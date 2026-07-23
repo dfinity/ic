@@ -624,6 +624,8 @@ type Event = record {
             index : ReimbursementIndex;
         };
         RegisteredDepositAddresses : record {
+            scan_window_nanos : nat64;
+            capacity : nat64;
             addresses : vec record {
                 owner : principal;
                 subaccount : opt Subaccount;

@@ -408,9 +408,15 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                     block_number: block_number.try_into().unwrap(),
                 }
             }
-            EventPayload::RegisteredDepositAddresses { addresses } => {
-                ET::RegisteredDepositAddresses(
-                    addresses
+            EventPayload::RegisteredDepositAddresses {
+                scan_window_nanos,
+                capacity,
+                addresses,
+            } => ET::RegisteredDepositAddresses(
+                ic_cketh_minter::state::event::DepositAddressRegistry {
+                    scan_window_nanos,
+                    capacity,
+                    registrations: addresses
                         .into_iter()
                         .map(
                             |a| ic_cketh_minter::state::event::DepositAddressRegistration {
@@ -421,8 +427,8 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                             },
                         )
                         .collect(),
-                )
-            }
+                },
+            ),
         },
     }
 }

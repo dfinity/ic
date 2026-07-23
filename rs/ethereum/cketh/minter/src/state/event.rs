@@ -175,7 +175,24 @@ pub enum EventType {
     /// Full snapshot of the ckERC20 deposit addresses registered via `deposit_erc20`.
     /// Emitted at pre-upgrade and replayed to restore the in-heap registry.
     #[n(25)]
-    RegisteredDepositAddresses(#[n(0)] Vec<DepositAddressRegistration>),
+    RegisteredDepositAddresses(#[n(0)] DepositAddressRegistry),
+}
+
+/// Full snapshot of the ckERC20 deposit address registry. Carries the limits in
+/// force when it was taken (`scan_window_nanos` = the watchlist ttl, `capacity`
+/// = the maximum number of armed addresses) so the watchlist is rebuilt exactly
+/// on replay. Changing these limits across canister versions is deliberately
+/// left for future work.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct DepositAddressRegistry {
+    #[n(0)]
+    pub scan_window_nanos: u64,
+    #[n(1)]
+    pub capacity: u64,
+    /// Registered addresses in time-index order (ascending expiry, insertion
+    /// order within a shared expiry), as produced by `watchlist_snapshot`.
+    #[n(2)]
+    pub registrations: Vec<DepositAddressRegistration>,
 }
 
 /// A single entry of the ckERC20 deposit address registry snapshot.

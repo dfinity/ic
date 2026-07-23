@@ -530,6 +530,8 @@ pub mod events {
             index: ReimbursementIndex,
         },
         RegisteredDepositAddresses {
+            scan_window_nanos: u64,
+            capacity: u64,
             addresses: Vec<DepositAddressRegistration>,
         },
     }

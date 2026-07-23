@@ -2,7 +2,7 @@ use super::{
     AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSIT_ADDRESSES,
 };
 use crate::endpoints::DepositErc20Error;
-use crate::state::event::DepositAddressRegistration;
+use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry};
 use crate::timed_sized_map::{Entry, Timestamp};
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -90,82 +90,53 @@ fn should_reject_new_address_when_watchlist_is_full() {
 }
 
 #[test]
-fn should_rebuild_watchlist_from_snapshot() {
-    struct Case {
-        name: &'static str,
-        preexisting: Vec<(Timestamp, Account)>,
-        snapshot: Vec<DepositAddressRegistration>,
-        now: Timestamp,
-        expected_live: Vec<(Account, Timestamp)>,
-    }
+fn should_rebuild_watchlist_exactly_from_snapshot() {
+    let mut source = AutomaticDeposits::default();
+    // account(0) and account(1) are armed in the same round, so they share an
+    // expiry bucket; a faithful rebuild must preserve their order too.
+    source
+        .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
+        .unwrap();
+    source
+        .watch_address_for_account(ts(0), account(1), deposit_address(&account(1)))
+        .unwrap();
+    source
+        .watch_address_for_account(ts(10), account(2), deposit_address(&account(2)))
+        .unwrap();
+    let registry = source.watchlist_snapshot();
 
-    let cases = vec![
-        Case {
-            name: "restores entries that are still live",
-            preexisting: vec![],
-            snapshot: vec![
-                registration(account(0), ts(100)),
-                registration(account(1), ts(50)),
-            ],
-            now: ts(10),
-            expected_live: vec![(account(0), ts(100)), (account(1), ts(50))],
-        },
-        Case {
-            name: "drops entries expired as of now",
-            preexisting: vec![],
-            snapshot: vec![
-                registration(account(0), ts(100)),
-                registration(account(1), ts(50)),
-            ],
-            now: ts(60),
-            expected_live: vec![(account(0), ts(100))],
-        },
-        Case {
-            name: "clamps validity to the current scan window",
-            preexisting: vec![],
-            snapshot: vec![registration(account(0), ts(10 + 2 * window_nanos()))],
-            now: ts(10),
-            expected_live: vec![(account(0), ts(10 + window_nanos()))],
-        },
-        Case {
-            name: "replaces preexisting entries",
-            preexisting: vec![(ts(0), account(0))],
-            snapshot: vec![registration(account(1), ts(100))],
-            now: ts(10),
-            expected_live: vec![(account(1), ts(100))],
-        },
-    ];
+    let mut restored = AutomaticDeposits::default();
+    restored
+        .watch_address_for_account(ts(5), account(9), deposit_address(&account(9)))
+        .unwrap();
+    restored.rebuild_watchlist(&registry);
 
-    for case in cases {
-        let mut deposits = AutomaticDeposits::default();
-        for (now, account) in &case.preexisting {
-            deposits
-                .watch_address_for_account(*now, *account, deposit_address(account))
-                .unwrap();
-        }
-
-        deposits.rebuild_watchlist(case.now, &case.snapshot);
-
-        assert_eq!(
-            deposits.watchlist_iter().count(),
-            case.expected_live.len(),
-            "case: {}",
-            case.name
-        );
-        for (account, expires_at) in &case.expected_live {
-            assert_eq!(
-                deposits.get_entry(case.now, account),
-                Some(&entry(account, *expires_at)),
-                "case: {}",
-                case.name
-            );
-        }
-    }
+    assert_eq!(restored, source);
+    assert_eq!(restored.watchlist_snapshot(), registry);
 }
 
 #[test]
-fn should_snapshot_entries_sorted_by_descending_expiry() {
+fn should_restore_the_limits_recorded_in_the_snapshot() {
+    let registry = DepositAddressRegistry {
+        scan_window_nanos: 12_345,
+        capacity: 3,
+        registrations: vec![
+            registration(account(0), ts(50)),
+            registration(account(1), ts(100)),
+        ],
+    };
     let mut deposits = AutomaticDeposits::default();
+
+    deposits.rebuild_watchlist(&registry);
+
+    assert_eq!(deposits.watchlist_snapshot(), registry);
+}
+
+#[test]
+fn should_snapshot_entries_in_time_index_order() {
+    let mut deposits = AutomaticDeposits::default();
+    // account(0) and account(2) share an expiry; within a bucket the snapshot
+    // keeps insertion order, and buckets come in ascending-expiry order.
     deposits
         .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
         .unwrap();
@@ -173,17 +144,17 @@ fn should_snapshot_entries_sorted_by_descending_expiry() {
         .watch_address_for_account(ts(10), account(1), deposit_address(&account(1)))
         .unwrap();
     deposits
-        .watch_address_for_account(ts(5), account(2), deposit_address(&account(2)))
+        .watch_address_for_account(ts(0), account(2), deposit_address(&account(2)))
         .unwrap();
 
     let snapshot = deposits.watchlist_snapshot();
 
     assert_eq!(
-        snapshot,
+        snapshot.registrations,
         vec![
-            registration(account(1), ts(10 + window_nanos())),
-            registration(account(2), ts(5 + window_nanos())),
             registration(account(0), ts(window_nanos())),
+            registration(account(2), ts(window_nanos())),
+            registration(account(1), ts(10 + window_nanos())),
         ]
     );
 }

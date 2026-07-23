@@ -293,7 +293,7 @@ mod deposit_erc20 {
         assert_matches!(
             snapshot_and_upgrade.as_slice(),
             [
-                EventPayload::RegisteredDepositAddresses { addresses },
+                EventPayload::RegisteredDepositAddresses { addresses, .. },
                 EventPayload::Upgrade(_)
             ] if addresses.len() == subaccounts.len(),
             "BUG: expected a single deposit-address snapshot with all addresses and one upgrade event, got {new_events:#?}"

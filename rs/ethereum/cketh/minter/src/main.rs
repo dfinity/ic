@@ -131,9 +131,9 @@ fn emit_preupgrade_events() {
         }
     });
 
-    let deposit_addresses = read_state(|s| s.automatic_deposits.watchlist_snapshot());
-    if !deposit_addresses.is_empty() {
-        storage::record_event(EventType::RegisteredDepositAddresses(deposit_addresses));
+    let registry = read_state(|s| s.automatic_deposits.watchlist_snapshot());
+    if !registry.registrations.is_empty() {
+        storage::record_event(EventType::RegisteredDepositAddresses(registry));
     }
 }
 
@@ -707,19 +707,20 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         CandidEvent {
             timestamp,
             payload: match payload {
-                EventType::RegisteredDepositAddresses(registrations) => {
-                    EP::RegisteredDepositAddresses {
-                        addresses: registrations
-                            .into_iter()
-                            .map(|r| CandidDepositAddressRegistration {
-                                owner: r.owner,
-                                subaccount: r.subaccount,
-                                address: r.address.to_string(),
-                                expires_at_nanos: r.expires_at_nanos.as_nanos(),
-                            })
-                            .collect(),
-                    }
-                }
+                EventType::RegisteredDepositAddresses(registry) => EP::RegisteredDepositAddresses {
+                    scan_window_nanos: registry.scan_window_nanos,
+                    capacity: registry.capacity,
+                    addresses: registry
+                        .registrations
+                        .into_iter()
+                        .map(|r| CandidDepositAddressRegistration {
+                            owner: r.owner,
+                            subaccount: r.subaccount,
+                            address: r.address.to_string(),
+                            expires_at_nanos: r.expires_at_nanos.as_nanos(),
+                        })
+                        .collect(),
+                },
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),
                 EventType::AcceptedDeposit(ReceivedEthEvent {

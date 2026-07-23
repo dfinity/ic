@@ -61,12 +61,6 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         }
     }
 
-    /// Remove all entries, leaving `ttl` and `capacity` unchanged.
-    pub fn clear(&mut self) {
-        self.entries.clear();
-        self.by_time.clear();
-    }
-
     /// Reconstruct a map verbatim from its `ttl`, `capacity`, and the entries
     /// previously produced by [`Self::iter_by_expiry`].
     ///

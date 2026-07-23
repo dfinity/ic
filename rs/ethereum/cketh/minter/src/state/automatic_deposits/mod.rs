@@ -2,11 +2,10 @@
 mod tests;
 
 use crate::endpoints::DepositErc20Error;
-use crate::state::event::DepositAddressRegistration;
+use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
-use std::cmp::Reverse;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
@@ -56,28 +55,33 @@ impl AutomaticDeposits {
         }
     }
 
-    /// Rebuild the watchlist from a snapshot previously produced by
+    /// Rebuild the watchlist exactly from a registry previously produced by
     /// [`Self::watchlist_snapshot`], replacing any existing content.
     ///
-    /// Entries are re-admitted under *this* version's limits rather than the
-    /// ones in effect when the snapshot was taken: entries already expired as of
-    /// `now` are dropped, each entry's validity is clamped to the current scan
-    /// window, and the current capacity is enforced. Since the snapshot lists
-    /// entries longest-lived first, the soonest-to-expire are the ones dropped
-    /// when the snapshot exceeds the current capacity.
-    pub fn rebuild_watchlist(&mut self, now: Timestamp, snapshot: &[DepositAddressRegistration]) {
-        self.watchlist.clear();
-        for deposit in snapshot {
-            let account = Account {
-                owner: deposit.owner,
-                subaccount: deposit.subaccount,
-            };
-            let entry = Entry {
-                value: DepositRequest::from(deposit.address),
-                expires_at: deposit.expires_at_nanos,
-            };
-            let _ = self.watchlist.insert_entry(now, account, entry);
-        }
+    /// The watchlist is restored verbatim under the limits recorded in the
+    /// registry (`scan_window_nanos`, `capacity`), not the current code
+    /// constants: entries keep their stored expiry (no clamping), expired
+    /// entries are preserved (no eviction), and the entry count may exceed
+    /// `capacity` (no admission check). This makes the restored state equal to
+    /// the one that produced the registry, which the event-log equivalence
+    /// check relies on. Changing the limits across versions is future work.
+    pub fn rebuild_watchlist(&mut self, registry: &DepositAddressRegistry) {
+        let ttl = Duration::from_nanos(registry.scan_window_nanos);
+        let capacity = NonZeroUsize::new(usize::try_from(registry.capacity).unwrap_or(usize::MAX))
+            .expect("BUG: deposit address registry capacity must be non-zero");
+        let entries = registry.registrations.iter().map(|deposit| {
+            (
+                Account {
+                    owner: deposit.owner,
+                    subaccount: deposit.subaccount,
+                },
+                Entry {
+                    value: DepositRequest::from(deposit.address),
+                    expires_at: deposit.expires_at_nanos,
+                },
+            )
+        });
+        self.watchlist = TimedSizedMap::from_ordered_entries(ttl, capacity, entries);
     }
 
     /// The live watchlist entry for `account`, or `None` if the account is not
@@ -90,10 +94,13 @@ impl AutomaticDeposits {
         self.watchlist.iter()
     }
 
-    pub fn watchlist_snapshot(&self) -> Vec<DepositAddressRegistration> {
-        let mut snapshot: Vec<_> = self
+    /// Full snapshot of the watchlist, faithful enough to reconstruct it exactly
+    /// via [`Self::rebuild_watchlist`]: it records the current limits and lists
+    /// every entry (live and expired-but-unevicted) in time-index order.
+    pub fn watchlist_snapshot(&self) -> DepositAddressRegistry {
+        let registrations = self
             .watchlist
-            .iter()
+            .iter_by_expiry()
             .map(|(account, deposit)| DepositAddressRegistration {
                 owner: account.owner,
                 subaccount: account.subaccount,
@@ -101,9 +108,11 @@ impl AutomaticDeposits {
                 expires_at_nanos: deposit.expires_at,
             })
             .collect();
-        snapshot.sort_unstable_by_key(|deposit| Reverse(deposit.expires_at_nanos));
-
-        snapshot
+        DepositAddressRegistry {
+            scan_window_nanos: u64::try_from(self.watchlist.ttl().as_nanos()).unwrap_or(u64::MAX),
+            capacity: self.watchlist.capacity().get() as u64,
+            registrations,
+        }
     }
 }
 
