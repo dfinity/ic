@@ -264,6 +264,12 @@ pub fn main() -> Result<()> {
             let mut hostos_config: HostOSConfig =
                 config_tool::deserialize_config(&hostos_config_json_path)?;
 
+            if hostos_config.config_version == CONFIG_VERSION {
+                println!("Config already up to date. Skipping update.");
+
+                return Ok(());
+            }
+
             // Fill the NO key from the old keyfile, only if missing.
             if hostos_config
                 .icos_settings
