@@ -785,6 +785,12 @@ fn test_minimum_cycles_balance<F, G, H>(
         Scenario::IncreaseMemoryAllocation => {
             assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation)
         }
+        Scenario::OtherManagement => {
+            assert!(
+                err.code() == ErrorCode::CanisterOutOfCycles
+                    || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+            );
+        }
         Scenario::IncreaseLogAndMemoryAllocation => assert!(
             err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
                 || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow

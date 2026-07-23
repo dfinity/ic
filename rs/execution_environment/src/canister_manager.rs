@@ -2085,11 +2085,13 @@ impl CanisterManager {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
 
-        let replace_snapshot_size = match replace_snapshot {
-            Some(replace_snapshot_id) => self.get_snapshot(canister, replace_snapshot_id)?.size(),
+        // Validate that the snapshot to be replaced exists (if replacing) or that
+        // the maximum number of snapshots has not been reached (if not replacing).
+        match replace_snapshot {
+            Some(replace_snapshot_id) => {
+                self.get_snapshot(canister, replace_snapshot_id)?;
+            }
             None => {
-                // No replace snapshot ID provided, check whether the maximum number of snapshots
-                // has been reached.
                 if canister.canister_snapshots.len()
                     >= self.config.max_number_of_snapshots_per_canister
                 {
@@ -2098,7 +2100,6 @@ impl CanisterManager {
                         limit: self.config.max_number_of_snapshots_per_canister,
                     });
                 }
-                NumBytes::new(0)
             }
         };
 
@@ -2112,42 +2113,18 @@ impl CanisterManager {
             });
         }
 
-        let uninstalled_canister_size = if uninstall_code {
-            // Note: log_memory_store is NOT included here because uninstall_code
-            // only clears the log records (clear_log) while keeping the store
-            // allocated, so log_memory_store_memory_usage() does not decrease.
-            canister.execution_memory_usage() + canister.wasm_chunk_store_memory_usage()
-        } else {
-            NumBytes::from(0)
-        };
-
         let new_snapshot_size = canister.snapshot_size_bytes();
         let old_memory_usage = canister.memory_usage();
-        let new_memory_usage = canister
-            .memory_usage()
-            .saturating_add(&new_snapshot_size)
-            .saturating_sub(&replace_snapshot_size)
-            .saturating_sub(&uninstalled_canister_size);
 
         // Compute cycles for instructions spent taking a snapshot of the canister.
         let instructions = self
             .config
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
-        self.cycles_and_memory_usage_checks_and_updates(
-            subnet_cycles_config,
-            canister,
-            sender,
-            instructions,
-            round_limits,
-            new_memory_usage,
-            old_memory_usage,
-            resource_saturation,
-            None,
-        )?;
-        round_limits.instructions -= as_round_instructions(instructions);
 
-        // Create new snapshot.
+        // Create new snapshot (capturing the canister state before the optional
+        // uninstall below). This can fail (e.g. the canister has no execution
+        // state) before any canister state is mutated.
         let new_snapshot =
             CanisterSnapshot::from_canister(canister, time).map_err(CanisterManagerError::from)?;
 
@@ -2164,36 +2141,45 @@ impl CanisterManager {
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
 
-        let deleted_call_context_responses = if uninstall_code {
-            // The subnet available memory is updated (together with the
-            // `CanisterCodeUninstall` canister history change recorded below) by
-            // `cycles_and_memory_usage_checks_and_updates`.
-            let rejects =
-                uninstall_canister(&self.log, canister, time, Arc::clone(&self.fd_factory));
-            // Memory usage after uninstalling, before the `CanisterCodeUninstall`
-            // canister history change, which is accounted for via the
-            // `canister_history_change` argument.
-            let memory_usage = canister.memory_usage();
-            let canister_history_change = canister.add_canister_change(
-                time,
-                origin,
-                CanisterChangeDetails::CanisterCodeUninstall,
-            );
-            self.cycles_and_memory_usage_checks_and_updates(
-                subnet_cycles_config,
-                canister,
-                sender,
-                NumInstructions::new(0),
-                round_limits,
-                memory_usage,
-                memory_usage,
-                resource_saturation,
-                Some(canister_history_change),
-            )?;
-            rejects
-        } else {
-            vec![]
-        };
+        // Optionally uninstall the canister's code atomically after taking the
+        // snapshot, recording the corresponding `CanisterCodeUninstall` canister
+        // history entry. `new_memory_usage` is read from the canister state after
+        // taking the snapshot and (optionally) uninstalling the code, so it reflects
+        // both, but before the history entry is recorded, so it excludes it (the
+        // entry is folded in via the `canister_history_change` argument below).
+        let (deleted_call_context_responses, new_memory_usage, canister_history_change) =
+            if uninstall_code {
+                let rejects =
+                    uninstall_canister(&self.log, canister, time, Arc::clone(&self.fd_factory));
+                let new_memory_usage = canister.memory_usage();
+                let canister_history_change = canister.add_canister_change(
+                    time,
+                    origin,
+                    CanisterChangeDetails::CanisterCodeUninstall,
+                );
+                (rejects, new_memory_usage, Some(canister_history_change))
+            } else {
+                (vec![], canister.memory_usage(), None)
+            };
+
+        // A single cycles-and-memory-usage check-and-update accounting for the new
+        // snapshot allocation, the optional uninstall deallocation, and the optional
+        // `CanisterCodeUninstall` canister history entry (folded in via the
+        // `canister_history_change` argument). The subnet available memory is updated
+        // together with all of the above. Any partial state mutations above are rolled
+        // back by the caller if this check fails.
+        self.cycles_and_memory_usage_checks_and_updates(
+            subnet_cycles_config,
+            canister,
+            sender,
+            instructions,
+            round_limits,
+            new_memory_usage,
+            old_memory_usage,
+            resource_saturation,
+            canister_history_change,
+        )?;
+        round_limits.instructions -= as_round_instructions(instructions);
 
         let reply = CanisterSnapshotResponse::new(
             &snapshot_id,
