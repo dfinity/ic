@@ -501,7 +501,6 @@ rust_ic_bench(
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
-        "//rs/types/types_test_utils",
         "//rs/types/wasm_types",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
