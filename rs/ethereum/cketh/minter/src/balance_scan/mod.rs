@@ -35,7 +35,7 @@ pub async fn balance_scan() {
         mutate_state(|s| {
             s.last_balance_scan = Some(BalanceScanStats {
                 scanned_at_ns: now.as_nanos(),
-                addresses_scanned: 0,
+                addresses_scanned,
                 candidates_found: 0,
                 chunks_failed: 0,
             })
