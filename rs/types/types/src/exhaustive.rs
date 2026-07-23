@@ -1,6 +1,7 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::artifact::IngressMessageId;
+use crate::backwards_compatibility::BackwardsCompatible;
 use crate::batch::ChainKeyAgreement;
 use crate::canister_http::CanisterHttpResponseSignature;
 use crate::consensus::dkg::RemoteDkgAttempts;
@@ -232,6 +233,18 @@ impl ExhaustiveSet for bool {
 impl ExhaustiveSet for String {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
         vec!["0123abcd!@#$.,;()[]<>".to_string(), "".to_string()]
+    }
+}
+
+impl<T: Clone + Default> ExhaustiveSet for BackwardsCompatible<T, false> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
+        vec![Self::empty()]
+    }
+}
+
+impl<T: Clone + ExhaustiveSet> ExhaustiveSet for BackwardsCompatible<T, true> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        T::exhaustive_set(rng).into_iter().map(Self::new).collect()
     }
 }
 
