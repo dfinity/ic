@@ -1932,8 +1932,8 @@ fn on_low_wasm_memory_is_executed_once() {
 #[test]
 fn on_low_wasm_memory_runs_after_dts_execution() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(50_000_000)
+        .with_slice_instruction_limit(240_000)
         .with_manual_execution()
         .build();
 
@@ -1941,10 +1941,10 @@ fn on_low_wasm_memory_runs_after_dts_execution() {
         (import "ic0" "msg_reply" (func $msg_reply))
         (func $grow_mem
             (drop (memory.grow (i32.const 7)))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 60000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 60000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 60000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 60000))
             (call $msg_reply)
         )
         (export "canister_update grow_mem" (func $grow_mem))

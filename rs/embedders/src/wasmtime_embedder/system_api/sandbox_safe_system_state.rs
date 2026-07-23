@@ -4,7 +4,7 @@ use super::{
     ApiType, CERTIFIED_DATA_MAX_LENGTH, cycles_balance_change::CyclesBalanceChange, routing,
     routing::ResolveDestinationError,
 };
-use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -26,7 +26,7 @@ use ic_replicated_state::{
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumInstructions, Time,
+    CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, Time,
     messages::{CallContextId, NO_DEADLINE, RejectContext, RequestMetadata},
     time::CoarseTime,
 };
@@ -634,7 +634,6 @@ pub struct SandboxSafeSystemState {
     pub(super) status: CanisterStatusView,
     pub(super) subnet_type: SubnetType,
     pub(super) subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-    dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
     wasm_memory_threshold: NumBytes,
@@ -687,7 +686,6 @@ impl SandboxSafeSystemState {
         ic00_available_request_slots: usize,
         ic00_aliases: BTreeSet<CanisterId>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-        dirty_page_overhead: NumInstructions,
         global_timer: CanisterTimer,
         canister_version: u64,
         controllers: BTreeSet<PrincipalId>,
@@ -703,7 +701,6 @@ impl SandboxSafeSystemState {
             status,
             subnet_type: cycles_account_manager.subnet_type(),
             subnet_cycles_config,
-            dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
             environment_variables,
@@ -743,7 +740,6 @@ impl SandboxSafeSystemState {
         system_state: &SystemState,
         cycles_account_manager: CyclesAccountManager,
         network_topology: Arc<NetworkTopology>,
-        dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         available_callbacks: u64,
         request_metadata: RequestMetadata,
@@ -755,7 +751,6 @@ impl SandboxSafeSystemState {
             system_state,
             cycles_account_manager,
             network_topology,
-            dirty_page_overhead,
             compute_allocation,
             available_callbacks,
             request_metadata,
@@ -771,7 +766,6 @@ impl SandboxSafeSystemState {
         system_state: &SystemState,
         cycles_account_manager: CyclesAccountManager,
         network_topology: Arc<NetworkTopology>,
-        dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         available_callbacks: u64,
         request_metadata: RequestMetadata,
@@ -844,7 +838,6 @@ impl SandboxSafeSystemState {
             ic00_available_request_slots,
             ic00_aliases,
             subnet_cycles_config,
-            dirty_page_overhead,
             system_state.global_timer,
             system_state.canister_version(),
             system_state.controllers.clone(),
@@ -1175,23 +1168,6 @@ impl SandboxSafeSystemState {
         Ok(())
     }
 
-    /// Calculate the cost for newly created dirty pages.
-    pub fn dirty_page_cost(&self, dirty_pages: NumOsPages) -> HypervisorResult<NumInstructions> {
-        let (inst, overflow) = dirty_pages
-            .get()
-            .overflowing_mul(self.dirty_page_overhead.get());
-        if overflow {
-            Err(HypervisorError::ToolchainContractViolation {
-                error: format!(
-                    "Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}",
-                    self.dirty_page_overhead, dirty_pages
-                ),
-            })
-        } else {
-            Ok(NumInstructions::from(inst))
-        }
-    }
-
     pub fn is_controller(&self, principal_id: &PrincipalId) -> bool {
         self.controllers.contains(principal_id)
     }
@@ -1450,7 +1426,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
@@ -1590,7 +1566,6 @@ mod tests {
                 CanisterCyclesCostSchedule::Normal,
                 ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
             ),
-            SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,
             BTreeSet::new(),
