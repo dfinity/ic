@@ -622,6 +622,26 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
         .collect()
 }
 
+/// Returns the subset of `new_utxos` that match a change output of one of the
+/// minter's submitted or stuck transactions. UTXOs sent to the minter's main
+/// address by a third party are dropped, since they did not go through deposit
+/// screening (minimum amount, check fee, and Bitcoin checker).
+fn retain_change_utxos(
+    submitted_transactions: &[state::SubmittedBtcTransaction],
+    stuck_transactions: &[state::SubmittedBtcTransaction],
+    new_utxos: Vec<Utxo>,
+) -> Vec<Utxo> {
+    let change_outpoints: BTreeSet<(Txid, u32)> = submitted_transactions
+        .iter()
+        .chain(stuck_transactions.iter())
+        .filter_map(|tx| tx.change_output.as_ref().map(|out| (tx.txid, out.vout)))
+        .collect();
+    new_utxos
+        .into_iter()
+        .filter(|utxo| change_outpoints.contains(&(utxo.outpoint.txid, utxo.outpoint.vout)))
+        .collect()
+}
+
 pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
     state: &mut state::CkBtcMinterState,
     maybe_finalized_transactions: &mut BTreeMap<Txid, state::SubmittedBtcTransaction>,
@@ -638,8 +658,17 @@ pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
     // meantime. If that happens, we should stop waiting for replacement transactions to finalize.
     let unstuck_transactions: Vec<_> = finalized_txids(&state.stuck_transactions, &new_utxos);
 
-    if !new_utxos.is_empty() {
-        state::audit::add_utxos(state, None, main_account, new_utxos, runtime);
+    // Only import UTXOs that correspond to a change output of a transaction
+    // submitted by the minter. UTXOs sent to the main address by a third party
+    // did not go through deposit screening and must not enter the reserve.
+    let change_utxos = retain_change_utxos(
+        &state.submitted_transactions,
+        &state.stuck_transactions,
+        new_utxos,
+    );
+
+    if !change_utxos.is_empty() {
+        state::audit::add_utxos(state, None, main_account, change_utxos, runtime);
     }
     for txid in &confirmed_transactions {
         confirm_transaction(state, txid, runtime);
