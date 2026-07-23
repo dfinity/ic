@@ -850,7 +850,7 @@ fn canister_state_ingress_induction_cycles_debit() {
     assert_eq!(
         *system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_as_counters()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
         NominalCycles::new(ingress_induction_debit.get()),
@@ -905,7 +905,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     assert_eq!(
         *system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_as_counters()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         (prepaid_cycles - refund).nominal()

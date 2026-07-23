@@ -1931,18 +1931,14 @@ impl CanisterManager {
         // Consume cycles for instructions.
         let cycles_for_instructions = self
             .cycles_account_manager
-            .management_canister_cost(instructions, subnet_cycles_config)
-            .real();
+            .management_canister_cost(instructions, subnet_cycles_config);
         let message_memory_usage = canister.message_memory_usage();
         self.cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut canister.system_state,
                 new_memory_usage,
                 message_memory_usage,
-                CompoundCycles::<Instructions>::new(
-                    cycles_for_instructions,
-                    subnet_cycles_config.cost_schedule,
-                ),
+                cycles_for_instructions,
                 subnet_cycles_config,
                 reveal_top_up,
             )

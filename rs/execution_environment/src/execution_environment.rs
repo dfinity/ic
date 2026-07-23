@@ -348,7 +348,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
     ) {
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
-        let res = self.cycles_account_manager.consume_cycles(
+        let res = self.cycles_account_manager.consume_cycles_for_final_instructions(
             &mut canister.system_state,
             memory_usage,
             message_memory_usage,

@@ -652,7 +652,7 @@ fn provisional_create_canister_has_no_creation_fee() {
         canister
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_as_counters()
             .get(&CyclesUseCase::CanisterCreation),
         None
     );
@@ -2139,7 +2139,7 @@ fn delete_canister_consumed_cycles_observed() {
             .state()
             .metadata
             .subnet_metrics
-            .get_consumed_cycles_by_use_case()
+            .get_consumed_cycles_by_use_case_as_counters()
             .get(&CyclesUseCase::DeletedCanisters)
             .unwrap(),
         NominalCycles::new(initial_cycles.get())
@@ -7442,7 +7442,7 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         canister
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_as_counters()
             .get(&CyclesUseCase::CanisterCreation)
             .unwrap()
             .get(),

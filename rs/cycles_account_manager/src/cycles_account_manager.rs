@@ -386,28 +386,35 @@ impl CyclesAccountManager {
         self.consume_with_threshold(system_state, cycles, threshold, reveal_top_up)
     }
 
-    /// Withdraws and consumes the cost of executing the given number of
-    /// instructions.
-    pub fn consume_cycles_for_instructions(
+    /// Consumes a direct, final `Instructions` charge (e.g. the cost of
+    /// management-canister instructions) that — unlike execution instructions,
+    /// which are prepaid for the full instruction limit and then refunded — has
+    /// no subsequent refund.
+    ///
+    /// In addition to deducting the cycles, this observes a zero refund so that
+    /// the full amount is recorded on the monotonic per-use-case counter, which
+    /// (unlike the gauge) only accounts for `Instructions` at refund time.
+    pub fn consume_cycles_for_final_instructions(
         &self,
-        sender: &PrincipalId,
-        canister: &mut CanisterState,
-        amount: NumInstructions,
+        system_state: &mut SystemState,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
+        cycles: CompoundCycles<Instructions>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-        execution_mode: WasmExecutionMode,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let memory_usage = canister.memory_usage();
-        let message_memory = canister.message_memory_usage();
-        let cycles = self.execution_cost(amount, subnet_cycles_config, execution_mode);
-        let reveal_top_up = canister.controllers().contains(sender);
         self.consume_cycles(
-            &mut canister.system_state,
-            memory_usage,
-            message_memory,
+            system_state,
+            canister_current_memory_usage,
+            canister_current_message_memory_usage,
             cycles,
             subnet_cycles_config,
             reveal_top_up,
-        )
+        )?;
+        let zero_refund =
+            CompoundCycles::<Instructions>::new(Cycles::zero(), subnet_cycles_config.cost_schedule);
+        system_state.refund_cycles(cycles, zero_refund);
+        Ok(())
     }
 
     /// Withdraws and consumes the cost of executing the given number of
@@ -423,7 +430,7 @@ impl CyclesAccountManager {
         let message_memory = canister.message_memory_usage();
         let cycles = self.management_canister_cost(amount, subnet_cycles_config);
         let reveal_top_up = canister.controllers().contains(sender);
-        self.consume_cycles(
+        self.consume_cycles_for_final_instructions(
             &mut canister.system_state,
             memory_usage,
             message_memory,

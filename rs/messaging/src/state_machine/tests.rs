@@ -706,7 +706,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         let dropped_cycles = state
             .metadata
             .subnet_metrics
-            .get_consumed_cycles_by_use_case()
+            .get_consumed_cycles_by_use_case_as_counters()
             .get(&CyclesUseCase::DroppedMessages)
             .map(|n| n.get())
             .unwrap_or(0);

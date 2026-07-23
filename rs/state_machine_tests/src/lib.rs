@@ -183,7 +183,7 @@ use ic_types::{
     time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
@@ -5133,25 +5133,6 @@ impl StateMachine {
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
         balance
-    }
-
-    /// Returns the cycle consumption metrics of the specified canister.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the specified canister does not exist.
-    pub fn consumed_cycles_by_use_cases(
-        &self,
-        canister_id: CanisterId,
-    ) -> BTreeMap<CyclesUseCase, NominalCycles> {
-        let state = self.state_manager.get_latest_state().take();
-        state
-            .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
-            .system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .clone()
     }
 
     /// Returns `sign_with_ecdsa` contexts from internal subnet call context manager.

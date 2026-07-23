@@ -2626,7 +2626,7 @@ fn ingress_deducts_execution_cost_from_canister_balance_and_updates_consumed_met
             .canister_state(canister)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_as_counters()
             .get(&CyclesUseCase::Instructions)
             .unwrap_or(&NominalCycles::zero());
         test.ingress(canister, "update", run).unwrap();
@@ -2636,7 +2636,7 @@ fn ingress_deducts_execution_cost_from_canister_balance_and_updates_consumed_met
             .canister_state(canister)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_as_counters()
             .get(&CyclesUseCase::Instructions)
             .unwrap_or(&NominalCycles::zero());
 
@@ -3322,7 +3322,7 @@ fn execute_canister_http_request() {
                 .state()
                 .metadata
                 .subnet_metrics
-                .get_consumed_cycles_by_use_case()
+                .get_consumed_cycles_by_use_case_as_counters()
                 .get(&CyclesUseCase::HTTPOutcalls)
                 .unwrap()
         );
@@ -4688,7 +4688,7 @@ fn canister_init_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_as_counters()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
@@ -4720,7 +4720,7 @@ fn canister_post_upgrade_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_as_counters()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
@@ -4754,7 +4754,7 @@ fn canister_pre_upgrade_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_as_counters()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
@@ -4786,7 +4786,7 @@ fn reply_callback_can_burn_cycles() {
         .canister_state(caller_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_as_counters()
         .clone();
     let transmission_cost = Cycles::new(
         use_cases
@@ -4832,7 +4832,7 @@ fn reject_callback_can_burn_cycles() {
         .canister_state(caller_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_as_counters()
         .clone();
     let transmission_cost = Cycles::new(
         use_cases
@@ -4881,7 +4881,7 @@ fn cleanup_callback_can_burn_cycles() {
         .canister_state(caller_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_as_counters()
         .clone();
     let transmission_cost = Cycles::new(
         use_cases
@@ -4928,7 +4928,7 @@ fn heartbeat_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_as_counters()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
