@@ -90,10 +90,6 @@ impl AutomaticDeposits {
         self.watchlist.get_entry(now, account)
     }
 
-    pub fn watchlist_iter(&self) -> impl Iterator<Item = (&Account, &Entry<DepositRequest>)> {
-        self.watchlist.iter()
-    }
-
     /// Full snapshot of the watchlist, faithful enough to reconstruct it exactly
     /// via [`Self::rebuild_watchlist`]: it records the current limits and lists
     /// every entry (live and expired-but-unevicted) in time-index order.

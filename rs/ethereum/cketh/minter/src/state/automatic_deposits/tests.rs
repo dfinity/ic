@@ -55,7 +55,7 @@ fn should_watch_address_for_account() {
         }
 
         assert_eq!(
-            deposits.watchlist_iter().count(),
+            deposits.watchlist_snapshot().registrations.len(),
             case.expected_len,
             "case: {}",
             case.name
@@ -86,7 +86,7 @@ fn should_reject_new_address_when_watchlist_is_full() {
     let rejected = deposits.watch_address_for_account(ts(0), account, deposit_address(&account));
 
     assert_eq!(rejected, Err(DepositErc20Error::TooManyActiveAddresses));
-    assert_eq!(deposits.watchlist_iter().count(), capacity);
+    assert_eq!(deposits.watchlist_snapshot().registrations.len(), capacity);
 }
 
 #[test]
