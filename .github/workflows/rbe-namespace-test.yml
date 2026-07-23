@@ -114,64 +114,7 @@ jobs:
 
           bazel "${bazel_args[@]}" //...
 
-      - name: Bazel Test with RBE (no system-tests)
-        if: ${{ !cancelled() }}
-        timeout-minutes: 120
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:3f3cd90dcc0ff4255d3fed1cb3b2a17ae5bcf36c26679b65e5e1821767f348bd"
-
-          # Directory for the Build Event Protocol and execution profile files,
-          # later uploaded to Namespace Artifact Storage for offline analysis.
-          mkdir -p /tmp/bep
-
-          bazel_args=(
-            --noworkspace_rc
-            --bazelrc=./bazel/conf/.bazelrc.build
-            --bazelrc=/tmp/bazel-rbe.bazelrc
-
-            test
-
-            --config=flaky_retry
-
-            --spawn_strategy=remote,sandboxed,local
-            --strategy=Genrule=remote,sandboxed,local
-
-            --remote_default_exec_properties=namespace_action_isolation=sandboxed
-            --remote_default_exec_properties=container-image="$worker_image"
-
-            --jobs=32
-
-            --test_tag_filters=-local_system_test,-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
-
-            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
-            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
-            # mid-build, actions fail with "Lost inputs no longer available remotely" or
-            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
-            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
-            # so the CAS extends their TTL and stops evicting live inputs.
-            --experimental_remote_cache_lease_extension
-            --experimental_remote_cache_eviction_retries=10
-
-            --remote_download_minimal
-
-            # Capture the Build Event Protocol and the execution profile so this
-            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
-            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
-            # by the "Upload Bazel BEP" step below.
-            --build_event_binary_file=/tmp/bep/bazel-bep-tests.pb
-            --profile=/tmp/bep/profile-tests.json
-            --experimental_profile_include_target_label
-
-            --keep_going
-          )
-
-          bazel "${bazel_args[@]}" //...
-
-      - name: Bazel Test with RBE (only system-tests)
-        # Run even if the previous "no system-tests" step failed, but not when the job is cancelled.
+      - name: Bazel Test with RBE
         if: ${{ !cancelled() }}
         timeout-minutes: 120
         shell: bash
@@ -214,13 +157,13 @@ jobs:
 
             --remote_download_minimal
 
-            # Force the test logs of every system-test to be downloaded from the
+            # Force the test logs of every test to be downloaded from the
             # remote CAS. Under BwoB (--remote_download_minimal) test outputs stay
             # remote, and --test_output=errors can't even echo the failing logs
-            # because multi-MB system-test logs exceed
+            # because multi-MB (system-)test logs exceed
             # --experimental_ui_max_stdouterr_bytes (default 1 MiB), leaving only
             # unreachable CAS paths in the console. Downloading them lets the
-            # "Stage failed and flaky system-test logs" step below collect and
+            # "Stage failed and flaky test logs" step below collect and
             # upload the logs of the tests that failed or were flaky.
             --remote_download_regex='.*/testlogs/.*'
 
@@ -228,23 +171,23 @@ jobs:
             # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
             # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
             # by the "Upload Bazel BEP" step below.
-            --build_event_binary_file=/tmp/bep/bazel-bep-systests.pb
-            --profile=/tmp/bep/profile-systests.json
+            --build_event_binary_file=/tmp/bep/bazel-bep-tests.pb
+            --profile=/tmp/bep/profile-tests.json
             --experimental_profile_include_target_label
 
             --keep_going
           )
 
           # Tee the output to a file (in /tmp/test-logs, separate from the BEP
-          # directory) so the "Stage failed and flaky system-test logs" step below
+          # directory) so the "Stage failed and flaky test logs" step below
           # can parse which targets failed or were flaky. pipefail preserves
           # Bazel's exit code so the step still fails when a test fails.
           mkdir -p /tmp/test-logs
-          bazel "${bazel_args[@]}" //rs/tests/... 2>&1 | tee /tmp/test-logs/systests-bazel-output.log
+          bazel "${bazel_args[@]}" //... 2>&1 | tee /tmp/test-logs/tests-bazel-output.log
 
-      - name: Stage failed and flaky system-test logs
-        # Collect the Bazel test logs of the system-tests that FAILED or were
-        # FLAKY so the "Upload failed and flaky system-test logs" step below can
+      - name: Stage failed and flaky test logs
+        # Collect the Bazel test logs of the tests that FAILED or were
+        # FLAKY so the "Upload failed and flaky test logs" step below can
         # push them to Namespace Artifact Storage. Runs even when the test step
         # failed, but not when the job is cancelled.
         if: ${{ !cancelled() }}
@@ -252,7 +195,7 @@ jobs:
         run: |
           set -uo pipefail
 
-          out=/tmp/test-logs/systests-bazel-output.log
+          out=/tmp/test-logs/tests-bazel-output.log
           dest=/tmp/test-logs/failed-test-logs
           mkdir -p "$dest"
 
@@ -261,7 +204,7 @@ jobs:
             exit 0
           fi
 
-          # Resolve the testlogs tree of the system-tests invocation (compilation
+          # Resolve the testlogs tree of the tests invocation (compilation
           # mode 'opt' -> bazel-out/k8-opt/testlogs). Prefer the convenience
           # symlink; fall back to 'bazel info' with the same bazelrc so the
           # configuration (and thus the path) matches.
@@ -283,11 +226,11 @@ jobs:
           mapfile -t failed < <(grep -oE '^//[^ ]+ +(FAILED|FLAKY)' "$out" | awk '{print $1}' | sort -u)
 
           if [ "${#failed[@]}" -eq 0 ]; then
-            echo "No failed or flaky system-tests found; nothing to stage."
+            echo "No failed or flaky tests found; nothing to stage."
             exit 0
           fi
 
-          echo "Staging logs for ${#failed[@]} failed/flaky system-test(s):"
+          echo "Staging logs for ${#failed[@]} failed/flaky test(s):"
           for label in "${failed[@]}"; do
             echo "  $label"
             rel="${label#//}"     # //rs/tests/nns:foo_test -> rs/tests/nns:foo_test
@@ -319,9 +262,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Upload failed and flaky system-test logs to Namespace Artifact Storage
+      - name: Upload failed and flaky test logs to Namespace Artifact Storage
         # Push the logs staged above (test.log, test.xml and per-attempt logs of
-        # every FAILED or FLAKY system-test), plus the captured Bazel console
+        # every FAILED or FLAKY test), plus the captured Bazel console
         # output, to Namespace Artifact Storage. Runs on failure too, but not when
         # the job is cancelled. Retrieve with namespace-actions/download-artifact
         # or `nsc artifact`.
@@ -331,6 +274,6 @@ jobs:
           name: failed-test-logs
           path: |
             /tmp/test-logs/failed-test-logs/**
-            /tmp/test-logs/systests-bazel-output.log
+            /tmp/test-logs/tests-bazel-output.log
           if-no-files-found: ignore
           retention-days: 14
