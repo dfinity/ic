@@ -173,8 +173,18 @@ fn should_yield_only_live_addresses() {
     // account(1) (armed 10ns later) is still live.
     let now = ts(window_nanos() + 1);
     let live: Vec<_> = deposits.live_addresses(now).collect();
+    assert_eq!(
+        live,
+        vec![(
+            account(1),
+            deposit_address(&account(1)),
+            ts(10 + window_nanos())
+        )]
+    );
 
-    assert_eq!(live, vec![(account(1), deposit_address(&account(1)))]);
+    // Once account(1) also expires, nothing is live.
+    let after_expiry = ts(10 + window_nanos() + 1);
+    assert_eq!(deposits.live_addresses(after_expiry).count(), 0);
 }
 
 fn ts(nanos: u64) -> Timestamp {

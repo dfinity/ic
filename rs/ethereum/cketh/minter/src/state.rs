@@ -90,6 +90,10 @@ pub struct State {
     /// Statistics from the most recent balance scan, if any.
     pub last_balance_scan: Option<BalanceScanStats>,
 
+    /// Per-account number of balance scans already performed, driving the
+    /// per-address dynamic scan schedule.
+    pub deposit_scan_progress: BTreeMap<Account, u8>,
+
     /// Number of HTTP outcalls since the last upgrade.
     /// Used to correlate request and response in logs.
     pub http_request_counter: u64,
