@@ -714,10 +714,13 @@ impl CanisterManager {
                     .map(|environment_variables| environment_variables.hash());
 
                 if new_environment_variables_hash.is_some() || new_controllers.is_some() {
-                    // The settings change is the only memory change past the
-                    // settings validation above, so the old and new memory usage
-                    // (excluding the change itself) are equal; the change is
-                    // accounted for via the `canister_history_change` argument.
+                    // `validate_and_update_canister_settings` above already applied the
+                    // settings and ran `cycles_and_memory_usage_checks_and_updates` for
+                    // any memory usage change resulting from the update. Recording the
+                    // `settings_change` canister history entry is therefore the only
+                    // memory change past that point, so the old and new memory usage
+                    // (excluding the change itself) are equal; the change is accounted
+                    // for via the `canister_history_change` argument.
                     let memory_usage = canister.memory_usage();
                     let canister_history_change = canister.add_canister_change(
                         timestamp_nanos,
@@ -743,10 +746,13 @@ impl CanisterManager {
             FlagStatus::Disabled => {
         */
         if let Some(new_controllers) = new_controllers {
-            // The controllers change is the only memory change past the settings
-            // validation above, so the old and new memory usage (excluding the
-            // change itself) are equal; the change is accounted for via the
-            // `canister_history_change` argument.
+            // `validate_and_update_canister_settings` above already applied the
+            // settings and ran `cycles_and_memory_usage_checks_and_updates` for any
+            // memory usage change resulting from the update. Recording the
+            // `controllers_change` canister history entry is therefore the only
+            // memory change past that point, so the old and new memory usage
+            // (excluding the change itself) are equal; the change is accounted for
+            // via the `canister_history_change` argument.
             let memory_usage = canister.memory_usage();
             let canister_history_change = canister.add_canister_change(
                 timestamp_nanos,
@@ -1589,9 +1595,12 @@ impl CanisterManager {
         let environment_variables_hash = settings
             .environment_variables()
             .map(|env_vars| env_vars.hash());
-        // Memory usage after settings validation, but before the
-        // `canister_creation` canister history change, which is accounted for via
-        // the `canister_history_change` argument.
+        // `validate_and_update_canister_settings` above already applied the settings
+        // and ran `cycles_and_memory_usage_checks_and_updates` for any memory usage
+        // change resulting from the update. Recording the `canister_creation` canister
+        // history entry is therefore the only memory change past that point, so the old
+        // and new memory usage (excluding the change itself) are equal; the change is
+        // accounted for via the `canister_history_change` argument.
         let new_memory_usage = new_canister.memory_usage();
         let canister_history_change = new_canister.add_canister_change(
             state.time(),
