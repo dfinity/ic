@@ -414,7 +414,10 @@ unique, deterministic deposit address, derived from the minter's threshold-ECDSA
   (`R13`): registrations are free for callers, so any per-registration spending
   is a DoS vector. With `fee = {from_subaccount, max_fee}`, the call is
   *sponsored*: the caller pays the sweep gas in ckETH and detection/sweep/crediting
-  run on demand (step 0). Repeated calls are cheap lookups that re-arm the window.
+  run on demand (step 0). Re-calling while an address is still armed is an idempotent
+  lookup — it returns the same address and its original `valid_until` **without**
+  extending the window; re-arming with a fresh window happens only once the address
+  has expired (`R15`).
 
 **Variants — address layout across asset classes** (decided: per-asset, introduced
 with Phase 2):
@@ -452,9 +455,11 @@ deposits are single-step too.
 
 Detection runs as a **minter background task over "active" addresses**:
 
-* When `deposit_erc20` is called, the minter records the address together with the
-  then-current **last observed block number** (the latest finalized block) — the
-  scan floor: history before registration is never scanned.
+* Detection records, per address, the **last observed block number** (the latest
+  finalized block) at registration time as the scan floor, so history before
+  registration is never scanned. (The shipped registration state stores only
+  `Account → Address` plus the window expiry; persisting this scan floor lands with
+  the detection work, see step 1.)
 * The number of addresses tracked in parallel is a **fixed hard cap** (currently
   7'000). When the active set is full of live entries, an unsponsored call is
   **rejected with `TooManyActiveAddresses` and does not register**; a *sponsored*
