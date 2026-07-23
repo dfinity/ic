@@ -67,6 +67,35 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         self.by_time.clear();
     }
 
+    /// Reconstruct a map verbatim from its `ttl`, `capacity`, and the entries
+    /// previously produced by [`Self::iter_by_expiry`].
+    ///
+    /// Unlike [`Self::insert_entry`], entries are admitted exactly as given: no
+    /// expiry clamping, no eviction of already-expired entries, and no capacity
+    /// enforcement. Preserving the [`Self::iter_by_expiry`] order reconstructs
+    /// the time index bucket-for-bucket, so the result equals the map that
+    /// produced the entries. Intended for event-log replay, where the snapshot
+    /// is trusted; a duplicate key is a corrupt snapshot and panics.
+    pub fn from_ordered_entries(
+        ttl: Duration,
+        capacity: NonZeroUsize,
+        entries: impl IntoIterator<Item = (K, Entry<V>)>,
+    ) -> Self {
+        let mut map = Self::new(ttl, capacity);
+        for (key, entry) in entries {
+            map.by_time
+                .entry(entry.expires_at)
+                .or_default()
+                .push_back(key.clone());
+            let previous = map.entries.insert(key, entry);
+            assert!(
+                previous.is_none(),
+                "BUG: from_ordered_entries received a duplicate key"
+            );
+        }
+        map
+    }
+
     /// Insert `value` under `key`. Returns an [`InsertError`] if the key already has a live entry
     /// ([`InsertError::AlreadyPresent`] — refreshing a live entry is not allowed, so a caller cannot
     /// extend an entry's lifetime by re-inserting it; the map is left unchanged) or, after evicting
@@ -167,6 +196,17 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         self.entries.iter()
     }
 
+    /// Iterate all entries (live and expired-but-not-yet-evicted) in time-index
+    /// order: ascending expiry, and insertion order within a shared expiry. This
+    /// is the order [`Self::from_ordered_entries`] must be fed to reconstruct an
+    /// identical map.
+    pub fn iter_by_expiry(&self) -> impl Iterator<Item = (&K, &Entry<V>)> {
+        self.by_time.values().flatten().map(|key| {
+            let entry = self.entries.get(key).expect("BUG: indexed key must exist");
+            (key, entry)
+        })
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -177,6 +217,10 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
 
     pub fn capacity(&self) -> NonZeroUsize {
         self.capacity
+    }
+
+    pub fn ttl(&self) -> Duration {
+        self.ttl
     }
 
     /// The expiry timestamp for an entry inserted at `now`, i.e. `now + ttl`.

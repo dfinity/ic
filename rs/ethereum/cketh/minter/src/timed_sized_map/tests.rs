@@ -240,3 +240,55 @@ fn should_keep_indices_consistent_through_churn() {
     assert!(map.is_empty());
     assert_consistent(&map);
 }
+
+#[test]
+fn should_round_trip_through_from_ordered_entries() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(100), cap(5));
+    // "b" and "a" share an expiry, so their by_time bucket order (insertion order)
+    // differs from key order; a faithful round-trip must preserve it.
+    map.insert(ts(0), "b", 2).unwrap();
+    map.insert(ts(0), "a", 1).unwrap();
+    map.insert(ts(10), "c", 3).unwrap();
+
+    let entries: Vec<_> = map
+        .iter_by_expiry()
+        .map(|(key, entry)| (*key, entry.clone()))
+        .collect();
+    let restored = TimedSizedMap::from_ordered_entries(map.ttl(), map.capacity(), entries);
+
+    assert_eq!(restored, map);
+    assert_consistent(&restored);
+}
+
+#[test]
+fn should_preserve_expired_entries_when_rebuilding() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
+    map.insert(ts(0), "a", 1).unwrap();
+    let entries: Vec<_> = map
+        .iter_by_expiry()
+        .map(|(key, entry)| (*key, entry.clone()))
+        .collect();
+
+    let restored = TimedSizedMap::from_ordered_entries(map.ttl(), map.capacity(), entries);
+
+    assert_eq!(restored, map);
+    assert_eq!(restored.len(), 1);
+    // The entry is expired as of ts(20) but still physically held, exactly like
+    // the live map that produced the snapshot.
+    assert_eq!(restored.get(ts(20), &"a"), None);
+    assert_consistent(&restored);
+}
+
+#[test]
+#[should_panic(expected = "duplicate key")]
+fn should_panic_on_duplicate_key_in_from_ordered_entries() {
+    let entry = Entry {
+        value: 1,
+        expires_at: ts(10),
+    };
+    let _ = TimedSizedMap::from_ordered_entries(
+        Duration::from_nanos(10),
+        cap(5),
+        vec![("a", entry.clone()), ("a", entry)],
+    );
+}
