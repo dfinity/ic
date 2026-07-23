@@ -2213,7 +2213,7 @@ impl ProposalTitle for ProposeToUpdateStandardEngineReplicaVersionCmd {
         }
 
         format!(
-            "Update {}% of Cloud Engines to {}",
+            "Update {:.1}% of Cloud Engines to {}",
             self.deployment_progress * 100.0,
             shortened_hash_string(&self.new_replica_version_id),
         )
