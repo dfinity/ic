@@ -123,10 +123,10 @@ jobs:
     needs: [config]
     steps:
       # calculate which bazel targets may need to be rebuilt
-      - &checkout
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          fetch-depth: ${{ case(github.event_name == 'pull_request', 256, 0) }}
           ref: ${{ inputs.commit-sha }}
       - name: Infer Targets
         uses: ./.github/actions/bazel
@@ -192,7 +192,10 @@ jobs:
       - name: Set up Bazel Remote Execution
         run: |
           nsc bazel execution setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
-      - *checkout
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.commit-sha }}
       - uses: ./.github/actions/netrc
 
       - name: Infer Bazel Args
