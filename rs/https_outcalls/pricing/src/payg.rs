@@ -53,20 +53,16 @@ pub struct PayAsYouGoTracker {
 }
 
 impl PayAsYouGoTracker {
-    pub fn new(
-        context: &CanisterHttpRequestContext,
-        subnet_size: NumberOfNodes,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Self {
+    pub fn new(context: &CanisterHttpRequestContext) -> Self {
         Self {
-            subnet_size,
+            subnet_size: context.subnet_size,
             is_gossiping: match context.replication {
                 // Non-replicated outcalls gossip the response, so they are charged
                 // the same way as flexible outcalls.
                 Replication::Flexible { .. } | Replication::NonReplicated(_) => true,
                 Replication::FullyReplicated => false,
             },
-            is_free: match cost_schedule {
+            is_free: match context.cost_schedule {
                 CanisterCyclesCostSchedule::Free => true,
                 CanisterCyclesCostSchedule::Normal => false,
             },
@@ -205,7 +201,7 @@ mod tests {
             },
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 
@@ -220,29 +216,20 @@ mod tests {
         }
     }
 
-    /// Builds a tracker on a `Normal` cost schedule with the given subnet size.
-    fn make_tracker(ctx: &CanisterHttpRequestContext, subnet_size: u32) -> PayAsYouGoTracker {
-        PayAsYouGoTracker::new(
-            ctx,
-            NumberOfNodes::from(subnet_size),
-            CanisterCyclesCostSchedule::Normal,
-        )
-    }
-
     /// Asserts that a gossiping outcall (flexible or non-replicated) charges the
     /// gossip term over the full subnet size.
     fn assert_gossip_charged_over_subnet_size(replication: Replication) {
-        let subnet_size = 13_u32;
         let ctx = context(replication, 1_000_000_000);
-        let mut tracker = make_tracker(&ctx, subnet_size);
+        let mut tracker = PayAsYouGoTracker::new(&ctx);
 
         let transformed_size = 500_u64;
         assert_eq!(
             tracker.subtract_gossip_usage(NumBytes::from(transformed_size)),
             Ok(())
         );
-        let expected =
-            FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE * transformed_size as u128 * subnet_size as u128;
+        let expected = FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
+            * transformed_size as u128
+            * ctx.subnet_size.get() as u128;
         assert_eq!(tracker.spent, expected);
     }
 
@@ -252,7 +239,7 @@ mod tests {
         // tracker has spent nothing and a zero-usage request records no spend
         // (the full allowance is refunded downstream).
         let ctx = context(Replication::FullyReplicated, 1_000_000);
-        let tracker = make_tracker(&ctx, 13);
+        let tracker = PayAsYouGoTracker::new(&ctx);
         assert_eq!(tracker.spent, 0);
         assert_eq!(tracker.create_payment_receipt().spent, Cycles::zero());
     }
@@ -261,7 +248,7 @@ mod tests {
     fn charges_per_replica_cost_fully_replicated() {
         let allowance = 1_000_000_000_u128;
         let ctx = context(Replication::FullyReplicated, allowance);
-        let mut tracker = make_tracker(&ctx, 13);
+        let mut tracker = PayAsYouGoTracker::new(&ctx);
 
         let response_size = 1_000_u64;
         let response_ms = 2_000_u128;
@@ -310,7 +297,7 @@ mod tests {
     fn returns_pricing_error_when_budget_is_exceeded() {
         let allowance = 100;
         let ctx = context(Replication::FullyReplicated, allowance);
-        let mut tracker = make_tracker(&ctx, 13);
+        let mut tracker = PayAsYouGoTracker::new(&ctx);
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
                 response_size: NumBytes::from(1_000),
@@ -337,12 +324,11 @@ mod tests {
         // A flexible request is used so the gossip term (not charged for
         // fully-replicated requests) is also exercised.
         let subnet_size = 13_u64;
-        let ctx = context(flexible(subnet_size as usize), 0);
-        let mut tracker = PayAsYouGoTracker::new(
-            &ctx,
-            NumberOfNodes::from(subnet_size as u32),
-            CanisterCyclesCostSchedule::Free,
-        );
+        let ctx = CanisterHttpRequestContext {
+            cost_schedule: CanisterCyclesCostSchedule::Free,
+            ..context(flexible(subnet_size as usize), 0)
+        };
+        let mut tracker = PayAsYouGoTracker::new(&ctx);
 
         let response_size = 1_000_000_u64;
         let response_ms = 30_000_u128;
@@ -389,12 +375,11 @@ mod tests {
         // allowance, the reported spend is never unbounded: it is capped at
         // `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
         let subnet_size = 13_u64;
-        let ctx = context(flexible(subnet_size as usize), 0);
-        let mut tracker = PayAsYouGoTracker::new(
-            &ctx,
-            NumberOfNodes::from(subnet_size as u32),
-            CanisterCyclesCostSchedule::Free,
-        );
+        let ctx = CanisterHttpRequestContext {
+            cost_schedule: CanisterCyclesCostSchedule::Free,
+            ..context(flexible(subnet_size as usize), 0)
+        };
+        let mut tracker = PayAsYouGoTracker::new(&ctx);
 
         // A gossip term large enough to push the raw spend past the cap.
         assert_eq!(

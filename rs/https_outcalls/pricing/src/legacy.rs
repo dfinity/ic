@@ -1,7 +1,9 @@
 use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
 use ic_types::{
     NumBytes, NumInstructions,
-    canister_http::{CanisterHttpPaymentReceipt, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+    canister_http::{
+        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    },
 };
 
 use crate::{AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError};
@@ -11,9 +13,10 @@ pub struct LegacyTracker {
 }
 
 impl LegacyTracker {
-    pub fn new(max_response_bytes: Option<NumBytes>) -> Self {
+    pub fn new(context: &CanisterHttpRequestContext) -> Self {
         Self {
-            max_response_size: max_response_bytes
+            max_response_size: context
+                .max_response_bytes
                 .unwrap_or(NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)),
         }
     }
