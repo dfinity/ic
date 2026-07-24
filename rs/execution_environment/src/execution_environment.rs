@@ -3702,6 +3702,21 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         rng: &mut dyn RngCore,
     ) -> Result<(), UserError> {
+        if state
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .len()
+            >= self.config.max_setup_initial_dkg_requests_in_flight
+        {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "max number ({}) of setup initial DKG requests in-flight reached.",
+                    self.config.max_setup_initial_dkg_requests_in_flight
+                ),
+            ));
+        }
         match SetupInitialDKGArgs::decode(payload) {
             Err(err) => Err(err),
             Ok(settings) => match settings.get_set_of_node_ids() {

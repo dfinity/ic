@@ -190,6 +190,9 @@ pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 10;
 /// The worst case request latency used here should be equivalent to the request timeout in the adapter.
 pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 
+/// Maximum number of setup initial DKG requests in-flight on a subnet.
+pub const MAX_SETUP_INITIAL_DKG_REQUESTS_IN_FLIGHT: usize = 20;
+
 /// The default value of `wasm_memory_limit` in the canister settings:
 /// - this value is used directly for newly created canisters.
 /// - existing canisters will get their field initialized as follows:
@@ -334,7 +337,11 @@ pub struct Config {
     /// Indicates whether dirty page logging is enabled or not.
     pub dirty_page_logging: FlagStatus,
 
+    /// The maximum number of canister HTTP requests in flight on a subnet.
     pub max_canister_http_requests_in_flight: usize,
+
+    /// The maximum number of setup initial DKG requests in flight on a subnet.
+    pub max_setup_initial_dkg_requests_in_flight: usize,
 
     /// The default value of `wasm_memory_limit` in the canister settings:
     /// - this value is used directly for newly created canisters.
@@ -436,6 +443,7 @@ impl Default for Config {
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             dirty_page_logging: FlagStatus::Disabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
+            max_setup_initial_dkg_requests_in_flight: MAX_SETUP_INITIAL_DKG_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
             max_number_of_snapshots_per_canister: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
             max_environment_variables: MAX_ENVIRONMENT_VARIABLES,

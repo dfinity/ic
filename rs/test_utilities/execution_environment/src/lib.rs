@@ -2805,6 +2805,15 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_setup_initial_dkg_requests_in_flight(
+        mut self,
+        max_setup_initial_dkg_requests_in_flight: usize,
+    ) -> Self {
+        self.execution_config
+            .max_setup_initial_dkg_requests_in_flight = max_setup_initial_dkg_requests_in_flight;
+        self
+    }
+
     pub fn with_max_wasm_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
         self.execution_config.embedders_config.max_wasm_memory_size = wasm_memory_size;
         self
