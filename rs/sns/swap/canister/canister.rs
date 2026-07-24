@@ -4,8 +4,10 @@
 
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_cdk::api::{canister_self, msg_caller, time};
-use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{
+    api::{canister_cycle_balance, canister_self, msg_caller, time},
+    init, post_upgrade, pre_upgrade, query, update,
+};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
@@ -495,7 +497,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_cycle_balance",
-        ic_cdk::api::canister_cycle_balance() as f64,
+        canister_cycle_balance() as f64,
         "Cycle balance on the sale canister.",
     )?;
     w.encode_gauge(

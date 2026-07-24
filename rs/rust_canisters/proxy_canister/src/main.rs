@@ -10,8 +10,7 @@ use candid::Principal;
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::msg_caller;
-use ic_cdk::api::{data_certificate, in_replicated_execution, time};
+use ic_cdk::api::{data_certificate, in_replicated_execution, msg_caller, time};
 use ic_cdk::spawn;
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{

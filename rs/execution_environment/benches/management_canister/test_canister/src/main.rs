@@ -16,7 +16,7 @@ use ic_cdk::api::management_canister::main::{
     stop_canister as ic_cdk_stop_canister, update_settings as ic_cdk_update_settings,
 };
 use ic_cdk::call::Call;
-use ic_cdk::update;
+use ic_cdk::{api::canister_self, update};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
@@ -37,7 +37,7 @@ async fn create_canisters(args: CreateCanistersArgs) -> Vec<Principal> {
                 ic_cdk_create_canister(
                     CreateCanisterArgument {
                         settings: Some(CanisterSettings {
-                            controllers: Some(vec![ic_cdk::api::canister_self()]),
+                            controllers: Some(vec![canister_self()]),
                             ..CanisterSettings::default()
                         }),
                     },
@@ -159,7 +159,7 @@ pub struct UpdateSettingsArgs {
 
 #[update]
 async fn update_settings(args: UpdateSettingsArgs) {
-    let controllers = vec![ic_cdk::api::canister_self(); args.controllers_number as usize];
+    let controllers = vec![canister_self(); args.controllers_number as usize];
     let futures: Vec<_> = args
         .canister_ids
         .into_iter()
