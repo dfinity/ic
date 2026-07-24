@@ -49,17 +49,12 @@ use std::time::Duration;
 const FOUNDRY_VM_NAME: &str = "foundry";
 const DOCKER_NETWORK_NAME: &str = "ethereum";
 const FOUNDRY_PORT: u16 = 8545;
-/// File names of the `solc` compilers vendored via Bazel (see `MODULE.bazel`)
-/// and shipped in the foundry UVM config image. They are used by
-/// `deploy_smart_contract` so that `forge` compiles the helper smart contracts
-/// offline instead of downloading `solc` at runtime. Each compiler must satisfy
-/// the `pragma solidity` of the contracts it compiles.
-///
-/// Most contracts are compiled with `SOLC`. `EthDepositHelper.sol` pins an older
-/// Solidity version to stay faithful to its immutable mainnet deployment, so it
-/// is compiled with its own `SOLC_ETH_DEPOSIT_HELPER`.
+/// File name of the `solc` compiler vendored via Bazel (see `MODULE.bazel`) and
+/// shipped in the foundry UVM config image. It is used by `deploy_smart_contract`
+/// so that `forge` compiles the helper smart contracts offline instead of
+/// downloading `solc` at runtime. The pinned version satisfies the
+/// `pragma solidity` of every contract it compiles.
 const SOLC: &str = "solc";
-const SOLC_ETH_DEPOSIT_HELPER: &str = "solc_eth_deposit_helper";
 const ENCODED_PRINCIPAL: &str =
     "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000";
 
@@ -113,9 +108,8 @@ fn setup_anvil(env: &TestEnv) {
 docker load -i /config/foundry.tar
 docker network create {DOCKER_NETWORK_NAME}
 docker run --net {DOCKER_NETWORK_NAME} --detach --rm --name anvil -p {FOUNDRY_PORT}:{FOUNDRY_PORT} foundry:latest "anvil --host 0.0.0.0"
-cp /config/{SOLC_ETH_DEPOSIT_HELPER} /tmp/{SOLC_ETH_DEPOSIT_HELPER}
 cp /config/{SOLC} /tmp/{SOLC}
-chmod +x /tmp/{SOLC_ETH_DEPOSIT_HELPER} /tmp/{SOLC}
+chmod +x /tmp/{SOLC}
 "#
             ))
             .unwrap();
@@ -402,7 +396,7 @@ fn deploy_eth_deposit_helper_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "EthDepositHelper.sol",
-        SOLC_ETH_DEPOSIT_HELPER,
+        SOLC,
         "CkEthDeposit",
         &minter_address.to_string(),
         logger,

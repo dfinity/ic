@@ -430,35 +430,15 @@ http_file(
     url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2026-03-12/ic-doge-canister.wasm.gz",
 )
 
-# solc compilers used by //rs/tests/cross_chain:ic_xc_cketh_test to compile the
-# ckETH/ckERC20 helper smart contracts offline. Vendoring these avoids `forge`
+# Single pinned solc used to compile the ckETH/ckERC20 helper and demo smart
+# contracts offline for //rs/tests/cross_chain:ic_xc_cketh_test and
+# //rs/ethereum/cketh/minter:deposit_from_cex_demo_test. Vendoring avoids `forge`
 # downloading solc from https://binaries.soliditylang.org at test runtime, which
-# made the test flaky in data centers with unreliable IPv4 connectivity.
-# The sha256 hashes are taken from https://binaries.soliditylang.org/linux-amd64/list.json.
-#
-# `solc` is used to compile most contracts. `EthDepositHelper.sol` pins an older
-# Solidity version to stay faithful to its immutable mainnet deployment, so it
-# gets its own `solc_eth_deposit_helper`.
-http_file(
-    name = "solc",
-    downloaded_file_path = "solc",
-    executable = True,
-    sha256 = "0479d44fdf9c501c25337fdc540419f1593b884a87b47f023da4f1c700fda782",
-    url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.20+commit.a1b79de6",
-)
-
-http_file(
-    name = "solc_eth_deposit_helper",
-    downloaded_file_path = "solc_eth_deposit_helper",
-    executable = True,
-    sha256 = "95e6ed4949a63ad89afb443ecba1fb8302dd2860ee5e9baace3e674a0f48aa77",
-    url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.18+commit.87f61d96",
-)
-
-# Latest stable solc, used by //rs/ethereum/cketh/minter:deposit_from_cex_demo_test
-# to compile the demo contracts (pinned exactly for reproducible bytecode/gas).
-# One binary per host platform; the consuming target selects the right one.
-# The macosx-amd64 download is a universal (x86_64 + arm64) Mach-O, so it runs
+# made the test flaky in data centers with unreliable IPv4 connectivity. Pinning
+# exactly keeps compiled bytecode and gas reproducible. One binary per host
+# platform; the consuming target selects the right one. The sha256 hashes are
+# taken from https://binaries.soliditylang.org/<platform>/list.json. The
+# macosx-amd64 download is a universal (x86_64 + arm64) Mach-O, so it runs
 # natively on both Intel and Apple Silicon Macs.
 http_file(
     name = "solc_0_8_35_linux_amd64",
