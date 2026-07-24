@@ -6,6 +6,10 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::decode_registry_value;
+use ic_nns_constants::{
+    ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -16,15 +20,19 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
 use ic_protobuf::registry::subnet::v1::{
-    CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb, SubnetRecord,
+    CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb,
+    SubnetListRecord as SubnetListRecordPb, SubnetRecord,
 };
-use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_chain_key_enabled_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
+};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::ReplicaVersion;
+use pocket_ic::PocketIcBuilder;
 use prost::Message;
 use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
 use registry_canister::{
@@ -33,7 +41,7 @@ use registry_canister::{
 use std::str::FromStr;
 
 mod common;
-use common::test_helpers::get_subnet_record;
+use common::test_helpers::{get_subnet_record, install_registry_canister_with_payload_builder};
 
 #[test]
 fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
@@ -706,4 +714,122 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         retransmission_request_ms: None,
         set_gossip_config_to_default: Default::default(),
     }
+}
+
+#[tokio::test]
+async fn test_governance_canister_can_update_a_subnet() {
+    update_subnet_succeeds_when_called_by(GOVERNANCE_CANISTER_ID.get()).await;
+}
+
+#[tokio::test]
+async fn test_engine_controller_can_update_a_subnet() {
+    update_subnet_succeeds_when_called_by(ENGINE_CONTROLLER_CANISTER_ID.get()).await;
+}
+
+#[tokio::test]
+async fn test_an_unauthorized_principal_cannot_update_a_subnet() {
+    let (pocket_ic, subnet_id) = setup_with_existing_subnet().await;
+
+    // A principal that is neither governance nor the engine controller, calling
+    // via an ingress message.
+    let unauthorized_caller = PrincipalId::new_user_test_id(1);
+    assert_ne!(unauthorized_caller, GOVERNANCE_CANISTER_ID.get());
+    assert_ne!(unauthorized_caller, ENGINE_CONTROLLER_CANISTER_ID.get());
+
+    let payload = UpdateSubnetPayload {
+        max_number_of_canisters: Some(42),
+        ..empty_update_subnet_payload(subnet_id)
+    };
+
+    let response = pocket_ic
+        .update_call(
+            REGISTRY_CANISTER_ID.get().0,
+            unauthorized_caller.0,
+            "update_subnet",
+            Encode!(&payload).unwrap(),
+        )
+        .await;
+
+    assert!(
+        response.as_ref().is_err_and(|err| err
+            .reject_message
+            .contains("is not authorized to call this method: update_subnet")),
+        "Expected an authorization rejection, but got {response:?}"
+    );
+
+    // The subnet record must be unchanged.
+    assert_ne!(
+        get_max_number_of_canisters(&pocket_ic, subnet_id).await,
+        42,
+        "an unauthorized caller must not be able to update the subnet"
+    );
+}
+
+/// Installs an invariant-compliant registry (which already contains a single
+/// subnet) and returns the running `PocketIc` together with the id of an
+/// existing subnet that can be used as an `update_subnet` target.
+async fn setup_with_existing_subnet() -> (pocket_ic::nonblocking::PocketIc, SubnetId) {
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0));
+    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
+
+    let subnet_list_record =
+        decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
+            .await;
+    let subnet_id = subnet_list_record
+        .subnets
+        .first()
+        .expect("expected the invariant-compliant registry to contain at least one subnet");
+    let subnet_id = SubnetId::new(PrincipalId::try_from(subnet_id.as_slice()).unwrap());
+
+    (pocket_ic, subnet_id)
+}
+
+/// Reads the `max_number_of_canisters` field of `subnet_id`'s record from the
+/// registry. Used by the authorization tests to assert whether an
+/// `update_subnet` call actually took effect.
+async fn get_max_number_of_canisters(
+    pocket_ic: &pocket_ic::nonblocking::PocketIc,
+    subnet_id: SubnetId,
+) -> u64 {
+    decode_registry_value::<SubnetRecord>(pocket_ic, make_subnet_record_key(subnet_id))
+        .await
+        .max_number_of_canisters
+}
+
+/// Sets up a registry containing a subnet and verifies that `caller` is
+/// authorized to call `update_subnet` and that the update is actually applied.
+async fn update_subnet_succeeds_when_called_by(caller: PrincipalId) {
+    let (pocket_ic, subnet_id) = setup_with_existing_subnet().await;
+
+    // Sanity check: the field we are about to set must differ first, otherwise
+    // the test could pass without the update having any effect.
+    assert_ne!(get_max_number_of_canisters(&pocket_ic, subnet_id).await, 42);
+
+    let payload = UpdateSubnetPayload {
+        max_number_of_canisters: Some(42),
+        ..empty_update_subnet_payload(subnet_id)
+    };
+
+    pocket_ic
+        .update_call(
+            REGISTRY_CANISTER_ID.get().0,
+            caller.0,
+            "update_subnet",
+            Encode!(&payload).unwrap(),
+        )
+        .await
+        .unwrap_or_else(|err| {
+            panic!(
+                "update_subnet call by authorized caller {caller} was unexpectedly rejected: {err:?}"
+            )
+        });
+
+    assert_eq!(
+        get_max_number_of_canisters(&pocket_ic, subnet_id).await,
+        42,
+        "authorized caller {caller} should have updated the subnet record"
+    );
 }
