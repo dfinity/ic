@@ -693,6 +693,8 @@ pub mod proposal {
         LoadCanisterSnapshot(super::LoadCanisterSnapshot),
         /// Create a canister in a (possibly non-NNS) subnet and install code into it.
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Change what replica version(s) are run by Cloud Engines.
+        UpdateStandardEngineReplicaVersion(super::UpdateStandardEngineReplicaVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1454,6 +1456,7 @@ pub enum ProposalActionRequest {
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeRequest),
+    UpdateStandardEngineReplicaVersion(UpdateStandardEngineReplicaVersion),
 }
 
 #[derive(
@@ -2841,6 +2844,15 @@ pub struct BlessAlternativeGuestOsVersion {
     pub chip_ids: Option<Vec<Vec<u8>>>,
     pub rootfs_hash: Option<String>,
     pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct UpdateStandardEngineReplicaVersion {
+    pub new_replica_version_id: Option<String>,
+    pub old_replica_version_id: Option<String>,
+    pub deployment_progress: Option<f64>,
 }
 
 /// See also the definition of GuestLaunchMeasurements (plural!) in
