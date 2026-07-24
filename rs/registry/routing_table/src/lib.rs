@@ -545,6 +545,12 @@ impl RoutingTable {
         lookup_in_ranges(&self.0, canister_id)
     }
 
+    /// Returns the corresponding `SubnetId` that the given `range` is assigned to or `None` if an
+    /// assignment cannot be found.
+    pub fn lookup_range(&self, range: CanisterIdRange) -> Option<SubnetId> {
+        self.0.get(&range).copied()
+    }
+
     /// Find all canister ranges that are assigned to subnet_id.
     pub fn ranges(&self, subnet_id: SubnetId) -> CanisterIdRanges {
         let ranges = CanisterIdRanges(

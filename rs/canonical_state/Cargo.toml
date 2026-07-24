@@ -42,5 +42,6 @@ ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 maplit = { workspace = true }
 proptest = { workspace = true }
+rstest = { workspace = true }
 tempfile = { workspace = true }
 test-strategy = "0.4.0"
