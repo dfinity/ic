@@ -173,7 +173,7 @@ jobs:
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
-          nsc bazel cache setup --enable_remote_asset_api --bazelrc=/tmp/bazel-cache.bazelrc
+          nsc bazel cache setup --enable_remote_asset_api --command common --bazelrc=/tmp/bazel-cache.bazelrc
           cat /tmp/bazel-cache.bazelrc
       - name: Infer Targets
         shell: bash
