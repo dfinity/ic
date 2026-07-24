@@ -168,29 +168,40 @@ jobs:
     needs: [config]
     steps:
       # calculate which bazel targets may need to be rebuilt
+      - uses: ./.github/actions/netrc
+      - name: Set up Bazel cache
+        run: |
+          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
+          nsc bazel cache setup --enable_remote_asset_api --bazelrc=/tmp/bazel-cache.bazelrc
+          cat /tmp/bazel-cache.bazelrc
       - *checkout
       - name: Infer Targets
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            targets_args=()
-            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
-              targets_args+=("--skip_long_tests")
-            fi
-            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
-              targets_args+=("--exclude_tags=buf")
-            fi
-            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
-              targets_args+=(
-                '--base=${{ github.event.pull_request.base.sha }}'
-                '--head=${{ github.event.pull_request.head.sha }}'
-                )
-            fi
+        shell: bash
+        run: |
+          targets_args=()
+          if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+            targets_args+=("--skip_long_tests")
+          fi
+          if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+            targets_args+=("--exclude_tags=buf")
+          fi
+          if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
+            targets_args+=(
+              '--base=${{ github.event.pull_request.base.sha }}'
+              '--head=${{ github.event.pull_request.head.sha }}'
+              )
+          fi
+          targets_args+=(
+            --
+            --noworkspace_rc
+            --bazelrc=./bazel/conf/.bazelrc.build
+            --bazelrc=/tmp/bazel-cache.bazelrc
+          )
 
-            # creates a list of targets suitable for --target_pattern_file and list
-            # the targets on the step summary
-            /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
-            /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
+          # creates a list of targets suitable for --target_pattern_file and list
+          # the targets on the step summary
+          /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
+          /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
 
       - name: Upload target files
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

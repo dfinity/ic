@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test,check}
+#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test,check} [-- BAZEL_ARG ...]
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
@@ -18,6 +18,10 @@
 # whenever its Farm sibling is already selected.
 #
 # When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness.
+#
+# Any arguments following a `--` separator are passed verbatim to the `bazel` command as startup
+# options (i.e. before the `query` subcommand). This is used e.g. to point the query at an
+# additional bazelrc: `targets.py test -- --bazelrc=/tmp/bazel-cache.bazelrc`.
 #
 # The script will print the bazel query to stderr which is useful for debugging:
 #   ci/scripts/targets.py --skip_long_tests --base=master test
@@ -189,8 +193,12 @@ def targets(
     exclude_tags: list[str],
     base: str | None,
     head: str | None,
+    bazel_args: list[str],
 ):
-    """Print the bazel targets to build or test to stdout."""
+    """Print the bazel targets to build or test to stdout.
+
+    `bazel_args` are passed verbatim to `bazel` as startup options (before the `query` subcommand).
+    """
     # If no base is specified, form a query to return all targets
     # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified)
     # and those with any of the excluded tags.
@@ -206,7 +214,7 @@ def targets(
     excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
-    args = ["bazel", "query", "--keep_going", query]
+    args = ["bazel", *bazel_args, "query", "--keep_going", query]
     log(shlex.join(args))
     result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
@@ -235,7 +243,7 @@ def targets(
         print("\n".join(result_targets))
 
 
-def check():
+def check(bazel_args: list[str]):
     """
     Exit successfully with 0 if PULL_REQUEST_BAZEL_TARGETS:
     * can be read and parsed.
@@ -243,6 +251,8 @@ def check():
     * each pattern has at least one explicit target.
     * each target is valid and when queried results in at least one target after excluding all excluded targets.
     Otherwise print all errors to stderr and exit erroneously with 1.
+
+    `bazel_args` are passed verbatim to `bazel` as startup options (before the `query` subcommand).
     """
     try:
         explicit_targets = load_explicit_targets()
@@ -272,7 +282,7 @@ def check():
         for target in explicit_targets_for_pattern:
             excluded_tags_regex = "|".join(EXCLUDED_TAGS)
             query = f'({target}) except attr(tags, "{excluded_tags_regex}", //...)'
-            result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
+            result = subprocess.run(["bazel", *bazel_args, "query", query], capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
                 errors.append(f"Pattern '{pattern}' has problematic target '{target}':\n{indented_error_msg}")
@@ -295,7 +305,20 @@ def check():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Return bazel targets which should be build/tested")
+    # Split off any arguments following a `--` separator; these are passed verbatim to `bazel`
+    # as startup options (before the `query` subcommand), e.g.:
+    #   targets.py test -- --bazelrc=/tmp/bazel-cache.bazelrc
+    argv = sys.argv[1:]
+    bazel_args: list[str] = []
+    if "--" in argv:
+        i = argv.index("--")
+        argv, bazel_args = argv[:i], argv[i + 1 :]
+
+    parser = argparse.ArgumentParser(
+        description="Return bazel targets which should be build/tested",
+        epilog="Arguments after a `--` separator are passed verbatim to `bazel` as startup options, "
+        "e.g. `targets.py test -- --bazelrc=/tmp/bazel-cache.bazelrc`.",
+    )
     parser.add_argument(
         "command",
         choices=["build", "test", "check"],
@@ -310,12 +333,12 @@ def main():
         help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]` where $HEAD is from --head if specified.",
     )
     parser.add_argument("--head", help="See --base.")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.command == "check":
-        check()
+        check(bazel_args)
 
-    targets(args.command, args.skip_long_tests, args.exclude_tags, args.base, args.head)
+    targets(args.command, args.skip_long_tests, args.exclude_tags, args.base, args.head, bazel_args)
 
 
 if __name__ == "__main__":
