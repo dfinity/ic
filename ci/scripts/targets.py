@@ -217,12 +217,13 @@ def targets(
 
     args = ["bazel", *bazel_args, "query", "--keep_going", query]
     log(shlex.join(args))
-    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    result = subprocess.run(args, stdout=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
-        log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
+        log(f"`bazel query --keep_going '{query}'` failed with exit code {result.returncode} (see its output above)")
         sys.exit(result.returncode)
 
     result_targets = result.stdout.splitlines()
