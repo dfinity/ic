@@ -4086,11 +4086,17 @@ impl From<api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
 
 impl From<pb::MaturityModulation> for api::MaturityModulation {
     fn from(item: pb::MaturityModulation) -> Self {
+        // `updated_at_days_since_epoch == 0` is the "never measured" sentinel; surface it to the
+        // API as `None` so callers can distinguish "no measurement yet" from a real timestamp.
+        let updated_at_timestamp_seconds = if item.updated_at_days_since_epoch == 0 {
+            None
+        } else {
+            item.updated_at_days_since_epoch
+                .checked_mul(ONE_DAY_SECONDS)
+        };
         Self {
-            current_value_permyriad: item.current_value_permyriad,
-            updated_at_timestamp_seconds: item
-                .updated_at_days_since_epoch
-                .and_then(|days| days.checked_mul(ONE_DAY_SECONDS)),
+            current_value_permyriad: Some(item.current_value_permyriad),
+            updated_at_timestamp_seconds,
         }
     }
 }

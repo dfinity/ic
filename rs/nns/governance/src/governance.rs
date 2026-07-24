@@ -6470,7 +6470,7 @@ impl Governance {
             .heap_data
             .maturity_modulation
             .as_ref()
-            .and_then(|m| m.current_value_permyriad)
+            .map(|m| m.current_value_permyriad)
         {
             None => return,
             Some(value) => value,

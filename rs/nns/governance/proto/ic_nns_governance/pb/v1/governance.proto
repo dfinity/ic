@@ -2088,10 +2088,12 @@ message IcpPriceHistory {
 // This might be unpopulated, which indicates that no value is currently available.
 message MaturityModulation {
   // Current maturity modulation in permyriad (0.01% per unit).
-  optional int32 current_value_permyriad = 1;
+  int32 current_value_permyriad = 1;
 
   // Day (days_since_epoch) when current_value_permyriad was last computed.
-  optional uint64 updated_at_days_since_epoch = 2;
+  // 0 acts as a "never measured" sentinel — `current_day` is always >> 0 in practice, so a real
+  // measurement can never collide with it.
+  uint64 updated_at_days_since_epoch = 2;
 }
 
 // This represents the whole NNS governance system. It contains all

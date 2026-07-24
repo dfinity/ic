@@ -3349,11 +3349,13 @@ pub struct IcpPriceHistory {
 )]
 pub struct MaturityModulation {
     /// Current maturity modulation in permyriad (0.01% per unit).
-    #[prost(int32, optional, tag = "1")]
-    pub current_value_permyriad: ::core::option::Option<i32>,
+    #[prost(int32, tag = "1")]
+    pub current_value_permyriad: i32,
     /// Day (days_since_epoch) when current_value_permyriad was last computed.
-    #[prost(uint64, optional, tag = "2")]
-    pub updated_at_days_since_epoch: ::core::option::Option<u64>,
+    /// 0 acts as a "never measured" sentinel — `current_day` is always >> 0 in practice, so a real
+    /// measurement can never collide with it.
+    #[prost(uint64, tag = "2")]
+    pub updated_at_days_since_epoch: u64,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
