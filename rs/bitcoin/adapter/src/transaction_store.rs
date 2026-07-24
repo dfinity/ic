@@ -1,6 +1,6 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::{time::Duration, time::SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use bitcoin::consensus::deserialize;
 use bitcoin::{
@@ -17,6 +17,14 @@ use crate::{Channel, Command};
 
 /// How long should the transaction manager hold on to a transaction.
 const TX_CACHE_TIMEOUT_PERIOD_SECS: u64 = 10 * 60; // 10 minutes
+
+/// How long to wait before re-advertising a transaction to a peer.
+/// The `inv → getdata → tx` exchange is not acknowledged, so any of its messages can be
+/// lost without a trace, e.g. when the connection to the peer is dropped and
+/// re-established. Re-advertising until the transaction leaves the cache makes the relay
+/// robust against such losses. Peers that already received the transaction simply ignore
+/// the repeated `inv`.
+const TX_READVERTISE_PERIOD_SECS: u64 = 10;
 
 /// Maximum number of transaction to advertise.
 // https://developer.bitcoin.org/reference/p2p_networking.html#inv
@@ -36,12 +44,15 @@ const TX_CACHE_SIZE: usize = 250;
 struct TransactionInfo {
     /// The actual transaction to be sent to the BTC network.
     transaction: Transaction,
-    /// Set of peer to which we advertised this transaction.
-    /// Having a peer in this set doesn't guarantee that the peer actually saw the transaction.
-    /// If the connection is healthy during sending most likely the peer will see the transaction.
-    /// The adapter maintains a pool of connected peers, so it is unlikely that
-    /// the transaction won't be seen by at least a few peers.
-    advertised: HashSet<SocketAddr>,
+    /// When this transaction was last advertised to each peer.
+    /// Having a peer in this map doesn't guarantee that the peer actually saw the
+    /// transaction: the advertisement or the follow-up `getdata`/`tx` exchange may be
+    /// lost, e.g. when the connection is dropped and re-established. Therefore the
+    /// transaction is re-advertised every [TX_READVERTISE_PERIOD_SECS] for as long as
+    /// it stays in the cache.
+    /// [Instant] is used instead of [SystemTime] because the re-advertisement schedule
+    /// must be immune to wall-clock jumps (NTP corrections, VM clock adjustments).
+    advertised: HashMap<SocketAddr, Instant>,
     /// How long the transaction should be held on to.
     /// This is needed in order to be able to reply to GetData requests.
     ttl: SystemTime,
@@ -52,7 +63,7 @@ impl TransactionInfo {
     fn new(transaction: &Transaction) -> Self {
         Self {
             transaction: transaction.clone(),
-            advertised: HashSet::new(),
+            advertised: HashMap::new(),
             ttl: SystemTime::now() + Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS),
         }
     }
@@ -123,16 +134,22 @@ impl TransactionStore {
     }
 
     /// This method is used to broadcast known transaction IDs to connected peers.
-    /// If the timeout period has passed for a transaction ID, it is broadcasted again.
-    /// If the transaction has not been broadcasted, the transaction ID is broadcasted.
+    /// A transaction ID is broadcasted to a peer if it has never been advertised to that
+    /// peer, or if the last advertisement was at least [TX_READVERTISE_PERIOD_SECS] ago.
     pub fn advertise_txids<Header, Block>(&mut self, channel: &mut impl Channel<Header, Block>) {
         self.remove_old_txns();
+        let now = Instant::now();
+        let readvertise_period = Duration::from_secs(TX_READVERTISE_PERIOD_SECS);
         for address in channel.available_connections() {
             let mut inventory = vec![];
             for (txid, info) in self.transactions.iter_mut() {
-                if !info.advertised.contains(&address) {
+                let advertise = match info.advertised.get(&address) {
+                    Some(last_advertised) => *last_advertised + readvertise_period <= now,
+                    None => true,
+                };
+                if advertise {
                     inventory.push(Inventory::Transaction(*txid));
-                    info.advertised.insert(address);
+                    info.advertised.insert(address, now);
                 }
                 // If the inventory contains the maximum allowed number of transactions, we will send it
                 // and start building a new one.
@@ -141,14 +158,12 @@ impl TransactionStore {
                         self.logger,
                         "Broadcasting Txids ({:?}) to peer {:?}", inventory, address
                     );
-                    for address in channel.available_connections() {
-                        channel
-                            .send(Command {
-                                address: Some(address),
-                                message: NetworkMessage::Inv(std::mem::take(&mut inventory)),
-                            })
-                            .ok();
-                    }
+                    channel
+                        .send(Command {
+                            address: Some(address),
+                            message: NetworkMessage::Inv(std::mem::take(&mut inventory)),
+                        })
+                        .ok();
                 }
             }
             if !inventory.is_empty() {
@@ -325,7 +340,7 @@ mod test {
         assert!(manager.transactions.get(&first_tx.compute_txid()).is_none());
     }
 
-    /// This function tests that we don't readvertise transactions that were already advertised.
+    /// This function tests that we don't readvertise transactions that were recently advertised.
     /// Test Steps:
     /// 1. Add transaction to manager.
     /// 2. Advertise that transaction and create requests from peer.
@@ -368,14 +383,68 @@ mod test {
                 .len(),
             1
         );
-        assert_eq!(
+        assert!(
             manager
                 .transactions
                 .get(&transaction.compute_txid())
                 .unwrap()
                 .advertised
-                .get(&address),
-            Some(&address)
+                .contains_key(&address)
+        );
+    }
+
+    /// This function tests that a transaction is re-advertised to a peer once the
+    /// re-advertisement period has elapsed.
+    /// Test Steps:
+    /// 1. Add transaction to manager.
+    /// 2. Advertise that transaction.
+    /// 3. Check that this transaction does not get advertised again during manager tick.
+    /// 4. Backdate the advertisement to exactly [TX_READVERTISE_PERIOD_SECS] ago,
+    ///    the (inclusive) re-advertisement boundary. The test is skipped if the
+    ///    monotonic clock cannot represent that instant (i.e. the system booted
+    ///    less than [TX_READVERTISE_PERIOD_SECS] ago).
+    /// 5. Check that the transaction is advertised to the peer again.
+    #[test]
+    fn test_adapter_readvertise_after_period() {
+        let address = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
+        let mut channel = TestChannel::new(vec![address]);
+        let mut manager = make_transaction_manager();
+
+        // 1.
+        let transaction = get_transaction();
+        let raw_tx = serialize(&transaction);
+        let txid = transaction.compute_txid();
+        manager.enqueue_transaction(&raw_tx);
+
+        // 2.
+        manager.advertise_txids(&mut channel);
+        assert_eq!(channel.command_count(), 1);
+        channel.pop_front().unwrap();
+
+        // 3.
+        manager.advertise_txids(&mut channel);
+        assert_eq!(channel.command_count(), 0);
+
+        // 4.
+        let Some(backdated) =
+            Instant::now().checked_sub(Duration::from_secs(TX_READVERTISE_PERIOD_SECS))
+        else {
+            return;
+        };
+        let info = manager
+            .transactions
+            .get_mut(&txid)
+            .expect("transaction should be in the map");
+        info.advertised.insert(address, backdated);
+
+        // 5.
+        manager.advertise_txids(&mut channel);
+        assert_eq!(
+            channel.pop_front().expect("there should be one command"),
+            Command {
+                address: Some(address),
+                message: NetworkMessage::Inv(vec![Inventory::Transaction(txid)])
+            }
         );
     }
 
