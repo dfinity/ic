@@ -62,7 +62,7 @@ impl AbortableBroadcastChannelBuilder {
         Artifact: IdentifiableArtifact,
         WireArtifact: PbArtifact,
         F: FnOnce(Arc<dyn Transport>) -> D + 'static,
-        D: ArtifactAssembler<Artifact, WireArtifact>,
+        D: ArtifactAssembler<Artifact, WireArtifact> + Sync,
     >(
         &mut self,
         (assembler, assembler_router): (F, Router),
@@ -148,7 +148,7 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
 where
     Artifact: IdentifiableArtifact,
     WireArtifact: PbArtifact,
-    Assembler: ArtifactAssembler<Artifact, WireArtifact>,
+    Assembler: ArtifactAssembler<Artifact, WireArtifact> + Sync,
 {
     let metrics = ConsensusManagerMetrics::new::<WireArtifact>(metrics_registry);
 
