@@ -4607,6 +4607,7 @@ async fn main() {
             SubCommand::ProposeToAddOrRemoveDataCenters(_) => (),
             SubCommand::ProposeToAddOrRemoveNodeProvider(_) => (),
             SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
+            SubCommand::ProposeToBlessAlternativeGuestOsVersion(_) => (),
             SubCommand::ProposeToChangeNnsCanister(_) => (),
             SubCommand::ProposeToChangeSubnetMembership(_) => (),
             SubCommand::ProposeToChangeSubnetTypeAssignment(_) => (),
