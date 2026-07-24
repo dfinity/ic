@@ -1,5 +1,12 @@
 # work around race condition in zig: https://github.com/ziglang/zig/issues/23993
 # hermetic_cc_toolchain ticket: https://github.com/uber/hermetic_cc_toolchain/issues/224
+#
+# The cache is sharded by Bazel configuration (inferred from the working directory)
+# and, under remote execution (e.g. Namespace RBE, where every action runs in its own
+# ".../execroots/action-<id>" directory on a long-lived worker), by action: all
+# concurrently executing actions on a worker would otherwise share one cache
+# directory and trip the race above, crashing zig's linker child with SIGABRT
+# ("abnormal exit: child_process.ChildProcess.Term{ .Signal = 6 }").
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
 index 88978ee..6456bb5 100644
 --- a/toolchain/defs.bzl
@@ -17,7 +24,7 @@ diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
 index 42f84d5..acac7de 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
-@@ -201,6 +201,22 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
+@@ -201,6 +201,36 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
      return code;
  }
 
@@ -25,6 +32,20 @@ index 42f84d5..acac7de 100644
 +    var it = std.mem.tokenize(u8, pwd, "/");
 +
 +    while (it.next()) |segment| {
++        // Remote execution (e.g. Namespace RBE) runs every action in its own
++        // execroot (".../execroots/action-<id>/...") on a long-lived worker
++        // whose zig cache would otherwise be shared by all concurrently
++        // executing actions, tripping the race above when many cold links
++        // start at once (zig's linker child dies with SIGABRT). Shard the
++        // cache per action instead; invocations from subdirectories of one
++        // action (e.g. foreign_cc configure scripts) still share its cache.
++        if (std.mem.eql(u8, segment, "execroots")) {
++            const action = it.next() orelse "unknown";
++            var hasher = std.hash.Wyhash.init(0);
++            hasher.update(action);
++            const hash_value = hasher.final();
++            return std.fmt.allocPrint(allocator, "action-{x}", .{hash_value});
++        }
 +        if (std.mem.startsWith(u8, segment, "k8-opt-")) {
 +            var hasher = std.hash.Wyhash.init(0);
 +            hasher.update(segment);
@@ -33,14 +54,14 @@ index 42f84d5..acac7de 100644
 +        }
 +    }
 +
-+    // no "k8-opt-" found
++    // neither "execroots" nor "k8-opt-" found
 +    return std.fmt.allocPrint(allocator, "config-catchall", .{});
 +}
 +
  // argv_it is an object that has such method:
  //     fn next(self: *Self) ?[]const u8
  // in non-testing code it is *process.ArgIterator.
-@@ -257,9 +273,19 @@ fn parseArgs(
+@@ -257,9 +287,19 @@ fn parseArgs(
      var env = process.getEnvMap(arena) catch |err|
          return parseFatal(arena, "error getting env: {s}", .{@errorName(err)});
 

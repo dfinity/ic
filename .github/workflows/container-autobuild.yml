@@ -103,10 +103,44 @@ jobs:
             exit 1
           fi
 
+  rbe-worker-image:
+    name: Create Remote Build Execution Worker Image @ Namespace
+    runs-on: namespace-profile-default;permissions.additional_grant=baseimage:*:*
+    permissions: {}
+    needs: [build-image-prep, ic-build-image]
+    if: |
+      needs.build-image-prep.outputs.build_image == 'true' &&
+      github.repository == 'dfinity/ic' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    timeout-minutes: 30
+    outputs:
+      worker-image: ${{ steps.worker.outputs.worker-image }}
+    steps:
+      - name: Mirror ic-build to nscr.io and optimize it for Remote Build Execution @ Namespace
+        id: worker
+        shell: bash
+        run: |
+          set -xeuo pipefail
+
+          nsc docker login
+
+          ic_build_repo="ghcr.io/dfinity/ic-build"
+          src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
+          upload_log="$(nsc base-image upload "$src" "ic-build-worker:${{ needs.build-image-prep.outputs.image_tag }}" 2>&1)"
+          echo "$upload_log"
+          worker_digest="$(printf '%s\n' "$upload_log" | grep -i 'Uploaded base image' | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1 || true)"
+          : "${worker_digest:?could not parse pushed image digest from nsc base-image upload output}"
+          worker_image="${NSC_CONTAINER_REGISTRY}/ic-build-worker@${worker_digest}"
+          echo "Resolved worker image: $worker_image"
+
+          nsc base-image optimize --image_ref "$worker_image"
+          echo "worker-image=$worker_image" >> "$GITHUB_OUTPUT"
+
   update-image-references:
     name: Update Image References in Repo
     runs-on: ubuntu-latest
-    needs: [build-image-prep, ic-build-image]
+    needs: [build-image-prep, ic-build-image, rbe-worker-image]
     if: ${{ needs.build-image-prep.outputs.build_image == 'true' }}
     steps:
       - name: Create GitHub App Token
@@ -119,7 +153,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Update Image References
@@ -127,7 +161,6 @@ jobs:
         run: |
           # Update container image references
           set -xeuo pipefail
-
 
           IMAGE_PREFIX="ghcr.io/dfinity/"
           IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
@@ -139,6 +172,8 @@ jobs:
           popd
           pushd .github
           sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
+          WORKER_IMAGE='${{ needs.rbe-worker-image.outputs.worker-image }}'
+          sed -i -E "s|nscr\.io/[^\"/]+/ic-build-worker@sha256:[0-9a-f]{64}|${WORKER_IMAGE}|g" -- workflow*/*
           popd
 
           git config --global user.name "IDX GitHub Automation"
@@ -147,7 +182,8 @@ jobs:
           git commit \
             -m 'Updating container images to tag: ${{ needs.build-image-prep.outputs.image_tag }}' \
             -m 'ic-build: ${{ needs.ic-build-image.outputs.ic-build-imageid }}' \
-            -m 'ic-dev:   ${{ needs.ic-build-image.outputs.ic-dev-imageid }}'
+            -m 'ic-dev:   ${{ needs.ic-build-image.outputs.ic-dev-imageid }}' \
+            -m 'ic-build-worker: ${{ needs.rbe-worker-image.outputs.worker-image }}'
           git push
 
       - name: Add PR Comment
@@ -162,6 +198,7 @@ jobs:
             message += 'New container images with tag: `${{ needs.build-image-prep.outputs.image_tag }}`\n'
             message += 'ic-build: `${{ needs.ic-build-image.outputs.ic-build-imageid }}`\n'
             message += 'ic-dev: `${{ needs.ic-build-image.outputs.ic-dev-imageid }}`\n'
+            message += 'ic-build-worker: `${{ needs.rbe-worker-image.outputs.worker-image }}`\n'
 
             // Find existing comment from this workflow
             const comments = await github.rest.issues.listComments({

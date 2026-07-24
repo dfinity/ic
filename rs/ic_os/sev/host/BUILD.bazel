@@ -24,6 +24,7 @@ rust_library(
 rust_test(
     name = "host_test",
     crate = ":host",
+    exec_properties = {"namespace_requires_network": "true"},
     tags = ["requires-network"],
     deps = [
         "@crate_index//:pem",
