@@ -92,6 +92,7 @@ rust_test(
     crate = ":embedders",
     deps = [
         # Keep sorted.
+        "//rs/config",
         "//rs/interfaces",
         "//rs/test_utilities",
         "//rs/test_utilities/types",

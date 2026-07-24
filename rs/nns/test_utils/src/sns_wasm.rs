@@ -121,10 +121,10 @@ pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm) -> SnsWasm {
     let wasm = add_wasm_via_proposal_and_return_immediately(env, wasm.clone());
     let proposal_id = ProposalId(wasm.proposal_id.unwrap());
 
-    while get_proposal_info(env, proposal_id).unwrap().status == (ProposalStatus::Open as i32) {
-        env.tick();
-        env.advance_time(Duration::from_millis(100));
-    }
+    // Wait for the proposal to be executed, not merely decided. Once a proposal is
+    // decided its status becomes `Adopted`, but the downstream `add_wasm` call it
+    // triggers may not have completed yet, so we must also tick past `Adopted`.
+    wait_for_proposal_executed(env, proposal_id);
 
     wasm
 }
@@ -182,6 +182,29 @@ pub fn add_wasm_via_proposal_and_return_immediately(env: &StateMachine, wasm: Sn
         proposal_id: Some(proposal_id.0),
         ..wasm
     }
+}
+
+/// Ticks the `StateMachine` until the given proposal has finished executing.
+///
+/// Waiting only for the proposal to leave `Open` is not enough: once decided, a
+/// proposal's status is `Adopted`, but any cross-canister calls it triggers (e.g.
+/// `add_wasm`) may still be in flight. We therefore keep ticking while the status is
+/// `Open` or `Adopted`, and stop once it reaches `Executed`.
+fn wait_for_proposal_executed(env: &StateMachine, proposal_id: ProposalId) {
+    for _ in 0..50 {
+        let proposal = get_proposal_info(env, proposal_id).unwrap();
+        let status = proposal.status;
+        if status == ProposalStatus::Executed as i32 {
+            return;
+        }
+        assert!(
+            status == ProposalStatus::Open as i32 || status == ProposalStatus::Adopted as i32,
+            "Proposal {proposal_id:?} did not execute successfully: {proposal:#?}"
+        );
+        env.tick();
+        env.advance_time(Duration::from_millis(100));
+    }
+    panic!("Proposal {proposal_id:?} was never executed");
 }
 
 /// Make a proposal with test_neuron_1
@@ -247,10 +270,7 @@ pub fn update_sns_subnet_list_via_proposal(
 
     let pid = make_proposal_with_test_neuron_1(env, proposal);
 
-    while get_proposal_info(env, pid).unwrap().status == (ProposalStatus::Open as i32) {
-        env.tick();
-        env.advance_time(Duration::from_millis(100));
-    }
+    wait_for_proposal_executed(env, pid);
 }
 
 /// Make a get_sns_subnet_ids request to a canister in the StateMachine

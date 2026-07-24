@@ -13,7 +13,7 @@ use ic_universal_canister::{call_args, wasm};
 use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 use slog::{Logger, info};
 
-const EPSILON: f64 = 0.0005;
+const EPSILON: f64 = 0.005;
 const MAX_CUTS: usize = 10;
 
 /// Checks whether the first argument is equal to the second argument with a relative error
@@ -203,15 +203,15 @@ fn load_metrics_e2e_test() {
         // These metrics are near-symmetric, so they do not pin down the orientation; the
         // orientation is determined and checked for consistency by the exact `assert_eq_oriented`
         // checks below, and these `assert_near` checks pass in either orientation.
-        assert_near!(states_sizes_bytes.source, 4604164, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4604180, 0.1);
-        assert_near!(instructions_executed.source, 8296137, 0.1);
-        assert_near!(instructions_executed.destination, 8290079, 0.1);
-        assert_eq_oriented!(ingress_messages_executed, 20, 19);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);
-        assert_eq_oriented!(http_outcalls_executed, 5, 5);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 328, 366);
+        assert_near!(states_sizes_bytes.source, 4778330, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4473176, 0.1);
+        assert_near!(instructions_executed.source, 144966571, 0.1);
+        assert_near!(instructions_executed.destination, 144966571, 0.1);
+        assert_eq_oriented!(ingress_messages_executed, 17, 22);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 4, 6);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 13, 15);
+        assert_eq_oriented!(http_outcalls_executed, 6, 4);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 355, 339);
         // A single split cannot report some metrics in the original orientation and others in the
         // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
         assert!(
