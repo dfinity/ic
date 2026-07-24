@@ -6,6 +6,7 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
 function install_hostos() {
@@ -96,9 +97,41 @@ function resize_partition() {
         log_and_halt_installation_on_error "${?}" "Unable to include PV '/dev/${drive}' in VG."
     done
 
-    # Extend GuestOS LV to fill VG space
-    lvextend -i "${count}" --type striped -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
-    log_and_halt_installation_on_error "${?}" "Unable to extend logical volume: /dev/hostlvm/guestos"
+    local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
+
+    # Configure multiple GuestOS if type4.X
+    if [[ $node_reward_type =~ ^type4(\.[0-9]+)?$ ]]; then
+        # Cleanup the initial GuestOS
+        lvremove -f hostlvm/guestos >/dev/null 2>&1
+        log_and_halt_installation_on_error "${?}" "Unable to cleanup initial GuestOS volume"
+
+        # And set up new split volumes
+        min_pv_free=$(pvs --noheadings -o pv_pe_count,pv_pe_alloc_count -S vg_name=hostlvm | awk '{print $1 - $2}' | sort -n | head -n1)
+
+        create_guestos_lvs() {
+            local total="$1"
+            local each=$(((min_pv_free / total) * count))
+            local i
+
+            for ((i = 0; i < total; i++)); do
+                lvcreate -i "${count}" --type striped -l "${each}" -n "guestos${i}" hostlvm >/dev/null 2>&1
+                log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+            done
+        }
+
+        case "${node_reward_type}" in
+            type4.0) create_guestos_lvs 32 ;;
+            type4.1) create_guestos_lvs 60 ;;
+            type4.2) create_guestos_lvs 8 ;;
+            type4.3) create_guestos_lvs 4 ;;
+            type4.4) create_guestos_lvs 2 ;;
+        esac
+    # "Normal" behavior
+    else
+        # Extend GuestOS LV to fill VG space
+        lvextend -i "${count}" --type striped -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
+        log_and_halt_installation_on_error "${?}" "Unable to extend logical volume: /dev/hostlvm/guestos"
+    fi
 }
 
 # Establish run order

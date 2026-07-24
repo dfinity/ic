@@ -11,6 +11,10 @@ component_files = {
     # hostos components
     Label("hostos/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
     Label("hostos/guestos/upgrade-guestos.service"): "/etc/systemd/system/upgrade-guestos.service",
+    Label("multi-hostos/start-guestos.sh"): "/opt/ic/bin/start-guestos.sh",
+    Label("multi-hostos/start-guestos.service"): "/etc/systemd/system/start-guestos.service",
+    Label("multi-hostos/guestos@.service"): "/etc/systemd/system/guestos@.service",
+    Label("multi-hostos/guestos.target"): "/etc/systemd/system/guestos.target",
     Label("hostos/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",

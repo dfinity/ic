@@ -4,7 +4,9 @@ use config_types::{
     GuestVMType, HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{
+    MacAddr6Ext, calculate_deterministic_mac, calculate_multi_deterministic_mac,
+};
 use std::net::Ipv6Addr;
 use std::path::Path;
 use utils::to_cidr;
@@ -16,6 +18,7 @@ const DEFAULT_GUESTOS_RECOVERY_FILE_PATH: &str = "/run/config/guestos_recovery_h
 /// sev_certificate_chain_pem must be provided.
 pub fn generate_guestos_config(
     hostos_config: &HostOSConfig,
+    guest_vm_slot: Option<u8>,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
 ) -> Result<GuestOSConfig> {
@@ -47,9 +50,14 @@ pub fn generate_guestos_config(
         }
     };
 
-    let guestos_ipv6_address =
-        node_ipv6_address(node_type, hostos_config, deterministic_ipv6_config)?;
+    let guestos_ipv6_address = node_ipv6_address(
+        guest_vm_slot,
+        node_type,
+        hostos_config,
+        deterministic_ipv6_config,
+    )?;
     let peer_ipv6_address = node_ipv6_address(
+        None,
         upgrade_peer_node_type,
         hostos_config,
         deterministic_ipv6_config,
@@ -90,15 +98,25 @@ pub fn generate_guestos_config(
 }
 
 fn node_ipv6_address(
+    slot: Option<u8>,
     node_type: NodeType,
     hostos_config: &HostOSConfig,
     deterministic_config: &DeterministicIpv6Config,
 ) -> Result<Ipv6Addr> {
-    let mac = calculate_deterministic_mac(
-        &hostos_config.icos_settings.mgmt_mac,
-        hostos_config.icos_settings.deployment_environment,
-        node_type,
-    );
+    let mac = if let Some(slot) = slot {
+        calculate_multi_deterministic_mac(
+            &hostos_config.icos_settings.mgmt_mac,
+            hostos_config.icos_settings.deployment_environment,
+            node_type,
+            slot,
+        )
+    } else {
+        calculate_deterministic_mac(
+            &hostos_config.icos_settings.mgmt_mac,
+            hostos_config.icos_settings.deployment_environment,
+            node_type,
+        )
+    };
 
     mac.calculate_slaac(&deterministic_config.prefix)
 }
@@ -148,7 +166,7 @@ mod tests {
         let hostos_config = hostos_config_for_test();
 
         let guestos_config =
-            generate_guestos_config(&hostos_config, GuestVMType::Default, None).unwrap();
+            generate_guestos_config(&hostos_config, None, GuestVMType::Default, None).unwrap();
 
         assert_eq!(guestos_config.config_version, CONFIG_VERSION.to_string());
         assert_eq!(
@@ -190,7 +208,7 @@ mod tests {
             });
 
         let guestos_config =
-            generate_guestos_config(&hostos_config, GuestVMType::Upgrade, None).unwrap();
+            generate_guestos_config(&hostos_config, None, GuestVMType::Upgrade, None).unwrap();
 
         if let Ipv6Config::Fixed(fixed) = &guestos_config.network_settings.ipv6_config {
             assert_eq!(fixed.address, "2001:db8::6802:94ff:feef:2978/64");
@@ -215,7 +233,7 @@ mod tests {
             gateway: "2001:db8::1".parse().unwrap(),
         });
 
-        let result = generate_guestos_config(&hostos_config, GuestVMType::Default, None);
+        let result = generate_guestos_config(&hostos_config, None, GuestVMType::Default, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Deterministic"));
     }
@@ -226,6 +244,7 @@ mod tests {
 
         let result = generate_guestos_config(
             &hostos_config,
+            None,
             GuestVMType::Default,
             Some("abc".to_string()),
         )
