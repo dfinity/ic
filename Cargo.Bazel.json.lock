@@ -1,5 +1,5 @@
 {
-  "checksum": "04cb3be95a0857e516fce14b2327d9f77d8165b7fb6ac0cd12f56764bf236113",
+  "checksum": "92a55337f436dbf59799fb2a763ef69b2f7eecda308e1d2a50c6def8ac9aad03",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -45574,7 +45574,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/libflate/2.1.0/download",
-          "sha256": "45d9dfdc14ea4ef0900c1cddbc8dcd553fbaacd8a4a282cf4018ae9dd04fb21e"
+          "sha256": "45d9dfdc14ea4ef0900c1cddbc8dcd553fbaacd8a4a282cf4018ae9dd04fb21e",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:libflate.patch"
+          ]
         }
       },
       "targets": [
