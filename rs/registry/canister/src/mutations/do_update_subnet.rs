@@ -788,6 +788,7 @@ mod tests {
                 ResourceLimits {
                     maximum_state_size: Some(NumBytes::new(42)),
                     maximum_state_delta: Some(NumBytes::new(64)),
+                    ..Default::default()
                 }
                 .into(),
             ),
@@ -847,6 +848,7 @@ mod tests {
                     ResourceLimits {
                         maximum_state_size: Some(NumBytes::new(42)),
                         maximum_state_delta: Some(NumBytes::new(64)),
+                        ..Default::default()
                     }
                     .into()
                 ),
@@ -883,6 +885,7 @@ mod tests {
                 ResourceLimits {
                     maximum_state_size: Some(NumBytes::new(42)),
                     maximum_state_delta: Some(NumBytes::new(64)),
+                    ..Default::default()
                 }
                 .into(),
             ),
@@ -956,6 +959,7 @@ mod tests {
                     ResourceLimits {
                         maximum_state_size: Some(NumBytes::new(42)),
                         maximum_state_delta: Some(NumBytes::new(64)),
+                        ..Default::default()
                     }
                     .into()
                 ),
@@ -971,6 +975,7 @@ mod tests {
                 ResourceLimits {
                     maximum_state_size: Some(NumBytes::new(42)),
                     maximum_state_delta: Some(NumBytes::new(64)),
+                    ..Default::default()
                 }
                 .into(),
             ),
@@ -988,6 +993,7 @@ mod tests {
                 ResourceLimits {
                     maximum_state_size: Some(NumBytes::new(128)),
                     maximum_state_delta: None,
+                    ..Default::default()
                 }
                 .into(),
             ),
@@ -1000,6 +1006,7 @@ mod tests {
                     ResourceLimits {
                         maximum_state_size: Some(NumBytes::new(128)),
                         maximum_state_delta: None,
+                        ..Default::default()
                     }
                     .into()
                 ),

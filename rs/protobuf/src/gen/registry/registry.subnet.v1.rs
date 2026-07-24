@@ -437,6 +437,16 @@ pub struct ResourceLimits {
     pub maximum_state_size: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "2")]
     pub maximum_state_delta: ::core::option::Option<u64>,
+    /// The maximum number of instructions a single query (or composite query)
+    /// method execution is allowed to consume.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[prost(uint64, optional, tag = "3")]
+    pub maximum_query_instructions: ::core::option::Option<u64>,
+    /// The maximum number of instructions allowed across an entire composite query
+    /// call graph.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[prost(uint64, optional, tag = "4")]
+    pub maximum_composite_query_instructions: ::core::option::Option<u64>,
 }
 #[derive(
     serde::Serialize,

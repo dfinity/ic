@@ -6,7 +6,7 @@
 use candid::CandidType;
 use clap::Args;
 use ic_protobuf::registry::subnet::v1 as pb;
-use ic_types::NumBytes;
+use ic_types::{NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
 
 /// Limits on resource consumption (e.g., memory usage).
@@ -24,6 +24,15 @@ pub struct ResourceLimits {
     /// The protocol uses a default value if the limit of `0` is specified.
     #[arg(long)]
     pub maximum_state_delta: Option<NumBytes>,
+    /// The maximum number of instructions a single query (or composite query) method execution
+    /// is allowed to consume.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[arg(long)]
+    pub maximum_query_instructions: Option<NumInstructions>,
+    /// The maximum number of instructions allowed across an entire composite query call graph.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[arg(long)]
+    pub maximum_composite_query_instructions: Option<NumInstructions>,
 }
 
 impl ResourceLimits {
@@ -51,6 +60,10 @@ impl From<ResourceLimits> for pb::ResourceLimits {
         Self {
             maximum_state_size: resource_limits.maximum_state_size.map(|x| x.get()),
             maximum_state_delta: resource_limits.maximum_state_delta.map(|x| x.get()),
+            maximum_query_instructions: resource_limits.maximum_query_instructions.map(|x| x.get()),
+            maximum_composite_query_instructions: resource_limits
+                .maximum_composite_query_instructions
+                .map(|x| x.get()),
         }
     }
 }
@@ -60,6 +73,12 @@ impl From<pb::ResourceLimits> for ResourceLimits {
         Self {
             maximum_state_size: resource_limits.maximum_state_size.map(NumBytes::from),
             maximum_state_delta: resource_limits.maximum_state_delta.map(NumBytes::from),
+            maximum_query_instructions: resource_limits
+                .maximum_query_instructions
+                .map(NumInstructions::from),
+            maximum_composite_query_instructions: resource_limits
+                .maximum_composite_query_instructions
+                .map(NumInstructions::from),
         }
     }
 }
