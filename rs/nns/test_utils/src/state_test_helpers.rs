@@ -1665,13 +1665,20 @@ pub fn nns_get_node_provider_rewards(
 pub fn nns_get_most_recent_monthly_node_provider_rewards(
     state_machine: &StateMachine,
 ) -> Option<MonthlyNodeProviderRewards> {
-    let result = state_machine
-        .execute_ingress(
-            GOVERNANCE_CANISTER_ID,
-            "get_most_recent_monthly_node_provider_rewards",
-            Encode!(&()).unwrap(),
-        )
-        .unwrap();
+    try_nns_get_most_recent_monthly_node_provider_rewards(state_machine).unwrap()
+}
+
+/// Like `nns_get_most_recent_monthly_node_provider_rewards`, but returns the ingress
+/// `UserError` (e.g. a transient `CanisterStopped` while Governance is being upgraded)
+/// to the caller instead of panicking on it.
+pub fn try_nns_get_most_recent_monthly_node_provider_rewards(
+    state_machine: &StateMachine,
+) -> Result<Option<MonthlyNodeProviderRewards>, ic_state_machine_tests::UserError> {
+    let result = state_machine.execute_ingress(
+        GOVERNANCE_CANISTER_ID,
+        "get_most_recent_monthly_node_provider_rewards",
+        Encode!(&()).unwrap(),
+    )?;
 
     let result = match result {
         WasmResult::Reply(result) => result,
@@ -1680,7 +1687,7 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
         }
     };
 
-    Decode!(&result, Option<MonthlyNodeProviderRewards>).unwrap()
+    Ok(Decode!(&result, Option<MonthlyNodeProviderRewards>).unwrap())
 }
 
 pub fn nns_list_node_provider_rewards(
