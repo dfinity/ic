@@ -5004,7 +5004,7 @@ fn creation_canister_history_bytes() -> i64 {
     (size_of::<CanisterChange>() + size_of::<PrincipalId>()) as i64
 }
 
-fn create_canister_with_zero_log_memory_limit(
+fn create_canister_with_zero_log_memory_limit_and_freezing_threshold(
     test: &mut ExecutionTest,
 ) -> Result<CanisterId, UserError> {
     test.create_canister_with_settings(
@@ -5029,7 +5029,8 @@ fn create_canister_succeeds_if_subnet_can_account_for_canister_history() {
     let creation_bytes = creation_canister_history_bytes();
     test.set_available_execution_memory(creation_bytes);
 
-    let canister_id = create_canister_with_zero_log_memory_limit(&mut test).unwrap();
+    let canister_id =
+        create_canister_with_zero_log_memory_limit_and_freezing_threshold(&mut test).unwrap();
 
     // The created canister has no memory allocation and a zero log memory limit,
     // so its entire memory usage is the `canister_creation` history entry.
@@ -5059,7 +5060,8 @@ fn create_canister_fails_if_subnet_cannot_account_for_canister_history() {
     let creation_bytes = creation_canister_history_bytes();
     test.set_available_execution_memory(creation_bytes - 1);
 
-    let err = create_canister_with_zero_log_memory_limit(&mut test).unwrap_err();
+    let err =
+        create_canister_with_zero_log_memory_limit_and_freezing_threshold(&mut test).unwrap_err();
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
 
     // The creation failed atomically: no canister was created and the subnet
