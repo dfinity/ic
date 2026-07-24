@@ -1033,6 +1033,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 consensus_responses: Vec::new(),
+                canister_http_spent: Default::default(),
                 chain_key_data: Default::default(),
                 requires_full_state_hash: false,
             },
@@ -2399,6 +2400,7 @@ fn process_batch_updates_subnet_metrics() {
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 consensus_responses: Vec::new(),
+                canister_http_spent: Default::default(),
                 chain_key_data: Default::default(),
                 requires_full_state_hash: false,
             },
@@ -2469,6 +2471,7 @@ fn process_batch_resets_split_marker() {
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 consensus_responses: Vec::new(),
+                canister_http_spent: Default::default(),
                 chain_key_data: Default::default(),
                 requires_full_state_hash: false,
             },

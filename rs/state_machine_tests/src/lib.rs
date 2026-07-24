@@ -146,8 +146,8 @@ use ic_types::{
     SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
-        ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
+        ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
         ValidationContext, XNetPayload,
     },
     canister_http::{
@@ -1931,7 +1931,7 @@ impl StateMachine {
         let xnet_payload = batch_payload.xnet.clone();
         let ingress = &batch_payload.ingress;
         let ingress_messages = ingress.clone().try_into().unwrap();
-        let (http_responses, _) =
+        let (http_responses, http_spent, _) =
             CanisterHttpPayloadBuilderImpl::into_messages(&batch_payload.canister_http);
         let inducted: Vec<_> = http_responses
             .clone()
@@ -1990,6 +1990,7 @@ impl StateMachine {
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
             .with_consensus_responses(consensus_responses)
+            .with_canister_http_spent(http_spent)
             .with_query_stats(query_stats)
             .with_self_validating(self_validating);
         if let Some(blockmaker_metrics) = blockmaker_metrics {
@@ -3108,6 +3109,7 @@ impl StateMachine {
                 nidkg_ids: self.ni_dkg_ids.clone(),
             },
             consensus_responses: payload.consensus_responses,
+            canister_http_spent: payload.canister_http_spent,
             requires_full_state_hash,
         };
         let blockmaker_metrics = payload
@@ -5420,6 +5422,7 @@ pub struct PayloadBuilder {
     ingress_messages: Vec<SignedIngress>,
     xnet_payload: XNetPayload,
     consensus_responses: Vec<ConsensusResponse>,
+    canister_http_spent: CanisterHttpSpent,
     query_stats: Option<QueryStatsPayload>,
     self_validating: Option<SelfValidatingPayload>,
     blockmaker_metrics: Option<BlockmakerMetrics>,
@@ -5433,6 +5436,7 @@ impl Default for PayloadBuilder {
             ingress_messages: Default::default(),
             xnet_payload: Default::default(),
             consensus_responses: Default::default(),
+            canister_http_spent: Default::default(),
             query_stats: Default::default(),
             self_validating: Default::default(),
             blockmaker_metrics: Default::default(),
@@ -5486,6 +5490,13 @@ impl PayloadBuilder {
     pub fn with_consensus_responses(self, consensus_responses: Vec<ConsensusResponse>) -> Self {
         Self {
             consensus_responses,
+            ..self
+        }
+    }
+
+    pub fn with_canister_http_spent(self, canister_http_spent: CanisterHttpSpent) -> Self {
+        Self {
+            canister_http_spent,
             ..self
         }
     }

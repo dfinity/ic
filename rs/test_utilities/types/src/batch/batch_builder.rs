@@ -19,6 +19,7 @@ impl Default for BatchBuilder {
                     batch_messages: BatchMessages::default(),
                     chain_key_data: Default::default(),
                     consensus_responses: vec![],
+                    canister_http_spent: Default::default(),
                     requires_full_state_hash: false,
                 },
                 randomness: Randomness::from([0; 32]),
@@ -49,6 +50,7 @@ impl BatchBuilder {
             batch_messages: messages,
             chain_key_data: Default::default(),
             consensus_responses: vec![],
+            canister_http_spent: Default::default(),
             requires_full_state_hash: false,
         };
         self

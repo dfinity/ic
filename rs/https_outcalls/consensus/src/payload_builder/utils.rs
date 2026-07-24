@@ -1,7 +1,8 @@
 use CanisterHttpResponseContent::Reject;
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, fully_replicated_initial_spent};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
-    CountBytes, NodeId, NumBytes, RegistryVersion,
+    CountBytes, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
     batch::{
         FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
@@ -16,6 +17,7 @@ use ic_types::{
     messages::CallbackId,
     signature::{BasicSigBatchEntry, BasicSignature},
 };
+use ic_types_cycles::Cycles;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     mem::size_of,
@@ -344,6 +346,7 @@ pub(crate) fn group_shares_by_callback_id<
 pub(crate) fn find_fully_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
@@ -351,9 +354,14 @@ pub(crate) fn find_fully_replicated_response(
         if signers.len() >= threshold {
             pool_access
                 .get_response_content_by_hash(&metadata.content_hash)
-                .map(|content| CanisterHttpResponseWithConsensus {
-                    content,
-                    proof: aggregate_shares(metadata.clone(), shares),
+                .map(|content| {
+                    let proof = aggregate_shares(metadata.clone(), shares);
+                    let initial_spent = fully_replicated_initial_spent(&proof, subnet_size);
+                    CanisterHttpResponseWithConsensus {
+                        content,
+                        proof,
+                        initial_spent,
+                    }
                 })
         } else {
             None
@@ -368,6 +376,7 @@ pub(crate) fn find_fully_replicated_response(
 pub(crate) fn find_non_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
@@ -377,9 +386,14 @@ pub(crate) fn find_non_replicated_response(
             .and_then(|correct_share| {
                 pool_access
                     .get_response_content_by_hash(&metadata.content_hash)
-                    .map(|content| CanisterHttpResponseWithConsensus {
-                        content,
-                        proof: aggregate_shares(metadata.clone(), &[correct_share]),
+                    .map(|content| {
+                        let proof = aggregate_shares(metadata.clone(), &[correct_share]);
+                        let initial_spent = fully_replicated_initial_spent(&proof, subnet_size);
+                        CanisterHttpResponseWithConsensus {
+                            content,
+                            proof,
+                            initial_spent,
+                        }
                     })
             })
     })
@@ -418,6 +432,7 @@ pub(crate) fn find_flexible_result(
     max_responses: u32,
     accumulated_size: usize,
     max_payload_size: NumBytes,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> FlexibleFindResult {
     let mut entries_sorted_asc: Vec<_> = grouped_shares.iter().collect();
@@ -425,7 +440,8 @@ pub(crate) fn find_flexible_result(
 
     let min_responses = min_responses as usize;
     let mut ok_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
-    let mut ok_responses_size = size_of::<CallbackId>();
+    // Account for the serialized `initial_spent` field alongside the callback id.
+    let mut ok_responses_size = size_of::<CallbackId>() + size_of::<Cycles>();
     // Tracks all signers processed (both OK and reject)
     let mut seen_signers = BTreeSet::new();
     let mut reject_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
@@ -469,6 +485,11 @@ pub(crate) fn find_flexible_result(
 
     // 1. Enough OK responses collected?
     if ok_responses.len() >= min_responses {
+        let initial_spent = flexible_initial_spent(
+            ok_responses.iter().map(|(_, share)| *share),
+            subnet_size,
+            min_responses as u32,
+        );
         return FlexibleFindResult::OkResponses(
             FlexibleCanisterHttpResponses {
                 callback_id,
@@ -479,6 +500,7 @@ pub(crate) fn find_flexible_result(
                         proof: share.clone(),
                     })
                     .collect(),
+                initial_spent,
             },
             ok_responses_size,
         );
@@ -486,6 +508,11 @@ pub(crate) fn find_flexible_result(
 
     // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
     if reject_responses.len() > committee.len().saturating_sub(min_responses) {
+        let initial_spent = flexible_initial_spent(
+            reject_responses.iter().map(|(_, share)| *share),
+            subnet_size,
+            min_responses as u32,
+        );
         let error = FlexibleCanisterHttpError::TooManyRejects {
             callback_id,
             reject_responses: reject_responses
@@ -495,6 +522,7 @@ pub(crate) fn find_flexible_result(
                     proof: share.clone(),
                 })
                 .collect(),
+            initial_spent,
         };
         let error_size = error.count_bytes();
         return FlexibleFindResult::Error(error, error_size);

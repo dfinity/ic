@@ -1,4 +1,5 @@
 mod dark_launch;
+pub mod fees;
 mod legacy;
 mod metrics;
 mod payg;

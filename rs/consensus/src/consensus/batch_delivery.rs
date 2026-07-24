@@ -26,8 +26,8 @@ use ic_protobuf::{
 use ic_types::{
     Height, PrincipalId, SubnetId,
     batch::{
-        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
-        ConsensusResponse,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
+        ChainKeyData, ConsensusResponse,
     },
     consensus::{
         Block, BlockPayload, HasVersion,
@@ -210,7 +210,8 @@ pub(crate) fn deliver_batches_with_result_processor(
             idkg_pre_signatures,
             nidkg_ids,
         };
-        let consensus_responses = generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
+        let (consensus_responses, canister_http_spent) =
+            generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
         // This flag can only be true, if we've called deliver_batches with a height
         // limit.  In this case we also want to have a checkpoint for that last height.
         let persist_batch = Some(height) == max_batch_height_to_deliver;
@@ -220,6 +221,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 batch_messages: BatchMessages::default(),
                 chain_key_data,
                 consensus_responses,
+                canister_http_spent,
                 requires_full_state_hash,
             },
             BlockPayload::Data(data_payload) => {
@@ -236,6 +238,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                         .unwrap_or_default(),
                     chain_key_data,
                     consensus_responses,
+                    canister_http_spent,
                     requires_full_state_hash,
                 }
             }
@@ -312,9 +315,9 @@ fn generate_responses_to_subnet_calls(
     block: &Block,
     stats: &mut BatchStats,
     log: &ReplicaLogger,
-) -> Vec<ConsensusResponse> {
+) -> (Vec<ConsensusResponse>, CanisterHttpSpent) {
     let mut consensus_responses = Vec::new();
-    match block.payload.as_ref() {
+    let canister_http_spent = match block.payload.as_ref() {
         BlockPayload::Summary(summary_payload) => {
             info!(
                 log,
@@ -324,7 +327,8 @@ fn generate_responses_to_subnet_calls(
             consensus_responses.append(&mut generate_responses_to_remote_dkgs(
                 &summary_payload.dkg.transcripts_for_remote_subnets,
                 log,
-            ))
+            ));
+            CanisterHttpSpent::default()
         }
         BlockPayload::Data(data_payload) => {
             consensus_responses.append(&mut generate_responses_to_remote_dkgs(
@@ -337,7 +341,7 @@ fn generate_responses_to_subnet_calls(
                     .append(&mut generate_responses_to_initial_dealings_calls(payload));
             }
 
-            let (mut http_responses, http_stats) =
+            let (mut http_responses, http_spent, http_stats) =
                 CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
             consensus_responses.append(&mut http_responses);
             stats.canister_http = http_stats;
@@ -345,9 +349,10 @@ fn generate_responses_to_subnet_calls(
             let mut chain_key_responses =
                 ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
             consensus_responses.append(&mut chain_key_responses);
+            http_spent
         }
-    }
-    consensus_responses
+    };
+    (consensus_responses, canister_http_spent)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -735,7 +740,7 @@ mod tests {
         );
 
         let mut batch_stats = BatchStats::new(Height::from(1));
-        let responses =
+        let (responses, _canister_http_spent) =
             generate_responses_to_subnet_calls(&block, &mut batch_stats, &no_op_logger());
 
         assert_eq!(

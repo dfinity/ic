@@ -8,32 +8,21 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
+use crate::fees::{
+    FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE, PER_DOWNLOADED_BYTE_FEE, PER_RESPONSE_MS_FEE,
+    TRANSFORM_INSTRUCTION_DIVISOR,
+};
 use crate::{AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError};
 
-// Per-replica fee constants.
-//
-// A request's cost is split into three parts:
-//   1. the base cost, subtracted up-front when the request context is created
-//      (and therefore reflected in `per_replica_allowance`);
-//   2. the per-replica cost, accounted for here as-you-go;
-//   3. the consensus cost, computed from the aggregated response in the block
-//      payload.
-//
-// This tracker implements the per-replica part. The formula differs
-// between fully-replicated and non-replicated/flexible outcalls:
-//
-// Fully-replicated per replica:
-//   50 * downloaded_bytes_i + 300 * request_ms_i + transform_instructions_i / 13
-//
-// Non-replicated/Flexible per replica:
-//   50 * downloaded_bytes_i + 300 * request_ms_i
-//     + 50 * transformed_response_bytes_i * N + transform_instructions_i / 13
-const PER_DOWNLOADED_BYTE_FEE: u128 = 50;
-const PER_RESPONSE_MS_FEE: u128 = 300;
-/// HTTP outcalls are priced consistently against a reference subnet size of 13.
-const TRANSFORM_INSTRUCTION_DIVISOR: u128 = 13;
-const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
-
+/// This tracker implements the per-replica part of pay-as-you-go pricing. The formula
+/// differs between fully-replicated and non-replicated/flexible outcalls:
+///
+/// Fully-replicated per replica:
+///   50 * downloaded_bytes_i + 300 * request_ms_i + transform_instructions_i / 13
+///
+/// Non-replicated/Flexible per replica:
+///   50 * downloaded_bytes_i + 300 * request_ms_i
+///      + 50 * transformed_response_bytes_i * N + transform_instructions_i / 13
 pub struct PayAsYouGoTracker {
     /// Number of nodes (`N`) on the subnet.
     subnet_size: NumberOfNodes,

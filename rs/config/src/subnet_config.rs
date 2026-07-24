@@ -129,16 +129,6 @@ pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// cover the cost of the subnet.
 pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 
-/// Pay-as-you-go base-fee pricing constants for HTTP outcalls, charged upfront
-/// for every request by `CyclesAccountManager::http_request_base_fee`.
-pub const HTTP_REQUEST_BASE_FEE: u128 = 1_000_000;
-pub const HTTP_REQUEST_PER_BYTE_FEE: u128 = 50;
-pub const HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE: u128 = 140_000;
-pub const HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE: u128 = 800;
-pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE: u128 = 90_000;
-pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE: u128 = 2_000;
-pub const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: u128 = 100_000;
-
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.

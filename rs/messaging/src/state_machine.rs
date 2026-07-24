@@ -127,6 +127,7 @@ impl StateMachine for StateMachineImpl {
                 BatchContent::Data {
                     batch_messages,
                     consensus_responses,
+                    canister_http_spent: _,
                     chain_key_data,
                     requires_full_state_hash,
                 } => (

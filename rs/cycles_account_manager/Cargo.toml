@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
+ic-https-outcalls-pricing = { path = "../https_outcalls/pricing" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }

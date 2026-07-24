@@ -19,6 +19,7 @@ rust_library(
         # Keep sorted.
         "//packages/ic-error-types",
         "//rs/consensus/utils",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/interfaces/adapter_client",
         "//rs/interfaces/registry",
@@ -56,6 +57,7 @@ rust_test(
         "//rs/artifact_pool",
         "//rs/consensus/mocks",
         "//rs/consensus/utils",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/interfaces/adapter_client",
         "//rs/interfaces/mocks",

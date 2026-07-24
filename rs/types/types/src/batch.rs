@@ -41,10 +41,13 @@ use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use ic_types_cycles::Cycles;
 use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BatchContent {
     /// The payload messages to be processed.
@@ -52,6 +55,8 @@ pub enum BatchContent {
         batch_messages: BatchMessages,
         /// Responses to subnet calls that require consensus' involvement.
         consensus_responses: Vec<ConsensusResponse>,
+        /// The amount of cycles spent on HTTP outcalls.
+        canister_http_spent: CanisterHttpSpent,
         /// Data required by the chain key service
         chain_key_data: ChainKeyData,
         /// Whether the state obtained by executing this batch needs to be fully
@@ -342,6 +347,45 @@ impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
             payload,
         })
     }
+}
+
+/// The amount of cycles spent on HTTP outcalls, delivered to the DSM
+/// as part of the batch.
+///
+/// There are two kinds of reports:
+///  - an *initial* report, where the set of nodes that produced a response
+///    collectively spent one specific amount of cycles (see
+///    [`CanisterHttpInitialSpent`]);
+///  - an *asynchronous* report, where individual nodes each spent some cycles,
+///    possibly in a later block than the response (see
+///    [`CanisterHttpAsyncSpent`]).
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpSpent {
+    pub initial: Vec<CanisterHttpInitialSpent>,
+    pub asynchronous: Vec<CanisterHttpAsyncSpent>,
+}
+
+/// The initial spent report for an HTTP outcall: the set of `nodes` that
+/// produced the response collectively spent one specific `amount` of cycles
+/// (the sum of their per-replica spends plus the consensus cost).
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpInitialSpent {
+    pub callback: CallbackId,
+    pub amount: Cycles,
+    pub nodes: BTreeSet<NodeId>,
+}
+
+/// An asynchronous spent report for an HTTP outcall.
+///
+/// `shares` maps each participating node to the per-replica cycles it signed
+/// over as part of the aggregated response proof.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpAsyncSpent {
+    pub callback: CallbackId,
+    pub shares: BTreeMap<NodeId, Cycles>,
 }
 
 #[cfg(test)]
