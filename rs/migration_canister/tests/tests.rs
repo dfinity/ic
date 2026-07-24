@@ -25,7 +25,7 @@ use std::{
     collections::{HashMap, VecDeque},
     time::Duration,
 };
-use strum::Display;
+use strum::{Display, EnumIter, IntoEnumIterator};
 
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
@@ -119,6 +119,11 @@ async fn setup(
         })
         .with_application_subnet()
         .with_application_subnet()
+        // A third application subnet hosts the default effective canister ID so
+        // that the two application subnets used for the migrated and replaced
+        // canisters can both be deleted (the subnet containing the default
+        // effective canister ID cannot be deleted).
+        .with_application_subnet()
         .build_async()
         .await;
 
@@ -164,7 +169,19 @@ async fn setup(
     )
     .await;
 
-    let subnets = pic.topology().await.get_app_subnets();
+    let topology = pic.topology().await;
+    // Exclude the subnet hosting the default effective canister ID since it
+    // cannot be deleted (some tests delete the migrated/replaced subnets).
+    let default_subnet = topology
+        .get_subnet(Principal::from(
+            topology.default_effective_canister_id.clone(),
+        ))
+        .expect("default effective canister ID must belong to a subnet");
+    let subnets: Vec<_> = topology
+        .get_app_subnets()
+        .into_iter()
+        .filter(|subnet| *subnet != default_subnet)
+        .collect();
     let migrated_canister_subnet = subnets[0];
     let replaced_canister_subnet = subnets[1];
 
@@ -377,6 +394,91 @@ impl Logs {
         }
         true
     }
+}
+
+/// The in-progress migration states, in the order a migration advances through
+/// them. `Display` yields the exact status string reported by the migration
+/// canister (matching `RequestState::name()`), and `EnumIter` lets tests iterate
+/// over every state without a hand-maintained list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumIter)]
+enum MigrationState {
+    Accepted,
+    ControllersChanged,
+    StoppedAndReady,
+    RenamedReplacedCanister,
+    UpdatedRoutingTable,
+    RoutingTableChangeAccepted,
+    MigratedCanisterDeleted,
+    RestoredControllers,
+}
+
+async fn assert_in_progress_state_stable(
+    pic: &PocketIc,
+    sender: Principal,
+    args: &MigrateCanisterArgs,
+    expected: MigrationState,
+) {
+    let s1 = match get_status(pic, sender, args).await.unwrap() {
+        MigrationStatus::InProgress { status } => status,
+        s => panic!("expected InProgress, got {:?}", s),
+    };
+    println!("State: {s1}");
+    for _ in 0..5 {
+        pic.tick().await;
+    }
+    let s2 = match get_status(pic, sender, args).await.unwrap() {
+        MigrationStatus::InProgress { status } => status,
+        s => panic!("expected InProgress, got {:?}", s),
+    };
+    println!("State: {s2}");
+    assert_eq!(s1, s2, "state changed without advancing time");
+    assert_eq!(s1, expected.to_string());
+}
+
+/// Drives a fresh migration to the given steady state.
+/// Assumes `migrate_canister` has NOT yet been called; calls it here.
+async fn bring_to_state(
+    pic: &PocketIc,
+    sender: Principal,
+    args: &MigrateCanisterArgs,
+    target_state: MigrationState,
+) {
+    let regular_advances: usize = match target_state {
+        MigrationState::Accepted => 0,
+        MigrationState::ControllersChanged => 1,
+        MigrationState::StoppedAndReady => 2,
+        MigrationState::RenamedReplacedCanister => 3,
+        MigrationState::UpdatedRoutingTable => 4,
+        MigrationState::RoutingTableChangeAccepted => 5,
+        // `MigratedCanisterDeleted` and `RestoredControllers` take the same
+        // number of regular advances: reaching `MigratedCanisterDeleted`
+        // already requires all 6 advances, and the transition to
+        // `RestoredControllers` is not driven by another regular advance but by
+        // a timed wait (360 s) followed by an advance, handled separately below.
+        MigrationState::MigratedCanisterDeleted => 6,
+        MigrationState::RestoredControllers => 6,
+    };
+
+    migrate_canister(pic, sender, args).await.unwrap();
+
+    for _ in 0..regular_advances {
+        advance(pic).await;
+    }
+
+    if target_state == MigrationState::RestoredControllers {
+        // MigratedCanisterDeleted waits 360 s before restoring controllers.
+        pic.advance_time(Duration::from_secs(360)).await;
+        advance(pic).await;
+    }
+
+    let status = get_status(pic, sender, args).await.unwrap();
+    assert_eq!(
+        status,
+        MigrationStatus::InProgress {
+            status: target_state.to_string()
+        },
+        "failed to reach state {target_state}"
+    );
 }
 
 async fn canister_info(
@@ -1932,4 +2034,177 @@ async fn validation_fails_both_cloud_engine_subnets() {
     let Err(ValidationError::CloudEngineSubnet { .. }) = result else {
         panic!("unexpected result: {:?}", result)
     };
+}
+
+#[tokio::test]
+async fn migration_states_explicit() {
+    for state in MigrationState::iter() {
+        let Setup {
+            pic,
+            migrated_canisters,
+            replaced_canisters,
+            migrated_canister_controllers,
+            ..
+        } = setup(Settings::default()).await;
+        let sender = migrated_canister_controllers[0];
+        let args = MigrateCanisterArgs {
+            migrated_canister_id: migrated_canisters[0],
+            replaced_canister_id: replaced_canisters[0],
+        };
+        bring_to_state(&pic, sender, &args, state).await;
+        assert_in_progress_state_stable(&pic, sender, &args, state).await;
+    }
+}
+
+#[tokio::test]
+async fn migration_completes_after_subnet_deletion() {
+    for state in MigrationState::iter() {
+        for delete_source in [true, false] {
+            let Setup {
+                pic,
+                migrated_canisters,
+                replaced_canisters,
+                migrated_canister_controllers,
+                replaced_canister_controllers,
+                migrated_canister_subnet,
+                replaced_canister_subnet,
+                ..
+            } = setup(Settings::default()).await;
+            let sender = migrated_canister_controllers[0];
+            let args = MigrateCanisterArgs {
+                migrated_canister_id: migrated_canisters[0],
+                replaced_canister_id: replaced_canisters[0],
+            };
+
+            bring_to_state(&pic, sender, &args, state).await;
+
+            let subnet_to_delete = if delete_source {
+                migrated_canister_subnet
+            } else {
+                replaced_canister_subnet
+            };
+            pic.delete_subnet(subnet_to_delete).await;
+
+            for _ in 0..10 {
+                let status = get_status(&pic, sender, &args).await.unwrap();
+                match status {
+                    MigrationStatus::InProgress { .. } => {}
+                    MigrationStatus::Succeeded { .. } | MigrationStatus::Failed { .. } => break,
+                }
+                // Advance time in big steps to fast-forward through the state
+                // machine's longest timed wait (the ~360 s wait in
+                // `MigratedCanisterDeleted`) without hundreds of tiny ticks.
+                // The step is kept below `MAX_INGRESS_TTL` (5 min) so a single
+                // jump doesn't leap clear over the ingress-expiry window and
+                // expire in-flight ingress messages.
+                pic.advance_time(Duration::from_secs(250)).await;
+                advance(&pic).await;
+            }
+            // `delete_source == true` deletes the source subnet (the subnet of
+            // the migrated canister) and keeps the target subnet (the subnet of
+            // the replaced canister); `delete_source == false` does the opposite.
+            let source_subnet = migrated_canister_subnet;
+            let target_subnet = replaced_canister_subnet;
+            let source_deleted = delete_source;
+            let target_deleted = !delete_source;
+
+            // We use `get_subnet` (instead of `canister_status`) to determine on
+            // which subnet a canister lives: `canister_status` would be an
+            // ingress message that is rejected at submission time (and makes the
+            // client panic) if the canister's subnet has been deleted.
+            let status = get_status(&pic, sender, &args).await.unwrap();
+            let migrated_subnet = pic.get_subnet(migrated_canisters[0]).await;
+            let replaced_subnet = pic.get_subnet(replaced_canisters[0]).await;
+            match status {
+                MigrationStatus::Succeeded { .. } => {
+                    // The migration moved the migrated canister to the target
+                    // subnet and removed it from the source subnet (so the source
+                    // subnet no longer contains it). If the target subnet was
+                    // deleted, the migrated canister no longer exists anywhere.
+                    assert_eq!(
+                        migrated_subnet,
+                        (!target_deleted).then_some(target_subnet),
+                        "state={state}, delete_source={delete_source}: migrated canister should be on the target subnet (or gone if it was deleted)"
+                    );
+                    // The replaced canister was consumed by the migration.
+                    assert_eq!(
+                        replaced_subnet, None,
+                        "state={state}, delete_source={delete_source}: replaced canister should have been consumed by the migration"
+                    );
+                }
+                MigrationStatus::Failed { .. } => {
+                    // The migration did not move the migrated canister; it remains
+                    // on the source subnet. If the source subnet was deleted, it
+                    // no longer exists anywhere.
+                    assert_eq!(
+                        migrated_subnet,
+                        (!source_deleted).then_some(source_subnet),
+                        "state={state}, delete_source={delete_source}: migrated canister should remain on the source subnet (or gone if it was deleted)"
+                    );
+                    // The replaced canister was left untouched on the target subnet.
+                    assert_eq!(
+                        replaced_subnet,
+                        (!target_deleted).then_some(target_subnet),
+                        "state={state}, delete_source={delete_source}: replaced canister should remain on the target subnet (or gone if it was deleted)"
+                    );
+                }
+                MigrationStatus::InProgress { .. } => panic!(
+                    "state={state}, delete_source={delete_source}: expected Succeeded or Failed, got InProgress"
+                ),
+            }
+
+            // `get_subnet` only reflects the routing table (i.e. which subnet a
+            // canister ID is routed to), not whether the canister actually
+            // exists. Whenever a canister still routes to a subnet, that subnet
+            // is alive (so `canister_status` won't be rejected at ingress
+            // submission time) and the canister must actually exist there, which
+            // we confirm by querying its status on behalf of a controller.
+            let migration_canister: Principal = MIGRATION_CANISTER_ID.into();
+            for (canister, subnet, which, original_controllers) in [
+                (
+                    migrated_canisters[0],
+                    migrated_subnet,
+                    "migrated",
+                    &migrated_canister_controllers,
+                ),
+                (
+                    replaced_canisters[0],
+                    replaced_subnet,
+                    "replaced",
+                    &replaced_canister_controllers,
+                ),
+            ] {
+                if subnet.is_some() {
+                    let canister_status = pic
+                        .canister_status(canister, Some(sender))
+                        .await
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "state={state}, delete_source={delete_source}: {which} canister routes to {subnet:?} but canister_status failed: {err:?}"
+                            )
+                        });
+                    // The migration restores the original (user) controllers. The
+                    // migration canister may still be a controller only if it was
+                    // already one before the migration and the migration never
+                    // took exclusive control (otherwise it removes itself), so we
+                    // disregard it when comparing against the original controllers.
+                    let mut controllers: Vec<Principal> = canister_status
+                        .settings
+                        .controllers
+                        .into_iter()
+                        .filter(|controller| *controller != migration_canister)
+                        .collect();
+                    controllers.sort();
+                    let mut expected_controllers = original_controllers.clone();
+                    expected_controllers.sort();
+                    assert_eq!(
+                        controllers, expected_controllers,
+                        "state={state}, delete_source={delete_source}: {which} canister controllers were not restored to the original controllers"
+                    );
+                }
+            }
+
+            pic.drop().await;
+        }
+    }
 }

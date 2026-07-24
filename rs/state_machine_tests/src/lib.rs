@@ -2473,6 +2473,7 @@ impl StateMachine {
                 }
                 Err(sm) => {
                     state_manager = sm;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
                 }
             }
             if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
