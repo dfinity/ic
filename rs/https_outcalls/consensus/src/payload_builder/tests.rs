@@ -304,31 +304,31 @@ fn divergence_response_inclusion_test() {
             add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
             add_received_shares_to_pool(pool_access.deref_mut(), shares[1..4].to_vec());
 
-            // Ensure that one bad apple can't cause us to report divergence
-            add_received_shares_to_pool(
-                pool_access.deref_mut(),
-                (0..10_u8)
-                    .map(|i| {
-                        let (_, metadata) = test_response_and_metadata_with_content(
-                            1,
-                            CanisterHttpResponseContent::Success(vec![i]),
-                        );
-                        metadata_to_share(7, &metadata)
-                    })
-                    .collect(),
-            );
+            // Ensure that one bad apple can't cause us to report divergence: a
+            // single node returning a different response is below the divergence
+            // threshold.
+            add_received_shares_to_pool(pool_access.deref_mut(), {
+                let (_, metadata) = test_response_and_metadata_with_content(
+                    1,
+                    CanisterHttpResponseContent::Success(vec![0]),
+                );
+                vec![metadata_to_share(7, &metadata)]
+            });
         }
 
         let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
         assert_eq!(parsed_payload.divergence_responses.len(), 0);
 
-        // But that if we actually get divergence, we report it
+        // But if enough distinct nodes disagree, we report divergence. Nodes 4,
+        // 5 and 6 each return their own distinct response which, together with
+        // node 7 above, pushes the number of diverging signers past the fault
+        // tolerance.
         {
             let mut pool_access = canister_http_pool.write().unwrap();
 
             add_received_shares_to_pool(
                 pool_access.deref_mut(),
-                (4..8_u8)
+                (4..7_u8)
                     .map(|i| {
                         let (_, metadata) = test_response_and_metadata_with_content(
                             1,
@@ -795,6 +795,63 @@ fn divergence_response_validation_test() {
     }
 }
 
+/// A divergence proof must not contain more than one share from the same
+/// signer. A byzantine block maker could otherwise include an equivocating
+/// node twice; since `into_messages` sums the initial spend over every share
+/// but deduplicates the signer set, this would inflate the reported spend
+/// relative to the number of nodes and break the spend/refund accounting.
+#[test]
+fn divergence_duplicate_signer_rejected() {
+    for subnet_size in 3..MAX_SUBNET_SIZE {
+        test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+            inject_request_contexts(&mut payload_builder, fully_replicated_contexts([0]));
+            let (_, metadata) = test_response_and_metadata(0);
+            let (_, other_metadata) = test_response_and_metadata_with_content(
+                0,
+                CanisterHttpResponseContent::Success(b"other".to_vec()),
+            );
+
+            // A valid divergence (each half of the nodes votes for one of two
+            // hashes), plus a duplicate: node 0 also votes for the second hash,
+            // so it now signs two shares.
+            let payload = CanisterHttpPayload {
+                responses: vec![],
+                timeouts: vec![],
+                divergence_responses: vec![CanisterHttpResponseDivergence {
+                    shares: (0..subnet_size / 2)
+                        .map(|node_id| metadata_to_share(node_id.try_into().unwrap(), &metadata))
+                        .chain((subnet_size / 2..subnet_size).map(|node_id| {
+                            metadata_to_share(node_id.try_into().unwrap(), &other_metadata)
+                        }))
+                        .chain(std::iter::once(metadata_to_share(0, &other_metadata)))
+                        .collect(),
+                }],
+                flexible_responses: vec![],
+                flexible_errors: vec![],
+            };
+            let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+
+            let validation_result = payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload,
+                &[],
+            );
+
+            match validation_result {
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::DivergenceDuplicateSigner {
+                            signer, ..
+                        },
+                    ),
+                )) => assert_eq!(signer, node_test_id(0)),
+                x => panic!("Expected DivergenceDuplicateSigner, got {x:?}"),
+            }
+        });
+    }
+}
+
 /// Check that the divergence error message is constructed correctly and readable
 #[test]
 fn divergence_error_message() {
@@ -831,7 +888,7 @@ fn divergence_error_message() {
         shares: response_shares,
     };
 
-    let divergence_reject = divergence_response_into_reject(divergence_response).unwrap();
+    let (_, divergence_reject) = divergence_response_into_reject(divergence_response).unwrap();
 
     assert_eq!(
         divergence_reject.payload,
@@ -3168,10 +3225,11 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
 
 #[test]
 fn into_messages_emits_initial_spend_reports() {
-    // A fully-replicated response, a flexible ok group, and a flexible
-    // too-many-rejects error, each carrying a distinct nonzero collective spend,
-    // must each yield one initial spend report tagged with the reporting
-    // callback, the claimed amount, and the signing nodes.
+    // Every delivered outcome that carries signed shares yields one initial spend
+    // report tagged with the reporting callback, the amount, and the signing
+    // nodes: a fully-replicated response, a flexible ok group, a too-many-rejects
+    // error, a divergence, and a responses-too-large error. A plain timeout
+    // carries no shares and yields none.
     let fr_callback = CallbackId::from(100);
     let (response, metadata) = test_response_and_metadata(fr_callback.get());
     let mut fr_proof = response_and_metadata_to_proof(&response, &metadata);
@@ -3195,7 +3253,6 @@ fn into_messages_emits_initial_spend_reports() {
         ],
     };
 
-    // A too-many-rejects error is the only flexible error that reports a spend.
     let err_callback = CallbackId::from(200);
     let flex_error = FlexibleCanisterHttpError::TooManyRejects {
         callback_id: err_callback,
@@ -3206,19 +3263,22 @@ fn into_messages_emits_initial_spend_reports() {
         initial_spent: Cycles::new(5_000),
     };
 
-    // A plain timeout and a divergence are both delivered as rejects but carry
-    // no full response body, so neither must contribute an initial spend report.
+    // A plain timeout carries no shares and yields no spend report. A divergence
+    // and a responses-too-large error carry signed shares but deliver no body
+    // (consensus cost zero), so each reports the sum of its shares' spend.
     let timeout_callback = CallbackId::from(300);
 
     let div_callback = CallbackId::from(400);
     let (_, div_metadata) = test_response_and_metadata(div_callback.get());
-    let divergent_share = |node: u64, hash: u8| {
+    let divergent_share = |node: u64, hash: u8, spent: u128| {
         let mut metadata = div_metadata.clone();
         metadata.content_hash = CryptoHashOf::from(CryptoHash(vec![hash; 32]));
         Signed {
             content: CanisterHttpResponseReceipt {
                 metadata,
-                payment_receipt: CanisterHttpPaymentReceipt::default(),
+                payment_receipt: CanisterHttpPaymentReceipt {
+                    spent: Cycles::new(spent),
+                },
             },
             signature: BasicSignature {
                 signature: BasicSigOf::new(BasicSig(vec![])),
@@ -3226,14 +3286,37 @@ fn into_messages_emits_initial_spend_reports() {
             },
         }
     };
+    // divergence spend = 400 + 600 = 1_000.
     let divergence = CanisterHttpResponseDivergence {
-        shares: vec![divergent_share(0, 1), divergent_share(1, 2)],
+        shares: vec![divergent_share(0, 1, 400), divergent_share(1, 2, 600)],
+    };
+
+    let too_large_callback = CallbackId::from(500);
+    let (_, tl_metadata) = test_response_and_metadata(too_large_callback.get());
+    let seen_share = |node: u64, spent: u128| Signed {
+        content: CanisterHttpResponseReceipt {
+            metadata: tl_metadata.clone(),
+            payment_receipt: CanisterHttpPaymentReceipt {
+                spent: Cycles::new(spent),
+            },
+        },
+        signature: BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![])),
+            signer: node_test_id(node),
+        },
+    };
+    // responses-too-large spend = 250 + 350 = 600.
+    let too_large = FlexibleCanisterHttpError::ResponsesTooLarge {
+        callback_id: too_large_callback,
+        all_seen_shares: vec![seen_share(0, 250), seen_share(1, 350)],
+        total_requests: 2,
+        min_responses: 1,
     };
 
     let payload = CanisterHttpPayload {
         responses: vec![fr_proof],
         flexible_responses: vec![flex_group],
-        flexible_errors: vec![flex_error],
+        flexible_errors: vec![flex_error, too_large],
         timeouts: vec![timeout_callback],
         divergence_responses: vec![divergence],
     };
@@ -3241,7 +3324,7 @@ fn into_messages_emits_initial_spend_reports() {
 
     let (responses, spent, _stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
-    // All five callbacks are delivered as consensus responses...
+    // All six callbacks are delivered as consensus responses...
     let delivered: BTreeSet<CallbackId> = responses.iter().map(|r| r.callback).collect();
     assert_eq!(
         delivered,
@@ -3251,18 +3334,14 @@ fn into_messages_emits_initial_spend_reports() {
             err_callback,
             timeout_callback,
             div_callback,
+            too_large_callback,
         ]
         .into_iter()
         .collect()
     );
-    // ...but only the three carrying full bodies report an initial spend.
-    assert_eq!(spent.initial.len(), 3);
-    assert!(
-        spent
-            .initial
-            .iter()
-            .all(|r| r.callback != timeout_callback && r.callback != div_callback)
-    );
+    // ...and every one except the timeout reports an initial spend.
+    assert_eq!(spent.initial.len(), 5);
+    assert!(spent.initial.iter().all(|r| r.callback != timeout_callback));
     assert!(spent.asynchronous.is_empty());
 
     let signers: BTreeSet<NodeId> = [node_test_id(0), node_test_id(1)].into_iter().collect();
@@ -3285,6 +3364,14 @@ fn into_messages_emits_initial_spend_reports() {
     let err = report(err_callback);
     assert_eq!(err.amount, Cycles::new(5_000));
     assert_eq!(err.nodes, signers);
+
+    let div = report(div_callback);
+    assert_eq!(div.amount, Cycles::new(1_000));
+    assert_eq!(div.nodes, signers);
+
+    let too_large = report(too_large_callback);
+    assert_eq!(too_large.amount, Cycles::new(600));
+    assert_eq!(too_large.nodes, signers);
 }
 
 #[test]
@@ -3512,10 +3599,18 @@ fn flexible_error_into_messages_responses_too_large() {
     assert_eq!(responses[0].callback, callback_id);
     assert_eq!(stats.flexible_errors, 1);
     assert_eq!(stats.flexible_errors_candid_failures, 0);
-    // A responses-too-large error carries no full response body, hence reports
-    // no spend (the per-replica spends in `all_seen_shares` are deliberately not
-    // reported here).
-    assert!(spent.initial.is_empty());
+    // A responses-too-large error delivers no body (consensus cost zero), so it
+    // reports the sum of its seen shares' per-replica spend. Here every share
+    // carries a default (zero) receipt, so the reported amount is zero, but a
+    // report is still emitted for all signing nodes.
+    assert_eq!(spent.initial.len(), 1);
+    let report = &spent.initial[0];
+    assert_eq!(report.callback, callback_id);
+    assert_eq!(report.amount, Cycles::zero());
+    assert_eq!(
+        report.nodes,
+        (0..4).map(node_test_id).collect::<BTreeSet<_>>()
+    );
     assert!(spent.asynchronous.is_empty());
 
     let Payload::Data(ref data) = responses[0].payload else {

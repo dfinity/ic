@@ -83,6 +83,11 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
+    /// A divergence proof contains more than one share from the same signer.
+    DivergenceDuplicateSigner {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
     /// The callback_id in a flexible response group does not match a response or proof within it.
     FlexibleCallbackIdMismatch {
         callback_id: CallbackId,

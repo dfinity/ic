@@ -537,6 +537,20 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
                 );
             }
+
+            let mut seen_signers = HashSet::new();
+            for share in &response.shares {
+                let signer = share.signature.signer;
+                if !seen_signers.insert(signer) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::DivergenceDuplicateSigner {
+                            callback_id: share.content.id(),
+                            signer,
+                        },
+                    );
+                }
+            }
+
             for (callback_id, grouped_shares) in grouped_shares {
                 if !delivered_ids.insert(callback_id) {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
@@ -1027,11 +1041,30 @@ impl
             ));
         }
 
-        // Divergences carry no response content, and hence no spend report.
+        // Divergences deliver no response body, so their consensus cost is zero:
+        // the initial spend is just the per-replica cost each diverging signer
+        // incurred, summed on the fly from the shares.
         for divergence_response in messages.divergence_responses {
-            if let Some(consensus_response) = divergence_response_into_reject(divergence_response) {
+            let nodes: BTreeSet<NodeId> = divergence_response
+                .shares
+                .iter()
+                .map(|share| share.signature.signer)
+                .collect();
+            let amount = divergence_response
+                .shares
+                .iter()
+                .map(|share| share.content.spent())
+                .sum();
+            if let Some((callback, consensus_response)) =
+                divergence_response_into_reject(divergence_response)
+            {
                 stats.divergence_responses += 1;
                 consensus_responses.push(consensus_response);
+                spent.initial.push(CanisterHttpInitialSpent {
+                    callback,
+                    amount,
+                    nodes,
+                });
             }
         }
 
@@ -1060,9 +1093,9 @@ impl
         }
 
         for error in messages.flexible_errors {
-            // Only errors that carry full responses (too-many-rejects) produce an
-            // initial spend; timeouts and responses-too-large do not.
             let report = match &error {
+                // `TooManyRejects` delivers reject bodies, so its spend (including the
+                // consensus term) was computed during payload building and validated.
                 FlexibleCanisterHttpError::TooManyRejects {
                     reject_responses,
                     initial_spent,
@@ -1078,7 +1111,27 @@ impl
                         nodes,
                     })
                 }
-                _ => None,
+                // `ResponsesTooLarge` delivers no body, so its consensus cost is zero
+                // and its spend is summed on the fly from the seen shares.
+                FlexibleCanisterHttpError::ResponsesTooLarge {
+                    all_seen_shares, ..
+                } => {
+                    let nodes: BTreeSet<NodeId> = all_seen_shares
+                        .iter()
+                        .map(|share| share.signature.signer)
+                        .collect();
+                    let amount = all_seen_shares
+                        .iter()
+                        .map(|share| share.content.spent())
+                        .sum();
+                    Some(CanisterHttpInitialSpent {
+                        callback: error.callback_id(),
+                        amount,
+                        nodes,
+                    })
+                }
+                // Timeouts carry no shares and produce no spend report.
+                FlexibleCanisterHttpError::Timeout { .. } => None,
             };
             match flexible_error_into_consensus_response(error) {
                 Some(consensus_response) => {
@@ -1260,7 +1313,7 @@ fn flexible_error_into_consensus_response(
 /// The function includes request id, which is also part of the hashed value.
 fn divergence_response_into_reject(
     response: CanisterHttpResponseDivergence,
-) -> Option<ConsensusResponse> {
+) -> Option<(CallbackId, ConsensusResponse)> {
     let Some(id) = response.shares.first().map(|share| share.content.id()) else {
         // NOTE: We skip delivering the divergence response, if it has no shares
         // Such a divergence response should never validate, therefore this should never happen
@@ -1294,16 +1347,19 @@ fn divergence_response_into_reject(
         .map(|(hash, count)| format!("[{}: {}]", hex::encode(hash), count))
         .collect::<Vec<_>>();
 
-    Some(ConsensusResponse::new(
+    Some((
         id,
-        Payload::Reject(RejectContext::new(
-            RejectCode::SysTransient,
-            format!(
-                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, hashes: {}",
-                id,
-                hash_counts.join(", ")
-            ),
-        )),
+        ConsensusResponse::new(
+            id,
+            Payload::Reject(RejectContext::new(
+                RejectCode::SysTransient,
+                format!(
+                    "No consensus could be reached. Replicas had different responses. Details: request_id: {}, hashes: {}",
+                    id,
+                    hash_counts.join(", ")
+                ),
+            )),
+        ),
     ))
 }
 
