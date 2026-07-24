@@ -4,6 +4,7 @@ use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
+use ic_cketh_minter::balance_scan::balance_scan;
 use ic_cketh_minter::deposit::scrape_logs;
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
@@ -43,8 +44,8 @@ use ic_cketh_minter::withdraw::{
     process_reimbursement, process_retrieve_eth_requests,
 };
 use ic_cketh_minter::{
-    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL,
-    state, storage,
+    BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
+    SCRAPING_ETH_LOGS_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -91,6 +92,12 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
         process_reimbursement().await;
+    });
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        balance_scan().await;
+    });
+    ic_cdk_timers::set_timer_interval(BALANCE_SCAN_INTERVAL, async || {
+        balance_scan().await;
     });
 }
 
@@ -989,6 +996,29 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         .unwrap_or(0.0),
                     "The last Ethereum block the ckETH minter observed.",
                 )?;
+
+                if let Some(stats) = &s.last_balance_scan {
+                    w.encode_gauge(
+                        "cketh_minter_balance_scan_last_run_timestamp_seconds",
+                        stats.scanned_at_ns as f64 / 1_000_000_000.0,
+                        "Timestamp of the last balance scan.",
+                    )?;
+                    w.encode_gauge(
+                        "cketh_minter_balance_scan_addresses_scanned",
+                        stats.addresses_scanned as f64,
+                        "Number of deposit addresses scanned in the last balance scan.",
+                    )?;
+                    w.encode_gauge(
+                        "cketh_minter_balance_scan_candidates",
+                        stats.candidates_found as f64,
+                        "Number of deposit candidates found in the last balance scan.",
+                    )?;
+                    w.encode_gauge(
+                        "cketh_minter_balance_scan_failed_chunks",
+                        stats.chunks_failed as f64,
+                        "Number of multicall chunks that failed in the last balance scan.",
+                    )?;
+                }
 
                 for (id, scraping_state) in s.log_scrapings.iter() {
                     w.encode_gauge(

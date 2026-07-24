@@ -94,6 +94,14 @@ impl AutomaticDeposits {
         self.watchlist.get_entry(now, account)
     }
 
+    /// The deposit address of every account still armed (unexpired) as of `now`.
+    pub fn live_addresses(&self, now: Timestamp) -> impl Iterator<Item = (Account, Address)> + '_ {
+        self.watchlist
+            .iter()
+            .filter(move |(_, entry)| entry.expires_at >= now)
+            .map(|(account, entry)| (*account, entry.value.address))
+    }
+
     /// Full snapshot of the watchlist, faithful enough to reconstruct it exactly
     /// via [`Self::rebuild_watchlist`]: it records the current limits and lists
     /// every entry (live and expired-but-unevicted) in time-index order.
