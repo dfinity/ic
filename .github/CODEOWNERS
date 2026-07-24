@@ -8,13 +8,13 @@
 /cpp/                     @dfinity/node
 /licenses/                @dfinity/idx
 /bin/                     @dfinity/idx
-/bin/fuzzing/             @dfinity/product-security
+/bin/fuzzing/             @dfinity/core-protocol
 
 # [Bazel]
 .bazelrc                           @dfinity/idx
 .bazelversion                      @dfinity/idx
 /bazel/                            @dfinity/idx
-/bazel/fuzz_testing.bzl            @dfinity/idx @dfinity/product-security
+/bazel/fuzz_testing.bzl            @dfinity/idx @dfinity/core-protocol
 /BUILD.bazel                       @dfinity/idx
 /third_party/                      @dfinity/idx
 /MODULE.bazel                      @dfinity/idx
@@ -75,19 +75,19 @@ go.sum                    @dfinity/idx
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
-/.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx @dfinity/product-security
-/.github/workflows/container-scan-nightly.yml                            @dfinity/idx @dfinity/product-security
+/.github/workflows/container-scan-nightly.yml                            @dfinity/idx @dfinity/node
 /.github/workflows/ledger-suite-release.yml                              @dfinity/defi @dfinity/idx
-/.github/workflows/publish-crates.yml                                    @dfinity/idx @dfinity/infrasec
+/.github/workflows/publish-crates.yml                                    @dfinity/idx @dfinity/security
 /.github/workflows/repro-check.yml                                       @dfinity/dre @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/defi @dfinity/idx
-/.github/workflows/security-checks.yml                                   @dfinity/idx @dfinity/product-security
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
-.github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/infrasec
+.github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/security
 /ci/                                                                     @dfinity/idx
-/ci/actions/dependencies/                                                @dfinity/product-security
-/ci/src/dependencies/                                                    @dfinity/product-security
-/ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
+/ci/src/dependencies/                                                    @dfinity/node
+/ci/src/dependencies/integration/github/github_api.py                    @dfinity/idx @dfinity/node
+/ci/src/dependencies/integration/github/github_dependency_submission.py  @dfinity/idx
+/ci/src/dependencies/job/bazel_rust_gh_submission_job.py                 @dfinity/idx
+/ci/src/dependencies/parser/                                             @dfinity/idx
 /ci/scripts/repro-check                                                  @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
@@ -117,9 +117,8 @@ go.sum                    @dfinity/idx
 /rs/ethereum/                                           @dfinity/defi
 /rs/engine_controller/                                  @dfinity/dre
 /rs/execution_environment/                              @dfinity/core-protocol
-/rs/fuzzers/                                            @dfinity/product-security
+/rs/fuzzers/                                            @dfinity/core-protocol
 /rs/http_endpoints/                                     @dfinity/core-protocol
-/rs/http_endpoints/fuzz/                                @dfinity/product-security
 /rs/http_utils/                                         @dfinity/core-protocol
 /rs/https_outcalls/                                     @dfinity/core-protocol
 /rs/https_outcalls/consensus/                           @dfinity/core-protocol
