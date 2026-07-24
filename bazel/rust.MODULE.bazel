@@ -17,10 +17,10 @@ rust.toolchain(
     versions = ["1.97.1"],
 )
 rust.strip_level_select(
-    triples = [ "x86_64-unknown-linux-gnu" ],
     dbg = "none",
     fastbuild = "none",
     opt = "none",
+    triples = ["x86_64-unknown-linux-gnu"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
