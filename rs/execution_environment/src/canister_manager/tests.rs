@@ -7415,7 +7415,7 @@ fn rename_canister_with_available_memory(
             version: 42,
             total_num_changes: 50,
         },
-        requested_by: migration_canister.get(),
+        requested_by: test.user_id().get(),
         sender_canister_version: 0,
     };
     test.inject_call_to_ic00(Method::RenameCanister, args.encode(), Cycles::new(0));
