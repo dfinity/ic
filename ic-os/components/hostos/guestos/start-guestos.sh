@@ -18,8 +18,10 @@ esac
 
 # If not a type4 node, fall to the default GuestOS flow
 if ((COUNT == 1)); then
-    systemctl start guestos.service
+    systemctl start guestos@0.service
     exit 0
 fi
 
+# TODO: Starting a ton of guests at once can lead to some of these units
+# failing. For now, systemd will handle restarting them until they are healthy.
 eval systemctl start --no-block guestos@{0..$((COUNT - 1))}.service
