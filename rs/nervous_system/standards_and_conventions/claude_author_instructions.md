@@ -16,8 +16,10 @@ Always be MEANINGFUL.
 Lead with the lede.
 
 
-Consistency is king. When nearby code and far away code follow different
-patterns, follow the nearby code.
+Consistency is king. This inevitably leads to a couple classes of conflicts:
+1. local vs. regional or global - Local wins.
+2. existing pattern vs. Standards & Conventions - Existing pattern wins. See
+   "Grandfathering".
 
 
 Data is gold. Diagnostics are diamonds.
@@ -265,4 +267,9 @@ assert_eq!(get_widget_ids(&registry), vec![widget_id]);
 
 ## Grandfathering
 
-Making legacy code comply with these rules is its own separate effort.
+This has been adopted without making existing code compliant. Nevertheless,
+abide by "Consistency is king", as explained earlier.
+
+You might think this would gradually lead us away from compliance. To solve
+that, there will be a compliance campaign to more or less swiftly eliminate such
+non-compliance.

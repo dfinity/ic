@@ -61,8 +61,10 @@ Lead with the lede.
 
 (All general principles of good communication apply.)
 
-Consistency is king. When nearby code and far away code follow different
-patterns, follow the nearby code.
+Consistency is king. This inevitably leads to a couple classes of conflicts:
+1. local vs. regional or global - Local wins.
+2. existing pattern vs. Standards & Conventions - Existing pattern wins. See
+   "Grandfathering".
 
 (Control access on a "need to know" basis. E.g. minimize bazel visibility.)
 
@@ -407,14 +409,19 @@ leave the thread unresolved.
 
 ## Grandfathering
 
-Making legacy code comply with these rules is its own separate effort.
+This has been adopted without making existing code compliant. Nevertheless,
+abide by "Consistency is king", as explained earlier.
+
+You might think this would gradually lead us away from compliance. To solve
+that, there will be a compliance campaign to more or less swiftly eliminate such
+non-compliance.
 
 ((
-This has been adopted without making existing code compliant. After adopting
-this, there will be a campaign to make legacy code compliant. Therefore, there
-will be an interstitial period where legacy code is not compliant.
+Such a campaign is necessary anyway, since merely following the rules going
+forward is not going to do anything about the tons of non-compliant legacy code
+that we have.
 
-Ditto for when new rules are added in the future: they will be added with
-requiring that legacy be code be fixed first, but there needs to be a commitment
-to actually fix legacy code before adding such rules.
+Ditto for when new rules are added in the future: they will be added without
+requiring that legacy code be fixed first, but there needs to be a commitment to
+actually fix legacy code before adding such rules.
 ))
