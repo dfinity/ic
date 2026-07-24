@@ -419,6 +419,9 @@ enum SubCommand {
     /// Submits a proposal to bless an alternative GuestOS version for disaster recovery.
     ProposeToBlessAlternativeGuestOsVersion(ProposeToBlessAlternativeGuestOsVersionCmd),
 
+    /// Submits a proposal to change what replica version(s) are run by Cloud Engines.
+    ProposeToUpdateStandardEngineReplicaVersion(ProposeToUpdateStandardEngineReplicaVersionCmd),
+
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
 
@@ -2178,6 +2181,60 @@ impl ProposalAction for ProposeToBlessAlternativeGuestOsVersionCmd {
                 chip_ids: Some(chip_ids),
                 rootfs_hash: Some(self.rootfs_hash.clone()),
                 base_guest_launch_measurements: Some(measurements),
+            },
+        )
+    }
+}
+
+/// Sub-command to submit a proposal to change what replica version(s) are run
+/// by Cloud Engines.
+#[derive_common_proposal_fields]
+#[derive(Clone, Parser, ProposalMetadata)]
+struct ProposeToUpdateStandardEngineReplicaVersionCmd {
+    /// The replica version that Cloud Engines should eventually upgrade to.
+    #[clap(long, required = true)]
+    new_replica_version_id: String,
+
+    /// The replica version that Cloud Engines should upgrade from.
+    #[clap(long, required = true)]
+    old_replica_version_id: String,
+
+    /// The (approximate) fraction of Cloud Engines that should be on new
+    /// replica version (the rest stay on the old one). Must be in the closed
+    /// interval [0.0, 1.0].
+    #[clap(long, required = true)]
+    deployment_progress: f64,
+}
+
+impl ProposalTitle for ProposeToUpdateStandardEngineReplicaVersionCmd {
+    fn title(&self) -> String {
+        if let Some(title) = &self.proposal_title {
+            return title.clone();
+        }
+
+        format!(
+            "Update {:.1}% of Cloud Engines to {}",
+            self.deployment_progress * 100.0,
+            shortened_hash_string(&self.new_replica_version_id),
+        )
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToUpdateStandardEngineReplicaVersionCmd {
+    async fn action(&self, _: &Agent) -> ProposalActionRequest {
+        let Self {
+            new_replica_version_id,
+            old_replica_version_id,
+            deployment_progress,
+            ..
+        } = self.clone();
+
+        ProposalActionRequest::UpdateStandardEngineReplicaVersion(
+            ic_nns_governance_api::UpdateStandardEngineReplicaVersion {
+                new_replica_version_id: Some(new_replica_version_id),
+                old_replica_version_id: Some(old_replica_version_id),
+                deployment_progress: Some(deployment_progress),
             },
         )
     }
@@ -4650,6 +4707,7 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
             SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(_) => (),
+            SubCommand::ProposeToUpdateStandardEngineReplicaVersion(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToUpdateSubnetType(_) => (),
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
@@ -6029,6 +6087,16 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToBlessAlternativeGuestOsVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::ProposeToUpdateStandardEngineReplicaVersion(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             let canister_client = make_canister_client(
                 reachable_nns_urls,
