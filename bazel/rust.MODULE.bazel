@@ -5,24 +5,22 @@
 bazel_dep(name = "rules_rust", version = "0.71.3")
 archive_override(
     module_name = "rules_rust",
-    integrity = "sha256-h8txtdi9xcNfgjdTBYX+R9CEsxKDucJx+OPvezmkTQM=",
-    patch_strip = 1,
-    patches = [
-        # Configure per-compilation-mode strip levels, which the native
-        # `rust.toolchain` tag's flat `strip_level` string_dict cannot express
-        # (https://github.com/bazelbuild/rules_rust/issues/3730).
-        "//bazel:rules_rust_strip_level.patch",
-        # Fix cross-crate DEP_* env vars being redacted to an `${out_dir}` token
-        # that downstream crates' build scripts cannot resolve (see patch header).
-        "//bazel:rules_rust_dep_env.patch",
-    ],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.71.3/rules_rust-0.71.3.tar.gz"],
+    sha256 = "e465f066da79565371308f9da25618c61ca11b97f945e679ab3df48006cfb2b8",
+    strip_prefix = "rules_rust-f8f382c7e351a797242ce4a92262342f8994e265",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/nmattia/rules_rust/tar.gz/f8f382c7e351a797242ce4a92262342f8994e265"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
     versions = ["1.97.1"],
+)
+rust.strip_level_select(
+    triples = [ "x86_64-unknown-linux-gnu" ],
+    dbg = "none",
+    fastbuild = "none",
+    opt = "none",
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
