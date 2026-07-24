@@ -1,6 +1,6 @@
 #![allow(deprecated)]
 #[cfg(target_arch = "wasm32")]
-use ic_cdk::api::{call_context_instruction_counter, instruction_counter};
+use ic_cdk::api::{call_context_instruction_counter, canister_self, instruction_counter};
 use ic_cdk::query;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -51,7 +51,7 @@ async fn make_noop_call() {}
 /// Makes a call to a no-op function defined in this library.
 #[cfg(target_arch = "wasm32")]
 async fn make_noop_call() {
-    () = ic_cdk::call(ic_cdk::id(), "__long_message_noop", ())
+    () = ic_cdk::call(canister_self(), "__long_message_noop", ())
         .await
         .unwrap();
 }

@@ -2,7 +2,10 @@
 pub use ic_management_canister_types::CanisterSettings;
 
 use candid::{CandidType, Nat};
-use ic_cdk::api::call::{CallResult, RejectionCode};
+use ic_cdk::api::{
+    call::{CallResult, RejectionCode},
+    msg_caller,
+};
 use std::time::{Duration, SystemTime};
 
 use dfn_protobuf::{ProtoBuf, ToProto};
@@ -60,7 +63,7 @@ pub fn ic0_mint_cycles128(amount: Cycles) -> Cycles {
 
 /// caller that returns principalId instead of Principal
 pub fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk::caller())
+    PrincipalId::from(msg_caller())
 }
 
 // Duplicating some functionality that is no longer available

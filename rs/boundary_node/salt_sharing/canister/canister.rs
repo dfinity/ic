@@ -6,8 +6,8 @@ use crate::logs::export_logs_as_http_response;
 use crate::metrics::{METRICS, export_metrics_as_http_response};
 use crate::storage::SALT;
 use ic_cdk::api::call::{accept_message, method_name};
-use ic_cdk::api::time;
-use ic_cdk::{caller, trap};
+use ic_cdk::api::{msg_caller, time};
+use ic_cdk::trap;
 use ic_cdk::{init, inspect_message, post_upgrade, query};
 use ic_cdk_timers::set_timer;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -19,7 +19,7 @@ const REPLICATED_QUERY_METHOD: &str = "get_salt";
 // Inspect the ingress messages in the pre-consensus phase and reject early, if the conditions are not met
 #[inspect_message]
 fn inspect_message() {
-    let caller_id = caller();
+    let caller_id = msg_caller();
     let called_method = method_name();
 
     if called_method == REPLICATED_QUERY_METHOD && is_api_boundary_node_principal(&caller_id) {
@@ -51,7 +51,7 @@ fn post_upgrade(init_arg: InitArg) {
 
 #[query]
 fn get_salt() -> GetSaltResponse {
-    let caller_id = caller();
+    let caller_id = msg_caller();
     if is_api_boundary_node_principal(&caller_id) {
         let stored_salt = SALT
             .with(|cell| cell.borrow().get(&()))
