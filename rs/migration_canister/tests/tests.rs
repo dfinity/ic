@@ -25,7 +25,7 @@ use std::{
     collections::{HashMap, VecDeque},
     time::Duration,
 };
-use strum::Display;
+use strum::{Display, EnumIter, IntoEnumIterator};
 
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
@@ -396,11 +396,27 @@ impl Logs {
     }
 }
 
+/// The in-progress migration states, in the order a migration advances through
+/// them. `Display` yields the exact status string reported by the migration
+/// canister (matching `RequestState::name()`), and `EnumIter` lets tests iterate
+/// over every state without a hand-maintained list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumIter)]
+enum MigrationState {
+    Accepted,
+    ControllersChanged,
+    StoppedAndReady,
+    RenamedReplacedCanister,
+    UpdatedRoutingTable,
+    RoutingTableChangeAccepted,
+    MigratedCanisterDeleted,
+    RestoredControllers,
+}
+
 async fn assert_in_progress_state_stable(
     pic: &PocketIc,
     sender: Principal,
     args: &MigrateCanisterArgs,
-    expected: &str,
+    expected: MigrationState,
 ) {
     let s1 = match get_status(pic, sender, args).await.unwrap() {
         MigrationStatus::InProgress { status } => status,
@@ -416,7 +432,7 @@ async fn assert_in_progress_state_stable(
     };
     println!("State: {s2}");
     assert_eq!(s1, s2, "state changed without advancing time");
-    assert_eq!(&s1, expected);
+    assert_eq!(s1, expected.to_string());
 }
 
 /// Drives a fresh migration to the given steady state.
@@ -425,18 +441,22 @@ async fn bring_to_state(
     pic: &PocketIc,
     sender: Principal,
     args: &MigrateCanisterArgs,
-    target_state: &str,
+    target_state: MigrationState,
 ) {
     let regular_advances: usize = match target_state {
-        "Accepted" => 0,
-        "ControllersChanged" => 1,
-        "StoppedAndReady" => 2,
-        "RenamedReplacedCanister" => 3,
-        "UpdatedRoutingTable" => 4,
-        "RoutingTableChangeAccepted" => 5,
-        "MigratedCanisterDeleted" => 6,
-        "RestoredControllers" => 6,
-        _ => panic!("unknown state: {target_state}"),
+        MigrationState::Accepted => 0,
+        MigrationState::ControllersChanged => 1,
+        MigrationState::StoppedAndReady => 2,
+        MigrationState::RenamedReplacedCanister => 3,
+        MigrationState::UpdatedRoutingTable => 4,
+        MigrationState::RoutingTableChangeAccepted => 5,
+        // `MigratedCanisterDeleted` and `RestoredControllers` take the same
+        // number of regular advances: reaching `MigratedCanisterDeleted`
+        // already requires all 6 advances, and the transition to
+        // `RestoredControllers` is not driven by another regular advance but by
+        // a timed wait (360 s) followed by an advance, handled separately below.
+        MigrationState::MigratedCanisterDeleted => 6,
+        MigrationState::RestoredControllers => 6,
     };
 
     migrate_canister(pic, sender, args).await.unwrap();
@@ -445,7 +465,7 @@ async fn bring_to_state(
         advance(pic).await;
     }
 
-    if target_state == "RestoredControllers" {
+    if target_state == MigrationState::RestoredControllers {
         // MigratedCanisterDeleted waits 360 s before restoring controllers.
         pic.advance_time(Duration::from_secs(360)).await;
         advance(pic).await;
@@ -2018,17 +2038,7 @@ async fn validation_fails_both_cloud_engine_subnets() {
 
 #[tokio::test]
 async fn migration_states_explicit() {
-    const STATES: &[&str] = &[
-        "Accepted",
-        "ControllersChanged",
-        "StoppedAndReady",
-        "RenamedReplacedCanister",
-        "UpdatedRoutingTable",
-        "RoutingTableChangeAccepted",
-        "MigratedCanisterDeleted",
-        "RestoredControllers",
-    ];
-    for state in STATES {
+    for state in MigrationState::iter() {
         let Setup {
             pic,
             migrated_canisters,
@@ -2048,17 +2058,7 @@ async fn migration_states_explicit() {
 
 #[tokio::test]
 async fn migration_completes_after_subnet_deletion() {
-    const STATES: &[&str] = &[
-        "Accepted",
-        "ControllersChanged",
-        "StoppedAndReady",
-        "RenamedReplacedCanister",
-        "UpdatedRoutingTable",
-        "RoutingTableChangeAccepted",
-        "MigratedCanisterDeleted",
-        "RestoredControllers",
-    ];
-    for state in STATES {
+    for state in MigrationState::iter() {
         for delete_source in [true, false] {
             let Setup {
                 pic,
