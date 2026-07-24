@@ -112,7 +112,7 @@ pub trait GetLogFilter {
 }
 
 /// A single log entry.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub struct LogEntry<Priority> {
     /// The time at which the log entry is recorded.
     pub timestamp: u64,
@@ -129,7 +129,7 @@ pub struct LogEntry<Priority> {
 }
 
 /// A container for log entries at a given log priority level.
-#[derive(Clone, Debug, Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Log<Priority> {
     /// The log entries for this priority level.
     pub entries: Vec<LogEntry<Priority>>,
