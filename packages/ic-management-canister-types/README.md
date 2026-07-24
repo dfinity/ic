@@ -18,4 +18,3 @@ The [`ic.did`](tests/ic.did) is sourced from the [Internet Computer Interface Sp
 
 Some methods are excluded (commented out) as follows:
 - Bitcoin API: These functionalities are planned to migrate from the Management Canister to the [Bitcoin Canister](https://github.com/dfinity/bitcoin-canister).
-- `fetch_canister_logs`: This method is only available for ingress messages (using an agent) and cannot be invoked in inter-canister calls.
