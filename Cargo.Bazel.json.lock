@@ -1,5 +1,5 @@
 {
-  "checksum": "beec4b43d21535a1fdc42ba152ca90dcd9676ef202cade55514af29d9ae3b46a",
+  "checksum": "b0aadd8852660b43eb49ceb59a3c7bd696e5e73eb91b6e0e3255c7294e3ce1eb",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20976,7 +20976,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "ic-agent 0.49.0",
+              "id": "ic-agent 0.49.1",
               "target": "ic_agent"
             },
             {
@@ -21060,7 +21060,7 @@
               "target": "ic_http_certification"
             },
             {
-              "id": "ic-identity-hsm 0.49.0",
+              "id": "ic-identity-hsm 0.49.1",
               "target": "ic_identity_hsm"
             },
             {
@@ -21093,11 +21093,11 @@
               "target": "ic_test_state_machine_client"
             },
             {
-              "id": "ic-transport-types 0.49.0",
+              "id": "ic-transport-types 0.49.1",
               "target": "ic_transport_types"
             },
             {
-              "id": "ic-utils 0.49.0",
+              "id": "ic-utils 0.49.1",
               "target": "ic_utils"
             },
             {
@@ -21304,7 +21304,7 @@
               "target": "nftables"
             },
             {
-              "id": "nix 0.24.3",
+              "id": "nix 0.31.3",
               "target": "nix"
             },
             {
@@ -33642,14 +33642,14 @@
       ],
       "license_file": null
     },
-    "ic-agent 0.49.0": {
+    "ic-agent 0.49.1": {
       "name": "ic-agent",
-      "version": "0.49.0",
+      "version": "0.49.1",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-agent/0.49.0/download",
-          "sha256": "65a32acd8665871aff33d8c2d47ab8bf5da60635652d83a3770bfa34b9ef91ad"
+          "url": "https://static.crates.io/crates/ic-agent/0.49.1/download",
+          "sha256": "499d1647334e4c8bccd9a96a92bf4be8b332a4507369c0e36d7ab9585a24f725"
         }
       },
       "targets": [
@@ -33693,8 +33693,8 @@
               "target": "async_lock"
             },
             {
-              "id": "backoff 0.4.0",
-              "target": "backoff"
+              "id": "backon 1.6.0",
+              "target": "backon"
             },
             {
               "id": "bytes 1.11.1",
@@ -33749,7 +33749,7 @@
               "target": "ic_ed25519"
             },
             {
-              "id": "ic-transport-types 0.49.0",
+              "id": "ic-transport-types 0.49.1",
               "target": "ic_transport_types"
             },
             {
@@ -33862,7 +33862,7 @@
           ],
           "selects": {}
         },
-        "version": "0.49.0"
+        "version": "0.49.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36587,14 +36587,14 @@
       ],
       "license_file": null
     },
-    "ic-identity-hsm 0.49.0": {
+    "ic-identity-hsm 0.49.1": {
       "name": "ic-identity-hsm",
-      "version": "0.49.0",
+      "version": "0.49.1",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-identity-hsm/0.49.0/download",
-          "sha256": "bd610c57b9353fbbc00af59894341e43eb98299f327a46eda5f5a6bf841b0fc1"
+          "url": "https://static.crates.io/crates/ic-identity-hsm/0.49.1/download",
+          "sha256": "af528049c02d371578ea1dde0ad75b7d572d5f5145a61ff7a5ac0711b151f419"
         }
       },
       "targets": [
@@ -36623,7 +36623,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-agent 0.49.0",
+              "id": "ic-agent 0.49.1",
               "target": "ic_agent"
             },
             {
@@ -36646,7 +36646,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.49.0"
+        "version": "0.49.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37353,14 +37353,14 @@
       ],
       "license_file": null
     },
-    "ic-transport-types 0.49.0": {
+    "ic-transport-types 0.49.1": {
       "name": "ic-transport-types",
-      "version": "0.49.0",
+      "version": "0.49.1",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.49.0/download",
-          "sha256": "ede9080798410ed4777b6c4e02f011467b256fb9ddd393fc48aef86eb96442e6"
+          "url": "https://static.crates.io/crates/ic-transport-types/0.49.1/download",
+          "sha256": "9ae3ab1d620565ff148c9fd9486bf2e9da0cfa8d42f7020d0cff13e2d6eff8b5"
         }
       },
       "targets": [
@@ -37433,7 +37433,7 @@
           ],
           "selects": {}
         },
-        "version": "0.49.0"
+        "version": "0.49.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37545,14 +37545,14 @@
       ],
       "license_file": null
     },
-    "ic-utils 0.49.0": {
+    "ic-utils 0.49.1": {
       "name": "ic-utils",
-      "version": "0.49.0",
+      "version": "0.49.1",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-utils/0.49.0/download",
-          "sha256": "9eee176e6e16bb85f904442af47503b1e214da3d62e4cad2fda4a64d9b72de28"
+          "url": "https://static.crates.io/crates/ic-utils/0.49.1/download",
+          "sha256": "a143d270c29f00fb6274d43d490d619cd3aaf6d87f128ab1073d14f5842f573a"
         }
       },
       "targets": [
@@ -37591,7 +37591,7 @@
               "target": "futures_util"
             },
             {
-              "id": "ic-agent 0.49.0",
+              "id": "ic-agent 0.49.1",
               "target": "ic_agent"
             },
             {
@@ -37647,7 +37647,7 @@
           ],
           "selects": {}
         },
-        "version": "0.49.0"
+        "version": "0.49.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -45377,7 +45377,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
+            "Rev": "a244a247789fd9ece0fe1a406180c32e5bbc0c3f"
           }
         }
       },
@@ -45409,7 +45409,7 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.10.0",
               "target": "bitflags"
             },
             {
@@ -45427,7 +45427,7 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
+        "edition": "2024",
         "version": "0.14.99"
       },
       "license": "Apache-2.0",
@@ -45444,7 +45444,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
+            "Rev": "a244a247789fd9ece0fe1a406180c32e5bbc0c3f"
           },
           "strip_prefix": "lmdb-sys",
           "patch_args": [
@@ -45505,7 +45505,7 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
+        "edition": "2024",
         "version": "0.11.99"
       },
       "build_script_attrs": {
@@ -47594,91 +47594,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "memoffset 0.6.5": {
-      "name": "memoffset",
-      "version": "0.6.5",
-      "package_url": "https://github.com/Gilnaa/memoffset",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/memoffset/0.6.5/download",
-          "sha256": "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "memoffset",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "memoffset",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "memoffset 0.6.5",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.6.5"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.5.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "memoffset 0.9.0": {
       "name": "memoffset",
@@ -49802,104 +49717,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "nix 0.24.3": {
-      "name": "nix",
-      "version": "0.24.3",
-      "package_url": "https://github.com/nix-rust/nix",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/nix/0.24.3/download",
-          "sha256": "fa52e972a9a719cecb6864fb88568781eb706bac2cd1d4f04a648542dbf78069"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "nix",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "nix",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "acct",
-            "aio",
-            "default",
-            "dir",
-            "env",
-            "event",
-            "feature",
-            "fs",
-            "hostname",
-            "inotify",
-            "ioctl",
-            "kmod",
-            "memoffset",
-            "mman",
-            "mount",
-            "mqueue",
-            "net",
-            "personality",
-            "poll",
-            "process",
-            "pthread",
-            "ptrace",
-            "quota",
-            "reboot",
-            "resource",
-            "sched",
-            "signal",
-            "socket",
-            "term",
-            "time",
-            "ucontext",
-            "uio",
-            "user",
-            "zerocopy"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            },
-            {
-              "id": "memoffset 0.6.5",
-              "target": "memoffset"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.24.3"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "nix 0.27.1": {
       "name": "nix",
       "version": "0.27.1",
@@ -50160,6 +49977,121 @@
         },
         "edition": "2021",
         "version": "0.30.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg_aliases 0.2.1",
+              "target": "cfg_aliases"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "nix 0.31.3": {
+      "name": "nix",
+      "version": "0.31.3",
+      "package_url": "https://github.com/nix-rust/nix",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/nix/0.31.3/download",
+          "sha256": "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nix",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "nix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "feature",
+            "fs",
+            "ioctl",
+            "memoffset",
+            "mman",
+            "net",
+            "process",
+            "ptrace",
+            "signal",
+            "socket",
+            "time",
+            "uio",
+            "user",
+            "zerocopy"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            },
+            {
+              "id": "memoffset 0.9.0",
+              "target": "memoffset"
+            },
+            {
+              "id": "nix 0.31.3",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.31.3"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -97790,7 +97722,7 @@
     "hyper-rustls 0.27.7",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.20",
-    "ic-agent 0.49.0",
+    "ic-agent 0.49.1",
     "ic-bn-lib 0.2.3",
     "ic-bn-lib-common 0.2.2",
     "ic-btc-interface 0.4.0",
@@ -97811,7 +97743,7 @@
     "ic-doge-interface 0.3.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.1.0",
-    "ic-identity-hsm 0.49.0",
+    "ic-identity-hsm 0.49.1",
     "ic-management-canister-types 0.8.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.1.0",
@@ -97819,8 +97751,8 @@
     "ic-stable-structures 0.6.8",
     "ic-stable-structures 0.7.0",
     "ic-test-state-machine-client 3.0.1",
-    "ic-transport-types 0.49.0",
-    "ic-utils 0.49.0",
+    "ic-transport-types 0.49.1",
+    "ic-utils 0.49.1",
     "ic-verify-bls-signature 0.6.0",
     "ic-vetkeys 0.7.0",
     "ic-wasm 0.10.0",
@@ -97873,7 +97805,7 @@
     "moka 0.12.15",
     "more-asserts 0.3.1",
     "nftables 0.4.1",
-    "nix 0.24.3",
+    "nix 0.31.3",
     "num-bigint 0.4.6",
     "num-bigint-dig 0.9.1",
     "num-traits 0.2.19",

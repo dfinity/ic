@@ -32,8 +32,6 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_replicated_state::metadata_state::SubnetTopology;
-use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -5163,20 +5161,6 @@ pub(crate) fn inject_request_contexts_with_cost_schedule(
             .subnet_call_context_manager
             .canister_http_request_contexts
             .insert(cb, ctx);
-    }
-    if let Some(cost_schedule) = cost_schedule {
-        let own_subnet_id = init_state.metadata.own_subnet_id;
-        init_state
-            .metadata
-            .modify_network_topology(|network_topology| {
-                network_topology.subnets_mut().insert(
-                    own_subnet_id,
-                    SubnetTopology {
-                        cost_schedule,
-                        ..Default::default()
-                    },
-                );
-            });
     }
     let state_manager = Arc::new(RefMockStateManager::default());
     state_manager

@@ -12,7 +12,10 @@ use nix::{
 };
 use std::{
     cell::Cell,
+    num::NonZeroUsize,
     ops::Range,
+    os::unix::io::BorrowedFd,
+    ptr::NonNull,
     sync::{
         Arc,
         atomic::{AtomicU64, AtomicUsize, Ordering},
@@ -582,11 +585,12 @@ fn apply_memory_instructions(
                 metrics.mmap_count.fetch_add(1, Ordering::Relaxed);
                 unsafe {
                     mmap(
-                        memory_area.page_start_addr_from(range.start),
-                        range_size_in_bytes(&range),
+                        NonZeroUsize::new(memory_area.page_start_addr_from(range.start) as usize),
+                        NonZeroUsize::new(range_size_in_bytes(&range))
+                            .expect("mmap length must be non-zero"),
                         current_prot_flags,
                         MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
-                        fd,
+                        BorrowedFd::borrow_raw(fd),
                         offset as i64,
                     )
                     .map_err(print_enomem_help)
@@ -603,7 +607,8 @@ fn apply_memory_instructions(
                     current_prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
                     unsafe {
                         mprotect(
-                            memory_area.page_start_addr_from(prefetch_range.start),
+                            NonNull::new(memory_area.page_start_addr_from(prefetch_range.start))
+                                .expect("mprotect address is null"),
                             range_size_in_bytes(&prefetch_range),
                             current_prot_flags,
                         )
@@ -631,7 +636,8 @@ fn apply_memory_instructions(
     if page_protection_flags != current_prot_flags {
         unsafe {
             mprotect(
-                memory_area.page_start_addr_from(prefetch_range.start),
+                NonNull::new(memory_area.page_start_addr_from(prefetch_range.start))
+                    .expect("mprotect address is null"),
                 range_size_in_bytes(&prefetch_range),
                 page_protection_flags,
             )

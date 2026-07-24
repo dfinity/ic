@@ -262,6 +262,7 @@ members = [
     "rs/nervous_system/governance",
     "rs/nervous_system/histogram",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/ids",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
     "rs/nervous_system/instruction_stats_update_attribute",
@@ -703,7 +704,7 @@ ic-canister-log = "^0.2.0"
 ic-certified-map = "^0.3.1"
 ic-metrics-encoder = "^1.1.1"
 ic0 = "1.0.0"
-ic-agent = { version = "0.49.0", features = ["pem"] }
+ic-agent = { version = "0.49.1", features = ["pem"] }
 ic-bn-lib = { version = "0.2.3", features = ["acme-alpn"] }
 ic-bn-lib-common = { version = "0.2.2" }
 ic-btc-interface = "0.4.0"
@@ -718,13 +719,13 @@ ic-certification = "3"
 ic-doge-interface = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "3e698972422be07776bf888666285b7b3f7c984e", default-features = false }
 ic-http-certification = "3.0.3"
-ic-identity-hsm = { version = "0.49.0" }
+ic-identity-hsm = { version = "0.49.1" }
 ic-management-canister-types = "0.8.0"
 ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
-ic-transport-types = { version = "0.49.0" }
-ic-utils = { version = "0.49.0", features = ["raw"] }
+ic-transport-types = { version = "0.49.1" }
+ic-utils = { version = "0.49.1", features = ["raw"] }
 ic-vetkeys = "0.7.0"
 ic-xrc-types = "1.2.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
@@ -763,8 +764,8 @@ libcryptsetup-rs = "0.15"
 libflate = "2.1.0"
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
-lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
-lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
 lzma-sys = { version = "0.1.20", features = ["static"] }
@@ -778,7 +779,7 @@ mockall = "0.13.0"
 mockito = "1.6.1"
 more-asserts = "0.3.1"
 nftables = "0.4"
-nix = { version = "0.24.3", features = ["ptrace", "user", "signal"] }
+nix = { version = "0.31.3", features = ["fs", "ioctl", "mman", "net", "process", "ptrace", "signal", "socket", "time", "user", "zerocopy"] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"

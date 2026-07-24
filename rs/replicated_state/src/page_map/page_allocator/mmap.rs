@@ -14,8 +14,10 @@ use libc::{c_void, close};
 use nix::sys::mman::{MapFlags, MmapAdvise, ProtFlags, madvise, mmap, munmap};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 use std::os::raw::c_int;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{BorrowedFd, RawFd};
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -495,7 +497,8 @@ struct MmapBasedPageAllocatorCore {
 impl Drop for MmapBasedPageAllocatorCore {
     fn drop(&mut self) {
         for chunk in self.chunks.iter() {
-            let ptr = chunk.ptr as *mut c_void;
+            // `chunk.ptr` is a non-null mapping returned by `mmap`.
+            let ptr = NonNull::new(chunk.ptr as *mut c_void).expect("chunk pointer is null");
             // SAFETY: The chunk was created using `mmap`, so `munmap` should work.
             unsafe { munmap(ptr, chunk.size) }.unwrap_or_else(|err| {
                 panic!(
@@ -606,11 +609,11 @@ impl MmapBasedPageAllocatorCore {
         // SAFETY: The parameters are valid.
         let mmap_ptr = unsafe {
             mmap(
-                std::ptr::null_mut(),
-                mmap_size,
+                None,
+                NonZeroUsize::new(mmap_size).expect("mmap_size must be non-zero"),
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
-                self.file_descriptor,
+                BorrowedFd::borrow_raw(self.file_descriptor),
                 mmap_file_offset,
             )
         }
@@ -620,7 +623,8 @@ impl MmapBasedPageAllocatorCore {
                  at offset {} while allocating a new memory block: {}",
                 mmap_size, self.file_descriptor, mmap_file_offset, err,
             )
-        }) as *mut u8;
+        })
+        .as_ptr() as *mut u8;
 
         // Do madvise transparent huge page performance optimization only on Linux.
         #[cfg(target_os = "linux")]
@@ -630,7 +634,7 @@ impl MmapBasedPageAllocatorCore {
             if mmap_size >= MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.get() as usize * HUGE_PAGE_SIZE {
                 unsafe {
                     madvise(
-                        mmap_ptr as *mut c_void,
+                        NonNull::new(mmap_ptr as *mut c_void).expect("mmap pointer is null"),
                         mmap_size,
                         MmapAdvise::MADV_HUGEPAGE,
                     )
@@ -691,11 +695,11 @@ impl MmapBasedPageAllocatorCore {
         // SAFETY: The parameters are valid.
         let mmap_ptr = unsafe {
             mmap(
-                std::ptr::null_mut(),
-                mmap_size,
+                None,
+                NonZeroUsize::new(mmap_size).expect("mmap_size must be non-zero"),
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
-                self.file_descriptor,
+                BorrowedFd::borrow_raw(self.file_descriptor),
                 mmap_file_offset,
             )
         }
@@ -705,7 +709,8 @@ impl MmapBasedPageAllocatorCore {
                          at offset {} for deserialization: {}",
                 mmap_size, self.file_descriptor, mmap_file_offset, err,
             )
-        }) as *mut u8;
+        })
+        .as_ptr() as *mut u8;
 
         self.chunks.push(Chunk {
             ptr: mmap_ptr,
@@ -767,7 +772,7 @@ impl MmapBasedPageAllocatorCore {
 // - the range is not empty.
 unsafe fn madvise_remove(start_ptr: *mut u8, end_ptr: *mut u8) {
     unsafe {
-        let ptr = start_ptr as *mut c_void;
+        let ptr = NonNull::new(start_ptr as *mut c_void).expect("start pointer is null");
         let size = end_ptr.offset_from(start_ptr);
         assert!(size > 0);
         // MacOS does not support punching holes in the file with `MADV_REMOVE`.

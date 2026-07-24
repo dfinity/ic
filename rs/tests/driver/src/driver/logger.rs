@@ -2,19 +2,43 @@
 
 use crate::driver::constants;
 use anyhow::Result;
+use nix::fcntl::{Flock, FlockArg};
 use slog::{Drain, KV, Key, Level, Logger, OwnedKVList, Record, o};
 use slog_term::Decorator;
+use std::path::Path;
 use std::{fmt, fs::File, io};
-use std::{os::unix::prelude::AsRawFd, path::Path};
 
-fn open_append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
-    let f = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(p)?;
-    let fd = f.as_raw_fd();
-    nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusiveNonblock)?;
-    Ok(f)
+/// A log file that holds an exclusive advisory `flock` for as long as it stays
+/// open; the lock is released when the value is dropped. Holding the `Flock`
+/// guard (rather than a bare `File`) is what keeps the lock alive for the
+/// lifetime of the logger the file is handed to.
+pub(crate) struct LockedLogFile(Flock<File>);
+
+impl LockedLogFile {
+    /// Opens `p` for appending, creating it if needed, and takes an exclusive
+    /// advisory lock on it. Fails immediately (rather than blocking) if another
+    /// process already holds the lock.
+    pub(crate) fn open_append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<Self> {
+        let f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)?;
+        let locked = Flock::lock(f, FlockArg::LockExclusiveNonblock).map_err(|(_, errno)| errno)?;
+        Ok(Self(locked))
+    }
+}
+
+impl io::Write for LockedLogFile {
+    // Faithfully forwards the `Write::write` contract to the locked file, so the
+    // partial-write check does not apply here.
+    #[allow(clippy::disallowed_methods)]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
 }
 
 fn async_drain<D>(d: D) -> slog::Fuse<slog_async::Async>
@@ -32,7 +56,7 @@ where
 /// don't exist.
 fn new_file_logger<P: AsRef<Path>>(p: P) -> Result<Logger> {
     std::fs::create_dir_all(p.as_ref().parent().expect("no parent"))?;
-    let log_file = open_append_and_lock_exclusive(p)?;
+    let log_file = LockedLogFile::open_append_and_lock_exclusive(p)?;
     let file_drain = slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(log_file))
         .build()
         .fuse();
