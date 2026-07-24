@@ -264,33 +264,34 @@ pub fn main() -> Result<()> {
             let mut hostos_config: HostOSConfig =
                 config_tool::deserialize_config(&hostos_config_json_path)?;
 
-            if !node_operator_private_key_path.exists() {
-                println!(
-                    "Node operator private key file not found at {}. Skipping update.",
-                    node_operator_private_key_path.display()
-                );
+            if hostos_config.config_version == CONFIG_VERSION {
+                println!("Config already up to date. Skipping update.");
+
                 return Ok(());
             }
 
+            // Fill the NO key from the old keyfile, only if missing.
             if hostos_config
                 .icos_settings
                 .node_operator_private_key
-                .is_some()
+                .is_none()
             {
-                println!("Node operator private key already present in config. Skipping update.");
-                return Ok(());
+                hostos_config.icos_settings.node_operator_private_key =
+                    fs::read_to_string(&node_operator_private_key_path)
+                        .map_err(|_| {
+                            println!(
+                                "Node operator private key file not found at {}.",
+                                node_operator_private_key_path.display()
+                            )
+                        })
+                        .ok();
             }
 
-            let node_operator_private_key = fs::read_to_string(&node_operator_private_key_path)
-                .context("unable to read node operator private key")?;
-
-            hostos_config.icos_settings.node_operator_private_key = Some(node_operator_private_key);
             hostos_config.config_version = CONFIG_VERSION.to_string();
-
             serialize_and_write_config(&hostos_config_json_path, &hostos_config)?;
 
             println!(
-                "HostOS config updated with node operator private key and written to {}",
+                "HostOS config updated and written to {}",
                 hostos_config_json_path.display()
             );
 
