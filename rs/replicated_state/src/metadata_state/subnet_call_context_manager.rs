@@ -36,7 +36,7 @@ const NONCE_SIZE: usize = 32;
 /// to execution is retained before being removed.
 ///
 /// The timeout is measured against the `time` of the original
-/// `CanisterHttpRequestContext` and the batch time, not wall-clock time.
+/// `CanisterHttpRequestContext` and the batch time.
 pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 pub enum SubnetCallContext {
@@ -377,19 +377,13 @@ impl SubnetCallContextManager {
         &mut self,
         current_time: Time,
     ) -> Vec<CanisterHttpRequestContext> {
-        let mut timed_out = Vec::new();
         self.delivered_canister_http_request_contexts
-            .retain(|_callback_id, context| {
-                if current_time.saturating_duration_since(context.time)
-                    < DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
-                {
-                    true
-                } else {
-                    timed_out.push(context.clone());
-                    false
-                }
-            });
-        timed_out
+            .extract_if(.., |_callback_id, context| {
+                current_time.saturating_duration_since(context.time)
+                    >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+            })
+            .map(|(_callback_id, context)| context)
+            .collect()
     }
 
     pub fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {

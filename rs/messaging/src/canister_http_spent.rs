@@ -14,6 +14,18 @@ struct CanisterAccounting {
     /// Nominal cycles the caller consumed, to report in its cost metrics. This
     /// is nonzero also on free subnets.
     consumed: Cycles,
+    /// The cost schedule to use for this request.
+    cost_schedule: CanisterCyclesCostSchedule,
+}
+
+impl CanisterAccounting {
+    fn new(cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        Self {
+            refund: Cycles::zero(),
+            consumed: Cycles::zero(),
+            cost_schedule,
+        }
+    }
 }
 
 /// Applies the HTTP outcall spend reports carried by `spent` to the calling
@@ -34,9 +46,6 @@ pub(crate) fn deliver_canister_http_spent(
     state: &mut ReplicatedState,
     log: &ReplicaLogger,
 ) {
-    // TODO: Use the cost schedule from the context, once it exists.
-    let cost_schedule = state.get_own_cost_schedule();
-
     // First update the contexts' refund status and accumulate the amounts to
     // credit/report per canister. The crediting happens in a second pass to
     // avoid borrowing both the subnet call context manager and the canister
@@ -77,7 +86,9 @@ pub(crate) fn deliver_canister_http_spent(
                 .refund_status
                 .refunding_nodes
                 .extend(report.nodes.iter());
-            let entry = credits.entry(context.request.sender).or_default();
+            let entry = credits
+                .entry(context.request.sender)
+                .or_insert_with(|| CanisterAccounting::new(context.cost_schedule));
             entry.refund += applied;
             entry.consumed += report.amount;
         }
@@ -115,7 +126,7 @@ pub(crate) fn deliver_canister_http_spent(
         }
     }
 
-    apply_accounting(state, credits, cost_schedule, log);
+    apply_accounting(state, credits, log);
 }
 
 /// Times out delivered `CanisterHttpRequestContext`s and refunds the calling
@@ -136,17 +147,13 @@ pub(crate) fn refund_timed_out_canister_http_contexts(
         .subnet_call_context_manager
         .time_out_delivered_canister_http_request_contexts(current_time);
 
-    // TODO: Use the cost schedule and subnet size from the context, once they exist.
-    let cost_schedule = state.get_own_cost_schedule();
-    let subnet_size = state.get_own_subnet_size();
-
     let mut credits: BTreeMap<CanisterId, CanisterAccounting> = BTreeMap::new();
     for mut context in timed_out {
         // The number of replicas assigned to the request; the responders already
         // refunded via `deliver_canister_http_spent`, the rest refund in full
         // here.
         let node_count = match &context.replication {
-            Replication::FullyReplicated => subnet_size,
+            Replication::FullyReplicated => context.subnet_size.get() as usize,
             Replication::Flexible { committee, .. } => committee.len(),
             Replication::NonReplicated(_) => 1,
         };
@@ -159,10 +166,13 @@ pub(crate) fn refund_timed_out_canister_http_contexts(
             context.request.sender_reply_callback,
             log,
         );
-        credits.entry(context.request.sender).or_default().refund += applied;
+        credits
+            .entry(context.request.sender)
+            .or_insert_with(|| CanisterAccounting::new(context.cost_schedule))
+            .refund += applied;
     }
 
-    apply_accounting(state, credits, cost_schedule, log);
+    apply_accounting(state, credits, log);
 }
 
 /// Records `amount` as refunded against `refund_status`, capped so that
@@ -202,7 +212,6 @@ fn apply_capped(
 fn apply_accounting(
     state: &mut ReplicatedState,
     credits: BTreeMap<CanisterId, CanisterAccounting>,
-    cost_schedule: CanisterCyclesCostSchedule,
     log: &ReplicaLogger,
 ) {
     for (sender, accounting) in credits {
@@ -213,9 +222,11 @@ fn apply_accounting(
             Some(canister) => {
                 canister.system_state.add_cycles(accounting.refund);
                 if !accounting.consumed.is_zero() {
-                    let consumed =
-                        CompoundCycles::<HTTPOutcalls>::new(accounting.consumed, cost_schedule)
-                            .nominal();
+                    let consumed = CompoundCycles::<HTTPOutcalls>::new(
+                        accounting.consumed,
+                        accounting.cost_schedule,
+                    )
+                    .nominal();
                     canister
                         .system_state
                         .observe_consumed_cycles_for_https_outcall(consumed);
@@ -260,9 +271,9 @@ mod tests {
     }
 
     /// Number of nodes on the (fully-replicated) subnet used in these tests. The
-    /// state's own subnet size drives the timeout refund of non-responders for a
-    /// fully-replicated request; it is kept in sync with the contexts'
-    /// `subnet_size`.
+    /// request context's `subnet_size` drives the timeout refund of non-responders
+    /// for a fully-replicated request; the state is created with a matching node
+    /// set for consistency.
     const SUBNET_SIZE: u64 = 13;
 
     /// Builds a state holding a single caller canister (`canister_test_id(1)`) on
@@ -425,10 +436,10 @@ mod tests {
             initial: vec![],
             asynchronous: vec![CanisterHttpAsyncSpent {
                 callback: CALLBACK,
-                shares: vec![
+                shares: BTreeMap::from([
                     (node_test_id(1), Cycles::new(400)),
                     (node_test_id(2), Cycles::new(600)),
-                ],
+                ]),
             }],
         };
         deliver_canister_http_spent(&first, &mut state, &log);
@@ -444,10 +455,10 @@ mod tests {
             initial: vec![],
             asynchronous: vec![CanisterHttpAsyncSpent {
                 callback: CALLBACK,
-                shares: vec![
+                shares: BTreeMap::from([
                     (node_test_id(1), Cycles::new(999)),
                     (node_test_id(3), Cycles::new(700)),
-                ],
+                ]),
             }],
         };
         deliver_canister_http_spent(&second, &mut state, &log);
@@ -475,7 +486,7 @@ mod tests {
             initial: vec![],
             asynchronous: vec![CanisterHttpAsyncSpent {
                 callback: CALLBACK,
-                shares: vec![(node_test_id(1), Cycles::new(400))],
+                shares: BTreeMap::from([(node_test_id(1), Cycles::new(400))]),
             }],
         };
         deliver_canister_http_spent(&async_report, &mut state, &log);
@@ -536,7 +547,7 @@ mod tests {
             }],
             asynchronous: vec![CanisterHttpAsyncSpent {
                 callback: CALLBACK,
-                shares: vec![(node_test_id(2), Cycles::new(1))],
+                shares: BTreeMap::from([(node_test_id(2), Cycles::new(1))]),
             }],
         };
         deliver_canister_http_spent(&report, &mut state, &no_op_logger());
@@ -591,11 +602,11 @@ mod tests {
             initial: vec![],
             asynchronous: vec![CanisterHttpAsyncSpent {
                 callback: CALLBACK,
-                shares: vec![
+                shares: BTreeMap::from([
                     (node_test_id(1), Cycles::zero()),
                     (node_test_id(2), Cycles::zero()),
                     (node_test_id(3), Cycles::zero()),
-                ],
+                ]),
             }],
         };
         deliver_canister_http_spent(&report, &mut state, &log);
