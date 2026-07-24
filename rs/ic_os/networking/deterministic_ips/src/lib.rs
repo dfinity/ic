@@ -5,7 +5,7 @@ use ic_crypto_sha2::Sha256;
 use macaddr::MacAddr6;
 use node_type::NodeType;
 
-pub use config_types::DeploymentEnvironment;
+pub use config_types::{DeploymentEnvironment, VmSlot};
 pub mod node_type;
 
 pub trait MacAddr6Ext {
@@ -64,6 +64,7 @@ pub fn calculate_deterministic_mac(
     mgmt_mac: &MacAddr6,
     deployment_environment: DeploymentEnvironment,
     node_type: NodeType,
+    slot: VmSlot,
 ) -> MacAddr6 {
     let index = node_type.to_index();
 
@@ -77,32 +78,18 @@ pub fn calculate_deterministic_mac(
 
     let hash = Sha256::hash(seed.as_bytes());
 
-    // 0x6a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
-    [0x6a, index, hash[0], hash[1], hash[2], hash[3]].into()
-}
-
-pub fn calculate_multi_deterministic_mac(
-    mgmt_mac: &MacAddr6,
-    deployment_environment: DeploymentEnvironment,
-    node_type: NodeType,
-    slot: u8,
-) -> MacAddr6 {
-    let index = node_type.to_index();
-
-    // NOTE: In order to be backwards compatible with existing scripts, this
-    // **MUST** have a newline.
-    let seed = format!(
-        "{}{}\n",
-        mgmt_mac.to_string().to_lowercase(),
-        deployment_environment
-    );
-
-    let hash = Sha256::hash(seed.as_bytes());
-
-    // NOTE: We extend to 7a and use the space of the index to store the
-    // slot.
-    // 0x7a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
-    [0x7a, index, slot, hash[1], hash[2], hash[3]].into()
+    match slot {
+        VmSlot::Plain => {
+            // 0x6a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
+            [0x6a, index, hash[0], hash[1], hash[2], hash[3]].into()
+        }
+        VmSlot::Multi(slot) => {
+            // NOTE: We extend to 7a and use the space of the index to store the
+            // slot.
+            // 0x7a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
+            [0x7a, index, slot.into(), hash[1], hash[2], hash[3]].into()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -118,6 +105,7 @@ mod test {
             &mgmt_mac,
             DeploymentEnvironment::Testnet,
             NodeType::HostOS,
+            VmSlot::Plain,
         );
         assert_eq!(mac, expected_mac);
     }
@@ -147,6 +135,7 @@ mod test {
             &mgmt_mac,
             DeploymentEnvironment::Mainnet,
             NodeType::GuestOS,
+            VmSlot::Plain,
         );
         let slaac = mac.calculate_slaac(prefix).unwrap();
         assert_eq!(slaac, expected_ip);
@@ -222,11 +211,11 @@ mod test {
     fn multi_mac() {
         let mgmt_mac: MacAddr6 = "70:B5:E8:E8:25:DE".parse().unwrap();
         let expected_mac: MacAddr6 = "7a:02:f0:87:a4:8a".parse().unwrap();
-        let mac = calculate_multi_deterministic_mac(
+        let mac = calculate_deterministic_mac(
             &mgmt_mac,
             DeploymentEnvironment::Testnet,
             NodeType::UpgradeGuestOS,
-            240,
+            VmSlot::new(240),
         );
         assert_eq!(mac, expected_mac);
     }
@@ -238,11 +227,11 @@ mod test {
         let expected_ip = "2602:ffe4:801:17:7802:f1ff:feec:bd51"
             .parse::<Ipv6Addr>()
             .unwrap();
-        let mac = calculate_multi_deterministic_mac(
+        let mac = calculate_deterministic_mac(
             &mgmt_mac,
             DeploymentEnvironment::Mainnet,
             NodeType::UpgradeGuestOS,
-            241,
+            VmSlot::new(241),
         );
         let slaac = mac.calculate_slaac(prefix).unwrap();
         assert_eq!(slaac, expected_ip);
@@ -256,6 +245,7 @@ mod test {
             &mgmt_mac,
             DeploymentEnvironment::Mainnet,
             NodeType::HostOS,
+            VmSlot::Plain,
         );
         let host_ip = host_mac.calculate_slaac(prefix).unwrap().to_string();
 
@@ -263,6 +253,7 @@ mod test {
             &mgmt_mac,
             DeploymentEnvironment::Mainnet,
             NodeType::GuestOS,
+            VmSlot::Plain,
         );
         let guest_ip = guest_mac.calculate_slaac(prefix).unwrap().to_string();
 
@@ -270,11 +261,11 @@ mod test {
         let ip_prefix = &host_ip[..17];
         assert!(host_ip.starts_with(ip_prefix) && guest_ip.starts_with(ip_prefix));
 
-        let multi_guest_mac = calculate_multi_deterministic_mac(
+        let multi_guest_mac = calculate_deterministic_mac(
             &mgmt_mac,
             DeploymentEnvironment::Mainnet,
             NodeType::GuestOS,
-            1,
+            VmSlot::new(1),
         );
         let multi_guest_ip = multi_guest_mac.calculate_slaac(prefix).unwrap().to_string();
 

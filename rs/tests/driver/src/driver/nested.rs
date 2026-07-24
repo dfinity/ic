@@ -21,7 +21,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail, ensure};
 use async_trait::async_trait;
-use config_types::DeploymentEnvironment;
+use config_types::{DeploymentEnvironment, VmSlot};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
@@ -420,11 +420,13 @@ impl HasNestedVms for TestEnv {
             &seed_mac,
             DeploymentEnvironment::Testnet,
             NodeType::HostOS,
+            VmSlot::Plain,
         );
         let guest_mac = calculate_deterministic_mac(
             &seed_mac,
             DeploymentEnvironment::Testnet,
             NodeType::GuestOS,
+            VmSlot::Plain,
         );
 
         let host_ip = host_mac.calculate_slaac(&prefix).unwrap();

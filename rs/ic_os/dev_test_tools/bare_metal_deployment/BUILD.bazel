@@ -20,8 +20,6 @@ rust_library(
     ],
     deps = [
         ":build_script",
-        "//rs/ic_os/boot/grub",
-        "//rs/ic_os/networking/deterministic_ips",
         "@crate_index//:anyhow",
         "@crate_index//:http",
         "@crate_index//:macaddr",
@@ -31,6 +29,9 @@ rust_library(
         "@crate_index//:slog",
         "@crate_index//:ssh2",
         "@crate_index//:thiserror",
+        "//rs/ic_os/boot/grub",
+        "//rs/ic_os/config/types:config_types",
+        "//rs/ic_os/networking/deterministic_ips",
     ],
 )
 
@@ -63,8 +64,6 @@ rust_test(
     crate = ":bare_metal_deployment",
     deps = [
         ":build_script",
-        "//rs/ic_os/boot/grub",
-        "//rs/ic_os/networking/deterministic_ips",
         "@crate_index//:anyhow",
         "@crate_index//:http",
         "@crate_index//:macaddr",
@@ -74,6 +73,9 @@ rust_test(
         "@crate_index//:slog",
         "@crate_index//:ssh2",
         "@crate_index//:thiserror",
+        "//rs/ic_os/boot/grub",
+        "//rs/ic_os/config/types:config_types",
+        "//rs/ic_os/networking/deterministic_ips",
     ],
 )
 

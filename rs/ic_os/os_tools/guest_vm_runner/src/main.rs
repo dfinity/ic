@@ -12,7 +12,7 @@ use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
-use config_types::{HostOSConfig, Ipv6Config};
+use config_types::{HostOSConfig, Ipv6Config, VmSlot};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use ic_device::device_mapping::MappedDevice;
@@ -129,6 +129,8 @@ pub async fn main() -> Result<()> {
 }
 
 async fn run(slot: Option<u8>, vm_type: GuestVMType) -> Result<()> {
+    let slot = VmSlot::new(slot.unwrap_or(0));
+
     let startup_message = match vm_type {
         GuestVMType::Default => "Launching GuestOS Virtual Machine...",
         GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
@@ -417,7 +419,7 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_ttys: Vec<Mutex<Box<dyn Write + Send + Sync>>>,
-    guest_vm_slot: Option<u8>,
+    guest_vm_slot: VmSlot,
     guest_vm_type: GuestVMType,
     sev_certificate_provider: HostSevCertificateProvider,
     disk_device: PathBuf,
@@ -436,7 +438,7 @@ impl GuestVmService {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn new(guest_vm_slot: Option<u8>, guest_vm_type: GuestVMType) -> Result<Self> {
+    pub fn new(guest_vm_slot: VmSlot, guest_vm_type: GuestVMType) -> Result<Self> {
         let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
             .context("Failed to create metrics")?;
         let libvirt_connection = LibvirtConnectionWithReconnect::new(Arc::new(|| {
@@ -473,8 +475,7 @@ impl GuestVmService {
             })
             .transpose()?;
 
-        let slot_suffix = guest_vm_slot.map(|v| v.to_string()).unwrap_or_default();
-        let device_string = format!("{GUESTOS_DEVICE}{slot_suffix}");
+        let device_string = format!("{GUESTOS_DEVICE}{guest_vm_slot}");
         let disk_device = upgrade_mapped_device
             .as_ref()
             .map(|x| x.path())
@@ -506,7 +507,7 @@ impl GuestVmService {
 
     #[cfg(target_os = "linux")]
     pub async fn create_and_run(
-        slot: Option<u8>,
+        slot: VmSlot,
         guest_vm_type: GuestVMType,
         termination_token: CancellationToken,
     ) -> Result<()> {
@@ -686,6 +687,7 @@ impl GuestVmService {
             &self.hostos_config.icos_settings.mgmt_mac,
             self.hostos_config.icos_settings.deployment_environment,
             NodeType::HostOS,
+            VmSlot::Plain,
         );
 
         let Ipv6Config::Deterministic(ipv6_config) =
@@ -1039,11 +1041,7 @@ mod tests {
         /// Starts a VM service in the background.
         /// This roughly corresponds to invoking `run_guest_vm()` in prod code.
         /// The returned instance can be used to interact with the newly started service.
-        fn start_service(
-            &self,
-            guest_vm_type: GuestVMType,
-            slot: Option<u8>,
-        ) -> TestServiceInstance {
+        fn start_service(&self, guest_vm_type: GuestVMType, slot: VmSlot) -> TestServiceInstance {
             let console_file = NamedTempFile::new().expect("Failed to create console log file");
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
             let systemd_notifier = MockSystemdNotifier::new();
