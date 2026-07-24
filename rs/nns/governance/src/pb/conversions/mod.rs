@@ -469,6 +469,9 @@ impl From<api::proposal::Action> for pb::proposal::Action {
             api::proposal::Action::CreateCanisterAndInstallCode(v) => {
                 pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
             }
+            api::proposal::Action::UpdateStandardEngineReplicaVersion(v) => {
+                pb::proposal::Action::UpdateStandardEngineReplicaVersion(v.into())
+            }
         }
     }
 }
@@ -529,6 +532,9 @@ impl From<api::ProposalActionRequest> for pb::proposal::Action {
             }
             api::ProposalActionRequest::CreateCanisterAndInstallCode(v) => {
                 pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
+            }
+            api::ProposalActionRequest::UpdateStandardEngineReplicaVersion(v) => {
+                pb::proposal::Action::UpdateStandardEngineReplicaVersion(v.into())
             }
         }
     }
@@ -2827,6 +2833,33 @@ impl From<api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVe
             base_guest_launch_measurements: item
                 .base_guest_launch_measurements
                 .map(convert_guest_launch_measurements_from_api_to_pb),
+        }
+    }
+}
+
+impl From<pb::UpdateStandardEngineReplicaVersion> for api::UpdateStandardEngineReplicaVersion {
+    fn from(item: pb::UpdateStandardEngineReplicaVersion) -> Self {
+        Self {
+            new_replica_version_id: Some(item.new_replica_version_id),
+            old_replica_version_id: Some(item.old_replica_version_id),
+            deployment_progress: Some(item.deployment_progress),
+        }
+    }
+}
+
+impl From<api::UpdateStandardEngineReplicaVersion> for pb::UpdateStandardEngineReplicaVersion {
+    fn from(item: api::UpdateStandardEngineReplicaVersion) -> Self {
+        Self {
+            // These are string fields. Therefore, if no value is supplied,
+            // unwrap_or_default returns an empty string, which will be rejected
+            // later (during proposal creation time), because we require that
+            // these fields have the shape of a git commit ID.
+            new_replica_version_id: item.new_replica_version_id.unwrap_or_default(),
+            old_replica_version_id: item.old_replica_version_id.unwrap_or_default(),
+            // -1.0 is a "poison" value. That way, we do not make the unfounded
+            // assumption that the user intended that deployment_progress be set
+            // to 0.0.
+            deployment_progress: item.deployment_progress.unwrap_or(-1.0),
         }
     }
 }
