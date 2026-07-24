@@ -238,7 +238,6 @@ impl StateMachine for StateMachineImpl {
                 batch.batch_number
             )
         }
-
         execution_timer.observe_duration();
 
         // Postprocess the state: route messages into streams.

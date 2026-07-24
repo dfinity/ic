@@ -443,7 +443,6 @@ impl CanisterHttpPayloadBuilderImpl {
             )?;
 
             let subnet_size = request_context.subnet_size;
-
             let (effective_committee, effective_threshold) = match request_context.replication {
                 Replication::NonReplicated(node_id) => (vec![node_id], 1),
                 Replication::FullyReplicated => {

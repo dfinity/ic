@@ -379,13 +379,13 @@ pub struct CanisterHttpInitialSpent {
 
 /// An asynchronous spent report for an HTTP outcall.
 ///
-/// `shares` holds the per-replica spends that the participating nodes signed
+/// `shares` maps each participating node to the per-replica cycles it signed
 /// over as part of the aggregated response proof.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpAsyncSpent {
     pub callback: CallbackId,
-    pub shares: Vec<(NodeId, Cycles)>,
+    pub shares: BTreeMap<NodeId, Cycles>,
 }
 
 #[cfg(test)]

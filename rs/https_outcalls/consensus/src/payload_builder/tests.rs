@@ -3208,17 +3208,63 @@ fn into_messages_emits_initial_spend_reports() {
         initial_spent: Cycles::new(5_000),
     };
 
+    // A plain timeout and a divergence are both delivered as rejects but carry
+    // no full response body, so neither must contribute an initial spend report.
+    let timeout_callback = CallbackId::from(300);
+
+    let div_callback = CallbackId::from(400);
+    let (_, div_metadata) = test_response_and_metadata(div_callback.get());
+    let divergent_share = |node: u64, hash: u8| {
+        let mut metadata = div_metadata.clone();
+        metadata.content_hash = CryptoHashOf::from(CryptoHash(vec![hash; 32]));
+        Signed {
+            content: CanisterHttpResponseReceipt {
+                metadata,
+                payment_receipt: CanisterHttpPaymentReceipt::default(),
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: node_test_id(node),
+            },
+        }
+    };
+    let divergence = CanisterHttpResponseDivergence {
+        shares: vec![divergent_share(0, 1), divergent_share(1, 2)],
+    };
+
     let payload = CanisterHttpPayload {
         responses: vec![fr_proof],
         flexible_responses: vec![flex_group],
         flexible_errors: vec![flex_error],
-        ..Default::default()
+        timeouts: vec![timeout_callback],
+        divergence_responses: vec![divergence],
     };
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (_responses, spent, _stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, spent, _stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
+    // All five callbacks are delivered as consensus responses...
+    let delivered: BTreeSet<CallbackId> = responses.iter().map(|r| r.callback).collect();
+    assert_eq!(
+        delivered,
+        [
+            fr_callback,
+            flex_callback,
+            err_callback,
+            timeout_callback,
+            div_callback,
+        ]
+        .into_iter()
+        .collect()
+    );
+    // ...but only the three carrying full bodies report an initial spend.
     assert_eq!(spent.initial.len(), 3);
+    assert!(
+        spent
+            .initial
+            .iter()
+            .all(|r| r.callback != timeout_callback && r.callback != div_callback)
+    );
     assert!(spent.asynchronous.is_empty());
 
     let signers: BTreeSet<NodeId> = [node_test_id(0), node_test_id(1)].into_iter().collect();
@@ -3344,11 +3390,14 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
     }]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, _spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 0);
     assert_eq!(stats.flexible_ok_responses, 0);
     assert_eq!(stats.flexible_ok_responses_candid_failures, 1);
+    // A candid-decode failure delivers nothing, hence reports no spend.
+    assert!(spent.initial.is_empty());
+    assert!(spent.asynchronous.is_empty());
 }
 
 #[test]
@@ -3361,12 +3410,15 @@ fn flexible_error_into_messages_timeout() {
     };
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, _spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
     assert_eq!(stats.flexible_errors, 1);
     assert_eq!(stats.flexible_errors_candid_failures, 0);
+    // A flexible timeout carries no full response body, hence reports no spend.
+    assert!(spent.initial.is_empty());
+    assert!(spent.asynchronous.is_empty());
 
     let Payload::Data(ref data) = responses[0].payload else {
         panic!("Expected Payload::Data, got {:?}", responses[0].payload);
@@ -3456,12 +3508,17 @@ fn flexible_error_into_messages_responses_too_large() {
     };
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, _spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
     assert_eq!(stats.flexible_errors, 1);
     assert_eq!(stats.flexible_errors_candid_failures, 0);
+    // A responses-too-large error carries no full response body, hence reports
+    // no spend (the per-replica spends in `all_seen_shares` are deliberately not
+    // reported here).
+    assert!(spent.initial.is_empty());
+    assert!(spent.asynchronous.is_empty());
 
     let Payload::Data(ref data) = responses[0].payload else {
         panic!("Expected Payload::Data, got {:?}", responses[0].payload);
