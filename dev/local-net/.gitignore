@@ -1,0 +1,11 @@
+# Bazel disk + repository cache (large; rebuildable)
+cache/
+
+# Extracted binaries (regeneratable via ./build.sh)
+out/
+
+# ic-prep output, per-node crypto/state, generated configs
+bootstrap/
+
+# Stray logs from background builds
+*.log
