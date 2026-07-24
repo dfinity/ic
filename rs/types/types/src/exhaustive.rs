@@ -2,7 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::backwards_compatibility::BackwardsCompatible;
-use crate::batch::{CanisterHttpAsyncSpent, ChainKeyAgreement};
+use crate::batch::ChainKeyAgreement;
 use crate::canister_http::CanisterHttpResponseSignature;
 use crate::consensus::dkg::RemoteDkgAttempts;
 use crate::consensus::hashed::Hashed;
@@ -1044,7 +1044,7 @@ impl HasId<NiDkgTargetId> for RemoteDkgAttempts {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
 impl HasId<NodeId> for CanisterHttpResponseSignature {}
-impl HasId<CanisterHttpAsyncSpent> for Cycles {}
+impl HasId<NodeId> for Cycles {}
 
 #[cfg(test)]
 mod tests {
