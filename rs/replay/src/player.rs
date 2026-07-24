@@ -1151,6 +1151,20 @@ impl Player {
             return Ok(());
         }
 
+        if last_cup.height() > self.state_manager.latest_state_height() {
+            error!(
+                self.log,
+                "Can't verify the latest CUP at height {} because \
+                we don't have the state at that height (latest state height: {}). \
+                This could happen during recovery if we are using the state from a node which is \
+                lagging behind. To fix this, make sure to download the most recent checkpoint \
+                among all nodes in the recovered subnet",
+                last_cup.height(),
+                self.state_manager.latest_state_height(),
+            );
+            return Err(ReplayError::CUPVerificationFailed(last_cup.height()));
+        }
+
         // Verify state hash against the state hash in the CUP
         if self
             .get_state_hash(last_cup.height())
