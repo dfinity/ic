@@ -12,6 +12,7 @@ use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
 use icrc_ledger_types::{
     icrc::generic_value::Value,
     icrc1::{account::Account, transfer::Memo},
+    icrc3::blocks::ICRC3GenericBlock,
 };
 use rosetta_core::identifiers::BlockIdentifier;
 use rusqlite::ToSql;
@@ -89,6 +90,16 @@ impl RosettaBlock {
     pub fn from_generic_block(generic_block: GenericBlock, block_idx: u64) -> anyhow::Result<Self> {
         Ok(Self {
             block: IcrcBlock::try_from(generic_block)?,
+            index: block_idx,
+        })
+    }
+
+    pub fn from_icrc3_generic_block(
+        icrc3_generic_block: ICRC3GenericBlock,
+        block_idx: u64,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            block: IcrcBlock::try_from(Value::from(icrc3_generic_block))?,
             index: block_idx,
         })
     }

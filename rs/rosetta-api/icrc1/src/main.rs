@@ -18,7 +18,7 @@ use ic_icrc_rosetta::{
     construction_api::endpoints::*,
     data_api::endpoints::*,
     ledger_blocks_synchronization::blocks_synchronizer::{
-        RecurrencyConfig, RecurrencyMode, start_synching_blocks,
+        GetBlocksMode, RecurrencyConfig, RecurrencyMode, start_synching_blocks,
     },
 };
 use ic_sys::fs::write_string_using_tmp_file;
@@ -316,6 +316,11 @@ async fn main() -> Result<()> {
         }
 
         info!("Starting to sync blocks");
+        let get_blocks_mode = if config.icrc3 {
+            GetBlocksMode::Icrc3
+        } else {
+            GetBlocksMode::Legacy
+        };
         let futures = token_app_states
             .token_states
             .values()
@@ -327,6 +332,7 @@ async fn main() -> Result<()> {
                     shared_state.archive_canister_ids.clone(),
                     RecurrencyMode::OneShot,
                     Box::new(|| {}), // <-- no-op heartbeat
+                    get_blocks_mode,
                 )
                 .await
             });
@@ -400,6 +406,11 @@ async fn main() -> Result<()> {
         )?;
     }
 
+    let get_blocks_mode = if config.icrc3 {
+        GetBlocksMode::Icrc3
+    } else {
+        GetBlocksMode::Legacy
+    };
     if !config.offline {
         // For each token state, spawn a watchdog thread that repeatedly syncs blocks.
         for shared_state in token_app_states.token_states.values() {
@@ -450,6 +461,7 @@ async fn main() -> Result<()> {
                                         backoff_factor: 2,
                                     }),
                                     Box::new(heartbeat),
+                                    get_blocks_mode,
                                 )
                                 .await
                                 {
