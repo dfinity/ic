@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 65
+assertion_line: 66
 expression: out
 ---
 (module
@@ -29,7 +29,7 @@ expression: out
   (export "canister counter_accessed_pages" (global 2))
   (func $fac (;5;) (type 0) (param i64) (result i64)
     global.get 0
-    i64.const 10
+    i64.const 18
     i64.sub
     global.set 0
     global.get 0

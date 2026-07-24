@@ -36,7 +36,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::I32,
                 Wasm64::Disabled,
             ),
-            517000511,
+            517000519,
         ),
         common::Benchmark(
             "wasm64/ic0_msg_method_name_size()".into(),
@@ -46,7 +46,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::I64,
                 Wasm64::Enabled,
             ),
-            517000511,
+            517000527,
         ),
         common::Benchmark(
             "wasm32/ic0_msg_method_name_copy()/1B".into(),
@@ -56,7 +56,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            520000511 + common::deterministic_tracker_overhead(1),
+            520000519 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm64/ic0_msg_method_name_copy()/1B".into(),
@@ -66,7 +66,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            520000511 + common::deterministic_tracker_overhead(1),
+            520000527 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_msg_method_name_copy()/20B".into(),
@@ -76,7 +76,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            539000511 + common::deterministic_tracker_overhead(1),
+            539000519 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm64/ic0_msg_method_name_copy()/20B".into(),
@@ -86,17 +86,17 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            539000511 + common::deterministic_tracker_overhead(1),
+            539000527 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_accept_message()*".into(),
             Module::InspectMessage.from_sections(("", "", ""), Wasm64::Disabled), // inspect_message accepts by default
-            506,
+            514,
         ),
         common::Benchmark(
             "wasm64/ic0_accept_message()*".into(),
             Module::InspectMessage.from_sections(("", "", ""), Wasm64::Enabled), // inspect_message accepts by default
-            506,
+            522,
         ),
     ];
     common::run_benchmarks(

@@ -205,8 +205,8 @@ fn load_metrics_e2e_test() {
         // checks below, and these `assert_near` checks pass in either orientation.
         assert_near!(states_sizes_bytes.source, 4604164, 0.1);
         assert_near!(states_sizes_bytes.destination, 4604180, 0.1);
-        assert_near!(instructions_executed.source, 8296137, 0.1);
-        assert_near!(instructions_executed.destination, 8290079, 0.1);
+        assert_near!(instructions_executed.source, 9797613, 0.1);
+        assert_near!(instructions_executed.destination, 9789279, 0.1);
         assert_eq_oriented!(ingress_messages_executed, 20, 19);
         assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
         assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);

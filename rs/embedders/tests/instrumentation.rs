@@ -750,8 +750,8 @@ fn metering_loop() {
     let instructions_used = instr_used(&mut instance);
     assert_eq!(
         instructions_used,
-        // Function is 1 instruction.
-        1 + cost_a(5) + (c_loop) * 5 + cost_a(20) + cost_a(30)
+        // Function is 1 instruction plus cost for locals (per byte).
+        1 + 4 + cost_a(5) + (c_loop) * 5 + cost_a(20) + cost_a(30)
     );
 }
 

@@ -20,8 +20,8 @@ fn fib(n: u64) -> u64 {
 #[update]
 async fn test_next_message_if_over_instructions(params: BreakMessageParams) {
     // Just processing a message costs 30k instructions
-    // each fib(17) costs about 80k instructions
-    // so if we do that 10x, it's about 830k instructions.
+    // each fib(16) costs about 75k instructions
+    // so if we do that 10x, it's about 780k instructions.
     // The test setup for this canister allows for 500k instructions per message.
 
     let BreakMessageParams {
@@ -32,13 +32,14 @@ async fn test_next_message_if_over_instructions(params: BreakMessageParams) {
 
     // Doing anything costs about 30k instructions.
     for _x in 0..10 {
-        // println!("Invocation number {}", x);
-        // println!(
+        // ic_cdk::println!("Invocation number {}", _x);
+        // ic_cdk::println!(
         //     "Instruction_counter: {}",
         //     ic_cdk::api::instruction_counter()
         // );
-        // Fib(17) was benchmarked at about 80k instructions
-        fib(17);
+        // Fib(16) was benchmarked at about 75k instructions
+
+        fib(16);
         if use_break {
             noop_self_call_if_over_instructions(message_threshold, upper_bound)
                 .await
