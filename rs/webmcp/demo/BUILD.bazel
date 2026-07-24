@@ -1,0 +1,42 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+ALIASES = {}
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:serde",
+]
+
+rust_library(
+    name = "demo_backend_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "demo_backend_lib",
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "demo_backend_canister",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    compile_data = [":backend.did"],
+    proc_macro_deps = [],
+    service_file = ":backend.did",
+    version = "0.1.0",
+    deps = DEPENDENCIES + [":demo_backend_lib"],
+)
+
+rust_test(
+    name = "unit_tests",
+    aliases = ALIASES,
+    crate = ":demo_backend_lib",
+)

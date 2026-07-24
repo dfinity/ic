@@ -3515,6 +3515,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "demo-backend"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "serde",
+]
+
+[[package]]
 name = "depcheck"
 version = "0.1.0"
 dependencies = [
@@ -15724,6 +15733,28 @@ dependencies = [
  "ic-validate-eq",
  "ic-validate-eq-derive",
  "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "ic-webmcp-asset-middleware"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ic-webmcp-codegen"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "candid_parser",
+ "clap 4.6.0",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 

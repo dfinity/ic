@@ -1,0 +1,52 @@
+// WebMCP Demo Canister — Candid interface
+//
+// A simple e-commerce canister exposing products and a cart,
+// used to demonstrate the full WebMCP pipeline.
+
+type Product = record {
+    id : nat32;
+    name : text;
+    description : text;
+    price_e8s : nat64;
+    in_stock : bool;
+};
+
+type CartItem = record {
+    product_id : nat32;
+    quantity : nat32;
+};
+
+type Cart = record {
+    items : vec CartItem;
+    total_e8s : nat64;
+};
+
+type AddToCartResult = variant {
+    Ok : Cart;
+    Err : text;
+};
+
+type CheckoutResult = variant {
+    Ok : record { order_id : nat64; total_paid_e8s : nat64 };
+    Err : text;
+};
+
+service : {
+    // List all available products
+    list_products : () -> (vec Product) query;
+
+    // Get a single product by ID
+    get_product : (nat32) -> (opt Product) query;
+
+    // Get the current user's cart
+    get_cart : () -> (Cart) query;
+
+    // Add an item to the cart
+    add_to_cart : (CartItem) -> (AddToCartResult);
+
+    // Remove an item from the cart
+    remove_from_cart : (nat32) -> (Cart);
+
+    // Complete the purchase
+    checkout : () -> (CheckoutResult);
+};
