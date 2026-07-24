@@ -32,6 +32,7 @@ rust_library(
         "@crate_index//:rusqlite",
         "@crate_index//:serde",
         "@crate_index//:tokio",
+        "@crate_index//:tokio-rusqlite",
         "@crate_index//:tracing",
         "@crate_index//:url",
     ],
@@ -48,9 +49,32 @@ rust_test(
     ],
 )
 
+_RUNTIME_RESPONSIVENESS_TEST = "tests/runtime_responsiveness_test.rs"
+
+# This test builds a fixed 2-worker tokio runtime plus a canary/block_on thread
+# and asserts a wall-clock tick ratio, so it needs dedicated CPUs to avoid
+# flaking under oversubscription. It therefore lives in its own `rust_test`
+# target (with a cpu reservation tag) rather than in the tests/** suite below,
+# whose tags would otherwise apply to every file in the suite.
+rust_test(
+    name = "runtime_responsiveness_test",
+    srcs = [_RUNTIME_RESPONSIVENESS_TEST],
+    crate_root = _RUNTIME_RESPONSIVENESS_TEST,
+    tags = ["cpu:4"],
+    deps = [
+        # Keep sorted.
+        ":ledger_canister_blocks_synchronizer_lib",
+        "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
+        "@crate_index//:tokio",
+    ],
+)
+
 rust_test_suite(
     name = "ledger_canister_blocks_synchronizer_test_suite",
-    srcs = glob(["tests/**"]),
+    srcs = glob(
+        ["tests/**"],
+        exclude = [_RUNTIME_RESPONSIVENESS_TEST],
+    ),
     deps = [
         # Keep sorted.
         ":ledger_canister_blocks_synchronizer_lib",

@@ -11,7 +11,6 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::path::Path;
-use std::sync::Mutex;
 use tracing::info;
 
 mod database_access {
@@ -691,6 +690,27 @@ impl From<String> for BlockStoreError {
     }
 }
 
+impl std::fmt::Display for BlockStoreError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlockStoreError::NotFound(idx) => write!(f, "Block not found: {idx}"),
+            BlockStoreError::NotAvailable(idx) => write!(f, "Block not available: {idx}"),
+            BlockStoreError::Other(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+impl std::error::Error for BlockStoreError {}
+
+impl From<tokio_rusqlite::Error<BlockStoreError>> for BlockStoreError {
+    fn from(error: tokio_rusqlite::Error<BlockStoreError>) -> Self {
+        match error {
+            tokio_rusqlite::Error::Error(e) => e,
+            other => BlockStoreError::Other(other.to_string()),
+        }
+    }
+}
+
 fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
     let ba: Box<[u8; 32]> = match v.into_boxed_slice().try_into() {
         Ok(ba) => ba,
@@ -749,61 +769,65 @@ impl RosettaDbConfig {
 }
 
 pub struct Blocks {
-    connection: Mutex<rusqlite::Connection>,
+    connection: tokio_rusqlite::Connection,
     pub rosetta_blocks_mode: RosettaBlocksMode,
 }
 
 impl Blocks {
-    pub fn new_persistent(
+    pub async fn new_persistent(
         location: &Path,
         config: RosettaDbConfig,
     ) -> Result<Self, BlockStoreError> {
         std::fs::create_dir_all(location)
             .expect("Unable to create directory for SQLite on-disk store.");
         let path = location.join("db.sqlite");
-        let connection =
-            rusqlite::Connection::open(path).map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        Self::new(connection, config)
+        let connection = tokio_rusqlite::Connection::open(path)
+            .await
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        Self::new(connection, config).await
     }
 
-    pub fn new_in_memory(config: RosettaDbConfig) -> Result<Self, BlockStoreError> {
-        // Use a unique in-memory database for each instance to avoid locks in parallel tests.
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        static COUNTER: AtomicUsize = AtomicUsize::new(0);
-        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let connection =
-            rusqlite::Connection::open(format!("file:memdb{counter}?mode=memory&cache=private"))
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        Self::new(connection, config)
+    pub async fn new_in_memory(config: RosettaDbConfig) -> Result<Self, BlockStoreError> {
+        // A tokio-rusqlite in-memory connection owns a dedicated background thread
+        // holding a single long-lived `:memory:` database, so each `Blocks` instance
+        // gets its own isolated in-memory store (no cross-test locking).
+        let connection = tokio_rusqlite::Connection::open_in_memory()
+            .await
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        Self::new(connection, config).await
     }
 
-    fn new(
-        connection: rusqlite::Connection,
+    async fn new(
+        connection: tokio_rusqlite::Connection,
         config: RosettaDbConfig,
     ) -> Result<Self, BlockStoreError> {
         let mut store = Self {
-            connection: Mutex::new(connection),
+            connection,
             rosetta_blocks_mode: RosettaBlocksMode::Disabled,
         };
         store
             .connection
-            .lock()
-            .unwrap()
-            .execute("PRAGMA foreign_keys = 1", [])
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        store.create_tables(config).map_err(|e| {
+            .call::<_, (), BlockStoreError>(|connection| {
+                connection
+                    .execute("PRAGMA foreign_keys = 1", [])
+                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+                Ok(())
+            })
+            .await?;
+        store.create_tables(config).await.map_err(|e| {
             BlockStoreError::Other(format!("Failed to initialize SQLite database: {e}"))
         })?;
-        store.cache_rosetta_blocks_mode().map_err(|e| {
+        store.cache_rosetta_blocks_mode().await.map_err(|e| {
             BlockStoreError::Other(format!("Failed to determine the Rosetta Blocks Mode: {e}"))
         })?;
 
-        store.check_table_coherence()?;
+        store.check_table_coherence().await?;
         Ok(store)
     }
 
-    fn create_tables(&self, config: RosettaDbConfig) -> Result<(), rusqlite::Error> {
-        let mut connection = self.connection.lock().unwrap();
+    async fn create_tables(&self, config: RosettaDbConfig) -> Result<(), BlockStoreError> {
+        self.connection
+            .call::<_, (), rusqlite::Error>(move |connection| {
         let tx = connection.transaction()?;
         tx.execute(
             r#"
@@ -966,7 +990,7 @@ impl Blocks {
 
             // From account index
             create_index_if_not_exists(
-                &mut connection,
+                connection,
                 "from_account_index",
                 r#"
             CREATE INDEX from_account_index 
@@ -977,7 +1001,7 @@ impl Blocks {
 
             // To account index
             create_index_if_not_exists(
-                &mut connection,
+                connection,
                 "to_account_index",
                 r#"
             CREATE INDEX to_account_index 
@@ -988,7 +1012,7 @@ impl Blocks {
 
             // Spender account index
             create_index_if_not_exists(
-                &mut connection,
+                connection,
                 "spender_account_index",
                 r#"
             CREATE INDEX spender_account_index 
@@ -999,7 +1023,7 @@ impl Blocks {
 
             // Operation type index for searching by transaction type
             create_index_if_not_exists(
-                &mut connection,
+                connection,
                 "operation_type_index",
                 r#"
             CREATE INDEX operation_type_index 
@@ -1010,270 +1034,373 @@ impl Blocks {
         }
 
         Ok(())
+            })
+            .await
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
     }
 
-    fn cache_rosetta_blocks_mode(&mut self) -> Result<(), rusqlite::Error> {
+    async fn cache_rosetta_blocks_mode(&mut self) -> Result<(), BlockStoreError> {
         // The Rosetta Blocks Mode is enabled if the rosetta_blocks table
         // exists.
         // See https://www.sqlite.org/fileformat2.html#storage_of_the_sql_database_schema/
-        let connection = self.connection.lock().unwrap();
-
-        // The query returns a single row if the table exists, no rows otherwise.
-        // .optional() converts Err(QueryReturnedNoRows) to Ok(None)
-        let is_rosetta_blocks_mode_enabled = connection
-            .query_row(
-                r#"SELECT 1
+        let mode = self
+            .connection
+            .call::<_, RosettaBlocksMode, rusqlite::Error>(|connection| {
+                // The query returns a single row if the table exists, no rows otherwise.
+                // .optional() converts Err(QueryReturnedNoRows) to Ok(None)
+                let is_rosetta_blocks_mode_enabled = connection
+                    .query_row(
+                        r#"SELECT 1
                    FROM sqlite_master
                    WHERE type='table'
                      AND name='rosetta_blocks'"#,
-                [],
-                |_| Ok(()),
-            )
-            .optional()
-            .map(|opt| opt.is_some())?;
-        if !is_rosetta_blocks_mode_enabled {
-            self.rosetta_blocks_mode = RosettaBlocksMode::Disabled;
-            return Ok(());
-        }
+                        [],
+                        |_| Ok(()),
+                    )
+                    .optional()
+                    .map(|opt| opt.is_some())?;
+                if !is_rosetta_blocks_mode_enabled {
+                    return Ok(RosettaBlocksMode::Disabled);
+                }
 
-        // From this point we know the table rosetta_blocks exists.
-        // There are three potential states:
-        //  1. if the table rosetta_blocks has at least one row then
-        //     the first rosetta block index is the smallest index
-        //     in that table
-        //  2. else if the table blocks has at least one row then
-        //     the first rosetta block index will be the highest index
-        //     in the blocks table + 1, i.e. the next incoming block.
-        //  3. else the first rosetta block index will be
-        //     the lowest possible block index, i.e. 0.
-        let first_rosetta_block_index = connection.query_row(
-            "SELECT min(rosetta_block_idx) FROM rosetta_blocks",
-            [],
-            |row| row.get::<_, Option<u64>>(0),
-        )?;
-        let first_rosetta_block_index = match first_rosetta_block_index {
-            Some(first_rosetta_block_index) => first_rosetta_block_index,
-            None => connection
-                .query_row("SELECT max(block_idx) + 1 FROM blocks", [], |row| {
-                    row.get::<_, Option<u64>>(0)
-                })?
-                .unwrap_or(0),
-        };
-        info!(
-            "Rosetta blocks mode enabled, first rosetta block index is {first_rosetta_block_index}"
-        );
-        self.rosetta_blocks_mode = RosettaBlocksMode::Enabled {
-            first_rosetta_block_index,
-        };
-        Ok(())
-    }
-
-    pub fn prune(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        connection
-            .execute_batch("BEGIN TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
-
-        database_access::prune_account_balances(&mut connection, &hb.index)?;
-        connection
-            .execute(
-                "DELETE FROM blocks WHERE block_idx > 0 AND block_idx < ?",
-                params![hb.index],
-            )
+                // From this point we know the table rosetta_blocks exists.
+                // There are three potential states:
+                //  1. if the table rosetta_blocks has at least one row then
+                //     the first rosetta block index is the smallest index
+                //     in that table
+                //  2. else if the table blocks has at least one row then
+                //     the first rosetta block index will be the highest index
+                //     in the blocks table + 1, i.e. the next incoming block.
+                //  3. else the first rosetta block index will be
+                //     the lowest possible block index, i.e. 0.
+                let first_rosetta_block_index = connection.query_row(
+                    "SELECT min(rosetta_block_idx) FROM rosetta_blocks",
+                    [],
+                    |row| row.get::<_, Option<u64>>(0),
+                )?;
+                let first_rosetta_block_index = match first_rosetta_block_index {
+                    Some(first_rosetta_block_index) => first_rosetta_block_index,
+                    None => connection
+                        .query_row("SELECT max(block_idx) + 1 FROM blocks", [], |row| {
+                            row.get::<_, Option<u64>>(0)
+                        })?
+                        .unwrap_or(0),
+                };
+                Ok(RosettaBlocksMode::Enabled {
+                    first_rosetta_block_index,
+                })
+            })
+            .await
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-
-        connection
-            .execute_batch("COMMIT TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
-
+        if let RosettaBlocksMode::Enabled {
+            first_rosetta_block_index,
+        } = mode
+        {
+            info!(
+                "Rosetta blocks mode enabled, first rosetta block index is {first_rosetta_block_index}"
+            );
+        }
+        self.rosetta_blocks_mode = mode;
         Ok(())
     }
-    pub fn get_block_idx_by_block_hash(
+
+    pub async fn prune(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
+        let index = hb.index;
+        self.connection
+            .call::<_, (), BlockStoreError>(move |connection| {
+                // The connection is long-lived and reused, so any error path that
+                // returns without closing the transaction would leave it open and
+                // cause every subsequent write to fail with "cannot start a
+                // transaction within a transaction". Explicitly roll back on every
+                // error path (mirroring `push_batch`).
+                connection
+                    .execute_batch("BEGIN TRANSACTION;")
+                    .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
+
+                if let Err(e) = database_access::prune_account_balances(connection, &index)
+                    .and_then(|_| {
+                        connection
+                            .execute(
+                                "DELETE FROM blocks WHERE block_idx > 0 AND block_idx < ?",
+                                params![index],
+                            )
+                            .map(|_| ())
+                            .map_err(|e| BlockStoreError::Other(e.to_string()))
+                    })
+                {
+                    connection
+                        .execute_batch("ROLLBACK TRANSACTION;")
+                        .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
+                    return Err(e);
+                }
+
+                connection
+                    .execute_batch("COMMIT TRANSACTION;")
+                    .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
+
+                Ok(())
+            })
+            .await?;
+        Ok(())
+    }
+    pub async fn get_block_idx_by_block_hash(
         &self,
         hash: &HashOf<EncodedBlock>,
     ) -> Result<u64, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-
-        database_access::get_block_idx_by_block_hash(&mut connection, hash)
+        let hash = *hash;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_block_idx_by_block_hash(connection, &hash)
+            })
+            .await?)
     }
 
-    pub fn get_block_idxs_by_transaction_hash(
+    pub async fn get_block_idxs_by_transaction_hash(
         &self,
         hash: &HashOf<icp_ledger::Transaction>,
     ) -> Result<Vec<u64>, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_block_idx_by_transaction_hash(&mut connection, hash)
+        let hash = *hash;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_block_idx_by_transaction_hash(connection, &hash)
+            })
+            .await?)
     }
-    pub fn get_account_balance_history(
+    pub async fn get_account_balance_history(
         &self,
         acc: &AccountIdentifier,
         limit_num_blocks: Option<u64>,
     ) -> Result<Vec<(u64, Tokens)>, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_account_balance_history(&mut connection, acc, limit_num_blocks)
+        let acc = *acc;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_account_balance_history(connection, &acc, limit_num_blocks)
+            })
+            .await?)
     }
 
     /// Sanity check (sum of tokens equal pool size).
-    fn sanity_check(&self, latest_hb: &HashedBlock) -> Result<(), BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        let accounts = database_access::get_all_accounts(&mut connection)?;
-        let mut total = Tokens::ZERO;
-        for account in accounts {
-            let amount = database_access::get_account_balance(
-                &mut connection,
-                &latest_hb.index.clone(),
-                &account,
-            )?;
-            total = total
-                .checked_add(&Tokens::from_e8s(amount.unwrap()))
-                .unwrap();
-        }
-        assert!(total <= Tokens::MAX);
+    async fn sanity_check(&self, latest_hb: &HashedBlock) -> Result<(), BlockStoreError> {
+        let index = latest_hb.index;
+        self.connection
+            .call::<_, (), BlockStoreError>(move |connection| {
+                let accounts = database_access::get_all_accounts(connection)?;
+                let mut total = Tokens::ZERO;
+                for account in accounts {
+                    let amount =
+                        database_access::get_account_balance(connection, &index, &account)?;
+                    total = total
+                        .checked_add(&Tokens::from_e8s(amount.unwrap()))
+                        .unwrap();
+                }
+                assert!(total <= Tokens::MAX);
+                Ok(())
+            })
+            .await?;
         Ok(())
     }
 
-    pub fn get_transaction_hash(
+    pub async fn get_transaction_hash(
         &self,
         block_idx: &u64,
     ) -> Result<Option<HashOf<icp_ledger::Transaction>>, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-
-        if database_access::contains_block(&mut connection, block_idx)? {
-            database_access::get_transaction_hash(&mut connection, block_idx)
-        } else {
-            Err(BlockStoreError::NotAvailable(*block_idx))
-        }
+        let block_idx = *block_idx;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                if database_access::contains_block(connection, &block_idx)? {
+                    database_access::get_transaction_hash(connection, &block_idx)
+                } else {
+                    Err(BlockStoreError::NotAvailable(block_idx))
+                }
+            })
+            .await?)
     }
 
-    pub fn get_first_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_first_hashed_block(&mut connection, Some(true))
+    pub async fn get_first_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_first_hashed_block(connection, Some(true))
+            })
+            .await?)
     }
-    pub fn get_hashed_block(&self, block_idx: &u64) -> Result<HashedBlock, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_hashed_block(&mut connection, block_idx)
+    pub async fn get_hashed_block(&self, block_idx: &u64) -> Result<HashedBlock, BlockStoreError> {
+        let block_idx = *block_idx;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_hashed_block(connection, &block_idx)
+            })
+            .await?)
     }
 
-    pub fn get_transaction(
+    pub async fn get_transaction(
         &self,
         block_idx: &u64,
     ) -> Result<icp_ledger::Transaction, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_transaction(&mut connection, block_idx)
+        let block_idx = *block_idx;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_transaction(connection, &block_idx)
+            })
+            .await?)
     }
-    fn check_table_coherence(&self) -> Result<(), BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        let mut block_indices =
-            database_access::get_all_block_indices_from_blocks_table(&mut connection)?;
-        let mut account_balances_block_indices =
-            database_access::get_all_block_indices_from_account_balances_table(&mut connection)?;
-        let vec_sorted_diff = |blocks_indices: &mut [u64],
-                               other_indices: &mut [u64]|
-         -> Result<Vec<u64>, BlockStoreError> {
-            let mut result: Vec<u64> = Vec::new();
-            let mut idx_b = 0;
-            for item in blocks_indices {
-                if idx_b >= other_indices.len() || *item < other_indices[idx_b] {
-                    result.push(*item);
-                    continue;
-                }
-                if *item == other_indices[idx_b] {
-                    idx_b += 1;
-                    continue;
-                }
-                if *item > other_indices[idx_b] {
-                    /* Vector a is representative of the block_idxes in the blocks table and since other tables refer to the blocks
-                    table with a forein key constraint it should not be possible for other tables to have a block idx that is
-                    not present in the blocks table. */
-                    while idx_b < other_indices.len() {
+    async fn check_table_coherence(&self) -> Result<(), BlockStoreError> {
+        self.connection
+            .call::<_, (), BlockStoreError>(move |connection| {
+                let mut block_indices =
+                    database_access::get_all_block_indices_from_blocks_table(connection)?;
+                let mut account_balances_block_indices =
+                    database_access::get_all_block_indices_from_account_balances_table(connection)?;
+                let vec_sorted_diff = |blocks_indices: &mut [u64],
+                                       other_indices: &mut [u64]|
+                 -> Result<Vec<u64>, BlockStoreError> {
+                    let mut result: Vec<u64> = Vec::new();
+                    let mut idx_b = 0;
+                    for item in blocks_indices {
+                        if idx_b >= other_indices.len() || *item < other_indices[idx_b] {
+                            result.push(*item);
+                            continue;
+                        }
                         if *item == other_indices[idx_b] {
                             idx_b += 1;
-                            break;
+                            continue;
                         }
-                        idx_b += 1;
+                        if *item > other_indices[idx_b] {
+                            /* Vector a is representative of the block_idxes in the blocks table and since other tables refer to the blocks
+                            table with a foreign key constraint it should not be possible for other tables to have a block idx that is
+                            not present in the blocks table. */
+                            while idx_b < other_indices.len() {
+                                if *item == other_indices[idx_b] {
+                                    idx_b += 1;
+                                    break;
+                                }
+                                idx_b += 1;
+                            }
+                        }
+                    }
+                    Ok(result)
+                };
+
+                block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                block_indices.dedup();
+
+                account_balances_block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                account_balances_block_indices.dedup();
+                if !block_indices.is_empty() {
+                    let difference_account_balances_indices: Vec<u64> = vec_sorted_diff(
+                        block_indices.as_mut_slice(),
+                        account_balances_block_indices.as_mut_slice(),
+                    )?;
+                    for missing_index in difference_account_balances_indices {
+                        let missing_block =
+                            database_access::get_hashed_block(connection, &missing_index)?;
+                        database_access::update_balance_book(connection, &missing_block)?;
                     }
                 }
-            }
-            Ok(result)
-        };
-
-        block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        block_indices.dedup();
-
-        account_balances_block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        account_balances_block_indices.dedup();
-        if !block_indices.is_empty() {
-            let difference_account_balances_indices: Vec<u64> = vec_sorted_diff(
-                block_indices.as_mut_slice(),
-                account_balances_block_indices.as_mut_slice(),
-            )?;
-            for missing_index in difference_account_balances_indices {
-                let missing_block =
-                    database_access::get_hashed_block(&mut connection, &missing_index)?;
-                database_access::update_balance_book(&mut connection, &missing_block)?;
-            }
-        }
+                Ok(())
+            })
+            .await?;
         Ok(())
     }
-    pub fn is_verified_by_hash(
+    pub async fn is_verified_by_hash(
         &self,
         hash: &HashOf<EncodedBlock>,
     ) -> Result<bool, BlockStoreError> {
-        let block_idx = self.get_block_idx_by_block_hash(hash)?;
-        let mut con = self.connection.lock().unwrap();
-        match database_access::contains_block(&mut con, &block_idx)? {
-            true => database_access::is_verified(&mut con, &block_idx),
-            false => Err(BlockStoreError::NotFound(block_idx)),
-        }
+        let hash = *hash;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                let block_idx = database_access::get_block_idx_by_block_hash(connection, &hash)?;
+                match database_access::contains_block(connection, &block_idx)? {
+                    true => database_access::is_verified(connection, &block_idx),
+                    false => Err(BlockStoreError::NotFound(block_idx)),
+                }
+            })
+            .await?)
     }
 
-    pub fn is_verified_by_idx(&self, idx: &u64) -> Result<bool, BlockStoreError> {
-        let mut con = self.connection.lock().unwrap();
-        match database_access::contains_block(&mut con, idx)? {
-            true => database_access::is_verified(&mut con, idx),
-            false => Err(BlockStoreError::NotFound(*idx)),
-        }
+    pub async fn is_verified_by_idx(&self, idx: &u64) -> Result<bool, BlockStoreError> {
+        let idx = *idx;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| match database_access::contains_block(
+                connection, &idx,
+            )? {
+                true => database_access::is_verified(connection, &idx),
+                false => Err(BlockStoreError::NotFound(idx)),
+            })
+            .await?)
     }
 
-    pub fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_first_hashed_block(&mut connection, None)
+    pub async fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_first_hashed_block(connection, None)
+            })
+            .await?)
     }
 
-    pub fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_latest_hashed_block(&mut connection, None)
+    pub async fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_latest_hashed_block(connection, None)
+            })
+            .await?)
     }
 
-    pub fn get_latest_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_latest_hashed_block(&mut connection, Some(true))
+    pub async fn get_latest_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_latest_hashed_block(connection, Some(true))
+            })
+            .await?)
     }
 
-    pub fn get_account_balance(
+    pub async fn get_account_balance(
         &self,
         account: &AccountIdentifier,
         block_idx: &u64,
     ) -> Result<Tokens, BlockStoreError> {
-        if self.is_verified_by_idx(block_idx)? {
-            let mut connection = self.connection.lock().unwrap();
-            let amount = database_access::get_account_balance(&mut connection, block_idx, account)?;
-            match amount {
-                Some(a) => Ok(Tokens::from_e8s(a)),
-                None => Ok(Tokens::ZERO),
-            }
-        } else {
-            Err(BlockStoreError::NotAvailable(*block_idx))
-        }
+        let account = *account;
+        let block_idx = *block_idx;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                let is_verified = match database_access::contains_block(connection, &block_idx)? {
+                    true => database_access::is_verified(connection, &block_idx)?,
+                    false => return Err(BlockStoreError::NotFound(block_idx)),
+                };
+                if !is_verified {
+                    return Err(BlockStoreError::NotAvailable(block_idx));
+                }
+                let amount =
+                    database_access::get_account_balance(connection, &block_idx, &account)?;
+                match amount {
+                    Some(a) => Ok(Tokens::from_e8s(a)),
+                    None => Ok(Tokens::ZERO),
+                }
+            })
+            .await?)
     }
 
-    pub fn get_hashed_block_range(
+    pub async fn get_hashed_block_range(
         &self,
         range: std::ops::Range<BlockIndex>,
     ) -> Result<Vec<HashedBlock>, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
         if range.end > range.start
-            && database_access::contains_block(&mut connection, &range.start).unwrap_or(false)
+            && database_access::contains_block(connection, &range.start)?
         {
             let mut stmt = connection.prepare_cached(r#"SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp FROM blocks WHERE block_idx >= :start AND block_idx < :end"#).map_err(|e| BlockStoreError::Other(e.to_string()))?;
             database_access::read_hashed_blocks(
@@ -1289,31 +1416,53 @@ impl Blocks {
                 range.start, range.end
             )))
         }
+            })
+            .await?)
     }
 
-    pub fn push(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
-        let mut con = self.connection.lock().unwrap();
-        con.execute_batch("BEGIN TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
-        database_access::push_hashed_block(&mut con, hb)?;
-        database_access::update_balance_book(&mut con, hb)?;
-        con.execute_batch("COMMIT TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
-        drop(con);
-        self.sanity_check(hb)?;
+    pub async fn push(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
+        let hb_owned = hb.clone();
+        self.connection
+            .call::<_, (), BlockStoreError>(move |con| {
+                // The connection is long-lived and reused, so any error path that
+                // returns without closing the transaction would leave it open and
+                // cause every subsequent write to fail with "cannot start a
+                // transaction within a transaction". Explicitly roll back on every
+                // error path (mirroring `push_batch`).
+                con.execute_batch("BEGIN TRANSACTION;")
+                    .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
+                if let Err(e) = database_access::push_hashed_block(con, &hb_owned)
+                    .and_then(|_| database_access::update_balance_book(con, &hb_owned))
+                {
+                    con.execute_batch("ROLLBACK TRANSACTION;")
+                        .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
+                    return Err(e);
+                }
+                con.execute_batch("COMMIT TRANSACTION;")
+                    .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
+                Ok(())
+            })
+            .await?;
+        self.sanity_check(hb).await?;
         Ok(())
     }
-    pub fn get_all_accounts(&self) -> Result<Vec<AccountIdentifier>, BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        database_access::get_all_accounts(&mut connection)
+    pub async fn get_all_accounts(&self) -> Result<Vec<AccountIdentifier>, BlockStoreError> {
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::get_all_accounts(connection)
+            })
+            .await?)
     }
 
-    pub fn push_batch(
+    pub async fn push_batch(
         &mut self,
         batch: Vec<HashedBlock>,
         progress_bar: Option<&indicatif::ProgressBar>,
     ) -> Result<(), BlockStoreError> {
-        let connection = self.connection.lock().unwrap();
+        let progress_bar = progress_bar.cloned();
+        self.connection
+            .call::<_, (), BlockStoreError>(move |connection| {
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
@@ -1352,7 +1501,7 @@ impl Blocks {
                     return Err(e);
                 }
             }
-            if let Some(bar) = progress_bar {
+            if let Some(bar) = &progress_bar {
                 bar.inc(1);
             }
         }
@@ -1360,9 +1509,12 @@ impl Blocks {
             .execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         Ok(())
+            })
+            .await?;
+        Ok(())
     }
 
-    pub fn try_prune(
+    pub async fn try_prune(
         &mut self,
         max_blocks: &Option<u64>,
         prune_delay: u64,
@@ -1370,19 +1522,21 @@ impl Blocks {
         if let Some(block_limit) = max_blocks {
             let first_idx = self
                 .get_first_hashed_block()
+                .await
                 .ok()
                 .map(|hb| hb.index)
                 .unwrap_or(0);
             let last_idx = self
                 .get_latest_hashed_block()
+                .await
                 .ok()
                 .map(|hb| hb.index)
                 .unwrap_or(0);
             if first_idx + block_limit + prune_delay < last_idx {
                 let new_first_idx = last_idx - block_limit;
-                let hb = self.get_hashed_block(&new_first_idx).ok();
+                let hb = self.get_hashed_block(&new_first_idx).await.ok();
                 match hb {
-                    Some(b) => self.prune(&b)?,
+                    Some(b) => self.prune(&b).await?,
                     None => return Err(BlockStoreError::NotFound(new_first_idx)),
                 }
             }
@@ -1390,14 +1544,17 @@ impl Blocks {
         Ok(())
     }
 
-    pub fn set_hashed_block_to_verified(
+    pub async fn set_hashed_block_to_verified(
         &self,
         block_height: &BlockIndex,
     ) -> Result<(), BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
+        let block_height = *block_height;
+        self.connection
+            .call::<_, (), BlockStoreError>(move |connection| {
         let last_verified =
-            database_access::get_latest_hashed_block(&mut connection, Some(true)).ok();
-        let last_block = database_access::get_latest_hashed_block(&mut connection, None)?;
+            database_access::get_latest_hashed_block(connection, Some(true)).ok();
+        let last_block = database_access::get_latest_hashed_block(connection, None)?;
+        let block_height = &block_height;
         match last_verified {
             Some(verified) => {
                 assert!(verified.index <= *block_height);
@@ -1427,6 +1584,9 @@ impl Blocks {
                 Ok(())
             }
         }
+            })
+            .await?;
+        Ok(())
     }
 
     // Returns the index of the next Rosetta Block and of the first block
@@ -1434,13 +1594,12 @@ impl Blocks {
     //
     // Note: this method requires that the rosetta blocks table exist but
     // it doesn't need them to be populated.
-    fn get_next_rosetta_block_indices(
+    async fn get_next_rosetta_block_indices(
         &self,
     ) -> Result<Option<RosettaBlockIndices>, BlockStoreError> {
-        let connection: std::sync::MutexGuard<rusqlite::Connection> = self
+        Ok(self
             .connection
-            .lock()
-            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
+            .call::<_, Option<RosettaBlockIndices>, BlockStoreError>(move |connection| {
         let last_rosetta_block_index: Option<BlockIndex> = connection
             .query_row(
                 "SELECT max(rosetta_block_idx) FROM rosetta_blocks",
@@ -1461,9 +1620,11 @@ impl Blocks {
             rosetta_block_index: last_rosetta_block_index + 1,
             first_block_index: last_block_index_in_rosetta_block + 1,
         }))
+            })
+            .await?)
     }
 
-    pub fn make_rosetta_blocks_if_enabled(
+    pub async fn make_rosetta_blocks_if_enabled(
         &self,
         certified_tip_index: BlockIndex,
     ) -> Result<(), BlockStoreError> {
@@ -1472,13 +1633,27 @@ impl Blocks {
             RosettaBlocksMode::Enabled {
                 first_rosetta_block_index,
             } => self
-                .get_next_rosetta_block_indices()?
+                .get_next_rosetta_block_indices()
+                .await?
                 .unwrap_or(RosettaBlockIndices {
                     rosetta_block_index: first_rosetta_block_index,
                     first_block_index: first_rosetta_block_index,
                 }),
         };
 
+        // We fetch the first icp block to extract the timestamp, the first icp transaction and the first parent_hash of the first rosetta block created
+        let Block {
+            parent_hash,
+            timestamp,
+            ..
+        } = Block::decode(
+            self.get_hashed_block(&next_block_indices.first_block_index)
+                .await?
+                .block,
+        )?;
+
+        self.connection
+            .call::<_, (), BlockStoreError>(move |connection| {
         // Keep track of how many rosetta blocks are being created
         let num_rosetta_blocks_created = RefCell::new(0);
 
@@ -1489,23 +1664,9 @@ impl Blocks {
         // A list of all icp block indices that we need to convert to rosetta blocks
         let block_indices = next_block_indices.first_block_index..=certified_tip_index;
 
-        // We fetch the first icp block to extract the timestamp, the first icp transaction and the first parent_hash of the first rosetta block created
         let current_rosetta_block_index = RefCell::new(next_block_indices.rosetta_block_index);
-        let Block {
-            parent_hash,
-            timestamp,
-            ..
-        } = Block::decode(
-            self.get_hashed_block(&next_block_indices.first_block_index)?
-                .block,
-        )?;
-
         let current_rosetta_block_parent_hash = RefCell::new(parent_hash);
         let current_rosetta_block_timestamp = RefCell::new(timestamp);
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
 
         let sql_tx = connection
             .transaction()
@@ -1569,7 +1730,7 @@ impl Blocks {
                 current_rosetta_block_timestamp.replace(current_icp_block_timestamp);
                 icp_transactions_per_rosetta_block.replace(HashMap::new());
 
-                self.store_rosetta_block(
+                Self::store_rosetta_block(
                     rosetta_block,
                     &mut insert_rosetta_block_stmt,
                     &mut insert_rosetta_block_transaction_stmt,
@@ -1635,10 +1796,12 @@ impl Blocks {
         );
 
         Ok(())
+            })
+            .await?;
+        Ok(())
     }
 
     pub(crate) fn store_rosetta_block(
-        &self,
         rosetta_block: RosettaBlock,
         insert_rosetta_block_stmt: &mut CachedStatement,
         insert_rosetta_block_transaction_stmt: &mut CachedStatement,
@@ -1671,14 +1834,16 @@ impl Blocks {
         Ok(())
     }
 
-    pub fn get_rosetta_block(
+    pub async fn get_rosetta_block(
         &self,
         rosetta_block_index: BlockIndex,
     ) -> Result<RosettaBlock, BlockStoreError> {
-        let (parent_hash, timestamp) =
-            self.get_rosetta_block_phash_timestamp(rosetta_block_index)?;
-        let transactions: BTreeMap<u64, Transaction> =
-            self.get_rosetta_block_transactions(rosetta_block_index)?;
+        let (parent_hash, timestamp) = self
+            .get_rosetta_block_phash_timestamp(rosetta_block_index)
+            .await?;
+        let transactions: BTreeMap<u64, Transaction> = self
+            .get_rosetta_block_transactions(rosetta_block_index)
+            .await?;
         Ok(RosettaBlock {
             index: rosetta_block_index,
             parent_hash,
@@ -1687,105 +1852,124 @@ impl Blocks {
         })
     }
 
-    pub fn get_highest_rosetta_block_index(&self) -> Result<Option<u64>, BlockStoreError> {
-        let connection = self
+    pub async fn get_highest_rosetta_block_index(&self) -> Result<Option<u64>, BlockStoreError> {
+        Ok(self
             .connection
-            .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-        let block_idx = match connection
-            .prepare_cached("SELECT MAX(rosetta_block_idx) FROM rosetta_blocks")
-            .map_err(|e| format!("Unable to prepare query: {e:?}"))?
-            .query_map(params![], |row| row.get(0))
-            .map_err(|e| {
-                BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}"))
-            })?
-            .next()
-        {
-            Some(Ok(block_idx)) => block_idx,
-            Some(Err(e)) => return Err(BlockStoreError::Other(e.to_string())),
-            None => None,
-        };
-        Ok(block_idx)
+            .call::<_, Option<u64>, BlockStoreError>(move |connection| {
+                let block_idx = match connection
+                    .prepare_cached("SELECT MAX(rosetta_block_idx) FROM rosetta_blocks")
+                    .map_err(|e| format!("Unable to prepare query: {e:?}"))?
+                    .query_map(params![], |row| row.get(0))
+                    .map_err(|e| {
+                        BlockStoreError::Other(format!(
+                            "Unable to select from rosetta_blocks: {e:?}"
+                        ))
+                    })?
+                    .next()
+                {
+                    Some(Ok(block_idx)) => block_idx,
+                    Some(Err(e)) => return Err(BlockStoreError::Other(e.to_string())),
+                    None => None,
+                };
+                Ok(block_idx)
+            })
+            .await?)
     }
 
-    fn get_rosetta_block_phash_timestamp(
+    async fn get_rosetta_block_phash_timestamp(
         &self,
         rosetta_block_index: BlockIndex,
     ) -> Result<(Option<[u8; 32]>, TimeStamp), BlockStoreError> {
-        let connection = self
+        Ok(self
             .connection
-            .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-        let mut statement = connection
+            .call::<_, (Option<[u8; 32]>, TimeStamp), BlockStoreError>(move |connection| {
+                let mut statement = connection
             .prepare_cached(
                 "SELECT parent_hash, timestamp FROM rosetta_blocks WHERE rosetta_block_idx=:idx",
             )
             .map_err(|e| format!("Unable to prepare query: {e:?}"))?;
-        let mut blocks = statement
-            .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
-                let parent_hash = row.get(0)?;
-                let timestamp = row.get(1).map(iso8601_to_timestamp)?;
-                Ok((parent_hash, timestamp))
+                let mut blocks = statement
+                    .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
+                        let parent_hash = row.get(0)?;
+                        let timestamp = row.get(1).map(iso8601_to_timestamp)?;
+                        Ok((parent_hash, timestamp))
+                    })
+                    .map_err(|e| {
+                        BlockStoreError::from(format!(
+                            "Unable to select from rosetta_blocks: {e:?}"
+                        ))
+                    })?;
+                match blocks.next() {
+                    Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
+                    None => Err(BlockStoreError::NotFound(rosetta_block_index)),
+                }
             })
-            .map_err(|e| {
-                BlockStoreError::from(format!("Unable to select from rosetta_blocks: {e:?}"))
-            })?;
-        match blocks.next() {
-            Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
-            None => Err(BlockStoreError::NotFound(rosetta_block_index)),
-        }
+            .await?)
     }
 
-    fn get_rosetta_block_transactions(
+    async fn get_rosetta_block_transactions(
         &self,
         rosetta_block_index: BlockIndex,
     ) -> Result<BTreeMap<BlockIndex, Transaction>, BlockStoreError> {
-        let connection = self
+        Ok(self
             .connection
-            .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-        let mut statement = connection
-            .prepare_cached(
-                r#"SELECT blocks.block_idx, encoded_block
+            .call::<_, BTreeMap<BlockIndex, Transaction>, BlockStoreError>(move |connection| {
+                let mut statement = connection
+                    .prepare_cached(
+                        r#"SELECT blocks.block_idx, encoded_block
                    FROM rosetta_blocks_transactions JOIN blocks
                    ON rosetta_blocks_transactions.block_idx = blocks.block_idx
                    WHERE rosetta_blocks_transactions.rosetta_block_idx=:idx"#,
-            )
-            .map_err(|e| format!("Unable to select block: {e:?}"))?;
-        let blocks = statement
-            .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
-                let block_index: BlockIndex = row.get(0)?;
-                let block = row.get(1).and_then(sql_bytes_to_block)?;
-                Ok((block_index, block))
+                    )
+                    .map_err(|e| format!("Unable to select block: {e:?}"))?;
+                let blocks = statement
+                    .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
+                        let block_index: BlockIndex = row.get(0)?;
+                        let block = row.get(1).and_then(sql_bytes_to_block)?;
+                        Ok((block_index, block))
+                    })
+                    .map_err(|e| format!("Unable to select block: {e:?}"))?;
+                let mut transactions = BTreeMap::new();
+                for index_and_block in blocks {
+                    let (block_index, block) =
+                        index_and_block.map_err(|e| format!("Unable to select block: {e:?}"))?;
+                    let transaction = block.transaction;
+                    transactions.insert(block_index, transaction);
+                }
+                Ok(transactions)
             })
-            .map_err(|e| format!("Unable to select block: {e:?}"))?;
-        let mut transactions = BTreeMap::new();
-        for index_and_block in blocks {
-            let (block_index, block) =
-                index_and_block.map_err(|e| format!("Unable to select block: {e:?}"))?;
-            let transaction = block.transaction;
-            transactions.insert(block_index, transaction);
-        }
-        Ok(transactions)
+            .await?)
     }
 
-    pub fn contains_block(&self, block_idx: &BlockIndex) -> Result<bool, BlockStoreError> {
-        let mut connection = self.connection.lock().map_err(|e| {
-            BlockStoreError::Other(format!("Unable to acquire the connection mutex: {e:?}"))
-        })?;
-        database_access::contains_block(&mut connection, block_idx)
+    pub async fn contains_block(&self, block_idx: &BlockIndex) -> Result<bool, BlockStoreError> {
+        let block_idx = *block_idx;
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                database_access::contains_block(connection, &block_idx)
+            })
+            .await?)
     }
 
-    pub fn get_blocks_by_custom_query<P>(
+    pub async fn get_blocks_by_custom_query(
         &self,
         sql_query: String,
-        params: P,
-    ) -> Result<Vec<HashedBlock>, BlockStoreError>
-    where
-        P: rusqlite::Params,
-    {
-        let open_connection = self.connection.lock().unwrap();
-        database_access::get_blocks_by_custom_query(&open_connection, sql_query, params)
+        params: Vec<(String, rusqlite::types::Value)>,
+    ) -> Result<Vec<HashedBlock>, BlockStoreError> {
+        Ok(self
+            .connection
+            .call::<_, _, BlockStoreError>(move |connection| {
+                let params_refs: Vec<(&str, &dyn rusqlite::ToSql)> = params
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v as &dyn rusqlite::ToSql))
+                    .collect();
+                database_access::get_blocks_by_custom_query(
+                    connection,
+                    sql_query,
+                    params_refs.as_slice(),
+                )
+            })
+            .await?)
     }
 }
 
@@ -1807,14 +1991,14 @@ struct RosettaBlockIndices {
 
 #[cfg(test)]
 mod tests {
-    use super::{Blocks, IndexOptimization, RosettaDbConfig};
+    use super::{BlockStoreError, Blocks, IndexOptimization, RosettaDbConfig};
     use crate::rosetta_block::RosettaBlock;
     use candid::Principal;
     use ic_ledger_core::block::BlockType;
     use icp_ledger::{AccountIdentifier, Block, Memo, Operation, TimeStamp, Tokens, Transaction};
 
-    #[test]
-    fn test_store_load_rosetta_block() {
+    #[tokio::test]
+    async fn test_store_load_rosetta_block() {
         let to = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
         let transaction0 = Transaction {
             operation: Operation::Mint {
@@ -1865,44 +2049,53 @@ mod tests {
             transactions: [(0, transaction0), (1, transaction1)].into_iter().collect(),
         };
 
-        let mut blocks = Blocks::new_in_memory(RosettaDbConfig::default_enabled()).unwrap();
-        blocks.push(&hashed_block0).unwrap();
-        blocks.push(&hashed_block1).unwrap();
-        let mut connection = blocks.connection.lock().unwrap();
-        let transaction = connection.transaction().unwrap();
-
-        let mut insert_rosetta_block_stmt = transaction
-            .prepare_cached(
-                r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
-                VALUES (:idx, :hash, :timestamp)"#,
-            )
+        let mut blocks = Blocks::new_in_memory(RosettaDbConfig::default_enabled())
+            .await
             .unwrap();
-        let mut insert_rosetta_block_transaction_stmt = transaction
-            .prepare_cached(
-                r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
-VALUES (:idx, :block_idx)"#,
-            )
-            .unwrap();
-
+        blocks.push(&hashed_block0).await.unwrap();
+        blocks.push(&hashed_block1).await.unwrap();
+        let rosetta_block_to_store = rosetta_block.clone();
         blocks
-            .store_rosetta_block(
-                rosetta_block.clone(),
-                &mut insert_rosetta_block_stmt,
-                &mut insert_rosetta_block_transaction_stmt,
-            )
-            .unwrap();
+            .connection
+            .call::<_, (), BlockStoreError>(move |connection| {
+                let transaction = connection.transaction().unwrap();
 
-        drop(insert_rosetta_block_stmt);
-        drop(insert_rosetta_block_transaction_stmt);
-        transaction.commit().unwrap();
-        drop(connection);
-        let actual_rosetta_block = blocks.get_rosetta_block(0).unwrap();
+                let mut insert_rosetta_block_stmt = transaction
+                    .prepare_cached(
+                        r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
+                VALUES (:idx, :hash, :timestamp)"#,
+                    )
+                    .unwrap();
+                let mut insert_rosetta_block_transaction_stmt = transaction
+                    .prepare_cached(
+                        r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
+VALUES (:idx, :block_idx)"#,
+                    )
+                    .unwrap();
+
+                Blocks::store_rosetta_block(
+                    rosetta_block_to_store,
+                    &mut insert_rosetta_block_stmt,
+                    &mut insert_rosetta_block_transaction_stmt,
+                )
+                .unwrap();
+
+                drop(insert_rosetta_block_stmt);
+                drop(insert_rosetta_block_transaction_stmt);
+                transaction.commit().unwrap();
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let actual_rosetta_block = blocks.get_rosetta_block(0).await.unwrap();
         assert_eq!(rosetta_block, actual_rosetta_block);
     }
 
-    #[test]
-    fn test_update_balance_book_with_large_values() {
-        let mut blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    #[tokio::test]
+    async fn test_update_balance_book_with_large_values() {
+        let mut blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled())
+            .await
+            .unwrap();
 
         let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
 
@@ -1928,28 +2121,32 @@ VALUES (:idx, :block_idx)"#,
         let hashed_block = super::HashedBlock::hash_block(encoded_block, None, 0, block.timestamp);
 
         // Push the block (this should handle the large value correctly with TEXT storage)
-        blocks.push(&hashed_block).unwrap();
+        blocks.push(&hashed_block).await.unwrap();
 
         // Set the block as verified so we can query the balance
-        blocks.set_hashed_block_to_verified(&0).unwrap();
+        blocks.set_hashed_block_to_verified(&0).await.unwrap();
 
         // Verify the balance was stored and can be retrieved with full precision
-        let balance = blocks.get_account_balance(&account, &0).unwrap();
+        let balance = blocks.get_account_balance(&account, &0).await.unwrap();
         assert_eq!(balance, Tokens::from_e8s(large_amount));
 
         // Verify the balance history
-        let history = blocks.get_account_balance_history(&account, None).unwrap();
+        let history = blocks
+            .get_account_balance_history(&account, None)
+            .await
+            .unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0], (0_u64, Tokens::from_e8s(large_amount)));
     }
 
-    #[test]
-    fn test_comprehensive_backwards_compatibility() {
+    #[tokio::test]
+    async fn test_comprehensive_backwards_compatibility() {
         use super::database_access;
         use rusqlite::params;
 
-        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
-        let mut connection = blocks.connection.lock().unwrap();
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled())
+            .await
+            .unwrap();
 
         let account1 = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
         let account2 = AccountIdentifier::new(
@@ -1957,144 +2154,171 @@ VALUES (:idx, :block_idx)"#,
             None,
         );
 
-        // Scenario 1: Existing database with small INTEGER values (backwards compatible)
-        let small_value1 = 1000000_u64; // 0.01 ICP
-        let small_value2 = 5000000000_u64; // 50 ICP
-        connection
+        blocks
+            .connection
+            .call::<_, (), BlockStoreError>(move |connection| {
+                // Scenario 1: Existing database with small INTEGER values (backwards compatible)
+                let small_value1 = 1000000_u64; // 0.01 ICP
+                let small_value2 = 5000000000_u64; // 50 ICP
+                connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
                 params![1_u64, account1.to_hex(), small_value1 as i64],
             )
             .unwrap();
-        connection
+                connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
                 params![2_u64, account2.to_hex(), small_value2 as i64],
             )
             .unwrap();
 
-        // Scenario 2: New large values using bit-reinterpretation
-        let large_value1 = 10000000000000000000_u64; // The problematic value from the original error
-        let large_value2 = 18446744073709551615_u64; // u64::MAX
-        connection
+                // Scenario 2: New large values using bit-reinterpretation
+                let large_value1 = 10000000000000000000_u64; // The problematic value from the original error
+                let large_value2 = 18446744073709551615_u64; // u64::MAX
+                connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
                 params![3_u64, account1.to_hex(), large_value1 as i64], // Stored as negative i64
             )
             .unwrap();
-        connection
+                connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
                 params![4_u64, account2.to_hex(), large_value2 as i64], // Stored as -1
             )
             .unwrap();
 
-        // Test reading all values - should work seamlessly with bit-reinterpretation
-        let balance1 =
-            database_access::get_account_balance(&mut connection, &1_u64, &account1).unwrap();
-        let balance2 =
-            database_access::get_account_balance(&mut connection, &2_u64, &account2).unwrap();
-        let balance3 =
-            database_access::get_account_balance(&mut connection, &3_u64, &account1).unwrap();
-        let balance4 =
-            database_access::get_account_balance(&mut connection, &4_u64, &account2).unwrap();
+                // Test reading all values - should work seamlessly with bit-reinterpretation
+                let balance1 =
+                    database_access::get_account_balance(connection, &1_u64, &account1).unwrap();
+                let balance2 =
+                    database_access::get_account_balance(connection, &2_u64, &account2).unwrap();
+                let balance3 =
+                    database_access::get_account_balance(connection, &3_u64, &account1).unwrap();
+                let balance4 =
+                    database_access::get_account_balance(connection, &4_u64, &account2).unwrap();
 
-        // All values should be read correctly regardless of magnitude
-        assert_eq!(balance1, Some(small_value1));
-        assert_eq!(balance2, Some(small_value2));
-        assert_eq!(balance3, Some(large_value1));
-        assert_eq!(balance4, Some(large_value2));
+                // All values should be read correctly regardless of magnitude
+                assert_eq!(balance1, Some(small_value1));
+                assert_eq!(balance2, Some(small_value2));
+                assert_eq!(balance3, Some(large_value1));
+                assert_eq!(balance4, Some(large_value2));
 
-        // Test that the latest balance query works correctly (should return the large values)
-        let latest_balance1 =
-            database_access::get_account_balance(&mut connection, &10_u64, &account1).unwrap();
-        let latest_balance2 =
-            database_access::get_account_balance(&mut connection, &10_u64, &account2).unwrap();
+                // Test that the latest balance query works correctly (should return the large values)
+                let latest_balance1 =
+                    database_access::get_account_balance(connection, &10_u64, &account1).unwrap();
+                let latest_balance2 =
+                    database_access::get_account_balance(connection, &10_u64, &account2).unwrap();
 
-        assert_eq!(latest_balance1, Some(large_value1));
-        assert_eq!(latest_balance2, Some(large_value2));
+                assert_eq!(latest_balance1, Some(large_value1));
+                assert_eq!(latest_balance2, Some(large_value2));
+                Ok(())
+            })
+            .await
+            .unwrap();
     }
 
-    #[test]
-    fn test_account_balance_bit_reinterpretation() {
+    #[tokio::test]
+    async fn test_account_balance_bit_reinterpretation() {
         use super::database_access;
         use rusqlite::params;
 
-        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
-        let mut connection = blocks.connection.lock().unwrap();
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled())
+            .await
+            .unwrap();
 
         let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
 
-        // Test 1: Small value (fits in i64) - stored as positive
-        let small_value = 1000000_u64; // 0.01 ICP in e8s
-        connection
+        blocks
+            .connection
+            .call::<_, (), BlockStoreError>(move |connection| {
+                // Test 1: Small value (fits in i64) - stored as positive
+                let small_value = 1000000_u64; // 0.01 ICP in e8s
+                connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
                 params![1_u64, account.to_hex(), small_value as i64],
             )
             .unwrap();
 
-        let balance =
-            database_access::get_account_balance(&mut connection, &1_u64, &account).unwrap();
-        assert_eq!(balance, Some(small_value));
+                let balance =
+                    database_access::get_account_balance(connection, &1_u64, &account).unwrap();
+                assert_eq!(balance, Some(small_value));
 
-        // Test 2: Large value (exceeds i64::MAX) - stored as negative i64, reinterpreted as u64
-        let large_value = 10000000000000000000_u64; // Exceeds i64::MAX
-        let large_value_as_i64 = large_value as i64; // This becomes negative
-        connection
+                // Test 2: Large value (exceeds i64::MAX) - stored as negative i64, reinterpreted as u64
+                let large_value = 10000000000000000000_u64; // Exceeds i64::MAX
+                let large_value_as_i64 = large_value as i64; // This becomes negative
+                connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
                 params![2_u64, account.to_hex(), large_value_as_i64],
             )
             .unwrap();
 
-        let balance =
-            database_access::get_account_balance(&mut connection, &2_u64, &account).unwrap();
-        assert_eq!(balance, Some(large_value)); // Should recover the original value
+                let balance =
+                    database_access::get_account_balance(connection, &2_u64, &account).unwrap();
+                assert_eq!(balance, Some(large_value)); // Should recover the original value
 
-        // Test 3: u64::MAX value
-        let max_value = u64::MAX;
-        let max_value_as_i64 = max_value as i64; // This becomes -1
-        connection
+                // Test 3: u64::MAX value
+                let max_value = u64::MAX;
+                let max_value_as_i64 = max_value as i64; // This becomes -1
+                connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
                 params![3_u64, account.to_hex(), max_value_as_i64],
             )
             .unwrap();
 
-        let balance =
-            database_access::get_account_balance(&mut connection, &3_u64, &account).unwrap();
-        assert_eq!(balance, Some(max_value)); // Should recover u64::MAX
+                let balance =
+                    database_access::get_account_balance(connection, &3_u64, &account).unwrap();
+                assert_eq!(balance, Some(max_value)); // Should recover u64::MAX
 
-        // Verify that bit reinterpretation works correctly
-        assert_eq!(large_value_as_i64, -8446744073709551616_i64);
-        assert_eq!(max_value_as_i64, -1_i64);
-        assert_eq!((-8446744073709551616_i64) as u64, 10000000000000000000_u64);
-        assert_eq!((-1_i64) as u64, u64::MAX);
+                // Verify that bit reinterpretation works correctly
+                assert_eq!(large_value_as_i64, -8446744073709551616_i64);
+                assert_eq!(max_value_as_i64, -1_i64);
+                assert_eq!((-8446744073709551616_i64) as u64, 10000000000000000000_u64);
+                assert_eq!((-1_i64) as u64, u64::MAX);
+                Ok(())
+            })
+            .await
+            .unwrap();
     }
 
-    #[test]
-    fn test_search_indexes_creation_when_enabled() {
-        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_enabled()).unwrap();
-        let connection = blocks.connection.lock().unwrap();
+    async fn read_search_index_names(blocks: &Blocks) -> Vec<String> {
+        blocks
+            .connection
+            .call::<_, Vec<String>, BlockStoreError>(move |connection| {
+                let index_query =
+                    "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
+                let mut stmt = connection.prepare(index_query).unwrap();
+                let index_names: Vec<String> = stmt
+                    .query_map(
+                        [
+                            "from_account_index",
+                            "to_account_index",
+                            "spender_account_index",
+                            "operation_type_index",
+                        ],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                Ok(index_names)
+            })
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_search_indexes_creation_when_enabled() {
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_enabled())
+            .await
+            .unwrap();
 
         // Check that indexes exist when optimization is enabled
-        let index_query =
-            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
-        let mut stmt = connection.prepare(index_query).unwrap();
-        let index_names: Vec<String> = stmt
-            .query_map(
-                [
-                    "from_account_index",
-                    "to_account_index",
-                    "spender_account_index",
-                    "operation_type_index",
-                ],
-                |row| row.get::<_, String>(0),
-            )
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let index_names = read_search_index_names(&blocks).await;
 
         assert!(index_names.contains(&"from_account_index".to_string()));
         assert!(index_names.contains(&"to_account_index".to_string()));
@@ -2102,31 +2326,16 @@ VALUES (:idx, :block_idx)"#,
         assert!(index_names.contains(&"operation_type_index".to_string()));
     }
 
-    #[test]
-    fn test_search_indexes_not_created_when_disabled() {
+    #[tokio::test]
+    async fn test_search_indexes_not_created_when_disabled() {
         let blocks = Blocks::new_in_memory(RosettaDbConfig::with_rosetta_blocks_enabled(
             IndexOptimization::Disabled,
         ))
+        .await
         .unwrap();
-        let connection = blocks.connection.lock().unwrap();
 
         // Check that indexes don't exist when optimization is disabled
-        let index_query =
-            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
-        let mut stmt = connection.prepare(index_query).unwrap();
-        let index_names: Vec<String> = stmt
-            .query_map(
-                [
-                    "from_account_index",
-                    "to_account_index",
-                    "spender_account_index",
-                    "operation_type_index",
-                ],
-                |row| row.get::<_, String>(0),
-            )
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let index_names = read_search_index_names(&blocks).await;
 
         // These specific indexes should not exist
         assert!(!index_names.contains(&"from_account_index".to_string()));
@@ -2135,13 +2344,15 @@ VALUES (:idx, :block_idx)"#,
         assert!(!index_names.contains(&"operation_type_index".to_string()));
     }
 
-    #[test]
-    fn test_search_indexes_creation_existing_db() {
+    #[tokio::test]
+    async fn test_search_indexes_creation_existing_db() {
         let tmp_dir = ic_ledger_canister_blocks_synchronizer_test_utils::create_tmp_dir();
         let config_disabled = RosettaDbConfig::default_disabled();
 
         {
-            let mut blocks = Blocks::new_persistent(tmp_dir.path(), config_disabled).unwrap();
+            let mut blocks = Blocks::new_persistent(tmp_dir.path(), config_disabled)
+                .await
+                .unwrap();
 
             let to = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
             let transaction0 = Transaction {
@@ -2165,31 +2376,17 @@ VALUES (:idx, :block_idx)"#,
                 0,
                 block0.timestamp,
             );
-            blocks.push(&hashed_block0).unwrap();
+            blocks.push(&hashed_block0).await.unwrap();
         }
 
         // Re-open with optimization enabled
         let config_enabled = RosettaDbConfig::default_enabled();
-        let blocks = Blocks::new_persistent(tmp_dir.path(), config_enabled).unwrap();
-        let connection = blocks.connection.lock().unwrap();
+        let blocks = Blocks::new_persistent(tmp_dir.path(), config_enabled)
+            .await
+            .unwrap();
 
         // Check indexes
-        let index_query =
-            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
-        let mut stmt = connection.prepare(index_query).unwrap();
-        let index_names: Vec<String> = stmt
-            .query_map(
-                [
-                    "from_account_index",
-                    "to_account_index",
-                    "spender_account_index",
-                    "operation_type_index",
-                ],
-                |row| row.get::<_, String>(0),
-            )
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let index_names = read_search_index_names(&blocks).await;
 
         assert!(index_names.contains(&"from_account_index".to_string()));
         assert!(index_names.contains(&"to_account_index".to_string()));

@@ -43,11 +43,17 @@ pub struct TestLedger {
 }
 
 impl TestLedger {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
+        Self::from_blockchain(
+            Blocks::new_in_memory(RosettaDbConfig::default_disabled())
+                .await
+                .unwrap(),
+        )
+    }
+
+    pub(crate) fn from_blockchain(blocks: Blocks) -> Self {
         Self {
-            blockchain: RwLock::new(
-                Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap(),
-            ),
+            blockchain: RwLock::new(blocks),
             canister_id: CanisterId::unchecked_from_principal(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),
@@ -60,14 +66,6 @@ impl TestLedger {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn from_blockchain(blocks: Blocks) -> Self {
-        Self {
-            blockchain: RwLock::new(blocks),
-            ..Default::default()
-        }
-    }
-
     async fn last_submitted(&self) -> Result<HashedBlock, ApiError> {
         match self.submit_queue.read().await.last() {
             Some(b) => Ok(b.clone()),
@@ -75,6 +73,7 @@ impl TestLedger {
                 .read_blocks()
                 .await
                 .get_latest_verified_hashed_block()
+                .await
                 .map_err(ApiError::from),
         }
     }
@@ -82,9 +81,10 @@ impl TestLedger {
     #[allow(dead_code)]
     pub async fn add_block(&self, hb: HashedBlock) -> Result<(), ApiError> {
         let mut blockchain = self.blockchain.write().await;
-        blockchain.push(&hb).map_err(ApiError::from)?;
+        blockchain.push(&hb).await.map_err(ApiError::from)?;
         blockchain
             .set_hashed_block_to_verified(&hb.index)
+            .await
             .map_err(ApiError::from)
     }
 
@@ -101,15 +101,9 @@ fn next_millisecond(t: TimeStamp) -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(t.as_nanos_since_unix_epoch() + 1_000_000)
 }
 
-impl Default for TestLedger {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[async_trait]
 impl LedgerAccess for TestLedger {
-    async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + 'a> {
+    async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + Send + 'a> {
         Box::new(self.blockchain.read().await)
     }
 
@@ -141,8 +135,8 @@ impl LedgerAccess for TestLedger {
         {
             let mut blockchain = self.blockchain.write().await;
             for hb in queue.iter() {
-                blockchain.push(hb)?;
-                blockchain.set_hashed_block_to_verified(&hb.index)?;
+                blockchain.push(hb).await?;
+                blockchain.set_hashed_block_to_verified(&hb.index).await?;
             }
         }
 

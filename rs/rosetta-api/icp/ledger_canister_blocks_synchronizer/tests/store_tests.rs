@@ -13,8 +13,10 @@ use icp_ledger::{AccountIdentifier, Block, Operation, apply_operation};
 use rusqlite::params;
 use std::path::Path;
 
-pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
-    Blocks::new_persistent(path, RosettaDbConfig::default_disabled()).unwrap()
+pub(crate) async fn sqlite_on_disk_store(path: &Path) -> Blocks {
+    Blocks::new_persistent(path, RosettaDbConfig::default_disabled())
+        .await
+        .unwrap()
 }
 
 #[derive(Default)]
@@ -53,32 +55,60 @@ impl LedgerContext for TestContext {
 #[actix_rt::test]
 async fn store_smoke_test() {
     let tmpdir = create_tmp_dir();
-    let mut store = sqlite_on_disk_store(tmpdir.path());
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb).unwrap();
+        store.push(hb).await.unwrap();
     }
 
     for hb in &scribe.blockchain {
-        assert_eq!(store.get_hashed_block(&hb.index).unwrap(), *hb);
+        assert_eq!(store.get_hashed_block(&hb.index).await.unwrap(), *hb);
         assert_eq!(
-            store.get_transaction(&hb.index).unwrap(),
+            store.get_transaction(&hb.index).await.unwrap(),
             Block::decode((*hb).clone().block).unwrap().transaction
         );
     }
     assert_eq!(
-        store.get_first_hashed_block().unwrap(),
+        store.get_first_hashed_block().await.unwrap(),
         *scribe.blockchain.front().unwrap()
     );
     assert_eq!(
-        store.get_latest_hashed_block().unwrap(),
+        store.get_latest_hashed_block().await.unwrap(),
         *scribe.blockchain.get(109).unwrap()
     );
     let last_idx = scribe.blockchain.back().unwrap().index;
     assert_eq!(
-        store.get_hashed_block(&(last_idx + 1)).unwrap_err(),
+        store.get_hashed_block(&(last_idx + 1)).await.unwrap_err(),
         BlockStoreError::NotFound(last_idx + 1)
+    );
+}
+
+#[actix_rt::test]
+async fn store_push_rolls_back_on_error() {
+    let tmpdir = create_tmp_dir();
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
+    let scribe = Scribe::new_with_sample_data(10, 100);
+
+    let blocks: Vec<_> = scribe.blockchain.iter().cloned().collect();
+
+    // Push the first two blocks successfully.
+    store.push(&blocks[0]).await.unwrap();
+    store.push(&blocks[1]).await.unwrap();
+
+    // Pushing an already-present block violates the PRIMARY KEY constraint on
+    // `block_idx` and must return an error.
+    let err = store.push(&blocks[0]).await;
+    assert!(err.is_err(), "expected duplicate push to fail, got {err:?}");
+
+    // The failed push must have rolled back its transaction. If the transaction
+    // had been left open, this subsequent valid push would fail with "cannot
+    // start a transaction within a transaction".
+    store.push(&blocks[2]).await.unwrap();
+
+    assert_eq!(
+        store.get_hashed_block(&blocks[2].index).await.unwrap(),
+        blocks[2]
     );
 }
 
@@ -88,7 +118,7 @@ async fn store_coherence_test() {
 
     let location = tmpdir.path();
 
-    let store = sqlite_on_disk_store(location);
+    let store = sqlite_on_disk_store(location).await;
     let scribe = Scribe::new_with_sample_data(10, 100);
     let path = location.join("db.sqlite");
     let con = rusqlite::Connection::open(path).unwrap();
@@ -113,24 +143,24 @@ async fn store_coherence_test() {
     }
     drop(con);
     for hb in &scribe.blockchain {
-        assert_eq!(store.get_hashed_block(&hb.index).unwrap(), *hb);
-        assert!(store.get_all_accounts().unwrap().is_empty());
+        assert_eq!(store.get_hashed_block(&hb.index).await.unwrap(), *hb);
+        assert!(store.get_all_accounts().await.unwrap().is_empty());
     }
-    let store = sqlite_on_disk_store(location);
+    let store = sqlite_on_disk_store(location).await;
     for hb in &scribe.blockchain {
-        assert_eq!(store.get_hashed_block(&hb.index).unwrap(), *hb);
+        assert_eq!(store.get_hashed_block(&hb.index).await.unwrap(), *hb);
         assert_eq!(
-            store.get_transaction_hash(&hb.index).unwrap(),
+            store.get_transaction_hash(&hb.index).await.unwrap(),
             Some(Block::decode(hb.block.clone()).unwrap().transaction.hash())
         );
     }
-    assert_eq!(store.get_all_accounts().unwrap().len(), 10);
+    assert_eq!(store.get_all_accounts().await.unwrap().len(), 10);
 }
 
 #[actix_rt::test]
 async fn store_account_balances_test() {
     let tmpdir = create_tmp_dir();
-    let mut store = sqlite_on_disk_store(tmpdir.path());
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
     let scribe = Scribe::new_with_sample_data(10, 100);
     let mut context = TestContext::default();
     let now = TimeStamp::from_nanos_since_unix_epoch(12345678);
@@ -140,8 +170,8 @@ async fn store_account_balances_test() {
         context.balance_book.store.transaction_context = Some(hb.index);
         apply_operation(&mut context, &operation, now).unwrap();
         context.balance_book.store.transaction_context = None;
-        store.push(hb).unwrap();
-        store.set_hashed_block_to_verified(&hb.index).unwrap();
+        store.push(hb).await.unwrap();
+        store.set_hashed_block_to_verified(&hb.index).await.unwrap();
         let to_account: Option<String>;
         let from_account: Option<String>;
         match operation {
@@ -164,20 +194,20 @@ async fn store_account_balances_test() {
         }
         if let Some(acc_str) = from_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
-            let amount_from = store.get_account_balance(&id, &hb.index).unwrap();
+            let amount_from = store.get_account_balance(&id, &hb.index).await.unwrap();
             let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_from, amount_local);
         }
         if let Some(acc_str) = to_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
-            let amount_to = store.get_account_balance(&id, &hb.index).unwrap();
+            let amount_to = store.get_account_balance(&id, &hb.index).await.unwrap();
             let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_to, amount_local);
         }
     }
     for (acc, history) in context.balance_book.store.acc_to_hist.iter() {
         for (block_index, tokens) in history.get_history(None) {
-            let amount = store.get_account_balance(acc, block_index).unwrap();
+            let amount = store.get_account_balance(acc, block_index).await.unwrap();
             assert_eq!(*tokens, amount);
         }
     }
@@ -186,139 +216,139 @@ async fn store_account_balances_test() {
 #[actix_rt::test]
 async fn store_prune_test() {
     let tmpdir = create_tmp_dir();
-    let mut store = sqlite_on_disk_store(tmpdir.path());
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb).unwrap();
-        store.set_hashed_block_to_verified(&hb.index).unwrap();
+        store.push(hb).await.unwrap();
+        store.set_hashed_block_to_verified(&hb.index).await.unwrap();
     }
 
-    prune(&scribe, &mut store, 10);
-    verify_pruned(&scribe, &mut store, 10);
+    prune(&scribe, &mut store, 10).await;
+    verify_pruned(&scribe, &mut store, 10).await;
 
-    prune(&scribe, &mut store, 20);
-    verify_pruned(&scribe, &mut store, 20);
+    prune(&scribe, &mut store, 20).await;
+    verify_pruned(&scribe, &mut store, 20).await;
 }
 
 #[actix_rt::test]
 async fn store_prune_corner_cases_test() {
     let tmpdir = create_tmp_dir();
-    let mut store = sqlite_on_disk_store(tmpdir.path());
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb).unwrap();
+        store.push(hb).await.unwrap();
     }
 
-    prune(&scribe, &mut store, 0);
-    verify_pruned(&scribe, &mut store, 0);
+    prune(&scribe, &mut store, 0).await;
+    verify_pruned(&scribe, &mut store, 0).await;
 
-    prune(&scribe, &mut store, 1);
-    verify_pruned(&scribe, &mut store, 0);
+    prune(&scribe, &mut store, 1).await;
+    verify_pruned(&scribe, &mut store, 0).await;
 
     let last_idx = scribe.blockchain.back().unwrap().index;
 
-    prune(&scribe, &mut store, last_idx);
-    verify_pruned(&scribe, &mut store, last_idx);
+    prune(&scribe, &mut store, last_idx).await;
+    verify_pruned(&scribe, &mut store, last_idx).await;
 }
 
 #[actix_rt::test]
 async fn store_prune_first_balance_test() {
     let tmpdir = create_tmp_dir();
-    let mut store = sqlite_on_disk_store(tmpdir.path());
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb).unwrap();
-        store.set_hashed_block_to_verified(&hb.index).unwrap();
+        store.push(hb).await.unwrap();
+        store.set_hashed_block_to_verified(&hb.index).await.unwrap();
     }
 
-    prune(&scribe, &mut store, 10);
-    verify_pruned(&scribe, &mut store, 10);
-    verify_balance_snapshot(&scribe, &mut store, 10);
+    prune(&scribe, &mut store, 10).await;
+    verify_pruned(&scribe, &mut store, 10).await;
+    verify_balance_snapshot(&scribe, &mut store, 10).await;
 
-    prune(&scribe, &mut store, 20);
-    verify_pruned(&scribe, &mut store, 20);
-    verify_balance_snapshot(&scribe, &mut store, 20);
+    prune(&scribe, &mut store, 20).await;
+    verify_pruned(&scribe, &mut store, 20).await;
+    verify_balance_snapshot(&scribe, &mut store, 20).await;
 }
 
 #[actix_rt::test]
 async fn store_prune_and_load_test() {
     let tmpdir = create_tmp_dir();
-    let mut store = sqlite_on_disk_store(tmpdir.path());
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
 
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb).unwrap();
-        store.set_hashed_block_to_verified(&hb.index).unwrap();
+        store.push(hb).await.unwrap();
+        store.set_hashed_block_to_verified(&hb.index).await.unwrap();
     }
 
-    prune(&scribe, &mut store, 10);
-    verify_pruned(&scribe, &mut store, 10);
-    verify_balance_snapshot(&scribe, &mut store, 10);
+    prune(&scribe, &mut store, 10).await;
+    verify_pruned(&scribe, &mut store, 10).await;
+    verify_balance_snapshot(&scribe, &mut store, 10).await;
 
-    prune(&scribe, &mut store, 20);
-    verify_pruned(&scribe, &mut store, 20);
-    verify_balance_snapshot(&scribe, &mut store, 20);
+    prune(&scribe, &mut store, 20).await;
+    verify_pruned(&scribe, &mut store, 20).await;
+    verify_balance_snapshot(&scribe, &mut store, 20).await;
 
     drop(store);
     // Now reload from disk
-    let mut store = sqlite_on_disk_store(tmpdir.path());
-    verify_pruned(&scribe, &mut store, 20);
-    verify_balance_snapshot(&scribe, &mut store, 20);
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
+    verify_pruned(&scribe, &mut store, 20).await;
+    verify_balance_snapshot(&scribe, &mut store, 20).await;
 
-    prune(&scribe, &mut store, 30);
-    verify_pruned(&scribe, &mut store, 30);
-    verify_balance_snapshot(&scribe, &mut store, 30);
+    prune(&scribe, &mut store, 30).await;
+    verify_pruned(&scribe, &mut store, 30).await;
+    verify_balance_snapshot(&scribe, &mut store, 30).await;
 
     drop(store);
     // Reload once again
-    let mut store = sqlite_on_disk_store(tmpdir.path());
-    verify_pruned(&scribe, &mut store, 30);
-    verify_balance_snapshot(&scribe, &mut store, 30);
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
+    verify_pruned(&scribe, &mut store, 30).await;
+    verify_balance_snapshot(&scribe, &mut store, 30).await;
 }
 
-fn prune(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
+async fn prune(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     let oldest_idx = prune_at;
     let oldest_block = scribe.blockchain.get(oldest_idx as usize).unwrap();
-    store.prune(oldest_block).unwrap();
+    store.prune(oldest_block).await.unwrap();
 }
 
-fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
+async fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     let after_last_idx = scribe.blockchain.len() as u64;
     let oldest_idx = prune_at.min(after_last_idx);
 
     if after_last_idx > 1 {
         // Genesis block (at idx 0) should still be accessible
         assert_eq!(
-            store.get_hashed_block(&0).unwrap(),
+            store.get_hashed_block(&0).await.unwrap(),
             *scribe.blockchain.front().unwrap()
         );
     }
 
     for i in 1..oldest_idx {
         assert_eq!(
-            store.get_hashed_block(&i).unwrap_err(),
+            store.get_hashed_block(&i).await.unwrap_err(),
             BlockStoreError::NotFound(i)
         );
         assert_eq!(
-            store.get_transaction(&i).unwrap_err(),
+            store.get_transaction(&i).await.unwrap_err(),
             BlockStoreError::NotFound(i)
         );
     }
 
     if oldest_idx < after_last_idx {
         assert_eq!(
-            store.get_first_hashed_block().ok().map(|x| x.index),
+            store.get_first_hashed_block().await.ok().map(|x| x.index),
             Some(oldest_idx)
         );
     }
 
     for i in oldest_idx..after_last_idx {
         assert_eq!(
-            store.get_hashed_block(&i).unwrap(),
+            store.get_hashed_block(&i).await.unwrap(),
             *scribe.blockchain.get(i as usize).unwrap()
         );
     }
@@ -326,28 +356,29 @@ fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     for i in oldest_idx..after_last_idx {
         let block = (*scribe.blockchain.get(i as usize).unwrap()).clone().block;
         assert_eq!(
-            store.get_transaction(&i).unwrap(),
+            store.get_transaction(&i).await.unwrap(),
             Block::decode(block).unwrap().transaction
         );
     }
 
     for i in after_last_idx..=scribe.blockchain.len() as u64 {
         assert_eq!(
-            store.get_hashed_block(&i).unwrap_err(),
+            store.get_hashed_block(&i).await.unwrap_err(),
             BlockStoreError::NotFound(i)
         );
     }
 }
 
-fn verify_balance_snapshot(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
+async fn verify_balance_snapshot(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     let oldest_idx = prune_at as usize;
-    let oldest_block = store.get_first_hashed_block().unwrap();
+    let oldest_block = store.get_first_hashed_block().await.unwrap();
     assert_eq!(oldest_block, *scribe.blockchain.get(oldest_idx).unwrap());
 
     let scribe_balances = scribe.balance_history.get(oldest_idx).unwrap().clone();
     for (acc, tokens) in scribe_balances {
         let balance = store
             .get_account_balance(&acc, &(oldest_idx as u64))
+            .await
             .unwrap();
         assert_eq!(balance, tokens);
     }
@@ -355,11 +386,12 @@ fn verify_balance_snapshot(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     for amount in scribe.balance_history.get(oldest_idx).unwrap().values() {
         sum_icpt = sum_icpt.checked_add(amount).unwrap();
     }
-    let accounts = store.get_all_accounts().unwrap();
+    let accounts = store.get_all_accounts().await.unwrap();
     let mut total = Tokens::ZERO;
     for account in accounts {
         let amount = store
             .get_account_balance(&account, &(oldest_idx as u64))
+            .await
             .unwrap();
         total = total.checked_add(&amount).unwrap();
     }

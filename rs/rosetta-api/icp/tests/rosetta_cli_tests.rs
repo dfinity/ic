@@ -40,7 +40,7 @@ async fn rosetta_cli_data_test() {
         scribe.gen_transaction();
     }
 
-    let ledger = Arc::new(TestLedger::new());
+    let ledger = Arc::new(TestLedger::new().await);
     let initial_sync_complete = Arc::new(AtomicBool::new(true));
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(
         ledger.clone(),
@@ -116,7 +116,7 @@ async fn rosetta_cli_construction_create_account_test() {
         scribe.gen_transaction();
     }
 
-    let ledger = Arc::new(TestLedger::new());
+    let ledger = Arc::new(TestLedger::new().await);
     let initial_sync_complete = Arc::new(AtomicBool::new(true));
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(
         ledger.clone(),
@@ -211,7 +211,7 @@ async fn rosetta_cli_construction_test() {
         100_000_000_007,
     );
 
-    let ledger = Arc::new(TestLedger::new());
+    let ledger = Arc::new(TestLedger::new().await);
     let initial_sync_complete = Arc::new(AtomicBool::new(true));
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(
         ledger.clone(),

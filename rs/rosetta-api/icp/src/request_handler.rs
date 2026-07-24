@@ -187,7 +187,9 @@ impl RosettaRequestHandler {
         })?;
         let block = self.get_block(msg.block_identifier).await?;
         let blocks = self.ledger.read_blocks().await;
-        let tokens = blocks.get_account_balance(&account_id, &block.block_identifier.index)?;
+        let tokens = blocks
+            .get_account_balance(&account_id, &block.block_identifier.index)
+            .await?;
         let amount = tokens_to_amount(tokens, self.ledger.token_symbol())?;
         Ok(AccountBalanceResponse {
             block_identifier: block.block_identifier,
@@ -254,6 +256,7 @@ impl RosettaRequestHandler {
                     );
                     if storage
                         .contains_block(&lowest_index)
+                        .await
                         .map_err(|err| ApiError::InvalidBlockId(false, format!("{err:?}").into()))?
                     {
                         // TODO: Use block range with rosetta blocks
@@ -262,6 +265,7 @@ impl RosettaRequestHandler {
                                 lowest_index
                                     ..query_block_range.highest_block_index.saturating_add(1),
                             )
+                            .await
                             .map_err(ApiError::from)?
                             .into_iter()
                         {
@@ -371,6 +375,7 @@ impl RosettaRequestHandler {
                         .read_blocks()
                         .await
                         .get_highest_rosetta_block_index()
+                        .await
                         .map_err(ApiError::from)?
                         .ok_or_else(|| ApiError::BlockchainEmpty(false, Default::default()))?;
                     self.get_rosetta_block_by_index(highest_block_index).await
@@ -389,13 +394,13 @@ impl RosettaRequestHandler {
         let parent_block_index = block_index.saturating_sub(1);
         let blocks = self.ledger.read_blocks().await;
         if self.is_a_rosetta_block_index(parent_block_index).await {
-            let parent_block = blocks.get_rosetta_block(parent_block_index)?;
+            let parent_block = blocks.get_rosetta_block(parent_block_index).await?;
             Ok(BlockIdentifier {
                 index: parent_block_index,
                 hash: hex::encode(parent_block.hash()),
             })
-        } else if blocks.is_verified_by_idx(&parent_block_index)? {
-            let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
+        } else if blocks.is_verified_by_idx(&parent_block_index).await? {
+            let parent_block = &blocks.get_hashed_block(&parent_block_index).await?;
             convert::block_id(parent_block)
         } else {
             Err(ApiError::InvalidBlockId(true, Default::default()))
@@ -417,6 +422,7 @@ impl RosettaRequestHandler {
             let blocks = self.ledger.read_blocks().await;
             blocks
                 .get_latest_verified_hashed_block()
+                .await
                 .map_err(ApiError::from)
         }?;
         self.hashed_block_to_rosetta_core_block(block).await
@@ -428,10 +434,10 @@ impl RosettaRequestHandler {
     ) -> Result<rosetta_core::objects::Block, ApiError> {
         let block = {
             let blocks = self.ledger.read_blocks().await;
-            if !blocks.is_verified_by_idx(&block_index)? {
+            if !blocks.is_verified_by_idx(&block_index).await? {
                 return Err(ApiError::InvalidBlockId(false, Default::default()));
             }
-            blocks.get_hashed_block(&block_index)
+            blocks.get_hashed_block(&block_index).await
         }?;
         self.hashed_block_to_rosetta_core_block(block).await
     }
@@ -455,11 +461,11 @@ impl RosettaRequestHandler {
         let hash = convert::to_hash::<ic_ledger_core::block::EncodedBlock>(block_hash)?;
         let block = {
             let blocks = self.ledger.read_blocks().await;
-            if !blocks.is_verified_by_hash(&hash)? {
+            if !blocks.is_verified_by_hash(&hash).await? {
                 return Err(ApiError::InvalidBlockId(true, Default::default()));
             }
-            let block_index = blocks.get_block_idx_by_block_hash(&hash)?;
-            blocks.get_hashed_block(&block_index)
+            let block_index = blocks.get_block_idx_by_block_hash(&hash).await?;
+            blocks.get_hashed_block(&block_index).await
         }?;
         self.hashed_block_to_rosetta_core_block(block).await
     }
@@ -470,7 +476,7 @@ impl RosettaRequestHandler {
     ) -> Result<rosetta_core::objects::Block, ApiError> {
         let rosetta_block = {
             let blocks = self.ledger.read_blocks().await;
-            blocks.get_rosetta_block(block_index)
+            blocks.get_rosetta_block(block_index).await
         }?;
         let parent_block_id = self.create_parent_block_id(block_index).await?;
         let token_symbol = self.ledger.token_symbol();
@@ -614,9 +620,9 @@ impl RosettaRequestHandler {
             // If rosetta mode is not enabled we simply fetched the latest verified block
             RosettaBlocksMode::Disabled => {
                 let blocks = self.ledger.read_blocks().await;
-                let tip_verified_block = blocks.get_latest_verified_hashed_block()?;
-                let genesis_block = blocks.get_hashed_block(&0)?;
-                let first_verified_block = blocks.get_first_verified_hashed_block()?;
+                let tip_verified_block = blocks.get_latest_verified_hashed_block().await?;
+                let genesis_block = blocks.get_hashed_block(&0).await?;
+                let first_verified_block = blocks.get_first_verified_hashed_block().await?;
                 let oldest_block_id = if first_verified_block.index != 0 {
                     Some(convert::block_id(&first_verified_block)?)
                 } else {
@@ -651,7 +657,8 @@ impl RosettaRequestHandler {
                     .ledger
                     .read_blocks()
                     .await
-                    .get_highest_rosetta_block_index()?;
+                    .get_highest_rosetta_block_index()
+                    .await?;
                 // If rosetta blocks mode is enabled we have to check whether the rosetta blocks table has been populated
                 match highest_rosetta_block_index {
                     // If it has been populated we can return the highest rosetta block
@@ -662,7 +669,7 @@ impl RosettaRequestHandler {
                         // If Rosetta Blocks started only after a certain index then the genesis block as well as the first verified block will be the first icp block
                         let genesis_block_id = if first_rosetta_block_index > 0 {
                             let hashed_block =
-                                self.ledger.read_blocks().await.get_hashed_block(&0)?;
+                                self.ledger.read_blocks().await.get_hashed_block(&0).await?;
                             self.hashed_block_to_rosetta_core_block(hashed_block)
                                 .await?
                                 .block_identifier
@@ -749,6 +756,7 @@ impl RosettaRequestHandler {
 
         let block_with_highest_block_index = block_storage
             .get_latest_verified_hashed_block()
+            .await
             .map_err(|e| ApiError::InvalidBlockId(false, format!("{e:?}").into()))?;
 
         let max_block: u64 = request
@@ -805,9 +813,15 @@ impl RosettaRequestHandler {
             "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp
                    FROM blocks WHERE block_idx <= :max_block_idx ",
         );
-        let mut parameters: Vec<(&str, Box<dyn rusqlite::ToSql>)> = Vec::new();
+        let mut parameters: Vec<(String, rusqlite::types::Value)> = Vec::new();
 
-        parameters.push((":max_block_idx", Box::new(start_idx)));
+        parameters.push((
+            // `start_idx` derives from the request's `i64` `max_block` field via
+            // `try_into()`, which rejects negatives, so the value is non-negative
+            // and fits in `i64`; the cast back to `i64` is lossless.
+            ":max_block_idx".to_string(),
+            rusqlite::types::Value::from(start_idx as i64),
+        ));
 
         if let Some(transaction_identifier) = request.transaction_identifier.clone() {
             command.push_str("AND tx_hash = :tx_hash ");
@@ -819,36 +833,42 @@ impl RosettaRequestHandler {
                 })?
                 .as_slice()
                 .to_vec();
-            parameters.push((":tx_hash", Box::new(tx_hash)));
+            parameters.push((
+                ":tx_hash".to_string(),
+                rusqlite::types::Value::from(tx_hash),
+            ));
         }
 
         if let Some(operation_type) = operation_type {
             command.push_str("AND operation_type = :operation_type ");
-            parameters.push((":operation_type", Box::new(operation_type)));
+            parameters.push((
+                ":operation_type".to_string(),
+                rusqlite::types::Value::from(operation_type),
+            ));
         }
 
         if let Some(account) = account_id {
             command.push_str("AND (from_account = :account_id OR to_account = :account_id OR spender_account = :account_id) ");
-            parameters.push((":account_id", Box::new(account.to_hex())));
+            parameters.push((
+                ":account_id".to_string(),
+                rusqlite::types::Value::from(account.to_hex()),
+            ));
         }
 
         command.push_str("ORDER BY block_idx DESC ");
 
         command.push_str("LIMIT :limit ");
-        parameters.push((":limit", Box::new(limit)));
+        parameters.push((
+            // `limit` derives from the request's `i64` `limit` field via
+            // `try_into()`, which rejects negatives, so the value is non-negative
+            // and fits in `i64`; the cast back to `i64` is lossless.
+            ":limit".to_string(),
+            rusqlite::types::Value::from(limit as i64),
+        ));
 
         let blocks = block_storage
-            .get_blocks_by_custom_query(
-                command,
-                parameters
-                    .iter()
-                    .map(|(key, param)| {
-                        let param_ref: &dyn rusqlite::ToSql = param.as_ref();
-                        (key.to_owned(), param_ref)
-                    })
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            )
+            .get_blocks_by_custom_query(command, parameters)
+            .await
             .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {e:?}")))?;
 
         let mut transactions = vec![];
