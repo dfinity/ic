@@ -80,7 +80,7 @@ pub struct ReplicatedStateMetrics {
 
 impl ReplicatedStateMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
-        Self {
+        let metrics = Self {
             canister_balance: cycles_histogram(
                 "canister_balance_cycles",
                 "Canisters balance distribution in Cycles.",
@@ -268,7 +268,26 @@ impl ReplicatedStateMetrics {
                 // 10 s .. 5×10⁶ s (~58 d), plus zero — 19 total buckets (0 + 18 powers).
                 decimal_buckets_with_zero(1, 6),
             ),
-        }
+        };
+
+        // Export the consumed-cycles metrics under their new names as well,
+        // sharing the same underlying metrics. This is a transitional step of
+        // renaming these metrics: the old names can only be dropped once the
+        // new names have been rolled out to all subnets.
+        // TODO: Drop the old names (and these aliases) once the new names have
+        // been rolled out to all subnets.
+        metrics_registry
+            .register_alias(&metrics.consumed_cycles, "replicated_state_consumed_cycles");
+        metrics_registry.register_alias(
+            &metrics.consumed_cycles_by_use_case,
+            "replicated_state_consumed_cycles_by_use_cases",
+        );
+        metrics_registry.register_alias(
+            &metrics.consumed_cycles_by_use_case_as_counters,
+            "replicated_state_consumed_cycles_by_use_cases_as_counters",
+        );
+
+        metrics
     }
 
     fn observe_consumed_cycles_by_use_case(
