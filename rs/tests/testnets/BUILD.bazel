@@ -248,6 +248,7 @@ system_test_nns(
     },
     deps = [
         # Keep sorted.
+        "//rs/nervous_system/common/test_keys",
         "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
@@ -255,6 +256,9 @@ system_test_nns(
         "//rs/tests/nns/nns_dapp",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-utils",
+        "@crate_index//:slog",
     ],
 )
 
