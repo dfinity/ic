@@ -2091,6 +2091,12 @@ async fn migration_completes_after_subnet_deletion() {
                     MigrationStatus::InProgress { .. } => {}
                     MigrationStatus::Succeeded { .. } | MigrationStatus::Failed { .. } => break,
                 }
+                // Advance time in big steps to fast-forward through the state
+                // machine's longest timed wait (the ~360 s wait in
+                // `MigratedCanisterDeleted`) without hundreds of tiny ticks.
+                // The step is kept below `MAX_INGRESS_TTL` (5 min) so a single
+                // jump doesn't leap clear over the ingress-expiry window and
+                // expire in-flight ingress messages.
                 pic.advance_time(Duration::from_secs(250)).await;
                 advance(&pic).await;
             }
