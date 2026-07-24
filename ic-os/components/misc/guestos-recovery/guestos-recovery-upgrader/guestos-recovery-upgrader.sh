@@ -89,8 +89,8 @@ log_message() {
 }
 
 stop_guestos_service() {
-    log_message "Stopping guestos.service for upgrade"
-    systemctl stop guestos.service
+    log_message "Stopping guestos@0.service for upgrade"
+    systemctl stop guestos@0.service
     GUESTOS_SERVICE_STOPPED=true
     RESTART_GUESTOS_SERVICE_ON_EXIT=true
     log_message "GuestOS service stopped"
@@ -99,7 +99,7 @@ stop_guestos_service() {
 start_guestos_service() {
     local reason="$1"
     log_message "$reason"
-    if systemctl start guestos.service; then
+    if systemctl start guestos@0.service; then
         GUESTOS_SERVICE_STOPPED=false
         RESTART_GUESTOS_SERVICE_ON_EXIT=false
         log_message "GuestOS service restarted successfully"
@@ -539,7 +539,7 @@ main() {
         log_message "Recovery hash written to $RECOVERY_FILE"
     fi
 
-    start_guestos_service "Restarting guestos.service after manual upgrade installation"
+    start_guestos_service "Restarting guestos@0.service after manual upgrade installation"
 
     # Log success banner in so that it is visible in manual recovery fallback method
     print_success_banner

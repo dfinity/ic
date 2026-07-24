@@ -466,16 +466,17 @@ impl GuestVmService {
         )
         .context("Could not initialize SEV certificate provider")?;
 
+        let device_string = format!("{GUESTOS_DEVICE}{guest_vm_slot}");
+
         // If this is an Upgrade VM, create a mapped device which protects the data partition of the
         // Guest device.
         let upgrade_mapped_device = (guest_vm_type == GuestVMType::Upgrade)
             .then(|| {
-                create_mapped_device_for_upgrade(Path::new(GUESTOS_DEVICE))
+                create_mapped_device_for_upgrade(Path::new(&device_string))
                     .context("Cannot create mapped device")
             })
             .transpose()?;
 
-        let device_string = format!("{GUESTOS_DEVICE}{guest_vm_slot}");
         let disk_device = upgrade_mapped_device
             .as_ref()
             .map(|x| x.path())
@@ -995,6 +996,16 @@ mod tests {
                 .to_string()
         }
 
+        fn get_disk_path(&self) -> String {
+            let domain = self.get_domain();
+            let vm_config = domain.get_xml_desc(0).unwrap();
+            Regex::new("<source dev='([^']+)' index='1'1/>")
+                .unwrap()
+                .captures(&vm_config)
+                .expect("disk path not found in VM config")[1]
+                .to_string()
+        }
+
         #[allow(dead_code)] // Remove once used
         fn terminate(&self) {
             self.termination_token.cancel();
@@ -1049,6 +1060,7 @@ mod tests {
             let (sev_certificate_provider, sev_certificate_cache_dir) =
                 mock_host_sev_certificate_provider()
                     .expect("Failed to create mock SEV cert provider");
+            let device_string = format!("{GUESTOS_DEVICE}{slot}");
             let mut service = GuestVmService {
                 metrics: GuestVmMetrics::new(metrics_file.path().to_path_buf()).unwrap(),
                 libvirt_connection: self.libvirt_connection.clone(),
@@ -1067,7 +1079,7 @@ mod tests {
                 guest_vm_type,
                 guest_vm_slot: slot,
                 sev_certificate_provider,
-                disk_device: GUESTOS_DEVICE.into(),
+                disk_device: device_string.into(),
                 _upgrade_mapped_device: None,
                 guestos_boot_timeout: self.guestos_boot_timeout,
                 vm_serial_log_path: self.guest_serial_log.path().to_path_buf(),
@@ -1085,7 +1097,7 @@ mod tests {
                 systemd_notifier,
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
-                vm_domain_name: vm_domain_name(guest_vm_type, slot).to_string(),
+                vm_domain_name: vm_domain_name(guest_vm_type, slot),
                 _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
         }
@@ -1276,6 +1288,7 @@ mod tests {
                 .get_kernel_cmdline()
                 .contains("root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7")
         );
+        assert!(service1.get_disk_path() != service2.get_disk_path());
     }
 
     #[tokio::test]
