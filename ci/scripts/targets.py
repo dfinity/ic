@@ -195,7 +195,8 @@ def targets(
     head: str | None,
     bazel_args: list[str],
 ):
-    """Print the bazel targets to build or test to stdout.
+    """
+    Print the bazel targets to build or test to stdout.
 
     `bazel_args` are passed verbatim to `bazel` as startup options (before the `query` subcommand).
     """
