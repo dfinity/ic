@@ -280,11 +280,11 @@ impl ReplicatedStateMetrics {
             .register_alias(&metrics.consumed_cycles, "replicated_state_consumed_cycles");
         metrics_registry.register_alias(
             &metrics.consumed_cycles_by_use_case,
-            "replicated_state_consumed_cycles_by_use_cases",
+            "replicated_state_consumed_cycles_by_use_case",
         );
         metrics_registry.register_alias(
             &metrics.consumed_cycles_by_use_case_as_counters,
-            "replicated_state_consumed_cycles_by_use_cases_as_counters",
+            "replicated_state_consumed_cycles_by_use_case_as_counters",
         );
 
         metrics
