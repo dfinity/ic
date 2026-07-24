@@ -38,7 +38,7 @@ pub fn lookup_or_else_create_canisters(
         }
     };
 
-    println!("SNS canister IDs:\n{:?}", &sns_canister_ids);
+    println!("SNS canister IDs:\n{:?}", sns_canister_ids);
     sns_canister_ids
 }
 
@@ -80,7 +80,7 @@ pub fn get_canister_id(
     verbose: bool,
     network: &String,
 ) -> Option<PrincipalId> {
-    println!("dfx canister --network {} id {}", &network, canister_name);
+    println!("dfx canister --network {} id {}", network, canister_name);
     let output = call_dfx(&["canister", "--network", network, "id", canister_name]);
 
     let canister_id = String::from_utf8(output.stdout)
@@ -136,7 +136,7 @@ where
     file.seek(SeekFrom::Start(0))?;
 
     let mut writer = BufWriter::new(file);
-    writeln!(&mut writer, "{}", &serde_json::to_string_pretty(&new_json)?)?;
+    writeln!(&mut writer, "{}", serde_json::to_string_pretty(&new_json)?)?;
     writer.flush()?;
     Ok(())
 }
@@ -401,7 +401,7 @@ impl DirectSnsDeployerForTests {
         if !output.status.success() {
             panic!(
                 "Failed to add {} as a controller of {}",
-                &controller, canister_name
+                controller, canister_name
             );
         }
     }

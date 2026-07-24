@@ -355,7 +355,7 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             }
             SystemTestBackend::Local => {
                 // No playnet DNS on Local; expose Prometheus/Grafana via raw
-                // IPv6 inside the libvirt network.
+                // IPv6 inside the local backend's network.
                 // TODO: this won't actually work since the nginx on the PrometheusVm is configured using virtualHosts.
                 let deployed_prometheus_vm = env.get_deployed_universal_vm(vm_name).unwrap();
                 let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();

@@ -1620,8 +1620,8 @@ where
 
         let canister_status_result = call_response.map_err(|(code, description)| {
             format!(
-                "Could not get the controllers of {target_canister_id:?} \
-                    due to an error from the replica. {code:?}:{description:?}"
+                "Could not get the controllers of canister {target_canister_id} \
+                due to an error from the replica. {code:?}:{description:?}"
             )
         })?;
 
@@ -4971,8 +4971,8 @@ mod test {
                 canisters: None,
                 error: Some(SnsWasmError {
                     message: "Could not get the controllers of all dapp_canisters for the following reason(s):\n  \
-                    -Could not get the controllers of CanisterId(heic2-yaaaa-aaaaa-aapuq-cai) due to an error from the replica. None:\"Something went wrong\"\n  \
-                    -Could not get the controllers of CanisterId(hnljg-oiaaa-aaaaa-aapva-cai) due to an error from the replica. None:\"Something else went wrong\""
+                    -Could not get the controllers of canister heic2-yaaaa-aaaaa-aapuq-cai due to an error from the replica. None:\"Something went wrong\"\n  \
+                    -Could not get the controllers of canister hnljg-oiaaa-aaaaa-aapva-cai due to an error from the replica. None:\"Something else went wrong\""
                     .to_string(),
                 }),
                 dapp_canisters_transfer_result: Some(DappCanistersTransferResult {

@@ -28,6 +28,7 @@ impl Metrics {
 
 #[tonic::async_trait]
 impl AdapterMetricsService for Metrics {
+    #[allow(clippy::result_large_err)]
     async fn scrape(
         &self,
         _request: Request<ScrapeRequest>,

@@ -145,7 +145,7 @@ impl Farm {
             .override_host_features
             .clone()
             .unwrap_or_else(|| vm.required_host_features.clone());
-        let path = format!("group/{}/vm/{}", group_name, &vm.name);
+        let path = format!("group/{}/vm/{}", group_name, vm.name);
         let rb = Self::json(self.post(&path), &vm);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb)?;

@@ -100,6 +100,30 @@ alias(
     }),
 )
 
+### foundry (anvil) & solc, used by //rs/ethereum/cketh/minter:deposit_from_cex_demo_test
+
+alias(
+    name = "anvil",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@foundry_bin_darwin_arm64//:anvil",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@foundry_bin_darwin_amd64//:anvil",
+        "@bazel_tools//src/conditions:linux_aarch64": "@foundry_bin_linux_arm64//:anvil",
+        "@bazel_tools//src/conditions:linux_x86_64": "@foundry_bin_linux_amd64//:anvil",
+    }),
+)
+
+# The macOS solc download is a universal (x86_64 + arm64) binary, so it serves
+# both Intel and Apple Silicon Macs natively.
+alias(
+    name = "solc",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@solc_0_8_35_macosx_amd64//file",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@solc_0_8_35_macosx_amd64//file",
+        "@bazel_tools//src/conditions:linux_aarch64": "@solc_0_8_35_linux_arm64//file",
+        "@bazel_tools//src/conditions:linux_x86_64": "@solc_0_8_35_linux_amd64//file",
+    }),
+)
+
 genrule(
     name = "dogecoind_stub",
     outs = ["dogecoind_stub.txt"],
@@ -334,5 +358,52 @@ platform(
     constraint_values = [
         "@platforms//os:osx",
         "@platforms//cpu:x86_64",
+    ],
+)
+
+## Extract ovmf firmware from the `ovmf-generic-hwe` `.deb`.
+## This pulls the two firmware files the backend needs
+##   * `OVMF_CODE_4M.fd` -- read-only UEFI code image (shared, mounted read-only)
+##   * `OVMF_VARS_4M.fd` -- template UEFI variable store (copied per-VM on first boot)
+## Note:
+##  `dpkg-deb --fsys-tarfile` streams the package's data tarball as a plain
+##  (uncompressed) tar, regardless of the `.deb`'s internal compression; `tar
+##  -xO` then extracts the single firmware member to stdout.
+
+# OVMF_CODE_4M.fd
+genrule(
+    name = "ovmf_code",
+    srcs = ["@ovmf_deb//file"],
+    outs = ["OVMF_CODE_4M.fd"],
+    cmd = "dpkg-deb --fsys-tarfile $(execpath @ovmf_deb//file) | tar -xO ./usr/share/OVMF/OVMF_CODE_4M.fd > $@",
+    target_compatible_with = [
+        "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
+    ],
+)
+
+# OVMF_VARS_4M.fd
+genrule(
+    name = "ovmf_vars",
+    srcs = ["@ovmf_deb//file"],
+    outs = ["OVMF_VARS_4M.fd"],
+    cmd = "dpkg-deb --fsys-tarfile $(execpath @ovmf_deb//file) | tar -xO ./usr/share/OVMF/OVMF_VARS_4M.fd > $@",
+    target_compatible_with = [
+        "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
+    ],
+)
+
+# OVMF_SEV.fd -- AMD SEV-SNP confidential VM firmware, extracted the same way
+# from the `ovmf-amdsev` `.deb` (see MODULE.bazel for the `ovmf_amdsev_deb`
+# http_file). That package is currently only available in Debian sid
+# (https://packages.debian.org/sid/ovmf-amdsev), hence pulling it from a
+# snapshot.debian.org snapshot rather than a stable release mirror.
+genrule(
+    name = "ovmfsev_code",
+    srcs = ["@ovmf_amdsev_deb//file"],
+    outs = ["OVMF_SEV.fd"],
+    cmd = "dpkg-deb --fsys-tarfile $(execpath @ovmf_amdsev_deb//file) | tar -xO ./usr/share/ovmf/OVMF.amdsev.fd > $@",
+    tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
     ],
 )

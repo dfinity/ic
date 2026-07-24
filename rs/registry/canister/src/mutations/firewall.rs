@@ -156,7 +156,7 @@ pub fn add_firewall_rules_compute_entries(
         .collect();
 
     // Add entries from the front to back (sorting with stable sort)
-    tuples.sort_by(|a, b| a.0.cmp(&b.0));
+    tuples.sort_by_key(|a| a.0);
 
     for (already_inserted_above, (mut pos, rule)) in tuples.into_iter().enumerate() {
         // For every new entry we push the position down by the number of already-inserted entries.

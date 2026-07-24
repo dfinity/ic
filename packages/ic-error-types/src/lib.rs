@@ -97,6 +97,7 @@ impl From<ErrorCode> for RejectCode {
             // Canister errors.
             CanisterInvalidController => CanisterError,
             CanisterInvalidControllerOrSubnetAdmin => CanisterError,
+            CanisterStatusAccessDenied => CanisterError,
             CanisterFunctionNotFound => CanisterError,
             CanisterNonEmpty => CanisterError,
             CanisterTrapped => CanisterError,
@@ -222,6 +223,7 @@ pub enum ErrorCode {
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
     CanisterInvalidControllerOrSubnetAdmin = 541,
+    CanisterStatusAccessDenied = 542,
     // 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -337,6 +339,7 @@ impl UserError {
             | ErrorCode::CanisterStoppingCancelled
             | ErrorCode::CanisterInvalidController
             | ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+            | ErrorCode::CanisterStatusAccessDenied
             | ErrorCode::CanisterFunctionNotFound
             | ErrorCode::CanisterNonEmpty
             | ErrorCode::QueryCallGraphLoopDetected
@@ -442,7 +445,7 @@ mod tests {
                 402, 403, 404, 405, 406, 407, 408, 409, 410,
                 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,
                 517, 520, 521, 522, 524, 525, 526, 527, 528, 529, 530, 531, 532,
-                533, 534, 535, 536, 537, 538, 539, 540, 541,
+                533, 534, 535, 536, 537, 538, 539, 540, 541, 542,
                 601, 602,
             ]
         );

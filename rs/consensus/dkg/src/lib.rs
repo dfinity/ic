@@ -1009,7 +1009,7 @@ mod tests {
                     "Configs: {:?}",
                     summary.dkg.configs
                 );
-                for (dkg_id, _) in summary.dkg.configs.iter() {
+                for dkg_id in summary.dkg.configs.keys() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
                 assert_eq!(summary.dkg.transcripts_for_remote_subnets.len(), 0);
@@ -1568,7 +1568,7 @@ mod tests {
                         PoolReader::new(&pool_1).get_highest_finalized_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                         assert_eq!(summary.dkg.configs.len(), 2);
-                        for (dkg_id, _) in summary.dkg.configs.iter() {
+                        for dkg_id in summary.dkg.configs.keys() {
                             assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                         }
                     } else {

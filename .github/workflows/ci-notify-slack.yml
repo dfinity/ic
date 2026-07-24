@@ -10,8 +10,6 @@ jobs:
   notify-slack:
     name: Notify Slack
     runs-on: ubuntu-latest
-    # TODO: Remove this when we no longer have a feature branch
-    if: github.event.pull_request.base.ref != 'feat-ai-on-engines'
     steps:
       # Sanitize PR title for Slack (<, >, &)
       - name: Sanitize PR title

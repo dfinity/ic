@@ -22,5 +22,5 @@ slog = { workspace = true }
 hex = { workspace = true }
 ic-protobuf-generator = { path = "./generator" }
 ic-test-utilities-compare-dirs = { path = "../test_utilities/compare_dirs" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 tempfile = { workspace = true }

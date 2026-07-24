@@ -59,7 +59,7 @@ index 5584f44..42f84d5 100644
          },
      }
  }
-@@ -152,13 +152,53 @@ fn spawnWindows(arena: mem.Allocator, params: ExecParams) u8 {
+@@ -152,13 +152,59 @@ fn spawnWindows(arena: mem.Allocator, params: ExecParams) u8 {
      }
  }
 
@@ -71,10 +71,16 @@ index 5584f44..42f84d5 100644
 -    );
 -    return 1;
 +fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
-+    // Build a strip command
++    // Build a strip command. Use an absolute path: this wrapper also runs at
++    // rustdoc doc-test time where the environment is cleared (no PATH), so a
++    // bare "strip" would fail to resolve with error.FileNotFound.
++    const strip_bin = for ([_][]const u8{ "/usr/bin/strip", "/bin/strip" }) |p| {
++        std.fs.accessAbsolute(p, .{}) catch continue;
++        break p;
++    } else return fatal("strip binary not found (checked /usr/bin/strip and /bin/strip)\n", .{});
 +    const strip_cmd = blk: {
 +        var list = ArrayListUnmanaged([]const u8){};
-+        list.appendSlice(arena, &[_][]const u8{ "strip", "-S" }) catch |err| {
++        list.appendSlice(arena, &[_][]const u8{ strip_bin, "-S" }) catch |err| {
 +            return fatal("error building strip cmd: {s}\n", .{@errorName(err)});
 +        };
 +

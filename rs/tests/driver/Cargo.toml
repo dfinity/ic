@@ -85,7 +85,7 @@ lazy_static = { workspace = true }
 libc = { workspace = true }
 macaddr = { workspace = true }
 nix = { workspace = true }
-num_cpus = "1.13.1"
+num_cpus = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
 rand = { workspace = true }
@@ -94,7 +94,7 @@ rcgen = { workspace = true }
 regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
-ring = { version = "0.17.7", features = ["std"] }
+ring = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -112,7 +112,6 @@ time = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
-virt = { workspace = true }
 walkdir = { workspace = true }
 wat = { workspace = true }
 zstd = { workspace = true }

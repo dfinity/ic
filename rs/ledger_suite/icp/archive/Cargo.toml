@@ -14,7 +14,7 @@ ic-cdk = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
 ic-ledger-core = { path = "../../common/ledger_core" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 icp-ledger = { path = "../" }
 serde = { workspace = true }

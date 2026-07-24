@@ -1,4 +1,4 @@
-use backoff::backoff::Backoff;
+use backon::{BackoffBuilder, ExponentialBuilder};
 use candid::Principal;
 use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity, candid_one};
@@ -42,17 +42,15 @@ const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(10);
 const BACKOFF_INTERVAL_MULTIPLIER: f64 = 1.1;
 const MAX_ELAPSED_TIME: Duration = Duration::from_secs(60 * 5); // 5 minutes
 
-pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
-    backoff::ExponentialBackoff {
-        initial_interval: MIN_BACKOFF_INTERVAL,
-        current_interval: MIN_BACKOFF_INTERVAL,
-        randomization_factor: 0.1,
-        multiplier: BACKOFF_INTERVAL_MULTIPLIER,
-        start_time: std::time::Instant::now(),
-        max_interval: MAX_BACKOFF_INTERVAL,
-        max_elapsed_time: Some(MAX_ELAPSED_TIME),
-        clock: backoff::SystemClock::default(),
-    }
+pub fn get_backoff_policy() -> backon::ExponentialBackoff {
+    ExponentialBuilder::new()
+        .with_min_delay(MIN_BACKOFF_INTERVAL)
+        .with_max_delay(MAX_BACKOFF_INTERVAL)
+        .with_factor(BACKOFF_INTERVAL_MULTIPLIER as f32)
+        .with_jitter()
+        .with_total_delay(Some(MAX_ELAPSED_TIME))
+        .without_max_times()
+        .build()
 }
 
 #[derive(Clone)]
@@ -229,7 +227,7 @@ impl Wasm {
                     eprintln!(
                         "Installation of wasm into canister with ID: {canister_id} failed with: {e}"
                     );
-                    match backoff.next_backoff() {
+                    match backoff.next() {
                         Some(interval) => {
                             tokio::time::sleep(interval).await;
                         }
@@ -258,13 +256,13 @@ where
     loop {
         match f().await {
             Ok(v) => return Ok(v),
-            Err(e) => match backoff.next_backoff() {
+            Err(e) => match backoff.next() {
                 Some(interval) => {
-                    eprintln!("Retrying due to: {}", &e);
+                    eprintln!("Retrying due to: {}", e);
                     tokio::time::sleep(interval).await;
                 }
                 None => {
-                    eprintln!("Failed due to: {}", &e);
+                    eprintln!("Failed due to: {}", e);
                     return Err(e);
                 }
             },
@@ -769,6 +767,8 @@ impl<'a> Canister<'a> {
                         freezing_threshold: None,
                         reserved_cycles_limit: None,
                         log_visibility: None,
+                        log_memory_limit: None,
+                        snapshot_visibility: None,
                         wasm_memory_limit: None,
                         wasm_memory_threshold: None,
                         environment_variables: None,
@@ -1108,7 +1108,7 @@ impl<'a> Install<'a> {
             self.wasm.0.clone(),
             payload,
         );
-        eprintln!("Install args: {}", &install_args);
+        eprintln!("Install args: {}", install_args);
         match self.runtime {
             Runtime::Local(local_runtime) => local_runtime
                 .install_canister_helper_async(install_args)

@@ -23,7 +23,7 @@ use ic_replicated_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
-        testing::NetworkTopologyTesting,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
@@ -148,25 +148,25 @@ impl ReplicatedStateBuilder {
             )
             .unwrap();
 
-        state
-            .metadata
-            .network_topology
-            .set_routing_table(routing_table);
-        state.metadata.network_topology.subnets_mut().insert(
-            self.subnet_id,
-            SubnetTopology {
-                public_key: vec![],
-                nodes: self.node_ids.into_iter().collect(),
-                subnet_type: self.subnet_type,
-                subnet_features: self.subnet_features,
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            },
-        );
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+            network_topology.subnets_mut().insert(
+                self.subnet_id,
+                SubnetTopology {
+                    public_key: vec![],
+                    nodes: self.node_ids.into_iter().collect(),
+                    subnet_type: self.subnet_type,
+                    subnet_features: self.subnet_features,
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                },
+            );
+        });
 
         state.metadata.batch_time = self.batch_time;
-        state.metadata.own_subnet_features = self.subnet_features;
+        std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).subnet_features =
+            self.subnet_features;
 
         state.epoch_query_stats = self.query_stats;
 
@@ -609,6 +609,7 @@ impl Default for ExecutionStateBuilder {
         ExecutionStateBuilder {
             execution_state: ExecutionState::new(
                 WasmBinary::new(CanisterModule::new(vec![])),
+                None,
                 ExportedFunctions::new(BTreeSet::new()),
                 Memory::new_for_testing(),
                 Memory::new_for_testing(),
@@ -789,17 +790,19 @@ pub fn get_initial_state_with_balance(
 
         state.put_canister_state(canister_state_builder.build());
     }
-    state.metadata.network_topology.set_routing_table({
-        let mut rt = ic_registry_routing_table::RoutingTable::new();
-        rt.insert(
-            ic_registry_routing_table::CanisterIdRange {
-                start: CanisterId::from(0),
-                end: CanisterId::from(u64::MAX),
-            },
-            subnet_test_id(1),
-        )
-        .unwrap();
-        rt
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table({
+            let mut rt = ic_registry_routing_table::RoutingTable::new();
+            rt.insert(
+                ic_registry_routing_table::CanisterIdRange {
+                    start: CanisterId::from(0),
+                    end: CanisterId::from(u64::MAX),
+                },
+                subnet_test_id(1),
+            )
+            .unwrap();
+            rt
+        });
     });
     state
 }
@@ -1226,8 +1229,9 @@ fn new_replicated_state_with_output_queues(
         .unwrap();
     replicated_state
         .metadata
-        .network_topology
-        .set_routing_table(routing_table);
+        .modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+        });
 
     replicated_state.put_canister_states(CanisterStates::new(canister_states));
     if let Some(subnet_queues) = subnet_queues {

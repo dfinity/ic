@@ -26,7 +26,7 @@ use ic_system_test_driver::{
     },
     util::{UniversalCanister, block_on},
 };
-use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use ic_utils::interfaces::ManagementCanister;
 use slog::info;
 use std::{ops::Range, time::Duration};
 
@@ -101,7 +101,8 @@ fn query_stats_fault_tolerance(
 
         let query_stats = ManagementCanister::create(agents.first().unwrap())
             .canister_status(&uc_id)
-            .call_and_wait()
+            .as_update()
+            .call()
             .await
             .unwrap()
             .0

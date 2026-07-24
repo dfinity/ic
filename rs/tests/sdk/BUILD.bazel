@@ -23,7 +23,7 @@ rust_library(
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
-        "@crate_index//:backoff",
+        "@crate_index//:backon",
         "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",

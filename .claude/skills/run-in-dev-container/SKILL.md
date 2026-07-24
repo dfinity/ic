@@ -1,6 +1,6 @@
 ---
 name: run-in-dev-container
-description: Use when you need to run a command (build, test, tool) inside the IC dev container via ./ci/container/container-run.sh — including on a host that has Docker but not podman (set CONTAINER_RUNTIME=docker).
+description: Use when you need to run a command (build, test, tool) inside the IC dev container via ./ci/container/container-run.sh — including on a host that has Docker but not podman (set CONTAINER_RUNTIME=docker) — or when you need to keep a namespace.so devbox awake during long-running work.
 ---
 
 # Running commands in the IC dev container
@@ -51,3 +51,24 @@ runtime's daemon isn't reachable it prints which command it tried.
 - Anything the command writes under `/ic` (or `~/.cache`) persists on the host,
   since those are bind-mounted.
 - Don't nest: the script refuses to run inside an existing container.
+
+## Keeping a namespace.so devbox awake for long-running work
+
+On a namespace.so devbox (`test -d /.namespace`), the machine can go to sleep
+during a long unattended operation — a multi-minute `bazel build`/`bazel
+test`, a container image build/pull, etc. — killing it partway through.
+
+Before starting long-running work, create the marker file:
+
+```sh
+mkdir -p /.namespace/tasks && touch /.namespace/tasks/stay-live
+```
+
+and remove it once the work is done, so the devbox is allowed to sleep again:
+
+```sh
+rm -f /.namespace/tasks/stay-live
+```
+
+This is independent of whether the work itself runs inside the dev container
+or directly on the host.

@@ -8,7 +8,7 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig, SubnetConfig},
+    subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::{
@@ -40,7 +40,9 @@ use ic_replicated_state::{
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, NumWasmPages,
     OutputRequest, ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
-    metadata_state::testing::NetworkTopologyTesting,
+    metadata_state::testing::{
+        NetworkTopologyTesting, SystemMetadataTesting, heap_delta_capacity_for_message_memory,
+    },
     metrics::ReplicatedStateMetrics,
     num_bytes_try_from,
     page_map::TestPageAllocatorFileDescriptorImpl,
@@ -813,7 +815,7 @@ pub(crate) struct SchedulerTestBuilder {
     hypervisor_config: HypervisorConfig,
     initial_canister_cycles: Cycles,
     subnet_memory_capacity: u64,
-    subnet_guaranteed_response_message_memory: u64,
+    maximum_state_delta: Option<NumBytes>,
     subnet_callback_soft_limit: usize,
     canister_guaranteed_callback_quota: usize,
     registry_settings: RegistryExecutionSettings,
@@ -845,9 +847,7 @@ impl Default for SchedulerTestBuilder {
             hypervisor_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_memory_capacity: config.subnet_memory_capacity.get(),
-            subnet_guaranteed_response_message_memory: config
-                .guaranteed_response_message_memory_capacity
-                .get(),
+            maximum_state_delta: None,
             subnet_callback_soft_limit: config.subnet_callback_soft_limit,
             canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
             registry_settings: test_registry_settings(),
@@ -891,7 +891,9 @@ impl SchedulerTestBuilder {
         subnet_guaranteed_response_message_memory: u64,
     ) -> Self {
         Self {
-            subnet_guaranteed_response_message_memory,
+            maximum_state_delta: Some(heap_delta_capacity_for_message_memory(NumBytes::new(
+                subnet_guaranteed_response_message_memory,
+            ))),
             ..self
         }
     }
@@ -981,13 +983,15 @@ impl SchedulerTestBuilder {
         }).unwrap();
 
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
+        {
+            let own_subnet_info = std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info);
+            own_subnet_info.resource_limits.maximum_state_delta = self.maximum_state_delta;
+        }
 
         let mut registry_settings = self.registry_settings;
 
-        state
-            .metadata
-            .network_topology
-            .set_subnets(generate_subnets(
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(generate_subnets(
                 vec![self.own_subnet_id, self.nns_subnet_id],
                 self.nns_subnet_id,
                 None,
@@ -997,30 +1001,26 @@ impl SchedulerTestBuilder {
                 self.cost_schedule,
                 self.subnet_admins,
             ));
-        state
-            .metadata
-            .network_topology
-            .set_routing_table(routing_table);
-        state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
+            network_topology.set_routing_table(routing_table);
+            network_topology.nns_subnet_id = self.nns_subnet_id;
+        });
         state.metadata.batch_time = self.batch_time;
 
         let mut subnet_config = SubnetConfig::new(self.subnet_type);
         subnet_config.scheduler_config = self.scheduler_config.clone();
 
         for key_id in &self.master_public_key_ids {
-            state
-                .metadata
-                .network_topology
-                .chain_key_enabled_subnets
-                .insert(key_id.clone(), vec![self.own_subnet_id]);
-            state
-                .metadata
-                .network_topology
-                .subnets_mut()
-                .get_mut(&self.own_subnet_id)
-                .unwrap()
-                .chain_keys_held
-                .insert(key_id.clone());
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology
+                    .chain_key_enabled_subnets
+                    .insert(key_id.clone(), vec![self.own_subnet_id]);
+                network_topology
+                    .subnets_mut()
+                    .get_mut(&self.own_subnet_id)
+                    .unwrap()
+                    .chain_keys_held
+                    .insert(key_id.clone());
+            });
 
             registry_settings.chain_key_settings.insert(
                 key_id.clone(),
@@ -1066,9 +1066,6 @@ impl SchedulerTestBuilder {
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::new(self.subnet_memory_capacity),
-            guaranteed_response_message_memory_capacity: NumBytes::new(
-                self.subnet_guaranteed_response_message_memory,
-            ),
             // Keep it simple, no memory reservation for responses.
             subnet_memory_reservation: NumBytes::new(0),
             subnet_callback_soft_limit: self.subnet_callback_soft_limit,
@@ -1078,10 +1075,7 @@ impl SchedulerTestBuilder {
             embedders_config: self.hypervisor_config.clone(),
             ..ic_config::execution_environment::Config::default()
         };
-        let wasm_executor = Arc::new(TestWasmExecutor::new(
-            Arc::clone(&cycles_account_manager),
-            registry_settings.subnet_size,
-        ));
+        let wasm_executor = Arc::new(TestWasmExecutor::new(Arc::clone(&cycles_account_manager)));
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let state_manager = Arc::new(FakeStateManager::new());
 
@@ -1109,7 +1103,6 @@ impl SchedulerTestBuilder {
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
-            config.log_memory_store_feature,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
 
@@ -1253,12 +1246,9 @@ struct TestWasmExecutor {
 }
 
 impl TestWasmExecutor {
-    fn new(cycles_account_manager: Arc<CyclesAccountManager>, subnet_size: usize) -> Self {
+    fn new(cycles_account_manager: Arc<CyclesAccountManager>) -> Self {
         Self {
-            core: Mutex::new(TestWasmExecutorCore::new(
-                cycles_account_manager,
-                subnet_size,
-            )),
+            core: Mutex::new(TestWasmExecutorCore::new(cycles_account_manager)),
         }
     }
 }
@@ -1318,12 +1308,11 @@ struct TestWasmExecutorCore {
     schedule: Vec<(ExecutionRound, CanisterId, NumInstructions)>,
     next_message_id: u32,
     round: ExecutionRound,
-    subnet_size: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
 impl TestWasmExecutorCore {
-    fn new(cycles_account_manager: Arc<CyclesAccountManager>, subnet_size: usize) -> Self {
+    fn new(cycles_account_manager: Arc<CyclesAccountManager>) -> Self {
         Self {
             messages: HashMap::new(),
             system_tasks: HashMap::new(),
@@ -1331,7 +1320,6 @@ impl TestWasmExecutorCore {
             next_message_id: 0,
             round: ExecutionRound::new(0),
             cycles_account_manager,
-            subnet_size,
         }
     }
 
@@ -1455,6 +1443,7 @@ impl TestWasmExecutorCore {
         }
         let execution_state = ExecutionState::new(
             execution_state::WasmBinary::new(canister_module),
+            None,
             ExportedFunctions::new(exported_functions.into_iter().collect()),
             Memory::new_for_testing(),
             Memory::new_for_testing(),
@@ -1505,11 +1494,7 @@ impl TestWasmExecutorCore {
         let call_message_id = self.next_message_id();
         let response_message_id = self.next_message_id();
         let closure = WasmClosure::new(0, response_message_id.into());
-        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
-            self.subnet_size,
-            system_state.cost_schedule(),
-            DEFAULT_REFERENCE_SUBNET_SIZE,
-        );
+        let subnet_cycles_config = system_state.subnet_cycles_config();
         let prepayment_for_response_execution = self
             .cycles_account_manager
             .prepayment_for_response_execution(

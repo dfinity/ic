@@ -6,7 +6,7 @@ use crate::canister_manager::types::{
 };
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
-use crate::execution::common::validate_controller;
+use crate::execution::common::{list_canisters, validate_controller};
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
 use crate::execution_environment_metrics::{
@@ -532,8 +532,9 @@ impl ExecutionEnvironment {
             self.subnet_memory_capacity(state.resource_limits()).get() as i64
                 - self.config.subnet_memory_reservation.get() as i64
                 - memory_taken.execution().get() as i64,
-            self.config
-                .guaranteed_response_message_memory_capacity
+            state
+                .metadata
+                .guaranteed_response_message_memory_capacity()
                 .get() as i64
                 - memory_taken.guaranteed_response_messages().get() as i64,
             self.config
@@ -572,8 +573,9 @@ impl ExecutionEnvironment {
         &self,
         state: &ReplicatedState,
     ) -> i64 {
-        self.config
-            .guaranteed_response_message_memory_capacity
+        state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
             .get() as i64
             - state.guaranteed_response_message_memory_taken().get() as i64
     }
@@ -664,7 +666,7 @@ impl ExecutionEnvironment {
             None => {
                 let err = UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 );
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
@@ -1083,6 +1085,27 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::ListCanisters) => match &msg {
+                CanisterCall::Request(_) => {
+                    // Only deduct round instructions for building the response
+                    // (i.e. the canister ID range computation) when access
+                    // control succeeds; a rejected call must not consume round
+                    // instructions.
+                    let res =
+                        list_canisters(&state, msg.sender(), payload).map(|(res, instructions)| {
+                            round_limits.instructions -= as_round_instructions(instructions);
+                            (res, None)
+                        });
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::ListCanisters)
+                }
+            },
+
             Ok(Ic00Method::CanisterInfo) => match &msg {
                 CanisterCall::Request(_) => {
                     let res = CanisterInfoRequest::decode(payload).and_then(|record| {
@@ -1217,58 +1240,87 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::FlexibleHttpRequest) => match self.config.flexible_http_requests {
-                FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
-                    response: Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    )),
-                    refund: msg.take_cycles(),
-                },
-                FlagStatus::Enabled => match &msg {
-                    CanisterCall::Request(request) => {
-                        match FlexibleCanisterHttpRequestArgs::decode(payload) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: msg.take_cycles(),
-                            },
-                            Ok(args) => {
-                                match CanisterHttpRequestContext::generate_from_flexible_args(
-                                    state.time(),
-                                    request.as_ref(),
-                                    args,
-                                    &registry_settings.node_ids,
-                                    registry_settings.registry_version,
-                                    rng,
-                                ) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err.into()),
-                                        refund: msg.take_cycles(),
-                                    },
-                                    Ok(canister_http_request_context) => match self
-                                        .try_add_http_context_to_replicated_state(
-                                            canister_http_request_context,
-                                            &mut state,
-                                            request.as_ref(),
-                                            since,
-                                        ) {
+            Ok(Ic00Method::FlexibleHttpRequest) => {
+                // Flexible HTTP outcalls are priced with the pay-as-you-go
+                // pricing model. That model is gated behind the
+                // `flexible_http_requests` feature flag and, once enabled,
+                // applies to every subnet. Until then, flexible outcalls are
+                // still offered on subnets where HTTP outcalls are free (pricing
+                // is moot), by falling back to the legacy
+                // (charge-everything-up-front) pricing. That covers subnets on a
+                // free cost schedule as well as system subnets, which charge
+                // zero for HTTP outcalls despite a normal cost schedule. On
+                // paying subnets flexible outcalls remain unavailable until the
+                // flag is enabled, since legacy pricing would overcharge them
+                // (it charges the maximum response size up front).
+                let http_outcalls_are_free =
+                    self.http_outcalls_are_free(state.get_own_cost_schedule());
+                let pricing_version = match self.config.flexible_http_requests {
+                    FlagStatus::Enabled => Some(PricingVersion::PayAsYouGo),
+                    FlagStatus::Disabled if http_outcalls_are_free => Some(PricingVersion::Legacy),
+                    FlagStatus::Disabled => None,
+                };
+                match pricing_version {
+                    None => ExecuteSubnetMessageResult::Finished {
+                        response: Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet".to_string(),
+                        )),
+                        refund: msg.take_cycles(),
+                    },
+                    Some(pricing_version) => match &msg {
+                        CanisterCall::Request(request) => {
+                            match FlexibleCanisterHttpRequestArgs::decode(payload) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: msg.take_cycles(),
+                                },
+                                Ok(args) => {
+                                    let cost_schedule = match self.own_subnet_type {
+                                        SubnetType::System => CanisterCyclesCostSchedule::Free,
+                                        SubnetType::Application
+                                        | SubnetType::VerifiedApplication
+                                        | SubnetType::CloudEngine => state.get_own_cost_schedule(),
+                                    };
+                                    match CanisterHttpRequestContext::generate_from_flexible_args(
+                                        state.time(),
+                                        request.as_ref(),
+                                        args,
+                                        &registry_settings.node_ids,
+                                        registry_settings.registry_version,
+                                        cost_schedule,
+                                        rng,
+                                        pricing_version,
+                                    ) {
                                         Err(err) => ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
+                                            response: Err(err.into()),
                                             refund: msg.take_cycles(),
                                         },
-                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
-                                    },
+                                        Ok(canister_http_request_context) => match self
+                                            .try_add_http_context_to_replicated_state(
+                                                canister_http_request_context,
+                                                &mut state,
+                                                request.as_ref(),
+                                                since,
+                                            ) {
+                                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                                response: Err(err),
+                                                refund: msg.take_cycles(),
+                                            },
+                                            Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                        },
+                                    }
                                 }
                             }
                         }
-                    }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
-                    }
-                },
-            },
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
+                        }
+                    },
+                }
+            }
 
-            Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
+            Ok(Ic00Method::HttpRequest) => match state.subnet_features().http_requests {
                 true => match &msg {
                     CanisterCall::Request(request) => {
                         match CanisterHttpRequestArgs::decode(payload) {
@@ -1277,12 +1329,19 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                             },
                             Ok(args) => {
+                                let cost_schedule = match self.own_subnet_type {
+                                    SubnetType::System => CanisterCyclesCostSchedule::Free,
+                                    SubnetType::Application
+                                    | SubnetType::VerifiedApplication
+                                    | SubnetType::CloudEngine => state.get_own_cost_schedule(),
+                                };
                                 match CanisterHttpRequestContext::generate_from_args(
                                     state.time(),
                                     request.as_ref(),
                                     args,
                                     &registry_settings.node_ids,
                                     registry_settings.registry_version,
+                                    cost_schedule,
                                     rng,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
@@ -1840,18 +1899,14 @@ impl ExecutionEnvironment {
                                 },
                                 Ok(args) => {
                                     let canister_id = args.get_canister_id();
-                                    let subnet_cycles_config = state.get_own_subnet_cycles_config();
                                     self.execute_mgmt_operation_on_canister(
                                         canister_id,
-                                        |canister, msg, _round_limits, _consumed_cycles| {
+                                        |canister, _msg, round_limits, _consumed_cycles| {
                                             fetch_canister_logs(
                                                 sender,
                                                 canister,
                                                 args,
-                                                self.config.log_memory_store_feature,
-                                                msg,
-                                                &self.cycles_account_manager,
-                                                subnet_cycles_config,
+                                                round_limits,
                                             )
                                         },
                                         &mut state,
@@ -2114,6 +2169,14 @@ impl ExecutionEnvironment {
         }
     }
 
+    /// Returns whether HTTP outcalls are free on this subnet, i.e. the subnet
+    /// charges nothing for them. This is true on a free cost schedule, and on
+    /// system subnets.
+    fn http_outcalls_are_free(&self, cost_schedule: CanisterCyclesCostSchedule) -> bool {
+        cost_schedule == CanisterCyclesCostSchedule::Free
+            || self.own_subnet_type == SubnetType::System
+    }
+
     fn try_add_http_context_to_replicated_state(
         &self,
         mut canister_http_request_context: CanisterHttpRequestContext,
@@ -2183,12 +2246,17 @@ impl ExecutionEnvironment {
             ));
         }
 
+        let http_outcalls_are_free = self.http_outcalls_are_free(cost_schedule);
+
         // The refundable cycles are everything the payment covers beyond the
-        // base fee; on a free cost schedule nothing is charged, so nothing is
+        // base fee; when the outcall is free nothing is charged, so nothing is
         // refundable. We set the refund status even for legacy pricing in order
-        // to enable observability during the dark launch. However, nothing will
-        // actually be refunded for legacy pricing.
-        let refundable_cycles = if cost_schedule == CanisterCyclesCostSchedule::Free {
+        // to enable observability during the dark launch. However, nothing is
+        // refunded via the `refund_status` mechanism under legacy pricing; the
+        // caller is instead refunded the unspent `request.payment` (the full
+        // payment on free/system subnets, where the legacy fee is zero) when the
+        // response is delivered.
+        let refundable_cycles = if http_outcalls_are_free {
             Cycles::new(0)
         } else {
             canister_http_request_context.request.payment - base_fee.real()
@@ -2214,9 +2282,9 @@ impl ExecutionEnvironment {
             }
             PricingVersion::PayAsYouGo => {
                 // Take out the entire payment upfront; the refundable portion is
-                // returned later via the refund mechanism. On a free cost
-                // schedule there is nothing to charge.
-                if cost_schedule != CanisterCyclesCostSchedule::Free {
+                // returned later via the refund mechanism. When the outcall is
+                // free there is nothing to charge.
+                if !http_outcalls_are_free {
                     canister_http_request_context.request.payment.take();
                 }
             }
@@ -2680,7 +2748,7 @@ impl ExecutionEnvironment {
             None => {
                 let err = UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 );
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
@@ -2972,7 +3040,7 @@ impl ExecutionEnvironment {
             return ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 )),
                 refund: msg.take_cycles(),
             };
@@ -3448,8 +3516,7 @@ impl ExecutionEnvironment {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory =
-            full_subnet_memory_capacity(&self.config, state.resource_limits());
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config, &state);
         let execution_parameters = self.execution_parameters(
             canister_state,
             instruction_limits,
@@ -3465,7 +3532,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             subnet_available_memory,
             &self.hypervisor,
-            Arc::new(state.metadata.network_topology.clone()),
+            Arc::clone(&state.metadata.network_topology),
             &self.log,
             &self.metrics.state_changes_error,
             metrics,
@@ -4130,7 +4197,7 @@ impl ExecutionEnvironment {
             prepaid_execution_cycles,
             old_canister,
             state.time(),
-            Arc::new(state.metadata.network_topology.clone()),
+            Arc::clone(&state.metadata.network_topology),
             execution_parameters,
             round_limits,
             compilation_cost_handling,
@@ -4177,7 +4244,7 @@ impl ExecutionEnvironment {
                         }
                         info!(
                             self.log,
-                            "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
+                            "Finished executing install_code message on canister {} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
                             canister_id,
                             execution_duration,
                             result.old_wasm_hash,
@@ -4190,7 +4257,7 @@ impl ExecutionEnvironment {
                     Err(err) => {
                         info!(
                             self.log,
-                            "Finished executing install_code message on canister {:?} after {:?} with error: {:?}, instructions consumed {}",
+                            "Finished executing install_code message on canister {} after {:?} with error: {:?}, instructions consumed {}",
                             canister_id,
                             execution_duration,
                             err,
@@ -4308,7 +4375,7 @@ impl ExecutionEnvironment {
                     ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
                 };
                 let round = RoundContext {
-                    network_topology: Arc::new(state.metadata.network_topology.clone()),
+                    network_topology: Arc::clone(&state.metadata.network_topology),
                     hypervisor: &self.hypervisor,
                     cycles_account_manager: &self.cycles_account_manager,
                     counters: round_counters,
@@ -4447,6 +4514,7 @@ impl ExecutionEnvironment {
                 .apply_ingress_induction_cycles_debit(
                     canister_id,
                     cost_schedule,
+                    true, // strict
                     log,
                     &self.metrics.charging_from_balance_error,
                 );
@@ -4834,13 +4902,17 @@ impl CompilationCostHandling {
 /// Returns the subnet's configured memory capacity (ignoring current usage).
 pub(crate) fn full_subnet_memory_capacity(
     config: &ExecutionConfig,
-    resource_limits: ResourceLimits,
+    state: &ReplicatedState,
 ) -> SubnetAvailableMemory {
     SubnetAvailableMemory::new_scaled(
-        resource_limits
+        state
+            .resource_limits()
             .maximum_state_size_or(config.subnet_memory_capacity)
             .get() as i64,
-        config.guaranteed_response_message_memory_capacity.get() as i64,
+        state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
+            .get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
         NonZeroU64::new(1).expect("scaling_factor must be non zero"),
     )
@@ -4854,7 +4926,7 @@ fn get_canister(
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} not found.", &canister_id),
+            format!("Canister {} not found.", canister_id),
         )),
     }
 }
@@ -4871,7 +4943,7 @@ fn canister_make_mut(
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} not found.", &canister_id),
+            format!("Canister {} not found.", canister_id),
         )),
     }
 }

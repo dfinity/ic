@@ -45,7 +45,7 @@ fn public_keys_should_have_a_nice_debug_representation() {
             signing_canister_id: CanisterId::from_u64(42),
             seed: vec![1, 2, 3, 4],
         },
-        "PublicKey{ signing_canister_id: CanisterId(xbgkv-fyaaa-aaaaa-aaava-cai), seed: AQIDBA== }",
+        "PublicKey{ signing_canister_id: CanisterId { is_u64: true, id: xbgkv-fyaaa-aaaaa-aaava-cai }, seed: AQIDBA== }",
     )];
     for (value, formatted) in test_vectors {
         assert_eq!(format!("{value:?}"), *formatted);

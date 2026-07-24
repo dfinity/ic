@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 bincode = { workspace = true }
-byteorder = "1.3.4"
+byteorder = { workspace = true }
 clap = { workspace = true }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
@@ -51,7 +51,7 @@ ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 rand = { workspace = true }
 slog-async = { workspace = true }
-slog-envlogger = "2.2.0"
+slog-envlogger = { workspace = true }
 slog-term = { workspace = true }
 
 [[bench]]

@@ -15,7 +15,7 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-colored = "2.0.0"
+colored = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
@@ -25,7 +25,7 @@ ic-nervous-system-common-test-keys = { path = "../../common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
 itertools = { workspace = true }
-rgb = "0.8.37"
+rgb = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

@@ -1,12 +1,10 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::{
-    Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE, LOG_MEMORY_STORE_FEATURE_ENABLED,
-    TEST_DEFAULT_LOG_MEMORY_USAGE,
+    Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE_ENABLED, TEST_DEFAULT_LOG_MEMORY_USAGE,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_execution_environment::units::{KIB, MIB};
-use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -19,11 +17,9 @@ use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
-use ic_test_utilities_execution_environment::{
-    ExecutionTestBuilder, get_reject, get_reply, wat_canister, wat_fn,
-};
+use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
-use ic_types::{CanisterId, CanisterLog, NumInstructions, ingress::WasmResult};
+use ic_types::{CanisterId, NumInstructions, ingress::WasmResult};
 use ic_types_cycles::Cycles;
 use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
@@ -102,7 +98,6 @@ fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachi
         subnet_config,
         ExecutionConfig {
             replicated_inter_canister_log_fetch,
-            log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
             ..Default::default()
         },
     );
@@ -182,8 +177,9 @@ fn fetch_canister_logs_intercanister(
     env: &StateMachine,
     universal_canister: CanisterId,
     canister_id: CanisterId,
-    cycles: Cycles,
 ) -> Result<WasmResult, UserError> {
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated),
+    // so no cycles are attached.
     env.execute_ingress(
         universal_canister,
         "update",
@@ -194,7 +190,7 @@ fn fetch_canister_logs_intercanister(
                 call_args()
                     .other_side(FetchCanisterLogsRequest::new(canister_id).encode())
                     .on_reject(wasm().reject_message().reject()),
-                cycles,
+                Cycles::new(0),
             )
             .build(),
     )
@@ -204,9 +200,8 @@ fn fetch_log_records_intercanister(
     env: &StateMachine,
     universal_canister: CanisterId,
     canister_id: CanisterId,
-    cycles: Cycles,
 ) -> Vec<CanisterLogRecord> {
-    let reply = fetch_canister_logs_intercanister(env, universal_canister, canister_id, cycles);
+    let reply = fetch_canister_logs_intercanister(env, universal_canister, canister_id);
     FetchCanisterLogsResponse::decode(&get_reply(reply))
         .unwrap()
         .canister_log_records
@@ -1950,12 +1945,7 @@ fn test_metric_fetch_canister_logs_via_update_call() {
     );
 
     assert_eq!(count(&env), 0);
-    let _ = fetch_canister_logs_intercanister(
-        &env,
-        canister_a,
-        canister_b,
-        Cycles::new(50_000_000_000),
-    );
+    let _ = fetch_canister_logs_intercanister(&env, canister_a, canister_b);
     assert_eq!(count(&env), 1);
 }
 
@@ -2314,8 +2304,6 @@ fn test_canister_resize_up_preserves_logs() {
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
-    let fetch_cycles = Cycles::new(100_000_000_000);
-
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
@@ -2335,8 +2323,7 @@ fn test_canister_resize_up_preserves_logs() {
     );
 
     let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
-    let logs_before =
-        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    let logs_before = fetch_log_records_intercanister(&env, universal_canister, canister_id);
 
     let _ = env.update_settings(
         &canister_id,
@@ -2345,8 +2332,7 @@ fn test_canister_resize_up_preserves_logs() {
             .build(),
     );
 
-    let logs_after =
-        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
@@ -2367,8 +2353,6 @@ fn test_canister_resize_down_preserves_logs() {
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
-    let fetch_cycles = Cycles::new(100_000_000_000);
-
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
@@ -2388,8 +2372,7 @@ fn test_canister_resize_down_preserves_logs() {
     );
 
     let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
-    let logs_before =
-        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    let logs_before = fetch_log_records_intercanister(&env, universal_canister, canister_id);
 
     let _ = env.update_settings(
         &canister_id,
@@ -2398,8 +2381,7 @@ fn test_canister_resize_down_preserves_logs() {
             .build(),
     );
 
-    let logs_after =
-        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
@@ -2614,7 +2596,9 @@ fn test_canister_log_resize_no_extra_charge_feature_disabled() {
 }
 
 #[test]
-fn test_fetch_canister_logs_update_call_rejected_insufficient_cycles() {
+fn test_fetch_canister_logs_update_call_succeeds_without_cycles() {
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated), so a
+    // call succeeds even when it attaches no cycles as payment.
     let user_controller = PrincipalId::new_user_test_id(42);
     let env = setup_env();
     let canister_a = create_and_install_canister(
@@ -2636,442 +2620,75 @@ fn test_fetch_canister_logs_update_call_rejected_insufficient_cycles() {
     );
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
-    // Send with 1 cycle — far below the required max fee.
-    let result = fetch_canister_logs_intercanister(&env, canister_a, canister_b, Cycles::new(1));
-    let reject_message = get_reject(result);
-    assert!(
-        reject_message.contains("cycles are required"),
-        "Expected insufficient cycles error, got: {reject_message}"
-    );
-}
-
-#[test]
-fn test_fetch_canister_logs_update_call_deducts_cycles() {
-    let user_controller = PrincipalId::new_user_test_id(42);
-    let env = setup_env();
-    let canister_a = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_controllers(vec![user_controller])
-            .build(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-    );
-    let canister_b = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Controllers)
-            .with_controllers(vec![canister_a.get()])
-            .build(),
-        wat_canister()
-            .update("test", wat_fn().debug_print(b"message"))
-            .build_wasm(),
-    );
-    let _ = env.execute_ingress(canister_b, "test", vec![]);
-
-    let balance_before = env.cycle_balance(canister_a);
-
-    // Provide more than enough cycles for the fetch.
-    let cycles_sent = Cycles::new(5_000_000_000);
-    let records = fetch_log_records_intercanister(&env, canister_a, canister_b, cycles_sent);
+    // The helper attaches no cycles as payment — no fetch fee is required.
+    let records = fetch_log_records_intercanister(&env, canister_a, canister_b);
     assert_eq!(records.len(), 1);
-
-    let balance_after = env.cycle_balance(canister_a);
-    let cycles_spent = balance_before - balance_after;
-
-    // Some cycles must have been deducted (fetch fee + execution overhead).
-    assert!(
-        cycles_spent > 0,
-        "Expected some cycles to be spent, but balance is unchanged"
-    );
-    // The refund should have returned most of the overpayment.
-    // cycles_sent was 5B, and the actual fetch fee for a small response
-    // plus execution overhead should be well under 2B.
-    assert_lt!(
-        cycles_spent,
-        2_000_000_000,
-        "Expected most cycles to be refunded, but {} were spent",
-        cycles_spent
-    );
 }
 
 #[test]
-fn test_log_memory_store_feature_flag_via_execution_test_builder() {
-    // With the flag disabled, canister creation does not allocate a ring buffer.
-    let mut test = ExecutionTestBuilder::new()
-        .with_log_memory_store_feature_disabled()
-        .build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
-    assert_eq!(
-        test.canister_status(canister_id)
-            .unwrap()
-            .log_memory_store_size()
-            .get(),
-        0,
-    );
-
-    // With the flag enabled, canister creation allocates the ring buffer.
-    let mut test = ExecutionTestBuilder::new()
-        .with_log_memory_store_feature_enabled()
-        .build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
-    assert_gt!(
-        test.canister_status(canister_id)
-            .unwrap()
-            .log_memory_store_size()
-            .get(),
-        0,
-    );
-}
-
-#[test]
-fn test_log_memory_store_upgrade_downgrade() {
-    let controller = PrincipalId::new_anonymous();
-    let subnet_type = SubnetType::Application;
-
-    let check_records = |env: &StateMachine,
-                         canister_id: CanisterId,
-                         expected_len: usize,
-                         expected_last_idx: u64,
-                         expected_last_content: &Vec<u8>| {
-        let records = fetch_log_records(env, controller, canister_id);
-        assert_eq!(records.len(), expected_len);
-        assert_eq!(
-            records.last().map(|r| (r.idx, &r.content)),
-            Some((expected_last_idx, expected_last_content))
-        );
-    };
-    let check_canister_log =
-        |env: &StateMachine, canister_id: CanisterId, expected_next_idx: u64| {
-            let state = env.get_latest_state();
-            let ss = &state.canister_state(&canister_id).unwrap().system_state;
-            assert_eq!(ss.canister_log.next_idx(), expected_next_idx);
-        };
-    let check_lms = |env: &StateMachine,
-                     canister_id: CanisterId,
-                     expected_migrated: bool,
-                     expected_allocated: bool,
-                     expected_empty: bool,
-                     expected_next_idx: u64| {
-        let state = env.get_latest_state();
-        let lms = &state
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .log_memory_store;
-        assert_eq!(lms.is_migrated(), expected_migrated);
-        assert_eq!(lms.is_allocated(), expected_allocated);
-        assert_eq!(lms.is_empty(), expected_empty);
-        assert_eq!(lms.next_idx(), expected_next_idx);
-    };
-
-    // Step 1: StateMachine with log_memory_store feature disabled. Install canisters
-    // and produce log entries that land in canister_log (legacy storage).
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type),
-            ExecutionConfig {
-                log_memory_store_feature: FlagStatus::Disabled,
-                ..Default::default()
-            },
-        )))
-        .with_subnet_type(subnet_type)
-        .with_checkpoints_enabled(true)
-        .build();
-
-    let canister_settings = || {
+fn test_fetch_canister_logs_update_call_refunds_all_attached_cycles() {
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated),
+    // so every cycle the caller attaches to the call is refunded (the incidental
+    // transmission and execution fees are paid from the caller's balance, not from the
+    // attached payment).
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .with_controllers(vec![controller])
-            .build()
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // Attach cycles and report back, from the reply callback, how many of them
+    // were refunded.
+    let attached = Cycles::new(5_000_000_000);
+    let balance_before = env.cycle_balance(canister_a);
+    let result = env
+        .execute_ingress(
+            canister_a,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    CanisterId::ic_00(),
+                    "fetch_canister_logs",
+                    call_args()
+                        .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                        .on_reject(wasm().reject_message().reject())
+                        .on_reply(wasm().msg_cycles_refunded128().append_and_reply()),
+                    attached,
+                )
+                .build(),
+        )
+        .unwrap();
+    let refunded = match result {
+        WasmResult::Reply(bytes) => u128::from_le_bytes(bytes.try_into().unwrap()),
+        WasmResult::Reject(err) => unreachable!("unexpected reject: {err}"),
     };
+    // The whole attached payment is refunded.
+    assert_eq!(refunded, attached.get());
 
-    // canister_many: receives 200+ messages, exercises wrap-around in canister_log.
-    let canister_many =
-        create_and_install_canister(&env, canister_settings(), UNIVERSAL_CANISTER_WASM.to_vec());
-    // canister_cleared: receives 42 log messages then gets uninstalled, so logs are
-    // cleared but next_idx is preserved at 42.
-    let canister_cleared =
-        create_and_install_canister(&env, canister_settings(), UNIVERSAL_CANISTER_WASM.to_vec());
-    // canister_few: one log before migration, one after, one after downgrade (3 total).
-    let canister_few =
-        create_and_install_canister(&env, canister_settings(), UNIVERSAL_CANISTER_WASM.to_vec());
-
-    // Execute enough messages to cause wrap-around in the legacy canister_log storage.
-    let num_pre_migration = 200_usize;
-    for i in 0..num_pre_migration {
-        let msg = format!("hello migration {i}");
-        let _ = env.execute_ingress(
-            canister_many,
-            "update",
-            wasm().debug_print(msg.as_bytes()).reply().build(),
-        );
-    }
-    let last_pre_migration_msg = format!("hello migration {}", num_pre_migration - 1).into_bytes();
-
-    let records = fetch_log_records(&env, controller, canister_many);
-    let pre_migration_len = records.len();
-    // Wrap-around dropped old records: fewer survive than were produced.
-    assert!(pre_migration_len < num_pre_migration);
-    // next_idx advances for every produced record, including dropped ones.
-    check_canister_log(&env, canister_many, num_pre_migration as u64);
-    check_lms(&env, canister_many, false, false, true, 0);
-    check_records(
-        &env,
-        canister_many,
-        pre_migration_len,
-        num_pre_migration as u64 - 1,
-        &last_pre_migration_msg,
+    // The caller still pays incidental costs (message execution and transmission
+    // fees) from its balance, so the balance is not unchanged; but since the
+    // attached payment is fully refunded, the difference stays below it.
+    let spent = balance_before - env.cycle_balance(canister_a);
+    assert!(spent > 0, "expected some cycles spent on incidental costs");
+    assert!(
+        spent < attached.get(),
+        "expected cycles spent ({spent}) to be less than the attached amount ({attached})"
     );
-
-    let num_cleared_logs = 42_usize;
-    for i in 0..num_cleared_logs {
-        let msg = format!("to be cleared {i}");
-        let _ = env.execute_ingress(
-            canister_cleared,
-            "update",
-            wasm().debug_print(msg.as_bytes()).reply().build(),
-        );
-    }
-    let _ = env.uninstall_code(canister_cleared).unwrap();
-    // After uninstall: records are cleared but next_idx is preserved.
-    assert!(fetch_log_records(&env, controller, canister_cleared).is_empty());
-    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
-    check_lms(&env, canister_cleared, false, false, true, 0);
-
-    let log_0 = b"log 0".to_vec();
-    let _ = env.execute_ingress(
-        canister_few,
-        "update",
-        wasm().debug_print(&log_0).reply().build(),
-    );
-    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
-    check_lms(&env, canister_cleared, false, false, true, 0);
-
-    check_canister_log(&env, canister_few, 1);
-    check_lms(&env, canister_few, false, false, true, 0);
-    check_records(&env, canister_few, 1, 0, &log_0);
-
-    // Step 2: Restart with log_memory_store feature enabled. Before any round
-    // executes, migration has not run yet: is_migrated=false, is_allocated=false,
-    // but fetch_canister_logs still works via the canister_log fallback.
-    let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
-        ExecutionConfig {
-            log_memory_store_feature: FlagStatus::Enabled,
-            ..Default::default()
-        },
-    ));
-
-    // canister_log next_idx survives the restart via the checkpoint.
-    check_canister_log(&env, canister_many, num_pre_migration as u64);
-    // log_memory_store is not yet migrated; next_idx is 0 until migration runs.
-    check_lms(&env, canister_many, false, false, true, 0);
-    check_records(
-        &env,
-        canister_many,
-        pre_migration_len,
-        num_pre_migration as u64 - 1,
-        &last_pre_migration_msg,
-    );
-
-    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
-    check_lms(&env, canister_cleared, false, false, true, 0);
-
-    check_canister_log(&env, canister_few, 1);
-    check_lms(&env, canister_few, false, false, true, 0);
-    check_records(&env, canister_few, 1, 0, &log_0);
-
-    // Step 3: Execute a round to trigger migration. Afterwards is_migrated=true,
-    // is_allocated=true, log_memory_store contains the migrated records, and
-    // fetch_canister_logs reads from log_memory_store.
-    env.tick();
-
-    // After migration next_idx matches the canister_log next_idx.
-    check_canister_log(&env, canister_many, num_pre_migration as u64);
-    check_lms(
-        &env,
-        canister_many,
-        true,
-        true,
-        false,
-        num_pre_migration as u64,
-    );
-    // Migration must preserve exactly the records that survived wrap-around.
-    check_records(
-        &env,
-        canister_many,
-        pre_migration_len,
-        num_pre_migration as u64 - 1,
-        &last_pre_migration_msg,
-    );
-
-    // Cleared canister: migrated and allocated but has no records; next_idx carried over from uninstall.
-    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
-    check_lms(
-        &env,
-        canister_cleared,
-        true,
-        true,
-        true,
-        num_cleared_logs as u64,
-    );
-
-    check_canister_log(&env, canister_few, 1);
-    check_lms(&env, canister_few, true, true, false, 1);
-    check_records(&env, canister_few, 1, 0, &log_0);
-
-    // Step 4: After migration, produce new log entries and verify they can be queried
-    // from log_memory_store together with the migrated records.
-    let post_migration_msg = format!("hello migration {num_pre_migration}").into_bytes();
-    let _ = env.execute_ingress(
-        canister_many,
-        "update",
-        wasm().debug_print(&post_migration_msg).reply().build(),
-    );
-
-    let log_1 = b"log 1".to_vec();
-    let _ = env.execute_ingress(
-        canister_few,
-        "update",
-        wasm().debug_print(&log_1).reply().build(),
-    );
-
-    check_records(
-        &env,
-        canister_many,
-        pre_migration_len + 1,
-        num_pre_migration as u64,
-        &post_migration_msg,
-    );
-    check_lms(
-        &env,
-        canister_many,
-        true,
-        true,
-        false,
-        num_pre_migration as u64 + 1,
-    );
-    check_canister_log(&env, canister_many, num_pre_migration as u64 + 1);
-
-    check_lms(
-        &env,
-        canister_cleared,
-        true,
-        true,
-        true,
-        num_cleared_logs as u64,
-    );
-    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
-
-    check_lms(&env, canister_few, true, true, false, 2);
-    check_canister_log(&env, canister_few, 2);
-    check_records(&env, canister_few, 2, 1, &log_1);
-
-    // Step 5: Downgrade — restart with log_memory_store feature disabled.
-    // The checkpoint still has migrated=true since it was saved after step 3.
-    let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
-        ExecutionConfig {
-            log_memory_store_feature: FlagStatus::Disabled,
-            ..Default::default()
-        },
-    ));
-
-    // Before any round, lms is still marked migrated as loaded from the checkpoint.
-    check_canister_log(&env, canister_many, num_pre_migration as u64 + 1);
-    check_lms(
-        &env,
-        canister_many,
-        true,
-        true,
-        false,
-        num_pre_migration as u64 + 1,
-    );
-    // With the feature disabled, fetch_canister_logs reads from canister_log, not lms.
-    // canister_log uses CanisterLogRecord
-    // while lms stores records more compactly (less overhead per record).
-    // Both have the same 4 KiB byte capacity, but canister_log fits fewer records before
-    // wrapping. By step 4, canister_log was already at its wrap point (pre_migration_len records),
-    // while lms had room for one more — so they now differ by one record.
-    check_records(
-        &env,
-        canister_many,
-        pre_migration_len,
-        num_pre_migration as u64,
-        &post_migration_msg,
-    );
-
-    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
-    check_lms(
-        &env,
-        canister_cleared,
-        true,
-        true,
-        true,
-        num_cleared_logs as u64,
-    );
-
-    check_canister_log(&env, canister_few, 2);
-    check_lms(&env, canister_few, true, true, false, 2);
-    check_records(&env, canister_few, 2, 1, &log_1);
-
-    // Execute a round to trigger the downgrade.
-    env.tick();
-
-    // After downgrade, lms is deallocated, the migration flag is cleared,
-    // and persistent_next_idx is reset to zero in lms.
-    check_canister_log(&env, canister_many, num_pre_migration as u64 + 1);
-    check_lms(&env, canister_many, false, false, true, 0);
-    // fetch_canister_logs falls back to canister_log after downgrade.
-    // canister_log was at capacity before step 4, so it wrapped around and still
-    // holds pre_migration_len records with the post-migration message at the tail.
-    check_records(
-        &env,
-        canister_many,
-        pre_migration_len,
-        num_pre_migration as u64,
-        &post_migration_msg,
-    );
-
-    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
-    check_lms(&env, canister_cleared, false, false, true, 0);
-
-    check_canister_log(&env, canister_few, 2);
-    check_lms(&env, canister_few, false, false, true, 0);
-    check_records(&env, canister_few, 2, 1, &log_1);
-
-    // Execute messages after downgrade: new logs go only to canister_log since
-    // lms is not migrated. canister_log wraps around again, keeping pre_migration_len records.
-    let post_downgrade_msg = format!("hello migration {}", num_pre_migration + 1).into_bytes();
-    let _ = env.execute_ingress(
-        canister_many,
-        "update",
-        wasm().debug_print(&post_downgrade_msg).reply().build(),
-    );
-
-    let log_2 = b"log 2".to_vec();
-    let _ = env.execute_ingress(
-        canister_few,
-        "update",
-        wasm().debug_print(&log_2).reply().build(),
-    );
-
-    check_canister_log(&env, canister_many, num_pre_migration as u64 + 2);
-    check_lms(&env, canister_many, false, false, true, 0);
-    check_records(
-        &env,
-        canister_many,
-        pre_migration_len,
-        num_pre_migration as u64 + 1,
-        &post_downgrade_msg,
-    );
-
-    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
-    check_lms(&env, canister_cleared, false, false, true, 0);
-
-    check_canister_log(&env, canister_few, 3);
-    check_lms(&env, canister_few, false, false, true, 0);
-    check_records(&env, canister_few, 3, 2, &log_2);
 }
 
 #[test]
@@ -3080,7 +2697,6 @@ fn test_canister_log_with_zero_log_memory_limit() {
     let config = StateMachineConfig::new(
         SubnetConfig::new(subnet_type),
         ExecutionConfig {
-            log_memory_store_feature: FlagStatus::Enabled,
             ..Default::default()
         },
     );
@@ -3198,100 +2814,5 @@ fn test_log_memory_store_deallocated_when_canister_out_of_cycles() {
             .system_state
             .log_memory_store
             .is_allocated()
-    );
-}
-
-#[test]
-fn test_log_memory_store_migration_filters_gap_records() {
-    // Regression test: canister_log records may have gaps in their idx sequence.
-    // Only the contiguous suffix ending at next_idx - 1 must be migrated.
-    //
-    // Records [10, 11, 20, 21, 22] have a gap at [12..19]; with next_idx=23
-    // only the contiguous suffix [20, 21, 22] survives.
-    let controller = PrincipalId::new_anonymous();
-    let subnet_type = SubnetType::Application;
-
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type),
-            ExecutionConfig {
-                log_memory_store_feature: FlagStatus::Disabled,
-                ..Default::default()
-            },
-        )))
-        .with_subnet_type(subnet_type)
-        .with_checkpoints_enabled(true)
-        .build();
-
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .with_controllers(vec![controller])
-            .build(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-    );
-
-    {
-        let (_height, mut state) = env.state_manager.take_tip();
-        let arc = state.take_canister_state(&canister_id).unwrap();
-        let mut c = (*arc).clone();
-        // next_idx=23: last record (idx=22) == next_idx-1; gap at [12..19] causes
-        // [10, 11] to be dropped, leaving contiguous suffix [20, 21, 22].
-        c.system_state.canister_log = CanisterLog::new_aggregate(
-            23,
-            vec![
-                CanisterLogRecord {
-                    idx: 10,
-                    timestamp_nanos: 1_000,
-                    content: b"a".to_vec(),
-                },
-                CanisterLogRecord {
-                    idx: 11,
-                    timestamp_nanos: 1_001,
-                    content: b"b".to_vec(),
-                },
-                CanisterLogRecord {
-                    idx: 20,
-                    timestamp_nanos: 2_000,
-                    content: b"c".to_vec(),
-                },
-                CanisterLogRecord {
-                    idx: 21,
-                    timestamp_nanos: 2_001,
-                    content: b"d".to_vec(),
-                },
-                CanisterLogRecord {
-                    idx: 22,
-                    timestamp_nanos: 2_002,
-                    content: b"e".to_vec(),
-                },
-            ],
-        );
-        state.put_canister_state(c);
-        env.state_manager
-            .commit_and_certify(state, CertificationScope::Full, None);
-    }
-
-    let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
-        ExecutionConfig {
-            log_memory_store_feature: FlagStatus::Enabled,
-            ..Default::default()
-        },
-    ));
-
-    env.tick();
-
-    let state = env.get_latest_state();
-    let ss = &state.canister_state(&canister_id).unwrap().system_state;
-    assert!(ss.log_memory_store.is_migrated());
-    assert!(ss.log_memory_store.is_allocated());
-    assert!(!ss.log_memory_store.is_empty());
-    assert_eq!(ss.log_memory_store.next_idx(), 23);
-    let records = ss.log_memory_store.records(None);
-    assert_eq!(
-        records.iter().map(|r| r.idx).collect::<Vec<_>>(),
-        vec![20, 21, 22]
     );
 }

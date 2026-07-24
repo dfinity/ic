@@ -12,5 +12,5 @@ ic-cdk = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 
 [dev-dependencies]
-maplit = "1.0.2"
+maplit = { workspace = true }
 pretty_assertions = { workspace = true }

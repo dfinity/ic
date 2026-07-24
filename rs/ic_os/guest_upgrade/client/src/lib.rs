@@ -198,13 +198,12 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .key
             .context("GetKeyResponse does not contain a key")?;
 
-        self.persist_disk_encryption_artifacts(
-            disk_encryption_key,
-            // This can be None when upgrading from older GuestOS-s that do not populate this field.
-            // TODO: Error on None once all GuestOS-s support detached headers
-            disk_encryption_data.luks_header,
-        )
-        .await?;
+        let luks_header = disk_encryption_data
+            .luks_header
+            .context("Server did not send a Store LUKS header")?;
+
+        self.persist_disk_encryption_artifacts(disk_encryption_key, luks_header)
+            .await?;
 
         Ok(())
     }
@@ -212,32 +211,19 @@ impl DiskEncryptionKeyExchangeClientAgent {
     async fn persist_disk_encryption_artifacts(
         &self,
         disk_encryption_key: Vec<u8>,
-        luks_header: Option<Vec<u8>>,
+        luks_header: Vec<u8>,
     ) -> Result<()> {
         let disk_encryption_key =
             String::from_utf8(disk_encryption_key).context("Key is not valid UTF-8")?;
 
-        match luks_header {
-            Some(luks_header) => {
-                tokio::fs::write(&self.store_luks_header_path, &luks_header)
-                    .await
-                    .with_context(|| {
-                        format!(
-                            "Failed to write store LUKS header to {}",
-                            self.store_luks_header_path.display()
-                        )
-                    })?;
-            }
-            None => {
-                println!(
-                    "GetKeyResponse does not contain a store LUKS header; recovering it locally from {}",
-                    self.store_device_path.display()
-                );
-                self.crypto_ops
-                    .backup_luks_header(&self.store_device_path, &self.store_luks_header_path)
-                    .context("Local LUKS header backup failed")?;
-            }
-        }
+        tokio::fs::write(&self.store_luks_header_path, &luks_header)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to write Store LUKS header to {}",
+                    self.store_luks_header_path.display()
+                )
+            })?;
 
         tokio::fs::write(&self.previous_key_path, disk_encryption_key)
             .await

@@ -14,7 +14,7 @@ use ic_replicated_state::{
     canister_state::{
         NextExecution, execution_state::WasmExecutionMode, system_state::wasm_chunk_store,
     },
-    metadata_state::testing::NetworkTopologyTesting,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
 };
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
@@ -1205,14 +1205,14 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     // A no-op subnet split (no canisters migrated).
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_1, own_subnet_id);
-    test.state_mut()
-        .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_2, own_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, own_subnet_id);
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, own_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Retains the `InstallCodeCall` and does not produce a response.
@@ -1228,9 +1228,11 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     // Simulate a subnet split that migrates canister 1 to another subnet.
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_1, other_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `InstallCodeCall` and produced a reject response.
@@ -1297,9 +1299,11 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     // Simulate a subnet split that migrates canister 2 to another subnet.
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_2, other_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `InstallCodeCall` and set the ingress state to `Failed`.

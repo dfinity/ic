@@ -263,7 +263,7 @@ impl DeterministicState {
         // SAFETY: We just checked that the Wasm page was accessed (mapped), so it must be valid.
         unsafe {
             mprotect(
-                page_start_addr,
+                std::ptr::NonNull::new(page_start_addr).expect("mprotect address is null"),
                 range_size_in_bytes(&page_range),
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
             )

@@ -1302,7 +1302,7 @@ fn test_inter_canister_message_exchange_1() {
                 escape(&adder_canister_id),
     ), vec![], None);
 
-    println!("Canister: {}", &canister_id);
+    println!("Canister: {}", canister_id);
 
     for num in &[5, 17, 113] {
         env.execute_ingress(canister_id, "compute", vec![*num])

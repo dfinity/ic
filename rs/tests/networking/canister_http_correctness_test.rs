@@ -30,7 +30,8 @@ use ic_cdk::api::call::RejectionCode;
 use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_management_canister_types_private::{
-    HttpHeader, HttpMethod, TransformContext, TransformFunc,
+    BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+    TransformFunc,
 };
 use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,
@@ -51,7 +52,7 @@ use ic_types::{
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use proxy_canister::{
-    RemoteHttpRequest, RemoteHttpResponse, ResponseWithRefundedCycles,
+    FlexibleRemoteHttpRequest, RemoteHttpRequest, RemoteHttpResponse, ResponseWithRefundedCycles,
     UnvalidatedCanisterHttpRequestArgs,
 };
 use serde_json::Value;
@@ -201,7 +202,11 @@ fn main() -> Result<()> {
                     test_only_headers_with_custom_max_response_bytes_exceeded
                 ))
                 .add_test(systest!(test_max_response_bytes_too_large))
-                .add_test(systest!(test_max_response_bytes_2_mb_returns_ok)),
+                .add_test(systest!(test_max_response_bytes_2_mb_returns_ok))
+                // Flexible outcalls are not available on a normal (paying) subnet.
+                .add_test(systest!(
+                    test_flexible_http_request_not_enabled_on_normal_subnet
+                )),
         )
         .execute_from_args()?;
 
@@ -1139,15 +1144,25 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
         },
     ));
 
-    let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }))";
+    // Newer `hyper_util` versions embed the target socket address in the
+    // `ConnectError`, so we only check the stable prefix and suffix.
+    let expected_error_message_prefix = "Error(Connect, ConnectError(\"tcp connect error\", ";
+    let expected_error_message_suffix =
+        "Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }))";
     let err_response = response.clone().unwrap_err();
 
     assert_matches!(err_response.reject_code, RejectCode::SysTransient);
 
     assert!(
-        err_response.reject_message.contains(expected_error_message),
-        "Expected error message to contain, {}, got: {}",
-        expected_error_message,
+        err_response
+            .reject_message
+            .contains(expected_error_message_prefix)
+            && err_response
+                .reject_message
+                .contains(expected_error_message_suffix),
+        "Expected error message to contain {} and {}, got: {}",
+        expected_error_message_prefix,
+        expected_error_message_suffix,
         err_response.reject_message
     );
 }
@@ -2701,6 +2716,88 @@ where
     }
 }
 
+/// Submits a flexible HTTP outcall through the proxy canister and returns the
+/// proxy's raw reply: `Ok(bytes)` (the Candid-encoded `FlexibleHttpRequestResult`)
+/// on a handled outcall, or `Err((code, message))` when `flexible_http_request`
+/// is rejected synchronously (e.g. because it is not enabled on this subnet).
+async fn submit_flexible_outcall(
+    handlers: &Handlers<'_>,
+    request: FlexibleRemoteHttpRequest,
+) -> Result<Vec<u8>, (RejectionCode, String)> {
+    let args = Encode!(&request).unwrap();
+    let agent = handlers.agent().await;
+
+    let principal_id: PrincipalId = handlers.proxy_canister().effective_canister_id();
+    let principal: Principal = principal_id.into();
+
+    let log = handlers.env.logger();
+    let canister_response = match retry_agent_on_transport_errors!(
+        "submit_flexible_outcall: call",
+        &log,
+        agent
+            .update(&principal, "send_flexible_request")
+            .with_arg(args.clone())
+            .call()
+    )
+    .await
+    .expect("submit_flexible_outcall retries exhausted")
+    {
+        Ok(CallResponse::Response(response)) => Ok(response),
+        Ok(CallResponse::Poll(request_id)) => retry_agent_on_transport_errors!(
+            "submit_flexible_outcall: wait",
+            &log,
+            agent.wait(&request_id, principal)
+        )
+        .await
+        .expect("submit_flexible_outcall retries exhausted"),
+        Err(err) => Err(err),
+    };
+
+    let serialized_bytes = canister_response.expect("send_flexible_request should reply");
+    decode_one::<Result<Vec<u8>, (RejectionCode, String)>>(&serialized_bytes.0)
+        .expect("Decoding the send_flexible_request reply should succeed.")
+}
+
+/// Flexible HTTP outcalls are priced with the (not-yet-enabled) pay-as-you-go
+/// pricing model, so they are rejected on a normal (paying) subnet. (On a free
+/// subnet they are available via the legacy pricing fallback; that path is
+/// covered by `canister_http_flexible_test`.)
+fn test_flexible_http_request_not_enabled_on_normal_subnet(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let request = FlexibleRemoteHttpRequest {
+        request: FlexibleCanisterHttpRequestArgs {
+            url: format!("https://[{webserver_ipv6}]/ascii/hello"),
+            max_response_bytes: None,
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: None,
+            method: HttpMethod::GET,
+            transform: None,
+            replication: None,
+        },
+        cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+    };
+
+    let result = block_on(submit_flexible_outcall(&handlers, request));
+
+    match result {
+        Err((reject_code, message)) => {
+            // A `CanisterContractViolation` (5xx) surfaces as `CanisterError`.
+            assert_matches!(reject_code, RejectionCode::CanisterError);
+            assert!(
+                message.contains("This API is not enabled on this subnet"),
+                "unexpected rejection message: '{message}'"
+            );
+        }
+        Ok(bytes) => panic!(
+            "expected the flexible outcall to be rejected on a normal subnet, \
+             got a {}-byte reply",
+            bytes.len()
+        ),
+    }
+}
+
 /// Pricing function of canister http requests.
 fn expected_cycle_cost(
     proxy_canister: CanisterId,
@@ -2721,6 +2818,7 @@ fn expected_cycle_cost(
         request.into(),
         &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
         RegistryVersion::from(1),
+        CanisterCyclesCostSchedule::Normal,
         &mut rand::thread_rng(),
     )
     .unwrap();

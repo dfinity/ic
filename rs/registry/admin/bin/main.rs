@@ -88,16 +88,17 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
-    chain_keys::ChainKeysRegistry, crypto::CryptoRegistry, deserialize_registry_value,
-    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry,
+    api_boundary_node::ApiBoundaryNodeRegistry, chain_keys::ChainKeysRegistry,
+    crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
+    hostos_version::HostosRegistry, node_operator::NodeOperatorRegistry,
     replica_version::ReplicaVersionRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
-    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
-    is_node_record_key, make_api_boundary_node_record_key, make_canister_migrations_record_key,
-    make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY, get_node_operator_id_from_record_key,
+    get_node_record_node_id, is_node_operator_record_key, is_node_record_key,
+    make_api_boundary_node_record_key, make_canister_migrations_record_key, make_crypto_node_key,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -1469,7 +1470,7 @@ impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
             Some(title) => title.clone(),
             None => format!(
                 "Upgrade NNS Canister: {} to wasm with hash: {}",
-                self.canister_id, &self.wasm_module_sha256
+                self.canister_id, self.wasm_module_sha256
             ),
         }
     }
@@ -1554,7 +1555,7 @@ impl ProposalTitle for ProposeToHardResetNnsRootToVersionCmd {
             Some(title) => title.clone(),
             None => format!(
                 "Hard reset NNS root to wasm with hash: {}",
-                &self.wasm_module_sha256
+                self.wasm_module_sha256
             ),
         }
     }
@@ -3082,7 +3083,7 @@ impl ProposalPayload<AddOrRemoveDataCentersProposalPayload> for ProposeToAddOrRe
         let payload = self.get_payload();
 
         if !self.skip_confirmation {
-            println!("\n{}", &payload);
+            println!("\n{}", payload);
             println!("Is the above payload correct? [Y/n]");
 
             let mut buffer = String::new();
@@ -4775,7 +4776,12 @@ async fn main() {
             }
             eprintln!("INFO: Fetching API Boundary nodes...");
             // list all API Boundary Nodes
-            let api_bn_node_ids = get_api_boundary_node_ids(reachable_nns_urls.clone())
+            let registry_client = make_registry_client(
+                reachable_nns_urls.clone(),
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+            let api_bn_node_ids = get_api_boundary_node_ids(registry_client)
                 .iter()
                 .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap()))
                 .collect();
@@ -5329,12 +5335,10 @@ async fn main() {
                 .await;
         }
         SubCommand::GetNodeOperatorList => {
-            let registry_client = RegistryClientImpl::new(
-                Arc::new(NnsDataProvider::new(
-                    tokio::runtime::Handle::current(),
-                    reachable_nns_urls.clone(),
-                )),
-                None,
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
             );
 
             // maximum number of retries, let the user ctrl+c if necessary
@@ -5342,20 +5346,14 @@ async fn main() {
                 .try_polling_latest_version(usize::MAX)
                 .unwrap();
 
-            let keys = registry_client
-                .get_key_family(
-                    NODE_OPERATOR_RECORD_KEY_PREFIX,
-                    registry_client.get_latest_version(),
-                )
-                .unwrap();
+            let node_operators = registry_client
+                .get_node_operators(registry_client.get_latest_version())
+                .unwrap()
+                .unwrap_or_default();
 
-            let records = keys
-                .iter()
-                .map(|k| k.strip_prefix(NODE_OPERATOR_RECORD_KEY_PREFIX).unwrap())
-                .collect::<Vec<_>>();
             println!(
                 "{}",
-                serde_json::to_string_pretty(&records)
+                serde_json::to_string_pretty(&node_operators)
                     .expect("Failed to serialize the records to JSON")
             );
         }
@@ -5853,12 +5851,10 @@ async fn main() {
             .await;
         }
         SubCommand::GetElectedHostosVersions => {
-            let registry_client = RegistryClientImpl::new(
-                Arc::new(NnsDataProvider::new(
-                    tokio::runtime::Handle::current(),
-                    reachable_nns_urls.clone(),
-                )),
-                None,
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
             );
 
             // maximum number of retries, let the user ctrl+c if necessary
@@ -5939,7 +5935,12 @@ async fn main() {
             .await;
         }
         SubCommand::GetApiBoundaryNodes => {
-            let records = get_api_boundary_node_ids(reachable_nns_urls.clone());
+            let registry_client = make_registry_client(
+                reachable_nns_urls.clone(),
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+            let records = get_api_boundary_node_ids(registry_client);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&records)
@@ -6072,7 +6073,7 @@ fn print_value<T: Debug + serde::Serialize>(key: &String, version: u64, value: T
 }
 
 /// Fetches the last value stored under `key` in the registry and prints it.
-async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
+async fn print_and_get_last_value<T: Message + Default + serde::Serialize + Debug>(
     key: Vec<u8>,
     registry: &RegistryCanister,
     as_json: bool,
@@ -6750,32 +6751,17 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
     }
 }
 
-fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
-    let registry_client = RegistryClientImpl::new(
-        Arc::new(NnsDataProvider::new(
-            tokio::runtime::Handle::current(),
-            nns_url,
-        )),
-        None,
-    );
+fn get_api_boundary_node_ids(registry_client: RegistryClientImpl) -> Vec<String> {
     // maximum number of retries, let the user ctrl+c if necessary
     registry_client
         .try_polling_latest_version(usize::MAX)
         .unwrap();
-    let keys = registry_client
-        .get_key_family(
-            API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
-            registry_client.get_latest_version(),
-        )
+
+    let bns = registry_client
+        .get_api_boundary_node_ids(registry_client.get_latest_version())
         .unwrap();
 
-    keys.iter()
-        .map(|k| {
-            k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
-                .unwrap()
-                .to_string()
-        })
-        .collect::<Vec<_>>()
+    bns.iter().map(|v| v.to_string()).collect::<Vec<_>>()
 }
 
 fn print_routing_table(routing_table: &Vec<(CanisterIdRange, SubnetId)>, version: RegistryVersion) {

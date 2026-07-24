@@ -4,9 +4,10 @@
     candid::CandidType,
     candid::Deserialize,
     serde::Serialize,
-    Eq,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct CustomProposalCriticality {
@@ -20,13 +21,7 @@ pub struct CustomProposalCriticality {
 /// to avoid future candid compatibility problems. However, for the struct to be "valid", all fields
 /// must be populated.
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
 )]
 pub struct SnsInitPayload {
     /// Fee of a transaction.
@@ -85,7 +80,7 @@ pub struct SnsInitPayload {
     pub final_reward_rate_basis_points: ::core::option::Option<u64>,
     /// The amount of time that the growth rate changes (presumably, decreases)
     /// from the initial growth rate to the final growth rate. (See the two
-    /// *_reward_rate_basis_points fields bellow.) The transition is quadratic, and
+    /// \*\_reward_rate_basis_points fields bellow.) The transition is quadratic, and
     /// levels out at the end of the growth rate transition period.
     #[prost(uint64, optional, tag = "16")]
     pub reward_rate_transition_duration_seconds: ::core::option::Option<u64>,
@@ -248,13 +243,7 @@ pub mod sns_init_payload {
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
     #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        Eq,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
+        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Oneof,
     )]
     pub enum InitialTokenDistribution {
         /// See `FractionalDeveloperVotingPower`
@@ -271,16 +260,10 @@ pub mod sns_init_payload {
 /// As more of the swap funds are swapped in future rounds, the voting power
 /// multiplier will approach 1.0. The following preconditions must be met for
 /// it to be a valid distribution:
-///     - swap_distribution.initial_swap_amount_e8s > 0
-///     - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
+/// - swap_distribution.initial_swap_amount_e8s > 0
+/// - swap_distribution.initial_swap_amount_e8s \<= swap_distribution.total_e8s
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
 )]
 pub struct FractionalDeveloperVotingPower {
     /// The developer bucket.
@@ -295,13 +278,7 @@ pub struct FractionalDeveloperVotingPower {
 }
 /// The distributions awarded to developers at SNS genesis.
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
 )]
 pub struct DeveloperDistribution {
     /// List of `NeuronDistribution` that specify a Neuron controller and Neuron stake in e8s (10E-8 of a token).
@@ -317,10 +294,11 @@ pub struct DeveloperDistribution {
     candid::CandidType,
     candid::Deserialize,
     serde::Serialize,
-    Eq,
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct TreasuryDistribution {
@@ -335,10 +313,11 @@ pub struct TreasuryDistribution {
     candid::CandidType,
     candid::Deserialize,
     serde::Serialize,
-    Eq,
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SwapDistribution {
@@ -358,9 +337,10 @@ pub struct SwapDistribution {
     candid::CandidType,
     candid::Deserialize,
     serde::Serialize,
-    Eq,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronDistribution {
@@ -397,13 +377,7 @@ pub struct NeuronDistribution {
 }
 /// / A Canister that will be transferred to an SNS.
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
 )]
 pub struct DappCanisters {
     #[prost(message, repeated, tag = "1")]

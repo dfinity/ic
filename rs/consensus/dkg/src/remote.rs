@@ -147,7 +147,7 @@ impl<'a> RemoteDkgContext<'a> {
                 else {
                     let err = format!(
                         "Failed to find resharing transcript for a remote dkg for tag {:?}",
-                        &dkg_id.dkg_tag
+                        dkg_id.dkg_tag
                     );
                     return Ok(Err(vec![(dkg_id, err)]));
                 };

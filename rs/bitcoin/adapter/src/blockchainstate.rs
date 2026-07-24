@@ -586,7 +586,7 @@ mod test {
         );
 
         let mut tips = crate::header_cache::test::get_tips(&state.header_cache);
-        tips.sort_by(|x, y| y.work.cmp(&x.work));
+        tips.sort_by_key(|y| std::cmp::Reverse(y.work));
         assert_eq!(tips.len(), 2);
         assert_eq!(tips[0].header.block_hash(), *last_fork_hash);
         assert_eq!(tips[1].header.block_hash(), *last_chain_hash);

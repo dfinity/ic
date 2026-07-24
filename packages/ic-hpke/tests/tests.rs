@@ -1,5 +1,5 @@
 use ic_hpke::*;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng, TryRngCore};
 
 #[test]
 fn key_generation_and_noauth_encrypt_is_stable() {
@@ -76,14 +76,14 @@ fn key_generation_and_authticated_encrypt_is_stable() {
 
 #[test]
 fn smoke_test_noauth() {
-    let mut rng = rand::rngs::OsRng;
+    let mut rng = rand::rngs::OsRng.unwrap_err();
     let sk = PrivateKey::generate(&mut rng);
     let pk = sk.public_key();
 
     for ptext_len in 0..128 {
         let mut ptext = vec![0_u8; ptext_len];
         rng.fill_bytes(&mut ptext);
-        let aad = rng.r#gen::<[u8; 32]>();
+        let aad = rng.random::<[u8; 32]>();
         let ctext = pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
         let rec = sk.decrypt_noauth(&ctext, &aad).unwrap();
         assert_eq!(rec, ptext);
@@ -92,7 +92,7 @@ fn smoke_test_noauth() {
 
 #[test]
 fn smoke_test_auth() {
-    let mut rng = rand::rngs::OsRng;
+    let mut rng = rand::rngs::OsRng.unwrap_err();
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
@@ -100,7 +100,7 @@ fn smoke_test_auth() {
     let b_sk = PrivateKey::generate(&mut rng);
     let b_pk = b_sk.public_key();
 
-    let aad = rng.r#gen::<[u8; 32]>();
+    let aad = rng.random::<[u8; 32]>();
 
     for ptext_len in 0..128 {
         let mut ptext = vec![0_u8; ptext_len];
@@ -115,13 +115,13 @@ fn smoke_test_auth() {
 
 #[test]
 fn any_bit_flip_causes_rejection_noauth() {
-    let mut rng = rand::rngs::OsRng;
+    let mut rng = rand::rngs::OsRng.unwrap_err();
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
 
-    let ptext = rng.r#gen::<[u8; 16]>().to_vec();
-    let aad = rng.r#gen::<[u8; 32]>();
+    let ptext = rng.random::<[u8; 16]>().to_vec();
+    let aad = rng.random::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
 
@@ -140,7 +140,7 @@ fn any_bit_flip_causes_rejection_noauth() {
 
 #[test]
 fn any_bit_flip_causes_rejection_auth() {
-    let mut rng = rand::rngs::OsRng;
+    let mut rng = rand::rngs::OsRng.unwrap_err();
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
@@ -148,8 +148,8 @@ fn any_bit_flip_causes_rejection_auth() {
     let b_sk = PrivateKey::generate(&mut rng);
     let b_pk = b_sk.public_key();
 
-    let ptext = rng.r#gen::<[u8; 16]>().to_vec();
-    let aad = rng.r#gen::<[u8; 32]>();
+    let ptext = rng.random::<[u8; 16]>().to_vec();
+    let aad = rng.random::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt(&ptext, &aad, &b_sk, &mut rng).unwrap();
 
@@ -168,13 +168,13 @@ fn any_bit_flip_causes_rejection_auth() {
 
 #[test]
 fn any_truncation_causes_rejection_noauth() {
-    let mut rng = rand::rngs::OsRng;
+    let mut rng = rand::rngs::OsRng.unwrap_err();
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
 
-    let ptext = rng.r#gen::<[u8; 16]>().to_vec();
-    let aad = rng.r#gen::<[u8; 32]>();
+    let ptext = rng.random::<[u8; 16]>().to_vec();
+    let aad = rng.random::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
 
@@ -193,7 +193,7 @@ fn any_truncation_causes_rejection_noauth() {
 
 #[test]
 fn any_truncation_causes_rejection_auth() {
-    let mut rng = rand::rngs::OsRng;
+    let mut rng = rand::rngs::OsRng.unwrap_err();
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
@@ -201,8 +201,8 @@ fn any_truncation_causes_rejection_auth() {
     let b_sk = PrivateKey::generate(&mut rng);
     let b_pk = b_sk.public_key();
 
-    let ptext = rng.r#gen::<[u8; 16]>().to_vec();
-    let aad = rng.r#gen::<[u8; 32]>();
+    let ptext = rng.random::<[u8; 16]>().to_vec();
+    let aad = rng.random::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt(&ptext, &aad, &b_sk, &mut rng).unwrap();
 

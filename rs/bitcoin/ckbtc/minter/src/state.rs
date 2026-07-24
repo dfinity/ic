@@ -1230,13 +1230,7 @@ impl CkBtcMinterState {
     ) -> Option<&ConsolidateUtxosRequest> {
         self.current_consolidate_utxos_request
             .as_ref()
-            .and_then(|req| {
-                if req.block_index == block_index {
-                    Some(req)
-                } else {
-                    None
-                }
-            })
+            .filter(|&req| req.block_index == block_index)
     }
 
     /// Push a new ConsolidateUtxosRequest.
@@ -1821,7 +1815,7 @@ impl CkBtcMinterState {
                     .get(&input.previous_output)
                     .copied()
                     .unwrap_or_else(|| {
-                        panic!("BUG: no account for outpoint {:?}", &input.previous_output)
+                        panic!("BUG: no account for outpoint {:?}", input.previous_output)
                     }),
             )
         }

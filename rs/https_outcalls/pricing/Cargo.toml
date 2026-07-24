@@ -8,4 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 ic-config = { path = "../../config" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
+ic-types-cycles = { path = "../../types/cycles" }
+prometheus = { workspace = true }
+slog = { workspace = true }

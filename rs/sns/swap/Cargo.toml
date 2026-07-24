@@ -22,7 +22,7 @@ build-info = { workspace = true }
 
 async-trait = { workspace = true }
 candid = { workspace = true }
-comparable = { version = "0.5.1", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
@@ -30,7 +30,7 @@ ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -46,10 +46,10 @@ icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 prost = { workspace = true }
-rust_decimal = "1.36.0"
-rust_decimal_macros = "1.36.0"
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 

@@ -1,6 +1,6 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
-load("@rules_distroless//distroless:defs.bzl", "flatten", "passwd")
+load("@rules_distroless//distroless:defs.bzl", "cacerts", "flatten", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
@@ -25,7 +25,6 @@ PACKAGES = [
     "@resolute//gzip/amd64",
     "@resolute//libssl3t64/amd64",
     "@resolute//libunwind8/amd64",
-    "@resolute//libvirt0-hwe/amd64",
     "@resolute//mtools/amd64",
     "@resolute//openssh-client/amd64",
     "@resolute//rsync/amd64",
@@ -49,6 +48,14 @@ tar(
         # we install the GNU variant but call 'awk' so we symlink
         "./usr/bin/awk type=link link=/usr/bin/gawk",
     ],
+)
+
+# Needed because reqwest 0.13 switched to `rustls-platform-verifier`, which on Linux reads
+# from `/etc/ssl/certs/ca-certificates.crt`. This rule creates that bundle from the cert package;
+# the old `rustls-native-certs` (reqwest 0.12) could find individual cert files without it.
+cacerts(
+    name = "ca_certificates",
+    package = "@resolute//ca-certificates/amd64:data",
 )
 
 # Creates /var/lib/dpkg/status with installed package information.
@@ -100,6 +107,7 @@ oci_image(
     target_compatible_with = ["@platforms//os:linux"],
     tars = [
         ":ubuntu_packages_tar",
+        ":ca_certificates",
     ],
 )
 
@@ -253,22 +261,4 @@ genrule(
     srcs = ["//bazel:version.txt"],
     outs = ["version-test.txt"],
     cmd = "sed < $< 's/$$/-test/' > $@",
-)
-
-genrule(
-    name = "libvirtd",
-    outs = ["libvirtd.bin"],
-    cmd = "cp -L /usr/sbin/libvirtd $@",
-    local = True,
-    tags = ["manual"],
-    target_compatible_with = ["@platforms//os:linux"],
-)
-
-genrule(
-    name = "dnsmasq",
-    outs = ["dnsmasq.bin"],
-    cmd = "cp -L /usr/sbin/dnsmasq $@",
-    local = True,
-    tags = ["manual"],
-    target_compatible_with = ["@platforms//os:linux"],
 )

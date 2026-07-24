@@ -48,13 +48,7 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "45.0.0", default-features = false, features = [
-    'cranelift',
-    'gc',
-    'gc-null',
-    'parallel-compilation',
-    'runtime',
-] }
+wasmtime = { workspace = true }
 wirm = { workspace = true }
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
@@ -77,7 +71,7 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 insta = "1.8.0"
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 more-asserts = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }

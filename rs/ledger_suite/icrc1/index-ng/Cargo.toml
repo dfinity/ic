@@ -25,11 +25,11 @@ ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
 ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
 ic-ledger-core = { path = "../../common/ledger_core" }
-ic-metrics-encoder = "1.1"
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
-scopeguard = "1.1.0"
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

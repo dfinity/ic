@@ -10,8 +10,11 @@ runs:
         # Set up .netrc so that tools can authenticate with GitHub to have higher rate limits for fetching dependencies.
         touch  ~/.netrc
         chmod 600 ~/.netrc
-        echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
-        echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
+        cat > ~/.netrc <<EOF
+        machine github.com login x-access-token password ${{ github.token }}
+        machine api.github.com login x-access-token password ${{ github.token }}
+        machine ghcr.io login x-access-token password ${{ github.token }}
+        EOF
         echo "Current GitHub API rate limits:"
 
         # Show how close we are to the limits (ignore errors from curl or invalid JSON)

@@ -102,7 +102,12 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
     }
 
     // We need to make the PocketIC instance live for dfx to work.
-    let url = pic.make_live(None);
+    let mut url = pic.make_live(None);
+    // Rewrite the URL host from `localhost` to `127.0.0.1` since some
+    // sandboxed environments (e.g. Namespace RBE) cannot resolve `localhost`
+    // (the HTTP gateway binds to `127.0.0.1` and accepts it as a host).
+    url.set_host(Some("127.0.0.1"))
+        .expect("Failed to rewrite PocketIC URL host to 127.0.0.1");
 
     // Create a home directory for dfx (that contains a configuration file)
     // and a snapshot directory for the snapshot downloaded using dfx.
@@ -125,7 +130,7 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
     // Download canister snapshot using dfx.
     let relative_dfx_path = std::env::var_os("DFX").expect("Missing dfx binary");
     let absolute_dfx_path = std::env::current_dir().unwrap().join(relative_dfx_path);
-    Command::new(absolute_dfx_path)
+    let dfx_output = Command::new(absolute_dfx_path)
         .arg("canister")
         .arg("snapshot")
         .arg("download")
@@ -140,7 +145,15 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
         .current_dir(dfx_home_dir.clone())
         .env("HOME", dfx_home_dir.clone())
         .output()
-        .unwrap();
+        .expect("Failed to execute dfx");
+    if !dfx_output.status.success() {
+        panic!(
+            "dfx canister snapshot download failed ({}): stdout: {}; stderr: {}",
+            dfx_output.status,
+            String::from_utf8_lossy(&dfx_output.stdout),
+            String::from_utf8_lossy(&dfx_output.stderr),
+        );
+    }
 
     // Check that the snapshots downloaded using PocketIC and dfx are equal.
     let diff = Command::new("diff")

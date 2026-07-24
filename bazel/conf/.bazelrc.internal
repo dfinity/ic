@@ -16,7 +16,22 @@ build --remote_cache_compression # If enabled, compress/decompress cache blobs w
 #build --remote_download_minimal # https://bazel.build/reference/command-line-reference#flag--remote_download_minimal
 #build --remote_download_outputs=toplevel # Still download outputs from top level targets.
 
-build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
+# Bazel 7+ defaults to minimal remote output downloads; some of our builds
+# require additional outputs to be present locally (reason TBD), so download all.
+common --remote_download_all
+
+# Keep C++ .d (dotd) dependency files on disk instead of in memory. With the
+# in-memory default, combined with our remote cache, C++ compile actions are
+# spuriously treated as not up-to-date in a *subsequent* bazel invocation
+# because their .d outputs don't persist on disk.
+#   https://github.com/bazelbuild/bazel/issues/22387
+# Concretely, this broke the `Upload artifacts` CI step which runs
+# `bazel run --check_up_to_date //:upload-artifacts` after `bazel build`: the
+# compression host-tools (zlib/pigz/lmdb/zstd/zopfli) were reported as "not
+# up-to-date" and --check_up_to_date aborted the upload.
+common --noexperimental_inmemory_dotd_files
+
+build --experimental_remote_downloader=bazel-remote.idx.dfinity.network
 build:local --experimental_remote_downloader=
 build --remote_local_fallback
 build    --remote_upload_local_results=false

@@ -38,9 +38,11 @@ type http_request_args = record {
 
 service : {
     "create_canisters" : (create_canisters_args) -> (vec principal);
+    "create_canisters_with_gaps" : (create_canisters_args) -> (nat64);
     "install_code" : (install_code_args) -> ();
     "update_settings" : (update_settings_args) -> ();
     "ecdsa_public_key" : (ecdsa_args) -> ();
     "sign_with_ecdsa" : (ecdsa_args) -> ();
     "http_request" : (http_request_args) -> ();
+    "list_canisters" : () -> (nat64);
 };

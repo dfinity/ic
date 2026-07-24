@@ -49,7 +49,7 @@ impl fmt::Debug for DomainSeparationContext {
         write!(
             f,
             "DomainSeparationContext{{ domain: \"{}\" }}",
-            &self.domain
+            self.domain
         )
     }
 }

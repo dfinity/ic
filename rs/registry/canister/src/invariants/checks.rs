@@ -12,6 +12,7 @@ use crate::{
         node_record::check_node_record_invariants,
         replica_version::check_replica_version_invariants,
         routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
+        standard_engine_replica_version::check_standard_engine_replica_version_invariants,
         subnet::check_subnet_invariants,
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
     },
@@ -116,6 +117,9 @@ impl Registry {
 
         // NodeRecord invariants.
         result = result.and(check_node_record_invariants(&snapshot));
+
+        // Standard engine replica version invariants
+        result = result.and(check_standard_engine_replica_version_invariants(&snapshot));
 
         if let Err(e) = result {
             panic!(

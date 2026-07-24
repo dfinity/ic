@@ -88,6 +88,7 @@ impl From<CanisterSettings> for management_canister::CanisterSettingsArgs {
             log_visibility: log_visibility.map(management_canister::LogVisibilityV2::from),
             snapshot_visibility: snapshot_visibility
                 .map(management_canister::SnapshotVisibility::from),
+            status_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit,
             wasm_memory_threshold,

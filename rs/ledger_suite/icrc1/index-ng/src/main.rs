@@ -946,6 +946,7 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
+    #[allow(clippy::explicit_counter_loop)]
     for block in new_blocks {
         append_block(block_index, block)?;
         block_index += 1;
@@ -1224,7 +1225,7 @@ fn account_block_ids_key(account: Account, block_index: BlockIndex64) -> Account
     (account_sha256(account), Reverse(block_index))
 }
 
-fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> GenericBlock {
+fn decode_icrc1_block(bytes: Vec<u8>) -> GenericBlock {
     let encoded_block = EncodedBlock::from(bytes);
     encoded_block_to_generic_block(&encoded_block)
 }
@@ -1243,12 +1244,12 @@ fn get_blocks(req: GetBlocksRequest) -> ic_icrc1_index_ng::GetBlocksResponse {
     }
 }
 
-fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>) -> R) -> Vec<R> {
+fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(Vec<u8>) -> R) -> Vec<R> {
     let length = length.min(with_state(|opts| opts.max_blocks_per_response));
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         (start..limit)
-            .map(|i| decoder(start + i, blocks.get(i).unwrap()))
+            .map(|i| decoder(blocks.get(i).unwrap()))
             .collect()
     })
 }

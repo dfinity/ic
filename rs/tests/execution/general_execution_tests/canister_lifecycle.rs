@@ -46,10 +46,7 @@ use ic_universal_canister::{CallInterface, UNIVERSAL_CANISTER_WASM, call_args, m
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{
     ManagementCanister,
-    management_canister::{
-        UpdateCanisterBuilder,
-        builders::{CanisterUpgradeOptions, InstallMode},
-    },
+    management_canister::builders::{CanisterUpgradeOptions, InstallMode},
 };
 use slog::info;
 
@@ -127,7 +124,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
             // Construct large `UpdateSettings` argument.
             let mut controllers = mgr
                 .canister_status(&canister.canister_id())
-                .call_and_wait()
+                .as_update()
+                .call()
                 .await
                 .unwrap()
                 .0
@@ -155,8 +153,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
 
             // Update freezing threshold to a very high value to make the canister frozen.
             let high_freezing_threshold = 1_u64 << 62;
-            UpdateCanisterBuilder::builder(&mgr, &canister.canister_id())
-                .with_optional_freezing_threshold(Some(high_freezing_threshold))
+            mgr.update_settings(&canister.canister_id())
+                .with_freezing_threshold(high_freezing_threshold)
                 .call_and_wait()
                 .await
                 .expect("setting freezing threshold on unfrozen canister failed");
@@ -179,8 +177,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
 
             // Update freezing threshold on a frozen canister back to a low value.
             let low_freezing_threshold = 30 * 24 * 3600; // 30 days default
-            UpdateCanisterBuilder::builder(&mgr, &canister.canister_id())
-                .with_optional_freezing_threshold(Some(low_freezing_threshold))
+            mgr.update_settings(&canister.canister_id())
+                .with_freezing_threshold(low_freezing_threshold)
                 .call_and_wait()
                 .await
                 .expect("setting freezing threshold on frozen canister failed");
@@ -193,7 +191,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
 
             let balance_before = mgr
                 .canister_status(&canister.canister_id())
-                .call_and_wait()
+                .as_update()
+                .call()
                 .await
                 .unwrap()
                 .0
@@ -212,7 +211,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
 
             let balance_after = mgr
                 .canister_status(&canister.canister_id())
-                .call_and_wait()
+                .as_update()
+                .call()
                 .await
                 .unwrap()
                 .0
@@ -357,8 +357,8 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 logger,
                 "Assert that the user cannot access canister C's status."
             );
-            assert_http_submit_fails(
-                mgr.canister_status(&canister_c).call().await,
+            assert_reject(
+                mgr.canister_status(&canister_c).as_update().call().await,
                 RejectCode::CanisterError,
             );
 
@@ -403,7 +403,8 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
 
             // `user` can now fetch the status too.
             mgr.canister_status(&canister_c)
-                .call_and_wait()
+                .as_update()
+                .call()
                 .await
                 .unwrap();
 
@@ -423,8 +424,8 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 logger,
                 "Assert that the user can no longer access canister C's status."
             );
-            assert_http_submit_fails(
-                mgr.canister_status(&canister_c).call().await,
+            assert_reject(
+                mgr.canister_status(&canister_c).as_update().call().await,
                 RejectCode::CanisterError,
             );
 
@@ -653,8 +654,9 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
 
             // Nor does fetching the status.
             info!(logger, "Asserting that fetching the canister status fails.");
-            assert_http_submit_fails(
+            assert_reject(
                 mgr.canister_status(&wallet_canister.canister_id())
+                    .as_update()
                     .call()
                     .await,
                 RejectCode::CanisterError,

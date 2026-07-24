@@ -460,6 +460,7 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) -> Result<(), String> {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
+    #[allow(clippy::explicit_counter_loop)]
     for block in new_blocks {
         // append the encoded block to the block log
         with_blocks(|blocks| {

@@ -181,7 +181,11 @@ fn can_make_a_checkpoint() {
     });
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
@@ -244,6 +248,7 @@ fn can_recover_from_a_checkpoint() {
         let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
         let execution_state = ExecutionState::new(
             WasmBinary::new(wasm.clone()),
+            None,
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory.clone(),
             stable_memory,
@@ -366,7 +371,11 @@ fn returns_not_found_for_missing_checkpoints() {
     });
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn reports_an_error_on_misconfiguration() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint_reports_an_error_on_misconfiguration");
@@ -821,6 +830,7 @@ fn flush_checkpoint_ops_and_page_maps_strips_execution_state_memories() {
     let stable_memory = one_page_of(2);
     let execution_state = ExecutionState::new(
         WasmBinary::new(empty_wasm()),
+        None,
         ExportedFunctions::new(BTreeSet::new()),
         wasm_memory,
         stable_memory,

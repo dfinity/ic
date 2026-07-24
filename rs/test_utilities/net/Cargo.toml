@@ -1,0 +1,10 @@
+[package]
+name = "ic-test-utilities-net"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+tokio = { workspace = true }

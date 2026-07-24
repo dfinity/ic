@@ -72,6 +72,7 @@ use registry_canister::{
             DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
         },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
+        do_update_standard_engine_replica_version::UpdateStandardEngineReplicaVersionPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_admins::UpdateSubnetAdminsPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -663,7 +664,8 @@ fn delete_subnet() {
 
 #[candid_method(update, rename = "delete_subnet")]
 fn delete_subnet_(payload: DeleteSubnetPayload) -> Result<(), String> {
-    registry_mut().do_delete_subnet(payload)?;
+    let caller = dfn_core::api::caller();
+    registry_mut().do_delete_subnet(caller, payload)?;
     recertify_registry();
     Ok(())
 }
@@ -712,7 +714,7 @@ fn remove_nodes_from_subnet_(payload: RemoveNodesFromSubnetPayload) {
 
 #[unsafe(export_name = "canister_update change_subnet_membership")]
 fn change_subnet_membership() {
-    check_caller_is_governance_and_log("change_subnet_membership");
+    check_caller_is_governance_or_engine_controller_and_log("change_subnet_membership");
     over(candid_one, |payload: ChangeSubnetMembershipPayload| {
         change_subnet_membership_(payload)
     });
@@ -986,6 +988,18 @@ fn update_unassigned_nodes_config() {
 #[candid_method(update, rename = "update_unassigned_nodes_config")]
 fn update_unassigned_nodes_config_(payload: UpdateUnassignedNodesConfigPayload) {
     registry_mut().do_update_unassigned_nodes_config(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update update_standard_engine_replica_version")]
+fn update_standard_engine_replica_version() {
+    check_caller_is_governance_and_log("update_standard_engine_replica_version");
+    over(candid_one, update_standard_engine_replica_version_);
+}
+
+#[candid_method(update, rename = "update_standard_engine_replica_version")]
+fn update_standard_engine_replica_version_(payload: UpdateStandardEngineReplicaVersionPayload) {
+    registry_mut().do_update_standard_engine_replica_version(payload);
     recertify_registry();
 }
 

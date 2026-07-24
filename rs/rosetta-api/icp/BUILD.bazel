@@ -10,7 +10,7 @@ load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
-ROSETTA_VERSION = "2.1.9"
+ROSETTA_VERSION = "2.1.10"
 
 rust_library(
     name = "rosetta-api",
@@ -388,11 +388,11 @@ rust_test(
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     },
+    exec_properties = {"cpu": "4"},
     proc_macro_deps = [
         "@crate_index//:test-strategy",
     ],
     tags = [
-        "cpu:4",
         "long_test",
     ],
     deps = [

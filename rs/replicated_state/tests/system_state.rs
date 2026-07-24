@@ -227,7 +227,7 @@ fn push_output_request_in_stopped_status_does_not_work() {
     let mut fixture = SystemStateFixture::running();
     fixture.set_stopped();
 
-    assert_matches!(
+    assert_eq!(
         fixture.push_output_request(default_request_to_self()),
         Err(StateError::CanisterStopped(CANISTER_ID))
     );

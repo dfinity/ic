@@ -104,9 +104,18 @@ impl IngressSelector for IngressManager {
         let max_expiry = context.time + MAX_INGRESS_TTL;
         let expiry_range = min_expiry..=max_expiry;
 
-        let settings = self
-            .get_ingress_message_settings(context.registry_version)
-            .expect("Couldn't fetch ingress message parameters from the registry.");
+        let settings = match self.get_ingress_message_settings(context.registry_version) {
+            Ok(settings) => settings,
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "Failed to get the ingress message settings from the registry: {err}"
+                );
+
+                return PayloadWithSizeEstimate::default();
+            }
+        };
 
         // Select valid ingress messages and stop once the total size
         // becomes greater than byte_limit.
@@ -332,9 +341,26 @@ impl IngressSelector for IngressManager {
             .start_timer();
 
         let certified_height = context.certified_height;
-        let settings = self
-            .get_ingress_message_settings(context.registry_version)
-            .expect("Couldn't get IngressMessageSettings from the registry.");
+        let settings = match self.get_ingress_message_settings(context.registry_version) {
+            Ok(settings) => settings,
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Failed to get the ingress message settings from the registry \
+                    at version {}: {:?}",
+                    context.registry_version,
+                    err
+                );
+
+                return Err(ValidationError::ValidationFailed(
+                    IngressPayloadValidationFailure::GetIngressMessageSettingsFailed(
+                        context.registry_version,
+                        err,
+                    ),
+                ));
+            }
+        };
 
         let past_ingress = match IngressSetChain::new(context.time, past_ingress, || {
             IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
@@ -379,6 +405,16 @@ impl IngressSelector for IngressManager {
             ));
         }
 
+        let size_estimates = self.payload_size_estimates(payload);
+        if size_estimates.memory.get() > settings.max_ingress_bytes_per_block as u64 {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::IngressPayloadTooBig(
+                    size_estimates.memory.get() as usize,
+                    settings.max_ingress_bytes_per_block,
+                ),
+            ));
+        }
+
         // Tracks the sum of cycles needed per canister.
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
 
@@ -416,8 +452,6 @@ impl IngressSelector for IngressManager {
                 &mut cycles_needed,
             )?;
         }
-
-        let size_estimates = self.payload_size_estimates(payload);
 
         Ok(size_estimates.wire)
     }
@@ -883,6 +917,116 @@ pub(crate) mod tests {
                 ),)
             );
         })
+    }
+
+    #[rstest]
+    fn test_validate_ingress_payload_max_block_bytes(
+        #[values[true, false]] hashes_in_blocks_enabled: bool,
+    ) {
+        let subnet_id = subnet_test_id(0);
+
+        const MAX_INGRESS_BYTES_PER_MESSAGE: usize = 4 * 1024 * 1024;
+
+        // Two payloads differing by exactly one ~1 KiB message. We set the
+        // per-block byte cap to the exact in-memory size of the smaller one, so
+        // the larger one is one message over it.
+        let build_message = |nonce: u64| {
+            SignedIngressBuilder::new()
+                .canister_id(canister_test_id(0))
+                .method_name("update")
+                .method_payload(vec![0_u8; 1024])
+                .nonce(nonce)
+                .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
+                .build()
+        };
+        let at_limit_msgs: Vec<_> = (0..4_u64).map(build_message).collect();
+        let over_limit_msgs: Vec<_> = (0..5_u64).map(build_message).collect();
+
+        // Each message individually respects the per-message size cap, so only
+        // the *cumulative* per-block cap is exercised below.
+        for msg in over_limit_msgs.iter() {
+            assert!(msg.count_bytes() <= MAX_INGRESS_BYTES_PER_MESSAGE);
+        }
+
+        let at_limit = IngressPayload::from(at_limit_msgs);
+        let over_limit = IngressPayload::from(over_limit_msgs);
+        // The in-memory size estimate is independent of the hashes-in-blocks
+        // feature, so the cap can be derived without an `IngressManager`.
+        let block_byte_cap = (at_limit.total_messages_size_estimate()
+            + at_limit.total_ids_size_estimate())
+        .get() as usize;
+
+        let registry = set_up_registry(
+            subnet_id,
+            Some(block_byte_cap), // max_ingress_bytes_per_block == `at_limit`'s size
+            1000,                 // max_ingress_messages_per_block
+            MAX_INGRESS_BYTES_PER_MESSAGE,
+        );
+
+        setup_with_params(
+            None,
+            Some((registry, subnet_id)),
+            None,
+            Some(
+                ReplicatedStateBuilder::new()
+                    .with_subnet_id(subnet_id)
+                    .with_canister(
+                        CanisterStateBuilder::new()
+                            .with_canister_id(canister_test_id(0))
+                            .with_cycles(u128::MAX)
+                            .build(),
+                    )
+                    .build(),
+            ),
+            /*ingress_pool_max_count=*/ None,
+            |mut ingress_manager, _| {
+                ingress_manager.hashes_in_blocks_enabled_in_tests = hashes_in_blocks_enabled;
+
+                let context = ValidationContext {
+                    time: UNIX_EPOCH,
+                    registry_version: RegistryVersion::from(1),
+                    certified_height: Height::from(0),
+                };
+
+                // A payload whose cumulative in-memory size is *exactly* the cap
+                // must validate. Validation returns the payload's wire size
+                // estimate, which with hashes-in-blocks enabled is just the
+                // message ids.
+                assert_eq!(
+                    ingress_manager
+                        .payload_size_estimates(&at_limit)
+                        .memory
+                        .get() as usize,
+                    block_byte_cap
+                );
+                let expected_wire = ingress_manager.payload_size_estimates(&at_limit).wire;
+                assert_eq!(
+                    ingress_manager.validate_ingress_payload(&at_limit, &HashSet::new(), &context),
+                    Ok(expected_wire)
+                );
+
+                // One additional message pushes the payload just over the cap,
+                // so it must be rejected regardless of the hashes-in-blocks
+                // feature.
+                assert!(
+                    ingress_manager
+                        .payload_size_estimates(&over_limit)
+                        .memory
+                        .get() as usize
+                        > block_byte_cap
+                );
+                assert_matches!(
+                    ingress_manager.validate_ingress_payload(
+                        &over_limit,
+                        &HashSet::new(),
+                        &context
+                    ),
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressPayloadTooBig(_, _),
+                    ))
+                );
+            },
+        );
     }
 
     #[test]

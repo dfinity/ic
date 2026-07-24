@@ -23,8 +23,9 @@ fi
 # docker daemon forces this regardless of the host's perms or how the device is
 # passed in (--device / bind-mount), unlike /dev/null and /dev/kvm which inherit
 # the host mode -- so the unprivileged container user can't open it. Note that
-# CAP_NET_ADMIN (raised by ic-net-admin for the tuntap ioctl) does not bypass
-# this DAC check on the device node, so we open up the perms here.
+# CAP_NET_ADMIN (which the driver holds in the private user namespace it unshares
+# for the tuntap ioctl) does not bypass this DAC check on the device node, whose
+# owner is outside that namespace, so we open up the perms here.
 if [ -e /dev/net/tun ] && [ ! -w /dev/net/tun ]; then
     sudo chmod 0666 /dev/net/tun
 fi

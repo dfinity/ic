@@ -1312,6 +1312,7 @@ fn test_account_balance() {
 
                     let mut all_involved_accounts = HashSet::new();
 
+                    #[allow(clippy::explicit_counter_loop)]
                     for ArgWithCaller {
                         caller,
                         arg,

@@ -65,7 +65,8 @@ pub(super) fn resolve_destination(
     // Figure out the destination subnet based on the method and the payload.
     let method = Ic00Method::from_str(method_name);
     match method {
-        Ok(Ic00Method::CreateCanister)
+        Ok(Ic00Method::ListCanisters)
+        | Ok(Ic00Method::CreateCanister)
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
         | Ok(Ic00Method::HttpRequest)

@@ -55,8 +55,7 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
     // `discover_uvms` walks is simply the group directory. We deliberately avoid
     // `get_root_env()` here: it opens `root_env/test.log` with an exclusive
     // (non-blocking) flock, which fails with EAGAIN when another long-lived
-    // process holds that lock (e.g. the root libvirtd spawned by the Local
-    // backend, which inherits the open file descriptor). We only need the path.
+    // process spawned by the Local backend holds that lock. We only need the path.
     let root_search_dir = group_ctx.group_dir.clone();
     // The IPv6 addresses of the IC nodes are not stored on disk next to the
     // UVMs; they live in the registry local store which is surfaced through the
@@ -371,9 +370,9 @@ fn discover_uvms(root_path: PathBuf) -> Result<HashMap<String, Ipv6Addr>> {
         .map(|e| e.path().to_owned())
     {
         let file =
-            std::fs::File::open(&entry).with_context(|| format!("Could not open: {:?}", &entry))?;
+            std::fs::File::open(&entry).with_context(|| format!("Could not open: {:?}", entry))?;
         let vm: AllocatedVm = serde_json::from_reader(file)
-            .with_context(|| format!("{:?}: Could not read json.", &entry))?;
+            .with_context(|| format!("{:?}: Could not read json.", entry))?;
         uvms.insert(vm.name.to_string(), vm.ipv6);
     }
     Ok(uvms)

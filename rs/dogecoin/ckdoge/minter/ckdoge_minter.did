@@ -308,6 +308,7 @@ type MemoryMetrics = record {
     canister_history_size : nat;
     wasm_chunk_store_size : nat;
     snapshots_size : nat;
+    log_memory_store_size : nat;
 };
 
 type CanisterStatusType = variant { stopped; stopping; running };
@@ -319,12 +320,20 @@ type DefiniteCanisterSettings = record {
   compute_allocation : nat;
   reserved_cycles_limit : nat;
   log_visibility: log_visibility;
+  snapshot_visibility : snapshot_visibility;
+  log_memory_limit : nat;
   wasm_memory_limit : nat;
   wasm_memory_threshold : nat;
   environment_variables : vec environment_variable;
 };
 
 type log_visibility = variant {
+    controllers;
+    public;
+    allowed_viewers : vec principal;
+};
+
+type snapshot_visibility = variant {
     controllers;
     public;
     allowed_viewers : vec principal;

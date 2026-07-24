@@ -69,6 +69,7 @@ rust_test(
         "//packages/ic-error-types",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/privileges",
         "//rs/test_utilities/state",
         "//rs/test_utilities/tmpdir",
         "//rs/test_utilities/types",

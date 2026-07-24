@@ -77,7 +77,7 @@ prost = { workspace = true }
 rstest = { workspace = true }
 serde_cbor = { workspace = true }
 slog-async = { workspace = true }
-slog-envlogger = "2.2.0"
+slog-envlogger = { workspace = true }
 slog-term = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }

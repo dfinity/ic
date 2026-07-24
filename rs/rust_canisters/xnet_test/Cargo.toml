@@ -17,6 +17,6 @@ ic-cdk = { workspace = true }
 ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-management-canister-types = { workspace = true }
 rand = { workspace = true }
-rand_pcg = "0.3"
+rand_pcg = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -124,6 +124,7 @@ impl CanisterHttpRequestArgs {
 /// ```text
 /// record {
 ///   url : text;
+///   max_response_bytes : opt nat64;
 ///   headers : vec http_header;
 ///   method : variant { get; head; post };
 ///   body : opt blob;
@@ -141,6 +142,7 @@ impl CanisterHttpRequestArgs {
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct FlexibleCanisterHttpRequestArgs {
     pub url: String,
+    pub max_response_bytes: Option<u64>,
     pub headers: BoundedHttpHeaders,
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub body: Option<Vec<u8>>,

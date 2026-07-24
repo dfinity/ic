@@ -20,10 +20,10 @@ use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        LOG_MEMORY_STORE_FEATURE, LOG_MEMORY_STORE_FEATURE_ENABLED,
-        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
+        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -56,7 +56,8 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
     canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
-        subnet_call_context_manager::InstallCodeCallId, testing::NetworkTopologyTesting,
+        subnet_call_context_manager::InstallCodeCallId,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},
@@ -324,7 +325,6 @@ fn canister_manager_config(
         MAX_ENVIRONMENT_VARIABLES,
         MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
         MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-        LOG_MEMORY_STORE_FEATURE,
     )
 }
 
@@ -339,12 +339,10 @@ fn initial_state(subnet_id: SubnetId, use_specified_ids_routing_table: bool) -> 
         })
         .unwrap()
     };
-    state
-        .metadata
-        .network_topology
-        .set_routing_table(routing_table);
-
-    state.metadata.network_topology.nns_subnet_id = subnet_id;
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table(routing_table);
+        network_topology.nns_subnet_id = subnet_id;
+    });
     state.metadata.init_allocation_ranges_if_empty().unwrap();
     state
 }
@@ -405,7 +403,7 @@ fn install_code(
         None,
         old_canister,
         time,
-        Arc::new(network_topology),
+        network_topology,
         execution_parameters,
         round_limits,
         CompilationCostHandling::CountFullAmount,
@@ -1392,9 +1390,9 @@ fn get_canister_status_with_incorrect_controller_fails() {
 
     let err = test.canister_status(canister_id).unwrap_err();
 
-    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(err.code(), ErrorCode::CanisterStatusAccessDenied);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} can control it"
+        "Caller {test_user} is not allowed to read the canister status"
     )));
 }
 
@@ -5117,6 +5115,85 @@ fn uninstall_code_clears_canister_state() {
 }
 
 #[test]
+fn last_install_timestamp_tracks_code_deployment_and_uninstall() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let last_install_timestamp = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .execution_state
+            .as_ref()
+            .and_then(|es| es.last_install_timestamp)
+    };
+
+    // A freshly created canister has no installed code, hence no install time.
+    assert_eq!(last_install_timestamp(&test), None);
+
+    // Install records the current round time as the install time.
+    let install_time = test.state().time();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(install_time));
+
+    // Reinstall updates the install time.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let reinstall_time = test.state().time();
+    assert!(reinstall_time > install_time);
+    test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(reinstall_time));
+
+    // Upgrade updates the install time.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let upgrade_time = test.state().time();
+    assert!(upgrade_time > reinstall_time);
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(upgrade_time));
+
+    // Uninstall drops the execution state, so the install time is gone. This
+    // exercises the same `uninstall_canister` primitive used by the
+    // out-of-cycles force uninstall.
+    test.uninstall_code(canister_id).unwrap();
+    assert_eq!(last_install_timestamp(&test), None);
+}
+
+#[test]
+fn canister_creation_timestamp_is_set_at_creation_and_stable() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // Advance the time so the recorded creation timestamp is distinct from the
+    // default, making the assertion below meaningful.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let creation_time = test.state().time();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let creation_timestamp = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .system_state
+            .canister_creation_timestamp
+    };
+
+    // The creation time is recorded at creation.
+    assert_eq!(creation_timestamp(&test), Some(creation_time));
+
+    // Unlike the install timestamp, it lives on the system state and is set only
+    // once, so it is unaffected by later code deployments or uninstall.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(creation_timestamp(&test), Some(creation_time));
+
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(creation_timestamp(&test), Some(creation_time));
+
+    test.uninstall_code(canister_id).unwrap();
+    assert_eq!(creation_timestamp(&test), Some(creation_time));
+}
+
+#[test]
 fn reinstall_clears_canister_state() {
     let reinstall_canister = |test: &mut ExecutionTest, canister_id: CanisterId| {
         test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
@@ -5401,9 +5478,7 @@ fn setup_canister_log_heap_delta_test(
     // of the two records.
     const MSG: &[u8] = &[b'x'; 2100];
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_log_memory_store_feature_enabled()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test
         .create_canister_with_settings(
             CYCLES,
@@ -5590,7 +5665,6 @@ fn update_settings_fails_when_heap_delta_rate_limited() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_heap_delta_rate_limit(LIMIT)
-        .with_log_memory_store_feature_enabled()
         .build();
     let canister_id = test
         .create_canister_with_settings(
@@ -5638,9 +5712,7 @@ fn update_settings_fails_when_heap_delta_rate_limited() {
 fn create_canister_heap_delta_log_memory_limit_default() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_log_memory_store_feature_enabled()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     test.create_canister(CYCLES);
 
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
@@ -5653,9 +5725,7 @@ fn create_canister_heap_delta_log_memory_limit_explicit() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const MIB: u64 = 1024 * 1024;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_log_memory_store_feature_enabled()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     test.create_canister_with_settings(
         CYCLES,
         CanisterSettingsArgsBuilder::new()
@@ -8604,12 +8674,9 @@ fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_ca
 
     // ...or status cannot be checked...
     let err = test.canister_status(canister_id).unwrap_err();
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
-    );
+    assert_eq!(err.code(), ErrorCode::CanisterStatusAccessDenied);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+        "Caller {test_user} is not allowed to read the canister status"
     )));
     // ...or canister metrics cannot be retrieved...
     let err = test.canister_metrics(canister_id).unwrap_err();

@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 assert_matches = { workspace = true }
 candid = { workspace = true }
-ethers-core = "2.0.8"
+ethers-core = { workspace = true }
 evm_rpc_types = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }

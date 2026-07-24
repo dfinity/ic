@@ -18,22 +18,6 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-# Provision the `ic-net-admin` capability launcher for the local system-test
-# backend (rs/tests/driver/src/driver/local_backend.rs; referenced there as
-# NET_ADMIN_LAUNCHER). It is a copy of `capsh` (from libcap2-bin) endowed with
-# narrow file capabilities so the otherwise-unprivileged test driver can raise
-# exactly CAP_NET_ADMIN / CAP_NET_RAW / CAP_NET_BIND_SERVICE into the ambient
-# set -- needed to create the per-group bridge and TAPs and to run its dnsmasq
-# router-advertiser / DHCPv4 server (which binds the privileged UDP port 67).
-# `setcap` needs CAP_SETFCAP, available at image-build time but not to the test
-# process; the resulting file capabilities are preserved in the image layer.
-# Baking this into the image (rather than provisioning it at container start)
-# keeps it off any runtime setup path, which can be unreliable -- e.g. in the
-# devcontainer such a hook would run as a VS Code `postStartCommand`, which
-# VS Code can skip.
-RUN install -m 0755 "$(command -v capsh)" /usr/local/bin/ic-net-admin && \
-    setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/local/bin/ic-net-admin
-
 # Drop troublesome SSH file (Potentially related: Debian #1072221)
 RUN rm -f /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
 
@@ -60,8 +44,8 @@ RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 # Add motoko compiler
 # This is only used by Cargo; Bazel pulls its own via rules_motoko
 # NOTE: keep version in line with rules_motoko
-ARG motoko_version=0.16.3
-RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+ARG motoko_version=1.11.0
+RUN curl -fsSL https://github.com/caffeinelabs/motoko/releases/download/${motoko_version}/motoko-Linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 # Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c

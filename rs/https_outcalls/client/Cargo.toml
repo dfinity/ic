@@ -23,6 +23,7 @@ ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
@@ -33,4 +34,4 @@ tracing = { workspace = true }
 [dev-dependencies]
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
-tower-test = "0.4.0"
+tower-test = { workspace = true }

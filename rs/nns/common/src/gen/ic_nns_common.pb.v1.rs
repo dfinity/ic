@@ -6,13 +6,11 @@
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Eq,
     PartialOrd,
     Ord,
-    std::hash::Hash,
 )]
 #[self_describing]
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NeuronId {
     #[prost(uint64, tag = "2")]
     pub id: u64,
@@ -23,13 +21,11 @@ pub struct NeuronId {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Eq,
     PartialOrd,
     Ord,
-    std::hash::Hash,
 )]
 #[self_describing]
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProposalId {
     #[prost(uint64, tag = "1")]
     pub id: u64,

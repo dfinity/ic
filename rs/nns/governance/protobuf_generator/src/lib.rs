@@ -107,13 +107,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(strum_macros::EnumIter)]",
     );
 
-    // Eq
-    // --
-
-    config.type_attribute("ic_nns_governance.pb.v1.BallotInfo", "#[derive(Eq)]");
-    config.type_attribute("ic_nns_governance.pb.v1.NeuronInfo", "#[derive(Eq)]");
-    config.type_attribute("ic_nns_governance.pb.v1.KnownNeuronData", "#[derive(Eq)]");
-
     // self_describing
     // ---------------
 
@@ -212,6 +205,27 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         .join("ic_nns_governance/pb/v1/governance.proto");
 
     config.compile_protos(&[src_file], &proto.to_vec()).unwrap();
+
+    // Prost applies `#[deprecated]` to enum variants (among other things). We do not
+    // want this, because we `match` on enums, and in general, `match` is required to
+    // be exhaustive (a nice feature of Rust). In particular, derrived third-party
+    // traits often do not use `#[allow(deprecated)]`, even though built in traits
+    // (e.g. `Eq`) do apply `#[allow(deprecated)]` to avoid warnings. There is a
+    // feature request to Prost to address warnings resulting from how their
+    // generated `#[deprecated]`:
+    // https://github.com/tokio-rs/prost/issues/1444
+    for entry in std::fs::read_dir(out).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_file() {
+            let content = std::fs::read_to_string(&path).unwrap();
+            let cleaned: String = content
+                .lines()
+                .filter(|line| !line.contains("#[deprecated]"))
+                .map(|line| format!("{}\n", line))
+                .collect();
+            std::fs::write(&path, cleaned).unwrap();
+        }
+    }
 
     ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }

@@ -20,17 +20,15 @@ pkg-config
 libclang-dev
 libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)
 libusb-1.0-0-dev # required for HSM
-lld # required for ovmf_sev genrule
+lld # used as the default system linker for cargo builds (see ci/container/Dockerfile)
 protobuf-compiler # needed by cargo for prost-build/tonic-build (Bazel brings its own)
 llvm
 
 # IC-OS
 clang
 cryptsetup-bin
-dosfstools # provides FAT tools
 faketime
 fdisk
-iasl # to build OVMF
 ipmitool # to connect to baremetal test instances
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
@@ -38,24 +36,10 @@ libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
 libvirt-dev
-mtools # used for mcopy and mmd
-nasm # to build OVMF
 podman
 rsync
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
-
-# Local system-test backend (libvirt/QEMU; see rs/tests/driver/src/driver/local_backend.rs).
-# Provides per-test libvirtd subprocess + KVM-accelerated QEMU for the libvirt
-# network's DHCP.
-libvirt-daemon
-libvirt-daemon-driver-qemu
-qemu-system-x86
-qemu-utils
-ovmf
-# Provides `capsh` (source of the baked-in /usr/local/bin/ic-net-admin launcher)
-# plus `setcap`/`getcap`; see ci/container/Dockerfile.
-libcap2-bin
 
 # For ci/githubstats/query.py
 libpq-dev

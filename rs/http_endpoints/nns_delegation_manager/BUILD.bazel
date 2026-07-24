@@ -48,6 +48,15 @@ rust_library(
 rust_test(
     name = "nns_delegation_manager_test",
     crate = ":nns_delegation_manager",
+    # Each test establishes a real TLS connection to an in-process mock server. The Rust test
+    # harness runs the tests in parallel (one thread per test), so on a busy machine the connection
+    # setup can be starved of CPU and exceed `CONNECTION_TIMEOUT`. Limit the number of concurrent
+    # test threads and reserve enough CPU cores so the connections are established in time,
+    # preventing flaky connection timeouts.
+    env = {
+        "RUST_TEST_THREADS": "4",
+    },
+    exec_properties = {"cpu": "4"},
     deps = [
         "//rs/certification/test-utils",
         "//rs/crypto/tls_interfaces",

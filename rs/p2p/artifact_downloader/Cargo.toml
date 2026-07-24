@@ -10,7 +10,7 @@ documentation.workspace = true
 
 [dependencies]
 axum = { workspace = true }
-backoff = { workspace = true }
+backon = { workspace = true }
 bytes = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }

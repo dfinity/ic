@@ -64,7 +64,7 @@ pub struct Scalars {
     pub r_bytes: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// Simple message to be included into a composite message.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Simple {
     #[prost(int64, tag = "1")]
     pub v_i64: i64,
@@ -89,12 +89,12 @@ pub struct Composite {
 }
 /// Nested message and enum types in `Composite`.
 pub mod composite {
-    #[derive(Clone, Copy, PartialEq, ::prost::Message)]
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct NestedInner {
         #[prost(uint64, tag = "1")]
         pub inner_u64: u64,
     }
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum VOneof {
         #[prost(string, tag = "6")]
         OneofString(::prost::alloc::string::String),
@@ -103,7 +103,7 @@ pub mod composite {
     }
 }
 /// A message with out-of-order fields.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Ordering {
     #[prost(int64, tag = "16")]
     pub v_i64: i64,

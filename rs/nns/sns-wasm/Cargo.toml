@@ -20,7 +20,7 @@ ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
@@ -35,7 +35,7 @@ ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 ic-wasm = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -117,10 +117,10 @@ impl CustomServer {
         let key_der =
             PrivateKeyDer::try_from(self.server_cert.key_pair().serialize_for_rustls()).unwrap();
 
-        let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
-        ring_crypto_provider.cipher_suites = cipher_suites;
+        let mut crypto_provider = rustls::crypto::aws_lc_rs::default_provider();
+        crypto_provider.cipher_suites = cipher_suites;
 
-        let config = ServerConfig::builder_with_provider(Arc::new(ring_crypto_provider))
+        let config = ServerConfig::builder_with_provider(Arc::new(crypto_provider))
             .with_protocol_versions(&protocol_versions)
             .expect("Valid rustls server config.")
             .with_no_client_auth()

@@ -2,6 +2,7 @@ use crate::crypt::{LuksHeaderLocation, activate_crypt_device, format_crypt_devic
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
 use ic_sys::fs::{Clobber, write_atomically_using_tmp_file};
+use prometheus::Registry;
 use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -13,7 +14,7 @@ const GENERATED_KEY_SIZE_BYTES: usize = 16;
 
 pub struct GeneratedKeyDiskEncryption<'a> {
     pub key_path: &'a Path,
-    pub metrics_file: &'a Path,
+    pub metrics_registry: &'a Registry,
 }
 
 impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
@@ -31,7 +32,7 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
             // execution environment)
             /*verify_luks_params=*/
             false,
-            Some(self.metrics_file),
+            Some(self.metrics_registry),
         )
         .context("Failed to initialize crypt device")?;
 

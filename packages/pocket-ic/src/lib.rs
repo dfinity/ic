@@ -1947,6 +1947,7 @@ pub enum ErrorCode {
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
     CanisterInvalidControllerOrSubnetAdmin = 541,
+    CanisterStatusAccessDenied = 542,
     // 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -2019,6 +2020,7 @@ impl TryFrom<u64> for ErrorCode {
             539 => Ok(ErrorCode::CanisterWasmMemoryLimitExceeded),
             540 => Ok(ErrorCode::ReservedCyclesLimitIsTooLow),
             541 => Ok(ErrorCode::CanisterInvalidControllerOrSubnetAdmin),
+            542 => Ok(ErrorCode::CanisterStatusAccessDenied),
             // 6xx -- `RejectCode::SysUnknown`
             601 => Ok(ErrorCode::DeadlineExpired),
             602 => Ok(ErrorCode::ResponseDropped),

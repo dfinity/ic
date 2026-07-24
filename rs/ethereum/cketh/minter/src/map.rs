@@ -176,7 +176,7 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         Key: Clone,
     {
         let mut to_remove = Vec::new();
-        for (key, _alt_key) in self.by_key.iter() {
+        for key in self.by_key.keys() {
             if predicate(key) {
                 to_remove.push(key.clone());
             }

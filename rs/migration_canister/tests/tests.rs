@@ -652,6 +652,7 @@ async fn call_request(
         canister_id,
         method_name: "update".to_string(),
         arg: wasm().reply().build(),
+        sender_info: None,
     };
     let envelope = Envelope {
         content: std::borrow::Cow::Borrowed(&content),

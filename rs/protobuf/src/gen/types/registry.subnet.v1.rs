@@ -169,7 +169,7 @@ pub struct CatchUpPackageContents {
 /// Nested message and enum types in `CatchUpPackageContents`.
 pub mod catch_up_package_contents {
     /// / The purpose of the CUP.
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum CupType {
         /// / Initial CUP used to bootstrap a subnet.
         #[prost(message, tag = "9")]
@@ -182,13 +182,13 @@ pub mod catch_up_package_contents {
         SubnetSplitting(super::SubnetSplittingArgs),
     }
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GenesisArgs {
     /// Initial height of the subnet
     #[prost(uint64, tag = "1")]
     pub height: u64,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RecoveryArgs {
     /// The blockchain height that the CUP should have
     #[prost(uint64, tag = "1")]
@@ -200,13 +200,13 @@ pub struct RecoveryArgs {
     #[prost(bytes = "vec", tag = "3")]
     pub state_hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubnetSplittingArgs {
     /// / The ID of the subnet created by the split.
     #[prost(message, optional, tag = "1")]
     pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RegistryStoreUri {
     /// / The uri at which the registry store data should be retrieved. The data
     /// / must be provided as gzipped tar archive
@@ -221,14 +221,14 @@ pub struct RegistryStoreUri {
     pub registry_version: u64,
 }
 /// Contains information pertaining to all subnets in the IC and their params.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubnetListRecord {
     /// A list of subnet ids of all subnets present in this instance of the IC.
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub subnets: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// Initial non-interactive DKG transcript record
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct InitialNiDkgTranscriptRecord {
     #[prost(message, optional, tag = "1")]
     pub id: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
@@ -241,7 +241,7 @@ pub struct InitialNiDkgTranscriptRecord {
     #[prost(bytes = "vec", tag = "5")]
     pub internal_csp_transcript: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgTranscriptId {
     #[prost(uint64, tag = "1")]
     pub id: u64,
@@ -280,14 +280,14 @@ pub struct IDkgTranscript {
     #[prost(bytes = "vec", tag = "8")]
     pub raw_transcript: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DealerTuple {
     #[prost(message, optional, tag = "1")]
     pub dealer_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
     #[prost(uint32, tag = "2")]
     pub dealer_index: u32,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SignatureTuple {
     #[prost(message, optional, tag = "1")]
     pub signer: ::core::option::Option<super::super::super::types::v1::NodeId>,
@@ -312,7 +312,7 @@ pub struct IDkgTranscriptParams {
     #[prost(message, repeated, tag = "7")]
     pub idkg_transcript_operation_args: ::prost::alloc::vec::Vec<IDkgTranscript>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgDealing {
     #[prost(message, optional, tag = "1")]
     pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
@@ -320,7 +320,7 @@ pub struct IDkgDealing {
     #[prost(bytes = "vec", tag = "2")]
     pub raw_dealing: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgSignedDealingTuple {
     #[prost(message, optional, tag = "1")]
     pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
@@ -338,7 +338,7 @@ pub struct InitialIDkgDealings {
     #[prost(message, repeated, tag = "4")]
     pub signed_dealings: ::prost::alloc::vec::Vec<IDkgSignedDealingTuple>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgComplaint {
     #[prost(message, optional, tag = "1")]
     pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
@@ -347,7 +347,7 @@ pub struct IDkgComplaint {
     #[prost(bytes = "vec", tag = "3")]
     pub raw_complaint: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgOpening {
     #[prost(message, optional, tag = "1")]
     pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
@@ -356,14 +356,14 @@ pub struct IDkgOpening {
     #[prost(bytes = "vec", tag = "3")]
     pub raw_opening: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExtendedDerivationPath {
     #[prost(message, optional, tag = "1")]
     pub caller: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub derivation_path: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubnetFeatures {
     /// This feature flag controls whether canister execution happens
     /// in sandboxed process or not. It is disabled by default.
@@ -377,7 +377,7 @@ pub struct SubnetFeatures {
     #[prost(bool, optional, tag = "9")]
     pub sev_enabled: ::core::option::Option<bool>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KeyConfig {
     /// The key's identifier.
     #[prost(message, optional, tag = "1")]
@@ -409,7 +409,7 @@ pub struct ChainKeyConfig {
     pub max_parallel_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
 }
 /// Limits on resource consumption (e.g., memory usage).
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResourceLimits {
     #[prost(uint64, optional, tag = "1")]
     pub maximum_state_size: ::core::option::Option<u64>,

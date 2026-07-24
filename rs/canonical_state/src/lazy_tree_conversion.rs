@@ -459,7 +459,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
         FiniteMap::default()
             .with("api_boundary_nodes", move || {
                 api_boundary_nodes_as_tree(
-                    &state.metadata.api_boundary_nodes,
+                    &state.metadata.network_topology.api_boundary_nodes,
                     certification_version,
                 )
             })
@@ -480,7 +480,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 subnets_as_tree(
                     state.metadata.network_topology.subnets_for_certification(),
                     own_subnet_id,
-                    &state.metadata.node_public_keys,
+                    &state.metadata.own_subnet_info.node_public_keys,
                     inverted_routing_table.clone(),
                     &state.metadata.subnet_metrics,
                     certification_version,
@@ -597,6 +597,8 @@ macro_rules! message_expander {
                 CertificationVersion::V24 => $expand::<{ CertificationVersion::V24 as u32 }>,
                 CertificationVersion::V25 => $expand::<{ CertificationVersion::V25 as u32 }>,
                 CertificationVersion::V26 => $expand::<{ CertificationVersion::V26 as u32 }>,
+                CertificationVersion::V27 => $expand::<{ CertificationVersion::V27 as u32 }>,
+                CertificationVersion::V28 => $expand::<{ CertificationVersion::V28 as u32 }>,
             }
         }
     };
@@ -876,15 +878,8 @@ const CERTIFIED_DATA_LABEL: &[u8] = b"certified_data";
 const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
-
-const CANISTER_LABELS: [&[u8]; 4] = [
-    CERTIFIED_DATA_LABEL,
-    CONTROLLERS_LABEL,
-    METADATA_LABEL,
-    MODULE_HASH_LABEL,
-];
-
-const CANISTER_NO_MODULE_LABELS: [&[u8]; 1] = [CONTROLLERS_LABEL];
+const LAST_INSTALL_TIMESTAMP_LABEL: &[u8] = b"last_install_timestamp";
+const CANISTER_CREATION_TIMESTAMP_LABEL: &[u8] = b"canister_creation_timestamp";
 
 #[derive(Clone)]
 struct CanisterFork<'a> {
@@ -896,6 +891,15 @@ impl<'a> CanisterFork<'a> {
     /// Like `edge`, but assumes valid labels only.
     fn edge_no_checks(&self, label: &[u8]) -> LazyTree<'a> {
         let canister = self.canister;
+        // The `canister_creation_timestamp` leaf is exposed for every canister
+        // (with or without installed code); it lives on the system state.
+        if label == CANISTER_CREATION_TIMESTAMP_LABEL {
+            let timestamp = canister
+                .system_state
+                .canister_creation_timestamp
+                .expect("canister_creation_timestamp leaf present without a value");
+            return num(timestamp.as_nanos_since_unix_epoch());
+        }
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
                 CERTIFIED_DATA_LABEL => Blob(canister.system_state.certified_data.as_slice(), None),
@@ -905,6 +909,12 @@ impl<'a> CanisterFork<'a> {
                 METADATA_LABEL => canister_metadata_as_tree(execution_state, self.version),
                 MODULE_HASH_LABEL => {
                     Blob(execution_state.wasm_binary.binary.module_hash_ref(), None)
+                }
+                LAST_INSTALL_TIMESTAMP_LABEL => {
+                    let timestamp = execution_state
+                        .last_install_timestamp
+                        .expect("last_install_timestamp leaf present without a value");
+                    num(timestamp.as_nanos_since_unix_epoch())
                 }
                 _ => unreachable!(),
             },
@@ -917,13 +927,46 @@ impl<'a> CanisterFork<'a> {
         }
     }
 
-    /// Returns the labels applicable to this canister.
-    #[inline]
-    fn valid_labels(&self) -> &'static [&'static [u8]] {
-        match self.canister.execution_state {
-            Some(_) => &CANISTER_LABELS,
-            None => &CANISTER_NO_MODULE_LABELS,
+    /// Returns the labels applicable to this canister, in sorted order.
+    fn valid_labels(&self) -> Vec<&'static [u8]> {
+        let mut labels: Vec<&'static [u8]> = if self.canister.execution_state.is_some() {
+            vec![
+                CERTIFIED_DATA_LABEL,
+                CONTROLLERS_LABEL,
+                METADATA_LABEL,
+                MODULE_HASH_LABEL,
+            ]
+        } else {
+            vec![CONTROLLERS_LABEL]
+        };
+        // The `last_install_timestamp` leaf is only exposed from certification
+        // version `V27` onwards, and only when the execution state has a recorded
+        // install timestamp. It is therefore omitted for canisters with no
+        // installed code and for code installed before the field existed.
+        if self.version >= CertificationVersion::V27
+            && self
+                .canister
+                .execution_state
+                .as_ref()
+                .is_some_and(|execution_state| execution_state.last_install_timestamp.is_some())
+        {
+            labels.push(LAST_INSTALL_TIMESTAMP_LABEL);
         }
+        // The `canister_creation_timestamp` leaf is exposed from certification
+        // version `V28` onwards for every canister (with or without installed
+        // code) that has a recorded creation timestamp. It is omitted for
+        // canisters created before the field existed.
+        if self.version >= CertificationVersion::V28
+            && self
+                .canister
+                .system_state
+                .canister_creation_timestamp
+                .is_some()
+        {
+            labels.push(CANISTER_CREATION_TIMESTAMP_LABEL);
+        }
+        labels.sort_unstable();
+        labels
     }
 }
 
@@ -936,14 +979,14 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + 'a> {
-        Box::new(self.valid_labels().iter().map(From::from))
+        Box::new(self.valid_labels().into_iter().map(Label::from))
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
         let canister = self.clone();
         Box::new(
             self.valid_labels()
-                .iter()
+                .into_iter()
                 .map(move |label| (Label::from(label), canister.edge_no_checks(label))),
         )
     }
@@ -980,6 +1023,8 @@ fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
         CertificationVersion::V24 => expand_canister::<{ CertificationVersion::V24 as u32 }>,
         CertificationVersion::V25 => expand_canister::<{ CertificationVersion::V25 as u32 }>,
         CertificationVersion::V26 => expand_canister::<{ CertificationVersion::V26 as u32 }>,
+        CertificationVersion::V27 => expand_canister::<{ CertificationVersion::V27 as u32 }>,
+        CertificationVersion::V28 => expand_canister::<{ CertificationVersion::V28 as u32 }>,
     }
 }
 

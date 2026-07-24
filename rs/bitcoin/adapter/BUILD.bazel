@@ -104,12 +104,12 @@ rust_test(
         "test_data/first_2500_testnet_headers.json",
     ],
     crate = ":adapter",
-    tags = ["requires-network"],
     deps = [
         # Keep sorted.
         "//rs/bitcoin/adapter/test_utils",
         "//rs/bitcoin/replica_types",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/net",
         "@crate_index//:tempfile",
     ],
 )
@@ -137,9 +137,7 @@ rust_test(
         "RUST_TEST_THREADS": "4",
         "RUST_TEST_NOCAPTURE": "1",
     },
-    tags = [
-        "cpu:4",
-    ],
+    exec_properties = {"cpu": "4"},
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [
         "@platforms//cpu:x86_64",

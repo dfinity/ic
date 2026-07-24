@@ -17,12 +17,12 @@ pub struct ChainKeyEnabledSubnetList {
 #[derive(
     serde::Serialize,
     serde::Deserialize,
-    Eq,
-    Hash,
     PartialOrd,
     Ord,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct PublicKey {
@@ -42,12 +42,12 @@ pub struct PublicKey {
 #[derive(
     serde::Serialize,
     serde::Deserialize,
-    Eq,
-    Hash,
     PartialOrd,
     Ord,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct X509PublicKeyCert {

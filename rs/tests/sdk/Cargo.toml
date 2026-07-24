@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-backoff = { workspace = true }
+backon = { workspace = true, features = ["std-blocking-sleep"] }
 candid = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }

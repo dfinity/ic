@@ -103,7 +103,15 @@ rust_test(
     name = "config_lib_test_dev",
     crate = ":config_lib_dev",
     crate_features = ["dev"],
-    env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
+    data = [
+        "@dosfstools//:mkfs.fat",
+        "@mtools//:mcopy",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config",
+        "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
+        "MCOPY": "$(rootpath @mtools//:mcopy)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:once_cell",
@@ -114,6 +122,14 @@ rust_test(
 rust_test(
     name = "config_lib_test",
     crate = ":config_lib",
+    data = [
+        "@dosfstools//:mkfs.fat",
+        "@mtools//:mcopy",
+    ],
+    env = {
+        "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
+        "MCOPY": "$(rootpath @mtools//:mcopy)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:once_cell",

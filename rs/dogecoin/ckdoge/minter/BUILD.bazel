@@ -48,7 +48,7 @@ rust_test(
     crate = ":ckdoge_minter_lib",
     data = [":test_vectors"],
     env = {
-        "TEST_VECTORS": "$(locations :test_vectors)",
+        "TEST_VECTORS": "$(rootpaths :test_vectors)",
     },
     proc_macro_deps = [
         # Keep sorted.
@@ -88,6 +88,7 @@ rust_test(
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-management-canister-types",
         ],
     )
     for (name, features) in [

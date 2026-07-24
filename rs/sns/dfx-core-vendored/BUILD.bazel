@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = [
+    "//rs/sns/cli:__pkg__",
+    "//rs/sns/testing:__pkg__",
+])
+
+rust_library(
+    name = "dfx-core-vendored",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "dfx_core_vendored",
+    version = "0.4.0",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:aes-gcm",
+        "@crate_index//:argon2",
+        "@crate_index//:candid",
+        "@crate_index//:dialoguer",
+        "@crate_index//:directories-next",
+        "@crate_index//:hex",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-identity-hsm",
+        "@crate_index//:keyring",
+        "@crate_index//:lazy_static",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:thiserror",
+        "@crate_index//:url",
+    ] + select({
+        "@platforms//os:osx": [
+            "@crate_index//:security-framework",
+        ],
+        "//conditions:default": [],
+    }),
+)

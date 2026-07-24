@@ -682,6 +682,7 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 pub struct StateMachineConfig {
     subnet_config: SubnetConfig,
     hypervisor_config: HypervisorConfig,
+    resource_limits: ResourceLimits,
 }
 
 impl StateMachineConfig {
@@ -689,7 +690,13 @@ impl StateMachineConfig {
         Self {
             subnet_config,
             hypervisor_config,
+            resource_limits: ResourceLimits::default(),
         }
+    }
+
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = resource_limits;
+        self
     }
 }
 
@@ -1254,7 +1261,6 @@ pub struct StateMachine {
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    hypervisor_config: HypervisorConfig,
 }
 
 impl Default for StateMachine {
@@ -2438,7 +2444,6 @@ impl StateMachine {
             chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
-            hypervisor_config,
         }
     }
 
@@ -2764,7 +2769,7 @@ impl StateMachine {
         contents: Vec<CanisterHttpResponseContent>,
     ) {
         assert_eq!(contents.len(), self.nodes.len());
-        for (node, content) in std::iter::zip(self.nodes.iter(), contents.into_iter()) {
+        for (node, content) in std::iter::zip(self.nodes.iter(), contents) {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
@@ -5330,9 +5335,9 @@ impl StateMachine {
                 }
             }
         });
-        let mut available_guaranteed_response_memory = self
-            .hypervisor_config
-            .guaranteed_response_message_memory_capacity
+        let mut available_guaranteed_response_memory = replicated_state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
             .get() as i64
             - replicated_state
                 .guaranteed_response_message_memory_taken()
@@ -5602,6 +5607,7 @@ fn multi_subnet_setup(
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
     StateMachineBuilder::new()
+        .with_resource_limits(config.resource_limits)
         .with_config(Some(config))
         .with_subnet_seed([subnet_seed; 32])
         .with_subnet_type(subnet_type)

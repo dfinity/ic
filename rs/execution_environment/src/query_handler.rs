@@ -55,12 +55,10 @@ use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::QueryScheduler;
-use crate::execution::common::validate_subnet_admin;
+use crate::execution::common::list_canisters;
 use ic_management_canister_types_private::{
-    CanisterIdRange, CanisterIdRecord, CanisterMetricsArgs, EmptyBlob, FetchCanisterLogsRequest,
-    ListCanistersResponse, Payload, QueryMethod,
+    CanisterIdRecord, CanisterMetricsArgs, FetchCanisterLogsRequest, Payload, QueryMethod,
 };
-use ic_registry_routing_table::canister_id_into_u64;
 
 pub struct DataCertificateWithDelegationMetadata {
     pub data_certificate: Vec<u8>,
@@ -176,47 +174,6 @@ impl InternalHttpQueryHandler {
         self.local_query_execution_stats.set_epoch(epoch);
     }
 
-    fn list_canisters(
-        &self,
-        state: &ReplicatedState,
-        caller: &ic_types::PrincipalId,
-        payload: &[u8],
-    ) -> Result<WasmResult, UserError> {
-        match EmptyBlob::decode(payload) {
-            Err(err) => Err(err),
-            Ok(EmptyBlob) => {
-                match state.get_own_subnet_admins() {
-                    Some(ref admins) => {
-                        validate_subnet_admin(admins, caller).map_err(UserError::from)?
-                    }
-                    None => {
-                        return Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            "list_canisters is only available on subnets with subnet admins",
-                        ));
-                    }
-                }
-                let mut canisters: Vec<CanisterIdRange> = Vec::new();
-                for id in state.canister_states().all_keys() {
-                    let id_u64 = canister_id_into_u64(*id);
-                    match canisters.last_mut() {
-                        Some(last)
-                            if canister_id_into_u64(last.end).checked_add(1) == Some(id_u64) =>
-                        {
-                            last.end = *id;
-                        }
-                        _ => canisters.push(CanisterIdRange {
-                            start: *id,
-                            end: *id,
-                        }),
-                    }
-                }
-                let response = ListCanistersResponse { canisters };
-                Ok(WasmResult::Reply(Encode!(&response).unwrap()))
-            }
-        }
-    }
-
     /// Handle a query of type `Query`.
     pub fn query(
         &self,
@@ -246,15 +203,10 @@ impl InternalHttpQueryHandler {
                                     format!("Canister {canister_id} not found"),
                                 )
                             })?;
-                    let result = Ok(WasmResult::Reply(
-                        fetch_canister_logs_response(
-                            query.source(),
-                            canister,
-                            args,
-                            self.config.log_memory_store_feature,
-                        )
-                        .map_err(UserError::from)?,
-                    ));
+                    let (reply, _record_count, _content_size) =
+                        fetch_canister_logs_response(query.source(), canister, args)
+                            .map_err(UserError::from)?;
+                    let result = Ok(WasmResult::Reply(reply));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),
@@ -295,8 +247,8 @@ impl InternalHttpQueryHandler {
                 Ok(QueryMethod::ListCanisters) => {
                     let since = Instant::now();
                     let caller = query.source();
-                    let result =
-                        self.list_canisters(state.get_ref(), &caller, &query.method_payload);
+                    let result = list_canisters(state.get_ref(), &caller, &query.method_payload)
+                        .map(|(res, _instructions)| WasmResult::Reply(res));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::ListCanisters,
                         since.elapsed().as_secs_f64(),
@@ -372,8 +324,7 @@ impl InternalHttpQueryHandler {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory =
-            full_subnet_memory_capacity(&self.config, state.get_ref().resource_limits());
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config, state.get_ref());
         // Letting the canister use the full subnet memory reservation
         // is fine as we do not persist state modifications.
         let subnet_memory_reservation = self.config.subnet_memory_reservation;

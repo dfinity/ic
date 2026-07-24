@@ -160,11 +160,7 @@ impl ProximityMap {
         }
 
         // Mean weight to assign to nodes that we don't have explicit weights for.
-        let mean_weight = if weighted_nodes > 0 {
-            total_weight / weighted_nodes
-        } else {
-            1
-        };
+        let mean_weight = total_weight.checked_div(weighted_nodes).unwrap_or(1);
 
         // Cumulative node weights, to be used for weighted random selection.
         let cumulative_weights: Vec<u64> = node_weights

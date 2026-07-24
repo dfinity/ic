@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-backoff = { workspace = true }
+backon = { workspace = true }
 futures-util = { workspace = true }
 hyper = { workspace = true }
 hyper-rustls = { workspace = true }

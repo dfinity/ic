@@ -168,6 +168,7 @@ use ic_nns_test_utils::{
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node, replica_version::v1::ReplicaVersionRecord, subnet::v1 as pb_subnet,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
@@ -175,6 +176,7 @@ use ic_registry_client_helpers::{
     replica_version::ReplicaVersionRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
+    unassigned_nodes::UnassignedNodeRegistry,
 };
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
@@ -399,15 +401,14 @@ impl TopologySnapshot {
     }
 
     pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
         Box::new(
             self.local_registry
-                .get_subnet_ids(registry_version)
-                .unwrap_result(registry_version, "subnet_ids")
+                .get_subnet_ids(self.registry_version)
+                .unwrap_result(self.registry_version, "subnet_ids")
                 .into_iter()
                 .map(|subnet_id| SubnetSnapshot {
                     subnet_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -418,25 +419,23 @@ impl TopologySnapshot {
     }
 
     pub fn subnet_canister_ranges(&self, sub: SubnetId) -> Vec<CanisterIdRange> {
-        let registry_version = self.local_registry.get_latest_version();
         self.local_registry
-            .get_subnet_canister_ranges(registry_version, sub)
+            .get_subnet_canister_ranges(self.registry_version, sub)
             .expect("Could not deserialize optional routing table from local registry.")
             .expect("Optional routing table is None in local registry.")
     }
 
     pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
         let assigned_nodes: HashSet<_> = self
             .local_registry
-            .get_subnet_ids(registry_version)
-            .unwrap_result(registry_version, "subnet_ids")
+            .get_subnet_ids(self.registry_version)
+            .unwrap_result(self.registry_version, "subnet_ids")
             .into_iter()
             .flat_map(|subnet_id| {
                 self.local_registry
-                    .get_node_ids_on_subnet(subnet_id, registry_version)
+                    .get_node_ids_on_subnet(subnet_id, self.registry_version)
                     .unwrap_result(
-                        registry_version,
+                        self.registry_version,
                         &format!("node_ids_on_subnet(subnet_id={subnet_id})"),
                     )
             })
@@ -444,12 +443,12 @@ impl TopologySnapshot {
 
         let api_boundary_nodes = self
             .local_registry
-            .get_api_boundary_node_ids(registry_version)
+            .get_api_boundary_node_ids(self.registry_version)
             .unwrap();
 
         Box::new(
             self.local_registry
-                .get_node_ids(registry_version)
+                .get_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .filter(|node_id| {
@@ -457,7 +456,7 @@ impl TopologySnapshot {
                 })
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -468,16 +467,14 @@ impl TopologySnapshot {
     }
 
     pub fn api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_api_boundary_node_ids(registry_version)
+                .get_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -488,16 +485,14 @@ impl TopologySnapshot {
     }
 
     pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_system_api_boundary_node_ids(registry_version)
+                .get_system_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -508,16 +503,14 @@ impl TopologySnapshot {
     }
 
     pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_app_api_boundary_node_ids(registry_version)
+                .get_app_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -528,10 +521,8 @@ impl TopologySnapshot {
     }
 
     pub fn replica_version_records(&self) -> Result<Vec<(String, ReplicaVersionRecord)>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         self.local_registry
-            .get_all_replica_version_records(registry_version)?
+            .get_all_replica_version_records(self.registry_version)?
             .context("get_all_replica_version_records always returns Some (and it did not)")
     }
 
@@ -555,6 +546,13 @@ impl TopologySnapshot {
             env: self.env.clone(),
             ic_name: self.ic_name.clone(),
         }
+    }
+
+    /// The unassigned nodes config record, if it exists.
+    pub fn unassigned_nodes_config(&self) -> Option<UnassignedNodesConfigRecord> {
+        self.local_registry
+            .get_unassigned_nodes_config(self.registry_version)
+            .expect("Could not deserialize unassigned nodes config from local registry.")
     }
 
     /// This method blocks and repeatedly fetches updates from the registry
@@ -878,16 +876,15 @@ impl IcNodeSnapshot {
     }
 
     pub fn subnet_id(&self) -> Option<SubnetId> {
-        let registry_version = self.registry_version;
         self.local_registry
-            .get_subnet_ids(registry_version)
-            .unwrap_result(registry_version, "subnet_ids")
+            .get_subnet_ids(self.registry_version)
+            .unwrap_result(self.registry_version, "subnet_ids")
             .into_iter()
             .find(|subnet_id| {
                 self.local_registry
-                    .get_node_ids_on_subnet(*subnet_id, registry_version)
+                    .get_node_ids_on_subnet(*subnet_id, self.registry_version)
                     .unwrap_result(
-                        registry_version,
+                        self.registry_version,
                         &format!("node_ids_on_subnet(subnet_id={subnet_id})"),
                     )
                     .contains(&self.node_id)
@@ -895,9 +892,8 @@ impl IcNodeSnapshot {
     }
 
     pub fn is_api_boundary_node(&self) -> bool {
-        let registry_version = self.registry_version;
         self.local_registry
-            .get_api_boundary_node_ids(registry_version)
+            .get_api_boundary_node_ids(self.registry_version)
             .unwrap()
             .contains(&self.node_id)
     }
@@ -2268,12 +2264,11 @@ pub trait IcNodeContainer {
 
 impl IcNodeContainer for SubnetSnapshot {
     fn nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.registry_version;
         let node_ids = self
             .local_registry
-            .get_node_ids_on_subnet(self.subnet_id, registry_version)
+            .get_node_ids_on_subnet(self.subnet_id, self.registry_version)
             .unwrap_result(
-                registry_version,
+                self.registry_version,
                 &format!("node_ids_on_subnet(subnet_id={})", self.subnet_id),
             );
 
@@ -2283,7 +2278,7 @@ impl IcNodeContainer for SubnetSnapshot {
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
                     ic_name: self.ic_name.clone(),
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                 })

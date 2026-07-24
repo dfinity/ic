@@ -678,7 +678,8 @@ pub fn extract_effective_canister_id(
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
 
-        Ok(Method::SetupInitialDKG)
+        Ok(Method::ListCanisters)
+        | Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)
         | Ok(Method::HttpRequest)
         | Ok(Method::FlexibleHttpRequest)

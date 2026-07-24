@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     error,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -62,15 +62,15 @@ pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<Node
 /// Returns all replica version records in the snapshot.
 pub(crate) fn get_all_replica_version_records(
     snapshot: &RegistrySnapshot,
-) -> Vec<(String, ReplicaVersionRecord)> {
-    let mut replica_versions = Vec::new();
+) -> BTreeMap<String, ReplicaVersionRecord> {
+    let mut replica_versions = BTreeMap::new();
     for (k, v) in snapshot {
         if let Some(key) = str::from_utf8(k)
             .unwrap()
             .strip_prefix(REPLICA_VERSION_KEY_PREFIX)
         {
             let record = ReplicaVersionRecord::decode(v.as_slice()).unwrap();
-            replica_versions.push((key.to_owned(), record));
+            replica_versions.insert(key.to_owned(), record);
         }
     }
 
@@ -114,12 +114,12 @@ pub(crate) fn get_all_chain_key_signing_subnet_list_records(
 // Retrieve all HostOS version records
 pub(crate) fn get_all_hostos_version_records(
     snapshot: &RegistrySnapshot,
-) -> Vec<HostosVersionRecord> {
-    let mut result = Vec::new();
+) -> BTreeSet<HostosVersionRecord> {
+    let mut result = BTreeSet::new();
     for (k, v) in snapshot {
         if k.starts_with(HOSTOS_VERSION_KEY_PREFIX.as_bytes()) {
             let hostos_version_record = HostosVersionRecord::decode(v.as_slice()).unwrap();
-            result.push(hostos_version_record);
+            result.insert(hostos_version_record);
         }
     }
 
@@ -147,8 +147,8 @@ pub(crate) fn get_api_boundary_node_records_from_snapshot(
 /// Returns an all api boundary node ids record from the registry snapshot.
 pub(crate) fn get_api_boundary_node_ids_from_snapshot(
     snapshot: &RegistrySnapshot,
-) -> Result<Vec<NodeId>, InvariantCheckError> {
-    let api_bn_ids: Result<Vec<NodeId>, InvariantCheckError> = snapshot
+) -> Result<BTreeSet<NodeId>, InvariantCheckError> {
+    snapshot
         .keys()
         .cloned()
         .map(|key| {
@@ -157,15 +157,13 @@ pub(crate) fn get_api_boundary_node_ids_from_snapshot(
                 source: None,
             })
         })
-        .collect::<Result<Vec<String>, InvariantCheckError>>()
+        .collect::<Result<BTreeSet<String>, InvariantCheckError>>()
         .map(|keys| {
             keys.into_iter()
                 .filter_map(|key_str| get_api_boundary_node_record_node_id(&key_str))
                 .map(NodeId::from)
                 .collect()
-        });
-
-    api_bn_ids
+        })
 }
 
 /// Returns node record from the snapshot corresponding to a key.
@@ -185,7 +183,7 @@ pub(crate) fn get_node_record_from_snapshot(
         .transpose()
 }
 
-pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> Vec<SubnetId> {
+pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> BTreeSet<SubnetId> {
     get_value_from_snapshot::<SubnetListRecord>(snapshot, make_subnet_list_record_key())
         .map(|r| {
             r.subnets

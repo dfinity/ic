@@ -54,4 +54,4 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-types-cycles = { path = "../types/cycles" }
-maplit = "1.0.2"
+maplit = { workspace = true }

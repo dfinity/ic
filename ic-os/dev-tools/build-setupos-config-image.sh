@@ -6,6 +6,10 @@ CONFIG_DIR="${1}"
 DATA_DIR="${2}"
 OUTPUT_IMAGE="${3}"
 
+mkfs_fat="${MKFS_FAT:-/usr/sbin/mkfs.fat}"
+mlabel="${MLABEL:-mlabel}"
+mcopy="${MCOPY:-mcopy}"
+
 TMPDIR=$(mktemp -d)
 
 tar cf "${TMPDIR}/config.tar" -C "${CONFIG_DIR}" .
@@ -13,11 +17,11 @@ tar cf "${TMPDIR}/data.tar" -C "${DATA_DIR}" .
 
 truncate -s 10M "${OUTPUT_IMAGE}"
 
-/usr/sbin/mkfs.fat "${OUTPUT_IMAGE}"
+"$mkfs_fat" "${OUTPUT_IMAGE}"
 
-mlabel -i "${OUTPUT_IMAGE}" ::OVERRIDE
+"$mlabel" -i "${OUTPUT_IMAGE}" ::OVERRIDE
 
-mcopy -i "${OUTPUT_IMAGE}" -o "${TMPDIR}/config.tar" ::
-mcopy -i "${OUTPUT_IMAGE}" -o "${TMPDIR}/data.tar" ::
+"$mcopy" -i "${OUTPUT_IMAGE}" -o "${TMPDIR}/config.tar" ::
+"$mcopy" -i "${OUTPUT_IMAGE}" -o "${TMPDIR}/data.tar" ::
 
 rm -rf "${TMPDIR}"

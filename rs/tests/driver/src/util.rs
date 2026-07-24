@@ -55,8 +55,11 @@ use ic_types::{
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{
-    call::{AsyncCall, SyncCall},
-    interfaces::{ManagementCanister, management_canister::CanisterLogRecord},
+    call::SyncCall,
+    interfaces::{
+        ManagementCanister,
+        management_canister::{CanisterLogRecord, FetchCanisterLogsArgs},
+    },
 };
 use icp_ledger::{
     AccountBalanceArgs, AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount,
@@ -293,9 +296,11 @@ impl<'a> UniversalCanister<'a> {
 
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -663,9 +668,11 @@ impl<'a> MessageCanister<'a> {
     ) -> Result<MessageCanister<'a>, String> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -801,12 +808,15 @@ impl<'a> MessageCanister<'a> {
 
     pub async fn fetch_logs(&self) -> Vec<CanisterLogRecord> {
         let mgr = ManagementCanister::create(self.agent);
-        mgr.fetch_canister_logs(&self.canister_id)
-            .call()
-            .await
-            .unwrap_or_else(|err| panic!("Could not fetch canister logs: {err}"))
-            .0
-            .canister_log_records
+        mgr.fetch_canister_logs(&FetchCanisterLogsArgs {
+            canister_id: self.canister_id,
+            filter: None,
+        })
+        .call()
+        .await
+        .unwrap_or_else(|err| panic!("Could not fetch canister logs: {err}"))
+        .0
+        .canister_log_records
     }
 }
 
@@ -844,9 +854,11 @@ impl<'a> SignerCanister<'a> {
     ) -> SignerCanister<'a> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -1009,14 +1021,10 @@ pub async fn agent_with_client_identity(
 
 // Creates an identity to be used with `Agent`.
 pub fn random_ed25519_identity() -> BasicIdentity {
-    let rng = ring::rand::SystemRandom::new();
-    let key_pair = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng)
-        .expect("Could not generate a key pair.");
-
-    BasicIdentity::from_key_pair(
-        ring::signature::Ed25519KeyPair::from_pkcs8(key_pair.as_ref())
-            .expect("Could not read the key pair."),
-    )
+    use rand::RngCore;
+    let mut raw_key = [0_u8; 32];
+    rand::thread_rng().fill_bytes(&mut raw_key);
+    BasicIdentity::from_raw_key(&raw_key)
 }
 
 pub fn get_nns_node(topo_snapshot: &TopologySnapshot) -> IcNodeSnapshot {
@@ -1307,7 +1315,8 @@ pub async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
     let mgr = ManagementCanister::create(agent);
     let canister_status = mgr
         .canister_status(canister_id)
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .unwrap_or_else(|err| panic!("Could not get canister status: {err}"))
         .0;
@@ -1481,7 +1490,8 @@ pub fn to_principal_id(principal: &Principal) -> PrincipalId {
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
     ManagementCanister::create(agent)
         .canister_status(canister_id)
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .is_ok_and(|s| s.0.module_hash.is_some())
 }
@@ -2131,6 +2141,7 @@ pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: None,
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }
@@ -2144,6 +2155,7 @@ pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }

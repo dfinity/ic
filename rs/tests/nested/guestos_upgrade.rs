@@ -15,8 +15,8 @@ use nested::{
     HOST_VM_NAME, registration,
     util::{
         NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, elect_guestos_version,
-        get_elected_guestos_versions, get_unassigned_nodes_config, try_logging_guestos_diagnostics,
-        update_unassigned_nodes, wait_for_expected_guest_version,
+        get_elected_guestos_versions, try_logging_guestos_diagnostics, update_unassigned_nodes,
+        wait_for_expected_guest_version,
     },
 };
 
@@ -69,13 +69,13 @@ pub fn upgrade_guestos(env: TestEnv) {
         info!(
             logger,
             "Initial replica versions: {:?}",
-            get_elected_guestos_versions(&topology).await
+            get_elected_guestos_versions(&topology)
         );
 
         info!(
             logger,
             "Unassigned nodes config: {:?}",
-            get_unassigned_nodes_config(&nns_node).await
+            topology.unassigned_nodes_config()
         );
 
         // check that GuestOS is on the expected version (initial version)
@@ -118,7 +118,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         info!(
             logger,
             "Updated replica versions: {:?}",
-            get_elected_guestos_versions(&new_topology).await
+            get_elected_guestos_versions(&new_topology)
         );
 
         update_unassigned_nodes(&nns_node, &target_version).await;
@@ -126,7 +126,7 @@ pub fn upgrade_guestos(env: TestEnv) {
         info!(
             logger,
             "Unassigned nodes config: {:?}",
-            get_unassigned_nodes_config(&nns_node).await
+            topology.unassigned_nodes_config()
         );
 
         wait_for_expected_guest_version(

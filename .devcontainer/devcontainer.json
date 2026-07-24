@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:3368ca5d900d0734b71b6fd891b76d6ed9ad4325727c2cc57f5f404b7627dcb6",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:661a3e80a89607d98b9384e4dddfaa4bd8f90a0cb420006cbf3f3f061aa8e9a5",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -78,6 +78,18 @@
           "bazel-ic/": true,
           "bazel-out/": true,
           "targets/": true
+        },
+        // rust-analyzer runs `cargo` with RUSTUP_AUTO_INSTALL=0, so a freshly
+        // (re)built dev container that lacks the toolchain pinned in
+        // rust-toolchain.toml fails to load the workspace until it's installed
+        // by hand. Overriding it back to 1 lets rust-analyzer's own cargo
+        // invocation install the pinned toolchain on demand. extraEnv is
+        // applied after rust-analyzer sets the =0 default, so this wins.
+        "rust-analyzer.cargo.extraEnv": {
+          "RUSTUP_AUTO_INSTALL": "1"
+        },
+        "rust-analyzer.check.extraEnv": {
+          "RUSTUP_AUTO_INSTALL": "1"
         }
       }
     }

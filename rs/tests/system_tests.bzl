@@ -99,7 +99,7 @@ def system_test(
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
       cpus: Optional number of CPU cores to reserve for the local variant of the test.
-        This will translate into a `cpu:N` tag for the `_local` variant.
+        This will translate into an `exec_properties = {"cpu": str(cpus)}` setting for the `_local` variant.
         Heuristic: set it to MIN_LOCAL_CPUS + number of vCPUs required for the whole testnet. DEFAULT_VCPUS_PER_VM can be used for the default number of vCPUs per VM if not overridden.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
@@ -137,6 +137,15 @@ def system_test(
     _runtime_deps = dict(runtime_deps)
 
     _runtime_deps["TEST_BIN"] = test_driver_target
+
+    # Bazel-built FAT tools the driver uses to assemble config images for
+    # universal VMs / SetupOS / GuestOS, instead of system dosfstools/mtools.
+    # These are set on the test process and read (by name) from the driver and
+    # the config-image scripts it spawns; see run_systest.sh (symlink handling)
+    # and colocate_test.rs.
+    _runtime_deps["MKFS_FAT"] = "@dosfstools//:mkfs.fat"
+    _runtime_deps["MCOPY"] = "@mtools//:mcopy"
+    _runtime_deps["MLABEL"] = "@mtools//:mlabel"
 
     env_var_files = {}
     icos_images = dict()
@@ -266,7 +275,7 @@ def system_test(
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
-    # Runtime deps that are only needed when running on the local (libvirt-based) backend.
+    # Runtime deps that are only needed when running on the local (QEMU-based) backend.
     _local_only_deps = {
         image_name + "_PATH": image_path
         for image_name, image_path in icos_images.items()
@@ -283,14 +292,20 @@ def system_test(
 
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
-    _local_only_deps["ENV_DEPS__LIBVIRTD_PATH"] = "//rs/tests:libvirtd"
-    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "//rs/tests:dnsmasq"
+    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
+    _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_X86_64_PATH"] = "@qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu//:qemu-system-x86_64"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_DATA_PATH"] = "@qemu_system_data_prebuilt_linux_amd64//:qemu-system-data"
+
+    # Split OVMF (UEFI) firmware for the QEMU VMs (see local_backend.rs). The
+    # code image is mounted read-only and shared; the vars image is a per-VM
+    # writable varstore template.
+    _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
+    _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
 
     local_dep_env = {
         name: "$(rootpath {})".format(dep)
         for name, dep in _local_only_deps.items()
-    } | {
-        "NET_ADMIN_LAUNCHER_PATH": "/usr/local/bin/ic-net-admin",
     }
 
     # The local backend runs in a sandbox without external network access, so it
@@ -299,8 +314,6 @@ def system_test(
     # (--stream-ic-node-logs) and tail each VM's serial console
     # (--stream-console-logs).
     local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
-
-    reserve_cpus = [] if cpus == None else ["cpu:{}".format(cpus)]
 
     sh_test(
         name = test_name + "_local",
@@ -313,7 +326,9 @@ def system_test(
             "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
         },
         env_inherit = env_inherit,
-        tags = tags + ["local_system_test"] + reserve_cpus + (["manual"] if backend == "farm" else []),
+        tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
+        exec_properties = {"cpu": str(cpus)} if cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,

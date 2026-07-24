@@ -78,7 +78,7 @@ impl SwapCanister {
             if new_sns_neuron_recipes.sns_neuron_recipes.is_empty() {
                 return Ok(sns_neuron_recipes);
             } else {
-                sns_neuron_recipes.extend(new_sns_neuron_recipes.sns_neuron_recipes.into_iter())
+                sns_neuron_recipes.extend(new_sns_neuron_recipes.sns_neuron_recipes)
             }
         }
         Err(ListAllSnsNeuronRecipesError::TooManyRecipes(

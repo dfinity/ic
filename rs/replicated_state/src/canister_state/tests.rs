@@ -669,6 +669,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     // And an execution state with non-zero size.
     canister_state.execution_state = Some(ExecutionState::new(
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        None,
         ExportedFunctions::new(Default::default()),
         Memory::new_for_testing(),
         Memory::new_for_testing(),
@@ -824,6 +825,7 @@ fn canister_state_ingress_induction_cycles_debit() {
     system_state.apply_ingress_induction_cycles_debit(
         system_state.canister_id(),
         cost_schedule,
+        true, // strict
         &no_op_logger(),
         &mock_metrics(),
     );
@@ -1023,6 +1025,7 @@ fn canister_state_canister_log_record_round_trip() {
 fn execution_state_test_partial_eq() {
     let state_1 = ExecutionState::new(
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        None,
         ExportedFunctions::new(Default::default()),
         Memory::new_for_testing(),
         Memory::new_for_testing(),

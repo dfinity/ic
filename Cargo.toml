@@ -262,6 +262,7 @@ members = [
     "rs/nervous_system/governance",
     "rs/nervous_system/histogram",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/ids",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
     "rs/nervous_system/instruction_stats_update_attribute",
@@ -416,6 +417,7 @@ members = [
     "rs/rust_canisters/xrc_mock",
     "rs/sns/audit",
     "rs/sns/cli",
+    "rs/sns/dfx-core-vendored",
     "rs/sns/governance",
     "rs/sns/governance/api",
     "rs/sns/governance/api_helpers",
@@ -452,6 +454,9 @@ members = [
     "rs/test_utilities/load_wasm",
     "rs/test_utilities/logger",
     "rs/test_utilities/metrics",
+    "rs/test_utilities/net",
+    "rs/test_utilities/privileges",
+    "rs/test_utilities/privileges/macros",
     "rs/test_utilities/registry",
     "rs/test_utilities/serialization",
     "rs/test_utilities/state",
@@ -608,21 +613,29 @@ async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
-backoff = "0.4"
+backon = { version = "1.6.0", default-features = false, features = ["std"] }
 base64 = { version = "0.13.1" }
+bech32 = "^0.9.0"
 bincode = "1.3.3"
+bip32 = "0.5.0"
+bit-vec = "^0.6.3"
 bitcoin = { package = "bitcoin-dogecoin", version = "0.32.7-doge.0", features = [
     "default",
     "rand",
     "serde",
 ] }
 # build-info and build-info-build MUST be kept in sync!
+bs58 = "^0.5.0"
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
+by_address = "^1.1.0"
+byteorder = "^1.3.4"
 bytes = "1.9.0"
-canbench-rs = "0.4.0"
-candid = { version = "0.10.22" }
+cached = { version = "0.49", default-features = false }
+canbench-rs = "0.6.0"
+candid = { version = "0.10.31" }
 candid_parser = { version = "0.1.2" }
+cargo_metadata = "^0.14.2"
 chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",
     "clock",
@@ -630,12 +643,9 @@ chrono = { version = "0.4.42", default-features = false, features = [
 ] }
 ciborium = "0.2.1"
 clap = { version = "4.5.20", features = ["derive", "string"] }
-# cloudflare v0.12 is broken, master is partly fixed but unreleased yet.
-# see:
-# - https://github.com/cloudflare/cloudflare-rs/issues/222
-# - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "8b011d170d9d61eaad77bb9645371f6219285104", default-features = false }
+colored = "^2.0.0"
 comparable = { version = "0.5", features = ["derive"] }
+crc32fast = "^1.2.0"
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
 csv = "^1.1"
@@ -643,10 +653,11 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
+cvt = "^0.1.1"
+darling = "^0.20.11"
 der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
-dfx-core = { version = "0.3.0" }
 ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
@@ -656,7 +667,9 @@ ed25519-dalek = { version = "2.2.0", features = [
     "pem",
     "hazmat",
 ] }
-ethnum = { version = "1.3.2", features = ["serde"] }
+escargot = "0.5.7"
+ethers-core = "^2.0.7"
+ethnum = { version = "1.5.3", features = ["serde"] }
 evm_rpc_client = "0.4.0"
 evm_rpc_types = "3.1.0"
 flate2 = "1.0.31"
@@ -668,8 +681,10 @@ getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"
 hex = { version = "0.4.3", features = ["serde"] }
-hickory-resolver = "0.25.2"
+hex-literal = "^0.4.1"
+hickory-resolver = "0.26.1"
 hkdf = "^0.12"
+hmac = "^0.12"
 http = "1.3.1"
 http-body = "1.0.1"
 http-body-util = "0.1.3"
@@ -680,34 +695,38 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
     "http1",
     "http2",
     "native-tokio",
-    "ring",
+    "aws-lc-rs",
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
+ic-canister-log = "^0.2.0"
+ic-certified-map = "^0.3.1"
+ic-metrics-encoder = "^1.1.1"
 ic0 = "1.0.0"
-ic-agent = { version = "0.45.0", features = ["pem", "ring"] }
-ic-bn-lib = { version = "0.1.14", features = ["acme-alpn"] }
-ic-bn-lib-common = "0.1.4"
+ic-agent = { version = "0.49.1", features = ["pem"] }
+ic-bn-lib = { version = "0.2.3", features = ["acme-alpn"] }
+ic-bn-lib-common = { version = "0.2.2" }
 ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.0"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
 ic-cdk = "0.19.0"
+ic-cdk-management-canister = "0.1.1"
 ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "3e698972422be07776bf888666285b7b3f7c984e", default-features = false }
 ic-http-certification = "3.0.3"
-ic-identity-hsm = "0.45.0"
-ic-management-canister-types = "0.5.0"
+ic-identity-hsm = { version = "0.49.1" }
+ic-management-canister-types = "0.8.0"
 ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
-ic-transport-types = { version = "0.45.0" }
-ic-utils = { version = "0.45.0", features = ["raw"] }
-ic-vetkeys = "0.6.0"
+ic-transport-types = { version = "0.49.1" }
+ic-utils = { version = "0.49.1", features = ["raw"] }
+ic-vetkeys = "0.7.0"
 ic-xrc-types = "1.2.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
@@ -719,6 +738,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
+indicatif = "^0.17.3"
 indoc = "1.0.9"
 inferno = "0.12.0"
 inotify = { version = "0.11.2", default-features = false, features = [
@@ -726,6 +746,7 @@ inotify = { version = "0.11.2", default-features = false, features = [
 ] }
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
+json5 = "^0.4.1"
 jsonrpc = "0.18.0"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
@@ -741,13 +762,15 @@ leb128 = "0.2.5"
 libc = "0.2.158"
 libcryptsetup-rs = "0.15"
 libflate = "2.1.0"
+libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
-lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
-lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
 lzma-sys = { version = "0.1.20", features = ["static"] }
 macaddr = "1.0"
+maplit = "^1.0.2"
 memchr = "2.7"
 memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
@@ -756,13 +779,17 @@ mockall = "0.13.0"
 mockito = "1.6.1"
 more-asserts = "0.3.1"
 nftables = "0.4"
-nix = { version = "0.24.3", features = ["ptrace", "user", "signal"] }
+nix = { version = "0.31.3", features = ["fs", "ioctl", "mman", "net", "process", "ptrace", "signal", "socket", "time", "user", "zerocopy"] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"
 object = "0.37.3"
+once_cell = "^1.8"
 opentelemetry = { version = "0.32.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["grpc-tonic", "trace"] }
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
+    "grpc-tonic",
+    "trace",
+] }
 opentelemetry_sdk = { version = "0.32.1", features = ["trace"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "alloc",
@@ -776,65 +803,78 @@ pairing = "0.23"
 parking_lot = "0.12.3"
 paste = "1.0.15"
 pem = { version = "^3", default-features = false, features = ["std"] }
+pin-project-lite = "^0.2"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
-pprof = { version = "0.14.0", default-features = false, features = [
+pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a", default-features = false, features = [
     "criterion",
     "flamegraph",
     "prost-codec",
 ] }
 predicates = "3.1.2"
 pretty_assertions = "1.4.0"
+priority-queue = "1.3.1"
 proc-macro2 = "1.0.89"
 procfs = { version = "^0.17", default-features = false }
 prometheus = { version = "0.14.0", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "=1.6.0"
 proptest-derive = "0.5.0"
-prost = "0.13.3"
-prost-build = "0.13.3"
+prost = "0.14.3"
+prost-build = "0.14.3"
 protobuf = "3.7.2"
 qrcode = { version = "0.14.1", default-features = false }
-quinn = { version = "0.11.5", default-features = false, features = [
-    "ring",
+quinn = { version = "0.11.11", default-features = false, features = [
+    "aws-lc-rs",
     "log",
     "runtime-tokio",
-    "rustls",
+    "rustls-aws-lc-rs",
 ] }
 quinn-udp = "0.5.5"
 quote = "1.0.37"
-rand = { version = "0.8.5", features = ["small_rng"] }
+rand = { version = "0.8.6", features = ["small_rng"] }
 rand_chacha = "0.3.1"
+rand_distr = "^0.4"
+rand_pcg = "^0.3.1"
 ratatui = "0.29"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.6"
-reqwest = { version = "0.12.24", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
     "blocking",
     "http2",
     "json",
     "multipart",
-    "rustls-tls",
-    "rustls-tls-native-roots",
+    "rustls",
     "socks",
     "stream",
 ] }
+rgb = "^0.8.37"
 ring = { version = "^0.17.7", features = ["std"] }
 rolling-file = "0.2.0"
 rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
+rusqlite = "0.37.0"
 rust-ini = "0.21.1"
+rust_decimal = "^1.36.0"
+rust_decimal_macros = "^1.36.0"
 rustc-demangle = { version = "0.1.16" }
+rustc-hash = "^1.1.0"
 rustls = { version = "0.23.18", default-features = false, features = [
-    "ring",
+    "aws_lc_rs",
     "std",
     "brotli",
     "tls12",
 ] }
+rustls-pemfile = "^2.1.2"
+rusty-fork = "^0.3.0"
 schemars = { version = "0.8.21", features = ["derive"] }
+scoped_threadpool = "^0.1.9"
 scopeguard = "1.2.0"
+scraper = "^0.17.1"
+secp256k1 = { version = "0.29", features = ["global-context", "rand", "std"] }
 securefmt = "0.1.5"
 semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
@@ -842,7 +882,7 @@ serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_regex = "1.1.0"
-serde_with = "1.14.0"
+serde_with = "3.21.0"
 serde_yaml = "0.9.33"
 sev = { version = "7.1", default-features = false, features = [
     "crypto_nossl",
@@ -859,6 +899,7 @@ slog = { version = "2.7.0", features = [
     "release_max_level_trace",
 ] }
 slog-async = { version = "2.8.0", features = ["nested-values"] }
+slog-envlogger = "^2.2.0"
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
 slotmap = "1.0.7"
@@ -874,21 +915,25 @@ sysinfo = "0.37"
 systemd = "0.10"
 tar = "0.4.39"
 tempfile = "3.20"
+textplots = "^0.8"
 thiserror = "2.0.18"
+thousands = "^0.2.0"
 threadpool = "1.8.1"
-tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
-tikv-jemallocator = "0.6"
+tikv-jemalloc-ctl = { version = "0.7", features = ["stats"] }
+tikv-jemallocator = "0.7"
 time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.42.0", features = ["full"] }
 tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
-    "ring",
+    "aws-lc-rs",
 ] }
 tokio-stream = "0.1.17"
 tokio-test = "0.4.4"
 tokio-util = { version = "0.7.13", features = ["full"] }
-tonic = "0.12.3"
-tonic-build = "0.12.3"
+tonic = "0.14.5"
+tonic-build = "0.14.5"
+tonic-prost = "0.14.5"
+tonic-prost-build = "0.14.5"
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.4", features = [
     "add-extension",
@@ -900,6 +945,8 @@ tower-http = { version = "0.6.4", features = [
     "compression-full",
     "tracing",
 ] }
+tower-test = "^0.4.0"
+tower_governor = "0.8.0"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-flame = "0.2.0"
@@ -919,18 +966,20 @@ url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
-walrus = "0.23.3"
+walrus = "0.26.4"
 wasm-encoder = { version = "0.251.0", features = ["wasmparser"] }
 wasmparser = "0.251.0"
 wasmprinter = "0.251.0"
+wasmtime = { version = "46.0.1", default-features = false, features = ["cranelift", "gc", "gc-null", "parallel-compilation", "runtime"] }
 wast = "251.0.0"
 wat = "~1.251.0"
 webpki-roots = "1.0.6"
 which = "6.0.3"
 wirm = { version = "4.0.4", features = ["parallel"] }
 wsl = "0.1.0"
+wycheproof = { version = "0.6", default-features = false }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
-x509-parser = { version = "0.16.0" }
+x509-parser = { version = "0.18.1" }
 xz2 = { version = "0.1.7", features = ["static"] }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.13.2"
@@ -938,4 +987,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.9.11"
+version = "^0.10.0"

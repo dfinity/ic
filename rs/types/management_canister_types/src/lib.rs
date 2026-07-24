@@ -77,6 +77,7 @@ pub enum Method {
     CanisterStatus,
     CanisterInfo,
     CanisterMetadata,
+    ListCanisters,
     CreateCanister,
     DeleteCanister,
     DepositCycles,
@@ -1372,6 +1373,94 @@ impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility 
     }
 }
 
+/// Status visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+///    allowed_viewers : vec principal;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, EnumIter)]
+pub enum StatusVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(BoundedAllowedViewers),
+}
+
+impl Payload<'_> for StatusVisibility {}
+
+impl From<&StatusVisibility> for pb_canister_state_bits::StatusVisibility {
+    fn from(item: &StatusVisibility) -> Self {
+        match item {
+            StatusVisibility::Controllers => pb_canister_state_bits::StatusVisibility {
+                status_visibility: Some(
+                    pb_canister_state_bits::status_visibility::StatusVisibility::Controllers(1),
+                ),
+            },
+            StatusVisibility::Public => pb_canister_state_bits::StatusVisibility {
+                status_visibility: Some(
+                    pb_canister_state_bits::status_visibility::StatusVisibility::Public(2),
+                ),
+            },
+            StatusVisibility::AllowedViewers(principals) => {
+                pb_canister_state_bits::StatusVisibility {
+                    status_visibility: Some(
+                        pb_canister_state_bits::status_visibility::StatusVisibility::AllowedViewers(
+                            pb_canister_state_bits::StatusVisibilityAllowedViewers {
+                                principals: principals
+                                    .get()
+                                    .iter()
+                                    .map(|c| (*c).into())
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
+                            },
+                        ),
+                    ),
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<pb_canister_state_bits::StatusVisibility> for StatusVisibility {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_canister_state_bits::StatusVisibility) -> Result<Self, Self::Error> {
+        let Some(status_visibility) = item.status_visibility else {
+            return Err(ProxyDecodeError::MissingField(
+                "StatusVisibility::status_visibility",
+            ));
+        };
+        match status_visibility {
+            pb_canister_state_bits::status_visibility::StatusVisibility::Controllers(_) => {
+                Ok(Self::Controllers)
+            }
+            pb_canister_state_bits::status_visibility::StatusVisibility::Public(_) => {
+                Ok(Self::Public)
+            }
+            pb_canister_state_bits::status_visibility::StatusVisibility::AllowedViewers(data) => {
+                let principals = data
+                    .principals
+                    .into_iter()
+                    .map(|p| {
+                        PrincipalId::try_from(p.raw).map_err(|e| {
+                            ProxyDecodeError::ValueOutOfRange {
+                                typ: "PrincipalId",
+                                err: e.to_string(),
+                            }
+                        })
+                    })
+                    .collect::<Result<Vec<PrincipalId>, _>>()?;
+                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(principals)))
+            }
+        }
+    }
+}
+
 /// Struct used for encoding/decoding
 /// ```text
 /// record {
@@ -1384,6 +1473,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility 
 ///   minimum_incoming_canister_call_cycles : nat;
 ///   log_visibility : log_visibility;
 ///   snapshot_visibility : snapshot_visibility;
+///   status_visibility : status_visibility;
 ///   log_memory_limit : nat;
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
@@ -1401,6 +1491,7 @@ pub struct DefiniteCanisterSettingsArgs {
     minimum_incoming_canister_call_cycles: candid::Nat,
     log_visibility: LogVisibilityV2,
     snapshot_visibility: SnapshotVisibility,
+    status_visibility: StatusVisibility,
     log_memory_limit: candid::Nat,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
@@ -1419,6 +1510,7 @@ impl DefiniteCanisterSettingsArgs {
         minimum_incoming_canister_call_cycles: u128,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
+        status_visibility: StatusVisibility,
         log_memory_limit: u64,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
@@ -1446,6 +1538,7 @@ impl DefiniteCanisterSettingsArgs {
             minimum_incoming_canister_call_cycles,
             log_visibility,
             snapshot_visibility,
+            status_visibility,
             log_memory_limit: candid::Nat::from(log_memory_limit),
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
@@ -1471,6 +1564,10 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn snapshot_visibility(&self) -> &SnapshotVisibility {
         &self.snapshot_visibility
+    }
+
+    pub fn status_visibility(&self) -> &StatusVisibility {
+        &self.status_visibility
     }
 
     pub fn log_memory_limit(&self) -> candid::Nat {
@@ -1605,6 +1702,7 @@ impl CanisterStatusResultV2 {
         minimum_incoming_canister_call_cycles: u128,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
+        status_visibility: StatusVisibility,
         log_memory_limit: u64,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
@@ -1648,6 +1746,7 @@ impl CanisterStatusResultV2 {
                 minimum_incoming_canister_call_cycles,
                 log_visibility,
                 snapshot_visibility,
+                status_visibility,
                 log_memory_limit,
                 wasm_memory_limit,
                 wasm_memory_threshold,
@@ -2170,8 +2269,8 @@ pub struct InstallCodeArgs {
 impl std::fmt::Display for InstallCodeArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallCodeArgs {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  canister_id: {:?}", self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
@@ -2239,8 +2338,8 @@ pub struct InstallCodeArgsV2 {
 impl std::fmt::Display for InstallCodeArgsV2 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallCodeArgsV2 {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  canister_id: {:?}", self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
@@ -2378,6 +2477,7 @@ pub struct EnvironmentVariable {
 ///   minimum_incoming_canister_call_cycles : opt nat;
 ///   log_visibility : opt log_visibility;
 ///   snapshot_visibility : opt snapshot_visibility;
+///   status_visibility : opt status_visibility;
 ///   log_memory_limit : opt nat;
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
@@ -2394,6 +2494,7 @@ pub struct CanisterSettingsArgs {
     pub minimum_incoming_canister_call_cycles: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibilityV2>,
     pub snapshot_visibility: Option<SnapshotVisibility>,
+    pub status_visibility: Option<StatusVisibility>,
     pub log_memory_limit: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
@@ -2415,6 +2516,7 @@ impl CanisterSettingsArgs {
             minimum_incoming_canister_call_cycles: None,
             log_visibility: None,
             snapshot_visibility: None,
+            status_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
@@ -2433,6 +2535,7 @@ pub struct CanisterSettingsArgsBuilder {
     minimum_incoming_canister_call_cycles: Option<candid::Nat>,
     log_visibility: Option<LogVisibilityV2>,
     snapshot_visibility: Option<SnapshotVisibility>,
+    status_visibility: Option<StatusVisibility>,
     log_memory_limit: Option<candid::Nat>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
@@ -2455,6 +2558,7 @@ impl CanisterSettingsArgsBuilder {
             minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
             log_visibility: self.log_visibility,
             snapshot_visibility: self.snapshot_visibility,
+            status_visibility: self.status_visibility,
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
@@ -2557,6 +2661,14 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_snapshot_visibility(self, snapshot_visibility: SnapshotVisibility) -> Self {
         Self {
             snapshot_visibility: Some(snapshot_visibility),
+            ..self
+        }
+    }
+
+    /// Sets the status visibility.
+    pub fn with_status_visibility(self, status_visibility: StatusVisibility) -> Self {
+        Self {
+            status_visibility: Some(status_visibility),
             ..self
         }
     }
@@ -3968,9 +4080,9 @@ pub struct InstallChunkedCodeArgs {
 impl std::fmt::Display for InstallChunkedCodeArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallChunkedCodeArgs {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  target_canister: {:?}", &self.target_canister)?;
-        writeln!(f, "  store_canister: {:?}", &self.store_canister)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  target_canister: {:?}", self.target_canister)?;
+        writeln!(f, "  store_canister: {:?}", self.store_canister)?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
     }

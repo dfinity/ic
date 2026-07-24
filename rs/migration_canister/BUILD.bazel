@@ -100,10 +100,10 @@ rust_test(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "RUST_TEST_THREADS": "4",  # running too many PocketIC tests in parallel affects overall performance
     },
+    exec_properties = {"cpu": "16"},
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    tags = ["cpu:16"],
     deps = [
         # Keep sorted
         "//packages/ic-http-types",

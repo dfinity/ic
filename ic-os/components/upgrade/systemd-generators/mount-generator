@@ -130,10 +130,12 @@ function make_var_cryptsetup() {
     echo "Description=Cryptography Setup for var_crypt"
     echo "DefaultDependencies=no"
     echo "IgnoreOnIsolate=true"
-    echo "After=cryptsetup-pre.target"
+    echo "After=cryptsetup-pre.target systemd-udevd-kernel.socket"
     echo "Before=blockdev@dev-mapper-var_crypt.target"
     echo "Wants=blockdev@dev-mapper-var_crypt.target"
     echo "Before=var.mount"
+    # Run fsck after we are done, since we also create the FS in this generated unit
+    echo "Before=systemd-fsck@dev-mapper-var_crypt.service"
     echo "Conflicts=umount.target"
     echo "Before=cryptsetup.target"
     echo "Requires=init-config.service"
@@ -141,7 +143,7 @@ function make_var_cryptsetup() {
     echo "Wants=ic-node-tmpfiles.service"
     echo "After=ic-node-tmpfiles.service" # needed for metrics
     # We need /boot/config for the decryption key (unless SEV is enabled)
-    echo "RequiresMountsFor=/boot/config"
+    echo "RequiresMountsFor=/boot/config/store.keyfile"
     echo "BindsTo=${SYSTEMD_DEVICE}"
     echo "After=${SYSTEMD_DEVICE}"
     echo "Before=umount.target"
@@ -149,8 +151,9 @@ function make_var_cryptsetup() {
     echo "[Service]"
     echo "Type=oneshot"
     echo "RemainAfterExit=yes"
-    echo "TimeoutSec=0"
+    echo "TimeoutSec=infinity"
     echo "KeyringMode=shared"
+    echo "OOMScoreAdjust=500"
     echo "ExecStart=/opt/ic/bin/setup-var-encryption.sh /dev/disk/by-partuuid/${PARTUUID} /dev/disk/by-partuuid/${ALT_PARTUUID}"
     echo "ExecStop=/lib/systemd/systemd-cryptsetup detach var_crypt"
 }
@@ -158,7 +161,7 @@ function make_var_cryptsetup() {
 CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
 
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
-make_requires localfs.target boot.mount
+make_requires local-fs.target boot.mount
 make_requires boot-efi.mount boot.mount
 make_requires boot-grub.mount boot.mount
 
@@ -168,4 +171,5 @@ if [ "$OS_TYPE" == "hostos" ]; then
 else
     make_var_cryptsetup "$CURRENT_SYSTEM" >"$UNIT_DIR"/systemd-cryptsetup@var_crypt.service
     make_requires dev-mapper-var_crypt.device systemd-cryptsetup@var_crypt.service
+    make_requires cryptsetup.target systemd-cryptsetup@var_crypt.service
 fi

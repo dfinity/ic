@@ -7,8 +7,8 @@ use candid::Principal;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::{api::msg_caller, call::Call, init, post_upgrade, println, update};
 use ic_engine_controller::{
-    CreateEngineArgs, DeleteEngineArgs, DeployGuestosToAllSubnetNodesPayload,
-    EngineControllerInitArgs, NewSubnet, UpdateSubnetPayload,
+    ChangeSubnetMembershipPayload, CreateEngineArgs, DeleteEngineArgs,
+    DeployGuestosToAllSubnetNodesPayload, EngineControllerInitArgs, NewSubnet, UpdateSubnetPayload,
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
@@ -103,7 +103,7 @@ fn ensure_authorized() -> Result<Principal, String> {
 
 #[update]
 async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
-    let caller = ensure_authorized()?;
+    ensure_authorized()?;
 
     // Validate node list.
     if args.node_ids.len() < REQUIRED_NODE_COUNT {
@@ -119,13 +119,9 @@ async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
         }
     }
 
-    // Make sure the caller is part of the subnet admins.
-    let mut subnet_admins: Vec<PrincipalId> =
-        args.subnet_admins.into_iter().map(PrincipalId).collect();
-    let caller_pid = PrincipalId(caller);
-    if !subnet_admins.contains(&caller_pid) {
-        subnet_admins.push(caller_pid);
-    }
+    // Forward the supplied `subnet_admins` list to the registry as-is; the
+    // engine controller does not manipulate it.
+    let subnet_admins: Vec<PrincipalId> = args.subnet_admins.into_iter().map(PrincipalId).collect();
 
     let node_ids: Vec<NodeId> = args
         .node_ids
@@ -296,39 +292,13 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
     }
 }
 
-/// Ensures that the configured `AUTHORIZED_CALLER` (the engine controller's
-/// "super admin") is always present in the resulting admin list, even if the
-/// caller forgot to include it.
-fn normalize_subnet_admins(admins: Vec<PrincipalId>) -> Vec<PrincipalId> {
-    let super_admin = PrincipalId(AUTHORIZED_CALLER.with(|c| *c.borrow()));
-    let mut admins = admins;
-    if !admins.contains(&super_admin) {
-        admins.push(super_admin);
-    }
-    admins
-}
-
 /// Proxies to the registry's `update_subnet` endpoint. Only `subnet_admins`
 /// and `is_halted` may be updated through this path; every other field must be
 /// left at its default value (`None` / `false`) or the call is rejected.
-///
-/// The `subnet_admins` list is always normalized to include the engine
-/// controller's authorized caller (the super admin), so callers cannot
-/// accidentally lock the controller out of the subnet.
 #[update]
 async fn update_subnet(payload: UpdateSubnetPayload) -> Result<(), String> {
     ensure_authorized()?;
     ensure_only_allowed_fields_set(&payload)?;
-
-    // Normalize `subnet_admins` so the super admin is always present.
-    // The caller may omit the field entirely (no change requested), but if
-    // they do supply one, we treat it as the source of truth and add the
-    // super admin if missing.
-    #[allow(unused_mut)]
-    let mut payload = payload;
-    if let Some(admins) = payload.subnet_admins {
-        payload.subnet_admins = Some(normalize_subnet_admins(admins));
-    }
 
     Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "update_subnet")
         .with_arg(payload)
@@ -357,6 +327,23 @@ async fn deploy_guestos_to_all_subnet_nodes(
     .map_err(|e| format!("registry.deploy_guestos_to_all_subnet_nodes call failed: {e:?}"))?
     .candid::<()>()
     .map_err(|e| format!("Failed to decode registry response: {e}"))?;
+
+    Ok(())
+}
+
+/// Proxies to the registry's `change_subnet_membership` endpoint. The
+/// registry enforces that, when invoked by the engine controller, the target
+/// subnet must be of type `CloudEngine`.
+#[update]
+async fn change_subnet_membership(payload: ChangeSubnetMembershipPayload) -> Result<(), String> {
+    ensure_authorized()?;
+
+    Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "change_subnet_membership")
+        .with_arg(payload)
+        .await
+        .map_err(|e| format!("registry.change_subnet_membership call failed: {e:?}"))?
+        .candid::<()>()
+        .map_err(|e| format!("Failed to decode registry response: {e}"))?;
 
     Ok(())
 }

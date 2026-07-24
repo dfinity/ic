@@ -1003,7 +1003,7 @@ mod metrics_tests {
         assert!(s.contains(&format!(
             "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"1\",proposal_topic=\"{}\",proposal_type=\"{}\"}} {} 10",
             Topic::NeuronManagement.as_str_name(),
-            &manage_neuron_action.as_str_name(),
+            manage_neuron_action.as_str_name(),
             deadline_ts,
         )));
 
@@ -1013,7 +1013,7 @@ mod metrics_tests {
         assert!(s.contains(&format!(
             "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"3\",proposal_topic=\"{}\",proposal_type=\"{}\"}} {} 10",
             Topic::Governance.as_str_name(),
-            &motion_action.as_str_name(),
+            motion_action.as_str_name(),
             deadline_ts,
         )));
 

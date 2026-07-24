@@ -21,7 +21,7 @@ rust_library(
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
-        "@crate_index//:backoff",
+        "@crate_index//:backon",
         "@crate_index//:candid",
         "@crate_index//:cargo_metadata",
         "@crate_index//:escargot",

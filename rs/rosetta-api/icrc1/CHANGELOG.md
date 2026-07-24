@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.2.10] - 2026-07-02
+### Added
+- Add ICRC-122/152 support ([#9586](https://github.com/dfinity/ic/pull/9586))
+
+### Fixed
+- Enforce a 24h ingress window in `/construction/payloads` ([#10547](https://github.com/dfinity/ic/pull/10547))
+
 ## [1.2.9] - 2026-02-02
 ### Added
 - Add ICRC-107 fee collector block handling ([#7697](https://github.com/dfinity/ic/pull/7697))

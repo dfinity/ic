@@ -11,6 +11,51 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-17: Proposal 142937
+
+http://dashboard.internetcomputer.org/proposal/142937
+
+## Added
+
+* A new method: update_standard_engine_replica_version. As usual, only callable
+  by Governance, and so far, Governance does not call this, so this code is for
+  all practical purposes not active yet, but the entry point is visible in
+  registry.did now.
+
+
+# 2026-07-10: Proposal 142805
+
+http://dashboard.internetcomputer.org/proposal/142805
+
+## Changed
+
+* `delete_subnet` may now delete any non-System subnet, lifting the previous
+  restriction to `CloudEngine` subnets. Authorization by subnet type:
+  System subnets (e.g. the NNS) may never be deleted; the engine controller
+  canister may only delete `CloudEngine` subnets; governance may delete any
+  non-System subnet.
+
+
+# 2026-07-03: Proposal 142680
+
+http://dashboard.internetcomputer.org/proposal/142680
+
+## Changed
+
+* A hardcoded allowlist of trusted node providers is now granted elevated
+  (10x) node operator and node provider rate limits. The elevated limits apply
+  to all node operator operations (node add/remove and the direct node config
+  updates), mirroring the scope of the standard node operator rate limiter.
+  This is a temporary measure to allow these providers to onboard nodes in bulk
+  (e.g. on-demand cloud provisioning). All other node providers remain subject
+  to the standard limits, and the per-IP `add_node` rate limit continues to
+  apply to everyone.
+* `change_subnet_membership` may now be called by the engine controller canister
+  in addition to the governance canister. When invoked by the engine controller,
+  the target subnet must be of type `CloudEngine`; governance retains
+  unrestricted access to any subnet.
+
+
 # 2026-06-26: Proposal 142586
 
 http://dashboard.internetcomputer.org/proposal/142586

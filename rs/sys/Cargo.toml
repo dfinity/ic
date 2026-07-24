@@ -21,9 +21,10 @@ wsl = { workspace = true }
 rand = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-cvt = "0.1.1"
+cvt = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-test-utilities-privileges = { path = "../test_utilities/privileges" }
 tempfile = { workspace = true }

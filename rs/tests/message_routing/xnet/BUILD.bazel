@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MIN_LOCAL_CPUS", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MIN_LOCAL_CPUS", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -135,5 +135,33 @@ system_test(
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",
+    ],
+)
+
+system_test(
+    name = "subnet_delete_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + (1 + 5 * 4) * DEFAULT_VCPUS_PER_VM,  # 1 API BN + 5 subnets * 4 nodes * 6 vCPUs each
+    tags = [
+        "long_test",
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | NNS_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/nns/constants",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )

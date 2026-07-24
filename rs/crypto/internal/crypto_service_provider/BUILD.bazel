@@ -109,6 +109,7 @@ rust_test(
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/utils/basic_sig",
         "//rs/test_utilities/in_memory_logger",
+        "//rs/test_utilities/privileges",
         "//rs/test_utilities/time",
         "//rs/types/management_canister_types",
         "//rs/types/types_test_utils",

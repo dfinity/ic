@@ -28,6 +28,20 @@ pub struct TransformArg {
     pub context: Vec<u8>,
 }
 
+/// Candid argument of the management canister's `canister_status` method.
+#[derive(CandidType, Deserialize)]
+pub struct CanisterIdRecord {
+    pub canister_id: Principal,
+}
+
+/// Encodes a `PushBytes` op (opcode byte, little-endian `u32` length, bytes)
+/// into `out`, matching the encoding produced by the `PayloadBuilder`.
+fn encode_push_bytes(out: &mut Vec<u8>, data: &[u8]) {
+    out.push(Ops::PushBytes as u8);
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out.extend_from_slice(data);
+}
+
 fn http_reply_with_body(body: &[u8]) -> Vec<u8> {
     Encode!(&HttpResponse {
         status: 200_u128,
@@ -511,6 +525,47 @@ fn eval(ops_bytes: OpsBytes) {
                 {
                     let pages = stack.pop_int();
                     core::arch::wasm32::memory_grow(0, pages as usize);
+                }
+            }
+            Ops::LoopUntilGlobalDataSet => {
+                // Pop in the reverse of the builder's push order (trigger then reply).
+                let reply_data = stack.pop_blob();
+                let trigger = stack.pop_blob();
+                if get_global() == trigger {
+                    // The awaited condition holds: reply and stop looping.
+                    api::reply_data_append(&reply_data);
+                    api::reply();
+                } else {
+                    // The condition does not hold yet: make a management-canister
+                    // `canister_status` call for this canister itself, and re-run
+                    // this same op from both its reply and reject callbacks. This
+                    // forms a loop across message boundaries that only ends once
+                    // some other message sets the global data to `trigger`,
+                    // thereby delaying the reply to the original caller.
+                    let mut cb = Vec::new();
+                    encode_push_bytes(&mut cb, &trigger);
+                    encode_push_bytes(&mut cb, &reply_data);
+                    cb.push(Ops::LoopUntilGlobalDataSet as u8);
+                    // A single call yields either a reply or a reject (never
+                    // both), so the same callback env can back both handlers.
+                    let env = add_callback(cb);
+                    let arg = Encode!(&CanisterIdRecord {
+                        canister_id: Principal::from_slice(&api::id()),
+                    })
+                    .unwrap();
+                    api::call_new(
+                        Principal::management_canister().as_slice(),
+                        b"canister_status",
+                        callback,
+                        env,
+                        callback,
+                        env,
+                    );
+                    api::call_data_append(&arg);
+                    let err_code = api::call_perform();
+                    if err_code != 0 {
+                        api::trap_with("call_perform failed in LoopUntilGlobalDataSet")
+                    }
                 }
             }
         }

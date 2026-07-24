@@ -10,5 +10,6 @@ mod node_operator;
 mod node_record;
 mod replica_version;
 mod routing_table;
+mod standard_engine_replica_version;
 pub(crate) mod subnet;
 mod unassigned_nodes_config;

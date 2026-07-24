@@ -16,6 +16,7 @@ mod types;
 pub mod units;
 pub mod util;
 
+pub use crate::canister_logs::fetch_canister_logs_response_for_bench;
 pub use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use canister_manager::types::WasmSource;
@@ -180,7 +181,6 @@ impl ExecutionServices {
             logger,
             config.rate_limiting_of_heap_delta,
             config.rate_limiting_of_instructions,
-            config.log_memory_store_feature,
             Arc::clone(&fd_factory),
         ));
 
@@ -380,7 +380,6 @@ fn setup_execution_helper(
         config.max_environment_variables,
         config.max_environment_variable_name_length,
         config.max_environment_variable_value_length,
-        config.log_memory_store_feature,
     );
     let canister_manager = Arc::new(CanisterManager::new(
         Arc::clone(&hypervisor),

@@ -224,7 +224,7 @@ pub struct ExtensionOperationSpec {
 
 impl ExtensionOperationSpec {
     pub fn name(&self) -> String {
-        format!("{}", &self.operation_type)
+        format!("{}", self.operation_type)
     }
 
     pub fn description(&self) -> &str {

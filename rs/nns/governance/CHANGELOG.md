@@ -11,6 +11,41 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-17: Proposal 142936
+
+http://dashboard.internetcomputer.org/proposal/142936
+
+## Fixed
+
+* Corrected the `DeleteSubnet` proposal description: dropped the outdated
+  "Currently limited to CloudEngine subnets" clause, added that the subnet
+  is also removed from the subnet list, and noted that system subnets cannot
+  be deleted.
+
+
+# 2026-07-03: Proposal 142679
+
+http://dashboard.internetcomputer.org/proposal/142679
+
+## Fixed
+
+* Delete zombie neuron during claim_neuron when Ledger is unavailable.
+
+
+# 2026-05-17: Proposal 142447
+
+http://dashboard.internetcomputer.org/proposal/142447
+
+## Added
+
+* Added a new field to GuestLaunchMeasurementMetadata to identify the VCPU type.
+
+* Added a new `NnsFunction` variant `SetDefaultInitialDkgSubnet`, which
+  proposes to set or unset the default subnet to which `SetupInitialDKG`
+  management canister calls are routed when no subnet is specified explicitly
+  in the request.
+
+
 # 2026-05-17: Proposal 141779
 
 http://dashboard.internetcomputer.org/proposal/141779

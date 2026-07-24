@@ -10,8 +10,8 @@ documentation.workspace = true
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-utils = { path = "../../utils" }
 itertools = { workspace = true }
-leb128 = "0.2.1"
-scoped_threadpool = "0.1.*"
+leb128 = { workspace = true }
+scoped_threadpool = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

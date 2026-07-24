@@ -10,14 +10,14 @@ use_repo(ext, "rules_buf_toolchains")
 register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
-bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
 single_version_override(
@@ -26,11 +26,12 @@ single_version_override(
     patches = [
         "//bazel:hermetic_cc_toolchain_strip.patch",
         "//bazel:hermetic_cc_toolchain_cache_dir.patch",
+        "//bazel:hermetic_cc_toolchain_lto.patch",
     ],
 )
 
 # configure/make dependencies
-bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
+bazel_dep(name = "rules_foreign_cc", version = "0.15.2")
 
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
@@ -39,14 +40,16 @@ register_toolchains(
 
 # Use a patch to work around determinism issues in make & pkgconfig toolchains
 # https://github.com/bazel-contrib/rules_foreign_cc/issues/1313
+# Also we use HEAD to have the latest version of the dependencies (Meson in
+# particular which otherwise cannot use the zig toolchain)
 archive_override(
     module_name = "rules_foreign_cc",
-    integrity = "sha256-MnWXKJE8N2ukWwEWhptxtoscLr+PK897QSIrwHt3PXM=",
     patch_strip = 1,
     patches = ["//bazel:rules_foreign_cc.patch"],
-    strip_prefix = "rules_foreign_cc-0.15.1",
+    sha256 = "7f05eb9cc4b1c600c643e69221c88203244ccadc75ae28c4ade960f0f0742f26",
+    strip_prefix = "rules_foreign_cc-f68b351c4691e747f889dc5e4c2cac3cd3b66ea2",
     type = "tar.gz",
-    urls = ["https://github.com/bazel-contrib/rules_foreign_cc/releases/download/0.15.1/rules_foreign_cc-0.15.1.tar.gz"],
+    urls = ["https://codeload.github.com/bazel-contrib/rules_foreign_cc/tar.gz/f68b351c4691e747f889dc5e4c2cac3cd3b66ea2"],
 )
 
 # Misc tools
@@ -54,13 +57,25 @@ archive_override(
 bazel_dep(name = "pigz", version = "2.8.bcr.1")  # (parallel) gzip
 bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
 
+# QEMU, for the local system test backend. We only use the prebuilt (hermetic)
+# qemu binaries; calling qemu is handled by the system test driver.
+bazel_dep(name = "rules_qemu", version = "0.3.0")
+
+qemu = use_extension("@rules_qemu//qemu/extension:qemu.bzl", "qemu")
+use_repo(
+    qemu,
+    "qemu_img_prebuilt_linux_amd64",
+    "qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu",
+    "qemu_system_data_prebuilt_linux_amd64",
+)
+
 # Rust
 
 include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
-bazel_dep(name = "rules_python", version = "1.7.0")
+bazel_dep(name = "rules_python", version = "1.9.0")
 
 python_version = "3.12"
 
@@ -195,7 +210,7 @@ use_repo(oci, "ic_gatewayd", "ic_gatewayd_linux_amd64")
 # foundry container used in test
 oci.pull(
     name = "foundry",
-    image = "ghcr.io/foundry-rs/foundry@sha256:8f9dd6d4c498538b3aa3999758520bca24a41273163b0c7295ed53b1a6062f30",  # v0.3.0 https://github.com/foundry-rs/foundry/pkgs/container/foundry/391862899?tag=v0.3.0
+    image = "ghcr.io/foundry-rs/foundry@sha256:8347b728d5d393dac1c018691b36f506d23b9dcd78341d40ea0fcb11c3a19cdd",  # v1.7.1 https://github.com/foundry-rs/foundry/pkgs/container/foundry?tag=v1.7.1
     platforms = [
         "linux/amd64",
     ],
@@ -310,6 +325,31 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 
 http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
 
+# OVMF (UEFI) firmware for the local system-test backend's QEMU VMs. At the
+# moment there are no official prebuilt firmwares so we extract one from a
+# `.deb`. We download the `.deb` instead of going through the
+# `rules_distroless` snapshot to avoid bloating the lockfile with (unused)
+# dependencies from the ovmf package.
+# https://github.com/tianocore/tianocore.github.io/issues/101
+http_file(
+    name = "ovmf_deb",
+    downloaded_file_path = "ovmf-generic-hwe.deb",
+    sha256 = "619680e1be05bf501ef723b40665c494de96e41804dc37f3ea5f9558a717e099",
+    url = "https://snapshot.ubuntu.com/ubuntu/20260422T000000Z/pool/main/e/edk2-hwe/ovmf-generic-hwe_2025.11-3ubuntu8_all.deb",
+)
+
+# OVMF (UEFI) firmware for AMD SEV-SNP confidential VMs, extracted from the
+# `ovmf-amdsev` `.deb` (see https://packages.debian.org/sid/ovmf-amdsev). Same
+# rationale as `ovmf_deb` above: no official prebuilt firmware, so we pull it
+# from a `.deb` snapshot instead of `rules_distroless` to avoid bloating the
+# lockfile.
+http_file(
+    name = "ovmf_amdsev_deb",
+    downloaded_file_path = "ovmf-amdsev.deb",
+    sha256 = "4655196c4e3131c77f172a17d422beba350f09e8385f2e55e3abda83276781fe",
+    url = "https://snapshot.debian.org/archive/debian/20260403T143651Z/pool/main/e/edk2/ovmf-amdsev_2025.11-5_all.deb",
+)
+
 # TLA+ tools
 bazel_dep(name = "rules_java", version = "9.3.0")
 
@@ -360,7 +400,7 @@ http_file(
     name = "long_asset_canister",
     downloaded_file_path = "http_gateway_canister_custom_assets.wasm.gz",
     sha256 = "eedcbf986c67fd4ebe3042094604a9a5703e825e56433e2509a6a4d0384ccf95",
-    url = "https://github.com/dfinity/ic-http-gateway-protocol/raw/refs/heads/main/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
+    url = "https://raw.githubusercontent.com/dfinity/ic-http-gateway-protocol/07bc0f3e6e95a8011de9d1712211cbafdf2e5bfe/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
 )
 
 # Old version of wallet canister
@@ -413,6 +453,71 @@ http_file(
     executable = True,
     sha256 = "95e6ed4949a63ad89afb443ecba1fb8302dd2860ee5e9baace3e674a0f48aa77",
     url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.18+commit.87f61d96",
+)
+
+# Latest stable solc, used by //rs/ethereum/cketh/minter:deposit_from_cex_demo_test
+# to compile the demo contracts (pinned exactly for reproducible bytecode/gas).
+# One binary per host platform; the consuming target selects the right one.
+# The macosx-amd64 download is a universal (x86_64 + arm64) Mach-O, so it runs
+# natively on both Intel and Apple Silicon Macs.
+http_file(
+    name = "solc_0_8_35_linux_amd64",
+    downloaded_file_path = "solc",
+    executable = True,
+    sha256 = "fa8ac9a32d301ad023a36ee5a29f8e291fe3200c60244e43c142539e82a617f4",
+    url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.35+commit.47b9dedd",
+)
+
+http_file(
+    name = "solc_0_8_35_linux_arm64",
+    downloaded_file_path = "solc",
+    executable = True,
+    sha256 = "4218d2936d2b582bc5751dac548f97b36a8652b21ded52b60a1c1259143ee0e4",
+    url = "https://binaries.soliditylang.org/linux-arm64/solc-linux-arm64-v0.8.35+commit.47b9dedd",
+)
+
+http_file(
+    name = "solc_0_8_35_macosx_amd64",
+    downloaded_file_path = "solc",
+    executable = True,
+    sha256 = "6e432580d973cae74c869ef4f737529e73fec5b200dce3c08d5e76c4a6b19159",
+    url = "https://binaries.soliditylang.org/macosx-amd64/solc-macosx-amd64-v0.8.35+commit.47b9dedd",
+)
+
+# foundry release binaries (anvil/cast/forge/chisel) used to run a local
+# EIP-7702-capable Ethereum node hermetically from a rust_test, without docker.
+# This release (>= v1.0) supports EIP-7702, unlike the v0.3.0 `@foundry` oci
+# image used by //rs/tests/cross_chain:ic_xc_cketh_test. One archive per host
+# platform; the consuming target selects the right one (see
+# //rs/ethereum/cketh/deposit_from_cex_demo:BUILD.bazel).
+FOUNDRY_BUILD_FILE = 'exports_files(["anvil", "cast", "forge", "chisel"])'
+
+http_archive(
+    name = "foundry_bin_linux_amd64",
+    build_file_content = FOUNDRY_BUILD_FILE,
+    sha256 = "cf7e688ed0c4c48adffca788b496076e31060b67ac5afe1e43dbb5499c20c88b",
+    url = "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_amd64.tar.gz",
+)
+
+http_archive(
+    name = "foundry_bin_linux_arm64",
+    build_file_content = FOUNDRY_BUILD_FILE,
+    sha256 = "c8fe8fa09ae3aba2c81b510c6f9da3a9d468029b9580e690b245b3f0aea687ae",
+    url = "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_arm64.tar.gz",
+)
+
+http_archive(
+    name = "foundry_bin_darwin_amd64",
+    build_file_content = FOUNDRY_BUILD_FILE,
+    sha256 = "c7fd1f5c9bf718d30b5cb6fc94eac605039de2aa50afc4c545a4dddc1e411acb",
+    url = "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_darwin_amd64.tar.gz",
+)
+
+http_archive(
+    name = "foundry_bin_darwin_arm64",
+    build_file_content = FOUNDRY_BUILD_FILE,
+    sha256 = "eacdc67718fac857cad9e19c7f6729dd80de731d09df81856391d093cfcab547",
+    url = "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_darwin_arm64.tar.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test
@@ -752,9 +857,10 @@ http_archive(
     # reproducibility. See the patch for details.
     patch_strip = 1,
     patches = ["//bazel:e2fsprogs_no_external_config.patch"],
-    sha256 = "da274408bebbfd13a5a2fc3cfc66e3ffff17c48534673aa67f88d49b99123b96",
+    sha256 = "9f82eaa7002673291629077b80ee005cadfcd49854907a22007fed70b0ef596e",
     strip_prefix = "e2fsprogs-1.47.4",
-    urls = ["https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.4/e2fsprogs-1.47.4.tar.gz"],
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/tytso/e2fsprogs/tar.gz/refs/tags/v1.47.4"],
 )
 
 http_archive(
@@ -817,8 +923,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "dd8a95dd5a784e9b7c8c79fc4fa3a5c97d449f9666afe57aefa960aef0d68b8c",
-    url = "https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz",
+    sha256 = "1186d16d98dbed1a9dbf06194ef11e3938a5386e8bf6c45d4f1165f62c8f04e0",
+    url = "https://download.dfinity.systems/ic/c0126e95b74ee154caf4c3ebd7f3c91dcdd51301/binaries/x86_64-linux/pocket-ic.gz",
 )
 
 ## Rosetta CLI
@@ -933,6 +1039,23 @@ http_archive(
     build_file = "@//third_party:BUILD.dfx.bazel",
     sha256 = "9da909e8a3cbcb938cfe8502afab87ec61e75c5744025cd0a18b621695c38a5e",
     url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-linux.tar.gz",
+)
+
+# We pull in the binary artifact to break a circular dependency
+# between repositories: `canbench` is hosted in a separate repository
+# and depends on `pocket_ic` hosted in this repository;
+# this prevents us from bumping `reqwest` from 0.12 to 0.13
+# in `canbench` and `pocket_ic` in an atomic step if we want to build
+# both from sources => we pull in `canbench` as a binary artifact instead.
+# Bumping `reqwest` from 0.12 to 0.13 in an atomic step is required
+# because having both version in the dependency tree (of this repository)
+# causes issues.
+http_file(
+    name = "canbench_bin",
+    downloaded_file_path = "canbench",
+    executable = True,
+    sha256 = "9d55976505e0e77a47be2f3240813090f84242f3912bb587fda8b97b9304bdd4",
+    url = "https://github.com/dfinity/canbench/releases/download/v0.6.0/canbench",
 )
 
 http_file(
@@ -1299,14 +1422,14 @@ canisters(
 bazel_dep(name = "rules_motoko", version = "1.0.0")
 archive_override(
     module_name = "rules_motoko",
-    integrity = "sha256-cheylLgUCNaODuEtYla4/oVrj6F0FMp7nRjui1AvCo4=",
-    strip_prefix = "rules_motoko-9b6d6311db8f1c1fe4c24b70414edf149913ae44",
+    integrity = "sha256-skEVw/tHSuYMLJxh8rWuwt6bjyYWpoay0JBZNYz4+5U=",
+    strip_prefix = "rules_motoko-0c3d815c0c07c5696a4cb3fa8da25834594a5294",
     type = "tar.gz",
-    urls = ["https://codeload.github.com/dfinity/rules_motoko/tar.gz/9b6d6311db8f1c1fe4c24b70414edf149913ae44"],
+    urls = ["https://codeload.github.com/dfinity/rules_motoko/tar.gz/0c3d815c0c07c5696a4cb3fa8da25834594a5294"],
 )
 
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
-motoko.toolchain(version = "0.16.3")  # NOTE: keep version in line with Dockerfile
+motoko.toolchain(version = "1.11.0")  # NOTE: keep version in line with Dockerfile
 
 # Universal VM and Prometheus VM disk images for the Local system-test backend.
 # These are vendored copies of the same artifacts the Farm backend references

@@ -18,12 +18,27 @@ pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KIB;
 /// The maximum size of a delta (per message) canister log buffer.
 pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MIB;
 
-/// Maximum number of response bytes for a fetch canister logs request.
-pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
+/// Maximum stored data size (in bytes) of the log records returned by a single
+/// `fetch_canister_logs` request.
+///
+/// The log memory store's ring buffer trims its result to this limit, measured by
+/// `CanisterLogRecord::data_size()`. This is the single source of truth for that
+/// limit: `RESULT_MAX_SIZE` in `ic-replicated-state` is defined from it.
+pub const MAX_FETCH_CANISTER_LOGS_RESULT_BYTES: usize = 2_000_000;
 
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
 const _: () = assert!(MAX_DELTA_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
+// A `fetch_canister_logs` response is the returned records (trimmed to
+// `MAX_FETCH_CANISTER_LOGS_RESULT_BYTES` by stored data size) plus fixed Candid
+// framing (magic bytes and type table, well under one page); it must fit within a
+// single inter-canister message so it can be returned to the caller. The
+// `fetch_canister_logs_response_within_limit` test in `ic-replicated-state` verifies
+// the encoded response stays within this bound.
+const _: () = assert!(
+    MAX_FETCH_CANISTER_LOGS_RESULT_BYTES + 4 * KIB
+        <= crate::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize
+);
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {

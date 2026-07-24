@@ -27,7 +27,7 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 clap = { workspace = true }
-dfx-core ={ workspace = true }
+dfx-core-vendored = { path = "../dfx-core-vendored" }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
@@ -59,7 +59,7 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rust_decimal = "1.36.0"
+rust_decimal = { workspace = true }
 slog ={ workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

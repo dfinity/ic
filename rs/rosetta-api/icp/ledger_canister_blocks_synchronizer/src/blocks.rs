@@ -1552,7 +1552,7 @@ impl Blocks {
                     .take()
                     .into_values()
                     .collect();
-                transactions.sort_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
+                transactions.sort_by_key(|(idx1, _)| *idx1);
                 let rosetta_block = RosettaBlock {
                     index: *current_rosetta_block_index.borrow(),
                     parent_hash: current_rosetta_block_parent_hash

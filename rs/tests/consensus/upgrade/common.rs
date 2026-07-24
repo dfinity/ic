@@ -12,7 +12,7 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use candid::Principal;
+use candid::{Encode, Principal};
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_fetch_logs, can_read_msg, cert_state_makes_progress_with_retries,
@@ -34,7 +34,6 @@ use ic_system_test_driver::{
     util::{JournalStreamer, MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -178,12 +177,22 @@ pub fn upgrade(
         let agent = create_agent(healthy_node.get_public_url().as_str())
             .await
             .expect("Failed to create agent");
-        let mgr = ManagementCanister::create(&agent);
         let snapshot_args = TakeCanisterSnapshotArgs {
             canister_id: CanisterId::from(can_id),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         };
-        mgr.take_canister_snapshot(&can_id, &snapshot_args)
+        // Call the management canister directly instead of via `ic_utils`'s typed
+        // helper: `ic_utils` pulls `ic-management-canister-types` from crates.io, which
+        // Cargo treats as a distinct crate from this workspace's local copy (same 0.8.0
+        // version), so its `take_canister_snapshot` expects an incompatible
+        // `TakeCanisterSnapshotArgs` type.
+        agent
+            .update(&Principal::management_canister(), "take_canister_snapshot")
+            .with_arg(Encode!(&snapshot_args).unwrap())
+            .with_effective_canister_id(CanisterId::from(can_id))
+            .call_and_wait()
             .await
             .unwrap();
     });

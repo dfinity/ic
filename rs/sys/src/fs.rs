@@ -622,13 +622,12 @@ pub fn copy_file_range_all(
     mut dst_offset: i64,
     len: usize,
 ) -> Result<(), CopyFileRangeAllError> {
-    use std::os::unix::io::AsRawFd;
     let mut copied_total = 0;
     while copied_total < len {
         let copied = nix::fcntl::copy_file_range(
-            src.as_raw_fd(),
+            src,
             Some(&mut src_offset),
-            dst.as_raw_fd(),
+            dst,
             Some(&mut dst_offset),
             len - copied_total,
         );
@@ -1197,7 +1196,11 @@ mod tests {
             );
         }
 
+        // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get
+        // the permission denial this test expects, run as `nobody` when
+        // root (e.g. under Bazel remote execution).
         #[test]
+        #[ic_test_utilities_privileges::as_nobody_when_root]
         fn should_return_error_if_permission_is_denied() {
             let temp_dir =
                 tempfile::TempDir::new().expect("failed to create a temporary directory");
@@ -1263,7 +1266,11 @@ mod tests {
             );
         }
 
+        // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get
+        // the permission denial this test expects, run as `nobody` when
+        // root (e.g. under Bazel remote execution).
         #[test]
+        #[ic_test_utilities_privileges::as_nobody_when_root]
         fn should_return_error_if_permission_is_denied() {
             let temp_dir =
                 tempfile::TempDir::new().expect("failed to create a temporary directory");

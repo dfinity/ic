@@ -20,7 +20,7 @@ use ic_replicated_state::{
     CanisterStatus, ReplicatedState, SystemState,
     canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
     metadata_state::subnet_call_context_manager::PreSignatureStash,
-    metadata_state::testing::NetworkTopologyTesting,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
@@ -1827,14 +1827,14 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     // A no-op subnet split (no canisters migrated).
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_1, own_subnet_id);
-    test.state_mut()
-        .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_2, own_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, own_subnet_id);
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, own_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Retains the `StopCanisterCall` and does not produce a response.
@@ -1850,9 +1850,11 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     // Simulate a subnet split that migrates canister 1 to another subnet.
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_1, other_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `StopCanisterCall` and produced a reject response.
@@ -1908,9 +1910,11 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     // Simulate a subnet split that migrates canister 2 to another subnet.
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_2, other_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `StopCanisterCall` and set the ingress state to `Failed`.
@@ -2292,7 +2296,9 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
         .with_nns_subnet_id(own_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
@@ -2326,7 +2332,9 @@ fn http_request_bound_holds() {
         // set number of max in-flight calls to 10
         .with_max_canister_http_requests_in_flight(10)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -2391,7 +2399,9 @@ fn management_canister_xnet_called_from_non_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
@@ -3047,7 +3057,7 @@ fn management_message_with_invalid_sender_is_not_accepted_without_subnet_admins(
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterInvalidController, err.code());
+    assert_eq!(ErrorCode::CanisterStatusAccessDenied, err.code());
 }
 
 #[test]
@@ -3067,10 +3077,7 @@ fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
-    assert_eq!(
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
-        err.code()
-    );
+    assert_eq!(ErrorCode::CanisterStatusAccessDenied, err.code());
 }
 
 #[test]
@@ -3341,7 +3348,9 @@ fn execute_canister_http_request_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = false;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = false;
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -3519,6 +3528,7 @@ fn execute_canister_http_request_non_replicated_refund_status() {
 fn flexible_http_request_args(caller_canister: CanisterId) -> FlexibleCanisterHttpRequestArgs {
     FlexibleCanisterHttpRequestArgs {
         url: "https://example.com".to_string(),
+        max_response_bytes: None,
         headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,
@@ -3563,8 +3573,9 @@ fn execute_flexible_canister_http_request() {
         let http_request_context = canister_http_request_contexts
             .get(&CallbackId::from(0))
             .unwrap();
-        // The flexible endpoint always uses pay-as-you-go pricing and flexible
-        // replication.
+        // With the `flexible_http_requests` feature flag enabled, the flexible
+        // endpoint uses pay-as-you-go pricing on every subnet (free or paying)
+        // and flexible replication.
         assert_eq!(
             http_request_context.pricing_version,
             PricingVersion::PayAsYouGo
@@ -3605,6 +3616,119 @@ fn execute_flexible_canister_http_request() {
                 .is_empty()
         );
     }
+}
+
+#[test]
+fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
+    // On a free subnet, flexible outcalls are available by default (without the
+    // `flexible_http_requests` feature flag) and fall back to legacy pricing,
+    // where pricing is moot because a free subnet charges nothing.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        // The feature flag is deliberately left disabled: the free-subnet path
+        // does not depend on it.
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    // The request is routed through legacy pricing with flexible replication.
+    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
+    assert!(
+        matches!(
+            http_request_context.replication,
+            Replication::Flexible { .. }
+        ),
+        "expected flexible replication, got {:?}",
+        http_request_context.replication
+    );
+
+    // Legacy pricing on a free subnet charges nothing: the full payment is
+    // retained (to be refunded when the response is delivered) and nothing is
+    // marked refundable through the pay-as-you-go mechanism.
+    assert_eq!(http_request_context.request.payment, payment);
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        Cycles::new(0)
+    );
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        Cycles::new(0)
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
+    // System subnets charge nothing for HTTP outcalls despite a normal cost
+    // schedule, so flexible outcalls are available there by default (without the
+    // feature flag) and fall back to legacy pricing.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        // A system subnet keeps the default (normal) cost schedule but charges
+        // zero for HTTP outcalls; the feature flag is left disabled.
+        .with_subnet_type(SubnetType::System)
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    // Routed through legacy pricing with flexible replication, just like a
+    // free-cost-schedule subnet.
+    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
+    assert!(
+        matches!(
+            http_request_context.replication,
+            Replication::Flexible { .. }
+        ),
+        "expected flexible replication, got {:?}",
+        http_request_context.replication
+    );
+
+    // A system subnet charges nothing for HTTP outcalls despite its normal cost
+    // schedule, so `try_add_http_context_to_replicated_state` treats it as free
+    // just like a free-cost-schedule subnet: the full payment is retained (to be
+    // refunded when the response is delivered) and nothing is marked refundable
+    // through the pay-as-you-go mechanism.
+    assert_eq!(http_request_context.request.payment, payment);
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        Cycles::new(0)
+    );
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        Cycles::new(0)
+    );
 }
 
 #[test]
@@ -3698,8 +3822,9 @@ fn execute_flexible_canister_http_request_insufficient_payment() {
 
 #[test]
 fn execute_flexible_canister_http_request_disabled() {
-    // The flexible HTTP outcalls feature is gated behind a feature flag that is
-    // disabled by default.
+    // On a paying subnet, flexible outcalls under pay-as-you-go pricing are
+    // gated behind the `flexible_http_requests` feature flag, which is disabled
+    // by default.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
@@ -3716,7 +3841,8 @@ fn execute_flexible_canister_http_request_disabled() {
     test.execute_all();
 
     // No context is added and the request is rejected specifically because the
-    // feature flag is disabled (as opposed to any other rejection reason).
+    // feature is not available on this subnet (as opposed to any other
+    // rejection reason).
     let canister_http_request_contexts = &test
         .state()
         .metadata
@@ -5829,4 +5955,50 @@ fn stopping_canister_not_controlled_by_caller_refunds_cycles() {
     );
     let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
     let _ = get_reject(res);
+}
+
+// `list_canisters` can only be called via an inter-canister call; an ingress
+// message is rejected by the ingress filter before execution, since
+// `list_canisters` is not among the ic00 methods allowed via ingress, even if
+// the caller is a subnet admin.
+#[test]
+fn list_canisters_via_ingress_fails_at_ingress_filter() {
+    let admin = user_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+    test.set_user_id(admin);
+
+    let result =
+        test.should_accept_ingress_message(IC_00, Method::ListCanisters, EmptyBlob.encode());
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "ic00 method list_canisters can not be called via ingress messages"
+        ))
+    );
+}
+
+// Even if an ingress message reaches `execute_subnet_message`, `list_canisters`
+// is still rejected: it can only be called via an inter-canister call, even by
+// a subnet admin.
+#[test]
+fn list_canisters_via_ingress_fails_at_execution() {
+    let admin = user_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+    test.set_user_id(admin);
+
+    let err = test
+        .subnet_message(Method::ListCanisters, EmptyBlob.encode())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains("list_canisters cannot be called by a user")
+    );
 }

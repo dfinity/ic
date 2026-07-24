@@ -26,6 +26,7 @@ pub const ROOT_SUBNET_ID_KEY: &str = "nns_subnet_id";
 pub const DEFAULT_INITIAL_DKG_SUBNET_ID_KEY: &str = "default_initial_dkg_subnet_id";
 pub const NODE_REWARDS_TABLE_KEY: &str = "node_rewards_table";
 const UNASSIGNED_NODES_CONFIG_RECORD_KEY: &str = "unassigned_nodes_config";
+const STANDARD_ENGINE_REPLICA_VERSION_RECORD_KEY: &str = "standard_engine_replica_version";
 
 pub const API_BOUNDARY_NODE_RECORD_KEY_PREFIX: &str = "api_boundary_node_";
 pub const NODE_RECORD_KEY_PREFIX: &str = "node_record_";
@@ -90,6 +91,10 @@ pub fn make_subnet_list_record_key() -> String {
 
 pub fn make_unassigned_nodes_config_record_key() -> String {
     UNASSIGNED_NODES_CONFIG_RECORD_KEY.to_string()
+}
+
+pub fn make_standard_engine_replica_version_record_key() -> String {
+    STANDARD_ENGINE_REPLICA_VERSION_RECORD_KEY.to_string()
 }
 
 /// Returns the key whose payload is the [`SubnetId`] of the subnet to which

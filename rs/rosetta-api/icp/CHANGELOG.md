@@ -4,8 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
+
+## [2.1.10] - 2026-07-01
 ### Changed
 - When no memo is specified for a transfer in `construction/payloads`, use a deterministic memo of 0 instead of a random one. Reconstructing the same transfer now produces the same transaction hash, so the ledger's `created_at_time` based deduplication catches retried transfers instead of applying them twice. ([#10537](https://github.com/dfinity/ic/pull/10537))
+- Optimize database query performance ([#8748](https://github.com/dfinity/ic/pull/8748)).
+
+### Fixed
+- Enforce a 24h ingress window in `construction/payloads` ([#10547](https://github.com/dfinity/ic/pull/10547)).
 
 ## [2.1.9] - 2026-02-02
 ### Added

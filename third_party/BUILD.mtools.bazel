@@ -41,6 +41,7 @@ configure_make(
     out_binaries = [
         "mtools",
         "mcopy",
+        "mlabel",
     ],
     # We don't ship any libs out of this build.
     out_shared_libs = [],
@@ -66,5 +67,12 @@ filegroup(
     name = "mcopy",
     srcs = [":mtools_build"],
     output_group = "mcopy",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mlabel",
+    srcs = [":mtools_build"],
+    output_group = "mlabel",
     visibility = ["//visibility:public"],
 )

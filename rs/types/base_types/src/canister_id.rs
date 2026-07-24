@@ -4,23 +4,90 @@ use candid::{CandidType, Principal};
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize, de::Error};
-use std::{convert::TryFrom, fmt};
+use std::convert::TryFrom;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 
 /// A type representing a canister's [`PrincipalId`].
-#[derive(
-    Copy,
-    Clone,
-    Eq,
-    DeterministicHeapBytes,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    CandidType,
-    Serialize,
-)]
-pub struct CanisterId(PrincipalId);
+///
+/// We use a `bool` plus principal ID instead of an enum because some clients
+/// require access to the underlying byte slice (which wouldn't be available in
+/// the `u64` variant).
+#[derive(Copy, Clone, Eq, DeterministicHeapBytes, Debug)]
+pub struct CanisterId {
+    /// Whether `id` is a `u64`-based canister ID (see [`CanisterId::from_u64`]),
+    /// which allows `eq`/`cmp` to take a fast path over the leading `u64`.
+    is_u64: bool,
+    id: PrincipalId,
+}
+
+impl PartialEq for CanisterId {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        match (self.is_u64, other.is_u64) {
+            (true, true) => as_u64(self.id) == as_u64(other.id),
+            (true, false) | (false, true) => false,
+            (false, false) => self.id == other.id,
+        }
+    }
+}
+
+impl Ord for CanisterId {
+    #[inline(always)]
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.is_u64 && other.is_u64 {
+            as_u64(self.id).cmp(&as_u64(other.id))
+        } else {
+            self.id.cmp(&other.id)
+        }
+    }
+}
+
+impl PartialOrd for CanisterId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Hash for CanisterId {
+    #[inline]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        if self.is_u64 {
+            // Fast path: a `u64`-based canister ID is fully determined by its
+            // leading `u64`, so hashing just those 8 bytes is both sufficient
+            // and consistent with `PartialEq` (which compares the same `u64`).
+            as_u64(self.id).hash(hasher);
+        } else {
+            self.id.hash(hasher);
+        }
+    }
+}
+
+impl Serialize for CanisterId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.id.serialize(serializer)
+    }
+}
+
+impl CandidType for CanisterId {
+    fn id() -> candid::types::TypeId {
+        candid::types::TypeId::of::<CanisterId>()
+    }
+
+    fn _ty() -> candid::types::Type {
+        PrincipalId::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        self.id.idl_serialize(serializer)
+    }
+}
 
 /// Represents an error that can occur when constructing a [`CanisterId`] from a
 /// [`PrincipalId`].
@@ -56,17 +123,20 @@ impl From<PrincipalError> for CanisterIdError {
 }
 
 impl CanisterId {
-    /// Returns the id of the management canister
+    /// Returns the ID of the management canister.
     pub const fn ic_00() -> Self {
-        Self(PrincipalId::new(0, [0; PrincipalId::MAX_LENGTH_IN_BYTES]))
+        Self {
+            is_u64: false,
+            id: PrincipalId::new(0, [0; PrincipalId::MAX_LENGTH_IN_BYTES]),
+        }
     }
 
     pub fn get_ref(&self) -> &PrincipalId {
-        &self.0
+        &self.id
     }
 
     pub fn get(self) -> PrincipalId {
-        self.0
+        self.id
     }
 
     /// Converts WITHOUT any validation.
@@ -75,7 +145,10 @@ impl CanisterId {
     /// CanisterId::try_from, because it lies: it does not actually return Err
     /// when the input is invalid.
     pub const fn unchecked_from_principal(principal_id: PrincipalId) -> Self {
-        Self(principal_id)
+        Self {
+            is_u64: is_canister_id(principal_id),
+            id: principal_id,
+        }
     }
 
     // Keep this consistent with try_from_principal_id.
@@ -104,7 +177,19 @@ impl CanisterId {
 
         let blob_length : usize = 8 /* the u64 */ + 1 /* the last 0x01 */;
 
-        Self(PrincipalId::new_opaque_from_array(data, blob_length))
+        Self {
+            is_u64: true,
+            id: PrincipalId::new_opaque_from_array(data, blob_length),
+        }
+    }
+
+    // Keep this consistent with try_from_principal_id.
+    pub const fn as_u64(&self) -> Option<u64> {
+        if self.is_u64 {
+            Some(as_u64(self.id))
+        } else {
+            None
+        }
     }
 
     /// Converts from PrincipalId.
@@ -113,53 +198,72 @@ impl CanisterId {
     //
     // Keep this consistent with from_u64.
     pub fn try_from_principal_id(principal_id: PrincipalId) -> Result<Self, CanisterIdError> {
-        // Must be opaque.
-        if principal_id.class() != Ok(PrincipalIdClass::Opaque) {
+        if !is_canister_id(principal_id) {
             return Err(CanisterIdError::InvalidPrincipalId(format!(
-                "Principal ID {} is of class {:?} (not Opaque).",
+                "Principal ID {} ({:?}) is not a valid canister ID: {} bytes, class {:?}",
                 principal_id,
-                principal_id.class(),
+                principal_id.as_slice(),
+                principal_id.len(),
+                principal_id.class()
             )));
         }
 
-        // Must be of length 10.
-        let raw = principal_id.as_slice();
-        if raw.len() != 10 {
-            return Err(CanisterIdError::InvalidPrincipalId(format!(
-                "Principal ID {} consists of {} bytes (not 10).",
-                principal_id,
-                raw.len(),
-            )));
-        }
-
-        // Byte 8 (penultimate) must be 0x01.
-        if raw[8] != 0x01 {
-            return Err(CanisterIdError::InvalidPrincipalId(format!(
-                "Byte 8 (9th) of Principal ID {} is not 0x01: {}",
-                principal_id,
-                hex::encode(raw),
-            )));
-        }
-
-        Ok(CanisterId(principal_id))
+        Ok(Self {
+            is_u64: true,
+            id: principal_id,
+        })
     }
+}
+
+/// Returns true if the given `PrincipalId` is a valid canister ID (length 10,
+/// byte 8 is 0x01, byte 9 is `Opaque`), false otherwise.
+const fn is_canister_id(principal_id: PrincipalId) -> bool {
+    const LENGTH: usize = std::mem::size_of::<u64>();
+    let raw = principal_id.0.as_fixed_bytes();
+
+    // The +2 accounts for the two sentinel bytes that are appended.
+    if principal_id.0.len() != LENGTH as u8 + 2 {
+        return false;
+    }
+
+    // Byte 9 (last; principal class) must be Opaque.
+    if raw[LENGTH + 1] != PrincipalIdClass::Opaque as u8 {
+        return false;
+    }
+
+    // Byte 8 (penultimate) must be 0x01.
+    raw[LENGTH] == 0x01
+}
+
+/// Returns the `u64` value of a canister ID, assuming that the given
+/// `PrincipalId` is a valid canister ID (see `is_canister_id`).
+#[inline(always)]
+const fn as_u64(principal_id: PrincipalId) -> u64 {
+    let raw_bytes = principal_id.0.as_fixed_bytes();
+    // SAFETY: `raw_bytes` is a `[u8; PrincipalId::MAX_LENGTH_IN_BYTES]` (29 bytes),
+    // which is at least as large as a `u64` (8 bytes), so `transmute_copy` reads
+    // only in-bounds source bytes (it copies `size_of::<u64>()` bytes from the
+    // start). `u8` has alignment 1, so there is no alignment requirement on the
+    // source, and every bit pattern is a valid `u64`.
+    let raw_be = unsafe { std::mem::transmute_copy::<[u8; _], u64>(raw_bytes) };
+    u64::from_be(raw_be)
 }
 
 impl AsRef<PrincipalId> for CanisterId {
     fn as_ref(&self) -> &PrincipalId {
-        &self.0
+        &self.id
     }
 }
 
 impl AsRef<[u8]> for CanisterId {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
+        self.id.as_slice()
     }
 }
 
 impl fmt::Display for CanisterId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.id)
     }
 }
 
@@ -209,14 +313,14 @@ impl From<SubnetId> for CanisterId {
 
 impl From<CanisterId> for PrincipalId {
     fn from(canister_id: CanisterId) -> Self {
-        canister_id.0
+        canister_id.id
     }
 }
 
 impl From<CanisterId> for pb::CanisterId {
     fn from(id: CanisterId) -> Self {
         Self {
-            principal_id: Some(pb::PrincipalId::from(id.0)),
+            principal_id: Some(pb::PrincipalId::from(id.id)),
         }
     }
 }
@@ -231,7 +335,10 @@ impl TryFrom<pb::CanisterId> for CanisterId {
                 .ok_or(ProxyDecodeError::MissingField("CanisterId::principal_id"))?,
         )
         .map_err(|err| ProxyDecodeError::InvalidPrincipalId(Box::new(err)))?;
-        Ok(CanisterId(principal_id))
+        Ok(CanisterId {
+            is_u64: is_canister_id(principal_id),
+            id: principal_id,
+        })
     }
 }
 
@@ -251,9 +358,7 @@ impl<'de> Deserialize<'de> for CanisterId {
         // transform the PrincipalId into a CanisterId.
         // A derived implementation of Deserialize would open
         // the door to invariant violation.
-        let res = CanisterId::try_from(PrincipalId::deserialize(deserializer)?);
-        let id = res.map_err(D::Error::custom)?;
-        Ok(id)
+        CanisterId::try_from(PrincipalId::deserialize(deserializer)?).map_err(D::Error::custom)
     }
 }
 

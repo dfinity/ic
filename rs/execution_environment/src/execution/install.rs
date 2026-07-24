@@ -117,6 +117,7 @@ pub(crate) fn execute_install(
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         wasm_module,
         canister_id,
+        round.time,
         round_limits,
         original.compilation_cost_handling,
     );

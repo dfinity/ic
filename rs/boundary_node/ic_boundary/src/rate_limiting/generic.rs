@@ -110,13 +110,8 @@ impl Bucket {
         }
 
         if let Some(v) = self.rule.canister_id {
-            if let Some(x) = ctx.canister_id {
-                // If we have a canister id - compare it
-                if x != v {
-                    return None;
-                }
-            } else {
-                // Otherwise ignore this rule
+            // If we have a canister id - compare it, otherwise ignore this rule
+            if ctx.canister_id? != v {
                 return None;
             }
         }
@@ -127,14 +122,10 @@ impl Bucket {
             return None;
         }
 
-        if let Some(rgx) = &self.rule.methods_regex {
-            if let Some(v) = ctx.method {
-                if !rgx.is_match(v) {
-                    return None;
-                }
-            } else {
-                return None;
-            }
+        if let Some(rgx) = &self.rule.methods_regex
+            && !rgx.is_match(ctx.method?)
+        {
+            return None;
         }
 
         if let Some(v) = self.rule.ip

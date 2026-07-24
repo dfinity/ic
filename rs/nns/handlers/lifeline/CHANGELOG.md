@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-10: Proposal 142804
+
+http://dashboard.internetcomputer.org/proposal/142804
+
+## Changed
+
+* Compile the `lifeline` canister with the latest Motoko compiler (1.11.0) (compared to compiling with 0.16.3 before).
+
+
 # 2025-11-07: Proposal 139315
 
 https://dashboard.internetcomputer.org/proposal/139315

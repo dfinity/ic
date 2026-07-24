@@ -80,7 +80,6 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_environment_variables: usize,
     pub(crate) max_environment_variable_name_length: usize,
     pub(crate) max_environment_variable_value_length: usize,
-    pub(crate) log_memory_store_feature: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -105,7 +104,6 @@ impl CanisterMgrConfig {
         max_environment_variables: usize,
         max_environment_variable_name_length: usize,
         max_environment_variable_value_length: usize,
-        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self {
             default_provisional_cycles_balance,
@@ -127,7 +125,6 @@ impl CanisterMgrConfig {
             max_environment_variables,
             max_environment_variable_name_length,
             max_environment_variable_value_length,
-            log_memory_store_feature,
         }
     }
 }
@@ -501,9 +498,8 @@ pub(crate) enum CanisterManagerError {
         caller: PrincipalId,
         method_name: String,
     },
-    FetchCanisterLogsNotEnoughCycles {
-        sent: Cycles,
-        required: Cycles,
+    CanisterStatusAccessDenied {
+        caller: PrincipalId,
     },
     FetchCanisterLogsAccessDenied {
         caller: PrincipalId,
@@ -761,6 +757,11 @@ impl AsErrorHelp for CanisterManagerError {
                     .to_string(),
                 doc_link: doc_ref("invalid-controller"),
             },
+            CanisterManagerError::CanisterStatusAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a principal with canister status read access."
+                    .to_string(),
+                doc_link: "".to_string(),
+            },
             CanisterManagerError::FetchCanisterLogsAccessDenied { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a controller of the target canister or \
                 a principal with log read access."
@@ -769,10 +770,6 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
-                doc_link: "".to_string(),
-            },
-            CanisterManagerError::FetchCanisterLogsNotEnoughCycles { .. } => ErrorHelp::UserError {
-                suggestion: "Try sending more cycles with the request.".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -806,7 +803,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterNotFound(canister_id) => Self::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found.{additional_help}", &canister_id),
+                format!("Canister {} not found.{additional_help}", canister_id),
             ),
             CanisterIdAlreadyExists(canister_id) => Self::new(
                 ErrorCode::CanisterIdAlreadyExists,
@@ -1201,16 +1198,19 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 format!("Caller {caller} is not allowed to call {method_name}"),
             ),
+            CanisterStatusAccessDenied { caller } => Self::new(
+                // `CanisterStatusAccessDenied` is a dedicated error code that is
+                // mapped to the same reject code (`CanisterError`) as the
+                // `CanisterInvalidController` error code that governed access to
+                // `canister_status` before the status visibility feature was
+                // introduced.
+                ErrorCode::CanisterStatusAccessDenied,
+                format!("Caller {caller} is not allowed to read the canister status"),
+            ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "The canister log memory limit {bytes} is too high. It must be at most {limit}."
-                ),
-            ),
-            FetchCanisterLogsNotEnoughCycles { sent, required } => Self::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "fetch_canister_logs request sent with {sent} cycles, but {required} cycles are required."
                 ),
             ),
             FetchCanisterLogsAccessDenied { caller } => Self::new(

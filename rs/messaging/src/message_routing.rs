@@ -30,12 +30,12 @@ use ic_registry_client_helpers::subnet::{
     SubnetListRegistry, SubnetRegistry, get_node_ids_from_subnet_record,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
-    DroppedMessageMetrics, FullTopology, NetworkTopology, ReplicatedState, SubnetTopology,
+    DroppedMessageMetrics, FullTopology, NetworkTopology, OwnSubnetInfo, ReplicatedState,
+    SubnetTopology,
 };
 use ic_types::batch::{Batch, BatchContent, BatchSummary};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
@@ -55,6 +55,7 @@ use prometheus::{
     Gauge, Histogram, HistogramTimer, HistogramVec, IntCounter, IntCounterVec, IntGauge,
     IntGaugeVec,
 };
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{AsRef, TryFrom};
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -582,14 +583,10 @@ trait BatchProcessor: Send {
 }
 
 /// Implementation of [`BatchProcessor`].
-struct BatchProcessorImpl<RegistryClient_>
-where
-    RegistryClient_: RegistryClient,
-{
+struct BatchProcessorImpl<RegistryClient_: RegistryClient> {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_machine: Box<dyn StateMachine>,
-    registry: Arc<RegistryClient_>,
-    bitcoin_config: BitcoinConfig,
+    registry_reader: RegistryReader<RegistryClient_>,
     metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
     #[allow(dead_code)]
@@ -666,7 +663,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         )));
         let stream_handler = Box::new(routing::stream_handler::StreamHandlerImpl::new(
             subnet_id,
-            hypervisor_config.clone(),
             metrics_registry,
             &metrics,
             Arc::clone(&time_in_stream_metrics),
@@ -699,23 +695,72 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             scheduler,
             demux,
             stream_builder,
-            hypervisor_config.clone(),
             log.clone(),
             metrics.clone(),
         ));
 
+        let registry_reader = RegistryReader::new(
+            registry,
+            hypervisor_config.bitcoin,
+            metrics.clone(),
+            log.clone(),
+        );
+
         Self {
             state_manager,
             state_machine,
-            registry,
-            bitcoin_config: hypervisor_config.bitcoin,
+            registry_reader,
             metrics,
             log,
             malicious_flags,
         }
     }
+}
+
+/// The registry-derived values read at a given registry version, cached by
+/// [`RegistryReader`] so that repeated reads at the same version are cheap.
+struct CachedRegistryData {
+    registry_version: RegistryVersion,
+    network_topology: Arc<NetworkTopology>,
+    own_subnet_info: Arc<OwnSubnetInfo>,
+    registry_execution_settings: Arc<RegistryExecutionSettings>,
+}
+
+/// Reads the registry contents required by `BatchProcessorImpl::process_batch()`.
+///
+/// Caches the values read at the most recent registry version, so that a
+/// subsequent read at the same version returns `Arc` clones of the cached
+/// values instead of reading the registry again.
+struct RegistryReader<RegistryClient_: RegistryClient> {
+    registry: Arc<RegistryClient_>,
+    bitcoin_config: BitcoinConfig,
+    /// Cache holding the values read at the most recent registry version.
+    cache: RefCell<Option<CachedRegistryData>>,
+    metrics: MessageRoutingMetrics,
+    log: ReplicaLogger,
+}
+
+impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
+    fn new(
+        registry: Arc<RegistryClient_>,
+        bitcoin_config: BitcoinConfig,
+        metrics: MessageRoutingMetrics,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            registry,
+            bitcoin_config,
+            cache: RefCell::new(None),
+            metrics,
+            log,
+        }
+    }
 
     /// Reads registry contents required by `BatchProcessorImpl::process_batch()`.
+    ///
+    /// Returns `Arc` clones of the cached values if they were previously read at
+    /// the same `registry_version`; otherwise reads the registry, caches the
+    /// results and returns them.
     //
     /// # Warning
     /// If the registry is unavailable, this method loops until it becomes
@@ -725,16 +770,24 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
     ) -> (
-        NetworkTopology,
-        SubnetFeatures,
-        ResourceLimits,
-        RegistryExecutionSettings,
-        NodePublicKeys,
-        ApiBoundaryNodes,
+        Arc<NetworkTopology>,
+        Arc<OwnSubnetInfo>,
+        Arc<RegistryExecutionSettings>,
     ) {
-        loop {
+        // Return the cached values if they were read at the requested version.
+        if let Some(cached) = self.cache.borrow().as_ref()
+            && cached.registry_version == registry_version
+        {
+            return (
+                Arc::clone(&cached.network_topology),
+                Arc::clone(&cached.own_subnet_info),
+                Arc::clone(&cached.registry_execution_settings),
+            );
+        }
+
+        let (network_topology, own_subnet_info, registry_execution_settings) = loop {
             match self.try_to_read_registry(registry_version, own_subnet_id) {
-                Ok(result) => return result,
+                Ok(result) => break result,
                 Err(ReadRegistryError::Persistent(error_message)) => {
                     // Increment the critical error counter in case of a persistent error.
                     self.metrics.critical_error_failed_to_read_registry.inc();
@@ -756,11 +809,28 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 }
             }
             sleep(std::time::Duration::from_millis(100));
-        }
+        };
+
+        let network_topology = Arc::new(network_topology);
+        let own_subnet_info = Arc::new(own_subnet_info);
+        let registry_execution_settings = Arc::new(registry_execution_settings);
+
+        *self.cache.borrow_mut() = Some(CachedRegistryData {
+            registry_version,
+            network_topology: Arc::clone(&network_topology),
+            own_subnet_info: Arc::clone(&own_subnet_info),
+            registry_execution_settings: Arc::clone(&registry_execution_settings),
+        });
+
+        (
+            network_topology,
+            own_subnet_info,
+            registry_execution_settings,
+        )
     }
 
-    /// Loads the `NetworkTopology`, `SubnetFeatures`, execution settings and
-    /// own subnet node public keys from the registry.
+    /// Loads the `NetworkTopology`, `OwnSubnetInfo` and execution settings from the
+    /// registry.
     ///
     /// All of the above are required for deterministic processing, so if any
     /// entry is missing or cannot be decoded; or reading the registry fails; the
@@ -770,17 +840,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
-    ) -> Result<
-        (
-            NetworkTopology,
-            SubnetFeatures,
-            ResourceLimits,
-            RegistryExecutionSettings,
-            NodePublicKeys,
-            ApiBoundaryNodes,
-        ),
-        ReadRegistryError,
-    > {
+    ) -> Result<(NetworkTopology, OwnSubnetInfo, RegistryExecutionSettings), ReadRegistryError>
+    {
         let subnet_record = self
             .registry
             .get_subnet_record(own_subnet_id, registry_version)
@@ -792,7 +853,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .try_into()
             .unwrap_or(SubnetType::CloudEngine);
 
-        let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
         let network_topology = self.try_to_populate_network_topology(
             registry_version,
             own_subnet_id,
@@ -903,8 +963,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 
         Ok((
             network_topology,
-            subnet_features,
-            resource_limits,
+            OwnSubnetInfo {
+                subnet_features,
+                resource_limits,
+                node_public_keys,
+            },
             RegistryExecutionSettings {
                 max_number_of_canisters,
                 provisional_whitelist,
@@ -913,8 +976,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 node_ids: nodes,
                 registry_version,
             },
-            node_public_keys,
-            api_boundary_nodes,
         ))
     }
 
@@ -1156,6 +1217,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             None
         };
 
+        let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
+
         Ok(NetworkTopology::new(
             subnets,
             Arc::new(routing_table),
@@ -1166,6 +1229,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             self.bitcoin_config.mainnet_canister_id,
             full_topology,
             default_initial_dkg_subnet_id,
+            api_boundary_nodes,
         ))
     }
 
@@ -1386,17 +1450,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             CertificationScope::Metadata
         };
 
-        // TODO (MR-29) Cache network topology and subnet_features; and populate only
-        // if version referenced in batch changes.
         let registry_version = batch.registry_version;
-        let (
-            network_topology,
-            subnet_features,
-            resource_limits,
-            registry_execution_settings,
-            node_public_keys,
-            api_boundary_nodes,
-        ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
+        let (network_topology, own_subnet_info, registry_execution_settings) = self
+            .registry_reader
+            .read_registry(registry_version, state.metadata.own_subnet_id);
 
         self.metrics.blocks_proposed_total.inc();
         self.metrics
@@ -1418,13 +1475,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         let batch_number = batch.batch_number;
         let mut state_after_round = self.state_machine.execute_round(
             state,
-            network_topology,
             batch,
-            subnet_features,
-            resource_limits,
+            network_topology,
+            own_subnet_info,
             &registry_execution_settings,
-            node_public_keys,
-            api_boundary_nodes,
         );
 
         let garbage_collect_timer = self.metrics.start_phase_timer(PHASE_GARBAGE_COLLECT);
