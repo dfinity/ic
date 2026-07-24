@@ -66,6 +66,10 @@ pub struct State {
     pub ethereum_block_height: CandidBlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
+    /// Latest block height observed across all providers, refreshed on its own
+    /// timer and used to schedule ckERC20 deposit-address balance scans. Volatile
+    /// runtime cache, not event-sourced.
+    pub latest_block_height: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
@@ -844,4 +848,5 @@ pub enum TaskType {
     RefreshGasFeeEstimate,
     Reimbursement,
     MintCkErc20,
+    RefreshLatestBlockHeight,
 }

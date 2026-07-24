@@ -6,7 +6,7 @@ use crate::{
     eth_rpc::{Topic, is_response_too_large},
     eth_rpc_client::{
         ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE, HEADER_SIZE_LIMIT, MIN_ATTACHED_CYCLES,
-        MultiCallError, NoReduction, ToReducedWithStrategy, rpc_client,
+        MinByKey, MultiCallError, NoReduction, ToReducedWithStrategy, rpc_client,
     },
     guard::TimerGuard,
     logs::{DEBUG, INFO},
@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
-use evm_rpc_types::{Hex32, LogEntry};
+use evm_rpc_types::{BlockTag, Hex32, LogEntry};
 use ic_canister_log::log;
 use ic_canister_runtime::IcRuntime;
 use ic_ethereum_types::Address;
@@ -178,6 +178,31 @@ pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
                 "Failed to get the latest {block_height:?} block number: {e:?}"
             );
             read_state(|s| s.last_observed_block_number)
+        }
+    }
+}
+
+pub async fn refresh_latest_block_height() -> Option<BlockNumber> {
+    let _guard = match TimerGuard::new(TaskType::RefreshLatestBlockHeight) {
+        Ok(guard) => guard,
+        Err(_) => return read_state(|s| s.latest_block_height),
+    };
+    match read_state(rpc_client)
+        .get_block_by_number(BlockTag::Latest)
+        .with_cycles(MIN_ATTACHED_CYCLES)
+        .try_send()
+        .await
+        .reduce_with_strategy(MinByKey::new(|block: &evm_rpc_types::Block| {
+            BlockNumber::from(block.number.clone())
+        })) {
+        Ok(latest_block) => {
+            let block_number = Some(BlockNumber::from(latest_block.number));
+            mutate_state(|s| s.latest_block_height = block_number);
+            block_number
+        }
+        Err(e) => {
+            log!(INFO, "Failed to get the latest block number: {e:?}");
+            read_state(|s| s.latest_block_height)
         }
     }
 }
