@@ -75,7 +75,7 @@ use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
@@ -1673,7 +1673,7 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
 /// to the caller instead of panicking on it.
 pub fn try_nns_get_most_recent_monthly_node_provider_rewards(
     state_machine: &StateMachine,
-) -> Result<Option<MonthlyNodeProviderRewards>, UserError> {
+) -> Result<Option<MonthlyNodeProviderRewards>, ic_state_machine_tests::UserError> {
     let result = state_machine.execute_ingress(
         GOVERNANCE_CANISTER_ID,
         "get_most_recent_monthly_node_provider_rewards",

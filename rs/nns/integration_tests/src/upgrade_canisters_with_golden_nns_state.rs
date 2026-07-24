@@ -3,7 +3,7 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
+use ic_nervous_system_common::{ONE_HOUR_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -456,19 +456,6 @@ mod sanity_check {
         let seconds_to_node_provider_reward_distribution = before_timestamp
             .saturating_add(NODE_PROVIDER_REWARD_PERIOD_SECONDS)
             .saturating_sub(state_machine.get_time().as_secs_since_unix_epoch());
-        // Advance gradually (in ticked increments) rather than in one atomic jump. This
-        // does not change the *total* amount of simulated time that passes
-        // (advance_time_gradually below advances exactly the requested number of
-        // seconds, no more and no less), which is what matters for landing on the
-        // correct reward-distribution day; see the comment on advance_time_gradually.
-        // What it does change is that leftover mainnet proposals whose voting deadlines
-        // fall within this span now cross those deadlines, and so get decided and
-        // executed, spread out over many ticks instead of all at once on the single
-        // tick that used to follow one big jump. That is both more realistic and avoids
-        // piling up many simultaneous proposal executions, which previously caused
-        // collateral failures (e.g. a canister-upgrade proposal leaving its target
-        // canister stopped mid-flight while sibling proposals' calls were still in
-        // progress).
         advance_time_gradually(
             state_machine,
             seconds_to_node_provider_reward_distribution.saturating_sub(1),
@@ -497,30 +484,11 @@ mod sanity_check {
         }
     }
 
-    /// Advances time by exactly `total_seconds`, split into bounded (~6 hour) ticked
-    /// increments rather than one atomic jump, with `state_machine.tick()` called after
-    /// each increment. The very last increment is whatever is left over (< the step
-    /// size), so the *sum* of all increments is bit-for-bit identical to `total_seconds`
-    /// -- i.e. this is observably the same amount of elapsed simulated time as a single
-    /// `state_machine.advance_time(Duration::from_secs(total_seconds))` call, just
-    /// spread across more ticks.
-    ///
-    /// This distinction matters here: an earlier attempt at gradual stepping (PR #8894)
-    /// computed the *total* time to advance as a fixed budget (one reward period plus a
-    /// few padding days) measured from "now" (whenever the test happened to reach this
-    /// point), rather than anchoring it to `before_timestamp` (when node provider
-    /// rewards were last distributed). That mismatch -- not the graduality of the
-    /// stepping itself -- could push the cumulative elapsed time slightly past (or
-    /// short of) the intended reward-distribution day, causing rewards to be issued for
-    /// the wrong day (PR #9066). As long as the total advanced here is computed the
-    /// same way the single jump it replaces would have been (as it is above, from
-    /// `before_timestamp`), and the increments sum to exactly that total, ticking
-    /// through the intermediate steps does not reintroduce that bug.
     fn advance_time_gradually(state_machine: &StateMachine, total_seconds: u64) {
-        const STEP_SECONDS: u64 = 6 * 60 * 60;
+        const STEP_SECONDS: u64 = 6 * ONE_HOUR_SECONDS;
         let mut remaining_seconds = total_seconds;
         while remaining_seconds > 0 {
-            let step_seconds = remaining_seconds.min(STEP_SECONDS);
+            let step_seconds = STEP_SECONDS.clamp(0, remaining_seconds);
             state_machine.advance_time(std::time::Duration::from_secs(step_seconds));
             state_machine.tick();
             remaining_seconds -= step_seconds;
