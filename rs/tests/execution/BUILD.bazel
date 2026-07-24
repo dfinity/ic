@@ -63,6 +63,20 @@ system_test(
 )
 
 system_test(
+    name = "large_zipped_wasm_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-utils",
+    ],
+)
+
+system_test(
     name = "general_execution_test",
     srcs = glob(["general_execution_tests/*.rs"]),
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs * 6 vCPUs.

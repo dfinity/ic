@@ -1,5 +1,5 @@
 {
-  "checksum": "d5ffecbe5eb539cc383255d2073c58ee29b2e68ff04ebfbcded41ae738abb154",
+  "checksum": "6ee1245facb7abdfdc1fbea58bb00e818bdfabefd73c5e0b3b6c771fd40f2e6d",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -43886,7 +43886,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/libflate/2.1.0/download",
-          "sha256": "45d9dfdc14ea4ef0900c1cddbc8dcd553fbaacd8a4a282cf4018ae9dd04fb21e"
+          "sha256": "45d9dfdc14ea4ef0900c1cddbc8dcd553fbaacd8a4a282cf4018ae9dd04fb21e",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:libflate.patch"
+          ]
         }
       },
       "targets": [

@@ -1,0 +1,93 @@
+diff --git a/src/deflate/decode.rs b/src/deflate/decode.rs
+index 7f0f23b..aa548aa 100644
+--- a/src/deflate/decode.rs
++++ b/src/deflate/decode.rs
+@@ -134,30 +134,25 @@ where
+     R: Read,
+ {
+     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+-        if !self.lz77_decoder.buffer().is_empty() {
+-            self.lz77_decoder.read(buf)
+-        } else if self.eos {
+-            Ok(0)
+-        } else {
++        loop {
++            if !self.lz77_decoder.buffer().is_empty() {
++                return self.lz77_decoder.read(buf);
++            }
++            if self.eos {
++                return Ok(0);
++            }
+             let bfinal = self.bit_reader.read_bit()?;
+             let btype = self.bit_reader.read_bits(2)?;
+             self.eos = bfinal;
+             match btype {
+-                0b00 => {
+-                    self.read_non_compressed_block()?;
+-                    self.read(buf)
+-                }
+-                0b01 => {
+-                    self.read_compressed_block(&symbol::FixedHuffmanCodec)?;
+-                    self.read(buf)
+-                }
+-                0b10 => {
+-                    self.read_compressed_block(&symbol::DynamicHuffmanCodec)?;
+-                    self.read(buf)
++                0b00 => self.read_non_compressed_block()?,
++                0b01 => self.read_compressed_block(&symbol::FixedHuffmanCodec)?,
++                0b10 => self.read_compressed_block(&symbol::DynamicHuffmanCodec)?,
++                0b11 => {
++                    return Err(invalid_data_error!(
++                        "btype 0x11 of DEFLATE is reserved(error) value"
++                    ));
+                 }
+-                0b11 => Err(invalid_data_error!(
+-                    "btype 0x11 of DEFLATE is reserved(error) value"
+-                )),
+                 _ => unreachable!(),
+             }
+         }
+diff --git a/src/gzip.rs b/src/gzip.rs
+index 519acfb..e2eda8f 100644
+--- a/src/gzip.rs
++++ b/src/gzip.rs
+@@ -1140,28 +1140,29 @@ where
+     R: io::Read,
+ {
+     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+-        if self.eos {
+-            return Ok(0);
+-        }
++        loop {
++            if self.eos {
++                return Ok(0);
++            }
++
++            let read_size = self.decoder.read(buf)?;
++            if read_size != 0 {
++                return Ok(read_size);
++            }
+ 
+-        let read_size = self.decoder.read(buf)?;
+-        if read_size == 0 {
+             match Header::read_from(self.as_inner_mut()) {
+                 Err(e) => {
+                     if e.kind() == io::ErrorKind::UnexpectedEof {
+                         self.eos = true;
+-                        Ok(0)
++                        return Ok(0);
+                     } else {
+-                        Err(e)
++                        return Err(e);
+                     }
+                 }
+                 Ok(header) => {
+                     self.decoder.reset(header);
+-                    self.read(buf)
+                 }
+             }
+-        } else {
+-            Ok(read_size)
+         }
+     }
+ }

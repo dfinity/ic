@@ -89,3 +89,7 @@ path = "cycles_cost_schedule_test.rs"
 [[bin]]
 name = "canister_migration_test"
 path = "canister_migration_test.rs"
+
+[[bin]]
+name = "large_zipped_wasm_test"
+path = "large_zipped_wasm_test.rs"

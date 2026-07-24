@@ -947,6 +947,8 @@ crate.spec(
     package = "libcryptsetup-rs",
     version = "0.15",
 )
+
+# currently patched, see below
 crate.spec(
     package = "libflate",
     version = "^2.1.0",
@@ -2246,6 +2248,12 @@ crate.annotation(
     patch_args = ["-p1"],
     patches = ["@@//bazel:rustix.patch"],
     version = "1.1.4",
+)
+crate.annotation(
+    crate = "libflate",
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:libflate.patch"],
+    version = "^2.1.0",
 )
 crate.annotation(
     crate = "ic-wasm",
