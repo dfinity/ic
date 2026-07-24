@@ -7,7 +7,7 @@ use ic_management_canister_types_private::{
 };
 use ic_types::{
     CanisterId, ExecutionRound, Height, NodeId, RegistryVersion, Time,
-    canister_http::CanisterHttpRequestContext,
+    canister_http::{CanisterHttpRequestContext, PricingVersion},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
         canister_threshold_sig::{
@@ -23,6 +23,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom},
     sync::Arc,
+    time::Duration,
 };
 
 /// ECDSA message hash size in bytes.
@@ -30,6 +31,13 @@ const MESSAGE_HASH_SIZE: usize = 32;
 
 /// Threshold algorithm nonce size in bytes.
 const NONCE_SIZE: usize = 32;
+
+/// How long a `CanisterHttpRequestContext` whose response was already delivered
+/// to execution is retained before being removed.
+///
+/// The timeout is measured against the `time` of the original
+/// `CanisterHttpRequestContext` and the batch time.
+pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
@@ -318,6 +326,14 @@ impl SubnetCallContextManager {
                             context.request.sender_reply_callback,
                             context.request.sender
                         );
+                        if context.pricing_version == PricingVersion::PayAsYouGo {
+                            // If the pricing version is pay-as-you-go, move the context
+                            // to the delivered contexts. This lets us keep accounting
+                            // late per-replica spend reports (and refund the replicas
+                            // that never responded on timeout).
+                            self.delivered_canister_http_request_contexts
+                                .insert(callback_id, context.clone());
+                        }
                         SubnetCallContext::CanisterHttpRequest(context)
                     })
             })
@@ -347,6 +363,27 @@ impl SubnetCallContextManager {
                         SubnetCallContext::BitcoinSendTransactionInternal(context)
                     })
             })
+    }
+
+    /// Removes all delivered `CanisterHttpRequestContext`s that have been around
+    /// for longer than [`DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT`] and
+    /// returns them, so that the caller can refund the per-replica allowance of
+    /// the replicas that never responded.
+    ///
+    /// The timeout is measured against the `time` recorded in the original
+    /// `CanisterHttpRequestContext` and the provided `current_time` (the batch
+    /// time).
+    pub fn time_out_delivered_canister_http_request_contexts(
+        &mut self,
+        current_time: Time,
+    ) -> Vec<CanisterHttpRequestContext> {
+        self.delivered_canister_http_request_contexts
+            .extract_if(.., |_callback_id, context| {
+                current_time.saturating_duration_since(context.time)
+                    >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+            })
+            .map(|(_callback_id, context)| context)
+            .collect()
     }
 
     pub fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
