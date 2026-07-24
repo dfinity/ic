@@ -85,7 +85,7 @@ use std::{
     fs::OpenOptions,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
-    process::{Child, Command},
+    process::Command,
     sync::{Arc, mpsc::channel},
     thread,
     thread::JoinHandle,
@@ -101,6 +101,9 @@ use wslpath::windows_to_wsl;
 
 pub mod common;
 pub mod nonblocking;
+mod server_process;
+
+pub use server_process::ServerHandle;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
@@ -2280,7 +2283,17 @@ pub struct StartServerParams {
 }
 
 /// Attempt to start a new PocketIC server.
-pub async fn start_server(params: StartServerParams) -> (Child, Url) {
+///
+/// The spawned server process is owned by a process-global registry; the returned
+/// [`ServerHandle`] only refers to it (dropping the handle does not stop the server). On
+/// unix, once the spawning process exits normally, the server is killed (its whole
+/// process group, so the canister-sandbox children are terminated too) and reaped on a
+/// bounded, best-effort basis; if the process terminates abnormally (e.g. it is killed by
+/// a signal or aborts), the server is not cleaned up and shuts down on its TTL instead.
+/// On other platforms the server is never killed automatically and always shuts down on
+/// its TTL. Callers can terminate the server earlier with [`ServerHandle::kill_and_wait`]
+/// or let it outlive this process with [`ServerHandle::detach`].
+pub async fn start_server(params: StartServerParams) -> (ServerHandle, Url) {
     let default_bin_dir =
         std::env::temp_dir().join(format!("{POCKET_IC_SERVER_NAME}-{LATEST_SERVER_VERSION}"));
     let default_bin_path = default_bin_dir.join("pocket-ic");
@@ -2389,11 +2402,13 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         cmd.process_group(0);
     }
 
-    // TODO: SDK-1936
-    #[allow(clippy::zombie_processes)]
     let child = cmd
         .spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path.display()));
+    // Transfer ownership of the server process to the process-global registry, which
+    // kills and reaps it (and its sandbox children) once the process exits normally.
+    // See `server_process`.
+    let server_handle = server_process::register(child, port_file_path.clone());
 
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone())
@@ -2404,7 +2419,7 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                 .parse()
                 .expect("Failed to parse port to number");
             break (
-                child,
+                server_handle,
                 Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap(),
             );
         }

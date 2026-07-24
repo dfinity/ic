@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The type `ServerHandle` (returned by `start_server`) with the methods `pid` (the OS
+  process id of the spawned server), `kill_and_wait` (kill the server now) and `detach`
+  (let the server outlive the spawning process, as in earlier `pocket-ic` versions).
+
+### Changed
+- Breaking: `start_server` now returns a `ServerHandle` (instead of a
+  `std::process::Child`). Every PocketIC server spawned by this crate — also implicitly
+  through `PocketIc`/`PocketIcBuilder` — is registered in a process-global registry and,
+  on unix, is automatically killed (its whole process group, so canister-sandbox children
+  are terminated too) and reaped when the spawning process exits normally — instead of
+  being detached and left to shut down on its TTL. This ensures the server no longer
+  keeps the spawning process's inherited stdout/stderr pipes open past process exit,
+  which caused issues on some CI runners. The cleanup does not run if the process
+  terminates abnormally (e.g. it is killed by a signal or aborts); the server then still
+  shuts down on its TTL, as before. On Windows nothing changes: the server is never
+  killed automatically and shuts down on its TTL. Migration: callers that previously kept
+  the `Child` to terminate the server themselves should call
+  `ServerHandle::kill_and_wait`; callers that used `Child::id` should use
+  `ServerHandle::pid`; callers that need the server to outlive the spawning process
+  should call `ServerHandle::detach`.
+
 
 
 ## 15.0.0 - 2026-06-26

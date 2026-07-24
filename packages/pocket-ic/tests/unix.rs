@@ -36,7 +36,7 @@ use registry_canister::mutations::do_remove_node_operators::{
 use reqwest::StatusCode;
 use std::{
     collections::BTreeMap,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
         Arc,
@@ -71,7 +71,7 @@ fn test_canister_wasm() -> Vec<u8> {
 async fn resume_killed_instance_impl(
     incomplete_state: Option<IncompleteStateFlag>,
 ) -> Result<(), String> {
-    let (mut server, server_url) = start_server(StartServerParams::default()).await;
+    let (server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
 
     let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
@@ -125,7 +125,7 @@ async fn resume_killed_instance_impl(
     let time = pic.get_time().await;
     assert!(time >= now.into());
 
-    server.kill().unwrap();
+    server.kill_and_wait();
 
     let (_, server_url) = start_server(StartServerParams::default()).await;
     let client = reqwest::Client::new();
@@ -934,4 +934,123 @@ fn test_cost_threshold_keys() {
             "`ic0.cost_vetkd_derive_key` mismatch for key `{name}`"
         );
     }
+}
+
+/// Selects the mode of `spawn_server_and_exit_helper` ("kill" or "detach"); the helper is
+/// a no-op unless this environment variable is set.
+const SPAWN_SERVER_HELPER_ENV: &str = "POCKET_IC_TEST_SPAWN_SERVER_HELPER";
+
+/// Helper for `server_is_killed_when_process_exits` and
+/// `detached_server_survives_process_exit`, which re-invoke this test binary with
+/// `SPAWN_SERVER_HELPER_ENV` set: spawns a PocketIC server, prints its pid and exits.
+#[tokio::test]
+async fn spawn_server_and_exit_helper() {
+    let Ok(mode) = std::env::var(SPAWN_SERVER_HELPER_ENV) else {
+        return;
+    };
+    let (server, server_url) = start_server(StartServerParams::default()).await;
+    // Make sure the server is fully up before exiting.
+    let resp = reqwest::Client::new()
+        .get(server_url.join("instances").unwrap())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    if mode == "detach" {
+        server.detach();
+    }
+    println!("SERVER_PID={}", server.pid());
+}
+
+fn spawn_server_helper(mode: &str) -> std::process::Child {
+    std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "spawn_server_and_exit_helper",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(SPAWN_SERVER_HELPER_ENV, mode)
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap()
+}
+
+fn parse_server_pid(out: &str) -> libc::pid_t {
+    out.lines()
+        .find_map(|line| line.strip_prefix("SERVER_PID="))
+        .expect("helper did not print SERVER_PID")
+        .trim()
+        .parse()
+        .unwrap()
+}
+
+/// Whether a process with the given pid currently exists, according to `kill(pid, 0)`.
+fn process_exists(pid: libc::pid_t) -> bool {
+    unsafe { libc::kill(pid, 0) == 0 }
+}
+
+/// Regression test for the exit-time reaper (`pocket_ic::server_process`): when a process
+/// that spawned a PocketIC server exits normally, the server's whole process group must
+/// be killed and the server reaped, so that the stdout/stderr pipes inherited from the
+/// spawning process are released.
+#[test]
+fn server_is_killed_when_process_exits() {
+    let mut helper = spawn_server_helper("kill");
+    let mut stdout = helper.stdout.take().unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut out = String::new();
+        let _ = stdout.read_to_string(&mut out);
+        let _ = sender.send(out);
+    });
+    // EOF on the helper's stdout is only reached once every process holding the inherited
+    // write-end — the helper itself, the server and its sandbox children — has
+    // terminated. This is exactly the property that unblocks CI runners waiting on the
+    // pipes of an exited test action.
+    let out = receiver
+        .recv_timeout(Duration::from_secs(300))
+        .expect("helper stdout did not reach EOF: a process is still holding the pipe");
+    assert!(helper.wait().unwrap().success());
+    // The helper reaps the server before exiting, so its pid must be gone. Poll briefly
+    // to tolerate init still having to reap it in the unlikely case the helper's bounded
+    // reap gave up.
+    let server_pid = parse_server_pid(&out);
+    let start = Instant::now();
+    while process_exists(server_pid) {
+        assert!(
+            start.elapsed() < Duration::from_secs(30),
+            "server (pid {server_pid}) is still alive after the spawning process exited"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// The counterpart to `server_is_killed_when_process_exits`: a `ServerHandle::detach`ed
+/// server must survive the spawning process.
+#[test]
+fn detached_server_survives_process_exit() {
+    let mut helper = spawn_server_helper("detach");
+    let stdout = helper.stdout.take().unwrap();
+    // Do not wait for EOF here: the detached server inherits the pipe and legitimately
+    // holds it open past the helper's exit.
+    let mut lines = BufReader::new(stdout).lines();
+    let server_pid = loop {
+        let line = lines
+            .next()
+            .expect("helper stdout closed before printing SERVER_PID")
+            .unwrap();
+        if let Some(pid) = line.strip_prefix("SERVER_PID=") {
+            break pid.trim().parse::<libc::pid_t>().unwrap();
+        }
+    };
+    assert!(helper.wait().unwrap().success());
+    // The helper has exited, but the detached server must still be running.
+    assert!(
+        process_exists(server_pid),
+        "detached server (pid {server_pid}) died with the spawning process"
+    );
+    // Clean up: kill the detached server's process group ourselves (it is not our child,
+    // so init reaps it).
+    unsafe { libc::kill(-server_pid, libc::SIGKILL) };
 }
