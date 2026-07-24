@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 rust_test(
     name = "guest_upgrade_tests",
     srcs = glob(["src/**/*.rs"]),
-    exec_properties = {"namespace_requires_network": "true"},
     tags = ["requires-network"],
     deps = [
         "//rs/ic_os/config/types:config_types",
