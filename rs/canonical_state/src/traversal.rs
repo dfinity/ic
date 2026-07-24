@@ -1205,6 +1205,99 @@ mod tests {
     }
 
     #[test]
+    fn test_traverse_subnet_metrics_includes_canister_consumed_cycles_at_v29() {
+        use crate::encoding::encode_subnet_metrics;
+        use ic_types_cycles::{CompoundCycles, Instructions, NominalCycles};
+
+        let own_subnet_id = subnet_test_id(1);
+        let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
+
+        // Register the own subnet in the topology so that the
+        // `/subnet/<own_subnet_id>/metrics` leaf is emitted.
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
+                own_subnet_id => SubnetTopology {
+                    public_key: vec![1, 2, 3, 4],
+                    nodes: BTreeSet::new(),
+                    subnet_type: SubnetType::Application,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                },
+            });
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    id_range(0, 10) => own_subnet_id,
+                })
+                .unwrap(),
+            );
+        });
+
+        // Add a non-deleted canister that has consumed some cycles.
+        let mut canister_state = new_canister_state(
+            canister_test_id(2),
+            user_test_id(24).get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        canister_state
+            .system_state
+            .consume_cycles(CompoundCycles::<Instructions>::new(
+                Cycles::new(123_456),
+                CanisterCyclesCostSchedule::Normal,
+            ));
+        let consumed_by_canisters = canister_state
+            .system_state
+            .canister_metrics()
+            .consumed_cycles();
+        assert!(consumed_by_canisters > NominalCycles::zero());
+        state.put_canister_state(canister_state);
+
+        for certification_version in all_supported_versions() {
+            state.metadata.certification_version = certification_version;
+
+            let trace = traverse(&state, Height::new(0), TracingVisitor::new(NoopVisitor)).0;
+
+            // Extract the blob following the "metrics" edge.
+            let metrics_blob = trace
+                .windows(2)
+                .find_map(|w| match (&w[0], &w[1]) {
+                    (E::EnterEdge(label), E::VisitBlob(blob)) if label.as_slice() == b"metrics" => {
+                        Some(blob.clone())
+                    }
+                    _ => None,
+                })
+                .expect("no metrics leaf in traversal");
+
+            // The tree must pass the sum of the non-deleted canisters' consumed
+            // cycles to `encode_subnet_metrics`; it is only reflected in the
+            // encoding starting with V29.
+            let expected_blob = encode_subnet_metrics(
+                &state.metadata.subnet_metrics,
+                consumed_by_canisters,
+                certification_version,
+            );
+            assert_eq!(
+                metrics_blob, expected_blob,
+                "unexpected metrics leaf for certification_version: {certification_version:?}"
+            );
+
+            // The canister's consumed cycles are included only starting with V29.
+            let without_canisters = encode_subnet_metrics(
+                &state.metadata.subnet_metrics,
+                NominalCycles::zero(),
+                certification_version,
+            );
+            if certification_version >= CertificationVersion::V29 {
+                assert_ne!(metrics_blob, without_canisters);
+            } else {
+                assert_eq!(metrics_blob, without_canisters);
+            }
+        }
+    }
+
+    #[test]
     fn test_traverse_large_or_empty_routing_table() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 

@@ -586,11 +586,11 @@ impl SubnetMetrics {
     /// Computes the total consumed cycles on the subnet.
     ///
     /// This is the current computation, which avoids double counting the cycles
-    /// consumed by deleted canisters. It is not yet reflected in the certified
-    /// state: the canonical state consumer still uses
-    /// [`Self::consumed_cycles_total_v27`] for all certification versions up to
-    /// and including `V27`. A future certification version should switch the
-    /// consumer over to this function.
+    /// consumed by deleted canisters. The canonical state consumer uses it
+    /// starting with certification version `V29`, adding on top the cycles
+    /// consumed by all non-deleted canisters; for earlier certification
+    /// versions the consumer uses the legacy [`Self::consumed_cycles_total_v28`]
+    /// instead.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -645,16 +645,16 @@ impl SubnetMetrics {
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical
-    /// state consumer for certification versions up to and including `V27`.
+    /// state consumer for certification versions up to and including `V28`.
     ///
     /// This version double counts the cycles consumed by deleted canisters: at
     /// deletion, a canister's per-use-case consumption is added both to
     /// `consumed_cycles_by_deleted_canisters` and to the
     /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
-    /// unchanged to preserve the certified state for existing certification
-    /// versions; [`Self::consumed_cycles_total`] fixes the double counting for
-    /// future certification versions.
-    pub fn consumed_cycles_total_v27(&self) -> NominalCycles {
+    /// unchanged to preserve the certified state for certification versions up
+    /// to and including `V28`; [`Self::consumed_cycles_total`] fixes the double
+    /// counting starting with certification version `V29`.
+    pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;

@@ -14,6 +14,7 @@ use crate::CertificationVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
 use ic_types::{PrincipalId, messages::StreamMessage, xnet::StreamHeader};
+use ic_types_cycles::NominalCycles;
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::convert::TryInto;
@@ -106,11 +107,22 @@ pub fn encode_subnet_canister_ranges(ranges: Option<&Vec<(PrincipalId, Principal
 }
 
 /// Encodes a `SubnetMetrics` into canonical CBOR representation.
+///
+/// `consumed_cycles_by_canisters` is the total number of cycles consumed by all
+/// non-deleted canisters on the subnet. It is only included in the reported
+/// `consumed_cycles_total` starting with certification version `V29`; for
+/// earlier versions the argument is ignored.
 pub fn encode_subnet_metrics(
     metrics: &SubnetMetrics,
+    consumed_cycles_by_canisters: NominalCycles,
     certification_version: CertificationVersion,
 ) -> Vec<u8> {
-    types::SubnetMetrics::proxy_encode((metrics, certification_version)).unwrap()
+    types::SubnetMetrics::proxy_encode((
+        metrics,
+        consumed_cycles_by_canisters,
+        certification_version,
+    ))
+    .unwrap()
 }
 
 /// Serializes controllers as a CBOR list.

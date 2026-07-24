@@ -283,7 +283,7 @@ fn canonical_encoding_stream_header_v26() {
 /// }
 /// ```
 ///
-/// Expected:
+/// Expected (for certification versions up to and including `V28`):
 ///
 /// For the `consumed_cycles_total`, the expected value (250B) is the sum of all
 /// the invividual values above.
@@ -303,6 +303,15 @@ fn canonical_encoding_stream_header_v26() {
 ///    03                     # field_index(SubnetMetrics::update_transactions_total)
 ///    19 1068                # unsigned(4200)
 /// ```
+///
+/// Starting with `V29`, the `Instructions` (80B) and
+/// `RequestAndResponseTransmission` (20B) use case entries are no longer added
+/// on top of the deleted canisters scalar (fixing the double counting), while
+/// the cycles consumed by non-deleted canisters (50B, passed to
+/// `encode_subnet_metrics`) are added instead. Hence the expected value becomes
+/// 0 (deleted) + 50B (HTTP) + 100B (ECDSA) + 50B (canisters) = 200B
+/// (`1B 0000002E90EDD000`).
+///
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
 fn canonical_encoding_subnet_metrics() {
@@ -333,9 +342,21 @@ fn canonical_encoding_subnet_metrics() {
         metrics.threshold_signature_agreements =
             BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
+        let consumed_cycles_by_canisters = NominalCycles::new(50_000_000_000);
+
+        let expected = if certification_version >= CertificationVersion::V29 {
+            "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 2E 90 ED D0 00 01 00 03 19 10 68"
+        } else {
+            "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 3A 35 29 44 00 01 00 03 19 10 68"
+        };
+
         assert_eq!(
-            "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 3A 35 29 44 00 01 00 03 19 10 68",
-            as_hex(&encode_subnet_metrics(&metrics, certification_version))
+            expected,
+            as_hex(&encode_subnet_metrics(
+                &metrics,
+                consumed_cycles_by_canisters,
+                certification_version
+            ))
         );
     }
 }
