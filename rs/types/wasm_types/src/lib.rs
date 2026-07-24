@@ -20,7 +20,7 @@ const WASM_HASH_LENGTH: usize = 32;
 /// A newtype for
 /// [BinaryEncoded](https://github.com/WebAssembly/design/blob/master/BinaryEncoding.md)
 /// Wasm modules used for execution.
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct BinaryEncodedWasm(Arc<Vec<u8>>);
 
 impl std::fmt::Debug for BinaryEncodedWasm {

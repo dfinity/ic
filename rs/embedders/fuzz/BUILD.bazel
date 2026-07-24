@@ -120,3 +120,9 @@ rust_fuzz_test_binary_afl(
     srcs = ["fuzz_targets/compile_wasm_using_embedder.rs"],
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )
+
+rust_fuzz_test_binary_afl(
+    name = "differential_instrumentation",
+    srcs = ["fuzz_targets/differential_instrumentation.rs"],
+    deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
+)
