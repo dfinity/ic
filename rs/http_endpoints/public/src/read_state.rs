@@ -2,7 +2,10 @@
 
 use crate::{
     HttpError, ReplicaHealthStatus,
-    common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
+    common::{
+        Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error,
+        verify_delegation_matches_certified_state,
+    },
     metrics::HttpHandlerMetrics,
 };
 use axum::{
@@ -30,8 +33,9 @@ use ic_types::{
     crypto::threshold_sig::IcRootOfTrust,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, EXPECTED_MESSAGE_ID_LENGTH, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequest, HttpRequestEnvelope, MessageId, ReadState,
+        Blob, Certificate, CertificateDelegation, CertificateDelegationMetadata,
+        EXPECTED_MESSAGE_ID_LENGTH, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
+        HttpRequestEnvelope, MessageId, ReadState,
     },
 };
 use ic_validator::{CanisterIdSet, HttpRequestVerifier};
@@ -281,13 +285,10 @@ pub(crate) async fn read_state(
             return (status, message).into_response();
         }
 
-        let delegation_from_nns = match (version, target) {
-            (Version::V2, _) => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
-            (Version::V3, Target::Canister) => nns_delegation_reader
-                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
-            (Version::V3, Target::Subnet) => {
-                nns_delegation_reader.get_delegation(CanisterRangesFilter::None)
-            }
+        let canister_ranges_filter = match (version, target) {
+            (Version::V2, _) => CanisterRangesFilter::Flat,
+            (Version::V3, Target::Canister) => CanisterRangesFilter::Tree(effective_canister_id),
+            (Version::V3, Target::Subnet) => CanisterRangesFilter::None,
         };
 
         let maybe_nns_subnet_filter = match version {
@@ -297,9 +298,10 @@ pub(crate) async fn read_state(
 
         get_certificate_and_create_response(
             read_state.paths,
-            delegation_from_nns,
+            nns_delegation_reader.get_delegation_with_metadata(canister_ranges_filter),
             certified_state_reader.as_ref(),
             maybe_nns_subnet_filter,
+            &metrics,
         )
     })
     .await;
@@ -354,9 +356,10 @@ enum DeprecatedCanisterRangesFilter {
 
 fn get_certificate_and_create_response(
     mut paths: Vec<Path>,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     deprecated_canister_ranges_filter: DeprecatedCanisterRangesFilter,
+    metrics: &HttpHandlerMetrics,
 ) -> axum::response::Response {
     // Create labeled tree. This may be an expensive operation and by
     // creating the labeled tree after verifying the paths we know that
@@ -393,11 +396,24 @@ fn get_certificate_and_create_response(
 
     let signature = certification.signed.signature.signature.get().0;
 
+    // Make sure the NNS delegation matches the certified state we are about to serve. Otherwise the
+    // client would reject the certificate.
+    if let Some((delegation, metadata)) = &delegation_from_nns
+        && let Err(HttpError { status, message }) = verify_delegation_matches_certified_state(
+            delegation,
+            metadata,
+            certified_state_reader,
+            metrics,
+        )
+    {
+        return (status, message).into_response();
+    }
+
     Cbor(HttpReadStateResponse {
         certificate: Blob(into_cbor(&Certificate {
             tree,
             signature: Blob(signature),
-            delegation: delegation_from_nns,
+            delegation: delegation_from_nns.map(|(delegation, _metadata)| delegation),
         })),
     })
     .into_response()
@@ -721,6 +737,7 @@ mod test {
             /*delegation_from_nns=*/ None,
             &reader,
             DeprecatedCanisterRangesFilter::KeepAll,
+            &HttpHandlerMetrics::new(&MetricsRegistry::new()),
         );
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -735,6 +752,7 @@ mod test {
             /*delegation_from_nns=*/ None,
             &reader,
             DeprecatedCanisterRangesFilter::KeepOnlyNNS(NNS_SUBNET_ID),
+            &HttpHandlerMetrics::new(&MetricsRegistry::new()),
         );
         assert_eq!(response.status(), StatusCode::OK);
     }

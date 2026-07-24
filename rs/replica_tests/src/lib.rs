@@ -615,6 +615,10 @@ impl LocalTestRuntime {
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")
             }
+            Err(QueryExecutionError::InvalidDelegation(_))
+            | Err(QueryExecutionError::OutdatedDelegation) => {
+                unreachable!("QueryExecutionErrors above only found when a delegation is given.")
+            }
         };
         if let Ok(WasmResult::Reply(result)) = result.clone() {
             info!(

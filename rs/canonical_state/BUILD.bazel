@@ -38,6 +38,7 @@ rust_test(
     crate = ":canonical_state",
     deps = [
         # Keep sorted.
+        "//rs/canonical_state/tree_hash/test_utils",
         "//rs/crypto/sha2",
         "//rs/registry/subnet_features",
         "//rs/sys",

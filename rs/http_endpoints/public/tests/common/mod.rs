@@ -46,7 +46,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id};
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
@@ -109,7 +109,8 @@ impl UpdateEndpoint {
 
     pub fn default_ingress_message(&self) -> ic_http_endpoints_test_agent::IngressMessage {
         match self {
-            UpdateEndpoint::Canister(_) => ic_http_endpoints_test_agent::IngressMessage::default(),
+            UpdateEndpoint::Canister(_) => ic_http_endpoints_test_agent::IngressMessage::default()
+                .with_canister_id(canister_test_id(0).get(), canister_test_id(0).get()),
             UpdateEndpoint::Subnet(_) => ic_http_endpoints_test_agent::IngressMessage::default()
                 .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
                 .with_method_name("create_canister".to_string()),
@@ -434,6 +435,10 @@ pub struct HttpEndpointHandles {
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
+    /// Sender feeding the NNS delegation the endpoint serves. Sending a new
+    /// value swaps the delegation the running endpoint uses, which lets tests
+    /// simulate the NNS delegation changing at runtime.
+    pub nns_delegation_watcher: watch::Sender<Option<NNSDelegationBuilder>>,
 }
 
 pub struct HttpEndpointBuilder {
@@ -536,9 +541,18 @@ impl HttpEndpointBuilder {
         let builder = self.delegation_from_nns.map(|delegation| {
             NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &log).unwrap()
         });
-        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(builder);
+        // Start the channel empty and *publish* the initial delegation below.
+        // Publishing (rather than seeding the channel with the initial value)
+        // triggers a change notification, which is what `wait_until_initialized`
+        // waits for before the endpoint becomes healthy. This lets us keep the
+        // sender alive (and hand it back to the test) so that tests can swap the
+        // delegation at runtime, instead of dropping it.
+        let (nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(None);
         let nns_delegation_reader =
             NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
+        nns_delegation_watcher_tx
+            .send(builder)
+            .expect("The NNS delegation receiver should be alive.");
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
@@ -583,6 +597,7 @@ impl HttpEndpointBuilder {
             query_execution: query_exe_handler,
             terminal_state_ingress_messages: terminal_state_ingress_messages_tx,
             certified_height_watcher: certified_height_watcher_tx,
+            nns_delegation_watcher: nns_delegation_watcher_tx,
         }
     }
 }

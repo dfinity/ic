@@ -16,6 +16,7 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
+use ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
@@ -488,17 +489,40 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                 // with a reference to older states which can cause out-of-memory crashes.
 
                 let (certificate_delegation, certificate_delegation_metadata) =
-                    match certificate_delegation_with_metadata {
+                    match certificate_delegation_with_metadata.clone() {
                         Some((delegation, metadata)) => (Some(delegation), Some(metadata)),
                         None => (None, None),
                     };
 
-                let result = match get_latest_certified_state_and_data_certificate(
+                let result = get_latest_certified_state_and_data_certificate(
                     state_reader,
                     certificate_delegation,
                     query.receiver,
-                ) {
-                    Some((state, cert)) => {
+                )
+                .map_or_else(
+                    || Err(QueryExecutionError::CertifiedStateUnavailable),
+                    |(state, cert)| {
+                        // Make sure NNS delegation is valid with respect to the certified state.
+                        // Otherwise the client would not be able to verify the query response against the delegation.
+                        if let Some((delegation, metadata)) = &certificate_delegation_with_metadata
+                        {
+                            match is_delegation_valid_with_respect_to_state(
+                                delegation,
+                                metadata.format,
+                                state.get_ref(),
+                            ) {
+                                Ok(true) => {}
+                                Ok(false) => {
+                                    return Err(QueryExecutionError::OutdatedDelegation);
+                                }
+                                Err(err) => {
+                                    return Err(QueryExecutionError::InvalidDelegation(
+                                        err.to_string(),
+                                    ));
+                                }
+                            }
+                        }
+
                         let time = state.get_ref().metadata.batch_time;
 
                         let certified_height_used_for_execution = state.height();
@@ -525,9 +549,8 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                         );
 
                         Ok((response, time))
-                    }
-                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
-                };
+                    },
+                );
 
                 let _ = tx.send(Ok(result));
             }

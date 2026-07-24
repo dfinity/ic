@@ -1,4 +1,4 @@
-use crate::HttpError;
+use crate::{HttpError, metrics::HttpHandlerMetrics};
 use axum::{body::Body, extract::FromRequest, response::IntoResponse};
 use bytes::Bytes;
 use http::{
@@ -7,11 +7,12 @@ use http::{
 };
 use http_body_util::BodyExt;
 use hyper::{Response, StatusCode, header};
+use ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{Label, Path, TooLongPathError, sparse_labeled_tree_from_paths};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_registry_client_helpers::crypto::{
     CryptoRegistry, root_of_trust::RegistryRootOfTrustProvider,
@@ -21,7 +22,9 @@ use ic_types::{
     RegistryVersion, SubnetId, Time,
     crypto::threshold_sig::ThresholdSigPublicKey,
     malicious_flags::MaliciousFlags,
-    messages::{HttpRequest, HttpRequestContent},
+    messages::{
+        CertificateDelegation, CertificateDelegationMetadata, HttpRequest, HttpRequestContent,
+    },
 };
 use ic_utils::str::StrEllipsize;
 use ic_validator::{
@@ -274,6 +277,18 @@ pub(crate) fn certified_state_unavailable_error() -> HttpError {
     HttpError { status, message }
 }
 
+pub(crate) fn outdated_delegation_error() -> HttpError {
+    let status = StatusCode::SERVICE_UNAVAILABLE;
+    let message = "This replica has an outdated NNS delegation. Please try again.".to_string();
+    HttpError { status, message }
+}
+
+pub(crate) fn invalid_delegation_error() -> HttpError {
+    let status = StatusCode::SERVICE_UNAVAILABLE;
+    let message = "This replica has an invalid NNS delegation. Please try again.".to_string();
+    HttpError { status, message }
+}
+
 pub(crate) async fn get_latest_certified_state(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Option<Arc<ReplicatedState>> {
@@ -316,6 +331,28 @@ where
         Arc::new(DisabledHttpRequestVerifier) as Arc<_>
     } else {
         Arc::new(HttpRequestVerifierImpl::new(ingress_verifier)) as Arc<_>
+    }
+}
+
+pub(crate) fn verify_delegation_matches_certified_state(
+    delegation: &CertificateDelegation,
+    metadata: &CertificateDelegationMetadata,
+    certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
+    metrics: &HttpHandlerMetrics,
+) -> Result<(), HttpError> {
+    let _timer = metrics
+        .verify_delegation_duration
+        .with_label_values(&[metadata.format.to_string()])
+        .start_timer();
+
+    match is_delegation_valid_with_respect_to_state(
+        delegation,
+        metadata.format,
+        certified_state_reader.get_state(),
+    ) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(outdated_delegation_error()),
+        Err(_err) => Err(invalid_delegation_error()),
     }
 }
 
