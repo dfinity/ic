@@ -19,7 +19,7 @@ bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = Tr
 # CC dependencies (for C libs like miracl-core, etc)
 bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
+bazel_dep(name = "hermetic_cc_toolchain", version = "4.2.0")
 single_version_override(
     module_name = "hermetic_cc_toolchain",
     patch_strip = 1,
@@ -27,6 +27,7 @@ single_version_override(
         "//bazel:hermetic_cc_toolchain_strip.patch",
         "//bazel:hermetic_cc_toolchain_cache_dir.patch",
         "//bazel:hermetic_cc_toolchain_lto.patch",
+        "//bazel:hermetic_cc_toolchain_no_ubsan.patch",
     ],
 )
 

@@ -1,0 +1,29 @@
+# Disable zig 0.14 cc UBSan-by-default. At -O0, `zig cc` compiles C/C++ with
+# non-trapping UBSan, emitting `__ubsan_handle_*` calls. zig only links the
+# UBSan runtime when it drives the final link; rustc links with -nodefaultlibs,
+# leaving those symbols undefined ("undefined symbol: __ubsan_handle_*"). zig
+# 0.12 (the previous toolchain) did not instrument at -O0; restore that.
+diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
+index 8b22097..898f2ca 100644
+--- a/toolchain/zig-wrapper.zig
++++ b/toolchain/zig-wrapper.zig
+@@ -329,6 +329,19 @@ fn parseArgs(
+         .arg1, .cc => try args.appendSlice(arena, &[_][]const u8{arg0_noexe}),
+     }
+ 
++    // Disable the "undefined behavior" sanitizer. zig 0.14's `zig cc` turns on
++    // non-trapping UBSan by default at -O0, so compiled C/C++ objects contain
++    // calls to `__ubsan_handle_*` from the UBSan runtime. zig only links that
++    // runtime when it drives the final link itself; rustc links with
++    // `-nodefaultlibs` (it supplies its own runtime), so those symbols stay
++    // undefined and the link fails with "undefined symbol: __ubsan_handle_*".
++    // zig 0.12 (used before this toolchain upgrade) did not instrument at -O0,
++    // so this restores the previous behavior. It is added before the caller's
++    // args so an explicit `-fsanitize=undefined` later on the command line
++    // still wins (clang applies the last sanitizer flag).
++    if (run_mode == RunMode.cc)
++        try args.append(arena, "-fno-sanitize=undefined");
++
+     while (argv_it.next()) |arg| {
+         // Drop the linker "-O" optimization setting (passed through the
+         // compiler driver as `-Wl,-O<n>`). rustc appends `-Wl,-O1` to every

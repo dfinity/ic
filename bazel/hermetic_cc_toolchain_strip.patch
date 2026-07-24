@@ -1,10 +1,10 @@
 # Strip debug_info off every target for determinism
 # (https://github.com/ziglang/zig/issues/23821, https://github.com/ziglang/zig/issues/23823).
 diff --git a/MODULE.bazel b/MODULE.bazel
-index cfca164..9f258cc 100644
+index daee179..55776fa 100644
 --- a/MODULE.bazel
 +++ b/MODULE.bazel
-@@ -60,3 +60,21 @@ register_toolchains(
+@@ -61,3 +61,21 @@ register_toolchains(
      "@zig_sdk//toolchain:zig",
      dev_dependency = True,
  )
@@ -27,18 +27,18 @@ index cfca164..9f258cc 100644
 +    path = "/usr/bin",
 +)
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
-index b90b93b..88978ee 100644
+index 5743b1d..6bc1819 100644
 --- a/toolchain/defs.bzl
 +++ b/toolchain/defs.bzl
-@@ -320,6 +320,7 @@ def declare_files(os):
+@@ -328,6 +328,7 @@ def declare_files(os):
                  ":zig",
                  ":{}_includes".format(target_config.zigtarget),
                  cxx_tool_label,
 +                "@strip//:strip_bin",
              ],
          )
-
-@@ -329,6 +330,7 @@ def declare_files(os):
+ 
+@@ -337,6 +338,7 @@ def declare_files(os):
                  ":zig",
                  ":{}_includes".format(target_config.zigtarget),
                  cxx_tool_label,
@@ -47,7 +47,7 @@ index b90b93b..88978ee 100644
              ] + native.glob([
                  "lib/libc/{}/**".format(target_config.libc),
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index 5584f44..42f84d5 100644
+index ea7fd07..c4b1592 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
 @@ -132,7 +132,7 @@ pub fn main() u8 {
@@ -62,7 +62,7 @@ index 5584f44..42f84d5 100644
 @@ -152,13 +152,59 @@ fn spawnWindows(arena: mem.Allocator, params: ExecParams) u8 {
      }
  }
-
+ 
 -fn execUnix(arena: mem.Allocator, params: ExecParams) u8 {
 -    const err = process.execve(arena, params.args.items, &params.env);
 -    std.debug.print(
@@ -124,5 +124,5 @@ index 5584f44..42f84d5 100644
 +
 +    return code;
  }
-
+ 
  // argv_it is an object that has such method:
