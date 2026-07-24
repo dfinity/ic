@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger};
+use crate::test_utils::{MockEnvironment, MockRandomness, StubIcpLedger};
 use ic_nervous_system_clients::exchange_rate_canister_client::{
     GetExchangeRateError, ICP_SYMBOL, MINIMUM_CXDR_SOURCES, MINIMUM_ICP_SOURCES,
 };
@@ -63,7 +63,6 @@ fn new_governance(now_seconds: u64) -> Governance {
         api::Governance::default(),
         Arc::new(MockEnvironment::new(vec![], now_seconds)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     )
 }

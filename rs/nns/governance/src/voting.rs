@@ -604,9 +604,7 @@ mod test {
         storage::with_voting_state_machines_mut,
         temporarily_disable_mission_70_voting_rewards,
         temporarily_enable_mission_70_voting_rewards,
-        test_utils::{
-            ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubCMC, StubIcpLedger,
-        },
+        test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubIcpLedger},
         voting::{
             ProposalVotingStateMachine, VotingStateMachines,
             temporarily_set_over_soft_message_limit,
@@ -675,7 +673,6 @@ mod test {
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 0)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
@@ -834,7 +831,6 @@ mod test {
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 234)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
@@ -1158,7 +1154,6 @@ mod test {
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 0)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
@@ -1229,7 +1224,6 @@ mod test {
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 0)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
@@ -1284,7 +1278,6 @@ mod test {
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 0)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
@@ -1376,7 +1369,6 @@ mod test {
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 1234)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
@@ -1493,7 +1485,6 @@ mod test {
             },
             Arc::new(environment),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 

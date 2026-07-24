@@ -10,7 +10,7 @@ use crate::{
         manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
         proposal::Action,
     },
-    test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, MockRandomness, StubIcpLedger},
 };
 
 use assert_matches::assert_matches;
@@ -43,7 +43,6 @@ fn new_governance() -> Governance {
         },
         Arc::new(MockEnvironment::new(Default::default(), *NOW)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     )
 }

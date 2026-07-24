@@ -240,7 +240,6 @@ fn check_proposal_status_after_voting_and_after_expiration(
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -636,7 +635,6 @@ async fn test_cascade_following() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     gov.make_proposal(
@@ -750,7 +748,6 @@ async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewar
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     // Set minimum conversion rate.
@@ -810,7 +807,6 @@ async fn test_manage_network_economics_change_one_deep_subfield() {
         },
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -925,7 +921,6 @@ async fn test_manage_network_economics_reject_invalid() {
         },
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -1161,7 +1156,6 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
         },
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -1332,7 +1326,6 @@ async fn test_mint_monthly_node_provider_rewards() {
         },
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     gov.heap_data.economics = Some(default_economics.clone());
@@ -1382,7 +1375,6 @@ async fn test_node_provider_must_be_registered() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     let node_provider = NodeProvider {
@@ -1447,7 +1439,6 @@ async fn test_sufficient_stake() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     // Set stake to 0.5 ICP.
@@ -1510,7 +1501,6 @@ async fn test_all_follow_proposer() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -1613,7 +1603,6 @@ async fn test_follow_negative() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     gov.make_proposal(
@@ -1702,7 +1691,6 @@ async fn test_no_default_follow_for_governance() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     gov.make_proposal(
@@ -1772,7 +1760,6 @@ async fn test_no_voting_after_deadline() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     let proposal_id = gov
@@ -1892,7 +1879,6 @@ fn test_enforce_public_neuron() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -1948,7 +1934,6 @@ fn test_query_for_manage_neuron() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     // Test that anybody can call `get_neuron_info` as long as the
@@ -2088,7 +2073,6 @@ async fn test_manage_neuron() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     // Make a proposal to replace the list of followees (2-4) with just 2.
@@ -2272,7 +2256,6 @@ async fn test_sufficient_stake_for_manage_neuron() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     // Set stake to less than 0.01 ICP (same as
@@ -2394,7 +2377,6 @@ async fn test_invalid_proposals_fail() {
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -2437,7 +2419,6 @@ async fn test_compute_tally_while_open() {
         },
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -2482,7 +2463,6 @@ async fn test_compute_tally_after_decided() {
         },
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -2548,7 +2528,6 @@ async fn test_no_compute_tally_after_deadline() {
         },
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -2622,7 +2601,6 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
@@ -2845,7 +2823,6 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
@@ -2937,7 +2914,6 @@ async fn test_disallow_large_manage_neuron_proposals() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -3200,7 +3176,6 @@ async fn test_reward_distribution_skips_deleted_neurons() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -3281,7 +3256,6 @@ async fn test_genesis_in_the_future_is_supported() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
@@ -3516,7 +3490,6 @@ fn compute_maturities(
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
@@ -4060,7 +4033,6 @@ fn test_approve_kyc() {
         governance_proto,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     let neuron_a = gov
@@ -4258,7 +4230,6 @@ fn test_get_neuron_ids_by_principal() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -4352,7 +4323,6 @@ fn governance_with_staked_neuron(
         empty_fixture(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -4695,7 +4665,6 @@ fn governance_with_staked_unclaimed_neuron(
         empty_fixture(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -6192,13 +6161,13 @@ fn test_maturity_correctly_reset_if_spawn_fails() {
     );
     assert_eq!(child_neuron.kyc_verified, true);
     assert_eq!(child_neuron.cached_neuron_stake_e8s, 0);
-    // We expect maturity modulation of 100 basis points, which is 1%, because of the
-    // result returned from FakeDriver when pretending to be CMC.
+    // The helper sets maturity_modulation to 100 permyriad (1%); confirm that's still in place.
     assert_eq!(
         gov.heap_data
-            .cached_daily_maturity_modulation_basis_points
-            .unwrap(),
-        100
+            .maturity_modulation
+            .as_ref()
+            .and_then(|m| m.current_value_permyriad),
+        Some(100)
     );
     // The value here should be reset to the original value, without being modulated.
     assert_eq!(child_neuron.maturity_e8s_equivalent, 123_456_789);
@@ -6534,7 +6503,6 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
         empty_fixture(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -6751,7 +6719,6 @@ fn governance_with_neurons(neurons: &[api::Neuron]) -> (fake::FakeDriver, Govern
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     assert_eq!(gov.neuron_store.len(), neurons.len());
@@ -7923,7 +7890,6 @@ fn test_get_proposal_info() {
         fixture_for_proposals(proposal_id, vec![1, 2, 3]),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     let caller = &principal(1);
@@ -7976,7 +7942,6 @@ async fn test_make_proposal_message() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -8015,7 +7980,6 @@ async fn test_max_number_of_proposals_with_ballots() {
         proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
@@ -8183,7 +8147,6 @@ fn test_proposal_gc() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     gov.heap_data.proposals = proposals.clone();
@@ -8277,7 +8240,6 @@ fn test_gc_ignores_exempt_proposals() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     gov.heap_data.proposals = props;
@@ -8296,7 +8258,6 @@ async fn test_id_v1_works() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     // Make a proposal to replace the list of followees (2-4) with just 2.
@@ -8336,7 +8297,6 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
             fixture_for_manage_neuron(),
             driver.get_fake_env(),
             driver.get_fake_ledger(),
-            driver.get_fake_cmc(),
             driver.get_fake_randomness_generator(),
         );
 
@@ -8448,7 +8408,6 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -8521,7 +8480,6 @@ fn test_start_dissolving() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -8581,7 +8539,6 @@ fn test_start_dissolving_panics() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -8628,7 +8585,6 @@ fn test_stop_dissolving() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -8691,7 +8647,6 @@ fn test_stop_dissolving_panics() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -8866,7 +8821,6 @@ fn test_increase_dissolve_delay() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     // Tests for neuron 1. Non-dissolving.
@@ -9015,7 +8969,6 @@ fn test_join_neurons_fund() {
         fixture,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
     {
@@ -9368,7 +9321,6 @@ fn test_neuron_set_visibility() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -9481,7 +9433,6 @@ fn test_deciding_and_potential_voting_power() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -9705,7 +9656,6 @@ fn test_include_public_neurons_in_full_neurons() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -9800,7 +9750,6 @@ async fn test_refresh_voting_power() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -9944,7 +9893,6 @@ fn wait_for_quiet_test_helper(
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     let pid = gov
@@ -10857,7 +10805,6 @@ async fn test_known_neurons() {
         governance_proto,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -11877,7 +11824,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -12009,7 +11955,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
             call_canister_method_min_duration: None,
         }),
         Arc::new(icp_ledger),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -12145,7 +12090,6 @@ async fn test_create_service_nervous_system_failure_due_to_swap_deployment_error
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -12246,7 +12190,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -12391,7 +12334,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -12547,7 +12489,6 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -12646,7 +12587,6 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -12886,7 +12826,6 @@ async fn distribute_rewards_test() {
         governance_init,
         helper.get_fake_env(),
         helper.get_fake_ledger(),
-        helper.get_fake_cmc(),
         helper.get_fake_randomness_generator(),
     );
     governance.heap_data.proposals = proposal_data_list
@@ -12978,7 +12917,6 @@ async fn test_proposal_url_not_on_list_fails() {
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -13055,7 +12993,6 @@ fn test_ready_to_be_settled_proposals_ids() {
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     let rewardable_proposal_ids = |now_timestamp_seconds| -> Vec<u64> {
@@ -13233,7 +13170,6 @@ async fn test_metrics() {
         governance_init,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -13450,7 +13386,6 @@ fn randomly_pick_swap_start() {
         Default::default(),
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
 
@@ -13509,7 +13444,6 @@ fn compute_closest_proposal_deadline_timestamp_seconds_no_wfq_fallback() {
         },
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     gov.heap_data.proposals.insert(1, proposal_1);
@@ -13560,7 +13494,6 @@ fn compute_closest_proposal_deadline_timestamp_seconds_incorporates_wfq() {
         },
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     gov.heap_data.proposals.insert(1, proposal_1);
@@ -13591,7 +13524,6 @@ fn voting_period_seconds_topic_dependency() {
         governance_proto,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -13719,7 +13651,6 @@ fn test_neuron_info_private_enforcement() {
         governance_proto,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -13930,7 +13861,6 @@ async fn test_follow_private_neuron_same_controller() {
         fixture_for_follow_private_neuron_restrictions(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -13982,7 +13912,6 @@ async fn test_follow_private_neuron_fails() {
         fixture_for_follow_private_neuron_restrictions(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -14032,7 +13961,6 @@ async fn test_follow_private_neuron_hotkeys() {
         fixture_for_follow_private_neuron_restrictions(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -14104,7 +14032,6 @@ async fn test_follow_public_neuron_succeeds() {
         fixture_for_follow_private_neuron_restrictions(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -14178,7 +14105,6 @@ async fn test_follow_private_neuron_neuron_management() {
         fixture_for_follow_private_neuron_restrictions(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 
@@ -14407,7 +14333,6 @@ async fn test_grandfathering() {
         fixture_for_grandfathering(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
         driver.get_fake_randomness_generator(),
     );
 

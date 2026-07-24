@@ -8,7 +8,7 @@ use crate::{
 };
 
 use futures::FutureExt;
-use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockIcpLedger};
+use ic_nervous_system_canisters::ledger::MockIcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nns_governance_api::Governance as GovernanceApi;
 use icp_ledger::AccountIdentifier;
@@ -471,7 +471,6 @@ thread_local! {
     static TEST_GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
         MOCK_ENVIRONMENT.with(|env| env.clone()),
         Arc::new(MockIcpLedger::default()),
-        Arc::new(MockCMC::default()),
         Box::new(MockRandomness::new()),
     ));
 }
@@ -540,7 +539,6 @@ fn set_governance_for_test(
         GovernanceApi::default(),
         MOCK_ENVIRONMENT.with(|env| env.clone()),
         Arc::new(mock_ledger),
-        Arc::new(MockCMC::default()),
         Box::new(MockRandomness::new()),
     );
     governance.heap_data.maturity_modulation = Some(MaturityModulation {

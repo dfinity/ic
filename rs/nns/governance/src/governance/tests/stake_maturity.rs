@@ -3,7 +3,7 @@ use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
         Governance,
-        tests::{MockEnvironment, StubCMC, StubIcpLedger},
+        tests::{MockEnvironment, StubIcpLedger},
     },
     pb::v1::manage_neuron::StakeMaturity,
 };
@@ -18,7 +18,6 @@ fn test_stake_maturity() {
         Default::default(),
         Arc::new(MockEnvironment::new(vec![], 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -60,7 +59,6 @@ fn test_stake_maturity_of_dissolved_neuron_fails() {
         Default::default(),
         Arc::new(MockEnvironment::new(vec![], 100)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 

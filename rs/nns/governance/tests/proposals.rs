@@ -221,7 +221,6 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
         governance_init,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
-        fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
     governance.heap_data.proposals = PROPOSALS.clone();
