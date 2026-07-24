@@ -37,7 +37,10 @@ use ic_types::CanisterId;
 use ic_types_cycles::Cycles;
 use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
-use ic_cdk::{init, post_upgrade, pre_upgrade, println, query, update};
+use ic_cdk::{
+    api::{canister_cycle_balance, canister_self, msg_caller},
+    init, post_upgrade, pre_upgrade, println, query, update,
+};
 use ic_nervous_system_common::serve_metrics;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
@@ -58,7 +61,7 @@ struct CanisterApiImpl {}
 impl CanisterApi for CanisterApiImpl {
     /// See CanisterApi::local_canister_id
     fn local_canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::id()))
+        CanisterId::unchecked_from_principal(PrincipalId::from(canister_self()))
     }
 
     /// See CanisterApi::create_canister
@@ -154,7 +157,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = ic_cdk::api::canister_balance();
+        let available = canister_cycle_balance() as u64;
 
         if available < required_cycles {
             return Err(format!(
@@ -253,7 +256,7 @@ impl CanisterApiImpl {
 }
 
 fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk::caller())
+    PrincipalId::from(msg_caller())
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.

@@ -5,7 +5,10 @@ use cycles_minting_canister::*;
 use environment::Environment;
 use exchange_rate_canister::{UpdateExchangeRateError, UpdateExchangeRateState};
 use ic_cdk::{
-    api::call::{CallResult, ManualReply},
+    api::{
+        call::{CallResult, ManualReply},
+        canister_cycle_balance, canister_self, certified_data_set,
+    },
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
@@ -130,7 +133,7 @@ impl Environment for CanisterEnvironment {
     }
 
     fn set_certified_data(&self, data: &[u8]) {
-        ic_cdk::api::set_certified_data(data)
+        certified_data_set(data)
     }
 }
 
@@ -425,7 +428,7 @@ where
     yansi::Paint<S>: std::string::ToString,
 {
     #[cfg(target_arch = "wasm32")]
-    ic_cdk::api::print(yansi::Paint::yellow(s).to_string());
+    ic_cdk::api::debug_print(yansi::Paint::yellow(s).to_string());
 
     #[cfg(not(target_arch = "wasm32"))]
     println!("{}", yansi::Paint::yellow(s).to_string());
@@ -1612,7 +1615,7 @@ async fn fetch_transaction(
     };
 
     let expected_to = AccountIdentifier::new(
-        PrincipalId::from(ic_cdk::api::id()),
+        PrincipalId::from(canister_self()),
         Some(expected_to_subaccount),
     );
     if to != expected_to {
@@ -1780,7 +1783,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
             spender: _,
         } => {
             let incoming_to_account_identifier = AccountIdentifier::new(
-                PrincipalId::from(ic_cdk::api::id()),
+                PrincipalId::from(canister_self()),
                 Some(incoming_to_subaccount),
             );
             if to != &incoming_to_account_identifier {
@@ -2306,7 +2309,7 @@ fn ensure_balance(
 ) -> Result<(), String> {
     let now = now_system_time();
 
-    let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
+    let current_balance = Cycles::from(canister_cycle_balance());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
@@ -2317,7 +2320,7 @@ fn ensure_balance(
 
     // unused because of check above
     let _minted_cycles = ic0_mint_cycles128(cycles_to_mint);
-    assert!(ic_cdk::api::canister_balance128() >= cycles.get());
+    assert!(canister_cycle_balance() >= cycles.get());
     Ok(())
 }
 

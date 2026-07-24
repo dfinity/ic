@@ -10,8 +10,8 @@ use candid::Principal;
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::{data_certificate, in_replicated_execution, time};
-use ic_cdk::{caller, spawn};
+use ic_cdk::api::{data_certificate, in_replicated_execution, msg_caller, time};
+use ic_cdk::spawn;
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
@@ -241,7 +241,7 @@ fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
         },
         HttpHeader {
             name: "caller".to_string(),
-            value: caller().to_string(),
+            value: msg_caller().to_string(),
         },
     ];
     transformed.body = context;
