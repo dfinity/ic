@@ -5,18 +5,17 @@
 bazel_dep(name = "rules_rust", version = "0.71.3")
 archive_override(
     module_name = "rules_rust",
-    integrity = "sha256-h8txtdi9xcNfgjdTBYX+R9CEsxKDucJx+OPvezmkTQM=",
+    integrity = "sha256-Suf3ncbfLjBtDNj/zlLmQzmooL5+fOfRex73QEvqtuI=",
     patch_strip = 1,
     patches = [
         # Configure per-compilation-mode strip levels, which the native
         # `rust.toolchain` tag's flat `strip_level` string_dict cannot express
         # (https://github.com/bazelbuild/rules_rust/issues/3730).
         "//bazel:rules_rust_strip_level.patch",
-        # Fix cross-crate DEP_* env vars being redacted to an `${out_dir}` token
-        # that downstream crates' build scripts cannot resolve (see patch header).
-        "//bazel:rules_rust_dep_env.patch",
     ],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.71.3/rules_rust-0.71.3.tar.gz"],
+    strip_prefix = "rules_rust-5f04c8c14c2ffacfe10ad14e55298be21454be04",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/bazelbuild/rules_rust/tar.gz/5f04c8c14c2ffacfe10ad14e55298be21454be04"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
