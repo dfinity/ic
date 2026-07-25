@@ -8,6 +8,7 @@ pub mod deploy;
 pub use deploy::SshAuthMethod;
 
 use anyhow::{Context, Result, bail};
+use config_types::VmSlot;
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{DeploymentEnvironment, MacAddr6Ext};
 use macaddr::MacAddr6;
@@ -192,6 +193,7 @@ impl LoginInfo {
             &self.mgmt_mac,
             DeploymentEnvironment::Testnet,
             NodeType::HostOS,
+            VmSlot::Plain,
         )
         .calculate_slaac(&self.addr_prefix)
         .unwrap()

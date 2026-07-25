@@ -1,20 +1,17 @@
 [Unit]
-Description=Manage GuestOS virtual machine
+Description=Manage GuestOS %i virtual machine
 # Not Requires, otherwise guestos will restart when libvirtd restarts
 Wants=libvirtd.service
 After=libvirtd.service
-
 RequiresMountsFor=/var
+PartOf=guestos.target
 
 [Service]
 Type=notify
-ExecStartPre=/bin/sh -c 'echo -e "\nStarting GuestOS service...\n\n" | tee /dev/tty1 > /dev/ttyS0'
+ExecStartPre=/bin/sh -c 'echo -e "\nStarting GuestOS %i service...\n\n" | tee /dev/tty1 > /dev/ttyS0'
 ExecStartPre=/opt/ic/bin/detect-first-boot.sh
-ExecStart=/opt/ic/bin/guest_vm_runner run
+ExecStart=/opt/ic/bin/guest_vm_runner run --slot %i
 ExecStartPost=/opt/ic/bin/manageboot.sh hostos confirm
 Restart=always
 RestartSec=60
 TimeoutStopSec=130s
-
-[Install]
-WantedBy=multi-user.target

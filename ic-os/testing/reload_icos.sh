@@ -141,7 +141,7 @@ install_guestos_full_image() {
     tar -xavf "$GUESTOS_FULL_IMG_TAR_PATH" -C "$GUESTOS_EXTRACT_DIR"
 
     echo "Stopping GuestOS service..."
-    systemctl stop guestos.service || true
+    systemctl stop guestos@0.service || true
     systemctl stop upgrade-guestos.service || true
 
     echo "Writing GuestOS full disk image..."
@@ -379,7 +379,7 @@ finalize_deployment() {
         full)
             echo "Only a GuestOS full disk image was updated."
             echo "Starting GuestOS..."
-            systemctl start guestos.service
+            systemctl start guestos@0.service
             ;;
         upgrade)
             echo "Only a GuestOS upgrade image was applied."

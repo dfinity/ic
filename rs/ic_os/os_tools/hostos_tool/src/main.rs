@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 use config_tool::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
-use config_types::{HostOSConfig, Ipv6Config};
+use config_types::{HostOSConfig, Ipv6Config, VmSlot};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use grub::BootAlternative;
@@ -104,6 +104,7 @@ pub fn main() -> Result<()> {
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
                 NodeType::HostOS,
+                VmSlot::Plain,
             );
 
             generate_network_config(
@@ -124,6 +125,7 @@ pub fn main() -> Result<()> {
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
                 node_type,
+                VmSlot::Plain,
             );
 
             warn!("Using generated mac address {generated_mac}");
@@ -153,6 +155,7 @@ pub fn main() -> Result<()> {
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
                 node_type,
+                VmSlot::Plain,
             );
             println!("{generated_mac}");
             Ok(())

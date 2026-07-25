@@ -3,6 +3,9 @@ use crate::protocol::{Request, Response, parse_request};
 use std::io::{Error, ErrorKind, Read, Result, Write};
 use vsock::{VMADDR_CID_ANY, VsockAddr, VsockListener, VsockStream};
 
+// The first CID available for guests to use. This is used later to enforce
+// that only the first guest is able to connect over VSOCK, for now.
+const VIR_VSOCK_GUEST_CID_MIN: u32 = 3;
 const DEFAULT_PORT: u32 = 19090;
 
 /// Runs the vsock server and awaits incoming vsock connections.
@@ -23,6 +26,9 @@ pub fn run_server() -> Result<()> {
 }
 
 fn create_vsock_listener() -> Result<VsockListener> {
+    // Only listen for the first GuestOS VM. Only type4.* nodes will have more
+    // than one VM that uses VSOCK. We treat the first GuestOS as the leader in
+    // charge of HostOS.
     let addr = VsockAddr::new(VMADDR_CID_ANY, DEFAULT_PORT);
     VsockListener::bind(&addr)
 }
@@ -36,6 +42,15 @@ fn process_connection(stream: &mut VsockStream) -> Result<()> {
         }
     };
     println!("Received vsock request: {request}");
+
+    if request.guest_cid != VIR_VSOCK_GUEST_CID_MIN {
+        let err = Error::new(
+            ErrorKind::ConnectionRefused,
+            "A type4 host only accepts VSOCK connections from the first VM.",
+        );
+        send_response(stream, &Err(err.to_string()))?;
+        return Err(err);
+    };
 
     if let Err(err) = verify_sender_cid(stream, request.guest_cid) {
         send_response(stream, &Err(err.to_string()))?;
@@ -62,6 +77,7 @@ fn get_request(stream: &mut VsockStream) -> Result<Request> {
 }
 
 // As a sanity check, we request that the sender adds its own CID to the message, and that CID must match the CID in the stream peer address.
+// NOTE: The kernel vhost driver also enforces this. Any packet with a forged source is dropped.
 fn verify_sender_cid(stream: &mut VsockStream, guest_cid: u32) -> Result<()> {
     let peer_address = match stream.peer_addr() {
         Ok(peer_address) => peer_address,

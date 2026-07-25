@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::hostos::guestos_config::generate_guestos_config;
-use config_types::{GuestOSConfig, HostOSConfig};
+use config_types::{GuestOSConfig, HostOSConfig, VmSlot};
 use deterministic_ips::calculate_deterministic_mac;
 use deterministic_ips::node_type::NodeType;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,10 @@ const DEFAULT_VM_MEMORY_GIB: u32 = 480;
 const DEFAULT_VM_VCPUS: u32 = 64;
 const UPGRADE_VM_MEMORY_GIB: u32 = 4;
 
+// The first CID available for guests to use. This is used later to enforce
+// that only the first guest is able to connect over VSOCK, for now.
+const VIR_VSOCK_GUEST_CID_MIN: u32 = 3;
+
 #[derive(Template)]
 #[template(path = "guestos_vm_template.xml", escape = "xml")]
 pub struct GuestOSTemplateProps {
@@ -31,6 +35,8 @@ pub struct GuestOSTemplateProps {
     pub console_log_path: String,
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,
+    pub topology: Topology,
+    pub vsock_cid: Option<u32>,
     pub mac_address: macaddr::MacAddr6,
     pub disk_device: PathBuf,
     pub config_media_path: PathBuf,
@@ -51,14 +57,22 @@ pub struct DirectBootConfig {
     pub kernel_cmdline: String,
 }
 
+pub struct Topology {
+    pub nr_of_sockets: u32,
+    pub nr_of_cores: u32,
+    pub nr_of_threads: u32,
+}
+
 pub fn assemble_config_media(
     hostos_config: &HostOSConfig,
+    guest_vm_slot: VmSlot,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
     media_path: &Path,
 ) -> Result<()> {
     let guestos_config = generate_guestos_config(
         hostos_config,
+        guest_vm_slot,
         guest_vm_type.to_config_type(),
         sev_certificate_chain_pem,
     )
@@ -105,6 +119,7 @@ pub fn generate_vm_config(
     direct_boot: Option<DirectBootConfig>,
     disk_device: &Path,
     serial_log_path: &Path,
+    guest_vm_slot: VmSlot,
     guest_vm_type: GuestVMType,
     available_hugepages_gib: u64,
     metrics: &GuestVmMetrics,
@@ -113,25 +128,30 @@ pub fn generate_vm_config(
         GuestVMType::Default => NodeType::GuestOS,
         GuestVMType::Upgrade => NodeType::UpgradeGuestOS,
     };
+
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
         node_type,
+        guest_vm_slot,
     );
 
     let (cpu_domain, total_vm_memory, nr_of_vcpus) = vm_resources(config);
+    let (vm_memory, nr_of_vcpus, topology) =
+        split_resources_for_type_4(config, total_vm_memory, nr_of_vcpus);
 
     // We need 4GB for the upgrade VM. We subtract that from the total memory. This is not
     // necessary when SEV is disabled (since no upgrade VM is needed) but mixed subnets that
     // contain nodes with and without SEV should have the same memory settings for consistency
     // across nodes.
     ensure!(
-        total_vm_memory >= UPGRADE_VM_MEMORY_GIB,
+        vm_memory >= UPGRADE_VM_MEMORY_GIB,
         "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GIB}GiB but is {total_vm_memory}GiB."
     );
-    let vm_memory_gib = match guest_vm_type {
-        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GIB,
-        GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GIB,
+    let vm_memory_gib = match (guest_vm_type, &config.icos_settings.node_reward_type) {
+        (GuestVMType::Default, Some(val)) if val.starts_with("type4") => vm_memory,
+        (GuestVMType::Default, _) => vm_memory - UPGRADE_VM_MEMORY_GIB,
+        (GuestVMType::Upgrade, _) => UPGRADE_VM_MEMORY_GIB,
     };
 
     // Enable hugepages if enough are available for this VM and TEE is disabled (hugepages are not
@@ -141,14 +161,21 @@ pub fn generate_vm_config(
 
     metrics.set_hugepages_enabled(guest_vm_type, use_hugepages);
 
+    let vsock_cid = match guest_vm_slot {
+        VmSlot::Plain => None,
+        VmSlot::Multi(v) => Some(Into::<u8>::into(v) as u32 + VIR_VSOCK_GUEST_CID_MIN),
+    };
+
     GuestOSTemplateProps {
-        domain_name: vm_domain_name(guest_vm_type).to_string(),
-        domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
+        domain_name: vm_domain_name(guest_vm_type, guest_vm_slot),
+        domain_uuid: vm_domain_uuid(guest_vm_type, guest_vm_slot),
         disk_device: disk_device.to_path_buf(),
         cpu_domain,
         console_log_path: serial_log_path.display().to_string(),
         vm_memory: vm_memory_gib,
         nr_of_vcpus,
+        topology,
+        vsock_cid,
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
@@ -178,30 +205,69 @@ pub(crate) fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
     ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS)
 }
 
-pub fn vm_domain_name(guest_vm_type: GuestVMType) -> &'static str {
+fn split_resources_for_type_4(
+    config: &HostOSConfig,
+    memory: u32,
+    vcpus: u32,
+) -> (
+    /* memory */ u32,
+    /* vcpus */ u32,
+    /* topology */ Topology,
+) {
+    let (memory, vcpus) = match &config.icos_settings.node_reward_type {
+        Some(val) if val == "type4.0" => (memory / 32, vcpus / 32),
+        Some(val) if val == "type4.1" => (memory / 60, 2 /* Overcommit vCPUs */),
+        Some(val) if val == "type4.2" => (memory / 8, vcpus / 8),
+        Some(val) if val == "type4.3" => (memory / 4, vcpus / 4),
+        Some(val) if val == "type4.4" => (memory / 2, vcpus / 2),
+        _ => (memory, vcpus),
+    };
+
+    let topology = match &config.icos_settings.node_reward_type {
+        Some(val) if val == "type4.1" || val == "type4.0" => Topology {
+            nr_of_sockets: 1,
+            nr_of_cores: vcpus,
+            nr_of_threads: 1,
+        },
+        _ => Topology {
+            nr_of_sockets: 2,
+            nr_of_cores: vcpus / 4,
+            nr_of_threads: 2,
+        },
+    };
+
+    (memory, vcpus, topology)
+}
+
+pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: VmSlot) -> String {
     match guest_vm_type {
-        GuestVMType::Default => DEFAULT_GUEST_VM_DOMAIN_NAME,
-        GuestVMType::Upgrade => UPGRADE_GUEST_VM_DOMAIN_NAME,
+        GuestVMType::Default => format!("{DEFAULT_GUEST_VM_DOMAIN_NAME}{slot}"),
+        GuestVMType::Upgrade => format!("{UPGRADE_GUEST_VM_DOMAIN_NAME}{slot}"),
     }
 }
 
-pub fn vm_domain_uuid(guest_vm_type: GuestVMType) -> &'static str {
+pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: VmSlot) -> String {
+    let slot = match slot {
+        VmSlot::Plain => 0,
+        VmSlot::Multi(v) => v.into(),
+    };
     match guest_vm_type {
-        GuestVMType::Default => "fd897da5-8017-41c8-8575-a706dba30766",
-        GuestVMType::Upgrade => "1ea49839-7f46-4560-a4c7-fce677bbfbbd",
+        GuestVMType::Default => format!("fd897da5-8017-41c8-8575-a706dba307{slot:02x}"),
+        GuestVMType::Upgrade => format!("1ea49839-7f46-4560-a4c7-fce677bbfb{slot:02x}"),
     }
 }
 
-pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
+pub fn serial_log_path(guest_vm_type: GuestVMType, slot: VmSlot) -> PathBuf {
     match guest_vm_type {
-        GuestVMType::Default => Path::new(DEFAULT_SERIAL_LOG_PATH),
-        GuestVMType::Upgrade => Path::new(UPGRADE_SERIAL_LOG_PATH),
+        GuestVMType::Default => PathBuf::from(format!("{DEFAULT_SERIAL_LOG_PATH}{slot}")),
+        GuestVMType::Upgrade => PathBuf::from(format!("{UPGRADE_SERIAL_LOG_PATH}{slot}")),
     }
 }
 
 #[cfg(all(test, not(feature = "skip_default_tests")))]
 mod tests {
     use super::*;
+    use config_tool::hostos::guestos_config::generate_guestos_config;
     use config_types::{
         DeterministicIpv6Config, HostOSConfig, HostOSDevSettings, HostOSSettings, ICOSSettings,
         Ipv6Config, NetworkSettings,
@@ -234,8 +300,13 @@ mod tests {
         let mut config = create_test_hostos_config();
         config.icos_settings.use_ssh_authorized_keys = true;
 
-        let guestos_config =
-            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
+        let guestos_config = generate_guestos_config(
+            &config,
+            VmSlot::Plain,
+            config_types::GuestVMType::Default,
+            None,
+        )
+        .unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
@@ -257,8 +328,13 @@ mod tests {
         let mut config = create_test_hostos_config();
         config.icos_settings.use_ssh_authorized_keys = true;
 
-        let guestos_config =
-            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
+        let guestos_config = generate_guestos_config(
+            &config,
+            VmSlot::Plain,
+            config_types::GuestVMType::Default,
+            None,
+        )
+        .unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
@@ -288,6 +364,7 @@ mod tests {
         enable_direct_boot: bool,
         guest_vm_type: GuestVMType,
         available_hugepages_gib: u64,
+        slot: VmSlot,
     ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
@@ -316,6 +393,7 @@ mod tests {
             direct_boot,
             Path::new("/dev/guest_disk"),
             Path::new("/var/serial/console.txt"),
+            slot,
             guest_vm_type,
             available_hugepages_gib,
             &metrics,
@@ -340,6 +418,7 @@ mod tests {
             /*enable_direct_boot=*/ true,
             GuestVMType::Default,
             16,
+            VmSlot::Plain,
         );
     }
 
@@ -359,6 +438,7 @@ mod tests {
             /*enable_direct_boot=*/ true,
             GuestVMType::Upgrade,
             4,
+            VmSlot::Plain,
         );
     }
 
@@ -378,6 +458,7 @@ mod tests {
             /*enable_direct_boot=*/ false,
             GuestVMType::Default,
             0,
+            VmSlot::Plain,
         );
     }
 
@@ -397,6 +478,27 @@ mod tests {
             /*enable_direct_boot=*/ true,
             GuestVMType::Default,
             470,
+            VmSlot::Plain,
+        );
+    }
+
+    #[test]
+    fn test_generate_multi_vm_config() {
+        test_vm_config(
+            "multi_guestos_vm.xml",
+            HostOSSettings {
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
+                ..HostOSSettings::default()
+            },
+            /*enable_trusted_execution_environment=*/ false,
+            /*enable_direct_boot=*/ true,
+            GuestVMType::Default,
+            16,
+            VmSlot::new(16),
         );
     }
 
@@ -406,7 +508,13 @@ mod tests {
         let media_path = temp_dir.path().join("config.img");
         let config = create_test_hostos_config();
 
-        let result = assemble_config_media(&config, GuestVMType::Upgrade, None, &media_path);
+        let result = assemble_config_media(
+            &config,
+            VmSlot::Plain,
+            GuestVMType::Upgrade,
+            None,
+            &media_path,
+        );
 
         assert!(
             result.is_ok(),
