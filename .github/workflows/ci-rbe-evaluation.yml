@@ -83,7 +83,13 @@ jobs:
           else
               # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
-              diff_only="true"
+
+              # The `infer-bazel-targets` job below is very unstable when diff_only is enabled so we temporarily disable it until we have a proper fix.
+              # When diff_only is enabled ci/scripts/targets.py will run a bazel query involving `rdeps` of modified files which will force all bazel repositories to be downloaded.
+              # These include several multi-GB mainnet ICOS images which will either cause the runner to run out of disk space or the bazel query to run for a very long time or timeout.
+              # diff_only="true"
+              diff_only="false"
+
               skip_long_tests="true"
           fi
 
