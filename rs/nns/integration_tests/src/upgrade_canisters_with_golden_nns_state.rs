@@ -3,7 +3,7 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
+use ic_nervous_system_common::{ONE_HOUR_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -455,9 +455,10 @@ mod sanity_check {
         let seconds_to_node_provider_reward_distribution = before_timestamp
             .saturating_add(NODE_PROVIDER_REWARD_PERIOD_SECONDS)
             .saturating_sub(state_machine.get_time().as_secs_since_unix_epoch());
-        state_machine.advance_time(std::time::Duration::from_secs(
+        advance_time_gradually(
+            state_machine,
             seconds_to_node_provider_reward_distribution.saturating_sub(1),
-        ));
+        );
 
         // Node provider rewards are minted by the governance heartbeat, but only once
         // the node-rewards canister has synced its node metrics up to the requested
@@ -472,12 +473,24 @@ mod sanity_check {
 
         // Advance time in the state machine by one month to ensure that voting rewards
         // are also distributed.
-        state_machine.advance_time(std::time::Duration::from_secs(
+        advance_time_gradually(
+            state_machine,
             ONE_MONTH_SECONDS.saturating_sub(seconds_to_node_provider_reward_distribution),
-        ));
+        );
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
+        }
+    }
+
+    fn advance_time_gradually(state_machine: &StateMachine, total_seconds: u64) {
+        const STEP_SECONDS: u64 = 6 * ONE_HOUR_SECONDS;
+        let mut remaining_seconds = total_seconds;
+        while remaining_seconds > 0 {
+            let step_seconds = STEP_SECONDS.clamp(0, remaining_seconds);
+            state_machine.advance_time(std::time::Duration::from_secs(step_seconds));
+            state_machine.tick();
+            remaining_seconds -= step_seconds;
         }
     }
 

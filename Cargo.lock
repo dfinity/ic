@@ -7964,6 +7964,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "prometheus",
  "rand 0.8.6",
  "slog",

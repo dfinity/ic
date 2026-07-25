@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 //! This module contains a canister used for XNet integration test.
 use candid::{CandidType, Principal};
-use ic_cdk::api::{call::call_raw, id};
+use ic_cdk::api::{call::call_raw, canister_self};
 use ic_cdk::query;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -82,7 +82,7 @@ async fn start(arguments: Arguments) -> Vec<Message> {
     let calltrees = arguments.calltrees;
 
     let mut messages = vec![];
-    let this_cid = id().to_string();
+    let this_cid = canister_self().to_string();
 
     touch_memory(arguments.num_pages);
 
