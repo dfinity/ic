@@ -1450,3 +1450,4 @@ http_file(
     sha256 = "3568d6e7e8176636bcbd29f5469dec6b036345e61d2b57c276a0941df0b31c4a",
     url = "https://download.dfinity.systems/farm/prometheus-vm/3568d6e7e8176636bcbd29f5469dec6b036345e61d2b57c276a0941df0b31c4a/x86_64-linux/prometheus-vm.img.zst",
 )
+https://github.com/dfinity/ic/blob/master/MODULE.bazel
