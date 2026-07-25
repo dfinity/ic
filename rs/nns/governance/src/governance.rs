@@ -93,7 +93,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
-use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
     NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, ledger,
@@ -1106,9 +1105,6 @@ pub struct Governance {
     /// Implementation of the interface with the Ledger canister.
     ledger: Arc<dyn IcpLedger>,
 
-    /// Implementation of the interface with the CMC canister.
-    cmc: Arc<dyn CMC>,
-
     /// Implementation of a randomness generator
     randomness: Box<dyn RandomnessGenerator>,
 
@@ -1281,7 +1277,6 @@ impl Governance {
     pub fn new_uninitialized(
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
-        cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         Self {
@@ -1289,7 +1284,6 @@ impl Governance {
             neuron_store: NeuronStore::new(BTreeMap::new()),
             env,
             ledger,
-            cmc,
             randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -1305,7 +1299,6 @@ impl Governance {
         initial_governance: api::Governance,
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
-        cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         let (neurons, heap_governance_proto) = initialize_governance(initial_governance, env.now());
@@ -1315,7 +1308,6 @@ impl Governance {
             neuron_store: NeuronStore::new(neurons),
             env,
             ledger,
-            cmc,
             randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -1330,7 +1322,6 @@ impl Governance {
         governance_proto: GovernanceProto,
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
-        cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         let (mut heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
@@ -1352,7 +1343,6 @@ impl Governance {
             neuron_store: NeuronStore::new_restored(),
             env,
             ledger,
-            cmc,
             randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -6327,9 +6317,6 @@ impl Governance {
                     GovernanceError::from(e),
                 ),
             }
-        // Try to update maturity modulation (once per day).
-        } else if self.should_update_maturity_modulation() {
-            self.update_maturity_modulation().await;
         } else {
             // This is the lowest-priority async task. All other tasks should have their own
             // `else if`, like the ones above.
@@ -6343,48 +6330,6 @@ impl Governance {
         }
 
         self.maybe_gc();
-    }
-
-    fn should_update_maturity_modulation(&self) -> bool {
-        // Check if we're already updating the neuron maturity modulation.
-        let now_seconds = self.env.now();
-        let last_updated = self
-            .heap_data
-            .maturity_modulation_last_updated_at_timestamp_seconds;
-        last_updated.is_none() || last_updated.unwrap() + ONE_DAY_SECONDS <= now_seconds
-    }
-
-    async fn update_maturity_modulation(&mut self) {
-        if !self.should_update_maturity_modulation() {
-            return;
-        };
-
-        let now_seconds = self.env.now();
-        let maturity_modulation = match self.cmc.neuron_maturity_modulation().await {
-            Ok(maturity_modulation) => maturity_modulation,
-            Err(err) => {
-                let silence_message =
-                    err.contains("Canister rkp4c-7iaaa-aaaaa-aaaca-cai not found");
-                if !silence_message {
-                    println!(
-                        "{}Couldn't update maturity modulation. Error: {}",
-                        LOG_PREFIX, err
-                    );
-                }
-                return;
-            }
-        };
-        println!(
-            "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
-            LOG_PREFIX,
-            maturity_modulation,
-            now_seconds,
-            self.heap_data
-                .maturity_modulation_last_updated_at_timestamp_seconds,
-        );
-        self.heap_data.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
-        self.heap_data
-            .maturity_modulation_last_updated_at_timestamp_seconds = Some(now_seconds);
     }
 
     fn should_refresh_xdr_rate(&self) -> bool {

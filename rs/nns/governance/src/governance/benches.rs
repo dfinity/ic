@@ -14,7 +14,7 @@ use crate::{
         NnsFunction, Proposal, ProposalData, Topic, Vote, install_code::CanisterInstallMode,
         proposal::Action,
     },
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubIcpLedger},
 };
 use canbench_rs::{BenchResult, bench, bench_fn};
 use futures::FutureExt;
@@ -335,7 +335,6 @@ fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResul
         Default::default(),
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -446,7 +445,6 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
         Default::default(),
         Arc::new(MockEnvironment::new(vec![], now_seconds)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -541,7 +539,6 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
         governance_api,
         Arc::new(MockEnvironment::new(vec![], now_seconds)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -560,7 +557,6 @@ fn list_neurons() -> BenchResult {
         Default::default(),
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -617,7 +613,6 @@ fn list_neurons_by_subaccount() -> BenchResult {
         Default::default(),
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -661,7 +656,6 @@ fn list_proposals_benchmark() -> BenchResult {
         },
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 

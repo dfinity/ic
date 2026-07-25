@@ -1,7 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, println, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_clients::exchange_rate_canister_client::RealExchangeRateCanisterClient;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
@@ -128,7 +127,6 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload,
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Arc::new(CMCCanister::<CdkRuntime>::new()),
         Box::new(CanisterRandomnessGenerator::new()),
     ));
 
@@ -175,7 +173,6 @@ fn canister_post_upgrade() {
         restored_state,
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Arc::new(CMCCanister::<CdkRuntime>::new()),
         Box::new(CanisterRandomnessGenerator::new()),
     ));
 

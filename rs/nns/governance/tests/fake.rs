@@ -4,7 +4,6 @@ use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifie
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
-use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
@@ -206,13 +205,6 @@ impl FakeDriver {
 
     /// Constructs a `Ledger` that interacts with this driver.
     pub fn get_fake_ledger(&self) -> Arc<dyn IcpLedger> {
-        Arc::new(FakeDriver {
-            state: Arc::clone(&self.state),
-            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
-        })
-    }
-
-    pub fn get_fake_cmc(&self) -> Arc<dyn CMC> {
         Arc::new(FakeDriver {
             state: Arc::clone(&self.state),
             error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
@@ -452,13 +444,6 @@ impl IcpLedger for FakeDriver {
         Err(NervousSystemError {
             error_message: "Not Implemented".to_string(),
         })
-    }
-}
-
-#[async_trait]
-impl CMC for FakeDriver {
-    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
-        Ok(100)
     }
 }
 

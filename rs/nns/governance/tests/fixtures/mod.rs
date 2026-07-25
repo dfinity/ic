@@ -12,7 +12,6 @@ use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::{
@@ -630,13 +629,6 @@ impl Environment for NNSFixture {
     }
 }
 
-#[async_trait]
-impl CMC for NNSFixture {
-    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
-        Ok(100)
-    }
-}
-
 /// The NNSState is used to capture all of the salient details of the NNS
 /// environment, so that we can compute the "delta", or what changed between
 /// actions.
@@ -1083,7 +1075,6 @@ impl NNSBuilder {
             ledger: self.ledger_builder.create(),
             environment: self.environment_builder.create(),
         });
-        let cmc: Arc<dyn CMC> = Arc::new(fixture.clone());
         let mut ledger: Arc<dyn IcpLedger> = Arc::new(fixture.clone());
         for t in self.ledger_transforms {
             ledger = t(ledger);
@@ -1095,7 +1086,7 @@ impl NNSBuilder {
         let randomness = Box::new(fixture.clone());
         NNS {
             fixture: fixture.clone(),
-            governance: Governance::new(self.governance, environment, ledger, cmc, randomness),
+            governance: Governance::new(self.governance, environment, ledger, randomness),
         }
     }
 

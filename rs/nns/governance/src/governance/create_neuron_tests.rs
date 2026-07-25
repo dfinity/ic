@@ -5,7 +5,7 @@ use crate::{
     test_utils::{MockEnvironment, MockRandomness},
 };
 
-use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockIcpLedger};
+use ic_nervous_system_canisters::ledger::MockIcpLedger;
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::{
@@ -24,7 +24,6 @@ thread_local! {
     static TEST_GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
         MOCK_ENVIRONMENT.with(|env| env.clone()),
         Arc::new(MockIcpLedger::default()),
-        Arc::new(MockCMC::default()),
         Box::new(MockRandomness::new()),
     ));
 }
@@ -61,7 +60,6 @@ fn set_governance_for_test(mock_ledger: MockIcpLedger) {
         },
         MOCK_ENVIRONMENT.with(|env| env.clone()),
         Arc::new(mock_ledger),
-        Arc::new(MockCMC::default()),
         Box::new(MockRandomness::new()),
     );
 

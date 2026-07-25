@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     pb::v1::create_service_nervous_system::SwapParameters,
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubIcpLedger},
 };
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
@@ -21,7 +21,6 @@ fn proposal_passes_if_not_too_many_nf_neurons_can_occur() {
         governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -90,7 +89,6 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
         governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
     governance.heap_data.proposals.insert(
@@ -130,7 +128,6 @@ fn proposal_fails_if_no_nf_neurons_exist() {
         governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
     governance.heap_data.proposals.insert(

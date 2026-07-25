@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
@@ -122,13 +121,6 @@ impl IcpLedger for DegradedEnv {
     }
 }
 
-#[async_trait]
-impl CMC for DegradedEnv {
-    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
-        unimplemented!()
-    }
-}
-
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 fn principal(i: u64) -> PrincipalId {
@@ -167,7 +159,6 @@ fn fixture_two_neurons_second_is_bigger() -> api::Governance {
 fn degraded_governance() -> Governance {
     Governance::new(
         fixture_two_neurons_second_is_bigger(),
-        Arc::new(DegradedEnv {}),
         Arc::new(DegradedEnv {}),
         Arc::new(DegradedEnv {}),
         Box::new(CanisterRandomnessGenerator::new()),

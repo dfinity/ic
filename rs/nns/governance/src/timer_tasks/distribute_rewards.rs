@@ -60,7 +60,7 @@ mod tests {
     use crate::canister_state::{GOVERNANCE, governance_mut, set_governance_for_tests};
     use crate::governance::Governance;
     use crate::reward::distribution::RewardsDistribution;
-    use crate::test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger};
+    use crate::test_utils::{MockEnvironment, MockRandomness, StubIcpLedger};
     use crate::timer_tasks::distribute_rewards::REWARDS_TIMER_ID;
     use ic_nervous_system_timers::test::{
         existing_timer_ids, has_timer_task, run_pending_timers_every_interval_for_count,
@@ -78,7 +78,6 @@ mod tests {
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 0)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
