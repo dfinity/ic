@@ -9,6 +9,12 @@ common --lockfile_mode=off
 common --experimental_remote_downloader_local_fallback
 common --experimental_remote_downloader_propagate_credentials
 
+# On a repository-cache hit, hardlink the file into the repo directory instead
+# of copying it. Saves one copy per multi-GB blob (e.g. the mainnet ICOS
+# images). Requires the repository cache and the output base to live on the
+# same filesystem (both default to the output user root).
+common --experimental_repository_cache_hardlinks
+
 # Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
 # See https://github.com/protocolbuffers/protobuf/issues/19558
 # (Removing this still builds, but reverts to compiling protoc/libprotoc from source.)
