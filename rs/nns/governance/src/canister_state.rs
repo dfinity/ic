@@ -71,19 +71,13 @@ are best practices for making use of the unsafe block:
       await is not advised. It is best practice to reacquire a reference to the state after
       an async call.
 */
-/// Returns an immutable reference to the global state.
-///
-/// This should only be called once the global state has been initialized, which
-/// happens in `canister_init` or `canister_post_upgrade`.
-pub fn governance() -> &'static Governance {
-    unsafe { &*GOVERNANCE.with(|g| g.as_ptr()) }
-}
-
 /// Returns a mutable reference to the global state.
 ///
-/// This should only be called once the global state has been initialized, which
-/// happens in `canister_init` or `canister_post_upgrade`.
-pub fn governance_mut() -> &'static mut Governance {
+/// This should only be called once the global state has been initialized, which happens in
+/// `canister_init` or `canister_post_upgrade`. Consider using `with_governance_mut` instead, as
+/// this function can lead to undefined behavior, for example, a reference of the global state being
+/// used across an await.
+pub fn legacy_governance_mut() -> &'static mut Governance {
     unsafe { &mut *GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
@@ -103,9 +97,11 @@ pub fn governance_ref() -> &'static LocalKey<RefCell<Governance>> {
 pub fn set_governance(gov: Governance) {
     GOVERNANCE.set(gov);
 
-    governance()
-        .validate()
-        .expect("Error initializing the governance canister.");
+    with_governance(|governance| {
+        governance
+            .validate()
+            .expect("Error initializing the governance canister.")
+    });
 }
 #[cfg(any(test, not(target_arch = "wasm32")))]
 pub fn set_governance_for_tests(gov: Governance) {
@@ -189,7 +185,9 @@ impl Environment for CanisterEnv {
         execute_nns_function: &ValidExecuteNnsFunction,
     ) -> Result<(), crate::pb::v1::GovernanceError> {
         let reply = move || {
-            governance_mut().set_proposal_execution_status::<()>(proposal_id, Ok(vec![]));
+            with_governance_mut(|governance| {
+                governance.set_proposal_execution_status::<()>(proposal_id, Ok(vec![]));
+            });
         };
         let reject = move |(code, msg): (i32, String)| {
             let mut msg = msg;
@@ -209,21 +207,23 @@ impl Environment for CanisterEnv {
                     .collect();
             }
 
-            governance_mut().set_proposal_execution_status::<()>(
-                proposal_id,
-                Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Error executing ExecuteNnsFunction proposal. Error Code: {code}. Rejection message: {msg}"
-                    ),
-                )),
+            let error = GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Error executing ExecuteNnsFunction proposal. Error Code: {code}. Rejection message: {msg}"
+                ),
             );
+            with_governance_mut(|governance| {
+                governance.set_proposal_execution_status::<()>(proposal_id, Err(error));
+            });
         };
         let (canister_id, method) = execute_nns_function.nns_function.canister_and_function();
-        let proposal_timestamp_seconds = governance()
-            .get_proposal_data(ProposalId(proposal_id))
-            .map(|data| data.proposal_timestamp_seconds)
-            .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))?;
+        let proposal_timestamp_seconds = with_governance(|governance| {
+            governance
+                .get_proposal_data(ProposalId(proposal_id))
+                .map(|data| data.proposal_timestamp_seconds)
+                .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))
+        })?;
         let encoded_request = execute_nns_function
             .re_encode_payload_to_target_canister(proposal_id, proposal_timestamp_seconds)?;
 
