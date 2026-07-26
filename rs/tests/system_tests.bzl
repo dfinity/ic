@@ -102,9 +102,12 @@ def system_test(
       cpus: Optional number of CPU cores the test actually needs.
         Heuristic: MIN_LOCAL_CPUS + the number of vCPUs required for the whole testnet
           (DEFAULT_VCPUS_PER_VM is the per-VM default).
-        The `_local` variant only *reserves* ceil(cpus / cpus_oversubscription_factor) via exec_properties,
-        i.e. deliberately less than the test uses.
-      cpus_oversubscription_factor: factor to divide the requested cpus with which allows to pack more system-tests on a single worker by effectively overloading it.
+        Must be an int >= 1. Note that the `_local` variant doesn't reserve `cpus` but only
+        ceil(cpus / cpus_oversubscription_factor) via exec_properties.
+      cpus_oversubscription_factor: positive integer by which `cpus` is divided to
+        determine how many CPUs to reserve. Reserving less than the test uses lets
+        more system-tests be packed onto a single worker, at the cost of
+        deliberately overloading it. A factor of 1 disables oversubscription.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -319,8 +322,18 @@ def system_test(
     # (--stream-console-logs).
     local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
 
-    # There's no math.ceil() in Starlark so we calculate it ourselves:
-    reserved_cpus = -(-cpus // cpus_oversubscription_factor) if cpus != None else None
+    if type(cpus_oversubscription_factor) != "int" or cpus_oversubscription_factor < 1:
+        fail("Invalid cpus_oversubscription_factor {}: must be an int >= 1".format(
+            repr(cpus_oversubscription_factor),
+        ))
+
+    reserved_cpus = None
+    if cpus != None:
+        if type(cpus) != "int" or cpus < 1:
+            fail("Invalid cpus {}: must be an int >= 1".format(repr(cpus)))
+
+        # Starlark has no math.ceil() so we round up using integer division.
+        reserved_cpus = (cpus + cpus_oversubscription_factor - 1) // cpus_oversubscription_factor
 
     sh_test(
         name = test_name + "_local",
