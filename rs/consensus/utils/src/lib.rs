@@ -511,7 +511,6 @@ mod tests {
         signature::ThresholdSignatureShare,
         time::UNIX_EPOCH,
     };
-    use ic_types_cycles::CanisterCyclesCostSchedule;
 
     /// Test that two shares with the same content are grouped together, and
     /// that a different share is grouped by itself
@@ -740,7 +739,7 @@ mod tests {
             refund_status: RefundStatus::default(),
             registry_version,
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
+            cost_schedule: None,
         }
     }
 

@@ -8,7 +8,7 @@ use std::time::Duration;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    NumBytes, NumInstructions,
+    NumBytes, NumInstructions, NumberOfNodes,
     canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext, PricingVersion},
 };
 pub use ic_types_cycles::CanisterCyclesCostSchedule;
@@ -92,16 +92,24 @@ impl PricingFactory {
         }
     }
 
-    pub fn new_tracker(&self, context: &CanisterHttpRequestContext) -> Box<dyn BudgetTracker> {
+    pub fn new_tracker(
+        &self,
+        context: &CanisterHttpRequestContext,
+        subnet_size: NumberOfNodes,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Box<dyn BudgetTracker> {
         match context.pricing_version {
             PricingVersion::Legacy => Box::new(DarkLaunchTracker::new(
-                Box::new(LegacyTracker::new(context)),
-                Box::new(PayAsYouGoTracker::new(context)),
-                context,
+                Box::new(LegacyTracker::new(context.max_response_bytes)),
+                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule)),
+                context.request.sender,
+                context.replication.kind(),
                 self.metrics.clone(),
                 self.log.clone(),
             )),
-            PricingVersion::PayAsYouGo => Box::new(PayAsYouGoTracker::new(context)),
+            PricingVersion::PayAsYouGo => {
+                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule))
+            }
         }
     }
 }
