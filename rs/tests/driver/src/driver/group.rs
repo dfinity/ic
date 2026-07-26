@@ -41,7 +41,7 @@ use clap::Parser;
 use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, debug, info, trace};
+use slog::{Logger, debug, info, trace, warn};
 use std::path::PathBuf;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -1559,6 +1559,19 @@ impl SystemTestGroup {
                     // Emit a json log event, to be consumed by log post-processing tools.
                     event.emit_log(group_ctx.log());
                     info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
+                }
+
+                // Write the JUnit XML report Bazel expects at $XML_OUTPUT_FILE. This is
+                // independent of --no_summary_report: it's for Bazel, not for the reader
+                // of the log. Failing to write it must never fail the test, so just warn.
+                match report.write_junit_xml_report() {
+                    Ok(Some(path)) => info!(
+                        group_ctx.log(),
+                        "Wrote the JUnit XML report to {}",
+                        path.display()
+                    ),
+                    Ok(None) => (),
+                    Err(e) => warn!(group_ctx.log(), "{e:?}"),
                 }
 
                 if with_farm && !args.no_delete_farm_group {
