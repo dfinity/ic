@@ -261,10 +261,18 @@ impl TaskReport {
                 )
             }
         };
+        // `status` follows GoogleTest's convention, which Bazel's own
+        // test_xml_generator also emits: "run" for a case that executed,
+        // "notrun" for one that didn't.
+        let status = match outcome {
+            TaskOutcome::Passed | TaskOutcome::Failed => "run",
+            TaskOutcome::Skipped => "notrun",
+        };
         format!(
-            "    <testcase name=\"{}\" classname=\"{}\" status=\"run\" duration=\"{:.3}\" time=\"{:.3}\">{}</testcase>\n",
+            "    <testcase name=\"{}\" classname=\"{}\" status=\"{}\" duration=\"{:.3}\" time=\"{:.3}\">{}</testcase>\n",
             xml_escape(&self.name),
             classname,
+            status,
             self.runtime,
             self.runtime,
             body,
@@ -366,20 +374,28 @@ mod tests {
 
     #[test]
     fn junit_xml_reports_counts_and_durations() {
-        let xml = summary().to_junit_xml();
+        let summary = summary();
+        let suite = xml_escape(&summary.display_name());
+        let xml = summary.to_junit_xml();
         assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites>\n"));
         assert!(xml.ends_with("  </testsuite>\n</testsuites>\n"));
         assert!(
             xml.contains(&format!(
-                "<testsuite name=\"{}\" tests=\"3\" failures=\"1\" errors=\"0\" skipped=\"1\" time=\"13.750\">",
-                xml_escape(&summary().display_name()),
+                "<testsuite name=\"{suite}\" tests=\"3\" failures=\"1\" errors=\"0\" skipped=\"1\" time=\"13.750\">"
             )),
             "{xml}"
         );
         assert!(
-            xml.contains("<testcase name=\"setup\" classname=\"")
-                && xml.contains("duration=\"1.500\" time=\"1.500\"></testcase>"),
+            xml.contains(&format!(
+                "<testcase name=\"setup\" classname=\"{suite}\" status=\"run\" duration=\"1.500\" time=\"1.500\"></testcase>"
+            )),
             "a passing task has an empty testcase body: {xml}"
+        );
+        assert!(
+            xml.contains(&format!(
+                "<testcase name=\"teardown\" classname=\"{suite}\" status=\"notrun\" duration=\"0.000\" time=\"0.000\">"
+            )),
+            "a skipped task is reported as notrun: {xml}"
         );
     }
 
