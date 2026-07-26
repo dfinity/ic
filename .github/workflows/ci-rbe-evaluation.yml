@@ -161,7 +161,7 @@ jobs:
       - name: Upload target files
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: bazel-targets
+          name: bazel-rbe-targets
           path: |
             ${{ runner.temp }}/build-targets
             ${{ runner.temp }}/test-targets
@@ -228,7 +228,7 @@ jobs:
       - name: Download target files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: bazel-targets
+          name: bazel-rbe-targets
           path: ~/.cache/bazel-targets
 
       # Just like with bazel-test-all the job is broken up between a build and a test step
