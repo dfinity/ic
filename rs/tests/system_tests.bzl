@@ -44,6 +44,7 @@ def system_test(
         logs = True,
         vm_allocation_mode = None,
         cpus = None,
+        cpus_oversubscription_factor = 2,
         **kwargs):
     """Declares a system-test.
 
@@ -98,9 +99,12 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
-      cpus: Optional number of CPU cores to reserve for the local variant of the test.
-        This will translate into an `exec_properties = {"cpu": str(cpus)}` setting for the `_local` variant.
-        Heuristic: set it to MIN_LOCAL_CPUS + number of vCPUs required for the whole testnet. DEFAULT_VCPUS_PER_VM can be used for the default number of vCPUs per VM if not overridden.
+      cpus: Optional number of CPU cores the test actually needs.
+        Heuristic: MIN_LOCAL_CPUS + the number of vCPUs required for the whole testnet
+          (DEFAULT_VCPUS_PER_VM is the per-VM default).
+        The `_local` variant only *reserves* ceil(cpus / cpus_oversubscription_factor) via exec_properties,
+        i.e. deliberately less than the test uses.
+      cpus_oversubscription_factor: factor to divide the requested cpus with which allows to pack more system-tests on a single worker by effectively overloading it.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -315,6 +319,9 @@ def system_test(
     # (--stream-console-logs).
     local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
 
+    # There's no math.ceil() in Starlark so we calculate it ourselves:
+    reserved_cpus = -(-cpus // cpus_oversubscription_factor) if cpus != None else None
+
     sh_test(
         name = test_name + "_local",
         srcs = ["//rs/tests:run_systest.sh"],
@@ -328,7 +335,7 @@ def system_test(
         env_inherit = env_inherit,
         tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
         # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
-        exec_properties = {"cpu": str(cpus)} if cpus != None else {},
+        exec_properties = {"cpu": str(reserved_cpus)} if reserved_cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
