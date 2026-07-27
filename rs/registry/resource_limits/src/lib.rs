@@ -33,6 +33,20 @@ pub struct ResourceLimits {
 }
 
 impl ResourceLimits {
+    /// Returns a copy of `self` where every unset (`None`) field inherits its value from `base`.
+    ///
+    /// This is used when updating a subnet: fields not specified in the update keep the value
+    /// currently used in production (taken from the existing subnet record).
+    pub fn inherit_from(&self, base: &Self) -> Self {
+        Self {
+            maximum_state_size: self.maximum_state_size.or(base.maximum_state_size),
+            maximum_state_delta: self.maximum_state_delta.or(base.maximum_state_delta),
+            maximum_query_instructions: self
+                .maximum_query_instructions
+                .or(base.maximum_query_instructions),
+        }
+    }
+
     /// Returns the subnet memory capacity.
     ///
     /// This is `maximum_state_size` if not `0`, otherwise the provided `default`.

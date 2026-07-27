@@ -342,24 +342,9 @@ impl ProposeToUpdateSubnetCmd {
             }
         }
 
-        let resource_limits = self.resource_limits.map(|resource_limits| {
-            let ResourceLimits {
-                maximum_state_size,
-                maximum_state_delta,
-                maximum_query_instructions,
-            } = resource_limits;
-            let maximum_state_size =
-                maximum_state_size.or(subnet_record.resource_limits.maximum_state_size);
-            let maximum_state_delta =
-                maximum_state_delta.or(subnet_record.resource_limits.maximum_state_delta);
-            let maximum_query_instructions = maximum_query_instructions
-                .or(subnet_record.resource_limits.maximum_query_instructions);
-            ResourceLimits {
-                maximum_state_size,
-                maximum_state_delta,
-                maximum_query_instructions,
-            }
-        });
+        let resource_limits = self
+            .resource_limits
+            .map(|resource_limits| resource_limits.inherit_from(&subnet_record.resource_limits));
 
         do_update_subnet::UpdateSubnetPayload {
             subnet_id,
