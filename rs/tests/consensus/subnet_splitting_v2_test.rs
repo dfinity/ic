@@ -309,10 +309,12 @@ async fn query_counter_canisters_until_stopped(
                         err @ Err(AgentError::CertificateNotAuthorized())
                         | err @ Err(AgentError::CertificateVerificationFailed())
                         | err @ Err(AgentError::CertificateOutdated(_)) => {
-                            // These errors could happen with an invalid/stale delegation. Replicas
-                            // should detect this and refresh their delegations before attempting to
-                            // reply, so if they don't, panic.
-                            panic!("The following error is not expected during the subnet split: {err:?}")
+                            // These errors could happen with an invalid/stale delegation.
+                            // Replicas could be able to detect this and refresh their delegations
+                            // before attempting to reply (and we could panic here to ensure we do
+                            // not observe those errors), but this is not yet implemented. So we
+                            // retry instead.
+                            Err(err.into())
                         }
                         Err(err) => {
                             // Transient errors are expected during the subnet split, so we retry.
