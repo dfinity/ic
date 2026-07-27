@@ -263,7 +263,8 @@ impl Request {
                     Err(_) => None,
                 }
             }
-            Ok(Method::CreateCanister)
+            Ok(Method::ListCanisters)
+            | Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
             | Ok(Method::FlexibleHttpRequest)

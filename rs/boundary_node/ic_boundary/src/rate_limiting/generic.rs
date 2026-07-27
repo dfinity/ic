@@ -24,7 +24,7 @@ use ic_bn_lib::prometheus::{
     IntCounterVec, IntGauge, Registry, register_int_counter_vec_with_registry,
     register_int_gauge_with_registry,
 };
-use ic_bn_lib_common::{traits::Run, types::http::ConnInfo};
+use ic_bn_lib::{http::server::conn::ConnInfo, tasks::Run};
 use ic_types::CanisterId;
 use ipnet::IpNet;
 use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
@@ -110,13 +110,8 @@ impl Bucket {
         }
 
         if let Some(v) = self.rule.canister_id {
-            if let Some(x) = ctx.canister_id {
-                // If we have a canister id - compare it
-                if x != v {
-                    return None;
-                }
-            } else {
-                // Otherwise ignore this rule
+            // If we have a canister id - compare it, otherwise ignore this rule
+            if ctx.canister_id? != v {
                 return None;
             }
         }
@@ -127,14 +122,10 @@ impl Bucket {
             return None;
         }
 
-        if let Some(rgx) = &self.rule.methods_regex {
-            if let Some(v) = ctx.method {
-                if !rgx.is_match(v) {
-                    return None;
-                }
-            } else {
-                return None;
-            }
+        if let Some(rgx) = &self.rule.methods_regex
+            && !rgx.is_match(ctx.method?)
+        {
+            return None;
         }
 
         if let Some(v) = self.rule.ip
@@ -511,7 +502,7 @@ pub async fn middleware(
 mod test {
     use super::*;
     use anyhow::bail;
-    use ic_bn_lib_common::principal;
+    use ic_bn_lib::principal;
     use indoc::indoc;
     use std::str::FromStr;
 

@@ -620,9 +620,9 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::backwards_compatibility::BackwardsCompatible;
     use ic_types::consensus::{
         BlockPayload, HashedBlock, Payload,
-        backwards_compatibility::BackwardsCompatibleOption,
         dkg::{SplittingArgs, SubnetSplittingStatus},
     };
 
@@ -801,7 +801,7 @@ mod tests {
                 let splitting_height = splitting_block.height;
                 let mut splitting_summary = splitting_block.payload.as_ref().as_summary().clone();
                 splitting_summary.dkg.subnet_splitting_status =
-                    BackwardsCompatibleOption::new_for_test_only(Some(
+                    BackwardsCompatible::new_for_test_only(Some(
                         SubnetSplittingStatus::Scheduled(SplittingArgs {
                             source_subnet_id,
                             destination_subnet_id,

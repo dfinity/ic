@@ -1,6 +1,7 @@
 use candid::{CandidType, Principal};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetType};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
@@ -14,10 +15,6 @@ use serde::{Deserialize, Serialize};
 use crate::{common::LOG_PREFIX, registry::Registry};
 
 impl Registry {
-    /// Note: The method name implies general subnet deletion. Currently, however, only CloudEngine subnets
-    ///       can be deleted. The reason is that general subnet deletion requires changes in the deterministic
-    ///       state machine, which are planned in the near future.  
-    ///
     /// Deleting a subnet means to:
     /// - Remove its subnet ID from the key `subnet_list`.
     /// - Remove its subnet record.
@@ -29,16 +26,34 @@ impl Registry {
     /// consumers that must take deleted subnets into account do so via old registry versions (the
     /// registry client method `get_versioned_value` allows the caller to distinguish between deleted
     /// and non-existing values via `version ?= 0`).
-    pub fn do_delete_subnet(&mut self, payload: DeleteSubnetPayload) -> Result<(), String> {
-        println!("{LOG_PREFIX}do_delete_subnet: {payload:?}");
+    ///
+    /// Authorization by subnet type (the calling principal is already restricted to governance or the
+    /// engine controller at the endpoint):
+    /// - Governance may delete any non-System subnet (including CloudEngine subnets).
+    /// - The engine controller may only delete CloudEngine subnets.
+    /// - As a corollary of the above, no one may delete a System subnet (e.g. the NNS).
+    pub fn do_delete_subnet(
+        &mut self,
+        caller: PrincipalId,
+        payload: DeleteSubnetPayload,
+    ) -> Result<(), String> {
+        println!("{LOG_PREFIX}do_delete_subnet: caller={caller}, payload={payload:?}");
 
         let DeleteSubnetPayload { subnet_id } = payload;
         let subnet_id_ = SubnetId::from(PrincipalId::from(subnet_id));
         let subnet_record = self.get_subnet(subnet_id_, self.latest_version())?;
 
-        // Currently, only CloudEngines can be deleted.
-        if subnet_record.subnet_type != i32::from(SubnetType::CloudEngine) {
-            return Err("Only CloudEngines may be deleted".to_string());
+        // System subnets (e.g. the NNS) may never be deleted.
+        if subnet_record.subnet_type == SubnetType::System as i32 {
+            return Err("System subnets may not be deleted".to_string());
+        }
+
+        // The engine controller may only delete CloudEngine subnets; governance may
+        // delete any non-System subnet.
+        if caller == ENGINE_CONTROLLER_CANISTER_ID.get()
+            && subnet_record.subnet_type != SubnetType::CloudEngine as i32
+        {
+            return Err("The engine controller may only delete CloudEngine subnets".to_string());
         }
 
         // Remove from `subnet_list`.

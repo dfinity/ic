@@ -244,6 +244,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         // Depending on the next step we might require some user interaction before we can execute
         // it.
         match step_type {
+            #[allow(clippy::collapsible_match)]
             StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
                 if self.params.admin_access_location.is_none() {
                     self.params.admin_access_location = Some(read_data_location(
@@ -255,6 +256,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             _ => {}
         }
         match step_type {
+            #[allow(clippy::collapsible_match)]
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
                     // We could pick a node with highest finalization and CUP height automatically,
@@ -310,6 +312,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::CreateArtifacts => {
                 if self.params.output_dir.is_none() {
                     self.params.output_dir = read_optional(
@@ -322,6 +325,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UploadCUPAndRegistry => {
                 if self.params.wait_for_cup_node.is_none() {
                     self.params.wait_for_cup_node = if let Some(DataLocation::Remote(ip)) =

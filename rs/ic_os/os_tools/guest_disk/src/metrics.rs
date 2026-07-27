@@ -93,38 +93,6 @@ fn build_luks_metric_labels(
     ])
 }
 
-/// Registers the status of the attached LUKS2 header on the Store data device with the given
-/// registry. Call [`write_metrics`] at the end of the program to persist all registered metrics to
-/// disk.
-pub(crate) fn export_attached_luks2_header_status(
-    registry: &Registry,
-    device_path: &Path,
-    attached_header_present: Result<bool>,
-) -> Result<()> {
-    let opts = Opts::new(
-        "guest_disk_store_attached_luks2_header_status",
-        "Status of the attached (on-device) LUKS2 header on the Store partition data device",
-    );
-    let header_status = GaugeVec::new(opts, &["device_path", "status"])
-        .context("Failed to create attached LUKS2 header status gauge")?;
-
-    let device_path_str = device_path.to_string_lossy();
-    let status_str = match attached_header_present {
-        Ok(true) => "present",
-        Ok(false) => "absent",
-        Err(_) => "error",
-    };
-    let label_values: Vec<&str> = vec![&device_path_str, status_str];
-
-    header_status.with_label_values(&label_values).set(1.0);
-
-    registry
-        .register(Box::new(header_status))
-        .context("Failed to register attached LUKS2 header status metric")?;
-
-    Ok(())
-}
-
 /// Encodes all metrics registered in `registry` and writes them to `metrics_file`.
 pub fn write_metrics(registry: &Registry, metrics_file: &Path) {
     let mut buffer = vec![];

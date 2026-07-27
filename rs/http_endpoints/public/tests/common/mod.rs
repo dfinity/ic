@@ -257,6 +257,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         None,
         None,
         None,
+        Default::default(),
     );
 
     metadata.network_topology = Arc::new(network_topology);

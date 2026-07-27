@@ -288,21 +288,33 @@ impl CatchUpPackageMaker {
             .inspect_err(|err| warn!(self.log, "Can't get a block for a CUP: {err}"))
             .ok()?;
 
+        info!(self.log, "CUP block: {cup_block:?}");
+
         let random_beacon = self
             .get_cup_random_beacon(pool, &cup_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't get a random beacon for a CUP: {err}"))
             .ok()?;
+
+        info!(self.log, "CUP random beacon: {random_beacon:?}");
 
         let high_dkg_id = self
             .get_high_dkg_id(pool, &cup_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't get a high dkg id for a CUP: {err}"))
             .ok()?;
 
+        info!(self.log, "CUP high dkg id: {high_dkg_id:?}");
+
         if !self
             .node_belongs_to_threshold_committee(&cup_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't check if node belongs to committee: {err}"))
             .unwrap_or_default()
         {
+            info!(
+                self.log,
+                "Node {} does not belong to the threshold committee at height {}",
+                self.replica_config.node_id,
+                cup_block.height()
+            );
             return None;
         }
 
@@ -611,6 +623,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         CryptoHashOfState, Height, NodeId, RegistryVersion,
+        backwards_compatibility::BackwardsCompatible,
         consensus::{
             BlockPayload, BlockProposal, ConsensusMessageHashable, HasVersion, Payload,
             SummaryPayload, idkg::PreSigId,
@@ -1167,8 +1180,6 @@ mod tests {
     ) {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                use ic_types::consensus::backwards_compatibility::BackwardsCompatibleOption;
-
                 const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
                 const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
                 const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
@@ -1258,7 +1269,7 @@ mod tests {
                 block.context.registry_version = SPLITTING_REGISTRY_VERSION;
                 let mut payload = block.payload.as_ref().as_summary().clone();
                 payload.dkg.subnet_splitting_status =
-                    BackwardsCompatibleOption::new_for_test_only(Some(subnet_splitting_status));
+                    BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
                 block.payload = Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(payload),
@@ -1301,8 +1312,6 @@ mod tests {
     #[test]
     fn create_post_split_summary_block_copies_idkg_summary() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            use ic_types::consensus::backwards_compatibility::BackwardsCompatibleOption;
-
             const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
             const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
             const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
@@ -1367,7 +1376,7 @@ mod tests {
             block.context.registry_version = SPLITTING_REGISTRY_VERSION;
             let mut payload = block.payload.as_ref().as_summary().clone();
             payload.dkg.subnet_splitting_status =
-                BackwardsCompatibleOption::new_for_test_only(Some(subnet_splitting_status));
+                BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
             let idkg = empty_idkg_payload(SOURCE_SUBNET_ID);
             payload.idkg = Some(idkg.clone());
             block.payload = Payload::new(

@@ -9470,7 +9470,7 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
         .build();
     let res = test.ingress(canister_id, "update", payload);
 
-    assert_matches!(res, Err(e) if e.code() == ErrorCode::CanisterContractViolation && e.description().contains("Failed to decode HttpRequestV2CostParams from Candid"));
+    assert_matches!(res, Err(e) if e.code() == ErrorCode::CanisterContractViolation && e.description().contains("params blob is too large"));
 }
 
 #[test]

@@ -83,7 +83,8 @@ fn address_from_pubkey() {
 mod rlp_encoding {
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
-        AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+        AccessList, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+        TransactionSignature,
     };
     use ethnum::u256;
     use ic_ethereum_types::Address;
@@ -137,7 +138,7 @@ mod rlp_encoding {
             ethers_core_tx.rlp().to_vec()
         );
 
-        let signature = Eip1559Signature {
+        let signature = TransactionSignature {
             signature_y_parity: true,
             r: u256::from_str_radix(
                 "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
@@ -176,7 +177,7 @@ mod rlp_encoding {
     #[test]
     fn should_compute_correct_rlp_encoding_of_signed_transaction() {
         // see https://sepolia.etherscan.io/getRawTx?tx=0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f
-        let signature = Eip1559Signature {
+        let signature = TransactionSignature {
             signature_y_parity: true,
             r: u256::from_str_hex(
                 "0x7d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3",
@@ -201,6 +202,7 @@ mod rlp_encoding {
             .unwrap(),
             access_list: AccessList::new(),
         };
+        use crate::tx::SignableTransaction;
         let tx_hash = transaction.hash();
         assert_eq!(
             tx_hash.to_string(),

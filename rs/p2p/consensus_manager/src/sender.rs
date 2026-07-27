@@ -7,7 +7,7 @@ use std::{
 };
 
 use axum::http::Request;
-use backoff::{ExponentialBackoffBuilder, backoff::Backoff};
+use backon::{BackoffBuilder, ExponentialBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit, ArtifactWithOpt};
@@ -311,11 +311,12 @@ async fn send_transmit_to_peer(
     peer: NodeId,
     route: String,
 ) {
-    let mut backoff = ExponentialBackoffBuilder::new()
-        .with_initial_interval(MIN_BACKOFF_INTERVAL)
-        .with_max_interval(MAX_BACKOFF_INTERVAL)
-        .with_multiplier(BACKOFF_MULTIPLIER)
-        .with_max_elapsed_time(None)
+    let mut backoff = ExponentialBuilder::new()
+        .with_min_delay(MIN_BACKOFF_INTERVAL)
+        .with_max_delay(MAX_BACKOFF_INTERVAL)
+        .with_factor(BACKOFF_MULTIPLIER as f32)
+        .with_jitter()
+        .without_max_times()
         .build();
 
     loop {
@@ -329,7 +330,7 @@ async fn send_transmit_to_peer(
             return;
         }
 
-        let backoff_duration = backoff.next_backoff().unwrap_or(MAX_BACKOFF_INTERVAL);
+        let backoff_duration = backoff.next().unwrap_or(MAX_BACKOFF_INTERVAL);
         time::sleep(backoff_duration).await;
     }
 }

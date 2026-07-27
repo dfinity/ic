@@ -44,6 +44,7 @@ def system_test(
         logs = True,
         vm_allocation_mode = None,
         cpus = None,
+        cpus_oversubscription_factor = 2,
         **kwargs):
     """Declares a system-test.
 
@@ -98,9 +99,15 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
-      cpus: Optional number of CPU cores to reserve for the local variant of the test.
-        This will translate into a `cpu:N` tag for the `_local` variant.
-        Heuristic: set it to MIN_LOCAL_CPUS + number of vCPUs required for the whole testnet. DEFAULT_VCPUS_PER_VM can be used for the default number of vCPUs per VM if not overridden.
+      cpus: Optional number of CPU cores the test actually needs.
+        Heuristic: MIN_LOCAL_CPUS + the number of vCPUs required for the whole testnet
+          (DEFAULT_VCPUS_PER_VM is the per-VM default).
+        Must be an int >= 1. Note that the `_local` variant doesn't reserve `cpus` but only
+        ceil(cpus / cpus_oversubscription_factor) via exec_properties.
+      cpus_oversubscription_factor: positive integer by which `cpus` is divided to
+        determine how many CPUs to reserve. Reserving less than the test uses lets
+        more system-tests be packed onto a single worker, at the cost of
+        deliberately overloading it. A factor of 1 disables oversubscription.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -293,12 +300,19 @@ def system_test(
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
     _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
+    _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_X86_64_PATH"] = "@qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu//:qemu-system-x86_64"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_DATA_PATH"] = "@qemu_system_data_prebuilt_linux_amd64//:qemu-system-data"
+
+    # Split OVMF (UEFI) firmware for the QEMU VMs (see local_backend.rs). The
+    # code image is mounted read-only and shared; the vars image is a per-VM
+    # writable varstore template.
+    _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
+    _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
 
     local_dep_env = {
         name: "$(rootpath {})".format(dep)
         for name, dep in _local_only_deps.items()
-    } | {
-        "NET_ADMIN_LAUNCHER_PATH": "/usr/local/bin/ic-net-admin",
     }
 
     # The local backend runs in a sandbox without external network access, so it
@@ -308,7 +322,18 @@ def system_test(
     # (--stream-console-logs).
     local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
 
-    reserve_cpus = [] if cpus == None else ["cpu:{}".format(cpus)]
+    if type(cpus_oversubscription_factor) != "int" or cpus_oversubscription_factor < 1:
+        fail("Invalid cpus_oversubscription_factor {}: must be an int >= 1".format(
+            repr(cpus_oversubscription_factor),
+        ))
+
+    reserved_cpus = None
+    if cpus != None:
+        if type(cpus) != "int" or cpus < 1:
+            fail("Invalid cpus {}: must be an int >= 1".format(repr(cpus)))
+
+        # Starlark has no math.ceil() so we round up using integer division.
+        reserved_cpus = (cpus + cpus_oversubscription_factor - 1) // cpus_oversubscription_factor
 
     sh_test(
         name = test_name + "_local",
@@ -321,7 +346,9 @@ def system_test(
             "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
         },
         env_inherit = env_inherit,
-        tags = tags + ["local_system_test"] + reserve_cpus + (["manual"] if backend == "farm" else []),
+        tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
+        exec_properties = {"cpu": str(reserved_cpus)} if reserved_cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,

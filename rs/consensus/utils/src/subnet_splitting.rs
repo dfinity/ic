@@ -153,10 +153,10 @@ mod tests {
     use ic_types::subnet_id_into_protobuf;
     use ic_types::{
         Height, ReplicaVersion, Time,
+        backwards_compatibility::BackwardsCompatible,
         batch::ValidationContext,
         consensus::{
             BlockPayload, Payload, Rank, SummaryPayload,
-            backwards_compatibility::BackwardsCompatibleOption,
         },
         crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
@@ -266,7 +266,7 @@ mod tests {
     fn make_summary_block_with_status(subnet_splitting_status: SubnetSplittingStatus) -> Block {
         let mut summary = SummaryPayload::fake();
         summary.dkg.subnet_splitting_status =
-            BackwardsCompatibleOption::new_for_test_only(Some(subnet_splitting_status));
+            BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
         Block {
             version: ReplicaVersion::default(),
             parent: CryptoHashOf::from(CryptoHash(vec![])),

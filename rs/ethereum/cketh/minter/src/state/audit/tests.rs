@@ -9,6 +9,7 @@ use crate::state::audit::{Event, replay_events_internal};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest,
 };
+use crate::timed_sized_map::Timestamp;
 use crate::tx::{
     AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
     StorageKey,
@@ -164,7 +165,7 @@ impl GetEventsFile {
         }
 
         fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequest {
-            use crate::tx::Eip1559Signature;
+            use crate::tx::TransactionSignature;
             use ethers_core::types::transaction::eip2718::TypedTransaction;
             use ethnum::u256;
             use ic_ethereum_types::Address;
@@ -229,7 +230,7 @@ impl GetEventsFile {
                 ),
             };
 
-            let signature = Eip1559Signature {
+            let signature = TransactionSignature {
                 signature_y_parity: decoded_sig.recovery_id().unwrap().is_y_odd(),
                 r: map_ethers_u256(decoded_sig.r),
                 s: map_ethers_u256(decoded_sig.s),
@@ -459,6 +460,23 @@ impl GetEventsFile {
                         block_number: block_number.try_into().unwrap(),
                     }
                 }
+                EventPayload::RegisteredDepositAddresses {
+                    scan_window_nanos,
+                    capacity,
+                    addresses,
+                } => ET::RegisteredDepositAddresses(crate::state::event::DepositAddressRegistry {
+                    scan_window_nanos,
+                    capacity,
+                    registrations: addresses
+                        .into_iter()
+                        .map(|a| crate::state::event::DepositAddressRegistration {
+                            owner: a.owner,
+                            subaccount: a.subaccount,
+                            address: a.address.parse().unwrap(),
+                            expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
+                        })
+                        .collect(),
+                }),
             },
         }
     }

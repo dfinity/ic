@@ -4,7 +4,7 @@ use super::*;
 use crate::{
     ReplicaVersion,
     artifact::PbArtifact,
-    consensus::backwards_compatibility::BackwardsCompatibleOption,
+    backwards_compatibility::BackwardsCompatible,
     crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
         config::NiDkgConfig,
@@ -270,7 +270,7 @@ pub struct DkgSummary {
     /// The number of intervals a DKG for the given remote target was attempted.
     pub remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
     /// Status of the subnet splitting.
-    pub subnet_splitting_status: BackwardsCompatibleOption<SubnetSplittingStatus, false>,
+    pub subnet_splitting_status: BackwardsCompatible<SubnetSplittingStatus, false>,
 }
 
 impl DkgSummary {
@@ -299,8 +299,8 @@ impl DkgSummary {
             next_interval_length,
             height,
             remote_dkg_attempts,
-            // subnet_splitting_status: BackwardsCompatibleOption::default(),
-            subnet_splitting_status: BackwardsCompatibleOption::new_for_test_only(Some(
+            // subnet_splitting_status: BackwardsCompatible::default(),
+            subnet_splitting_status: BackwardsCompatible::new_for_test_only(Some(
                 subnet_splitting_status,
             )),
         }
@@ -641,7 +641,7 @@ impl TryFrom<pb::Summary> for DkgSummary {
             )
             .map_err(ProxyDecodeError::Other)?,
             remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts),
-            subnet_splitting_status: BackwardsCompatibleOption::try_from_proto(
+            subnet_splitting_status: BackwardsCompatible::try_from_proto(
                 summary.subnet_splitting_status,
             )?,
         })

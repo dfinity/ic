@@ -18,6 +18,7 @@ rust_binary(
         # Keep sorted.
         "//rs/nervous_system/agent",
         "//rs/nervous_system/clients",
+        "//rs/nervous_system/string",
         "//rs/nns/common",
         "//rs/nns/constants",
         "//rs/types/base_types",

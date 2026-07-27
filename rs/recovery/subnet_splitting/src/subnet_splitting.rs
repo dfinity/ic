@@ -445,6 +445,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 ));
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UploadStateToSourceSubnet => {
                 if self.params.upload_node_source.is_none() {
                     self.params.upload_node_source = read_optional(
@@ -454,6 +455,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UploadStateToDestinationSubnet => {
                 if self.params.upload_node_destination.is_none() {
                     self.params.upload_node_destination = read_optional(

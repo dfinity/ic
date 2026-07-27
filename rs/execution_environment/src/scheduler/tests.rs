@@ -191,7 +191,7 @@ fn consensus_queue_is_emptied() {
     assert_eq!(sign_with_ecdsa_contexts.len(), 2);
 
     // Produce reject responses for both contexts and execute a round.
-    for (callback_id, _) in sign_with_ecdsa_contexts.iter() {
+    for callback_id in sign_with_ecdsa_contexts.keys() {
         let response = ConsensusResponse::new(
             *callback_id,
             Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),

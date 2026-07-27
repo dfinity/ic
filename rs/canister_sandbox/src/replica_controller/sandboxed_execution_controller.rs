@@ -1249,6 +1249,9 @@ impl WasmExecutor for SandboxedExecutionController {
         let initial_state_data = serialized_module.initial_state_data();
         let execution_state = ExecutionState {
             wasm_binary,
+            // The install timestamp is a deployment-round value that the embedder
+            // does not know; it is stamped by `Hypervisor::create_execution_state`.
+            last_install_timestamp: None,
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory,
             stable_memory,
@@ -1519,7 +1522,7 @@ impl SandboxedExecutionController {
             .get_ref()
             .resource_limits()
             .maximum_state_delta
-            .and_then(|d| if d.get() != 0 { Some(d) } else { None })
+            .filter(|&d| d.get() != 0)
             .unwrap_or(self.default_subnet_heap_delta_capacity);
         heap_delta_capacity / MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO
     }

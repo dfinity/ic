@@ -1,5 +1,6 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::endpoints::CandidBlockTag;
+use crate::deposit_address::{DepositAddressSchema, deposit_address};
+use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -10,14 +11,17 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
+use crate::state::automatic_deposits::{AutomaticDeposits, DepositRequest};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
+use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::management_canister::EcdsaPublicKeyResult;
 use ic_ethereum_types::Address;
 use ic_secp256k1::PublicKey;
+use icrc_ledger_types::icrc1::account::Account;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
@@ -25,6 +29,7 @@ use strum_macros::EnumIter;
 use transactions::EthTransactions;
 
 pub mod audit;
+pub mod automatic_deposits;
 pub mod eth_logs_scraping;
 pub mod event;
 pub mod transactions;
@@ -100,6 +105,10 @@ pub struct State {
     /// - secondary key: ERC-20 contract address on Ethereum
     /// - value: ckERC20 token symbol
     pub ckerc20_tokens: DedupMultiKeyMap<Principal, Address, CkTokenSymbol>,
+
+    /// ckERC20 deposit addresses registered via `deposit_erc20`, individually
+    /// derived for each user and watched for incoming deposits.
+    pub automatic_deposits: AutomaticDeposits,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -569,6 +578,7 @@ impl State {
             other.ledger_suite_orchestrator_id
         );
         ensure_eq!(self.ckerc20_tokens, other.ckerc20_tokens);
+        ensure_eq!(self.automatic_deposits, other.automatic_deposits);
 
         self.eth_transactions
             .is_equivalent_to(&other.eth_transactions)
@@ -586,6 +596,50 @@ impl State {
 
     pub const fn evm_rpc_id(&self) -> Principal {
         self.evm_rpc_id
+    }
+
+    pub fn public_key_and_chain_code(&self) -> Option<(PublicKey, [u8; 32])> {
+        self.ecdsa_public_key.as_ref().map(|response| {
+            let public_key =
+                PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
+                    ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
+                });
+            let chain_code =
+                <[u8; 32]>::try_from(response.chain_code.as_slice()).unwrap_or_else(|_| {
+                    ic_cdk::trap(format!(
+                        "BUG: expected a chain code of length 32, got {}",
+                        response.chain_code.len()
+                    ))
+                });
+            (public_key, chain_code)
+        })
+    }
+
+    /// Derive the ckERC20 deposit address for `account` from the minter's master
+    /// threshold-ECDSA public key and add it to the watchlist of automatic deposits.
+    ///
+    /// Returns the deposit address together with the timestamp until which a
+    /// deposit to it is guaranteed to be noticed. Fails with
+    /// [`DepositErc20Error::TemporarilyUnavailable`] if the minter's public key
+    /// has not been fetched yet.
+    pub fn register_deposit_address(
+        &mut self,
+        now: Timestamp,
+        account: Account,
+    ) -> Result<Entry<DepositRequest>, DepositErc20Error> {
+        let (master_public_key, chain_code) =
+            self.public_key_and_chain_code()
+                .ok_or(DepositErc20Error::TemporarilyUnavailable(
+                    "Minter's ECDSA public key not yet initialized".to_string(),
+                ))?;
+        let address = deposit_address(
+            &master_public_key,
+            &chain_code,
+            DepositAddressSchema::CkErc20,
+            &account,
+        );
+        self.automatic_deposits
+            .watch_address_for_account(now, account, address)
     }
 }
 
@@ -607,19 +661,27 @@ where
     })
 }
 
-pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
+pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32]) {
     use ic_cdk::management_canister::{
         EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, ecdsa_public_key,
     };
 
-    fn to_public_key(response: &EcdsaPublicKeyResult) -> PublicKey {
-        PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
+    fn to_public_key_and_chain_code(response: &EcdsaPublicKeyResult) -> (PublicKey, [u8; 32]) {
+        let public_key = PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
             ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
-        })
+        });
+        let chain_code =
+            <[u8; 32]>::try_from(response.chain_code.as_slice()).unwrap_or_else(|_| {
+                ic_cdk::trap(format!(
+                    "BUG: expected a chain code of length 32, got {}",
+                    response.chain_code.len()
+                ))
+            });
+        (public_key, chain_code)
     }
 
     if let Some(ecdsa_pk_response) = read_state(|s| s.ecdsa_public_key.clone()) {
-        return to_public_key(&ecdsa_pk_response);
+        return to_public_key_and_chain_code(&ecdsa_pk_response);
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     log!(DEBUG, "Fetching the ECDSA public key {key_name}");
@@ -637,7 +699,11 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     .await
     .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
-    to_public_key(&response)
+    to_public_key_and_chain_code(&response)
+}
+
+pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
+    lazy_call_ecdsa_public_key_with_chain_code().await.0
 }
 
 pub async fn minter_address() -> Address {

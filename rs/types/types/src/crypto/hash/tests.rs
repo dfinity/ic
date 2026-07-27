@@ -1060,7 +1060,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "86afd80c0bbb31b1776437bee06ff99329e91b53a5afea4c46003874d3e9bf3d",
+            "70d5cfb76e22ec392145fe3caae1458a7c2f395cde80c6090cfddc9174ced772",
             "Hash of CanisterHttpResponse changed"
         );
     }
@@ -1096,7 +1096,7 @@ mod crypto_hash_stability {
         let receipt_share = CanisterHttpResponseReceipt {
             metadata,
             payment_receipt: CanisterHttpPaymentReceipt {
-                refund: Cycles::new(42),
+                spent: Cycles::new(42),
             },
         };
         let data = Signed {

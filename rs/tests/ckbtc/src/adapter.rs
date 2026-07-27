@@ -38,7 +38,12 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
 
         let mgr = ManagementCanister::create(agent);
 
-        match mgr.canister_status(&bitcoin_principal).await {
+        match mgr
+            .canister_status(&bitcoin_principal)
+            .as_update()
+            .call()
+            .await
+        {
             Ok((status,)) => {
                 if status.status != CanisterStatus::Running {
                     panic!("Message canister in unexpected status");
@@ -228,7 +233,7 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
 
         // Flatten the partial block into a single Vec
         let reconstructed_block = std::iter::once(partial_block)
-            .chain(results.into_iter())
+            .chain(results)
             .flatten()
             .collect::<Vec<_>>();
 

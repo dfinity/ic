@@ -6,6 +6,7 @@ use crate::{
     ExecuteMessageResult, HypervisorMetrics, RoundLimits, as_round_instructions,
     canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
 };
+use candid::Encode;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -18,11 +19,14 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
-use ic_management_canister_types_private::CanisterStatusType;
+use ic_management_canister_types_private::{
+    CanisterIdRange, CanisterStatusType, EmptyBlob, ListCanistersResponse, Payload as _,
+};
+use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
-    SystemState,
+    ReplicatedState, SystemState,
 };
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
@@ -372,6 +376,32 @@ pub(crate) fn validate_snapshot_visibility(
     Ok(())
 }
 
+/// Validates that the `caller` is allowed to read the status of the `canister`
+/// according to its canister status visibility settings.
+///
+/// Subnet admins always retain access; otherwise access is governed by the
+/// status visibility setting, which grants access to the controllers plus any
+/// additional allowed viewers (or everyone, if the status is public).
+pub(crate) fn validate_status_visibility(
+    canister: &CanisterState,
+    subnet_admins: Option<BTreeSet<PrincipalId>>,
+    caller: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    // Subnet admins always retain access to the canister status.
+    if let Some(subnet_admins) = &subnet_admins
+        && subnet_admins.contains(caller)
+    {
+        return Ok(());
+    }
+    // Otherwise, access is governed by the status visibility setting.
+    if crate::canister_settings::VisibilitySettings::from(canister.status_visibility())
+        .has_access(caller, canister.controllers())
+    {
+        return Ok(());
+    }
+    Err(CanisterManagerError::CanisterStatusAccessDenied { caller: *caller })
+}
+
 pub(crate) fn validate_subnet_admin(
     subnet_admins: &BTreeSet<PrincipalId>,
     sender: &PrincipalId,
@@ -415,6 +445,67 @@ pub(crate) fn validate_controller_or_subnet_admin(
             controller_provided: *sender,
         })
     }
+}
+
+/// Computes the response to the `list_canisters` management canister method.
+///
+/// The method takes no arguments and is only available on subnets with subnet
+/// admins configured, in which case the caller must be a subnet admin. On
+/// success, it returns the Candid-encoded `ListCanistersResponse` listing the
+/// ranges of canister IDs hosted on this subnet, together with the number of
+/// round instructions the caller must deduct for computing it.
+pub(crate) fn list_canisters(
+    state: &ReplicatedState,
+    caller: &PrincipalId,
+    payload: &[u8],
+) -> Result<(Vec<u8>, NumInstructions), UserError> {
+    EmptyBlob::decode(payload)?;
+    match state.get_own_subnet_admins() {
+        Some(ref admins) => validate_subnet_admin(admins, caller).map_err(UserError::from)?,
+        None => {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "list_canisters is only available on subnets with subnet admins",
+            ));
+        }
+    }
+    let mut canisters: Vec<CanisterIdRange> = Vec::new();
+    for id in state.canister_states().all_keys() {
+        let id_u64 = canister_id_into_u64(*id);
+        match canisters.last_mut() {
+            Some(last) if canister_id_into_u64(last.end).checked_add(1) == Some(id_u64) => {
+                last.end = *id;
+            }
+            _ => canisters.push(CanisterIdRange {
+                start: *id,
+                end: *id,
+            }),
+        }
+    }
+    let response = ListCanistersResponse { canisters };
+    Ok((
+        Encode!(&response).unwrap(),
+        list_canisters_instructions(state),
+    ))
+}
+
+/// Computes the number of round instructions consumed by executing the
+/// `list_canisters` management method against the given state.
+///
+/// The cost model was derived from the `list_canisters` benchmark using the
+/// conversion `2B instructions = 1 second` (i.e. `2M instructions = 1 ms`):
+///   - a base cost of 20M instructions (≈10ms), and
+///   - a variable cost of 16K instructions per canister hosted on the subnet
+///     (`list_canisters` iterates over all of them to build the ID ranges).
+///     The variable cost reflects the worst case where the canister IDs form
+///     gaps so that each canister becomes its own ID range.
+// Keep in sync with `list_canisters_respects_round_instruction_limit` in
+// `execution_test.rs`.
+fn list_canisters_instructions(state: &ReplicatedState) -> NumInstructions {
+    const BASE_INSTRUCTIONS: u64 = 20_000_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
+    let num_canisters = state.num_canisters() as u64;
+    NumInstructions::new(BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters)
 }
 
 /// Unregisters the callback corresponding to the given response.

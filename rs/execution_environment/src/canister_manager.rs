@@ -2,7 +2,7 @@ use crate::as_round_instructions;
 use crate::canister_settings::CanisterSettings;
 use crate::execution::common::{
     validate_controller, validate_controller_or_subnet_admin, validate_snapshot_visibility,
-    validate_subnet_admin,
+    validate_status_visibility, validate_subnet_admin,
 };
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
@@ -138,6 +138,8 @@ impl CanisterManager {
             Err(_)
             | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::CanisterMetadata)
+            // `list_canisters` can only be called via inter-canister calls by subnet admins.
+            | Ok(Ic00Method::ListCanisters)
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
@@ -180,11 +182,31 @@ impl CanisterManager {
                 }
             }
 
+            // `CanisterStatus` is governed by the canister's status visibility
+            // settings: subnet admins always retain access; otherwise access is
+            // granted to the controllers plus any additional allowed viewers, or
+            // to everyone if the status is public.
+            Ok(Ic00Method::CanisterStatus) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {canister_id} not found"),
+                        ))?;
+                        let subnet_admins = state.get_own_subnet_admins();
+                        validate_status_visibility(canister, subnet_admins, &sender.get()).map_err(|err| err.into())
+                    },
+                    None => Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {method_name}"),
+                    )),
+                }
+            },
+
             // These methods are only valid if they are sent by the controller
             // of the canister or a subnet admin. We assume that the canister
             // always wants to accept such messages.
-            Ok(Ic00Method::CanisterStatus)
-            | Ok(Ic00Method::StartCanister)
+            Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister)
@@ -355,6 +377,11 @@ impl CanisterManager {
         // Snapshot visibility: apply.
         if let Some(snapshot_visibility) = settings.snapshot_visibility() {
             canister.system_state.snapshot_visibility = snapshot_visibility.clone();
+        }
+
+        // Status visibility: apply.
+        if let Some(status_visibility) = settings.status_visibility() {
+            canister.system_state.status_visibility = status_visibility.clone();
         }
 
         // Wasm memory threshold: apply.
@@ -546,9 +573,7 @@ impl CanisterManager {
         }
 
         // Log memory limit: validate, charge cycles for resize, and apply.
-        if canister.system_state.log_memory_store.is_migrated()
-            && let Some(requested_limit) = settings.log_memory_limit()
-        {
+        if let Some(requested_limit) = settings.log_memory_limit() {
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
@@ -1069,10 +1094,10 @@ impl CanisterManager {
         ready_for_migration: bool,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
-        // Skip the controller check if the canister itself is requesting its
+        // Skip the visibility check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
         if sender != canister.canister_id().get() {
-            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?
+            validate_status_visibility(canister, subnet_admins, &sender)?
         }
 
         let controller = canister.system_state.controller();
@@ -1103,6 +1128,7 @@ impl CanisterManager {
             canister.system_state.minimum_incoming_canister_call_cycles;
         let log_visibility = canister.system_state.log_visibility.clone();
         let snapshot_visibility = canister.system_state.snapshot_visibility.clone();
+        let status_visibility = canister.system_state.status_visibility.clone();
         let log_memory_limit = canister.log_memory_limit().get();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
@@ -1135,6 +1161,7 @@ impl CanisterManager {
             minimum_incoming_canister_call_cycles.get(),
             log_visibility,
             snapshot_visibility,
+            status_visibility,
             log_memory_limit,
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
@@ -1480,9 +1507,9 @@ impl CanisterManager {
             sender,
             cycles,
             state.metadata.batch_time,
+            state.metadata.batch_time,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
-            self.config.log_memory_store_feature,
         );
 
         system_state.consume_cycles(creation_fee);
@@ -2245,6 +2272,7 @@ impl CanisterManager {
                 self.hypervisor.create_execution_state(
                     execution_snapshot.wasm_binary.clone(),
                     canister_id,
+                    time,
                     round_limits,
                     compilation_cost_handling,
                 );

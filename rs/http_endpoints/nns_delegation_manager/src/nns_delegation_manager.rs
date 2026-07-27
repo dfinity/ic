@@ -2,7 +2,11 @@ use std::{convert::TryFrom, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::body::Body;
 use futures::FutureExt;
-use hickory_resolver::{Resolver, config::LookupIpStrategy};
+use hickory_resolver::{
+    Resolver,
+    config::{LookupIpStrategy, NameServerConfig, ResolverConfig},
+    net::runtime::TokioRuntimeProvider,
+};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
@@ -67,10 +71,7 @@ const DELEGATION_REACTIVE_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 
 const DELEGATION_RETRY_MAX_BACKOFF_SECONDS: u64 = 15;
 
-#[cfg(not(test))]
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(test)]
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(not(test))]
 const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
@@ -539,15 +540,25 @@ async fn connect(
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
                 .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
-            let mut dns_resolver = Resolver::builder_tokio()?;
+            // To test the DNS resolution in a hermetic environment which does not have any external
+            // network access, we use a placeholder nameserver which is never contacted, because the
+            // domain used in the test is an IP literal. In production, the resolver will use the
+            // system's default nameservers to resolve the domain.
+            let mut dns_resolver = if !cfg!(test) {
+                Resolver::builder(TokioRuntimeProvider::default())?
+            } else {
+                Resolver::builder_with_config(
+                    ResolverConfig::from_parts(
+                        None,
+                        vec![],
+                        vec![NameServerConfig::udp_and_tcp(
+                            std::net::Ipv6Addr::LOCALHOST.into(),
+                        )],
+                    ),
+                    TokioRuntimeProvider::default(),
+                )
+            };
             dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
-            #[cfg(test)]
-            {
-                // In unit tests, the domain does not resolve and we want to fail fast to keep a low
-                // test execution time.
-                dns_resolver.options_mut().timeout = Duration::from_millis(100);
-                dns_resolver.options_mut().attempts = 1;
-            }
             let ip_addr = dns_resolver
                 .build()?
                 .lookup_ip(domain.as_str())
@@ -757,7 +768,11 @@ mod tests {
     const VERIFIED_APP_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_4;
     const CLOUD_ENGINE_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_5;
     const API_BN_ID: NodeId = ic_test_utilities_types::ids::NODE_6;
-    const API_BN_DOMAIN: &str = "domain.invalid";
+    // An IPv6 loopback literal. `hickory`'s `lookup_ip` short-circuits IP literals and returns
+    // them without contacting any nameserver, so the CloudEngine code path resolves this offline
+    // (making the test hermetic) and then tries to connect to `[::1]:443`, where nothing is
+    // listening, yielding a fast connection-refused error inside the sandbox.
+    const API_BN_DOMAIN: &str = "::1";
 
     // Get a free port on this host to which we can connect transport to.
     fn get_free_localhost_socket_addr() -> SocketAddr {
@@ -1454,10 +1469,14 @@ mod tests {
         )
         .await;
 
-        // Since the API BN is configured with a domain that does not resolve, we expect the
-        // connection to fail with a name resolution error, which indicates that we indeed tried to
-        // connect to the API BN instead of an NNS node.
-        assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
+        // The API BN is configured with a loopback domain (`::1`) where nothing is listening on
+        // port 443 (the port hard-coded for API BNs). We therefore expect the connection to be
+        // refused. This indicates that we indeed tried to connect to the API BN (on port 443)
+        // instead of an NNS node (which would have connected to the mocked node's endpoint).
+        assert_matches!(
+            response,
+            Err(err) if format!("{err:?}").contains("Could not connect to node [::1]:443")
+        );
     }
 
     #[tokio::test]

@@ -541,6 +541,9 @@ impl Action {
             Action::TakeCanisterSnapshot(_) => "ACTION_TAKE_CANISTER_SNAPSHOT",
             Action::LoadCanisterSnapshot(_) => "ACTION_LOAD_CANISTER_SNAPSHOT",
             Action::CreateCanisterAndInstallCode(_) => "ACTION_CREATE_CANISTER_AND_INSTALL_CODE",
+            Action::UpdateStandardEngineReplicaVersion(_) => {
+                "ACTION_UPDATE_STANDARD_ENGINE_REPLICA_VERSION"
+            }
         }
     }
 }
@@ -1202,7 +1205,7 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
                 Err(vec!["Request.nns_proposal_id is unspecified.".to_string()])
             }
         };
-        let request_str = format!("{:#?}", &request);
+        let request_str = format!("{:#?}", request);
         // Validate request.result
         let swap_result = if let Some(result) = request.result {
             SwapResult::try_from(result).map_err(|err| vec![err])
@@ -4282,6 +4285,12 @@ impl Governance {
                 self.perform_call_canister(pid, create_canister_and_install_code)
                     .await;
             }
+            ValidProposalAction::UpdateStandardEngineReplicaVersion(
+                update_standard_engine_replica_version,
+            ) => {
+                self.perform_call_canister(pid, update_standard_engine_replica_version)
+                    .await;
+            }
         }
     }
 
@@ -4660,6 +4669,7 @@ impl Governance {
                     ));
                 }
             }
+            #[allow(clippy::collapsible_match)]
             Command::Follow(follow) => {
                 if follow.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
                     return Err(GovernanceError::new_with_message(
@@ -4919,6 +4929,9 @@ impl Governance {
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
                 create_canister_and_install_code.validate()
             }
+            ValidProposalAction::UpdateStandardEngineReplicaVersion(
+                update_standard_engine_replica_version,
+            ) => update_standard_engine_replica_version.validate(),
         }
     }
 
@@ -4955,6 +4968,7 @@ impl Governance {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
+            #[allow(clippy::collapsible_match)]
             ValidNnsFunction::SplitSubnet => {
                 if !are_subnet_splitting_proposals_enabled() {
                     return Err(invalid_proposal_error(String::from(

@@ -92,8 +92,8 @@ impl Strippable for &Option<IDkgPayload> {
     fn strip(self) -> Self::Output {
         let stripped_dealings = if let Some(idkg) = self {
             idkg.idkg_transcripts
-                .iter()
-                .flat_map(|(_id, transcript)| {
+                .values()
+                .flat_map(|transcript| {
                     transcript.verified_dealings.iter().map(
                         |(dealer_index, batch_signed_dealing)| {
                             (*dealer_index, batch_signed_dealing.content.message_id())

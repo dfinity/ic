@@ -170,7 +170,7 @@ impl NodeMetricsHistoryResponseTracker {
 
     fn with_subnet(mut self, subnet_id: SubnetId) -> Self {
         self.current_subnet = subnet_id;
-        for (_, metrics) in self.subnets_responses.iter_mut() {
+        for metrics in self.subnets_responses.values_mut() {
             metrics.insert(subnet_id, Vec::new());
         }
         self

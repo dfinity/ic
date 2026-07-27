@@ -17,6 +17,8 @@
 //! `VetKdArgs<'a>` (`'_` is forbidden, named lifetimes cannot be declared, and
 //! elision does not work inside the macro).
 
+#![allow(clippy::result_large_err)]
+
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,

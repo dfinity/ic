@@ -19,7 +19,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
-    SnapshotVisibility,
+    SnapshotVisibility, StatusVisibility,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{CallbackId, CanisterMessage, Ingress, RequestOrResponse, Response};
@@ -111,6 +111,10 @@ impl CanisterState {
 
     pub fn snapshot_visibility(&self) -> &SnapshotVisibility {
         &self.system_state.snapshot_visibility
+    }
+
+    pub fn status_visibility(&self) -> &StatusVisibility {
+        &self.system_state.status_visibility
     }
 
     /// Returns the difference in time since the canister was last charged for resource allocations.

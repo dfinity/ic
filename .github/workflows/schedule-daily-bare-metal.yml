@@ -1,0 +1,65 @@
+name: Schedule Daily Bare Metal tests
+
+on:
+  schedule:
+    - cron: "47 1 * * *" # 1:47 UTC - slightly offset to avoid high-load times of other scheduled workflows
+  workflow_dispatch:
+
+env:
+  CI_JOB_NAME: ${{ github.job }}
+
+jobs:
+  bazel-test-bare-metal:
+    name: Bazel Test Bare Metal
+    runs-on: &dind-large-setup
+      labels: dind-large
+    container: &container-setup
+      image: ghcr.io/dfinity/ic-build@sha256:65ab9023792784e8e13dbdd5b9a63c2dff0cd38237afd1cdbc299577505d4b88
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
+    environment: Bare Metal Tests
+    steps:
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run Bazel Launch Bare Metal
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            echo "$ZH2_DLL01_INI_SECRET" > file1
+            echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+
+            launch_bare_metal() {
+
+              # shellcheck disable=SC2046,SC2086
+              bazel run \
+                //ic-os/setupos/envs/dev:launch_bare_metal -- \
+                  --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
+                  --ini_filename "$(realpath file1)" \
+                  --file_share_ssh_key "$(realpath file2)" \
+                  --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
+                  --file_share_username ci_interim \
+                  --ci_mode \
+                  $@
+            }
+
+            # Run bare metal installation test
+            launch_bare_metal --hsm
+
+            # Run bare metal node performance benchmarks
+            launch_bare_metal --benchmark
+
+            # Run bare metal node hostOS metrics check
+            launch_bare_metal --check_hostos_metrics
+
+            # Run SEV tests
+            bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+
+            bazel clean
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        env:
+          ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
+          ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"

@@ -129,7 +129,7 @@ impl std::borrow::Borrow<MasterPublicKeyId> for IDkgMasterPublicKeyId {
 
 impl std::fmt::Display for IDkgMasterPublicKeyId {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "{}", &self.0)
+        write!(fmt, "{}", self.0)
     }
 }
 
@@ -228,8 +228,8 @@ impl IDkgPayload {
             .flat_map(MasterKeyTranscript::transcript_config_in_creation);
 
         self.pre_signatures_in_creation
-            .iter()
-            .flat_map(|(_, pre_sig)| pre_sig.iter_transcript_configs_in_creation())
+            .values()
+            .flat_map(|pre_sig| pre_sig.iter_transcript_configs_in_creation())
             .chain(key_transcripts)
             .chain(xnet_reshares_transcripts)
     }
@@ -240,8 +240,8 @@ impl IDkgPayload {
         &self,
     ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
         self.pre_signatures_in_creation
-            .iter()
-            .flat_map(|(_, pre_sig)| pre_sig.iter_transcript_configs_in_creation())
+            .values()
+            .flat_map(|pre_sig| pre_sig.iter_transcript_configs_in_creation())
     }
 
     /// Return an iterator of the ongoing xnet reshare transcripts on the source side.

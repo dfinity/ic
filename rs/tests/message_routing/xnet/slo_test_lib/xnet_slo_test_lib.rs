@@ -444,8 +444,11 @@ pub fn check_success(
             &actual,
         );
 
-        if responses_received != 0 {
-            let avg_latency_millis = m.latency_distribution.sum_millis() / responses_received;
+        if let Some(avg_latency_millis) = m
+            .latency_distribution
+            .sum_millis()
+            .checked_div(responses_received)
+        {
             expect(
                 avg_latency_millis <= config.targeted_latency_seconds as usize * 1000,
                 i,

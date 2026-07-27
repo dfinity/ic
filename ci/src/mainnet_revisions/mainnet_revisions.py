@@ -31,6 +31,11 @@ class VersionInfo:
     dev_hash: str
     launch_measurements: dict
     dev_measurements: dict
+    # SHA256 of the setup-os disk-img.tar.zst (prod and dev channels). Unlike
+    # `hash` (the NNS-elected update image), the setup-os image is not elected
+    # via the NNS, so this is read from the CDN SHA256SUMS file.
+    setupos_hash: str
+    setupos_dev_hash: str
 
 
 def sync_main_branch_and_checkout_branch(
@@ -162,7 +167,11 @@ def get_replica_version_info(replica_version: str) -> VersionInfo:
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
     )
 
-    return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements)
+    setupos_base = f"https://download.dfinity.systems/ic/{version}/setup-os"
+    setupos_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img/SHA256SUMS", "disk-img.tar.zst")
+    setupos_dev_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img-dev/SHA256SUMS", "disk-img.tar.zst")
+
+    return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements, setupos_hash, setupos_dev_hash)
 
 
 def get_latest_replica_version_info() -> VersionInfo:
@@ -192,7 +201,11 @@ def get_latest_replica_version_info() -> VersionInfo:
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
     )
 
-    return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements)
+    setupos_base = f"https://download.dfinity.systems/ic/{version}/setup-os"
+    setupos_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img/SHA256SUMS", "disk-img.tar.zst")
+    setupos_dev_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img-dev/SHA256SUMS", "disk-img.tar.zst")
+
+    return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements, setupos_hash, setupos_dev_hash)
 
 
 def get_latest_hostos_version_info(logger: logging.Logger) -> VersionInfo:
@@ -226,7 +239,15 @@ def get_latest_hostos_version_info(logger: logging.Logger) -> VersionInfo:
         )
         raise
 
-    return VersionInfo(version, hash, dev_hash, replica_info.launch_measurements, replica_info.dev_measurements)
+    return VersionInfo(
+        version,
+        hash,
+        dev_hash,
+        replica_info.launch_measurements,
+        replica_info.dev_measurements,
+        replica_info.setupos_hash,
+        replica_info.setupos_dev_hash,
+    )
 
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
@@ -239,8 +260,8 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    existing_version = data.get("guestos", {}).get("subnets", {}).get(subnet, {}).get("version", "")
-    if existing_version == replica_info.version:
+    existing = data.get("guestos", {}).get("subnets", {}).get(subnet, {})
+    if existing.get("version", "") == replica_info.version and "setupos_disk_img_hash" in existing:
         logger.info("Subnet revision already updated to version %s. Skipping update.", replica_info.version)
         return
 
@@ -248,6 +269,8 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
         "version": replica_info.version,
         "update_img_hash": replica_info.hash,
         "update_img_hash_dev": replica_info.dev_hash,
+        "setupos_disk_img_hash": replica_info.setupos_hash,
+        "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
         "launch_measurements": replica_info.launch_measurements,
         "launch_measurements_dev": replica_info.dev_measurements,
     }
@@ -270,8 +293,8 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    existing_version = data.get("guestos", {}).get("latest_release", {}).get("version", "")
-    if existing_version == replica_info.version:
+    existing = data.get("guestos", {}).get("latest_release", {})
+    if existing.get("version", "") == replica_info.version and "setupos_disk_img_hash" in existing:
         logger.info("Latest revision already updated to version %s. Skipping update.", replica_info.version)
         return
 
@@ -279,6 +302,8 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
         "version": replica_info.version,
         "update_img_hash": replica_info.hash,
         "update_img_hash_dev": replica_info.dev_hash,
+        "setupos_disk_img_hash": replica_info.setupos_hash,
+        "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
         "launch_measurements": replica_info.launch_measurements,
         "launch_measurements_dev": replica_info.dev_measurements,
     }
@@ -299,8 +324,8 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    existing_version = data.get("hostos", {}).get("latest_release", {}).get("version", "")
-    if existing_version == replica_info.version:
+    existing = data.get("hostos", {}).get("latest_release", {})
+    if existing.get("version", "") == replica_info.version and "setupos_disk_img_hash" in existing:
         logger.info("Hostos revision already updated to version %s. Skipping update.", replica_info.version)
         return
 
@@ -309,6 +334,8 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
             "version": replica_info.version,
             "update_img_hash": replica_info.hash,
             "update_img_hash_dev": replica_info.dev_hash,
+            "setupos_disk_img_hash": replica_info.setupos_hash,
+            "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
             "launch_measurements": replica_info.launch_measurements,
             "launch_measurements_dev": replica_info.dev_measurements,
         }
@@ -352,6 +379,18 @@ def download_and_read_file(url: str):
         urllib.request.urlretrieve(url, tmp_file.name)
         with open(tmp_file.name, "rb") as f:
             return json.loads(f.read().decode())
+
+
+def download_and_read_sha256sums(url: str, filename: str) -> str:
+    """Download a SHA256SUMS file and return the hex sha256 recorded for `filename`."""
+    with tempfile.NamedTemporaryFile() as tmp_file:
+        urllib.request.urlretrieve(url, tmp_file.name)
+        with open(tmp_file.name, "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) == 2 and parts[1] == filename:
+                    return parts[0]
+    raise Exception(f"No sha256 for {filename} in {url}")
 
 
 def get_logger(level) -> logging.Logger:

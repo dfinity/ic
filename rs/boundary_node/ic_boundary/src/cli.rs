@@ -1,13 +1,14 @@
 use candid::Principal;
 use clap::{ArgGroup, Args, Parser};
 use humantime::parse_duration;
-use ic_bn_lib_common::{
-    parse_size, parse_size_usize,
-    types::{
-        acme::AcmeUrl,
-        http::{HttpClientCli, HttpServerCli},
+use ic_bn_lib::{
+    http::{
+        client::cli::HttpClientCli,
+        server::cli::HttpServerCli,
         shed::{ShedShardedCli, ShedSystemCli},
     },
+    parse_size, parse_size_usize,
+    tls::acme::AcmeUrl,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_types::CanisterId;

@@ -381,6 +381,35 @@ type WithdrawalError = variant {
     TemporarilyUnavailable : text;
 };
 
+// Argument for the deposit_erc20 endpoint.
+type DepositErc20Arg = record { mode : DepositMode };
+
+// How the fee for a ckERC20 deposit address registration is settled.
+type DepositMode = variant {
+    // The registration fee is deducted from the deposited amount. The deposit
+    // address is derived from the caller's principal and the given subaccount.
+    Unsponsored : record { subaccount : opt blob };
+    // TODO(DEFI-2927): a sponsor pays the registration fee upfront so the user
+    // receives the full deposited amount.
+    // Sponsored : record { from_subaccount : opt blob; max_fee : nat };
+};
+
+// Response of the deposit_erc20 endpoint.
+type DepositErc20Response = record {
+    // The Ethereum deposit address derived for the caller.
+    address : text;
+    // Timestamp in nanoseconds since the Unix epoch until which a deposit sent
+    // to `address` is guaranteed to be noticed by the minter.
+    valid_until : nat64;
+};
+
+type DepositErc20Error = variant {
+    // The maximum number of concurrently armed deposit addresses has been reached.
+    TooManyActiveAddresses;
+    // The minter is temporarily unavailable, retry the request.
+    TemporarilyUnavailable : text;
+};
+
 type WithdrawErc20Arg = record {
     // Amount of tokens to withdraw.
     // The amount is in the smallest unit of the token, e.g.,
@@ -594,6 +623,16 @@ type Event = record {
         QuarantinedReimbursement : record {
             index : ReimbursementIndex;
         };
+        RegisteredDepositAddresses : record {
+            scan_window_nanos : nat64;
+            capacity : nat64;
+            addresses : vec record {
+                owner : principal;
+                subaccount : opt Subaccount;
+                address : text;
+                expires_at_nanos : nat64;
+            };
+        };
     };
 };
 
@@ -721,6 +760,12 @@ service : (MinterArg) -> {
 
     // Withdraw the specified amount of ERC-20 tokens to the given Ethereum address.
     withdraw_erc20 : (WithdrawErc20Arg) -> (variant { Ok : RetrieveErc20Request; Err : WithdrawErc20Error });
+
+    // Derive and register the ckERC20 deposit address for the caller.
+    // The account is derived from the caller's principal and the subaccount in the argument.
+    // Returns the EIP-55 checksummed deposit address together with `valid_until`, the timestamp
+    // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed.
+    deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
 
     // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);

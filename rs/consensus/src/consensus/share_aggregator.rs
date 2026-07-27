@@ -306,10 +306,12 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         CryptoHashOfState, NodeId, RegistryVersion, SubnetId,
+        backwards_compatibility::BackwardsCompatible,
         consensus::{
             BlockPayload, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent,
             FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare, Payload,
             RandomBeaconShare,
+            dkg::{SplittingArgs, SubnetSplittingStatus},
         },
         crypto::{CryptoHash, CryptoHashOf},
         signature::ThresholdSignatureShare,
@@ -534,11 +536,6 @@ mod tests {
     ) {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                use ic_types::consensus::{
-                    backwards_compatibility::BackwardsCompatibleOption,
-                    dkg::{SplittingArgs, SubnetSplittingStatus},
-                };
-
                 const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
                 const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
                 const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
@@ -618,7 +615,7 @@ mod tests {
                 block.context.registry_version = SPLITTING_REGISTRY_VERSION;
                 let mut payload = block.payload.as_ref().as_summary().clone();
                 payload.dkg.subnet_splitting_status =
-                    BackwardsCompatibleOption::new_for_test_only(Some(subnet_splitting_status));
+                    BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
                 block.payload = Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(payload),

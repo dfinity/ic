@@ -169,6 +169,7 @@ mod tests {
     use ic_types::{
         ReplicaVersion,
         consensus::{BlockPayload, Payload, dkg::SplittingArgs},
+        backwards_compatibility::BackwardsCompatible,
         crypto::crypto_hash,
     };
     use ic_types_test_utils::ids::{SUBNET_0, SUBNET_1};
@@ -314,8 +315,6 @@ mod tests {
     fn status_test(#[case] test_case: TestCase) {
         with_test_replica_logger(|logger| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                use ic_types::consensus::backwards_compatibility::BackwardsCompatibleOption;
-
                 let (pool, registry_client) = set_up(
                     pool_config,
                     test_case.subnet_id,
@@ -327,7 +326,7 @@ mod tests {
                     PoolReader::new(&pool).get_highest_finalized_summary_block();
                 let mut payload = last_summary_block.payload.as_ref().as_summary().clone();
                 payload.dkg.subnet_splitting_status =
-                    BackwardsCompatibleOption::new_for_test_only(test_case.subnet_splitting_status);
+                    BackwardsCompatible::new_for_test_only(test_case.subnet_splitting_status);
                 last_summary_block.payload =
                     Payload::new(crypto_hash, BlockPayload::Summary(payload));
 

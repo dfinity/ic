@@ -935,7 +935,9 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             .build();
         let caller_canister = test.create_canister();
 
-        test.state_mut().metadata.own_subnet_features.http_requests = true;
+        std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+            .subnet_features
+            .http_requests = true;
 
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
@@ -1047,7 +1049,9 @@ fn http_outcalls_free() {
         .build();
     let caller_canister = test.create_canister();
 
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     let cycles_before = test.canister_state(caller_canister).system_state.balance();
 

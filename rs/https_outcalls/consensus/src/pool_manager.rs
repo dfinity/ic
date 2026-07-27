@@ -25,7 +25,6 @@ use ic_types::{
     CountBytes, NodeId, NumBytes, ReplicaVersion, canister_http::*, crypto::Signed,
     messages::CallbackId, replica_config::ReplicaConfig,
 };
-use ic_utils::str::StrEllipsize;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -60,7 +59,6 @@ pub struct CanisterHttpPoolManagerImpl {
     log: ReplicaLogger,
 }
 
-const MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 const CANDID_OVERHEAD_RESERVE_BYTES: u64 = 1024; // 1KB
 
 // Checks that the response size is within the allowed limits.
@@ -94,9 +92,9 @@ fn validate_response_size(
         }
         CanisterHttpResponseContent::Reject(reject) => {
             let response_size = reject.message.len();
-            if response_size > MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES {
+            if response_size > MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES {
                 Err(format!(
-                    "Reject message size {response_size} exceeds the maximum allowed size of {MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES}"
+                    "Reject message size {response_size} exceeds the maximum allowed size of {MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES}"
                 ))
             } else {
                 Ok(())
@@ -366,7 +364,7 @@ impl CanisterHttpPoolManagerImpl {
         loop {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
-                Ok((mut response, payment_receipt)) => {
+                Ok((response, payment_receipt)) => {
                     // Drop the response if its context is no longer present in the replicated state
                     // (e.g. the request has timed out or has already been answered by enough other nodes).
                     let Some(context) = active_contexts.get(&response.id) else {
@@ -379,28 +377,6 @@ impl CanisterHttpPoolManagerImpl {
                         self.requested_id_cache.borrow_mut().remove(&response.id);
                         continue;
                     };
-
-                    // Truncate the reject message if it's too long.
-                    //
-                    // The "happy path" response is organically bounded by max_response_bytes, however we need to set a
-                    // limit for the error message as well.
-                    //
-                    // The current limit is 1KB, which should be reasonable for an error message.
-                    if let CanisterHttpResponseContent::Reject(reject) = &mut response.content
-                        && reject.message.len() > MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES
-                    {
-                        let original_len = reject.message.len();
-                        warn!(
-                            self.log,
-                            "Pruning oversized reject message for request ID {}. Original size: {}, New size: {}",
-                            response.id,
-                            original_len,
-                            MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES
-                        );
-                        reject.message = reject
-                            .message
-                            .ellipsize(MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES, 90);
-                    }
 
                     let receipt_share = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
@@ -469,8 +445,8 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["validate_shares"])
             .start_timer();
 
-        let active_contexts = &self
-            .latest_state()
+        let state = self.latest_state();
+        let active_contexts = &state
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
@@ -490,26 +466,35 @@ impl CanisterHttpPoolManagerImpl {
             .filter_map(|artifact| {
                 let share = &artifact.share;
 
+                // Reject shares from different replica versions
+                if !is_current_protocol_version(share.content.replica_version()) {
+                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                }
+
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return match is_current_protocol_version(share.content.replica_version()) {
-                        true => Some(CanisterHttpChangeAction::HandleInvalid(
-                            share.clone(),
-                            "Redundant share".into(),
-                        )),
-                        false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone())),
-                    };
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Redundant share".into(),
+                    ));
                 }
 
                 let Some(context) = active_contexts.get(&share.content.id()) else {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
-                // Invalidate shares whose refund exceeds what a single
-                // replica is allowed to claim.
-                if share.content.refund() > context.refund_status.per_replica_allowance {
+                // Invalidate shares whose claimed spent cycles exceed what a
+                // single replica is allowed to consume. Free subnets charge
+                // nothing, so their spend (used only for cost accounting) may
+                // exceed the zero allowance, up to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+                let spend_limit = context.max_http_outcall_spend();
+                if share.content.spent() > spend_limit {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
-                        "Refund is greater than replica allowance".to_string(),
+                        format!(
+                            "Spent cycles {} exceed the per-replica spend limit {}",
+                            share.content.spent(),
+                            spend_limit,
+                        ),
                     ));
                 }
 
@@ -692,12 +677,12 @@ pub mod test {
     use ic_types::CountBytes;
     use ic_types::crypto::crypto_hash;
     use ic_types::{
-        Height, NodeId, NumBytes, RegistryVersion,
+        Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
-    use ic_types_cycles::Cycles;
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use mockall::predicate::*;
     use mockall::*;
     use std::{collections::BTreeMap, str::FromStr};
@@ -762,6 +747,8 @@ pub mod test {
             pricing_version,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 
@@ -965,6 +952,110 @@ pub mod test {
 
                 let changes = pool_manager.validate_shares(&canister_http_pool);
 
+                assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
+            })
+        });
+    }
+
+    #[test]
+    fn test_removal_of_wrong_version_share_without_existing_validated_share() {
+        // A share signed under a different replica version must be removed from
+        // the unvalidated pool even when no share for the same (signer,
+        // callback) is present in the validated pool yet.
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
+
+                // A context must be present so that `next_callback_id` is 1 and
+                // the share for callback 0 is considered (id < next_callback_id).
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                // A share from a committee member with a valid signature that
+                // would otherwise be validated, but which carries an outdated
+                // replica version.
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::from_str("outdated_version").unwrap(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
+                };
+
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+
+                let share = Signed {
+                    content: response_metadata,
+                    signature,
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Note: the validated pool is intentionally left empty, so the
+                // (signer, callback) slot is free.
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(&canister_http_pool);
+
+                // The share is dropped silently (removed, not marked invalid).
+                assert_eq!(changes.len(), 1);
                 assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
             })
         });
@@ -1699,7 +1790,7 @@ pub mod test {
                 );
 
                 // 3. ARTIFACT: Create a Reject response. Its message size is valid
-                //    (i.e., less than MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES), so it should pass
+                //    (i.e., less than MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES), so it should pass
                 //    validation despite the context's zero-byte limit for success responses.
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
@@ -1755,262 +1846,6 @@ pub mod test {
     }
 
     #[test]
-    fn test_oversized_reject_message_is_pruned_not_invalidated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                // 1. SETUP: Standard dependencies.
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = dependencies(pool_config.clone(), 4);
-
-                let callback_id = CallbackId::from(5);
-                // Delegate the request to this node so it is the authorized signer
-                // and creates a share for the injected response.
-                let delegated_node_id = replica_config.node_id;
-
-                // 2. CONTEXT: Set up a NonReplicated request context in the state manager.
-                // This ensures we test the gossiping code path.
-                let request_context = test_request_context(
-                    Replication::NonReplicated(delegated_node_id),
-                    PricingVersion::Legacy,
-                    None,
-                );
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
-                            callback_id,
-                            request_context,
-                        )]))),
-                    ));
-
-                // 3. OVERSIZED RESPONSE: Define an error message that is intentionally too large.
-                let oversized_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES + 100;
-                let max_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES;
-                let oversized_message = "a".repeat(oversized_len);
-
-                let oversized_response = CanisterHttpResponse {
-                    id: callback_id,
-                    content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code: RejectCode::SysFatal,
-                        message: oversized_message,
-                    }),
-                    ..empty_canister_http_response(callback_id.get())
-                };
-
-                // 4. MOCK ADAPTER: Mock the adapter to return the oversized response once.
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-                let mut sequence = Sequence::new();
-                shim_mock
-                    .expect_try_receive()
-                    .times(1)
-                    .returning(move || {
-                        Ok((
-                            oversized_response.clone(),
-                            CanisterHttpPaymentReceipt::default(),
-                        ))
-                    })
-                    .in_sequence(&mut sequence);
-                shim_mock
-                    .expect_try_receive()
-                    .times(1)
-                    .returning(|| Err(TryReceiveError::Empty))
-                    .in_sequence(&mut sequence);
-
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
-
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager,
-                    shim,
-                    crypto,
-                    pool.get_cache(),
-                    replica_config,
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
-
-                // 5. ACTION: Call the function to generate shares from responses.
-                let change_set = pool_manager.create_shares_from_responses();
-
-                // 6. ASSERTIONS:
-                assert_eq!(
-                    change_set.len(),
-                    1,
-                    "A change action should have been created"
-                );
-
-                // Check that the action contains the *pruned* response and a share with the correct hash.
-                assert_matches!(
-                    &change_set[0],
-                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
-                        // Assert that the response message was indeed truncated.
-                        let pruned_message_len = if let CanisterHttpResponseContent::Reject(r) = &response.content {
-                            r.message.len()
-                        } else {
-                            panic!("Test failed: Expected a Reject response content");
-                        };
-                        assert_eq!(
-                            pruned_message_len, max_len,
-                            "The reject message should have been truncated to the maximum allowed length"
-                        );
-
-                        // Assert that the hash in the share matches the hash of the *truncated* response.
-                        let expected_hash = ic_types::crypto::crypto_hash(response);
-                        assert_eq!(
-                            share.content.content_hash(), &expected_hash,
-                            "The share's content hash must match the pruned response"
-                        );
-                    }
-                );
-            })
-        });
-    }
-
-    #[test]
-    fn test_oversized_reject_with_multibyte_char_is_pruned_safely() {
-        // This test ensures that when pruning an oversized reject message,
-        // the logic correctly handles multi-byte UTF-8 characters that
-        // straddle the byte limit, preventing a panic that a simple `truncate()` would cause.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                // 1. SETUP: Standard dependencies.
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = dependencies(pool_config.clone(), 4);
-
-                let callback_id = CallbackId::from(0); // Use ID that will pass validation filter
-                // Delegate the request to this node so it is the authorized signer
-                // and creates a share for the injected response.
-                let delegated_node_id = replica_config.node_id;
-
-                // 2. CONTEXT: Set up a NonReplicated request context.
-                let request_context = test_request_context(
-                    Replication::NonReplicated(delegated_node_id),
-                    PricingVersion::Legacy,
-                    None,
-                );
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
-                            callback_id,
-                            request_context,
-                        )]))),
-                    ));
-
-                // 3. MALICIOUS RESPONSE: Construct a string where a 4-byte emoji ('👍')
-                // starts 2 bytes before the limit, causing it to cross the boundary.
-                let max_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES;
-                let padding = "a".repeat(max_len - 2);
-                let emoji = "👍"; // A 4-byte character
-                let oversized_message = format!("{}{}", padding, emoji);
-
-                // Verify the setup: the message is oversized and the emoji crosses the boundary.
-                assert!(oversized_message.len() > max_len);
-                assert_eq!(padding.len(), max_len - 2);
-
-                let oversized_response = CanisterHttpResponse {
-                    id: callback_id,
-                    content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code: RejectCode::SysFatal,
-                        message: oversized_message,
-                    }),
-                    ..empty_canister_http_response(callback_id.get())
-                };
-
-                // 4. MOCK ADAPTER: Mock the adapter to return this specific response.
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-                shim_mock
-                    .expect_try_receive()
-                    .times(1)
-                    .return_once(move || {
-                        Ok((
-                            oversized_response.clone(),
-                            CanisterHttpPaymentReceipt::default(),
-                        ))
-                    });
-                shim_mock
-                    .expect_try_receive()
-                    .return_const(Err(TryReceiveError::Empty));
-
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
-
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager,
-                    shim,
-                    crypto,
-                    pool.get_cache(),
-                    replica_config,
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
-
-                // 5. ACTION: Call the function. The test will fail with a panic if
-                // the pruning logic is incorrect (i.e., not UTF-8 aware).
-                let change_set = pool_manager.create_shares_from_responses();
-
-                // 6. ASSERTIONS:
-                assert_eq!(
-                    change_set.len(),
-                    1,
-                    "A change action should have been created"
-                );
-
-                assert_matches!(
-                    &change_set[0],
-                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
-                        let pruned_message = if let CanisterHttpResponseContent::Reject(r) = &response.content {
-                            &r.message
-                        } else {
-                            panic!("Test failed: Expected a Reject response content");
-                        };
-
-                        // Assert that the pruned message is now within the byte limit.
-                        assert!(
-                            pruned_message.len() <= max_len,
-                            "The pruned message (len: {}) should not exceed the max length ({})",
-                            pruned_message.len(), max_len
-                        );
-
-                        // Assert the emoji is still present because ellipsize preserves the end of the string.
-                        assert!(
-                            pruned_message.contains(emoji),
-                            "Pruned message should still contain the emoji from the suffix"
-                        );
-
-                        // Assert that the hash in the share matches the hash of the now-pruned response.
-                        let expected_hash = ic_types::crypto::crypto_hash(response);
-                        assert_eq!(
-                            share.content.content_hash(), &expected_hash,
-                            "The share's content hash must match the pruned response"
-                        );
-                    }
-                );
-            })
-        });
-    }
-
-    #[test]
     fn test_dishonest_oversized_reject_is_invalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
@@ -2046,7 +1881,7 @@ pub mod test {
                     ));
 
                 // 3. DISHONEST ARTIFACT:
-                let oversized_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES + 1;
+                let oversized_len = MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES + 1;
                 let dishonest_response = CanisterHttpResponse {
                     id: callback_id,
                     content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
@@ -2109,7 +1944,7 @@ pub mod test {
 
                 let expected_error = format!(
                     "Http Response for request ID {} is too large: Reject message size {} exceeds the maximum allowed size of {}",
-                    callback_id, oversized_len, MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES
+                    callback_id, oversized_len, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES
                 );
                 assert_matches!(
                     &change_set[0],
@@ -2181,7 +2016,7 @@ pub mod test {
                 let reject_message =
                     "This error message is definitely longer than 10 bytes.".to_string();
                 assert!(reject_message.len() as u64 > LOW_MAX_RESPONSE_BYTES);
-                assert!(reject_message.len() <= MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES);
+                assert!(reject_message.len() <= MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES);
 
                 let reject_content = CanisterHttpReject {
                     reject_code: RejectCode::SysFatal,
@@ -2360,6 +2195,7 @@ pub mod test {
 
                 // `make_new_requests` will try to dispatch contexts to the adapter shim.
                 // Accept any number of `send` calls and treat them as no-ops.
+                #[allow(clippy::result_large_err)]
                 shim_mock.expect_send().returning(|_| Ok(()));
 
                 let mut sequence = Sequence::new();
@@ -3350,7 +3186,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_refund_greater_than_replica_allowance_is_invalid() {
+    fn test_spent_greater_than_replica_allowance_is_invalid() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
@@ -3391,7 +3227,7 @@ pub mod test {
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
-                // Build a per-replica receipt share whose refund claim is
+                // Build a per-replica receipt share whose spent claim is
                 // larger than the per-replica allowance.
                 let receipt_share = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
@@ -3402,7 +3238,7 @@ pub mod test {
                         replica_version: ReplicaVersion::default(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt {
-                        refund: Cycles::new(200),
+                        spent: Cycles::new(200),
                     },
                 };
                 let signature = crypto
@@ -3444,7 +3280,115 @@ pub mod test {
                 assert_matches!(
                     &changes[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Refund is greater than replica allowance"
+                        if reason == "Spent cycles 200 exceed the per-replica spend limit 100"
+                );
+            })
+        });
+    }
+
+    #[test]
+    fn test_spent_greater_than_replica_allowance_is_valid_on_free_subnet() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+
+                // A free subnet grants a zero per-replica allowance (nothing is
+                // charged), yet the reported spend is still accumulated for cost
+                // accounting and may exceed that allowance. The `Free` cost
+                // schedule is pinned in the request context, raising the spend
+                // limit to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+                let request = CanisterHttpRequestContext {
+                    refund_status: RefundStatus {
+                        refundable_cycles: Cycles::new(0),
+                        per_replica_allowance: Cycles::new(0),
+                        refunded_cycles: Cycles::new(0),
+                        refunding_nodes: BTreeSet::new(),
+                    },
+                    cost_schedule: CanisterCyclesCostSchedule::Free,
+                    ..test_request_context(
+                        Replication::FullyReplicated,
+                        PricingVersion::Legacy,
+                        None,
+                    )
+                };
+
+                let state =
+                    state_with_pending_http_calls(BTreeMap::from([(CallbackId::from(0), request)]));
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(Height::from(1), Arc::new(state)));
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Build a per-replica receipt share whose spent claim exceeds the
+                // (zero) per-replica allowance but stays below the free-subnet
+                // maximum. On a `Normal` schedule this would be rejected as
+                // overspending (see the test above); on a `Free` schedule it must
+                // not be.
+                let receipt_share = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt {
+                        spent: Cycles::new(200),
+                    },
+                };
+                let signature = crypto
+                    .sign(
+                        &receipt_share,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+                let share = Signed {
+                    content: receipt_share,
+                    signature,
+                };
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(&canister_http_pool);
+
+                // The share must not be invalidated for overspending.
+                assert_eq!(changes.len(), 1);
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::MoveToValidated(_),
+                    "free-subnet share was wrongly rejected: {:?}",
+                    changes[0]
                 );
             })
         });

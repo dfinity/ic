@@ -39,7 +39,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion, ReplicaVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
@@ -59,7 +59,7 @@ use ic_types::{
     signature::BasicSignature,
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use rand::Rng;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 use std::{
@@ -408,6 +408,64 @@ fn timeouts_bypass_max_responses_per_block() {
             assert_eq!(parsed.num_non_timeout_responses(), 0);
             assert_eq!(parsed.timeouts.len(), num_contexts);
 
+            payload_builder
+                .validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&validation_context),
+                    &payload,
+                    &[],
+                )
+                .unwrap();
+        },
+    );
+}
+
+#[test]
+fn flexible_timeouts_bypass_max_responses_per_block() {
+    let subnet_size = 4;
+    let num_contexts = CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK + 50;
+
+    test_config_with_http_feature(
+        true,
+        subnet_size,
+        |mut payload_builder, _canister_http_pool| {
+            let committee: BTreeSet<_> = (0..subnet_size as u64).map(node_test_id).collect();
+
+            // `num_contexts` flexible request contexts, all at time = UNIX_EPOCH.
+            let contexts: Vec<_> = (0..num_contexts as u64)
+                .map(|id| {
+                    (
+                        CallbackId::new(id),
+                        flexible_request_context(committee.clone(), 1, subnet_size as u32),
+                    )
+                })
+                .collect();
+            inject_request_contexts(&mut payload_builder, contexts);
+
+            // Validation time past the timeout interval so every context times out.
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+            };
+
+            let payload = payload_builder.build_payload(
+                Height::new(1),
+                TEST_MAX_PAYLOAD_BYTES,
+                &[],
+                &validation_context,
+            );
+
+            let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
+
+            // The builder emits all timed-out flexible requests, ungated by the cap.
+            assert_eq!(parsed.flexible_errors.len(), num_contexts);
+            assert!(parsed.responses.is_empty());
+            assert!(parsed.timeouts.is_empty());
+            // Flexible timeouts must not count against the per-block response cap.
+            assert_eq!(parsed.num_non_timeout_responses(), 0);
+
+            // The builder's own honest payload must pass validation.
             payload_builder
                 .validate_payload(
                     Height::new(1),
@@ -814,6 +872,8 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Insert the context in the replicated state
@@ -886,6 +946,8 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Insert the context in the replicated state
@@ -959,6 +1021,8 @@ fn non_replicated_share_is_ignored_if_content_is_missing() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
@@ -1010,6 +1074,8 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1040,15 +1106,15 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_non_replicated() {
+fn validate_payload_fails_for_spent_exceeding_allowance_non_replicated() {
     let delegated_node_id = node_test_id(1);
     let callback_id = CallbackId::from(99);
 
     let (response, metadata) = test_response_and_metadata(callback_id.get());
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
-    add_signer_with_excess_refund_to_proof(&mut proof, delegated_node_id);
+    add_signer_with_excess_spent_to_proof(&mut proof, delegated_node_id);
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         4,
         vec![(
             callback_id,
@@ -1063,17 +1129,17 @@ fn validate_payload_fails_for_refund_exceeding_allowance_non_replicated() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_fully_replicated() {
+fn validate_payload_fails_for_spent_exceeding_allowance_fully_replicated() {
     let num_nodes = 4;
     let callback_id = CallbackId::from(99);
 
     let (response, metadata) = test_response_and_metadata(callback_id.get());
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
     for node in 0..num_nodes as u64 {
-        add_signer_with_excess_refund_to_proof(&mut proof, node_test_id(node));
+        add_signer_with_excess_spent_to_proof(&mut proof, node_test_id(node));
     }
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         num_nodes,
         vec![(callback_id, request_context(Replication::FullyReplicated))],
         default_validation_context(),
@@ -1085,18 +1151,67 @@ fn validate_payload_fails_for_refund_exceeding_allowance_fully_replicated() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_divergence() {
+fn validate_payload_accepts_spent_exceeding_allowance_on_free_subnet() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(99);
+
+    let (response, metadata) = test_response_and_metadata(callback_id.get());
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for node in 0..num_nodes as u64 {
+        add_signer_with_excess_spent_to_proof(&mut proof, node_test_id(node));
+    }
+
+    test_config_with_http_feature(true, num_nodes, |mut payload_builder, _| {
+        // Pin the validating replica's own subnet to a `Free` cost schedule, so
+        // the spend limit becomes `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET` rather
+        // than the (zero) per-replica allowance.
+        inject_request_contexts_with_cost_schedule(
+            &mut payload_builder,
+            vec![(callback_id, request_context(Replication::FullyReplicated))],
+            Some(CanisterCyclesCostSchedule::Free),
+        );
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(CanisterHttpPayload {
+                responses: vec![proof],
+                ..Default::default()
+            }),
+            &[],
+        );
+        // The receipt's spend exceeds the (zero) allowance, so on the default
+        // (`Normal`) schedule this same payload is rejected (see
+        // `validate_payload_fails_for_spent_exceeding_allowance_fully_replicated`).
+        // On a free subnet it must NOT be rejected as overspending. (The payload
+        // still fails later, unrelated signature verification of the fake shares,
+        // but must never fail with `SpentExceedsLimit`.)
+        assert!(
+            !matches!(
+                validation_result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. },
+                    ),
+                ))
+            ),
+            "free-subnet payload wrongly rejected for overspending: {validation_result:?}"
+        );
+    });
+}
+
+#[test]
+fn validate_payload_fails_for_spent_exceeding_allowance_divergence() {
     let callback_id = CallbackId::from(99);
 
     let (_response, metadata) = test_response_and_metadata(callback_id.get());
     let payload = CanisterHttpPayload {
         divergence_responses: vec![CanisterHttpResponseDivergence {
-            shares: vec![share_with_excess_refund(0, &metadata)],
+            shares: vec![share_with_excess_spent(0, &metadata)],
         }],
         ..Default::default()
     };
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         4,
         vec![(callback_id, request_context(Replication::FullyReplicated))],
         default_validation_context(),
@@ -1105,7 +1220,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_divergence() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_flexible_response() {
+fn validate_payload_fails_for_spent_exceeding_allowance_flexible_response() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(99);
@@ -1119,13 +1234,13 @@ fn validate_payload_fails_for_refund_exceeding_allowance_flexible_response() {
             callback_id,
             responses: vec![FlexibleCanisterHttpResponseWithProof {
                 response,
-                proof: share_with_excess_refund(0, &metadata),
+                proof: share_with_excess_spent(0, &metadata),
             }],
         }],
         ..Default::default()
     };
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         num_nodes,
         vec![(callback_id, flexible_request_context(committee, 1, 4))],
         default_validation_context(),
@@ -1134,7 +1249,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_flexible_response() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_too_many_rejects() {
+fn validate_payload_fails_for_spent_exceeding_allowance_too_many_rejects() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(99);
@@ -1151,13 +1266,13 @@ fn validate_payload_fails_for_refund_exceeding_allowance_too_many_rejects() {
             callback_id,
             reject_responses: vec![FlexibleCanisterHttpResponseWithProof {
                 response,
-                proof: share_with_excess_refund(0, &metadata),
+                proof: share_with_excess_spent(0, &metadata),
             }],
         }],
         ..Default::default()
     };
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         num_nodes,
         vec![(callback_id, flexible_request_context(committee, 1, 4))],
         default_validation_context(),
@@ -1166,7 +1281,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_too_many_rejects() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_responses_too_large() {
+fn validate_payload_fails_for_spent_exceeding_allowance_responses_too_large() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(99);
@@ -1175,16 +1290,16 @@ fn validate_payload_fails_for_refund_exceeding_allowance_responses_too_large() {
     let payload = CanisterHttpPayload {
         flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
             callback_id,
-            all_seen_shares: vec![share_with_excess_refund(0, &metadata)],
+            all_seen_shares: vec![share_with_excess_spent(0, &metadata)],
             // Match the committee size and context `min_responses` so validation
-            // reaches the per-share refund check.
+            // reaches the per-share spent check.
             total_requests: num_nodes as u32,
             min_responses: 2,
         }],
         ..Default::default()
     };
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         num_nodes,
         vec![(callback_id, flexible_request_context(committee, 2, 4))],
         default_validation_context(),
@@ -1214,6 +1329,8 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Inject this context into the state reader.
@@ -1283,6 +1400,8 @@ fn validate_payload_fails_for_response_with_no_signatures() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1359,6 +1478,8 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Inject this context into the state reader.
@@ -1436,6 +1557,8 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // 2. Inject this context into the state reader
@@ -1628,17 +1751,17 @@ pub(crate) fn add_signer_to_proof(proof: &mut CanisterHttpResponseWithConsensus,
     );
 }
 
-/// A payment receipt whose refund exceeds the default (zero) per-replica
+/// A payment receipt whose spent cycles exceed the default (zero) per-replica
 /// allowance.
 fn receipt_exceeding_allowance() -> CanisterHttpPaymentReceipt {
     CanisterHttpPaymentReceipt {
-        refund: Cycles::new(1),
+        spent: Cycles::new(1),
     }
 }
 
 /// Builds a share for `metadata` signed by `signer_node` whose payment receipt
-/// claims a refund exceeding the default per-replica allowance.
-fn share_with_excess_refund(
+/// claims spent cycles exceeding the default per-replica allowance.
+fn share_with_excess_spent(
     signer_node: u64,
     metadata: &CanisterHttpResponseMetadata,
 ) -> CanisterHttpResponseShare {
@@ -1652,8 +1775,8 @@ fn share_with_excess_refund(
 }
 
 /// Inserts a fake signature for `signer` together with a payment receipt whose
-/// refund exceeds the default per-replica allowance into an aggregated proof.
-fn add_signer_with_excess_refund_to_proof(
+/// spent cycles exceed the default per-replica allowance into an aggregated proof.
+fn add_signer_with_excess_spent_to_proof(
     proof: &mut CanisterHttpResponseWithConsensus,
     signer: NodeId,
 ) {
@@ -1668,8 +1791,8 @@ fn add_signer_with_excess_refund_to_proof(
 
 /// Configures a payload builder with `num_nodes` nodes and the given request
 /// `contexts`, validates `payload`, and asserts that it is rejected because a
-/// payment receipt's refund exceeds the per-replica allowance.
-fn assert_payload_rejected_for_excess_refund(
+/// payment receipt's spent cycles exceed the per-replica allowance.
+fn assert_payload_rejected_for_excess_spent(
     num_nodes: usize,
     contexts: Vec<(CallbackId, CanisterHttpRequestContext)>,
     validation_context: ValidationContext,
@@ -1687,13 +1810,13 @@ fn assert_payload_rejected_for_excess_refund(
             validation_result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::RefundExceedsAllowance {
-                        refund,
-                        per_replica_allowance,
+                    InvalidCanisterHttpPayloadReason::SpentExceedsLimit {
+                        spent,
+                        limit,
                     },
                 ),
-            )) if refund == receipt_exceeding_allowance().refund
-                && per_replica_allowance == Cycles::new(0)
+            )) if spent == receipt_exceeding_allowance().spent
+                && limit == Cycles::new(0)
         );
     });
 }
@@ -4594,8 +4717,23 @@ pub(crate) fn inject_request_contexts(
     payload_builder: &mut CanisterHttpPayloadBuilderImpl,
     contexts: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
 ) {
+    inject_request_contexts_with_cost_schedule(payload_builder, contexts, None);
+}
+
+/// Like [`inject_request_contexts`], but also overrides the cost schedule pinned
+/// in each injected request context. When `cost_schedule` is `Some`, every
+/// context's `cost_schedule` is set to that value (the single source of truth
+/// used during validation); when `None`, the contexts are left unchanged.
+pub(crate) fn inject_request_contexts_with_cost_schedule(
+    payload_builder: &mut CanisterHttpPayloadBuilderImpl,
+    contexts: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
+) {
     let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-    for (cb, ctx) in contexts {
+    for (cb, mut ctx) in contexts {
+        if let Some(cost_schedule) = cost_schedule {
+            ctx.cost_schedule = cost_schedule;
+        }
         init_state
             .metadata
             .subnet_call_context_manager
@@ -4640,6 +4778,8 @@ pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestCo
         pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         refund_status: ic_types::canister_http::RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     }
 }
 
@@ -4665,6 +4805,8 @@ fn flexible_request_context(
         pricing_version: ic_types::canister_http::PricingVersion::PayAsYouGo,
         refund_status: ic_types::canister_http::RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     }
 }
 

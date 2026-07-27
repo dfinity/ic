@@ -372,6 +372,7 @@ fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
         }
         let length = length.min(max_length);
         let decoded_block_range = decode_block_range(start, length, decode_icrc1_block);
+        #[allow(clippy::explicit_counter_loop)]
         for block in decoded_block_range {
             blocks.push(BlockWithId {
                 id: id.clone(),

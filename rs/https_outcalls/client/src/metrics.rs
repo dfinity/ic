@@ -5,6 +5,7 @@ use prometheus::{Histogram, HistogramVec, IntCounterVec};
 const LABEL_STATUS_CODE: &str = "status_code";
 const LABEL_HTTP_METHOD: &str = "http_method";
 const LABEL_STATUS: &str = "status";
+const LABEL_REPLICATION: &str = "replication";
 
 #[derive(Clone)]
 pub struct Metrics {
@@ -35,7 +36,7 @@ impl Metrics {
             request_total: metrics_registry.int_counter_vec(
                 "canister_http_requests_total",
                 "Canister http request results returned to consensus.",
-                &[LABEL_STATUS, LABEL_HTTP_METHOD],
+                &[LABEL_STATUS, LABEL_HTTP_METHOD, LABEL_REPLICATION],
             ),
         }
     }
