@@ -605,6 +605,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub content_size: u32,
     #[prost(bool, tag = "10")]
     pub is_reject: bool,
+    #[prost(message, optional, tag = "11")]
+    pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CanisterHttpShare {
@@ -631,6 +633,8 @@ pub struct FlexibleCanisterHttpResponses {
     pub callback_id: u64,
     #[prost(message, repeated, tag = "2")]
     pub responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
+    #[prost(message, optional, tag = "3")]
+    pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FlexibleCanisterHttpTimeout {}
@@ -647,6 +651,8 @@ pub struct FlexibleCanisterHttpResponsesTooLarge {
 pub struct FlexibleCanisterHttpTooManyRejects {
     #[prost(message, repeated, tag = "1")]
     pub reject_responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
+    #[prost(message, optional, tag = "2")]
+    pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpError {
