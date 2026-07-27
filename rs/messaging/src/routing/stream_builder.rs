@@ -836,17 +836,6 @@ impl StreamBuilderImpl {
         state.take_refunds(|refund| {
             match network_topology.route(refund.recipient().get()) {
                 Some(dst_subnet_id) => {
-                    // A cooling down destination subnet must not be sent any messages.
-                    // Hold on to the refund until it stops cooling down; dropping it
-                    // would lose the cycles it carries.
-                    if network_topology.is_cooling_down(&dst_subnet_id) {
-                        self.observe_message_type_status(
-                            LABEL_VALUE_TYPE_REFUND,
-                            LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
-                        );
-                        return false;
-                    }
-
                     let is_loopback_stream = dst_subnet_id == self.subnet_id;
                     let is_engine_dst = !is_loopback_stream
                         && network_topology
@@ -854,6 +843,9 @@ impl StreamBuilderImpl {
                             .get(&dst_subnet_id)
                             .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
                     let is_engine_src = !is_loopback_stream && own_is_engine;
+                    // Checked before cooling down: a refund always carries cycles, so
+                    // one at an engine boundary is illegal there permanently, not
+                    // transiently, and must still raise the critical error below.
                     if is_engine_dst || is_engine_src {
                         // A refund destined to cross the engine boundary should not exist: a
                         // refund is only produced for a dropped cycle-bearing message, but a
@@ -876,6 +868,18 @@ impl StreamBuilderImpl {
                         );
                         return true;
                     }
+
+                    // A cooling down destination subnet must not be sent any messages.
+                    // Hold on to the refund until it stops cooling down; dropping it
+                    // would lose the cycles it carries.
+                    if network_topology.is_cooling_down(&dst_subnet_id) {
+                        self.observe_message_type_status(
+                            LABEL_VALUE_TYPE_REFUND,
+                            LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
+                        );
+                        return false;
+                    }
+
                     let stream = streams.entry(dst_subnet_id).or_default();
                     if is_loopback_stream
                         || (stream.refund_count() < refund_limit

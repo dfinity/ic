@@ -1693,6 +1693,35 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
         );
         assert_eq_critical_errors(0, 0, 0, &metrics_registry);
     });
+
+    // A refund always carries cycles, so it is always illegal at the boundary: it is
+    // dropped with a critical error rather than retained because of cooling down.
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut provided_state, metrics_registry) = fixture(&log);
+        provided_state.add_refund(remote_canister_id, Cycles::new(100));
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        assert!(result_state.refunds().is_empty());
+        assert_eq!(
+            0,
+            result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .map_or(0, |stream| stream.refund_count())
+        );
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REFUND),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+        assert_eq_critical_errors(0, 0, 1, &metrics_registry);
+    });
 }
 
 /// Given a stream with some (potentially zero) initial refunds and canister
