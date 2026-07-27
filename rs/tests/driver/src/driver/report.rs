@@ -1,11 +1,9 @@
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::{Display, Formatter, Result},
-    path::PathBuf,
     time::{Duration, SystemTime},
 };
 
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::driver::event::TaskId;
@@ -102,10 +100,10 @@ impl SystemGroupSummary {
             .all_reports()
             .fold(0.0, |total, report| total + report.runtime);
         let mut out = String::new();
-        out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        out.push_str("<testsuites>\n");
+        out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        out.push_str("<testsuites>");
         out.push_str(&format!(
-            "  <testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" errors=\"0\" skipped=\"{}\" time=\"{:.3}\">\n",
+            "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" errors=\"0\" skipped=\"{}\" time=\"{:.3}\">",
             suite,
             self.all_reports().count(),
             self.failure.len(),
@@ -121,36 +119,9 @@ impl SystemGroupSummary {
         for report in self.skipped.iter() {
             out.push_str(&report.to_junit_testcase(&suite, TaskOutcome::Skipped));
         }
-        out.push_str("  </testsuite>\n");
-        out.push_str("</testsuites>\n");
+        out.push_str("</testsuite>");
+        out.push_str("</testsuites>");
         out
-    }
-
-    /// Writes this summary as a JUnit XML report to `$XML_OUTPUT_FILE`, the path
-    /// Bazel tells a test to write its report to. Returns the path written to, or
-    /// `None` when the variable isn't set, i.e. we're not running under
-    /// `bazel test`.
-    ///
-    /// Writing this file matters beyond the report itself: `test.xml` is a
-    /// declared output of every Bazel test action, so when a test doesn't produce
-    /// it, Bazel runs a *second* spawn
-    /// (`@bazel_tools//tools/test:test_xml_generator`) to derive it from
-    /// `test.log`. Under remote execution that spawn has to queue for a free
-    /// worker -- often for minutes -- to do well under a second of work. Writing
-    /// the file ourselves makes Bazel skip that spawn entirely.
-    pub fn write_junit_xml_report(&self) -> anyhow::Result<Option<PathBuf>> {
-        let Some(path) = std::env::var_os("XML_OUTPUT_FILE") else {
-            return Ok(None);
-        };
-        let path = PathBuf::from(path);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create the directory of {}", path.display()))?;
-        }
-        std::fs::write(&path, self.to_junit_xml()).with_context(|| {
-            format!("Failed to write the JUnit XML report to {}", path.display())
-        })?;
-        Ok(Some(path))
     }
 
     pub fn to_map(&self) -> HashMap<String, (f64, Option<String>)> {
@@ -182,7 +153,7 @@ enum TaskOutcome {
 /// under test, and a single unescaped `<` or a stray escape sequence from a
 /// coloured log line would make the whole report unparsable.
 fn xml_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
+    let mut out = String::new();
     for c in s.chars() {
         match c {
             '&' => out.push_str("&amp;"),
@@ -229,9 +200,9 @@ impl TaskReport {
         res
     }
 
-    /// Renders this task as a JUnit `<testcase>` element, already escaped and
-    /// indented to sit inside a `<testsuite>`. `classname` is expected to be
-    /// escaped already.
+    /// Renders this task as a JUnit `<testcase>` element, already escaped to
+    /// sit inside a `<testsuite>`. `classname` is expected to be escaped
+    /// already.
     fn to_junit_testcase(&self, classname: &str, outcome: TaskOutcome) -> String {
         // Messages are stored with newlines escaped; undo that so the report is
         // readable, exactly like `pretty_print` does.
@@ -250,15 +221,12 @@ impl TaskReport {
         let body = match outcome {
             TaskOutcome::Passed => String::new(),
             TaskOutcome::Failed => format!(
-                "\n      <failure message=\"{}\">{}</failure>\n    ",
+                "<failure message=\"{}\">{}</failure>",
                 xml_escape(&summary),
                 xml_escape(message.as_deref().unwrap_or("")),
             ),
             TaskOutcome::Skipped => {
-                format!(
-                    "\n      <skipped message=\"{}\"/>\n    ",
-                    xml_escape(&summary)
-                )
+                format!("<skipped message=\"{}\"/>", xml_escape(&summary))
             }
         };
         // `status` follows GoogleTest's convention, which Bazel's own
@@ -269,11 +237,10 @@ impl TaskReport {
             TaskOutcome::Skipped => "notrun",
         };
         format!(
-            "    <testcase name=\"{}\" classname=\"{}\" status=\"{}\" duration=\"{:.3}\" time=\"{:.3}\">{}</testcase>\n",
+            "<testcase name=\"{}\" classname=\"{}\" status=\"{}\" time=\"{:.3}\">{}</testcase>",
             xml_escape(&self.name),
             classname,
             status,
-            self.runtime,
             self.runtime,
             body,
         )
@@ -377,8 +344,8 @@ mod tests {
         let summary = summary();
         let suite = xml_escape(&summary.display_name());
         let xml = summary.to_junit_xml();
-        assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites>\n"));
-        assert!(xml.ends_with("  </testsuite>\n</testsuites>\n"));
+        assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?><testsuites>"));
+        assert!(xml.ends_with("</testsuite></testsuites>"));
         assert!(
             xml.contains(&format!(
                 "<testsuite name=\"{suite}\" tests=\"3\" failures=\"1\" errors=\"0\" skipped=\"1\" time=\"13.750\">"
@@ -387,13 +354,13 @@ mod tests {
         );
         assert!(
             xml.contains(&format!(
-                "<testcase name=\"setup\" classname=\"{suite}\" status=\"run\" duration=\"1.500\" time=\"1.500\"></testcase>"
+                "<testcase name=\"setup\" classname=\"{suite}\" status=\"run\" time=\"1.500\"></testcase>"
             )),
             "a passing task has an empty testcase body: {xml}"
         );
         assert!(
             xml.contains(&format!(
-                "<testcase name=\"teardown\" classname=\"{suite}\" status=\"notrun\" duration=\"0.000\" time=\"0.000\">"
+                "<testcase name=\"teardown\" classname=\"{suite}\" status=\"notrun\" time=\"0.000\">"
             )),
             "a skipped task is reported as notrun: {xml}"
         );
