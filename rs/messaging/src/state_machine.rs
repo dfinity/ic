@@ -253,9 +253,19 @@ impl StateMachine for StateMachineImpl {
         // responded to during the round have already been moved into the
         // delivered collection and can therefore receive their refunds and have
         // their consumed cycles reported.
-        deliver_canister_http_spent(&canister_http_spent, &mut state_after_execution, &self.log);
+        deliver_canister_http_spent(
+            &canister_http_spent,
+            &mut state_after_execution,
+            &self.log,
+            &self.metrics.canister_http_spent_metrics,
+        );
         let batch_time = state_after_execution.time();
-        refund_timed_out_canister_http_contexts(&mut state_after_execution, batch_time, &self.log);
+        refund_timed_out_canister_http_contexts(
+            &mut state_after_execution,
+            batch_time,
+            &self.log,
+            &self.metrics.canister_http_spent_metrics,
+        );
 
         execution_timer.observe_duration();
 
