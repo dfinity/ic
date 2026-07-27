@@ -327,6 +327,16 @@ impl NetworkTopology {
             .map(|subnet_topology| subnet_topology.nodes.len())
     }
 
+    /// Returns whether the given subnet is cooling down. Unknown subnets are
+    /// not considered to be cooling down.
+    ///
+    /// See [`SubnetTopology::cooling_down`] for the exact semantics.
+    pub fn is_cooling_down(&self, subnet_id: &SubnetId) -> bool {
+        self.subnets
+            .get(subnet_id)
+            .is_some_and(|subnet_topology| subnet_topology.cooling_down)
+    }
+
     /// Returns the cycles cost schedule of the given subnet.
     pub fn get_cost_schedule(&self, subnet_id: &SubnetId) -> Option<CanisterCyclesCostSchedule> {
         self.subnets
@@ -408,6 +418,29 @@ pub struct SubnetTopology {
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
+    /// Whether the subnet is "cooling down", i.e. quiescing: it stops taking on
+    /// new work and settles the work it is already tracking, so that its state
+    /// converges to a state that no longer changes. While a subnet is cooling
+    /// down:
+    ///
+    ///  * All ingress messages addressed to it are rejected with
+    ///    `RejectCode::SysTransient`: by the ingress filter on the receiving
+    ///    nodes, so they never make it into a block; and during block
+    ///    validation, so a block containing such a message is invalid.
+    ///  * All inter-canister requests addressed to it are rejected with
+    ///    `RejectCode::SysTransient` by the sending subnet, before they are
+    ///    routed into a stream. Responses and anonymous refunds addressed to it
+    ///    are instead retained by the sender (in canister output queues and the
+    ///    refund pool, respectively) until it stops cooling down.
+    ///  * It executes no canister messages: the inner round only drains its
+    ///    subnet queues.
+    ///  * It retains no pending `stop_canister` request: a canister that is ready
+    ///    to stop is stopped, and every other stop context is rejected (rather than
+    ///    only those that timed out). Unlike a canister's status, such a request is
+    ///    tracked outside the canister, in the subnet call context manager, so
+    ///    leaving one pending would leave state behind that a canister-level view
+    ///    of the subnet does not capture.
+    pub cooling_down: bool,
 }
 
 /// Only rented subnets, i.e., application subnets on a "free" cost schedule,

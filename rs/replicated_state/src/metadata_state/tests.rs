@@ -453,6 +453,7 @@ fn network_topology_roundtrip_encoding() {
         public_key: vec![4, 5, 6],
         nodes: [node_test_id(3)].into_iter().collect(),
         subnet_type: SubnetType::CloudEngine,
+        cooling_down: true,
         ..Default::default()
     };
 
@@ -3177,6 +3178,29 @@ fn make_network_topology_with_subnet(
         subnets: btreemap! { subnet_id => subnet_topology },
         ..Default::default()
     }
+}
+
+#[test]
+fn network_topology_is_cooling_down() {
+    let cooling_down_subnet_id = subnet_test_id(1);
+    let other_subnet_id = subnet_test_id(2);
+    let unknown_subnet_id = subnet_test_id(3);
+
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            cooling_down_subnet_id => SubnetTopology {
+                cooling_down: true,
+                ..Default::default()
+            },
+            other_subnet_id => SubnetTopology::default(),
+        },
+        ..Default::default()
+    };
+
+    assert!(network_topology.is_cooling_down(&cooling_down_subnet_id));
+    assert!(!network_topology.is_cooling_down(&other_subnet_id));
+    // An unknown subnet is not considered to be cooling down.
+    assert!(!network_topology.is_cooling_down(&unknown_subnet_id));
 }
 
 #[test]

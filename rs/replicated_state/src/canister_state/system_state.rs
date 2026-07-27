@@ -1561,12 +1561,13 @@ impl SystemState {
     ///
     /// Returns a tuple of:
     ///  * a boolean indicating whether the canister has stopped,
-    ///  * all stop contexts if the canister has stopped; or the expired stop
-    ///    contexts only if the canister is still stopping.
+    ///  * all stop contexts if the canister has stopped (to be replied to); or, if
+    ///    the canister is still stopping, only those stop contexts for which
+    ///    `should_reject` holds (to be rejected), with the rest retained.
     #[must_use]
     pub fn try_stop_canister(
         &mut self,
-        is_expired: impl Fn(&StopCanisterContext) -> bool,
+        should_reject: impl Fn(&StopCanisterContext) -> bool,
     ) -> (bool, Vec<StopCanisterContext>) {
         match self.status {
             // Canister is not stopping so we can skip it.
@@ -1593,17 +1594,17 @@ impl SystemState {
                 ref mut stop_contexts,
                 ..
             } => {
-                // Return any stop contexts that have timed out.
-                let mut expired_stop_contexts = Vec::new();
+                // Return any stop contexts that are to be rejected.
+                let mut rejected_stop_contexts = Vec::new();
                 stop_contexts.retain(|stop_context| {
-                    if is_expired(stop_context) {
-                        expired_stop_contexts.push(stop_context.clone());
+                    if should_reject(stop_context) {
+                        rejected_stop_contexts.push(stop_context.clone());
                         false
                     } else {
                         true
                     }
                 });
-                (false, expired_stop_contexts)
+                (false, rejected_stop_contexts)
             }
         }
     }

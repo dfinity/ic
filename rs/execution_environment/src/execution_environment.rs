@@ -424,6 +424,8 @@ enum StopCanisterReply {
     Completed,
     // The stop request timed out.
     Timeout,
+    // The stop request was rejected because the subnet is cooling down.
+    SubnetCoolingDown,
 }
 
 /// ExecutionEnvironment is the component responsible for executing messages
@@ -3423,6 +3425,20 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
+        // While the subnet is cooling down it accepts no ingress messages at all, so
+        // that they never make it into a block. The same check is applied during
+        // block validation (see `IngressSelector::validate_ingress_payload()`), which
+        // is what actually guarantees it.
+        if state.is_own_subnet_cooling_down() {
+            return Err(UserError::new(
+                ErrorCode::SubnetCoolingDown,
+                format!(
+                    "Subnet {} is cooling down and does not accept ingress messages",
+                    state.metadata.own_subnet_id
+                ),
+            ));
+        }
+
         let canister = |canister_id: CanisterId| -> Result<&CanisterState, UserError> {
             match state.canister_state(&canister_id) {
                 Some(canister) => Ok(canister),
@@ -4635,6 +4651,14 @@ impl ExecutionEnvironment {
                         ErrorCode::StopCanisterRequestTimeout,
                         "Stop canister request timed out".to_string(),
                     )),
+                    StopCanisterReply::SubnetCoolingDown => IngressState::Failed(UserError::new(
+                        ErrorCode::SubnetCoolingDown,
+                        format!(
+                            "Subnet {} is cooling down, so canister {canister_id}'s stop \
+                                request was rejected",
+                            self.own_subnet_id
+                        ),
+                    )),
                 };
                 self.ingress_history_writer.set_status(
                     state,
@@ -4662,6 +4686,14 @@ impl ExecutionEnvironment {
                     StopCanisterReply::Timeout => Payload::Reject(RejectContext::new(
                         RejectCode::SysTransient,
                         "Stop canister request timed out",
+                    )),
+                    StopCanisterReply::SubnetCoolingDown => Payload::Reject(RejectContext::new(
+                        RejectCode::SysTransient,
+                        format!(
+                            "Subnet {} is cooling down, so canister {canister_id}'s stop request \
+                            was rejected",
+                            self.own_subnet_id
+                        ),
                     )),
                 };
                 let response = ic_types::messages::Response {
@@ -4715,18 +4747,28 @@ impl ExecutionEnvironment {
         }
     }
 
-    /// Checks for stopping canisters and performs the following:
-    ///   1. If there are stop contexts that have timed out, respond to them.
-    ///   2. If any stopping canisters are ready to stop, transition them to
-    ///      be fully stopped and reply to the corresponding stop contexts.
+    /// Iterates over all `Stopping` canisters and, for each one:
+    ///   1. If it is ready to stop, transitions it to `Stopped` and replies to all
+    ///      of its stop contexts with a success.
+    ///   2. Otherwise, rejects those of its stop contexts that are to be rejected,
+    ///      retaining the rest. A stop context is rejected either because it timed
+    ///      out (it is older than `stop_canister_timeout_duration`) or because the
+    ///      subnet is cooling down (which must retain no stop context at all).
     ///
-    /// Responses to the pending stop messages are written to ingress history
-    /// or returned to the calling canisters respectively.
+    /// Replying to a stop context also removes the corresponding call from the
+    /// subnet call context manager. Replies are written to ingress history or
+    /// returned to the calling canisters respectively.
     pub fn process_stopping_canisters(
         &self,
         mut state: ReplicatedState,
         current_round: ExecutionRound,
     ) -> ReplicatedState {
+        // A cooling down subnet must not hold on to any pending `stop_canister`
+        // request: unlike the canister's status, the corresponding call is tracked
+        // outside the canister, in the subnet call context manager. Rejecting every
+        // stop context below achieves exactly that.
+        let is_cooling_down = state.is_own_subnet_cooling_down();
+
         let mut canister_states = state.take_canister_states();
         let time = state.time();
 
@@ -4739,6 +4781,14 @@ impl ExecutionEnvironment {
             let canister = Arc::make_mut(canister);
             let (stopped, stop_contexts) =
                 canister.system_state.try_stop_canister(|stop_context| {
+                    // A cooling down subnet rejects every stop context. Note that a
+                    // canister that is ready to stop is still stopped (and its stop
+                    // contexts replied to with `Completed`), as that also resolves
+                    // the corresponding calls.
+                    if is_cooling_down {
+                        return true;
+                    }
+                    // Otherwise, reject the stop context iff it has timed out.
                     match stop_context.call_id() {
                         Some(call_id) => {
                             let sc_time = state
@@ -4768,6 +4818,8 @@ impl ExecutionEnvironment {
                     time,
                     if stopped {
                         StopCanisterReply::Completed
+                    } else if is_cooling_down {
+                        StopCanisterReply::SubnetCoolingDown
                     } else {
                         StopCanisterReply::Timeout
                     },

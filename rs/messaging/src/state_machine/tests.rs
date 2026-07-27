@@ -139,6 +139,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             chain_keys_held: BTreeSet::new(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: BTreeSet::new(),
+            cooling_down: false,
         },
     );
 
@@ -602,6 +603,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             chain_keys_held: BTreeSet::new(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: BTreeSet::new(),
+            cooling_down: false,
         },
     );
     subnets.insert(SUBNET_1, SubnetTopology::default());

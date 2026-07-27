@@ -951,6 +951,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
                 subnet_test_id(1) => SubnetTopology {
                     public_key: vec![5, 6, 7, 8],
@@ -960,6 +961,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
                 subnet_test_id(2) => SubnetTopology {
                     public_key: vec![9, 10, 11, 12],
@@ -969,6 +971,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
                 subnet_test_id(3) => SubnetTopology {
                     public_key: vec![13, 14, 15, 16],
@@ -978,6 +981,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 }
             });
             network_topology.set_routing_table(
@@ -1218,6 +1222,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
                 subnet_test_id(1) => SubnetTopology {
                     public_key: vec![5, 6, 7, 8],
@@ -1227,6 +1232,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 }
             });
             network_topology.set_routing_table(

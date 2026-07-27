@@ -27,8 +27,8 @@ use ic_test_utilities_types::ids::{
 };
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{
-    CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE, Payload, Refund,
-    RejectContext, Request, RequestOrResponse, Response, StreamMessage,
+    CallbackId, CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE, Payload,
+    Refund, RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
@@ -1149,6 +1149,187 @@ fn build_streams_drops_refunds_at_engine_boundary() {
             );
         });
     }
+}
+
+/// Sets up a fixture where `REMOTE_SUBNET` is cooling down, with
+/// `local_canister_id` hosted by `LOCAL_SUBNET` and `remote_canister_id` by
+/// `REMOTE_SUBNET`.
+fn new_cooling_down_fixture(
+    log: &ReplicaLogger,
+    local_canister_id: CanisterId,
+    remote_canister_id: CanisterId,
+) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
+    let (stream_builder, mut state, metrics_registry) = new_fixture(log);
+
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_subnets(btreemap! {
+            LOCAL_SUBNET => SubnetTopology::default(),
+            REMOTE_SUBNET => SubnetTopology { cooling_down: true, ..Default::default() },
+        });
+        network_topology.set_routing_table(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+            })
+            .unwrap(),
+        );
+    });
+
+    (stream_builder, state, metrics_registry)
+}
+
+/// Tests that a request to a canister on a cooling down subnet is rejected with
+/// a synthetic `SysTransient` reject response, rather than routed into a stream.
+#[test]
+fn build_streams_rejects_requests_to_cooling_down_subnet() {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+    with_test_replica_logger(|log| {
+        let msg = RequestBuilder::new()
+            .sender(local_canister_id)
+            .receiver(remote_canister_id)
+            .sender_reply_callback(CallbackId::from(1))
+            .build();
+
+        let (stream_builder, mut provided_state, metrics_registry) =
+            new_cooling_down_fixture(&log, local_canister_id, remote_canister_id);
+        provided_state.put_canister_states(canister_states_with_outputs(vec![msg]));
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // Nothing was routed into the `REMOTE_SUBNET` stream.
+        assert!(
+            result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .is_none_or(|stream| stream.messages().is_empty())
+        );
+
+        // And a `SysTransient` reject response was delivered back to the sender.
+        let input = result_state
+            .canister_state(&local_canister_id)
+            .unwrap()
+            .clone()
+            .pop_input()
+            .unwrap();
+        match input {
+            CanisterMessage::Response { response, .. } => match &response.response_payload {
+                Payload::Reject(context) => assert_eq!(RejectCode::SysTransient, context.code()),
+                payload => panic!("Unexpected response payload: {payload:?}"),
+            },
+            msg => panic!("Unexpected input message: {msg:?}"),
+        }
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_COOLING_DOWN),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+    });
+}
+
+/// Tests that a response to a canister on a cooling down subnet is retained in
+/// the sending canister's output queue, rather than routed or dropped.
+#[test]
+fn build_streams_retains_responses_to_cooling_down_subnet() {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+    with_test_replica_logger(|log| {
+        let response = Arc::new(Response {
+            originator: remote_canister_id,
+            respondent: local_canister_id,
+            originator_reply_callback: CallbackId::from(1),
+            refund: Cycles::zero(),
+            response_payload: Payload::Data(vec![]),
+            deadline: NO_DEADLINE,
+        });
+
+        let (stream_builder, mut provided_state, metrics_registry) =
+            new_cooling_down_fixture(&log, local_canister_id, remote_canister_id);
+        provided_state.put_canister_states(canister_states_with_outputs(vec![
+            RequestOrResponse::Response(Arc::clone(&response)),
+        ]));
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // Nothing was routed into the `REMOTE_SUBNET` stream.
+        assert!(
+            result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .is_none_or(|stream| stream.messages().is_empty())
+        );
+
+        // The response is still in the sender's output queue.
+        assert_eq!(
+            vec![&RequestOrResponse::Response(response)],
+            result_state
+                .canister_state(&local_canister_id)
+                .unwrap()
+                .system_state
+                .queues()
+                .output_queue_iter_for_testing(&remote_canister_id)
+                .unwrap()
+                .collect::<Vec<_>>()
+        );
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+    });
+}
+
+/// Tests that an anonymous refund to a canister on a cooling down subnet is
+/// retained in the refund pool, rather than routed or dropped.
+#[test]
+fn build_streams_retains_refunds_to_cooling_down_subnet() {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut provided_state, metrics_registry) =
+            new_cooling_down_fixture(&log, local_canister_id, remote_canister_id);
+        provided_state.add_refund(remote_canister_id, Cycles::new(100));
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // Nothing was routed into the `REMOTE_SUBNET` stream.
+        assert_eq!(
+            0,
+            result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .map_or(0, |stream| stream.refund_count())
+        );
+
+        // The refund is still in the refund pool.
+        assert_eq!(1, result_state.refunds().len());
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REFUND),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+    });
 }
 
 /// Given a stream with some (potentially zero) initial refunds and canister
