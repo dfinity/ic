@@ -19,7 +19,7 @@ use ic_consensus_utils::{
     membership::{CanisterHttpCommittee, Membership},
 };
 use ic_error_types::RejectCode;
-use ic_https_outcalls_pricing::fees::{flexible_initial_spent, fully_replicated_initial_spent};
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
@@ -501,12 +501,12 @@ impl CanisterHttpPayloadBuilderImpl {
             // The collective initial spend must match the value recomputed from
             // the request context's subnet size and the signed per-replica
             // receipts.
-            let computed_spent = fully_replicated_initial_spent(&response.proof, subnet_size);
-            if response.initial_spent != computed_spent {
+            let expected = non_flexible_initial_spent(&response.proof, subnet_size);
+            if response.initial_spent != expected {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
                     callback_id,
-                    payload_spent: response.initial_spent,
-                    computed_spent,
+                    received: response.initial_spent,
+                    expected,
                 });
             }
 
@@ -682,16 +682,16 @@ impl CanisterHttpPayloadBuilderImpl {
 
             // The collective initial spend must match the value recomputed from
             // the request context's subnet size and the signed receipts.
-            let computed_spent = flexible_initial_spent(
+            let expected = flexible_initial_spent(
                 group.responses.iter().map(|r| &r.proof),
                 subnet_size,
                 min_responses,
             );
-            if group.initial_spent != computed_spent {
+            if group.initial_spent != expected {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
                     callback_id,
-                    payload_spent: group.initial_spent,
-                    computed_spent,
+                    received: group.initial_spent,
+                    expected,
                 });
             }
 
@@ -767,17 +767,17 @@ impl CanisterHttpPayloadBuilderImpl {
 
                     // The collective initial spend must match the value recomputed
                     // from the request context's subnet size and the signed receipts.
-                    let computed_spent = flexible_initial_spent(
+                    let expected = flexible_initial_spent(
                         reject_responses.iter().map(|r| &r.proof),
                         subnet_size,
                         min_responses as u32,
                     );
-                    if *initial_spent != computed_spent {
+                    if *initial_spent != expected {
                         return invalid_artifact(
                             InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
                                 callback_id,
-                                payload_spent: *initial_spent,
-                                computed_spent,
+                                received: *initial_spent,
+                                expected,
                             },
                         );
                     }
@@ -1055,16 +1055,14 @@ impl
                 .iter()
                 .map(|share| share.content.spent())
                 .sum();
-            if let Some((callback, consensus_response)) =
-                divergence_response_into_reject(divergence_response)
-            {
+            if let Some(consensus_response) = divergence_response_into_reject(divergence_response) {
                 stats.divergence_responses += 1;
-                consensus_responses.push(consensus_response);
                 spent.initial.push(CanisterHttpInitialSpent {
-                    callback,
+                    callback: consensus_response.callback,
                     amount,
                     nodes,
                 });
+                consensus_responses.push(consensus_response);
             }
         }
 
@@ -1313,7 +1311,7 @@ fn flexible_error_into_consensus_response(
 /// The function includes request id, which is also part of the hashed value.
 fn divergence_response_into_reject(
     response: CanisterHttpResponseDivergence,
-) -> Option<(CallbackId, ConsensusResponse)> {
+) -> Option<ConsensusResponse> {
     let Some(id) = response.shares.first().map(|share| share.content.id()) else {
         // NOTE: We skip delivering the divergence response, if it has no shares
         // Such a divergence response should never validate, therefore this should never happen
@@ -1347,19 +1345,16 @@ fn divergence_response_into_reject(
         .map(|(hash, count)| format!("[{}: {}]", hex::encode(hash), count))
         .collect::<Vec<_>>();
 
-    Some((
+    Some(ConsensusResponse::new(
         id,
-        ConsensusResponse::new(
-            id,
-            Payload::Reject(RejectContext::new(
-                RejectCode::SysTransient,
-                format!(
-                    "No consensus could be reached. Replicas had different responses. Details: request_id: {}, hashes: {}",
-                    id,
-                    hash_counts.join(", ")
-                ),
-            )),
-        ),
+        Payload::Reject(RejectContext::new(
+            RejectCode::SysTransient,
+            format!(
+                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, hashes: {}",
+                id,
+                hash_counts.join(", ")
+            ),
+        )),
     ))
 }
 

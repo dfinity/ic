@@ -13,7 +13,7 @@ use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
-use ic_https_outcalls_pricing::fees::{flexible_initial_spent, fully_replicated_initial_spent};
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
@@ -888,7 +888,7 @@ fn divergence_error_message() {
         shares: response_shares,
     };
 
-    let (_, divergence_reject) = divergence_response_into_reject(divergence_response).unwrap();
+    let divergence_reject = divergence_response_into_reject(divergence_response).unwrap();
 
     assert_eq!(
         divergence_reject.payload,
@@ -1147,7 +1147,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
         // The proof must contain exactly ONE signature, from the DELEGATED node.
         add_signer_to_proof(&mut proof, delegated_node_id);
         proof.initial_spent =
-            fully_replicated_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
@@ -1187,7 +1187,7 @@ fn validate_payload_fails_for_initial_spent_mismatch() {
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         add_signer_to_proof(&mut proof, delegated_node_id);
         let computed =
-            fully_replicated_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
         // A content-bearing response has a nonzero consensus cost, so the honest
         // value is nonzero; claim one cycle too many.
         proof.initial_spent = computed + Cycles::new(1);
@@ -1213,13 +1213,72 @@ fn validate_payload_fails_for_initial_spent_mismatch() {
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
                         callback_id: cb,
-                        payload_spent,
-                        computed_spent,
+                        received,
+                        expected,
                     }
                 )
             )) if cb == callback_id
-                && payload_spent == computed + Cycles::new(1)
-                && computed_spent == computed
+                && received == computed + Cycles::new(1)
+                && expected == computed
+        );
+    });
+}
+
+#[test]
+fn validate_payload_fails_for_initial_spent_mismatch_fully_replicated() {
+    // ARRANGE
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        let callback_id = CallbackId::from(77);
+
+        let request_context = CanisterHttpRequestContext {
+            subnet_size: NumberOfNodes::from(subnet_size as u32),
+            ..request_context(Replication::FullyReplicated)
+        };
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
+
+        // Build a response signed by the whole committee, then claim a collective
+        // initial spend that differs from what the receipts and subnet size
+        // recompute to.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        for node in 0..subnet_size as u64 {
+            add_signer_to_proof(&mut proof, node_test_id(node));
+        }
+        let computed =
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
+        // A content-bearing response has a nonzero consensus cost, so the honest
+        // value is nonzero; claim one cycle too many.
+        proof.initial_spent = computed + Cycles::new(1);
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+
+        // ACT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // ASSERT
+        assert_matches!(
+            validation_result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                        callback_id: cb,
+                        received,
+                        expected,
+                    }
+                )
+            )) if cb == callback_id
+                && received == computed + Cycles::new(1)
+                && expected == computed
         );
     });
 }
@@ -1694,7 +1753,7 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         add_signer_to_proof(&mut proof, delegated_node_id);
         proof.initial_spent =
-            fully_replicated_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
 
         // 4. Create a payload that includes this same proof twice.
         let payload = CanisterHttpPayload {
@@ -2507,13 +2566,13 @@ fn validate_payload_fails_for_initial_spent_mismatch_flexible_response() {
                     InvalidPayloadReason::InvalidCanisterHttpPayload(
                         InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
                             callback_id: cb,
-                            payload_spent,
-                            computed_spent,
+                            received,
+                            expected,
                         }
                     )
                 )) if cb == callback_id
-                    && payload_spent == computed + Cycles::new(1)
-                    && computed_spent == computed
+                    && received == computed + Cycles::new(1)
+                    && expected == computed
             );
         },
     );
@@ -4797,13 +4856,13 @@ fn validate_payload_fails_for_initial_spent_mismatch_too_many_rejects() {
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
                         callback_id: cb,
-                        payload_spent,
-                        computed_spent,
+                        received,
+                        expected,
                     }
                 )
             )) if cb == callback_id
-                && payload_spent == computed + Cycles::new(1)
-                && computed_spent == computed
+                && received == computed + Cycles::new(1)
+                && expected == computed
         );
     });
 }

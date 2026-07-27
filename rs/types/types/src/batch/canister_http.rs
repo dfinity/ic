@@ -84,6 +84,15 @@ pub struct FlexibleCanisterHttpResponses {
     pub initial_spent: Cycles,
 }
 
+impl FlexibleCanisterHttpResponses {
+    /// The serialized byte size of a response group carrying no responses: just
+    /// the `callback_id` and `initial_spent` fields. Per-response sizes are added
+    /// on top via [`FlexibleCanisterHttpResponseWithProof::count_bytes`].
+    pub fn base_count_bytes() -> usize {
+        std::mem::size_of::<CallbackId>() + std::mem::size_of::<Cycles>()
+    }
+}
+
 /// A single flexible HTTP outcall response paired with its single-signer proof.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]

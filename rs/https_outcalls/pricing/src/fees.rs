@@ -6,7 +6,7 @@
 //!      is created (and therefore reflected in `per_replica_allowance`);
 //!   2. the per-replica fee, accounted for as-you-go by the `PayAsYouGoTracker`
 //!      (see `payg.rs`), which uses the per-replica constants below;
-//!   3. the consensus fee ([`fully_replicated_initial_spent`] /
+//!   3. the consensus fee ([`non_flexible_initial_spent`] /
 //!      [`flexible_initial_spent`]), computed from the aggregated response in the
 //!      block payload.
 
@@ -38,7 +38,7 @@ pub(crate) const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
 
 // ========================== Consensus-fee constants ==========================
 // Charged for including the aggregated response in a block, via
-// [`fully_replicated_initial_spent`] / [`flexible_initial_spent`].
+// [`non_flexible_initial_spent`] / [`flexible_initial_spent`].
 
 const CONSENSUS_PER_NODE_BYTE_FEE: u128 = 10;
 const CONSENSUS_BYTE_FEE: u128 = 600;
@@ -104,7 +104,7 @@ pub fn consensus_cost_coefficient(subnet_size: NumberOfNodes) -> u128 {
 /// The spend is the sum of the per-replica spends claimed in the proof's payment
 /// receipts, plus the consensus cost `N * (10 * N + 600) * <response_size>` of
 /// including the aggregated response in a block.
-pub fn fully_replicated_initial_spent(
+pub fn non_flexible_initial_spent(
     proof: &CanisterHttpResponseProof,
     subnet_size: NumberOfNodes,
 ) -> Cycles {
@@ -236,21 +236,21 @@ mod tests {
     }
 
     #[test]
-    fn fully_replicated_initial_spent_sums_receipts_plus_consensus_cost() {
+    fn non_flexible_initial_spent_sums_receipts_plus_consensus_cost() {
         // Two signers spending distinct amounts (so a dropped or double-counted
         // receipt changes the result), over a 100-byte response at N = 13.
         //   spent_sum      = 1_000 + 2_000                 = 3_000
         //   consensus_cost = 9_490 * 100                   = 949_000
         let spent =
-            fully_replicated_initial_spent(&proof(100, &[1_000, 2_000]), NumberOfNodes::from(13));
+            non_flexible_initial_spent(&proof(100, &[1_000, 2_000]), NumberOfNodes::from(13));
         assert_eq!(spent, Cycles::new(3_000 + 949_000));
     }
 
     #[test]
-    fn fully_replicated_initial_spent_with_zero_content_is_just_the_spends() {
+    fn non_flexible_initial_spent_with_zero_content_is_just_the_spends() {
         // A zero-size response contributes no consensus cost; only the receipts
         // remain.
-        let spent = fully_replicated_initial_spent(&proof(0, &[7, 11]), NumberOfNodes::from(13));
+        let spent = non_flexible_initial_spent(&proof(0, &[7, 11]), NumberOfNodes::from(13));
         assert_eq!(spent, Cycles::new(18));
     }
 

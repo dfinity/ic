@@ -1,5 +1,5 @@
 use CanisterHttpResponseContent::Reject;
-use ic_https_outcalls_pricing::fees::{flexible_initial_spent, fully_replicated_initial_spent};
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
     CountBytes, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
@@ -17,11 +17,7 @@ use ic_types::{
     messages::CallbackId,
     signature::{BasicSigBatchEntry, BasicSignature},
 };
-use ic_types_cycles::Cycles;
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    mem::size_of,
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 /// Checks whether the response is consistent
 ///
@@ -356,7 +352,7 @@ pub(crate) fn find_fully_replicated_response(
                 .get_response_content_by_hash(&metadata.content_hash)
                 .map(|content| {
                     let proof = aggregate_shares(metadata.clone(), shares);
-                    let initial_spent = fully_replicated_initial_spent(&proof, subnet_size);
+                    let initial_spent = non_flexible_initial_spent(&proof, subnet_size);
                     CanisterHttpResponseWithConsensus {
                         content,
                         proof,
@@ -388,7 +384,7 @@ pub(crate) fn find_non_replicated_response(
                     .get_response_content_by_hash(&metadata.content_hash)
                     .map(|content| {
                         let proof = aggregate_shares(metadata.clone(), &[correct_share]);
-                        let initial_spent = fully_replicated_initial_spent(&proof, subnet_size);
+                        let initial_spent = non_flexible_initial_spent(&proof, subnet_size);
                         CanisterHttpResponseWithConsensus {
                             content,
                             proof,
@@ -440,8 +436,7 @@ pub(crate) fn find_flexible_result(
 
     let min_responses = min_responses as usize;
     let mut ok_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
-    // Account for the serialized `initial_spent` field alongside the callback id.
-    let mut ok_responses_size = size_of::<CallbackId>() + size_of::<Cycles>();
+    let mut ok_responses_size = FlexibleCanisterHttpResponses::base_count_bytes();
     // Tracks all signers processed (both OK and reject)
     let mut seen_signers = BTreeSet::new();
     let mut reject_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
