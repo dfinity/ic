@@ -2,10 +2,7 @@
 
 use crate::{
     HttpError, ReplicaHealthStatus,
-    common::{
-        Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error,
-        verify_delegation_matches_certified_state,
-    },
+    common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
     metrics::HttpHandlerMetrics,
 };
 use axum::{
@@ -33,9 +30,8 @@ use ic_types::{
     crypto::threshold_sig::IcRootOfTrust,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, CertificateDelegationMetadata,
-        EXPECTED_MESSAGE_ID_LENGTH, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
-        HttpRequestEnvelope, MessageId, ReadState,
+        Blob, Certificate, CertificateDelegation, EXPECTED_MESSAGE_ID_LENGTH, HttpReadStateContent,
+        HttpReadStateResponse, HttpRequest, HttpRequestEnvelope, MessageId, ReadState,
     },
 };
 use ic_validator::{CanisterIdSet, HttpRequestVerifier};
@@ -285,10 +281,13 @@ pub(crate) async fn read_state(
             return (status, message).into_response();
         }
 
-        let canister_ranges_filter = match (version, target) {
-            (Version::V2, _) => CanisterRangesFilter::Flat,
-            (Version::V3, Target::Canister) => CanisterRangesFilter::Tree(effective_canister_id),
-            (Version::V3, Target::Subnet) => CanisterRangesFilter::None,
+        let delegation_from_nns = match (version, target) {
+            (Version::V2, _) => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+            (Version::V3, Target::Canister) => nns_delegation_reader
+                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
+            (Version::V3, Target::Subnet) => {
+                nns_delegation_reader.get_delegation(CanisterRangesFilter::None)
+            }
         };
 
         let maybe_nns_subnet_filter = match version {
@@ -298,7 +297,7 @@ pub(crate) async fn read_state(
 
         get_certificate_and_create_response(
             read_state.paths,
-            nns_delegation_reader.get_delegation_with_metadata(canister_ranges_filter),
+            delegation_from_nns,
             certified_state_reader.as_ref(),
             maybe_nns_subnet_filter,
         )
@@ -355,7 +354,7 @@ enum DeprecatedCanisterRangesFilter {
 
 fn get_certificate_and_create_response(
     mut paths: Vec<Path>,
-    delegation_from_nns: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+    delegation_from_nns: Option<CertificateDelegation>,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     deprecated_canister_ranges_filter: DeprecatedCanisterRangesFilter,
 ) -> axum::response::Response {
@@ -394,20 +393,11 @@ fn get_certificate_and_create_response(
 
     let signature = certification.signed.signature.signature.get().0;
 
-    // Make sure the public key in the NNS delegation matches the one in the certified state we are
-    // about to serve. Otherwise the client would not be able to verify the certificate.
-    if let Some((delegation, metadata)) = &delegation_from_nns
-        && let Err(HttpError { status, message }) =
-            verify_delegation_matches_certified_state(delegation, metadata, certified_state_reader)
-    {
-        return (status, message).into_response();
-    }
-
     Cbor(HttpReadStateResponse {
         certificate: Blob(into_cbor(&Certificate {
             tree,
             signature: Blob(signature),
-            delegation: delegation_from_nns.map(|(delegation, _metadata)| delegation),
+            delegation: delegation_from_nns,
         })),
     })
     .into_response()

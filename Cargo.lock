@@ -9319,7 +9319,6 @@ dependencies = [
  "ic-base-types",
  "ic-btc-interface",
  "ic-canister-sandbox-backend-lib",
- "ic-canonical-state",
  "ic-config",
  "ic-crypto-prng",
  "ic-crypto-sha2",

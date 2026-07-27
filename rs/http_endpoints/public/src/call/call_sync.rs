@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     HttpError,
-    common::{Cbor, WithTimeout, into_cbor, verify_delegation_matches_certified_state},
+    common::{Cbor, WithTimeout, into_cbor},
     metrics::{
         CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, HttpHandlerMetrics,
         SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
@@ -36,9 +36,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CanisterId, PrincipalId, SubnetId,
     consensus::certification::Certification,
-    messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
-    },
+    messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
@@ -239,35 +237,23 @@ async fn call_sync(
     // Check if the message is already known.
     // If it is known, we can return the certificate without re-submitting the message
     // to the ingress pool.
-    match tree_cert_deleg_for_message(
-        (&nns_delegation_reader, delegation_filter),
-        state_reader.clone(),
-        message_id.clone(),
-    )
-    .await
+    if let Some((tree, certification)) =
+        tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
+        && let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id)
     {
-        Ok(Some((tree, certification, delegation)))
-            if matches!(
-                parsed_message_status(&tree, &message_id),
-                ParsedMessageStatus::Known(_)
-            ) =>
-        {
-            let signature = certification.signed.signature.signature.get().0;
+        let signature = certification.signed.signature.signature.get().0;
 
-            metrics
-                .sync_call_early_response_trigger_total
-                .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
-                .inc();
+        metrics
+            .sync_call_early_response_trigger_total
+            .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
+            .inc();
 
-            return SyncCallResponse::Certificate(Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation,
-            });
-        }
-        Ok(None) | Ok(Some(_)) => (),
-        Err(err) => return SyncCallResponse::HttpError(err),
-    }
+        return SyncCallResponse::Certificate(Certificate {
+            tree,
+            signature: Blob(signature),
+            delegation: nns_delegation_reader.get_delegation(delegation_filter),
+        });
+    };
 
     let certification_subscriber = match ingress_watcher_handle
         .subscribe_for_certification(message_id.clone())
@@ -340,20 +326,12 @@ async fn call_sync(
         }
     }
 
-    let (tree, certification, delegation) = match tree_cert_deleg_for_message(
-        (&nns_delegation_reader, delegation_filter),
-        state_reader,
-        message_id.clone(),
-    )
-    .await
-    {
-        Ok(Some((tree, certification, delegation))) => (tree, certification, delegation),
-        Ok(None) => {
-            return SyncCallResponse::Accepted(
-                "Certified state is not available. Please try /read_state.",
-            );
-        }
-        Err(err) => return SyncCallResponse::HttpError(err),
+    let Some((tree, certification)) =
+        tree_and_certificate_for_message(state_reader, message_id.clone()).await
+    else {
+        return SyncCallResponse::Accepted(
+            "Certified state is not available. Please try /read_state.",
+        );
     };
 
     let message_status = parsed_message_status(&tree, &message_id);
@@ -388,7 +366,7 @@ async fn call_sync(
     SyncCallResponse::Certificate(Certificate {
         tree,
         signature: Blob(signature),
-        delegation,
+        delegation: nns_delegation_reader.get_delegation(delegation_filter),
     })
 }
 
@@ -412,27 +390,18 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
     }
 }
 
-async fn tree_cert_deleg_for_message(
-    (nns_delegation_reader, delegation_filter): (&NNSDelegationReader, CanisterRangesFilter),
+async fn tree_and_certificate_for_message(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: MessageId,
-) -> Result<Option<(MixedHashTree, Certification, Option<CertificateDelegation>)>, HttpError> {
+) -> Option<(MixedHashTree, Certification)> {
     let certified_state_reader = match tokio::task::spawn_blocking(move || {
         state_reader.get_certified_state_snapshot()
     })
     .await
     {
-        Ok(Some(certified_state_reader)) => certified_state_reader,
-        Ok(None) | Err(_) => return Ok(None),
-    };
-    let delegation_metadata = nns_delegation_reader.get_delegation_with_metadata(delegation_filter);
-    if let Some((delegation, metadata)) = delegation_metadata.as_ref() {
-        verify_delegation_matches_certified_state(
-            delegation,
-            metadata,
-            certified_state_reader.as_ref(),
-        )?
-    }
+        Ok(Some(certified_state_reader)) => Some(certified_state_reader),
+        Ok(None) | Err(_) => None,
+    }?;
 
     // We always add time path to comply with the IC spec.
     let time_path = Path::from(Label::from("time"));
@@ -445,12 +414,5 @@ async fn tree_cert_deleg_for_message(
         sparse_labeled_tree_from_paths(&[time_path, request_status_path])
             .expect("Path is within length bound.");
 
-    let Some((tree, certification)) = certified_state_reader.read_certified_state(&tree) else {
-        return Ok(None);
-    };
-    Ok(Some((
-        tree,
-        certification,
-        delegation_metadata.map(|(delegation, _metadata)| delegation),
-    )))
+    certified_state_reader.read_certified_state(&tree)
 }
