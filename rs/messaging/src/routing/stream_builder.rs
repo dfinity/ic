@@ -464,13 +464,32 @@ impl StreamBuilderImpl {
             match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
+                    let is_loopback_stream = self.subnet_id == dst_subnet_id;
+                    let is_engine_dst = !is_loopback_stream
+                        && network_topology
+                            .subnets()
+                            .get(&dst_subnet_id)
+                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+                    let is_engine_src =
+                        !is_loopback_stream && own_subnet_type == SubnetType::CloudEngine;
+                    // A message that must never cross an engine boundary: a
+                    // guaranteed-response message, or one carrying cycles. Such a message
+                    // is always handled by the engine boundary arms below, whether or not
+                    // the destination subnet is cooling down: it is illegal there
+                    // permanently, so a transient rejection would be misleading.
+                    let is_illegal_engine_msg = (is_engine_dst || is_engine_src)
+                        && (msg.deadline() == NO_DEADLINE || msg.cycles() > Cycles::zero());
+
                     // A cooling down destination subnet must not be sent any messages.
                     // Requests are rejected below, so that the caller is not left
                     // waiting; responses are instead retained in the output queue (a
                     // response cannot be rejected; and dropping it would leave the
                     // originator hanging forever), along with everything behind them.
                     let is_cooling_down_dst = network_topology.is_cooling_down(&dst_subnet_id);
-                    if is_cooling_down_dst && matches!(msg, RequestOrResponse::Response(_)) {
+                    if is_cooling_down_dst
+                        && !is_illegal_engine_msg
+                        && matches!(msg, RequestOrResponse::Response(_))
+                    {
                         self.observe_message_type_status(
                             LABEL_VALUE_TYPE_RESPONSE,
                             LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
@@ -480,7 +499,6 @@ impl StreamBuilderImpl {
                     }
 
                     let dst_stream_entry = streams.entry(dst_subnet_id);
-                    let is_loopback_stream = self.subnet_id == dst_subnet_id;
                     if !is_loopback_stream
                         && is_at_limit(
                             &dst_stream_entry,
@@ -498,28 +516,9 @@ impl StreamBuilderImpl {
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, &msg);
 
-                    let is_engine_dst = !is_loopback_stream
-                        && network_topology
-                            .subnets()
-                            .get(&dst_subnet_id)
-                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
-                    let is_engine_src =
-                        !is_loopback_stream && own_subnet_type == SubnetType::CloudEngine;
-
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall.
                     match msg {
-                        // Request to a cooling down subnet: reject it. Responses were
-                        // already retained above, so this is the only kind of message
-                        // that can still be headed for a cooling down subnet.
-                        RequestOrResponse::Request(req) if is_cooling_down_dst => {
-                            self.observe_message_type_status(
-                                LABEL_VALUE_TYPE_REQUEST,
-                                LABEL_VALUE_STATUS_COOLING_DOWN,
-                            );
-                            cooling_down_requests_to_reject.push(req);
-                        }
-
                         // Request at an engine boundary: reject if unbounded-wait or carries cycles.
                         RequestOrResponse::Request(req)
                             if (is_engine_dst || is_engine_src)
@@ -574,6 +573,18 @@ impl StreamBuilderImpl {
                                 dst_stream_entry.or_default().push(msg.into());
                             }
                             // Best-effort illegal responses are dropped (consumed here).
+                        }
+
+                        // Request to a cooling down subnet: reject it, so that the caller
+                        // is not left waiting for the subnet to come back. Responses were
+                        // already retained above, so this is the only kind of message that
+                        // can still be headed for a cooling down subnet.
+                        RequestOrResponse::Request(req) if is_cooling_down_dst => {
+                            self.observe_message_type_status(
+                                LABEL_VALUE_TYPE_REQUEST,
+                                LABEL_VALUE_STATUS_COOLING_DOWN,
+                            );
+                            cooling_down_requests_to_reject.push(req);
                         }
 
                         // Remote request above the payload size limit.
@@ -740,7 +751,7 @@ impl StreamBuilderImpl {
                 &mut state,
                 &req,
                 RejectCode::SysTransient,
-                format!("Canister {dst_canister_id}'s subnet is cooling down"),
+                format!("Canister {dst_canister_id} is deployed to a subnet that is cooling down"),
             );
         }
 

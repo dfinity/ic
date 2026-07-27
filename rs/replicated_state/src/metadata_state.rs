@@ -435,7 +435,9 @@ pub struct SubnetTopology {
     ///    instead retained by the sender (in canister output queues and the refund
     ///    pool, respectively) until it stops cooling down; retaining a response
     ///    also holds back whatever is queued behind it, so a request behind one
-    ///    stays put rather than being rejected.
+    ///    stays put rather than being rejected. A message that must never cross an
+    ///    engine boundary is still handled by the engine boundary check instead, as
+    ///    it is illegal there permanently rather than transiently.
     ///  * It executes no canister messages: the inner round only drains its
     ///    subnet queues, and no `Heartbeat` or `GlobalTimer` tasks are enqueued.
     ///    Note that `install_code` is a subnet message, so it is still executed
