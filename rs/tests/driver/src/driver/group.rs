@@ -1558,6 +1558,18 @@ impl SystemTestGroup {
                     let event: log_events::LogEvent<_> = report.clone().into();
                     // Emit a json log event, to be consumed by log post-processing tools.
                     event.emit_log(group_ctx.log());
+                    // Write the JUnit XML report Bazel expects at $XML_OUTPUT_FILE in case the latter is set..
+                    if let Some(xml_output_file) = std::env::var_os("XML_OUTPUT_FILE") {
+                        let path = PathBuf::from(xml_output_file);
+                        if let Some(parent) = path.parent() {
+                            std::fs::create_dir_all(parent).unwrap_or_else(|_| {
+                                panic!("Failed to create the directory of {}", path.display())
+                            });
+                        }
+                        std::fs::write(&path, report.to_junit_xml()).unwrap_or_else(|_| {
+                            panic!("Failed to write the JUnit XML report to {}", path.display())
+                        });
+                    }
                     info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
                 }
 

@@ -90,6 +90,15 @@ genrule(
     """.format(EXPORTED_FILES = str(exported_files))
     repository_ctx.file("BUILD.bazel", content = BUILD)
 
+    # This repo is reproducible: the multi-GB image downloads are pinned by
+    # sha256 and everything else is derived from the watched revisions JSON and
+    # the rule attributes. Declaring this makes the repo eligible for Bazel 9's
+    # repo contents cache ({repository_cache}/contents), so the images are
+    # shared across output bases/workspaces (e.g. persisted CI runner caches)
+    # instead of being re-downloaded on every fetch. Without this return value
+    # the repo is never contents-cached.
+    return repository_ctx.repo_metadata(reproducible = True)
+
 mainnet_icos_images = repository_rule(
     implementation = _mainnet_icos_images_impl,
     attrs = {
