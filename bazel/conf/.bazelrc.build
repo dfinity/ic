@@ -9,8 +9,6 @@ common --lockfile_mode=off
 common --experimental_remote_downloader_local_fallback
 common --experimental_remote_downloader_propagate_credentials
 
-common --experimental_repository_cache_hardlinks
-
 # Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
 # See https://github.com/protocolbuffers/protobuf/issues/19558
 # (Removing this still builds, but reverts to compiling protoc/libprotoc from source.)
