@@ -37,7 +37,7 @@ const NONCE_SIZE: usize = 32;
 ///
 /// The timeout is measured against the `time` of the original
 /// `CanisterHttpRequestContext` and the batch time.
-const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
@@ -367,8 +367,8 @@ impl SubnetCallContextManager {
 
     /// Removes all delivered `CanisterHttpRequestContext`s that have been around
     /// for longer than [`DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT`] and
-    /// returns them, so that the caller can refund the per-replica allowance of
-    /// the replicas that never responded.
+    /// returns them along with their callback IDs, so that the caller can refund
+    /// the per-replica allowance of the replicas that never responded.
     ///
     /// The timeout is measured against the `time` recorded in the original
     /// `CanisterHttpRequestContext` and the provided `current_time` (the batch
@@ -376,13 +376,12 @@ impl SubnetCallContextManager {
     pub fn time_out_delivered_canister_http_request_contexts(
         &mut self,
         current_time: Time,
-    ) -> Vec<CanisterHttpRequestContext> {
+    ) -> Vec<(CallbackId, CanisterHttpRequestContext)> {
         self.delivered_canister_http_request_contexts
             .extract_if(.., |_callback_id, context| {
                 current_time.saturating_duration_since(context.time)
                     >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
             })
-            .map(|(_callback_id, context)| context)
             .collect()
     }
 
