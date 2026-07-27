@@ -442,8 +442,10 @@ pub struct SubnetTopology {
     ///    (and resumed, if long-running) and does run the canister's `start` /
     ///    `pre_upgrade` / `post_upgrade` hooks.
     ///
-    /// Pending `stop_canister` requests are left alone: without canister execution
-    /// no canister can become ready to stop, so they all time out on their own.
+    /// `stop_canister` requests are left alone. A canister that is already idle when
+    /// the request is executed still stops right away; one with open call contexts
+    /// cannot become ready to stop while cooling down (there is no canister execution
+    /// to drain them), so its stop requests simply time out on their own.
     pub cooling_down: bool,
 }
 
