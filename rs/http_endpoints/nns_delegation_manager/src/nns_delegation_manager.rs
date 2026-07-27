@@ -217,11 +217,19 @@ impl DelegationManager {
     async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
         let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
         let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
+        // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
+        // is upgrading), we simply delay the next tick instead of building up a backlog of ticks
+        // while keeping a consistent duration between ticks.
+        proactive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        reactive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         // Since we can't distinguish between yet uninitialized and simply not present
         // (because we are on the NNS subnet) certification delegation, we explicitely keep
         // track whether the value has been initialized and notify all receivers when we initialize
         // it for the first time.
         let mut initialized = false;
+
+        // Keep track of the last delegation we fetched. This is used to compare it with the latest
+        // state.
         let mut last_delegation = None;
 
         loop {
