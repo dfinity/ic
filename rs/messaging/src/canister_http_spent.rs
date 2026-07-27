@@ -705,13 +705,10 @@ mod tests {
         assert_errors(&[(ERROR_DUPLICATE_NODE_REPORT, 1)], &metrics_registry);
     }
 
-    /// An initial report does not refund anything (to avoid refunding a node's
-    /// allowance twice) if any node has already been accounted through an
-    /// asynchronous report. Its nodes are still recorded as accounted, so that the
-    /// timeout does not refund their allowance either; and its spend is still
-    /// reported as consumed.
+    /// An initial report is dropped (to avoid refunding a node's allowance twice)
+    /// if any node has already been accounted through an asynchronous report.
     #[test]
-    fn initial_report_after_asynchronous_reports_consumed_without_refund() {
+    fn initial_report_dropped_after_asynchronous() {
         let allowance = Cycles::new(1_000);
         let (mut state, caller) = setup(Some((
             Replication::FullyReplicated,
@@ -731,7 +728,7 @@ mod tests {
         let balance_after_async = balance(&state, caller);
         let consumed_after_async = consumed(&state, caller);
 
-        // An initial report now arrives for the same callback; it must not refund.
+        // An initial report now arrives for the same callback; it must be dropped.
         let initial_report = CanisterHttpSpent {
             initial: vec![CanisterHttpInitialSpent {
                 callback: CALLBACK,
@@ -743,19 +740,9 @@ mod tests {
         deliver_canister_http_spent(&initial_report, &mut state, &log, &metrics);
 
         assert_eq!(balance(&state, caller), balance_after_async);
-        assert_eq!(consumed(&state, caller), consumed_after_async + 5_000);
-        // All 5 reported nodes plus node 1 (already accounted) are now accounted.
-        assert_eq!(get_refund_status(&state).refunding_nodes.len(), 5);
-        assert_errors(&[(ERROR_INITIAL_AFTER_NODE_REPORT, 1)], &metrics_registry);
-
-        // The timeout therefore only refunds the remaining 8 replicas, rather than
-        // handing out the allowance of nodes 1 to 5 a second time.
-        let timeout = UNIX_EPOCH + Duration::from_secs(3 * 60);
-        refund_timed_out_canister_http_contexts(&mut state, timeout, &log, &metrics);
-        assert_eq!(
-            balance(&state, caller),
-            balance_after_async + allowance * 8_usize
-        );
+        assert_eq!(consumed(&state, caller), consumed_after_async);
+        // Only the node accounted by the asynchronous report is recorded.
+        assert_eq!(get_refund_status(&state).refunding_nodes, node_set(&[1]));
         assert_errors(&[(ERROR_INITIAL_AFTER_NODE_REPORT, 1)], &metrics_registry);
     }
 
