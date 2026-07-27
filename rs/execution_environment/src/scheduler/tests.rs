@@ -274,9 +274,13 @@ fn cooling_down_subnet_only_drains_subnet_queues() {
     assert_eq!(0, test.ingress_queue_size(canister_id));
 }
 
-/// Tests that a cooling down subnet runs no canister code at all: not only are no
-/// canister messages executed, no `Heartbeat` or `GlobalTimer` tasks are enqueued
-/// either.
+/// Tests that a cooling down subnet enqueues no `Heartbeat` or `GlobalTimer`
+/// tasks, so that no canister message of any kind is executed (not just no
+/// ingress and inter-canister messages).
+///
+/// Note that this does not mean that no canister code runs at all: `install_code`
+/// is a subnet message, so it is still executed (and resumed, if long-running),
+/// and it runs the canister's `start` / `pre_upgrade` / `post_upgrade` hooks.
 #[test]
 fn cooling_down_subnet_runs_no_heartbeats_or_global_timers() {
     let mut test = SchedulerTestBuilder::new().build();
