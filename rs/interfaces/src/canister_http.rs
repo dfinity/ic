@@ -63,8 +63,10 @@ pub enum InvalidCanisterHttpPayloadReason {
     /// signed per-replica receipts.
     InitialSpentMismatch {
         callback_id: CallbackId,
-        payload_spent: Cycles,
-        computed_spent: Cycles,
+        /// The initial spend received in the payload.
+        received: Cycles,
+        /// The initial spend the validator recomputed and expected.
+        expected: Cycles,
     },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
@@ -83,6 +85,11 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
+    /// A divergence proof contains more than one share from the same signer.
+    DivergenceDuplicateSigner {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
     /// The callback_id in a flexible response group does not match a response or proof within it.
     FlexibleCallbackIdMismatch {
         callback_id: CallbackId,

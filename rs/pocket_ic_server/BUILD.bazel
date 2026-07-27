@@ -77,7 +77,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-bn-lib-common",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-doge-interface",
@@ -266,7 +265,7 @@ MAINNET_NNS_CANISTER_ENV = {
         ] + glob([
             "src/state_api/**/*.rs",
         ]),
-        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data,
+        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data + ["templates/dashboard.html"],
         crate_name = "pocket_ic_server",
         proc_macro_deps = [
             # Keep sorted.

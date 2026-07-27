@@ -730,6 +730,8 @@ message Proposal {
     LoadCanisterSnapshot load_canister_snapshot = 33;
     // Create a canister in a (possibly non-NNS) subnet and install code into it.
     CreateCanisterAndInstallCode create_canister_and_install_code = 34;
+    // Change what replica version(s) are run by Cloud Engines.
+    UpdateStandardEngineReplicaVersion update_standard_engine_replica_version = 35;
   }
 }
 
@@ -2008,6 +2010,14 @@ message BlessAlternativeGuestOsVersion {
   repeated bytes chip_ids = 1;
   string rootfs_hash = 2;
   registry.replica_version.v1.GuestLaunchMeasurements base_guest_launch_measurements = 3;
+}
+
+// Changes what replica version(s) are run by Cloud Engines. See Registry's
+// do_update_standard_engine_replica_version for what changes are allowed.
+message UpdateStandardEngineReplicaVersion {
+  string new_replica_version_id = 1;
+  string old_replica_version_id = 2;
+  double deployment_progress = 3;
 }
 
 message LoadCanisterSnapshot {
