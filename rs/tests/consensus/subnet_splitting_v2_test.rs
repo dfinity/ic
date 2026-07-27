@@ -86,10 +86,7 @@ fn main() -> Result<()> {
         .remove_metrics_to_check("consensus_invalidated_artifacts")
         .remove_metrics_to_check("dkg_invalidated_artifacts")
         // The replica is restarted after the split
-        .update_orchestrator_metrics_to_check(
-            "orchestrator_replica_process_start_attempts_total",
-            2,
-        )
+        .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
         .execute_from_args()
 }
 
