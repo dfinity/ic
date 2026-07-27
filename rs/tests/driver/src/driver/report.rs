@@ -1,11 +1,9 @@
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::{Display, Formatter, Result},
-    path::PathBuf,
     time::{Duration, SystemTime},
 };
 
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::driver::event::TaskId;
