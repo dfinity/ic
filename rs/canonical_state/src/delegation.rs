@@ -560,10 +560,13 @@ mod tests {
         // The delegation certifies no ranges at all.
         let delegation = delegation(subnet_id, &build_tree(format, subnet_id, &public_key, &[]));
 
-        assert_matches!(
-            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-            Ok(is_valid) if is_valid == matches!(format, CertificateDelegationFormat::Pruned)
-        );
+        assert_eq!(
+            matches!(
+                is_delegation_valid_with_respect_to_state(&delegation, format, &state),
+                Ok(true)
+            ),
+            matches!(format, CertificateDelegationFormat::Pruned)
+        )
     }
 
     /// In the `Tree` layout a certified range that the state assigns to a
