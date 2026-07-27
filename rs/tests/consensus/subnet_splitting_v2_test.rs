@@ -306,9 +306,9 @@ async fn query_counter_canisters_until_stopped(
                     .await
                     {
                         Ok(_) => Ok(()),
-                        err @ Err(AgentError::CertificateNotAuthorized())
-                        | err @ Err(AgentError::CertificateVerificationFailed())
-                        | err @ Err(AgentError::CertificateOutdated(_)) => {
+                        Err(err @ AgentError::CertificateNotAuthorized())
+                        | Err(err @ AgentError::CertificateVerificationFailed())
+                        | Err(err @ AgentError::CertificateOutdated(_)) => {
                             // These errors could happen with an invalid/stale delegation.
                             // Replicas could be able to detect this and refresh their delegations
                             // before attempting to reply (and we could panic here to ensure we do

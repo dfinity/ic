@@ -288,33 +288,21 @@ impl CatchUpPackageMaker {
             .inspect_err(|err| warn!(self.log, "Can't get a block for a CUP: {err}"))
             .ok()?;
 
-        info!(self.log, "CUP block: {cup_block:?}");
-
         let random_beacon = self
             .get_cup_random_beacon(pool, &cup_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't get a random beacon for a CUP: {err}"))
             .ok()?;
-
-        info!(self.log, "CUP random beacon: {random_beacon:?}");
 
         let high_dkg_id = self
             .get_high_dkg_id(pool, &cup_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't get a high dkg id for a CUP: {err}"))
             .ok()?;
 
-        info!(self.log, "CUP high dkg id: {high_dkg_id:?}");
-
         if !self
             .node_belongs_to_threshold_committee(&cup_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't check if node belongs to committee: {err}"))
             .unwrap_or_default()
         {
-            info!(
-                self.log,
-                "Node {} does not belong to the threshold committee at height {}",
-                self.replica_config.node_id,
-                cup_block.height()
-            );
             return None;
         }
 
