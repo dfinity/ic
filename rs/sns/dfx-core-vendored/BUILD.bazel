@@ -7,7 +7,10 @@ package(default_visibility = [
 
 rust_library(
     name = "dfx-core-vendored",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
     crate_name = "dfx_core_vendored",
     version = "0.4.0",
     deps = [
@@ -38,13 +41,36 @@ rust_library(
 
 rust_test(
     name = "dfx-core-vendored_test",
+    srcs = glob(["src/**/*.rs"]),
     args = [
-        # network.rs's tests mutate the process's working directory and the
-        # shared dfx config directory override, so they must not interleave
-        # with each other (they already serialize among themselves, but
-        # --test-threads=1 keeps this robust against future tests added
-        # elsewhere in the crate).
+        # This isolation is needed because some of the tests change what's in
+        # the file system. In particular, dfx configuration files. (These
+        # tests also change the process's working directory.)
         "--test-threads=1",
     ],
-    crate = ":dfx-core-vendored",
+    crate_root = "src/lib.rs",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:aes-gcm",
+        "@crate_index//:argon2",
+        "@crate_index//:candid",
+        "@crate_index//:dialoguer",
+        "@crate_index//:directories-next",
+        "@crate_index//:hex",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-identity-hsm",
+        "@crate_index//:keyring",
+        "@crate_index//:lazy_static",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:thiserror",
+        "@crate_index//:url",
+    ] + select({
+        "@platforms//os:osx": [
+            "@crate_index//:security-framework",
+        ],
+        "//conditions:default": [],
+    }),
 )
