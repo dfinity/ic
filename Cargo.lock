@@ -9572,7 +9572,6 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "wasmparser 0.251.0",
  "wat",
  "wirm",
 ]
