@@ -419,8 +419,8 @@ pub struct SubnetTopology {
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
     /// Whether the subnet is "cooling down", i.e. quiescing: it stops accepting new
-    /// messages and lets the messages already in flight drain. While a subnet is
-    /// cooling down:
+    /// messages and lets the subnet messages already in flight drain. While a subnet
+    /// is cooling down:
     ///
     ///  * Ingress messages addressed to it are rejected with
     ///    `ErrorCode::SubnetCoolingDown` (`RejectCode::SysTransient`) by the ingress
