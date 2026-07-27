@@ -7688,7 +7688,7 @@ dependencies = [
  "phantom_newtype",
  "prost",
  "slog",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -7866,7 +7866,7 @@ dependencies = [
  "rand 0.8.6",
  "rstest",
  "slog",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
