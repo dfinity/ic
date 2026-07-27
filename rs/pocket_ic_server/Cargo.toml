@@ -27,7 +27,6 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-admin = { path = "../registry/admin" }
 ic-agent = { workspace = true }
-ic-bn-lib-common = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-btc-interface = { workspace = true }
