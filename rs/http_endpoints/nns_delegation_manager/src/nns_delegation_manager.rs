@@ -138,9 +138,9 @@ impl DelegationManager {
     /// available).
     fn is_delegation_valid_with_respect_to_state(
         &self,
-        old_delegation: Option<&NNSDelegationBuilder>,
+        delegation: Option<&NNSDelegationBuilder>,
     ) -> Option<bool> {
-        let Some(old_delegation) = old_delegation else {
+        let Some(delegation) = delegation else {
             // No delegation: Initialization or on the NNS subnet: return true to proactively fetch
             // a new one (which is a no-op on the NNS).
             return Some(true);
@@ -148,7 +148,7 @@ impl DelegationManager {
 
         ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state(
             // Build the delegation in the flat format to capture all ranges
-            &old_delegation.build_or_original(CanisterRangesFilter::Flat, &self.log),
+            &delegation.build_or_original(CanisterRangesFilter::Flat, &self.log),
             CertificateDelegationFormat::Flat,
             self.state_reader.get_latest_certified_state()?.get_ref(),
         )
