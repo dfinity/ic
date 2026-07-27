@@ -37,7 +37,7 @@ const NONCE_SIZE: usize = 32;
 ///
 /// The timeout is measured against the `time` of the original
 /// `CanisterHttpRequestContext` and the batch time.
-pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
