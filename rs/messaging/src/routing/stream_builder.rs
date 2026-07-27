@@ -843,9 +843,10 @@ impl StreamBuilderImpl {
                             .get(&dst_subnet_id)
                             .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
                     let is_engine_src = !is_loopback_stream && own_is_engine;
-                    // Checked before cooling down: a refund always carries cycles, so
-                    // one at an engine boundary is illegal there permanently, not
-                    // transiently, and must still raise the critical error below.
+                    // Checked before the cool-down check below: a refund always
+                    // carries cycles, so one at an engine boundary is illegal there
+                    // permanently, not transiently, and must still raise the critical
+                    // error rather than being retained.
                     if is_engine_dst || is_engine_src {
                         // A refund destined to cross the engine boundary should not exist: a
                         // refund is only produced for a dropped cycle-bearing message, but a

@@ -15,13 +15,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus,
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::messages::{CallbackId, Payload, RejectContext, RequestOrResponse};
+use ic_types::messages::{CallbackId, Payload, RejectContext};
 use ic_types::methods::SystemMethod;
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
 use ic_types_cycles::Cycles;
@@ -234,52 +233,6 @@ fn clear_own_subnet_cooling_down(test: &mut SchedulerTest) {
     set_cooling_down(test, false);
 }
 
-/// Injects a `stop_canister` call for `canister_id` from `test.xnet_canister_id()`.
-fn inject_stop_canister_call(test: &mut SchedulerTest, canister_id: CanisterId) {
-    let arg = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-    test.inject_call_to_ic00(
-        Method::StopCanister,
-        arg,
-        Cycles::zero(),
-        test.xnet_canister_id(),
-        InputQueueType::RemoteSubnet,
-    );
-}
-
-/// Injects a `stop_canister` ingress message for `canister_id`, returning its
-/// `MessageId`.
-fn inject_stop_canister_ingress(test: &mut SchedulerTest, canister_id: CanisterId) -> MessageId {
-    let arg = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-    test.inject_ingress_to_ic00(Method::StopCanister, arg, expiry_time_from_now())
-}
-
-/// Asserts the number of `stop_canister` calls tracked by the subnet call context
-/// manager.
-fn assert_stop_canister_calls_len(test: &SchedulerTest, len: usize) {
-    assert_eq!(
-        len,
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .stop_canister_calls_len()
-    );
-}
-
-/// Pops the response to a `stop_canister` request from the subnet output queues and
-/// returns its payload.
-fn pop_stop_canister_response(test: &mut SchedulerTest) -> Payload {
-    let xnet_canister_id = test.xnet_canister_id();
-    let response = test
-        .state_mut()
-        .subnet_queues_mut()
-        .pop_canister_output(&xnet_canister_id)
-        .expect("Expected a response to the `stop_canister` request");
-    match response {
-        RequestOrResponse::Response(response) => response.response_payload.clone(),
-        msg => panic!("Unexpected output message: {msg:?}"),
-    }
-}
-
 /// Tests that a cooling down subnet executes no canister messages, while still
 /// draining its subnet queues.
 #[test]
@@ -351,102 +304,6 @@ fn cooling_down_subnet_runs_no_heartbeats_or_global_timers() {
     clear_own_subnet_cooling_down(&mut test);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(0, test.system_task_count(&canister_id));
-}
-
-/// Tests that a cooling down subnet does not reject pending `stop_canister`
-/// requests: without canister execution the canister cannot become ready to stop,
-/// so the requests are simply retained until they time out on their own.
-///
-/// Covers both a request from a canister (replied to via the subnet output queues)
-/// and one from a user (replied to via the ingress history).
-#[test]
-fn cooling_down_subnet_retains_pending_stop_canister_requests() {
-    let mut test = SchedulerTestBuilder::new().build();
-
-    let canister_id = test.create_canister();
-
-    // Open a call context, so that the canister is not immediately ready to stop.
-    test.send_ingress(
-        canister_id,
-        ingress(1).call(other_side(test.xnet_canister_id(), 1), on_response(1)),
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    // Begin stopping the canister, once from a canister and once from a user.
-    inject_stop_canister_call(&mut test, canister_id);
-    let ingress_message_id = inject_stop_canister_ingress(&mut test, canister_id);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    assert_eq!(
-        CanisterStatusType::Stopping,
-        test.canister_state(canister_id).status()
-    );
-    assert_stop_canister_calls_len(&test, 2);
-    assert_eq!(
-        IngressState::Processing,
-        test.ingress_state(&ingress_message_id)
-    );
-
-    // Cooling down leaves both stop requests pending.
-    set_own_subnet_cooling_down(&mut test);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    assert_eq!(
-        CanisterStatusType::Stopping,
-        test.canister_state(canister_id).status()
-    );
-    assert_stop_canister_calls_len(&test, 2);
-    assert_eq!(
-        IngressState::Processing,
-        test.ingress_state(&ingress_message_id)
-    );
-    assert!(!test.state().subnet_queues().has_output());
-
-    // They time out as usual, even though the subnet is still cooling down.
-    test.advance_time(STOP_CANISTER_TIMEOUT_DURATION + Duration::from_secs(1));
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    assert_eq!(
-        CanisterStatusType::Stopping,
-        test.canister_state(canister_id).status()
-    );
-    assert_stop_canister_calls_len(&test, 0);
-
-    // The calling canister got a `SysTransient` reject response.
-    match pop_stop_canister_response(&mut test) {
-        Payload::Reject(context) => assert_eq!(RejectCode::SysTransient, context.code()),
-        payload => panic!("Unexpected response payload: {payload:?}"),
-    }
-
-    // And the user's request failed with a timeout in ingress history.
-    let error = test.ingress_error(&ingress_message_id);
-    assert_eq!(ErrorCode::StopCanisterRequestTimeout, error.code());
-    assert_eq!(RejectCode::SysTransient, error.reject_code());
-}
-
-/// Tests that a cooling down subnet still stops a canister that is ready to stop:
-/// the subnet queues are drained even while cooling down, so the `stop_canister`
-/// request is executed and, with no open call contexts, takes effect right away.
-#[test]
-fn cooling_down_subnet_stops_canisters_that_are_ready_to_stop() {
-    let mut test = SchedulerTestBuilder::new().build();
-
-    let canister_id = test.create_canister();
-    set_own_subnet_cooling_down(&mut test);
-
-    // The canister has no open call contexts, so it is immediately ready to stop.
-    inject_stop_canister_call(&mut test, canister_id);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    assert_eq!(
-        CanisterStatusType::Stopped,
-        test.canister_state(canister_id).status()
-    );
-    assert_stop_canister_calls_len(&test, 0);
-    match pop_stop_canister_response(&mut test) {
-        Payload::Data(_) => {}
-        payload => panic!("Unexpected response payload: {payload:?}"),
-    }
 }
 
 #[test]

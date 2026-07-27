@@ -440,35 +440,29 @@ impl SchedulerTest {
     }
 
     /// Injects an ingress to the management canister.
-    /// Pushes an ingress message addressed to the management canister into the
-    /// subnet queues, sent by `self.user_id` (which controls the canisters created
-    /// by this fixture). Returns its `MessageId`, so that the resulting ingress
-    /// status can be looked up via `ingress_status()`.
     pub fn inject_ingress_to_ic00<S: ToString>(
         &mut self,
         method_name: S,
         method_payload: Vec<u8>,
         expiry_time: Time,
-    ) -> MessageId {
+    ) {
         let ingress_id = {
             let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
             wasm_executor.next_message_id()
         };
-        let ingress: Ingress = (
-            SignedIngressBuilder::new()
-                .canister_id(IC_00)
-                .sender(self.user_id)
-                .method_name(method_name)
-                .method_payload(method_payload)
-                .nonce(ingress_id as u64)
-                .expiry_time(expiry_time)
-                .build(),
-            None,
-        )
-            .into();
-        let message_id = ingress.message_id.clone();
-        self.state_mut().subnet_queues_mut().push_ingress(ingress);
-        message_id
+        self.state_mut().subnet_queues_mut().push_ingress(
+            (
+                SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name(method_name)
+                    .method_payload(method_payload)
+                    .nonce(ingress_id as u64)
+                    .expiry_time(expiry_time)
+                    .build(),
+                None,
+            )
+                .into(),
+        );
     }
 
     /// Similar to `inject_call_to_ic00()` but supports `InstallCode` messages.

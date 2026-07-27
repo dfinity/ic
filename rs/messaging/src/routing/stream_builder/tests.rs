@@ -1293,7 +1293,7 @@ fn output_queue_contents(
 }
 
 /// Asserts that exactly one message was observed, with the given type and status.
-fn assert_one_routed_message(msg_type: &str, status: &str, metrics_registry: &MetricsRegistry) {
+fn assert_one_message_status(msg_type: &str, status: &str, metrics_registry: &MetricsRegistry) {
     assert_routed_messages_eq(
         metric_vec(&[(&[(LABEL_TYPE, msg_type), (LABEL_STATUS, status)], 1)]),
         metrics_registry,
@@ -1363,7 +1363,7 @@ fn build_streams_rejects_requests_to_cooling_down_subnet() {
             COOLING_DOWN_REMOTE_CANISTER,
         );
 
-        assert_one_routed_message(
+        assert_one_message_status(
             LABEL_VALUE_TYPE_REQUEST,
             LABEL_VALUE_STATUS_COOLING_DOWN,
             &metrics_registry,
@@ -1401,7 +1401,7 @@ fn build_streams_retains_responses_to_cooling_down_subnet() {
                 )
             );
 
-            assert_one_routed_message(
+            assert_one_message_status(
                 LABEL_VALUE_TYPE_RESPONSE,
                 LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
                 &metrics_registry,
@@ -1443,7 +1443,7 @@ fn build_streams_retains_refunds_to_cooling_down_subnet() {
         assert_eq!(0, routed_refund_count(&result_state, REMOTE_SUBNET));
         assert_eq!(1, result_state.refunds().len());
 
-        assert_one_routed_message(
+        assert_one_message_status(
             LABEL_VALUE_TYPE_REFUND,
             LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
             &metrics_registry,
@@ -1498,7 +1498,7 @@ fn build_streams_retains_messages_behind_response_to_cooling_down_subnet() {
         );
 
         // Only the response was observed; the request was never even looked at.
-        assert_one_routed_message(
+        assert_one_message_status(
             LABEL_VALUE_TYPE_RESPONSE,
             LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
             &metrics_registry,
@@ -1528,7 +1528,7 @@ fn build_streams_does_not_exempt_loopback_while_cooling_down() {
             COOLING_DOWN_LOCAL_CANISTER,
             COOLING_DOWN_REMOTE_CANISTER,
         );
-        assert_one_routed_message(
+        assert_one_message_status(
             LABEL_VALUE_TYPE_REQUEST,
             LABEL_VALUE_STATUS_COOLING_DOWN,
             &metrics_registry,
@@ -1555,7 +1555,7 @@ fn build_streams_does_not_exempt_loopback_while_cooling_down() {
                 COOLING_DOWN_REMOTE_CANISTER
             )
         );
-        assert_one_routed_message(
+        assert_one_message_status(
             LABEL_VALUE_TYPE_RESPONSE,
             LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
             &metrics_registry,
@@ -1589,7 +1589,7 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
             RejectCode::SysFatal,
             "Unbounded-wait calls and calls with cycles are not allowed to CloudEngine subnets",
         );
-        assert_one_routed_message(
+        assert_one_message_status(
             LABEL_VALUE_TYPE_REQUEST,
             LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
             &metrics_registry,
@@ -1613,7 +1613,7 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
             COOLING_DOWN_LOCAL_CANISTER,
             COOLING_DOWN_REMOTE_CANISTER,
         );
-        assert_one_routed_message(
+        assert_one_message_status(
             LABEL_VALUE_TYPE_REQUEST,
             LABEL_VALUE_STATUS_COOLING_DOWN,
             &metrics_registry,
@@ -1632,7 +1632,7 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
 
         assert!(result_state.refunds().is_empty());
         assert_eq!(0, routed_refund_count(&result_state, REMOTE_SUBNET));
-        assert_one_routed_message(
+        assert_one_message_status(
             LABEL_VALUE_TYPE_REFUND,
             LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
             &metrics_registry,

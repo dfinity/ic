@@ -419,10 +419,10 @@ pub struct SubnetTopology {
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
     /// Whether the subnet is "cooling down", i.e. quiescing: it stops accepting new
-    /// canister-level work and lets the work already in flight drain. While a subnet
-    /// is cooling down:
+    /// messages and lets the messages already in flight drain. While a subnet is
+    /// cooling down:
     ///
-    ///  * Ingress messages addressed to it are refused with
+    ///  * Ingress messages addressed to it are rejected with
     ///    `ErrorCode::SubnetCoolingDown` (`RejectCode::SysTransient`) by the ingress
     ///    filter on the receiving nodes; they are excluded when building a block
     ///    payload; and a block containing one is invalid. The filter reads the
@@ -443,11 +443,6 @@ pub struct SubnetTopology {
     ///    Note that `install_code` is a subnet message, so it is still executed
     ///    (and resumed, if long-running) and does run the canister's `start` /
     ///    `pre_upgrade` / `post_upgrade` hooks.
-    ///
-    /// `stop_canister` requests are left alone. A canister that is already idle when
-    /// the request is executed still stops right away; one with open call contexts
-    /// cannot become ready to stop while cooling down (there is no canister execution
-    /// to drain them), so its stop requests simply time out on their own.
     pub cooling_down: bool,
 }
 
