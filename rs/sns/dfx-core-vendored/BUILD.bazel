@@ -38,7 +38,6 @@ rust_library(
 
 rust_test(
     name = "dfx-core-vendored_test",
-    crate = ":dfx-core-vendored",
     args = [
         # network.rs's tests mutate the process's working directory and the
         # shared dfx config directory override, so they must not interleave
@@ -47,4 +46,5 @@ rust_test(
         # elsewhere in the crate).
         "--test-threads=1",
     ],
+    crate = ":dfx-core-vendored",
 )
