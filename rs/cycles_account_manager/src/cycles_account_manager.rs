@@ -1,11 +1,6 @@
 use super::{CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND};
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::{
-    CyclesAccountManagerConfig, HTTP_REQUEST_BASE_FEE, HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE,
-    HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE,
-    HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE, HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE,
-    HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE, HTTP_REQUEST_PER_BYTE_FEE,
-};
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::Method;
@@ -1246,39 +1241,7 @@ impl CyclesAccountManager {
         replication: &Replication,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> CompoundCycles<HTTPOutcalls> {
-        let n = subnet_cycles_config.subnet_size as u128;
-        let request_bytes = request_size.get() as u128;
-        let per_replica = match replication {
-            Replication::FullyReplicated => {
-                HTTP_REQUEST_BASE_FEE
-                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                    + HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE * n
-                    + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n
-            }
-            Replication::Flexible {
-                min_responses: min, ..
-            } => {
-                let min = *min as u128;
-                HTTP_REQUEST_BASE_FEE
-                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
-                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * min
-                    + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min
-            }
-            Replication::NonReplicated(_) => {
-                // Non-replicated is equivalent to flexible replication with min_responses = 1.
-                HTTP_REQUEST_BASE_FEE
-                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
-                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n
-                    + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE
-            }
-        };
-
-        CompoundCycles::new(
-            Cycles::new(n * per_replica),
-            subnet_cycles_config.cost_schedule,
-        )
+        ic_https_outcalls_pricing::fees::base_fee(request_size, replication, subnet_cycles_config)
     }
 
     pub fn http_request_fee_v2(
