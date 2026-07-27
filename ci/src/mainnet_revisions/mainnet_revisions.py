@@ -157,7 +157,7 @@ def get_replica_version_info(replica_version: str) -> VersionInfo:
 
     version = response["payload"]["replica_version_to_elect"]
     hash = response["payload"]["release_package_sha256_hex"]
-    launch_measurements = decode_measurements(response["payload"]["guest_launch_measurements"])
+    launch_measurements = get_launch_measurements(version, response["payload"]["guest_launch_measurements"])
 
     dev_hash = download_and_hash_file(
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
@@ -191,7 +191,9 @@ def get_latest_replica_version_info() -> VersionInfo:
 
     version = latest_elect_proposal["payload"]["replica_version_to_elect"]
     hash = latest_elect_proposal["payload"]["release_package_sha256_hex"]
-    launch_measurements = decode_measurements(latest_elect_proposal["payload"]["guest_launch_measurements"])
+    launch_measurements = get_launch_measurements(
+        version, latest_elect_proposal["payload"]["guest_launch_measurements"]
+    )
 
     dev_hash = download_and_hash_file(
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
@@ -500,6 +502,18 @@ def decode_measurements(launch_measurements):
     for measurement in launch_measurements["guest_launch_measurements"]:
         measurement["measurement"] = list(bytes.fromhex(measurement["measurement"]))
     return launch_measurements
+
+
+def get_launch_measurements(version, payload_measurements):
+    # Security-patch releases don't publish `guest_launch_measurements` in the
+    # NNS proposal payload (the field is null). In that case, fall back to the
+    # measurements published on the CDN alongside the prod update image, which
+    # are already in the byte-list format used in this file.
+    if payload_measurements is None:
+        return download_and_read_file(
+            f"https://download.dfinity.systems/ic/{version}/guest-os/update-img/launch-measurements.json"
+        )
+    return decode_measurements(payload_measurements)
 
 
 if __name__ == "__main__":
