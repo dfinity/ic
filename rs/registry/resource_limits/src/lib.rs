@@ -24,15 +24,12 @@ pub struct ResourceLimits {
     /// The protocol uses a default value if the limit of `0` is specified.
     #[arg(long)]
     pub maximum_state_delta: Option<NumBytes>,
-    /// The maximum number of instructions a single query (or composite query) method execution
-    /// is allowed to consume.
+    /// The maximum number of instructions a query may consume. This applies both to a single
+    /// (non-composite) query method execution and to the total across an entire composite query
+    /// call graph.
     /// The protocol uses a default value if the limit of `0` is specified.
     #[arg(long)]
     pub maximum_query_instructions: Option<NumInstructions>,
-    /// The maximum number of instructions allowed across an entire composite query call graph.
-    /// The protocol uses a default value if the limit of `0` is specified.
-    #[arg(long)]
-    pub maximum_composite_query_instructions: Option<NumInstructions>,
 }
 
 impl ResourceLimits {
@@ -61,9 +58,6 @@ impl From<ResourceLimits> for pb::ResourceLimits {
             maximum_state_size: resource_limits.maximum_state_size.map(|x| x.get()),
             maximum_state_delta: resource_limits.maximum_state_delta.map(|x| x.get()),
             maximum_query_instructions: resource_limits.maximum_query_instructions.map(|x| x.get()),
-            maximum_composite_query_instructions: resource_limits
-                .maximum_composite_query_instructions
-                .map(|x| x.get()),
         }
     }
 }
@@ -75,9 +69,6 @@ impl From<pb::ResourceLimits> for ResourceLimits {
             maximum_state_delta: resource_limits.maximum_state_delta.map(NumBytes::from),
             maximum_query_instructions: resource_limits
                 .maximum_query_instructions
-                .map(NumInstructions::from),
-            maximum_composite_query_instructions: resource_limits
-                .maximum_composite_query_instructions
                 .map(NumInstructions::from),
         }
     }

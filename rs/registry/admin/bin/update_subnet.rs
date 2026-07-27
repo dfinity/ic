@@ -347,7 +347,6 @@ impl ProposeToUpdateSubnetCmd {
                 maximum_state_size,
                 maximum_state_delta,
                 maximum_query_instructions,
-                maximum_composite_query_instructions,
             } = resource_limits;
             let maximum_state_size =
                 maximum_state_size.or(subnet_record.resource_limits.maximum_state_size);
@@ -355,15 +354,10 @@ impl ProposeToUpdateSubnetCmd {
                 maximum_state_delta.or(subnet_record.resource_limits.maximum_state_delta);
             let maximum_query_instructions = maximum_query_instructions
                 .or(subnet_record.resource_limits.maximum_query_instructions);
-            let maximum_composite_query_instructions =
-                maximum_composite_query_instructions.or(subnet_record
-                    .resource_limits
-                    .maximum_composite_query_instructions);
             ResourceLimits {
                 maximum_state_size,
                 maximum_state_delta,
                 maximum_query_instructions,
-                maximum_composite_query_instructions,
             }
         });
 
@@ -1011,25 +1005,43 @@ mod tests {
     }
 
     #[test]
-    fn cli_to_payload_conversion_works_for_resource_limits_instruction_limits() {
+    fn cli_to_payload_conversion_works_for_maximum_query_instructions() {
+        // Override an existing `maximum_query_instructions` value.
         let initial_resource_limits = ResourceLimits {
             maximum_query_instructions: Some(NumInstructions::new(42)),
-            maximum_composite_query_instructions: Some(NumInstructions::new(64)),
             ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_query_instructions: Some(NumInstructions::new(128)),
-            maximum_composite_query_instructions: None,
             ..Default::default()
         });
 
-        // `maximum_query_instructions` is overriden according to `resource_limits_mutation`,
-        // `maximum_composite_query_instructions` is not set in `resource_limits_mutation` and thus
-        // the value from `initial_resource_limits` is used.
         let expected_resource_limits = Some(ResourceLimits {
             maximum_query_instructions: Some(NumInstructions::new(128)),
-            maximum_composite_query_instructions: Some(NumInstructions::new(64)),
+            ..Default::default()
+        });
+
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
+
+        // A mutation that does not set `maximum_query_instructions` leaves the existing value.
+        let initial_resource_limits = ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::new(42)),
+            ..Default::default()
+        };
+
+        let resource_limits_mutation = Some(ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(128)),
+            ..Default::default()
+        });
+
+        let expected_resource_limits = Some(ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(128)),
+            maximum_query_instructions: Some(NumInstructions::new(42)),
             ..Default::default()
         });
 

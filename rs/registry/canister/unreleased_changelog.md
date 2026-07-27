@@ -9,10 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `maximum_query_instructions` and `maximum_composite_query_instructions` fields
-  to the subnet record's `ResourceLimits`, allowing the query instruction limits to
-  be configured per subnet via `create_subnet` and `update_subnet`. A value of `0`
-  (or unset) means the replica's default is used.
+* Added a `maximum_query_instructions` field to the subnet record's `ResourceLimits`,
+  allowing the query instruction limit to be configured per subnet via `create_subnet`
+  and `update_subnet`. It applies both to a single (non-composite) query method execution
+  and to the total across a composite query call graph. A value of `0` (or unset) means
+  the replica's default is used.
 
 ## Changed
 
