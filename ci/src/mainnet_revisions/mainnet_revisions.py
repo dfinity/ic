@@ -505,10 +505,11 @@ def decode_measurements(launch_measurements):
 
 
 def get_launch_measurements(version, payload_measurements):
-    # Security-patch releases don't publish `guest_launch_measurements` in the
-    # NNS proposal payload (the field is null). In that case, fall back to the
-    # measurements published on the CDN alongside the prod update image, which
-    # are already in the byte-list format used in this file.
+    # `guest_launch_measurements` can be null in the NNS proposal payload
+    # (observed for a version elected via a "Security patch update" proposal).
+    # In that case, fall back to the measurements published on the CDN alongside
+    # the prod update image, which are already in the byte-list format used in
+    # this file (unlike the hex format in the proposal payload).
     if payload_measurements is None:
         return download_and_read_file(
             f"https://download.dfinity.systems/ic/{version}/guest-os/update-img/launch-measurements.json"
