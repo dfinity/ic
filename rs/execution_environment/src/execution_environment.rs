@@ -4654,8 +4654,7 @@ impl ExecutionEnvironment {
                     StopCanisterReply::SubnetCoolingDown => IngressState::Failed(UserError::new(
                         ErrorCode::SubnetCoolingDown,
                         format!(
-                            "Subnet {} is cooling down, so canister {canister_id}'s stop \
-                                request was rejected",
+                            "Subnet {} is cooling down, so canister {canister_id}'s stop request was rejected",
                             self.own_subnet_id
                         ),
                     )),
