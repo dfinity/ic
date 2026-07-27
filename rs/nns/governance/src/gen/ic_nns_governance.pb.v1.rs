@@ -466,7 +466,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -585,6 +585,9 @@ pub mod proposal {
         /// Create a canister in a (possibly non-NNS) subnet and install code into it.
         #[prost(message, tag = "34")]
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Change what replica version(s) are run by Cloud Engines.
+        #[prost(message, tag = "35")]
+        UpdateStandardEngineReplicaVersion(super::UpdateStandardEngineReplicaVersion),
     }
 }
 /// Take a canister snapshot.
@@ -3158,6 +3161,25 @@ pub struct BlessAlternativeGuestOsVersion {
     pub base_guest_launch_measurements: ::core::option::Option<
         ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
     >,
+}
+/// Changes what replica version(s) are run by Cloud Engines. See Registry's
+/// do_update_standard_engine_replica_version for what changes are allowed.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct UpdateStandardEngineReplicaVersion {
+    #[prost(string, tag = "1")]
+    pub new_replica_version_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub old_replica_version_id: ::prost::alloc::string::String,
+    #[prost(double, tag = "3")]
+    pub deployment_progress: f64,
 }
 #[derive(
     candid::CandidType,

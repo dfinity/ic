@@ -1,5 +1,5 @@
 {
-  "checksum": "ea38b2f8f86a4015a1826a4fc8b127c8ebdbcd1450a5ed540adab9dc93af7041",
+  "checksum": "76e51ba4f0a9cd9d1eece5abd2ecd00b308907d26af0bc3b1cccaa337e99d1af",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -15039,61 +15039,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "core2 0.4.0": {
-      "name": "core2",
-      "version": "0.4.0",
-      "package_url": "https://github.com/bbqsrc/core2",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/core2/0.4.0/download",
-          "sha256": "b49ba7ef1ad6107f8824dbe97de947cbaac53c44e7f9756a1fba0d37c1eec505"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "core2",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "core2",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "cpp_demangle 0.4.5": {
       "name": "cpp_demangle",
       "version": "0.4.5",
@@ -21213,7 +21158,7 @@
               "target": "libcryptsetup_rs"
             },
             {
-              "id": "libflate 2.1.0",
+              "id": "libflate 2.3.1",
               "target": "libflate"
             },
             {
@@ -37940,7 +37885,7 @@
               "target": "clap"
             },
             {
-              "id": "libflate 2.1.0",
+              "id": "libflate 2.3.1",
               "target": "libflate"
             },
             {
@@ -43879,14 +43824,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "libflate 2.1.0": {
+    "libflate 2.3.1": {
       "name": "libflate",
-      "version": "2.1.0",
+      "version": "2.3.1",
       "package_url": "https://github.com/sile/libflate",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/libflate/2.1.0/download",
-          "sha256": "45d9dfdc14ea4ef0900c1cddbc8dcd553fbaacd8a4a282cf4018ae9dd04fb21e"
+          "url": "https://static.crates.io/crates/libflate/2.3.1/download",
+          "sha256": "a4da9b700e758e57152a1fd1c52cbdc5727c1aa6d8743dc1acda917398f1d76c"
         }
       },
       "targets": [
@@ -43922,10 +43867,6 @@
               "target": "adler32"
             },
             {
-              "id": "core2 0.4.0",
-              "target": "core2"
-            },
-            {
               "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
@@ -43934,14 +43875,18 @@
               "target": "dary_heap"
             },
             {
-              "id": "libflate_lz77 2.1.0",
+              "id": "libflate_lz77 2.3.0",
               "target": "libflate_lz77"
+            },
+            {
+              "id": "no_std_io2 0.9.4",
+              "target": "no_std_io2"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "2.1.0"
+        "edition": "2024",
+        "version": "2.3.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -43949,14 +43894,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "libflate_lz77 2.1.0": {
+    "libflate_lz77 2.3.0": {
       "name": "libflate_lz77",
-      "version": "2.1.0",
+      "version": "2.3.0",
       "package_url": "https://github.com/sile/libflate",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/libflate_lz77/2.1.0/download",
-          "sha256": "e6e0d73b369f386f1c44abd9c570d5318f55ccde816ff4b562fa452e5182863d"
+          "url": "https://static.crates.io/crates/libflate_lz77/2.3.0/download",
+          "sha256": "ff7a10e427698aef6eef269482776debfef63384d30f13aad39a1a95e0e098fd"
         }
       },
       "targets": [
@@ -43987,12 +43932,12 @@
         "deps": {
           "common": [
             {
-              "id": "core2 0.4.0",
-              "target": "core2"
+              "id": "hashbrown 0.16.1",
+              "target": "hashbrown"
             },
             {
-              "id": "hashbrown 0.14.5",
-              "target": "hashbrown"
+              "id": "no_std_io2 0.9.4",
+              "target": "no_std_io2"
             },
             {
               "id": "rle-decode-fast 1.0.3",
@@ -44001,8 +43946,8 @@
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "2.1.0"
+        "edition": "2024",
+        "version": "2.3.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -50118,6 +50063,61 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "no_std_io2 0.9.4": {
+      "name": "no_std_io2",
+      "version": "0.9.4",
+      "package_url": "https://github.com/wcampbell0x2a/no-std-io2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/no_std_io2/0.9.4/download",
+          "sha256": "418abd1b6d34fbf6cae440dc874771b0525a604428704c76e48b29a5e67b8003"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "no_std_io2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "no_std_io2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.4"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "nohash 0.2.0": {
       "name": "nohash",
@@ -97782,7 +97782,7 @@
     "leb128 0.2.5",
     "libc 0.2.186",
     "libcryptsetup-rs 0.15.0",
-    "libflate 2.1.0",
+    "libflate 2.3.1",
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
     "little-loadshedder 0.2.0",
