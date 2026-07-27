@@ -14,7 +14,8 @@
 //! carry the previous key for up to a few minutes. Similarly, right before a subnet
 //! split, the delegation might already carry the new key while the certified state
 //! still carries the old key.
-use ic_crypto_tree_hash::{LabeledTree, lookup_path};
+use ic_base_types::PrincipalIdError;
+use ic_crypto_tree_hash::{LabeledTree, MixedHashTreeConversionError, lookup_path};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -28,18 +29,18 @@ use std::fmt;
 /// These indicate that validity could *not be determined* (e.g. a malformed
 /// certificate), as opposed to the delegation being found inconsistent with the
 /// state.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum DelegationValidationError {
     /// The delegation's `subnet_id` is not a valid principal.
-    InvalidSubnetId(String),
+    InvalidSubnetId(PrincipalIdError),
     /// The embedded certificate could not be CBOR-decoded.
-    MalformedCertificate(String),
+    MalformedCertificate(serde_cbor::Error),
     /// The certificate's mixed hash tree could not be converted into a labeled tree.
-    MalformedHashTree(String),
+    MalformedHashTree(MixedHashTreeConversionError),
     /// An expected path was missing from the certificate or had an unexpected shape.
     UnexpectedTreeShape(String),
     /// A certified canister-ranges leaf could not be CBOR-decoded.
-    MalformedCanisterRanges(String),
+    MalformedCanisterRanges(serde_cbor::Error),
     /// The state has no topology for the delegated subnet.
     UnknownSubnet(SubnetId),
 }
@@ -52,7 +53,7 @@ impl fmt::Display for DelegationValidationError {
                 write!(f, "failed to decode delegation certificate: {err}")
             }
             Self::MalformedHashTree(err) => {
-                write!(f, "invalid hash tree in delegation certificate: {err}")
+                write!(f, "invalid hash tree in delegation certificate: {err:?}")
             }
             Self::UnexpectedTreeShape(err) => write!(f, "unexpected certificate tree shape: {err}"),
             Self::MalformedCanisterRanges(err) => {
@@ -101,13 +102,13 @@ pub fn is_delegation_valid_with_respect_to_state(
 ) -> Result<bool, DelegationValidationError> {
     let subnet_id = SubnetId::from(
         PrincipalId::try_from(delegation.subnet_id.0.as_slice())
-            .map_err(|err| DelegationValidationError::InvalidSubnetId(err.to_string()))?,
+            .map_err(DelegationValidationError::InvalidSubnetId)?,
     );
 
     let certificate: Certificate = serde_cbor::from_slice(delegation.certificate.0.as_slice())
-        .map_err(|err| DelegationValidationError::MalformedCertificate(err.to_string()))?;
+        .map_err(DelegationValidationError::MalformedCertificate)?;
     let tree = LabeledTree::try_from(certificate.tree)
-        .map_err(|err| DelegationValidationError::MalformedHashTree(format!("{err:?}")))?;
+        .map_err(DelegationValidationError::MalformedHashTree)?;
 
     Ok(does_public_key_match(&tree, state, subnet_id)?
         && do_canister_ranges_match(&tree, state, format, subnet_id)?)
@@ -162,7 +163,7 @@ fn do_canister_ranges_match(
     // principal pairs (see `encoding::encode_subnet_canister_ranges`).
     let decode = |bytes: &[u8]| {
         serde_cbor::from_slice::<Vec<(PrincipalId, PrincipalId)>>(bytes)
-            .map_err(|err| DelegationValidationError::MalformedCanisterRanges(err.to_string()))
+            .map_err(DelegationValidationError::MalformedCanisterRanges)
     };
 
     let state_routing_table = state
