@@ -38,7 +38,7 @@ impl MockLedger {
 
 #[async_trait]
 impl LedgerAccess for MockLedger {
-    async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + 'a> {
+    async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + Send + 'a> {
         unimplemented!("Not needed for this test")
     }
 
