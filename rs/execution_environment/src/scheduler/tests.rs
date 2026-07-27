@@ -307,14 +307,14 @@ fn cooling_down_subnet_runs_no_heartbeats_or_global_timers() {
     assert_eq!(0, test.system_task_count(&canister_id));
 }
 
-/// Tests that a cooling down subnet retains no pending `stop_canister` request:
-/// a canister that is not ready to stop has its stop requests rejected (and stays
-/// `Stopping`), rather than holding on to them for the usual timeout duration.
+/// Tests that a cooling down subnet does not reject pending `stop_canister`
+/// requests: without canister execution the canister cannot become ready to stop,
+/// so the requests are simply retained until they time out on their own.
 ///
 /// Covers both a request from a canister (replied to via the subnet output queues)
 /// and one from a user (replied to via the ingress history).
 #[test]
-fn cooling_down_subnet_rejects_pending_stop_canister_requests() {
+fn cooling_down_subnet_retains_pending_stop_canister_requests() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister();
@@ -355,11 +355,31 @@ fn cooling_down_subnet_rejects_pending_stop_canister_requests() {
         test.ingress_state(&ingress_message_id)
     );
 
+    // Cooling down leaves both stop requests pending.
     set_own_subnet_cooling_down(&mut test);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Both stop requests were rejected and dropped from the subnet call context
-    // manager; the canister is still `Stopping`.
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id).status()
+    );
+    assert_eq!(
+        2,
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len()
+    );
+    assert_eq!(
+        IngressState::Processing,
+        test.ingress_state(&ingress_message_id)
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // They time out as usual, even though the subnet is still cooling down.
+    test.advance_time(STOP_CANISTER_TIMEOUT_DURATION + Duration::from_secs(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
     assert_eq!(
         CanisterStatusType::Stopping,
         test.canister_state(canister_id).status()
@@ -372,7 +392,7 @@ fn cooling_down_subnet_rejects_pending_stop_canister_requests() {
             .stop_canister_calls_len()
     );
 
-    // The canister was replied to with a `SysTransient` reject response.
+    // The calling canister got a `SysTransient` reject response.
     let xnet_canister_id = test.xnet_canister_id();
     let response = test
         .state_mut()
@@ -387,16 +407,15 @@ fn cooling_down_subnet_rejects_pending_stop_canister_requests() {
         msg => panic!("Unexpected output message: {msg:?}"),
     }
 
-    // And the user's request failed with `SubnetCoolingDown` in ingress history.
+    // And the user's request failed with a timeout in ingress history.
     let error = test.ingress_error(&ingress_message_id);
-    assert_eq!(ErrorCode::SubnetCoolingDown, error.code());
+    assert_eq!(ErrorCode::StopCanisterRequestTimeout, error.code());
     assert_eq!(RejectCode::SysTransient, error.reject_code());
 }
 
-/// Tests that a cooling down subnet still stops a canister that is ready to stop
-/// (and replies to its stop contexts with a success), as that also resolves the
-/// corresponding calls. Note that the subnet queues are drained even while cooling
-/// down, so the `stop_canister` request is executed in the first place.
+/// Tests that a cooling down subnet still stops a canister that is ready to stop:
+/// the subnet queues are drained even while cooling down, so the `stop_canister`
+/// request is executed and, with no open call contexts, takes effect right away.
 #[test]
 fn cooling_down_subnet_stops_canisters_that_are_ready_to_stop() {
     let mut test = SchedulerTestBuilder::new().build();

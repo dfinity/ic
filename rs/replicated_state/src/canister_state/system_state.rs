@@ -1563,7 +1563,8 @@ impl SystemState {
     ///  * a boolean indicating whether the canister has stopped,
     ///  * all stop contexts if the canister has stopped (to be replied to); or, if
     ///    the canister is still stopping, only those stop contexts for which
-    ///    `should_reject` holds (to be rejected), with the rest retained.
+    ///    `should_reject` holds, e.g. because they timed out (to be rejected), with
+    ///    the rest retained.
     #[must_use]
     pub fn try_stop_canister(
         &mut self,

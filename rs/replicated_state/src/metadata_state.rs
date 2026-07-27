@@ -418,28 +418,32 @@ pub struct SubnetTopology {
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
-    /// Whether the subnet is "cooling down", i.e. quiescing: it stops taking on
-    /// new work and settles the work it is already tracking, so that its state
-    /// converges to a state that no longer changes. While a subnet is cooling
-    /// down:
+    /// Whether the subnet is "cooling down", i.e. quiescing: it stops accepting new
+    /// canister-level work and lets the work already in flight drain. While a subnet
+    /// is cooling down:
     ///
-    ///  * All ingress messages addressed to it are rejected with
-    ///    `RejectCode::SysTransient`: by the ingress filter on the receiving
-    ///    nodes, so they never make it into a block; and during block
-    ///    validation, so a block containing such a message is invalid.
-    ///  * All inter-canister requests addressed to it are rejected with
-    ///    `RejectCode::SysTransient` by the sending subnet, before they are
-    ///    routed into a stream. Responses and anonymous refunds addressed to it
-    ///    are instead retained by the sender (in canister output queues and the
-    ///    refund pool, respectively) until it stops cooling down.
+    ///  * Ingress messages addressed to it are refused with
+    ///    `ErrorCode::SubnetCoolingDown` (`RejectCode::SysTransient`) by the ingress
+    ///    filter on the receiving nodes; they are excluded when building a block
+    ///    payload; and a block containing one is invalid. The filter reads the
+    ///    latest certified state, so it lags by the certification delay — payload
+    ///    building and validation are what make this binding.
+    ///  * Inter-canister requests addressed to it are rejected with
+    ///    `RejectCode::SysTransient` by the sending subnet, before they are routed
+    ///    into a stream (including the loopback stream, i.e. the subnet rejects
+    ///    requests to itself). Responses and anonymous refunds addressed to it are
+    ///    instead retained by the sender (in canister output queues and the refund
+    ///    pool, respectively) until it stops cooling down; retaining a response
+    ///    also holds back whatever is queued behind it, so a request behind one
+    ///    stays put rather than being rejected.
     ///  * It executes no canister messages: the inner round only drains its
-    ///    subnet queues.
-    ///  * It retains no pending `stop_canister` request: a canister that is ready
-    ///    to stop is stopped, and every other stop context is rejected (rather than
-    ///    only those that timed out). Unlike a canister's status, such a request is
-    ///    tracked outside the canister, in the subnet call context manager, so
-    ///    leaving one pending would leave state behind that a canister-level view
-    ///    of the subnet does not capture.
+    ///    subnet queues, and no `Heartbeat` or `GlobalTimer` tasks are enqueued.
+    ///    Note that `install_code` is a subnet message, so it is still executed
+    ///    (and resumed, if long-running) and does run the canister's `start` /
+    ///    `pre_upgrade` / `post_upgrade` hooks.
+    ///
+    /// Pending `stop_canister` requests are left alone: without canister execution
+    /// no canister can become ready to stop, so they all time out on their own.
     pub cooling_down: bool,
 }
 
