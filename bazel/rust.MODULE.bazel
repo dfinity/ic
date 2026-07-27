@@ -8,7 +8,7 @@ archive_override(
     integrity = "sha256-5GXwZtp5VlNxMI+dolYYxhyhG5f5ReZ5qz30gAbPsrg=",
     strip_prefix = "rules_rust-f8f382c7e351a797242ce4a92262342f8994e265",
     type = "tar.gz",
-    urls = ["https://codeload.github.com/nmattia/rules_rust/tar.gz/f8f382c7e351a797242ce4a92262342f8994e265"],
+    urls = ["https://codeload.github.com/dfinity/rules_rust/tar.gz/f8f382c7e351a797242ce4a92262342f8994e265"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
