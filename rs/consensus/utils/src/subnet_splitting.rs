@@ -155,9 +155,7 @@ mod tests {
         Height, ReplicaVersion, Time,
         backwards_compatibility::BackwardsCompatible,
         batch::ValidationContext,
-        consensus::{
-            BlockPayload, Payload, Rank, SummaryPayload,
-        },
+        consensus::{BlockPayload, Payload, Rank, SummaryPayload},
         crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
     };

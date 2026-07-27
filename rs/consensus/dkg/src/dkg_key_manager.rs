@@ -801,12 +801,12 @@ mod tests {
                 let splitting_height = splitting_block.height;
                 let mut splitting_summary = splitting_block.payload.as_ref().as_summary().clone();
                 splitting_summary.dkg.subnet_splitting_status =
-                    BackwardsCompatible::new_for_test_only(Some(
-                        SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    BackwardsCompatible::new_for_test_only(Some(SubnetSplittingStatus::Scheduled(
+                        SplittingArgs {
                             source_subnet_id,
                             destination_subnet_id,
-                        }),
-                    ));
+                        },
+                    )));
                 splitting_block.payload = Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(splitting_summary.clone()),

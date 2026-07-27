@@ -4754,9 +4754,7 @@ pub mod test {
         use ic_test_utilities_logger::with_test_replica_logger;
         use ic_test_utilities_registry::insert_initial_dkg_transcript;
         use ic_types::backwards_compatibility::BackwardsCompatible;
-        use ic_types::consensus::{
-            dkg::{SplittingArgs, SubnetSplittingStatus},
-        };
+        use ic_types::consensus::dkg::{SplittingArgs, SubnetSplittingStatus};
         use ic_types_test_utils::ids::{NODE_3, NODE_4, SUBNET_1, SUBNET_2};
 
         use std::str::FromStr;

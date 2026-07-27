@@ -168,8 +168,8 @@ mod tests {
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         ReplicaVersion,
-        consensus::{BlockPayload, Payload, dkg::SplittingArgs},
         backwards_compatibility::BackwardsCompatible,
+        consensus::{BlockPayload, Payload, dkg::SplittingArgs},
         crypto::crypto_hash,
     };
     use ic_types_test_utils::ids::{SUBNET_0, SUBNET_1};
