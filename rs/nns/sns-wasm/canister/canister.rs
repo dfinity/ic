@@ -38,7 +38,9 @@ use ic_types_cycles::Cycles;
 use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
 use ic_cdk::{
-    api::{canister_cycle_balance, canister_self, msg_caller},
+    api::{
+        canister_cycle_balance, canister_self, msg_caller, msg_cycles_accept, msg_cycles_available,
+    },
     init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_nervous_system_common::serve_metrics;
@@ -168,7 +170,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = ic_cdk::api::call::msg_cycles_available();
+        let available = msg_cycles_available() as u64;
 
         if available < required_cycles {
             return Err(format!(
@@ -179,10 +181,10 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
-        let cycles = cycles.unwrap_or_else(ic_cdk::api::call::msg_cycles_available);
+        let cycles = cycles.unwrap_or_else(|| msg_cycles_available() as u64);
         self.message_has_enough_cycles(cycles)?;
 
-        let accepted = ic_cdk::api::call::msg_cycles_accept(cycles);
+        let accepted = msg_cycles_accept(cycles as u128) as u64;
         Ok(accepted)
     }
 

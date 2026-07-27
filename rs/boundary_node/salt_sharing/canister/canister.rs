@@ -5,8 +5,7 @@ use crate::helpers::{init_async, is_api_boundary_node_principal};
 use crate::logs::export_logs_as_http_response;
 use crate::metrics::{METRICS, export_metrics_as_http_response};
 use crate::storage::SALT;
-use ic_cdk::api::call::{accept_message, method_name};
-use ic_cdk::api::{msg_caller, time};
+use ic_cdk::api::{accept_message, msg_caller, msg_method_name, time};
 use ic_cdk::trap;
 use ic_cdk::{init, inspect_message, post_upgrade, query};
 use ic_cdk_timers::set_timer;
@@ -20,7 +19,7 @@ const REPLICATED_QUERY_METHOD: &str = "get_salt";
 #[inspect_message]
 fn inspect_message() {
     let caller_id = msg_caller();
-    let called_method = method_name();
+    let called_method = msg_method_name();
 
     if called_method == REPLICATED_QUERY_METHOD && is_api_boundary_node_principal(&caller_id) {
         accept_message();
