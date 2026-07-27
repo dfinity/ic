@@ -7,11 +7,16 @@
 //! `networks.json` are intentionally not supported.
 //!
 //! For `local`, resolution mirrors dfx's `LocalBindDetermination::ApplyRunning
-//! WebserverPort`: the address to connect to defaults to `127.0.0.1:8000` inside
-//! a dfx project (a `dfx.json` found by walking up from the working directory) or
-//! `127.0.0.1:4943` for the shared network, and is overridden by the port
+//! WebserverPort`: the address to connect to is read from the nearest `dfx.json`
+//! (found by walking up from the working directory) *only if that file declares
+//! its own `networks.local` entry* -- falling back to `127.0.0.1:8000` when the
+//! entry has no `bind` -- and otherwise (including when no `dfx.json` is found,
+//! or the one that is found doesn't declare `local`) comes from the shared
+//! `local` network in `networks.json`, defaulting to `127.0.0.1:4943` when that
+//! file has no `local` entry either. Either address is overridden by the port
 //! recorded in the network's `webserver-port` file when a replica is running.
-use crate::config::directories::get_shared_network_data_directory;
+use crate::config::directories::{get_shared_network_data_directory, get_user_dfx_config_dir};
+use crate::error::config::ConfigError;
 use crate::error::get_user_home::GetUserHomeError;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -40,6 +45,9 @@ pub enum NetworkResolutionError {
 
     #[error("Failed to determine the shared local network data directory")]
     DetermineSharedNetworkDirectoryFailed(#[source] GetUserHomeError),
+
+    #[error("Failed to determine the shared dfx config directory")]
+    DetermineSharedConfigDirectoryFailed(#[source] ConfigError),
 
     #[error("Failed to read webserver port from {0}")]
     ReadWebserverPortFailed(PathBuf, #[source] std::io::Error),
@@ -96,15 +104,15 @@ pub fn resolve_network(network_name: &str) -> Result<NetworkDescriptor, NetworkR
 
 /// Resolves the `local` network, mirroring dfx's default bind determination.
 fn resolve_local_network() -> Result<NetworkDescriptor, NetworkResolutionError> {
-    let (data_directory, default_address) = match find_project_root() {
-        Some(project_root) => (
+    let (data_directory, default_address) = match find_project_local_network() {
+        Some((project_root, bind)) => (
             project_root.join(".dfx").join("network").join("local"),
-            project_local_address(&project_root),
+            bind,
         ),
         None => (
             get_shared_network_data_directory("local")
                 .map_err(NetworkResolutionError::DetermineSharedNetworkDirectoryFailed)?,
-            DEFAULT_SHARED_LOCAL_ADDRESS.to_string(),
+            shared_local_address()?,
         ),
     };
 
@@ -116,13 +124,33 @@ fn resolve_local_network() -> Result<NetworkDescriptor, NetworkResolutionError> 
     })
 }
 
-/// Walks up from the working directory looking for a `dfx.json`, returning the
-/// directory that contains it (the project root), if any.
-fn find_project_root() -> Option<PathBuf> {
+/// Walks up from the working directory looking for a `dfx.json`, and, if one is
+/// found *and it declares its own `networks.local` entry*, returns the project
+/// root together with the configured `bind` address (or dfx's project-local
+/// default, when the entry has no `bind`).
+///
+/// Returns `None` both when no `dfx.json` is found and when the nearest one
+/// doesn't declare `local` -- in both cases dfx falls back to the shared
+/// network, even from inside a dfx project directory. Mirrors dfx's
+/// `create_project_network_descriptor`, which only produces a project network
+/// descriptor for networks actually present in the project's `dfx.json`.
+fn find_project_local_network() -> Option<(PathBuf, String)> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
-        if dir.join("dfx.json").is_file() {
-            return Some(dir);
+        let dfx_json = dir.join("dfx.json");
+        if dfx_json.is_file() {
+            let local_network = std::fs::read(&dfx_json)
+                .ok()
+                .and_then(|content| serde_json::from_slice::<serde_json::Value>(&content).ok())
+                .and_then(|value| value.get("networks")?.get("local").cloned());
+            return local_network.map(|local| {
+                let bind = local
+                    .get("bind")
+                    .and_then(|b| b.as_str())
+                    .unwrap_or(DEFAULT_PROJECT_LOCAL_ADDRESS)
+                    .to_string();
+                (dir, bind)
+            });
         }
         if !dir.pop() {
             return None;
@@ -130,23 +158,28 @@ fn find_project_root() -> Option<PathBuf> {
     }
 }
 
-/// Returns the configured address for the project's `local` network, falling
-/// back to dfx's project default. Only the `bind` field is honoured; when a
-/// replica is running its `webserver-port` takes precedence regardless.
-fn project_local_address(project_root: &Path) -> String {
-    let dfx_json = project_root.join("dfx.json");
-    let bind = std::fs::read(&dfx_json)
+/// Returns the shared network's configured address for `local`, read from
+/// `networks.json` in the shared dfx config directory, falling back to dfx's
+/// shared-network default when that file doesn't exist, doesn't declare
+/// `local`, or the entry has no `bind`. Unlike a project's `dfx.json`, the
+/// shared `networks.json` has no top-level `networks` key: it is itself the
+/// map from network name to configuration.
+/// Mirrors dfx's `create_shared_network_descriptor`.
+fn shared_local_address() -> Result<String, NetworkResolutionError> {
+    let networks_json = get_user_dfx_config_dir()
+        .map_err(NetworkResolutionError::DetermineSharedConfigDirectoryFailed)?
+        .join("networks.json");
+    let bind = std::fs::read(&networks_json)
         .ok()
         .and_then(|content| serde_json::from_slice::<serde_json::Value>(&content).ok())
         .and_then(|value| {
             value
-                .get("networks")?
                 .get("local")?
                 .get("bind")?
                 .as_str()
                 .map(str::to_string)
         });
-    bind.unwrap_or_else(|| DEFAULT_PROJECT_LOCAL_ADDRESS.to_string())
+    Ok(bind.unwrap_or_else(|| DEFAULT_SHARED_LOCAL_ADDRESS.to_string()))
 }
 
 /// Applies a running replica's webserver port (if any) to the default address.
@@ -178,5 +211,120 @@ fn get_running_webserver_address(
         }
     } else {
         Ok(local_address)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // `find_project_local_network` and `shared_local_address` inspect global
+    // process state (the working directory and, via `DFX_CONFIG_ROOT`, the
+    // shared config directory), so tests that touch either must not run
+    // concurrently with one another.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "dfx-core-vendored-network-test-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn with_current_dir<T>(dir: &Path, f: impl FnOnce() -> T) -> T {
+        let original = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir).unwrap();
+        let result = f();
+        std::env::set_current_dir(original).unwrap();
+        result
+    }
+
+    /// Points the shared dfx config directory (normally `~/.config/dfx`) at
+    /// `<root>/.config/dfx` for the duration of `f`, matching how the real
+    /// `DFX_CONFIG_ROOT` environment variable overrides dfx's notion of "home".
+    fn with_dfx_config_root<T>(root: &Path, f: impl FnOnce() -> T) -> T {
+        let mut config_root = crate::config::directories::DFX_CONFIG_ROOT.lock().unwrap();
+        let original = config_root.take();
+        *config_root = Some(root.as_os_str().to_owned());
+        drop(config_root);
+        let result = f();
+        *crate::config::directories::DFX_CONFIG_ROOT.lock().unwrap() = original;
+        result
+    }
+
+    fn write_shared_networks_json(config_root: &Path, contents: &str) {
+        let dfx_dir = config_root.join(".config").join("dfx");
+        std::fs::create_dir_all(&dfx_dir).unwrap();
+        std::fs::write(dfx_dir.join("networks.json"), contents).unwrap();
+    }
+
+    #[test]
+    fn project_dfx_json_without_networks_falls_back_to_shared_network() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let project_dir = unique_temp_dir("project-no-networks-key");
+        std::fs::write(project_dir.join("dfx.json"), r#"{"canisters": {}}"#).unwrap();
+
+        let config_root = unique_temp_dir("shared-config");
+        write_shared_networks_json(&config_root, r#"{"local": {"bind": "127.0.0.1:8080"}}"#);
+
+        let result = with_current_dir(&project_dir, || {
+            with_dfx_config_root(&config_root, resolve_local_network)
+        })
+        .unwrap();
+
+        // Regression test for the vendored resolver hardcoding the
+        // project-local default (127.0.0.1:8000) instead of reading the
+        // shared network's actually configured bind address.
+        assert_eq!(result.providers, vec!["http://127.0.0.1:8080".to_string()]);
+
+        std::fs::remove_dir_all(&project_dir).ok();
+        std::fs::remove_dir_all(&config_root).ok();
+    }
+
+    #[test]
+    fn project_dfx_json_with_its_own_local_network_takes_precedence() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let project_dir = unique_temp_dir("project-with-local");
+        std::fs::write(
+            project_dir.join("dfx.json"),
+            r#"{"networks": {"local": {"bind": "127.0.0.1:9999"}}}"#,
+        )
+        .unwrap();
+
+        let result = with_current_dir(&project_dir, resolve_local_network).unwrap();
+
+        assert_eq!(result.providers, vec!["http://127.0.0.1:9999".to_string()]);
+
+        std::fs::remove_dir_all(&project_dir).ok();
+    }
+
+    #[test]
+    fn shared_network_without_local_entry_uses_default_shared_address() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let project_dir = unique_temp_dir("no-project");
+        let config_root = unique_temp_dir("empty-shared-config");
+
+        let result = with_current_dir(&project_dir, || {
+            with_dfx_config_root(&config_root, resolve_local_network)
+        })
+        .unwrap();
+
+        assert_eq!(
+            result.providers,
+            vec![format!("http://{DEFAULT_SHARED_LOCAL_ADDRESS}")]
+        );
+
+        std::fs::remove_dir_all(&project_dir).ok();
+        std::fs::remove_dir_all(&config_root).ok();
     }
 }

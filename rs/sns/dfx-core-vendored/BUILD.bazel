@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = [
     "//rs/sns/cli:__pkg__",
@@ -34,4 +34,17 @@ rust_library(
         ],
         "//conditions:default": [],
     }),
+)
+
+rust_test(
+    name = "dfx-core-vendored_test",
+    crate = ":dfx-core-vendored",
+    args = [
+        # network.rs's tests mutate the process's working directory and the
+        # shared dfx config directory override, so they must not interleave
+        # with each other (they already serialize among themselves, but
+        # --test-threads=1 keeps this robust against future tests added
+        # elsewhere in the crate).
+        "--test-threads=1",
+    ],
 )
