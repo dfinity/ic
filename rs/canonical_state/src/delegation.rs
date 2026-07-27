@@ -198,11 +198,12 @@ fn do_canister_ranges_match(
                     // In the tree layout, we only check that the ranges present in the delegation
                     // match the ranges assigned to the subnet in the state.
                     if children.is_empty() {
-                        // This could genuinely happen if the routing table has changed but we
-                        // haven't refreshed the NNS delegation just yet. In that case, we would
-                        // have built a delegation with no ranges, which is invalid. So we return
-                        // false here.
-                        return Ok(false);
+                        // We expect at least one leaf under /canister_ranges/<subnet_id>, so return
+                        // early if the subtree is empty. This should not happen in practice, but is
+                        // present just for robustness purposes.
+                        return Err(DelegationValidationError::UnexpectedTreeShape(format!(
+                            "empty /canister_ranges/{subnet_id} subtree"
+                        )));
                     }
 
                     for (_label, child) in children.iter() {
