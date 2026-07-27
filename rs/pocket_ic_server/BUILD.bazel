@@ -266,7 +266,7 @@ MAINNET_NNS_CANISTER_ENV = {
         ] + glob([
             "src/state_api/**/*.rs",
         ]),
-        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data,
+        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data + ["templates/dashboard.html"],
         crate_name = "pocket_ic_server",
         proc_macro_deps = [
             # Keep sorted.
