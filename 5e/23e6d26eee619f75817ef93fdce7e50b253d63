@@ -1,1 +1,13 @@
-# This commit was manually annotated by commit-annotator manually-annotate command.
+# WE DO NOT NEED THIS BRANCH.
+#
+# Not referenced in dfinity/dre release-index.yaml; no release depends on it.
+# Hand-annotated via commit-annotator manually-annotate (guestos/hostos-changed = False)
+# because "bazel query deps(//ic-os/...)" fails on this commit with a crate_index
+# lockfile digest mismatch ("the current lockfile is out of date for crate_index").
+# annotate_commits_of_branch() has no per-branch error handling, so that failure
+# aborted the whole annotator cycle every 30s and starved the two branches that ARE
+# in the release index: rc--2026-07-23_04-21-security-hotfix and
+# rc--2026-07-23_04-21-deterministic-tracker-security-hotfix.
+#
+# No release notes consume this label. To re-enable automatic annotation, remove the
+# guestos-changed / hostos-changed notes for this commit.
