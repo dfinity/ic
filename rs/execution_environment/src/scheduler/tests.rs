@@ -234,6 +234,52 @@ fn clear_own_subnet_cooling_down(test: &mut SchedulerTest) {
     set_cooling_down(test, false);
 }
 
+/// Injects a `stop_canister` call for `canister_id` from `test.xnet_canister_id()`.
+fn inject_stop_canister_call(test: &mut SchedulerTest, canister_id: CanisterId) {
+    let arg = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        arg,
+        Cycles::zero(),
+        test.xnet_canister_id(),
+        InputQueueType::RemoteSubnet,
+    );
+}
+
+/// Injects a `stop_canister` ingress message for `canister_id`, returning its
+/// `MessageId`.
+fn inject_stop_canister_ingress(test: &mut SchedulerTest, canister_id: CanisterId) -> MessageId {
+    let arg = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+    test.inject_ingress_to_ic00(Method::StopCanister, arg, expiry_time_from_now())
+}
+
+/// Asserts the number of `stop_canister` calls tracked by the subnet call context
+/// manager.
+fn assert_stop_canister_calls_len(test: &SchedulerTest, len: usize) {
+    assert_eq!(
+        len,
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len()
+    );
+}
+
+/// Pops the response to a `stop_canister` request from the subnet output queues and
+/// returns its payload.
+fn pop_stop_canister_response(test: &mut SchedulerTest) -> Payload {
+    let xnet_canister_id = test.xnet_canister_id();
+    let response = test
+        .state_mut()
+        .subnet_queues_mut()
+        .pop_canister_output(&xnet_canister_id)
+        .expect("Expected a response to the `stop_canister` request");
+    match response {
+        RequestOrResponse::Response(response) => response.response_payload.clone(),
+        msg => panic!("Unexpected output message: {msg:?}"),
+    }
+}
+
 /// Tests that a cooling down subnet executes no canister messages, while still
 /// draining its subnet queues.
 #[test]
@@ -327,29 +373,15 @@ fn cooling_down_subnet_retains_pending_stop_canister_requests() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     // Begin stopping the canister, once from a canister and once from a user.
-    let arg = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-    test.inject_call_to_ic00(
-        Method::StopCanister,
-        arg.clone(),
-        Cycles::zero(),
-        test.xnet_canister_id(),
-        InputQueueType::RemoteSubnet,
-    );
-    let ingress_message_id =
-        test.inject_ingress_to_ic00(Method::StopCanister, arg, expiry_time_from_now());
+    inject_stop_canister_call(&mut test, canister_id);
+    let ingress_message_id = inject_stop_canister_ingress(&mut test, canister_id);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     assert_eq!(
         CanisterStatusType::Stopping,
         test.canister_state(canister_id).status()
     );
-    assert_eq!(
-        2,
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .stop_canister_calls_len()
-    );
+    assert_stop_canister_calls_len(&test, 2);
     assert_eq!(
         IngressState::Processing,
         test.ingress_state(&ingress_message_id)
@@ -363,13 +395,7 @@ fn cooling_down_subnet_retains_pending_stop_canister_requests() {
         CanisterStatusType::Stopping,
         test.canister_state(canister_id).status()
     );
-    assert_eq!(
-        2,
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .stop_canister_calls_len()
-    );
+    assert_stop_canister_calls_len(&test, 2);
     assert_eq!(
         IngressState::Processing,
         test.ingress_state(&ingress_message_id)
@@ -384,27 +410,12 @@ fn cooling_down_subnet_retains_pending_stop_canister_requests() {
         CanisterStatusType::Stopping,
         test.canister_state(canister_id).status()
     );
-    assert_eq!(
-        0,
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .stop_canister_calls_len()
-    );
+    assert_stop_canister_calls_len(&test, 0);
 
     // The calling canister got a `SysTransient` reject response.
-    let xnet_canister_id = test.xnet_canister_id();
-    let response = test
-        .state_mut()
-        .subnet_queues_mut()
-        .pop_canister_output(&xnet_canister_id)
-        .expect("Expected a reject response to the `stop_canister` request");
-    match response {
-        RequestOrResponse::Response(response) => match &response.response_payload {
-            Payload::Reject(context) => assert_eq!(RejectCode::SysTransient, context.code()),
-            payload => panic!("Unexpected response payload: {payload:?}"),
-        },
-        msg => panic!("Unexpected output message: {msg:?}"),
+    match pop_stop_canister_response(&mut test) {
+        Payload::Reject(context) => assert_eq!(RejectCode::SysTransient, context.code()),
+        payload => panic!("Unexpected response payload: {payload:?}"),
     }
 
     // And the user's request failed with a timeout in ingress history.
@@ -424,39 +435,17 @@ fn cooling_down_subnet_stops_canisters_that_are_ready_to_stop() {
     set_own_subnet_cooling_down(&mut test);
 
     // The canister has no open call contexts, so it is immediately ready to stop.
-    let arg = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-    test.inject_call_to_ic00(
-        Method::StopCanister,
-        arg,
-        Cycles::zero(),
-        test.xnet_canister_id(),
-        InputQueueType::RemoteSubnet,
-    );
+    inject_stop_canister_call(&mut test, canister_id);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     assert_eq!(
         CanisterStatusType::Stopped,
         test.canister_state(canister_id).status()
     );
-    assert_eq!(
-        0,
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .stop_canister_calls_len()
-    );
-    let xnet_canister_id = test.xnet_canister_id();
-    let response = test
-        .state_mut()
-        .subnet_queues_mut()
-        .pop_canister_output(&xnet_canister_id)
-        .expect("Expected a response to the `stop_canister` request");
-    match response {
-        RequestOrResponse::Response(response) => match &response.response_payload {
-            Payload::Data(_) => {}
-            payload => panic!("Unexpected response payload: {payload:?}"),
-        },
-        msg => panic!("Unexpected output message: {msg:?}"),
+    assert_stop_canister_calls_len(&test, 0);
+    match pop_stop_canister_response(&mut test) {
+        Payload::Data(_) => {}
+        payload => panic!("Unexpected response payload: {payload:?}"),
     }
 }
 
