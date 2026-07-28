@@ -11,7 +11,7 @@ cc_import(
     visibility = ["//visibility:private"],
 )
 
-# Use an extra cc_library to hide the depth of the include folder
+# Use an extra cc_library to hide the depth of the include folder and to carry the linkopts below.
 cc_library(
     name = "libsystemd",
     includes = ["include"],

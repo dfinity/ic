@@ -9,9 +9,10 @@ cc_import(
     visibility = ["//visibility:private"],
 )
 
-# Use an extra cc_library to carry the linkopts below.
+# Use an extra cc_library to hide the depth of the include folder and to carry the linkopts below.
 cc_library(
     name = "libvirt",
+    includes = ["include"],
     # The host libvirt.so (and the host libsystemd.so it pulls in) is built
     # against the host glibc, which is newer than the glibc 2.31 the zig
     # toolchains target. zig 0.15's lld checks the undefined *versioned* symbol
