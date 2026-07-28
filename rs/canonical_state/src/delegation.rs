@@ -425,7 +425,8 @@ mod tests {
 
         assert_matches!(
             is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-            Ok(true)
+            Ok(true),
+            "a delegation whose public key and ranges match the state should be valid in the {format:?} layout"
         );
     }
 
@@ -447,7 +448,8 @@ mod tests {
 
         assert_matches!(
             is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-            Ok(false)
+            Ok(false),
+            "a delegation with a mismatching public key should be invalid in the {format:?} layout"
         );
     }
 
@@ -469,7 +471,8 @@ mod tests {
 
         assert_matches!(
             is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-            Err(DelegationValidationError::UnknownSubnet(_))
+            Err(DelegationValidationError::UnknownSubnet(_)),
+            "validating a delegation whose subnet is unknown to the state should fail with UnknownSubnet in the {format:?} layout"
         );
     }
 
@@ -498,9 +501,16 @@ mod tests {
             &build_tree(format, subnet_id, &public_key, &subset),
         );
 
+        // Flat requires an exact match; Tree accepts a subset; Pruned ignores ranges.
+        let should_be_valid = matches!(
+            format,
+            CertificateDelegationFormat::Tree | CertificateDelegationFormat::Pruned
+        );
         assert_matches!(
             is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-            Ok(is_valid) if is_valid == matches!(format, CertificateDelegationFormat::Tree | CertificateDelegationFormat::Pruned)
+            Ok(is_valid) if is_valid == should_be_valid,
+            "certifying a strict subset of the state's ranges should be {} in the {format:?} layout",
+            if should_be_valid { "valid" } else { "invalid" }
         );
     }
 
@@ -536,9 +546,14 @@ mod tests {
             &build_tree(format, subnet_id, &public_key, &certified_ranges),
         );
 
+        // Only the Pruned layout ignores ranges; Flat and Tree must reject the mismatch.
+        let should_be_valid = matches!(format, CertificateDelegationFormat::Pruned);
         assert_matches!(
             is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-            Ok(is_valid) if is_valid == matches!(format, CertificateDelegationFormat::Pruned)
+            Ok(is_valid) if is_valid == should_be_valid,
+            "certifying ranges {certified_ranges:?} that the state does not assign to the subnet \
+             should be {} in the {format:?} layout",
+            if should_be_valid { "valid" } else { "invalid" }
         );
     }
 
@@ -560,12 +575,12 @@ mod tests {
         // The delegation certifies no ranges at all.
         let delegation = delegation(subnet_id, &build_tree(format, subnet_id, &public_key, &[]));
 
+        let result = is_delegation_valid_with_respect_to_state(&delegation, format, &state);
         assert_eq!(
-            matches!(
-                is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-                Ok(true)
-            ),
-            matches!(format, CertificateDelegationFormat::Pruned)
+            matches!(result, Ok(true)),
+            matches!(format, CertificateDelegationFormat::Pruned),
+            "a delegation certifying no ranges should be valid only in the Pruned layout, \
+             but got {result:?} in the {format:?} layout"
         )
     }
 
@@ -594,7 +609,8 @@ mod tests {
 
         assert_matches!(
             is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-            Ok(false)
+            Ok(false),
+            "a delegation certifying a range the state assigns to another subnet should be invalid in the {format:?} layout"
         );
     }
 
@@ -614,7 +630,8 @@ mod tests {
 
         assert_matches!(
             is_delegation_valid_with_respect_to_state(&delegation, format, &state),
-            Err(DelegationValidationError::UnexpectedTreeShape(_))
+            Err(DelegationValidationError::UnexpectedTreeShape(_)),
+            "a delegation missing the ranges path required by the {format:?} layout should fail with UnexpectedTreeShape"
         );
     }
 }
