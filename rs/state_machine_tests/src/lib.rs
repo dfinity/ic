@@ -352,16 +352,15 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         .unwrap();
 
     // replica version record
-    let replica_version = ReplicaVersion::default();
     let replica_version_record = ReplicaVersionRecord {
-        version_id: Some(replica_version.to_string()),
+        version_id: ReplicaVersion::default().to_string(),
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,
     };
     registry_data_provider
         .add(
-            &make_replica_version_key(replica_version),
+            &make_replica_version_key(&replica_version_record.version_id),
             registry_version,
             Some(replica_version_record),
         )
