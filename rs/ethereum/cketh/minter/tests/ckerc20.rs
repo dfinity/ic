@@ -258,14 +258,11 @@ mod deposit_erc20 {
             ckerc20
                 .env
                 .advance_time(REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL);
-            ckerc20.env.tick();
-            ckerc20.env.tick();
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
                 .with_request_params(json!(["latest", false]))
                 .respond_for_all_with(block_response(block))
                 .build()
                 .expect_rpc_calls(ckerc20);
-
             ckerc20.env.tick();
         }
 

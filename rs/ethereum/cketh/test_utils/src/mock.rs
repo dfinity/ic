@@ -111,21 +111,12 @@ impl JsonRpcRequestMatcher {
     }
 
     fn tick_until_next_http_request(&self, env: &StateMachine) {
-        let method = self.json_rpc_method.to_string();
         for _ in 0..MAX_TICKS {
-            let matching_method = env
+            let has_matching_request = env
                 .canister_http_request_contexts()
                 .values()
-                .any(|context| {
-                    JsonRpcRequest::from_str(
-                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
-                    )
-                    .expect("BUG: invalid JSON RPC method")
-                    .method
-                    .to_string()
-                        == method
-                });
-            if matching_method {
+                .any(|context| self.matches(context));
+            if has_matching_request {
                 break;
             }
             env.tick();
