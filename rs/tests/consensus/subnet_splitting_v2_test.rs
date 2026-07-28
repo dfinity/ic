@@ -33,20 +33,19 @@ use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, canister_id_into_u64, difference,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::driver::test_env_api::{HasRegistryVersion, get_dependency_path};
-use ic_system_test_driver::nns::vote_and_execute_proposal;
-use ic_system_test_driver::retry_with_msg_async;
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
+    canister_agent::HasCanisterAgentCapability,
     driver::{
+        group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsCustomizations, SubnetSnapshot,
+            HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
+            IcNodeSnapshot, NnsCustomizations, SubnetSnapshot, get_dependency_path,
         },
     },
+    nns::vote_and_execute_proposal,
+    retry_with_msg_async, retry_with_msg_async_quiet, systest,
     util::runtime_from_url,
 };
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
