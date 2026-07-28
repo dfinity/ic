@@ -5,6 +5,18 @@
 //   one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
+// Every VM of the IC is pinned to the dm1-dmz datacenter in code, so neither the
+// DC nor the ALLOCATE_TESTNET_TO_LOCAL_DC env var is needed. The ic-gateway
+// additionally requires a DMZ host because it is the one VM that gets a publicly
+// routed IPv4 address attached (see IC_GW_IPV4 below).
+//
+// The nodes run the GuestOS version that mainnet's NNS subnet runs, and the NNS
+// canisters are the ones currently installed on mainnet (`guestos =
+// "mainnet_nns_dev"` plus the mainnet-NNS variant declared by `system_test_nns`
+// in rs/tests/testnets/BUILD.bazel). Deploy the `cloud_engine` target, NOT
+// `cloud_engine_head_nns`: the latter installs NNS canisters built from the tip
+// of this branch.
+//
 // The number of unassigned nodes can be overridden via the NUM_UNASSIGNED_NODES
 // env var (e.g. NUM_UNASSIGNED_NODES=60 will spin up 60 unassigned nodes,
 // distributed round-robin across the 20 DCs, yielding 3 nodes per DC). When
@@ -14,7 +26,16 @@
 // You can setup this testnet by executing the following commands (preferably from a devenv in dm1-idx1):
 //
 //   $ ./ci/tools/docker-run
-//   $ bazel run //rs/tests/testnets:cloud_engine --test_tmpdir=./cloud_engine -- --keepalive
+//   $ bazel run //rs/tests/testnets:cloud_engine --test_tmpdir=./cloud_engine \
+//       --test_env=IC_GW_IPV4=<free-address-of-the-dm1-dmz-network> \
+//       --test_env=DEMO_DOMAIN=<subdomain> -- --keepalive
+//
+// IC_GW_IPV4 must be a free address of the dm1-dmz network defined below;
+// leaving it out yields a testnet that is reachable over IPv6 only, since the
+// farm host's IPv4 address is private. DEMO_DOMAIN keeps the testnet's URL
+// stable across redeployments: farm serves a Let's Encrypt certificate for
+// <DEMO_DOMAIN>.demo.farm.dfinity.systems (plus its wildcards) and repoints
+// the DNS records at the new ic-gateway VM.
 //
 // The --test_tmpdir=./cloud_engine will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -42,6 +63,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
+    farm::HostFeature,
     group::SystemTestGroup,
     ic::{InternetComputer, Node, NodeOperatorConfig, Subnet},
     ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
@@ -56,6 +78,13 @@ use nns_dapp::{
     set_authorized_subnets,
 };
 use std::collections::BTreeMap;
+use std::net::Ipv4Addr;
+
+/// dm1-dmz datacenter and network constants
+const DM1_DMZ_DC: &str = "dm1-dmz";
+const DM1_DMZ_NETWORK: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 224);
+const DM1_DMZ_PREFIX: u8 = 28;
+const DM1_DMZ_GATEWAY: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 238);
 
 /// Cycles to fund the demo application canister with. 300T cycles.
 const DEMO_CANISTER_CYCLES: u128 = 300_000_000_000_000;
@@ -275,9 +304,20 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
+    // The whole testnet lives in dm1-dmz. Only the VMs that get a public IPv4
+    // address attached additionally require the DMZ host feature; asking for it
+    // on every replica would narrow placement for no reason.
+    let dm1_features = vec![HostFeature::DC(DM1_DMZ_DC.to_string())];
+    let dm1_dmz_features = vec![HostFeature::DC(DM1_DMZ_DC.to_string()), HostFeature::DMZ];
+
+    // `InternetComputer::with_required_host_features` only reaches the API
+    // boundary nodes; subnets and unassigned nodes are pinned individually below
+    // (`add_subnet` and `with_unassigned_node` do not inherit it).
     let mut ic = InternetComputer::new()
+        .with_required_host_features(dm1_dmz_features.clone())
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_required_host_features(dm1_features.clone())
                 .add_nodes(1)
                 // To speed up subnet creation
                 .with_dkg_interval_length(Height::from(10)),
@@ -285,6 +325,7 @@ pub fn setup(env: TestEnv) {
         // A small 1-node Application subnet, used to host a demo canister.
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_required_host_features(dm1_features.clone())
                 .add_nodes(1)
                 .with_dkg_interval_length(Height::from(10)),
         );
@@ -368,7 +409,8 @@ pub fn setup(env: TestEnv) {
             ic = ic.with_unassigned_node(
                 Node::new()
                     .with_node_operator_principal_id(operator_principal)
-                    .with_node_reward_type(*reward_type),
+                    .with_node_reward_type(*reward_type)
+                    .with_required_host_features(dm1_features.clone()),
             );
         }
     }
@@ -383,8 +425,25 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         nns_dapp_customizations(),
     );
-    // Deploy ic-gateway on any Farm host (no public/DMZ access needed).
-    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+    // Deploy ic-gateway on dm1-dmz. Given IC_GW_IPV4 it also gets a static,
+    // publicly routed IPv4 address, which farm publishes as the testnet's A
+    // record; without it the testnet is reachable over IPv6 only.
+    let mut ic_gateway_vm =
+        IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(dm1_dmz_features);
+    if let Ok(ic_gw_ipv4) = std::env::var("IC_GW_IPV4") {
+        let ip: Ipv4Addr = ic_gw_ipv4
+            .parse()
+            .unwrap_or_else(|e| panic!("invalid IC_GW_IPV4 address '{ic_gw_ipv4}': {e}"));
+        let mask: u32 = !((1_u32 << (32 - DM1_DMZ_PREFIX)) - 1);
+        assert_eq!(
+            u32::from(ip) & mask,
+            u32::from(DM1_DMZ_NETWORK),
+            "IC_GW_IPV4 address {ip} is not within {DM1_DMZ_NETWORK}/{DM1_DMZ_PREFIX}"
+        );
+        let address = format!("{ip}/{DM1_DMZ_PREFIX}");
+        ic_gateway_vm = ic_gateway_vm.with_ipv4_config(&address, &DM1_DMZ_GATEWAY.to_string());
+    }
+    ic_gateway_vm
         .start(&env)
         .expect("failed to setup ic-gateway");
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
