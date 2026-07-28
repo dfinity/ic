@@ -14,8 +14,9 @@ fn initcode_is_a_create_program_embedding_balance_of_selector() {
     // Leading PUSH32 (0x7f) then the balanceOf selector in the top 4 bytes of the word.
     assert_eq!(BATCHER_INITCODE[0], 0x7f);
     assert_eq!(&BATCHER_INITCODE[1..5], &BALANCE_OF_SELECTOR);
-    // Terminates with RETURN.
-    assert_eq!(*BATCHER_INITCODE.last().unwrap(), 0xf3);
+    // Has a RETURN (success path) and terminates with REVERT (fail-loud path).
+    assert!(BATCHER_INITCODE.contains(&0xf3));
+    assert_eq!(*BATCHER_INITCODE.last().unwrap(), 0xfd);
 }
 
 #[test]

@@ -465,13 +465,16 @@ Detection runs as a **minter background task over "active" addresses**:
 Scanning itself is a two-filter funnel, cheap-first:
 
 **Filter 1 — balances.** One create-style `eth_call` (`to` omitted) runs a
-**deployless balance batcher**: a fixed ~163-byte init-code program with the
+**deployless balance batcher**: a fixed ~165-byte init-code program with the
 `(token, holder)` pairs for every active address × supported token appended as
 calldata. The node executes it as init code and returns its `RETURN` without
 deploying anything or touching state — a pure read. The program `STATICCALL`s
 `balanceOf` for each pair and returns the balances as a flat `uint256[]` (32 bytes
-each), multiplying each result by the sub-call's success flag so a reverting or
-non-contract token reads back as `0`. One HTTPS outcall per provider; later a plain
+each). The token list is a trusted whitelist, so a sub-call that reverts or does
+not return exactly 32 bytes (e.g. a non-contract address) is treated as an anomaly
+rather than "no balance": the whole call reverts, surfacing as an `eth_call` error
+that fails the tick loudly (the affected addresses are retried, not silently
+recorded as empty). One HTTPS outcall per provider; later a plain
 JSON-RPC batch once the EVM-RPC canister supports `eth_batch`,
 [dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561).
 This deployless batcher was chosen over a
