@@ -255,10 +255,11 @@ sh_binary(
     visibility = ["//visibility:public"],
 )
 
-# the STABLE_VERSION, suffixed with `-test`. Used in testing.
+# An obviously-fake, but still well-formed (40-character hexadecimal),
+# replica version ID, distinct from both STABLE_VERSION and the all-zero
+# genesis replica version ID some tests use. Used in testing.
 genrule(
     name = "version-test",
-    srcs = ["//bazel:version.txt"],
     outs = ["version-test.txt"],
-    cmd = "sed < $< 's/$$/-test/' > $@",
+    cmd = "echo 'deadbeefffffffffffffffffffffffffffffffff' > $@",
 )
