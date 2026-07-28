@@ -132,10 +132,10 @@ impl AutomaticDeposits {
                         let elapsed_blocks = latest_block
                             .checked_sub(last_scanned_block)
                             .unwrap_or(BlockNumber::ZERO);
-                        let elapsed_secs = elapsed_blocks
-                            .checked_mul(SECS_PER_BLOCK)
-                            .unwrap_or(BlockNumber::MAX);
-                        elapsed_secs >= BlockNumber::new(SCAN_GAP_SECS[index] as u128)
+                        let elapsed_secs = u64::try_from(elapsed_blocks.into_inner())
+                            .unwrap_or(u64::MAX)
+                            .saturating_mul(SECS_PER_BLOCK);
+                        elapsed_secs >= SCAN_GAP_SECS[index]
                     }
                 }
             };
