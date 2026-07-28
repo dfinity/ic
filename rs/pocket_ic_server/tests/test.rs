@@ -27,8 +27,10 @@
 use crate::common::{send_signal_to_pic, start_server, start_server_helper};
 use candid::{Encode, Principal};
 use ic_agent::agent::CallResponse;
-use ic_cdk::api::management_canister::main::CanisterIdRecord;
-use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
+use ic_cdk::management_canister::{
+    CanisterIdRecord,
+    ProvisionalCreateCanisterWithCyclesArgs as IcCdkProvisionalCreateCanisterWithCyclesArgs,
+};
 use ic_management_canister_types_private::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
@@ -1116,7 +1118,7 @@ fn provisional_create_canister_with_cycles() {
         .with_application_subnet()
         .build();
 
-    let arg = ProvisionalCreateCanisterWithCyclesArgument::default();
+    let arg = IcCdkProvisionalCreateCanisterWithCyclesArgs::default();
     let res: (CanisterIdRecord,) = update_candid(
         &pic,
         Principal::management_canister(),
