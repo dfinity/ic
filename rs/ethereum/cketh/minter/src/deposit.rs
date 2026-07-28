@@ -187,6 +187,7 @@ pub async fn refresh_latest_block_height() -> Option<BlockNumber> {
         Ok(guard) => guard,
         Err(_) => return read_state(|s| s.latest_block_height),
     };
+    let previous_lastest_block_number = read_state(|s| s.latest_block_height);
     match read_state(rpc_client)
         .get_block_by_number(BlockTag::Latest)
         .with_cycles(MIN_ATTACHED_CYCLES)
@@ -197,8 +198,23 @@ pub async fn refresh_latest_block_height() -> Option<BlockNumber> {
         })) {
         Ok(latest_block) => {
             let block_number = Some(BlockNumber::from(latest_block.number));
-            mutate_state(|s| s.latest_block_height = block_number);
-            block_number
+            match previous_lastest_block_number.cmp(&block_number) {
+                std::cmp::Ordering::Less => {
+                    mutate_state(|s| s.latest_block_height = block_number);
+                    block_number
+                }
+                std::cmp::Ordering::Equal => {
+                    // no progress, tracked by metric
+                    None
+                }
+                std::cmp::Ordering::Greater => {
+                    log!(
+                        INFO,
+                        "[refresh_latest_block_height] Latest block number {block_number:?} is smaller than last latest block number {previous_lastest_block_number:?}"
+                    );
+                    None
+                }
+            }
         }
         Err(e) => {
             log!(INFO, "Failed to get the latest block number: {e:?}");
