@@ -5999,8 +5999,12 @@ fn check_install_code_in_wasm64_mode_is_charged_correctly() {
     let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, false);
     let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, false);
 
-    assert_lt!(balance64, balance32);
-    assert_lt!(execution_cost32, execution_cost64);
+    // Install messages are always charged at the Wasm32 rate because the
+    // execution mode of the new module is not known before it is compiled in
+    // the sandbox, so installing the (otherwise identical) Wasm64 module
+    // costs the same as the Wasm32 one.
+    assert_eq!(balance64, balance32);
+    assert_eq!(execution_cost32, execution_cost64);
 }
 
 #[test]

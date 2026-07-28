@@ -8,28 +8,29 @@
 # directory and trip the race above, crashing zig's linker child with SIGABRT
 # ("abnormal exit: child_process.ChildProcess.Term{ .Signal = 6 }").
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
-index 88978ee..6456bb5 100644
+index 6e58bd4..0161945 100644
 --- a/toolchain/defs.bzl
 +++ b/toolchain/defs.bzl
-@@ -184,7 +184,7 @@ def _zig_repository_impl(repository_ctx):
-     cache_prefix = repository_ctx.os.environ.get("HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX", "")
+@@ -199,8 +199,7 @@ def _zig_repository_impl(repository_ctx):
+ 
      if cache_prefix == "":
          if host_os == "windows":
--            cache_prefix = "C:\\\\Temp\\\\zig-cache"
+-            local_app_data = repository_ctx.os.environ.get("LOCALAPPDATA", "")
+-            cache_prefix = "{}\\zig".format(local_app_data) if local_app_data else "C:\\\\Temp\\\\zig-cache"
 +            fail("windows is not supported")
-         elif host_os == "macos":
-             cache_prefix = "/var/tmp/zig-cache"
-         elif host_os == "linux":
+         else:
+             home = repository_ctx.os.environ.get("HOME", "")
+             if home:
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index 42f84d5..acac7de 100644
+index 486cbda..c0d0e7e 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
-@@ -201,6 +201,36 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
+@@ -207,6 +207,22 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
      return code;
  }
-
+ 
 +fn makeSuffix(allocator: std.mem.Allocator, pwd: []const u8) ![]const u8 {
-+    var it = std.mem.tokenize(u8, pwd, "/");
++    var it = std.mem.tokenizeScalar(u8, pwd, '/');
 +
 +    while (it.next()) |segment| {
 +        // Remote execution (e.g. Namespace RBE) runs every action in its own
@@ -61,25 +62,36 @@ index 42f84d5..acac7de 100644
  // argv_it is an object that has such method:
  //     fn next(self: *Self) ?[]const u8
  // in non-testing code it is *process.ArgIterator.
-@@ -257,9 +287,19 @@ fn parseArgs(
-     var env = process.getEnvMap(arena) catch |err|
-         return parseFatal(arena, "error getting env: {s}", .{@errorName(err)});
-
-+    // Get the current working directory (PWD)
-+    const allocator = std.heap.page_allocator;
-+    const pwd = std.fs.cwd().realpathAlloc(allocator, ".") catch {
-+        std.process.exit(1);
-+    };
-+    defer allocator.free(pwd);
-+
+@@ -279,9 +295,18 @@ fn parseArgs(
+         break :blk @as([]const u8, if (builtin.os.tag == .macos) "/var/tmp/zig-cache" else "/tmp/zig-cache");
+     };
+ 
++    // Work around a race condition in zig (https://github.com/ziglang/zig/issues/23993)
++    // by giving each bazel configuration its own zig cache directory. The
++    // configuration is derived from the current working directory, which under
++    // bazel contains a "k8-opt-..." output-tree segment unique per config.
++    const pwd = cwd.realpathAlloc(arena, ".") catch |err|
++        return parseFatal(arena, "error getting cwd: {s}", .{@errorName(err)});
 +    const suffix = try makeSuffix(arena, pwd);
-+    const cache_dir = try std.fmt.allocPrint(arena, "{s}/{s}", .{ CACHE_DIR, suffix });
++    const cache_dir_with_suffix = try std.fmt.allocPrint(arena, "{s}/{s}", .{ cache_dir, suffix });
 +
      try env.put("ZIG_LIB_DIR", zig_lib_dir);
--    try env.put("ZIG_LOCAL_CACHE_DIR", CACHE_DIR);
--    try env.put("ZIG_GLOBAL_CACHE_DIR", CACHE_DIR);
-+    try env.put("ZIG_LOCAL_CACHE_DIR", cache_dir);
-+    try env.put("ZIG_GLOBAL_CACHE_DIR", cache_dir);
-
-     // args is the path to the zig binary and args to it.
-     var args = ArrayListUnmanaged([]const u8){};
+-    try env.put("ZIG_LOCAL_CACHE_DIR", cache_dir);
+-    try env.put("ZIG_GLOBAL_CACHE_DIR", cache_dir);
++    try env.put("ZIG_LOCAL_CACHE_DIR", cache_dir_with_suffix);
++    try env.put("ZIG_GLOBAL_CACHE_DIR", cache_dir_with_suffix);
+ 
+     // Zig 0.14.0 locates the macOS SDK by running `xcrun --show-sdk-path`.
+     // Bazel clears PATH via `exec env -`, making xcrun unfindable. Restore
+@@ -606,7 +631,10 @@ test "zig-wrapper:cache dir override" {
+     const global_cache_dir = res.exec.env.get("ZIG_GLOBAL_CACHE_DIR").?;
+ 
+     try testing.expectEqualStrings(cache_dir, global_cache_dir);
+-    try testing.expectEqualStrings(CACHE_DIR, cache_dir);
++    // The cache dir carries a per-bazel-config suffix (see makeSuffix). The
++    // test runs from a temporary directory, i.e. outside a bazel output tree,
++    // so it gets the catchall.
++    try testing.expectEqualStrings(CACHE_DIR ++ "/config-catchall", cache_dir);
+ }
+ 
+ fn noExe(b: []const u8) []const u8 {

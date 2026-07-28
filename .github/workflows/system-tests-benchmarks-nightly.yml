@@ -17,7 +17,7 @@ jobs:
       group: dm1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:3e3ee32a5de1fde724d4ab931cd5868dad52fef823c41331494a5b36742a6907
+      image: ghcr.io/dfinity/ic-build@sha256:b065e34c54640d10a8acd930b0b9b8a9caaa8479e3efaf38d2c7062b3e252669
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 480
