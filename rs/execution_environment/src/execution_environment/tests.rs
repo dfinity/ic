@@ -2528,6 +2528,55 @@ fn setup_initial_dkg_sender_not_on_nns() {
 }
 
 #[test]
+fn setup_initial_dkg_bound_holds() {
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_max_setup_initial_dkg_requests_in_flight(2)
+        .build();
+    let nodes = vec![node_test_id(1)];
+    let args = ic00::SetupInitialDKGArgs::new(nodes, RegistryVersion::new(1));
+    test.inject_call_to_ic00(
+        Method::SetupInitialDKG,
+        args.encode(),
+        test.canister_creation_fee().real(),
+    );
+    test.execute_all();
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .len(),
+        1
+    );
+
+    for _ in 0..10 {
+        let args = ic00::SetupInitialDKGArgs::new(vec![node_test_id(1)], RegistryVersion::new(1));
+        test.inject_call_to_ic00(
+            Method::SetupInitialDKG,
+            args.encode(),
+            test.canister_creation_fee().real(),
+        );
+    }
+    test.execute_all();
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn metrics_are_observed_for_subnet_messages() {
     let mut test = ExecutionTestBuilder::new().build();
     let methods: [ic00::Method; 5] = [
