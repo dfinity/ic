@@ -46,11 +46,17 @@ pub fn spawn_socketed_process(
             // return `newfd` without touching it. `socket` can already be fd 3:
             // the kernel hands out the lowest free descriptor, so under the fd
             // churn of a process that creates and destroys many sandboxes, the
-            // socket pair created for this child can land there. In that case
-            // fd 3 keeps the `SOCK_CLOEXEC` that `UnixStream::pair()` set,
-            // `execve()` closes it, and the child ends up talking to a closed
-            // descriptor. Clear the flag unconditionally to cover both cases.
-            if libc::fcntl(3, libc::F_SETFD, 0) == -1 {
+            // socket pair created for this child can land there. Since
+            // `UnixStream::pair()` creates the sockets with `SOCK_CLOEXEC`,
+            // fd 3 then still has `FD_CLOEXEC` set, `execve()` closes it, and
+            // the child ends up talking to a closed descriptor. Clear the flag
+            // unconditionally to cover both cases, leaving any other descriptor
+            // flag untouched.
+            let flags = libc::fcntl(3, libc::F_GETFD);
+            if flags == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if libc::fcntl(3, libc::F_SETFD, flags & !libc::FD_CLOEXEC) == -1 {
                 return Err(std::io::Error::last_os_error());
             }
             Ok(())
