@@ -216,6 +216,8 @@ impl std::hash::Hash for RemoteDkgAttempts {
     }
 }
 
+/// The subnet-splitting-related information available when the subnet is splitting at the summary
+/// block.
 #[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SplittingArgs {
@@ -223,17 +225,17 @@ pub struct SplittingArgs {
     pub source_subnet_id: SubnetId,
 }
 
-/// The subnet-splitting-related information available once the subnet has been
-/// split at the previous summary block.
+/// The subnet-splitting-related information available once the subnet has been split at the
+/// previous summary block.
 #[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PostSplitArgs {
     pub new_subnet_id: SubnetId,
 }
 
+/// Represents the status of subnet splitting at the given summary height.
 #[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug, Default)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-/// Represents the status of subnet splitting at the given summary height.
 pub enum SubnetSplittingStatus {
     /// The subnet hasn't been requested to be split.
     #[default]
