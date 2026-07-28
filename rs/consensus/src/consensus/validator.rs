@@ -86,6 +86,7 @@ enum ValidationFailure {
     BlockNotFound(CryptoHashOf<Block>, Height),
     FinalizedBlockNotFound(Height),
     FailedToGetRegistryVersion,
+    FailedToGetConsensusStatus,
     ValidationContextNotReached(ValidationContext, ValidationContext),
     CatchUpHeightNegligible,
     MissingPastPayloads,
@@ -1200,18 +1201,22 @@ impl Validator {
             return Err(InvalidArtifactReason::CannotVerifyBlockHeightZero.into());
         }
 
+        let parent = get_notarized_parent(pool_reader, proposal)?;
+        let last_summary_block = pool_reader
+            .dkg_summary_block(&parent)
+            .ok_or(ValidationFailure::DkgSummaryNotFound(parent.height))?;
         let Some(status) = status::get_status(
             proposal.height(),
+            &last_summary_block,
             self.registry_client.as_ref(),
             self.replica_config.subnet_id,
             pool_reader,
             &self.log,
         ) else {
-            return Err(ValidationFailure::FailedToGetRegistryVersion.into());
+            return Err(ValidationFailure::FailedToGetConsensusStatus.into());
         };
 
         let proposer = proposal.signature.signer;
-        let parent = get_notarized_parent(pool_reader, proposal)?;
 
         // Ensure registry_version, certified_height increase monotonically and that
         // time increases *strictly* monotonically.
@@ -1328,6 +1333,7 @@ impl Validator {
             self.state_manager.as_ref(),
             &proposal.context,
             &parent,
+            &last_summary_block,
             proposal.payload.as_ref(),
             self.metrics.idkg_validation_duration.clone(),
         )
@@ -1351,6 +1357,7 @@ impl Validator {
             pool_reader,
             dkg_pool,
             parent,
+            &last_summary_block,
             proposal.payload.as_ref(),
             self.state_manager.as_ref(),
             &proposal.context,
@@ -2857,6 +2864,7 @@ pub mod test {
             assert_matches!(
                 status::get_status(
                     summary_proposal.height(),
+                    &PoolReader::new(&pool).get_highest_finalized_summary_block(),
                     registry_client.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),

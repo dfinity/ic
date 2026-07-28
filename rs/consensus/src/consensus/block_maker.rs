@@ -19,7 +19,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, debug, error, trace, warn};
+use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -29,7 +29,7 @@ use ic_types::{
         Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
         HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
         block_maker::SubnetRecords,
-        dkg::{DkgDataPayload, DkgPayload},
+        dkg::{DkgDataPayload, DkgPayload, SubnetSplittingStatus},
         hashed,
     },
     replica_config::ReplicaConfig,
@@ -190,6 +190,11 @@ impl BlockMaker {
         let height = parent.height().increment();
         let certified_height = self.state_reader.latest_certified_height();
 
+        let Some(last_summary_block) = pool.dkg_summary_block(parent.get_value()) else {
+            warn!(self.log, "Couldn't find the summary block");
+            return None;
+        };
+
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
         //
@@ -276,6 +281,7 @@ impl BlockMaker {
             pool,
             context,
             parent,
+            &last_summary_block,
             height,
             rank,
             registry_version,
@@ -291,6 +297,7 @@ impl BlockMaker {
         pool: &PoolReader<'_>,
         context: ValidationContext,
         parent: HashedBlock,
+        last_summary_block: &Block,
         height: Height,
         rank: Rank,
         registry_version: RegistryVersion,
@@ -306,6 +313,7 @@ impl BlockMaker {
             pool,
             Arc::clone(&self.dkg_pool),
             parent.as_ref(),
+            last_summary_block,
             &*self.state_reader,
             &context,
             self.log.clone(),
@@ -331,6 +339,7 @@ impl BlockMaker {
                         pool,
                         &context,
                         parent.as_ref(),
+                        last_summary_block,
                         Some(&self.idkg_payload_metrics),
                         &self.log,
                     )
@@ -341,6 +350,13 @@ impl BlockMaker {
                     })
                     .ok()?;
 
+                    if matches!(
+                        summary.subnet_splitting_status(),
+                        SubnetSplittingStatus::Scheduled(..)
+                    ) {
+                        info!(self.log, "Proposing a Splitting block at height {}.", height);
+                    }
+
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
                         idkg: idkg_summary,
@@ -349,6 +365,7 @@ impl BlockMaker {
                 DkgPayload::Data(dkg) => {
                     let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
+                        last_summary_block,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
                         pool,
@@ -381,6 +398,7 @@ impl BlockMaker {
                                 &*self.state_reader,
                                 &context,
                                 parent.as_ref(),
+                                last_summary_block,
                                 &self.idkg_payload_metrics,
                                 &self.log,
                             )

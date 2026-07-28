@@ -176,6 +176,7 @@ impl CatchUpPackageMaker {
         let halting = || {
             status::should_halt(
                 height,
+                Some(&start_block),
                 self.membership.registry_client.as_ref(),
                 self.membership.subnet_id,
                 pool,
