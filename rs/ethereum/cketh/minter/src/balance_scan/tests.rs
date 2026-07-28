@@ -12,16 +12,35 @@ fn account(owner: u8) -> Account {
 }
 
 #[test]
-fn should_count_candidates_at_and_above_minimum_only() {
-    let min = Erc20Value::from(1_000_000_u64);
+fn should_count_candidates_at_and_above_the_per_token_minimum() {
+    let (token, min) = MIN_DEPOSITS[0]; // ckUSDC
+    let calls = vec![
+        BalanceOfCall {
+            token,
+            holder: DEPOSIT_ADDRESS,
+        };
+        4
+    ];
     let balances = vec![
-        Erc20Value::from(1_000_000_u64), // == min      -> candidate
-        Erc20Value::from(999_999_u64),   // < min       -> excluded
-        Erc20Value::from(1_000_001_u64), // > min       -> candidate
-        Erc20Value::from(0_u64),         // failed/zero -> excluded
+        min,                                              // == min      -> candidate
+        min.checked_sub(Erc20Value::from(1_u8)).unwrap(), // < min      -> excluded
+        min.checked_add(Erc20Value::from(1_u8)).unwrap(), // > min      -> candidate
+        Erc20Value::from(0_u8),                           // failed/zero -> excluded
     ];
 
-    assert_eq!(count_candidates(&balances, min), 2);
+    assert_eq!(count_candidates(&calls, &balances), 2);
+}
+
+#[test]
+fn should_not_count_candidates_for_an_unsupported_token() {
+    // TOKEN_A is absent from MIN_DEPOSITS, so even a huge balance is never a candidate.
+    let calls = vec![BalanceOfCall {
+        token: TOKEN_A,
+        holder: DEPOSIT_ADDRESS,
+    }];
+    let balances = vec![Erc20Value::from(u128::MAX)];
+
+    assert_eq!(count_candidates(&calls, &balances), 0);
 }
 
 #[test]
