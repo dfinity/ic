@@ -157,7 +157,14 @@ pub(crate) fn deliver_batches_with_result_processor(
         }
         // When we are not delivering CUP block, we must check if the subnet is halted.
         else {
-            match status::get_status(height, &summary_block, registry_client, subnet_id, pool, log) {
+            match status::get_status(
+                height,
+                &summary_block,
+                registry_client,
+                subnet_id,
+                pool,
+                log,
+            ) {
                 Some(Status::Halting | Status::Halted) => {
                     debug!(
                         every_n_seconds => 5,

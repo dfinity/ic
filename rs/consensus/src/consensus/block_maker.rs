@@ -354,7 +354,10 @@ impl BlockMaker {
                         summary.subnet_splitting_status(),
                         SubnetSplittingStatus::Scheduled(..)
                     ) {
-                        info!(self.log, "Proposing a Splitting block at height {}.", height);
+                        info!(
+                            self.log,
+                            "Proposing a Splitting block at height {}.", height
+                        );
                     }
 
                     BlockPayload::Summary(SummaryPayload {
