@@ -278,7 +278,7 @@ impl StubOnce {
     }
 }
 
-fn debug_http_outcalls(env: &StateMachine) -> String {
+pub fn debug_http_outcalls(env: &StateMachine) -> String {
     let mut debug_str = vec![];
     for context in env.canister_http_request_contexts().values() {
         let request_body = context
