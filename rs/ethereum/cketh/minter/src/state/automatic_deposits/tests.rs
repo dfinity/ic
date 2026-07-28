@@ -161,74 +161,81 @@ fn should_snapshot_entries_in_time_index_order() {
     );
 }
 
-#[test]
-fn should_mark_never_scanned_address_as_due() {
-    let deposits = deposits_from(vec![scan_state(account(0), ts(window_nanos()), None, 0)]);
+mod addresses_due_for_scan {
+    use super::{
+        BlockNumber, SCAN_GAP_SECS, SECS_PER_BLOCK, account, deposit_address, deposits_from,
+        scan_state, ts, window_nanos,
+    };
 
-    let due: Vec<_> = deposits
-        .addresses_due_for_scan(ts(0), BlockNumber::new(1_000))
-        .collect();
+    #[test]
+    fn should_mark_never_scanned_address_as_due() {
+        let deposits = deposits_from(vec![scan_state(account(0), ts(window_nanos()), None, 0)]);
 
-    assert_eq!(due, vec![(account(0), deposit_address(&account(0)))]);
-}
+        let due: Vec<_> = deposits
+            .addresses_due_for_scan(ts(0), BlockNumber::new(1_000))
+            .collect();
 
-#[test]
-fn should_mark_scanned_address_due_only_after_the_current_gap() {
-    // scan_count 2 selects a 60s gap, i.e. 5 blocks at 12s per block.
-    let last_scanned = BlockNumber::new(1_000);
-    let deposits = deposits_from(vec![scan_state(
-        account(0),
-        ts(window_nanos()),
-        Some(last_scanned),
-        2,
-    )]);
-    let gap_blocks = SCAN_GAP_SECS[2] / SECS_PER_BLOCK;
-    assert_eq!(gap_blocks, 5);
+        assert_eq!(due, vec![(account(0), deposit_address(&account(0)))]);
+    }
 
-    let just_before = BlockNumber::new(1_000 + u128::from(gap_blocks) - 1);
-    let at_boundary = BlockNumber::new(1_000 + u128::from(gap_blocks));
+    #[test]
+    fn should_mark_scanned_address_due_only_after_the_current_gap() {
+        // scan_count 2 selects a 60s gap, i.e. 5 blocks at 12s per block.
+        let last_scanned = BlockNumber::new(1_000);
+        let deposits = deposits_from(vec![scan_state(
+            account(0),
+            ts(window_nanos()),
+            Some(last_scanned),
+            2,
+        )]);
+        let gap_blocks = SCAN_GAP_SECS[2] / SECS_PER_BLOCK;
+        assert_eq!(gap_blocks, 5);
 
-    assert_eq!(
-        deposits.addresses_due_for_scan(ts(0), just_before).count(),
-        0,
-        "not due one block before the gap elapses"
-    );
-    assert_eq!(
-        deposits
-            .addresses_due_for_scan(ts(0), at_boundary)
-            .collect::<Vec<_>>(),
-        vec![(account(0), deposit_address(&account(0)))],
-        "due exactly when the gap elapses"
-    );
-}
+        let just_before = BlockNumber::new(1_000 + u128::from(gap_blocks) - 1);
+        let at_boundary = BlockNumber::new(1_000 + u128::from(gap_blocks));
 
-#[test]
-fn should_never_yield_an_expired_entry() {
-    let deposits = deposits_from(vec![scan_state(account(0), ts(100), None, 0)]);
+        assert_eq!(
+            deposits.addresses_due_for_scan(ts(0), just_before).count(),
+            0,
+            "not due one block before the gap elapses"
+        );
+        assert_eq!(
+            deposits
+                .addresses_due_for_scan(ts(0), at_boundary)
+                .collect::<Vec<_>>(),
+            vec![(account(0), deposit_address(&account(0)))],
+            "due exactly when the gap elapses"
+        );
+    }
 
-    assert_eq!(
-        deposits
-            .addresses_due_for_scan(ts(101), BlockNumber::new(1_000_000))
-            .count(),
-        0
-    );
-}
+    #[test]
+    fn should_never_yield_an_expired_entry() {
+        let deposits = deposits_from(vec![scan_state(account(0), ts(100), None, 0)]);
 
-#[test]
-fn should_not_yield_address_past_the_schedule_end() {
-    let deposits = deposits_from(vec![scan_state(
-        account(0),
-        ts(window_nanos()),
-        Some(BlockNumber::new(1)),
-        SCAN_GAP_SECS.len() as u32,
-    )]);
+        assert_eq!(
+            deposits
+                .addresses_due_for_scan(ts(101), BlockNumber::new(1_000_000))
+                .count(),
+            0
+        );
+    }
 
-    assert_eq!(
-        deposits
-            .addresses_due_for_scan(ts(0), BlockNumber::new(u128::MAX))
-            .count(),
-        0
-    );
+    #[test]
+    fn should_not_yield_address_past_the_schedule_end() {
+        let deposits = deposits_from(vec![scan_state(
+            account(0),
+            ts(window_nanos()),
+            Some(BlockNumber::new(1)),
+            SCAN_GAP_SECS.len() as u32,
+        )]);
+
+        assert_eq!(
+            deposits
+                .addresses_due_for_scan(ts(0), BlockNumber::new(u128::MAX))
+                .count(),
+            0
+        );
+    }
 }
 
 #[test]
