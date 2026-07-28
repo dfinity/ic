@@ -1,24 +1,13 @@
 use super::*;
-use crate::erc20::CkErc20Token;
-use crate::lifecycle::EthereumNetwork;
-use crate::test_fixtures::initial_state;
 
 const DEPOSIT_ADDRESS: Address = Address::new([0x11; 20]);
-const TOKEN_CONTRACT: Address = Address::new([0x22; 20]);
+const TOKEN_A: Address = Address::new([0x22; 20]);
+const TOKEN_B: Address = Address::new([0x33; 20]);
 
 fn account(owner: u8) -> Account {
     Account {
         owner: candid::Principal::from_slice(&[owner]),
         subaccount: None,
-    }
-}
-
-fn sepolia_token() -> CkErc20Token {
-    CkErc20Token {
-        erc20_ethereum_network: EthereumNetwork::Sepolia,
-        erc20_contract_address: TOKEN_CONTRACT,
-        ckerc20_token_symbol: "ckSepoliaUSDC".parse().unwrap(),
-        ckerc20_ledger_id: "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
     }
 }
 
@@ -36,39 +25,40 @@ fn should_count_candidates_at_and_above_minimum_only() {
 }
 
 #[test]
-fn should_build_parallel_calls_for_live_addresses_and_tokens() {
-    let now = Timestamp::from_nanos(1_000);
-    let mut state = initial_state();
-    state.record_add_ckerc20_token(sepolia_token());
-    state
-        .automatic_deposits
-        .watch_address_for_account(now, account(1), DEPOSIT_ADDRESS)
-        .expect("BUG: failed to register live address");
+fn should_build_one_call_per_address_and_token_in_order() {
+    let addresses = vec![
+        (account(1), DEPOSIT_ADDRESS),
+        (account(2), Address::new([0x99; 20])),
+    ];
+    let tokens = vec![TOKEN_A, TOKEN_B];
 
-    let (addresses_scanned, calls) = build_calls(&state, now);
+    let calls = balance_of_calls(&addresses, &tokens);
 
-    assert_eq!(addresses_scanned, 1);
     assert_eq!(
         calls,
-        vec![BalanceOfCall {
-            token: TOKEN_CONTRACT,
-            holder: DEPOSIT_ADDRESS,
-        }]
+        vec![
+            BalanceOfCall {
+                token: TOKEN_A,
+                holder: DEPOSIT_ADDRESS
+            },
+            BalanceOfCall {
+                token: TOKEN_B,
+                holder: DEPOSIT_ADDRESS
+            },
+            BalanceOfCall {
+                token: TOKEN_A,
+                holder: Address::new([0x99; 20])
+            },
+            BalanceOfCall {
+                token: TOKEN_B,
+                holder: Address::new([0x99; 20])
+            },
+        ]
     );
 }
 
 #[test]
-fn should_skip_expired_addresses_in_build_calls() {
-    let now = Timestamp::from_nanos(1_000);
-    let mut state = initial_state();
-    state.record_add_ckerc20_token(sepolia_token());
-    state
-        .automatic_deposits
-        .watch_address_for_account(now, account(1), DEPOSIT_ADDRESS)
-        .expect("BUG: failed to register live address");
-
-    let (addresses_scanned, calls) = build_calls(&state, Timestamp::from_nanos(u64::MAX));
-
-    assert_eq!(addresses_scanned, 0);
-    assert!(calls.is_empty());
+fn should_build_no_calls_when_no_addresses_or_no_tokens() {
+    assert!(balance_of_calls(&[], &[TOKEN_A]).is_empty());
+    assert!(balance_of_calls(&[(account(1), DEPOSIT_ADDRESS)], &[]).is_empty());
 }

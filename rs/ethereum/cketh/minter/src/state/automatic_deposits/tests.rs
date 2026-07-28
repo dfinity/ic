@@ -308,21 +308,57 @@ fn scan_state(
 }
 
 #[test]
-fn should_yield_only_live_addresses() {
+fn record_scan_advances_the_schedule() {
     let mut deposits = AutomaticDeposits::default();
     deposits
         .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
         .unwrap();
+    // Never scanned -> due immediately.
+    assert_eq!(
+        deposits
+            .addresses_to_scan_iter(ts(0), BlockNumber::new(1_000))
+            .count(),
+        1
+    );
+
+    deposits.record_scan(ts(0), &account(0), BlockNumber::new(1_000));
+
+    // The scan bookkeeping is advanced, and survives into the snapshot.
+    let snapshot = deposits.watchlist_snapshot();
+    assert_eq!(
+        snapshot.registrations[0].last_scanned_block,
+        Some(BlockNumber::new(1_000))
+    );
+    assert_eq!(snapshot.registrations[0].scan_count, 1);
+
+    // Not due at the just-scanned block; due again well after the next gap.
+    assert_eq!(
+        deposits
+            .addresses_to_scan_iter(ts(0), BlockNumber::new(1_000))
+            .count(),
+        0
+    );
+    assert_eq!(
+        deposits
+            .addresses_to_scan_iter(ts(0), BlockNumber::new(2_000))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn record_scan_is_a_noop_for_an_expired_account() {
+    let mut deposits = AutomaticDeposits::default();
     deposits
-        .watch_address_for_account(ts(10), account(1), deposit_address(&account(1)))
+        .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
         .unwrap();
 
-    // account(0) expires at window_nanos(); at this instant it is gone while
-    // account(1) (armed 10ns later) is still live.
-    let now = ts(window_nanos() + 1);
-    let live: Vec<_> = deposits.live_addresses(now).collect();
+    // Past the scan window the entry is no longer live; record_scan must not touch it.
+    deposits.record_scan(ts(window_nanos() + 1), &account(0), BlockNumber::new(1_000));
 
-    assert_eq!(live, vec![(account(1), deposit_address(&account(1)))]);
+    let snapshot = deposits.watchlist_snapshot();
+    assert_eq!(snapshot.registrations[0].last_scanned_block, None);
+    assert_eq!(snapshot.registrations[0].scan_count, 0);
 }
 
 fn ts(nanos: u64) -> Timestamp {

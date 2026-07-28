@@ -149,12 +149,14 @@ impl AutomaticDeposits {
         self.watchlist.get_entry(now, account)
     }
 
-    /// The deposit address of every account still armed (unexpired) as of `now`.
-    pub fn live_addresses(&self, now: Timestamp) -> impl Iterator<Item = (Account, Address)> + '_ {
-        self.watchlist
-            .iter()
-            .filter(move |(_, entry)| entry.expires_at >= now)
-            .map(|(account, entry)| (*account, entry.value.address))
+    /// Record that `account`'s deposit address was scanned at `block`, advancing it along the
+    /// backoff schedule (`last_scanned_block = block`, `scan_count += 1`). No-op if the account is
+    /// no longer live as of `now` (expired or evicted).
+    pub fn record_scan(&mut self, now: Timestamp, account: &Account, block: BlockNumber) {
+        if let Some(request) = self.watchlist.get_value_mut(now, account) {
+            request.last_scanned_block = Some(block);
+            request.scan_count = request.scan_count.saturating_add(1);
+        }
     }
 
     /// Full snapshot of the watchlist, faithful enough to reconstruct it exactly
