@@ -468,7 +468,8 @@ impl From<&DkgSummary> for pb::Summary {
                 summary.transcripts_for_remote_subnets.as_slice(),
             ),
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
-            subnet_splitting_status: summary.subnet_splitting_status
+            subnet_splitting_status: summary
+                .subnet_splitting_status
                 .as_ref()
                 .map(pb::summary::SubnetSplittingStatus::from),
         }
@@ -569,9 +570,7 @@ impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
             }
             SubnetSplittingStatus::PostSplit(post_split_args) => {
                 pb::summary::SubnetSplittingStatus::PostSplit(pb::PostSplitArgs {
-                    new_subnet_id: Some(subnet_id_into_protobuf(
-                        *post_split_args.new_subnet_id,
-                    )),
+                    new_subnet_id: Some(subnet_id_into_protobuf(*post_split_args.new_subnet_id)),
                 })
             }
         }
@@ -598,14 +597,14 @@ impl TryFrom<pb::summary::SubnetSplittingStatus> for SubnetSplittingStatus {
                     )?,
                 }))
             }
-            pb::summary::SubnetSplittingStatus::PostSplit(post_split_args) => Ok(
-                SubnetSplittingStatus::PostSplit(PostSplitArgs {
+            pb::summary::SubnetSplittingStatus::PostSplit(post_split_args) => {
+                Ok(SubnetSplittingStatus::PostSplit(PostSplitArgs {
                     new_subnet_id: subnet_id_try_from_option(
                         post_split_args.new_subnet_id,
                         "PostSplitArgs::new_subnet_id",
                     )?,
-                })
-            ),
+                }))
+            }
         }
     }
 }
