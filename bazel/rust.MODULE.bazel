@@ -255,7 +255,7 @@ crate.spec(
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.31",
+    version = "^0.10.34",
 )
 crate.spec(
     package = "cargo_metadata",
