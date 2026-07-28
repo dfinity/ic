@@ -45,7 +45,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
 use ic_types::{ExecutionRound, Height, NumberOfNodes, RegistryVersion};
-use ic_types_cycles::{Cycles, NominalCyclesTesting};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCyclesTesting};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -879,7 +879,7 @@ fn subnet_call_contexts_deserialization() {
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
         subnet_size: NumberOfNodes::from(13),
-        cost_schedule: None,
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
