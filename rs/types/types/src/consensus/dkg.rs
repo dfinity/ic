@@ -561,16 +561,16 @@ impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
             SubnetSplittingStatus::Scheduled(splitting_args) => {
                 pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs {
                     destination_subnet_id: Some(subnet_id_into_protobuf(
-                        *splitting_args.destination_subnet_id,
+                        splitting_args.destination_subnet_id,
                     )),
                     source_subnet_id: Some(subnet_id_into_protobuf(
-                        *splitting_args.source_subnet_id,
+                        splitting_args.source_subnet_id,
                     )),
                 })
             }
             SubnetSplittingStatus::PostSplit(post_split_args) => {
                 pb::summary::SubnetSplittingStatus::PostSplit(pb::PostSplitArgs {
-                    new_subnet_id: Some(subnet_id_into_protobuf(*post_split_args.new_subnet_id)),
+                    new_subnet_id: Some(subnet_id_into_protobuf(post_split_args.new_subnet_id)),
                 })
             }
         }

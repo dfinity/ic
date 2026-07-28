@@ -10,10 +10,8 @@ use crate::{
     crypto::*,
     node_id_into_protobuf, node_id_try_from_option,
 };
-use ic_base_types::{SubnetId, subnet_id_try_from_option};
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
-    registry::subnet::v1 as subnet_pb,
     types::v1 as pb,
 };
 use prost::Message;
