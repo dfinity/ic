@@ -125,8 +125,12 @@ jobs:
           nsc docker login
           ic_build_repo="ghcr.io/dfinity/ic-build"
           src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
-          nsc base-image upload "$src" "ic-build:${{ needs.build-image-prep.outputs.image_tag }}"
-          worker_image="${NSC_CONTAINER_REGISTRY}/ic-build@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
+          upload_log="$(mktemp)"
+          nsc base-image upload "$src" "ic-build:${{ needs.build-image-prep.outputs.image_tag }}" 2>&1 | tee "$upload_log"
+          worker_digest="$(grep -i 'Uploaded base image' "$upload_log" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1 || true)"
+          : "${worker_digest:?could not parse pushed image digest from nsc base-image upload output}"
+          worker_image="${NSC_CONTAINER_REGISTRY}/ic-build@${worker_digest}"
+          echo "Resolved worker image: $worker_image"
           nsc base-image optimize --image_ref "$worker_image"
           echo "worker-image=$worker_image" >> "$GITHUB_OUTPUT"
 
