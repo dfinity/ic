@@ -1245,15 +1245,29 @@ fn cooling_down_request(deadline: CoarseTime, payment: Cycles) -> Request {
 }
 
 /// A response from `COOLING_DOWN_LOCAL_CANISTER` to `COOLING_DOWN_REMOTE_CANISTER`.
-fn cooling_down_response(deadline: CoarseTime) -> RequestOrResponse {
+fn cooling_down_response(deadline: CoarseTime, refund: Cycles) -> RequestOrResponse {
     RequestOrResponse::Response(Arc::new(Response {
         originator: COOLING_DOWN_REMOTE_CANISTER,
         respondent: COOLING_DOWN_LOCAL_CANISTER,
         originator_reply_callback: CallbackId::from(1),
-        refund: Cycles::zero(),
+        refund,
         response_payload: Payload::Data(vec![]),
         deadline,
     }))
+}
+
+/// The 4 combinations of deadline (guaranteed-response or bounded-wait) and
+/// attached cycles (none or some) that a canister message may have. None of them
+/// makes any difference to a message headed for a cooling down (non-engine)
+/// subnet; contrast with `is_illegal_engine_msg` in `build_streams()`.
+fn deadline_and_cycles_matrix() -> impl Iterator<Item = (CoarseTime, Cycles)> {
+    [NO_DEADLINE, SOME_DEADLINE]
+        .into_iter()
+        .flat_map(|deadline| {
+            [Cycles::zero(), Cycles::new(100)]
+                .into_iter()
+                .map(move |cycles| (deadline, cycles))
+        })
 }
 
 /// Asserts that no canister message was routed into the stream to `subnet_id`.
@@ -1343,44 +1357,47 @@ fn assert_cooling_down_reject(
 
 /// Tests that a request to a canister on a cooling down subnet is rejected with
 /// a synthetic `SysTransient` reject response, rather than routed into a stream.
+/// Covers every combination of deadline and attached cycles.
 #[test]
 fn build_streams_rejects_requests_to_cooling_down_subnet() {
-    with_test_replica_logger(|log| {
-        let (stream_builder, mut provided_state, metrics_registry) =
-            new_cooling_down_fixture(&log, cooling_down_topology());
-        provided_state.put_canister_states(canister_states_with_outputs(vec![
-            cooling_down_request(NO_DEADLINE, Cycles::zero()),
-        ]));
+    for (deadline, payment) in deadline_and_cycles_matrix() {
+        with_test_replica_logger(|log| {
+            let (stream_builder, mut provided_state, metrics_registry) =
+                new_cooling_down_fixture(&log, cooling_down_topology());
+            provided_state.put_canister_states(canister_states_with_outputs(vec![
+                cooling_down_request(deadline, payment),
+            ]));
 
-        let result_state = stream_builder.build_streams(provided_state);
+            let result_state = stream_builder.build_streams(provided_state);
 
-        // Nothing was routed into the `REMOTE_SUBNET` stream; and a `SysTransient`
-        // reject response was delivered back to the sender.
-        assert_no_messages_routed(&result_state, REMOTE_SUBNET);
-        assert_cooling_down_reject(
-            &result_state,
-            COOLING_DOWN_LOCAL_CANISTER,
-            COOLING_DOWN_REMOTE_CANISTER,
-        );
+            // Nothing was routed into the `REMOTE_SUBNET` stream; and a `SysTransient`
+            // reject response was delivered back to the sender.
+            assert_no_messages_routed(&result_state, REMOTE_SUBNET);
+            assert_cooling_down_reject(
+                &result_state,
+                COOLING_DOWN_LOCAL_CANISTER,
+                COOLING_DOWN_REMOTE_CANISTER,
+            );
 
-        assert_one_message_status(
-            LABEL_VALUE_TYPE_REQUEST,
-            LABEL_VALUE_STATUS_COOLING_DOWN,
-            &metrics_registry,
-        );
-        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
-    });
+            assert_one_message_status(
+                LABEL_VALUE_TYPE_REQUEST,
+                LABEL_VALUE_STATUS_COOLING_DOWN,
+                &metrics_registry,
+            );
+            assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+        });
+    }
 }
 
 /// Tests that a response to a canister on a cooling down subnet is retained in
 /// the sending canister's output queue, rather than routed or dropped; and that it
-/// is routed as soon as the subnet stops cooling down. Covers both
-/// guaranteed-response and bounded-wait responses.
+/// is routed as soon as the subnet stops cooling down. Covers every combination of
+/// deadline and attached cycles.
 #[test]
 fn build_streams_retains_responses_to_cooling_down_subnet() {
-    for deadline in [NO_DEADLINE, SOME_DEADLINE] {
+    for (deadline, refund) in deadline_and_cycles_matrix() {
         with_test_replica_logger(|log| {
-            let response = cooling_down_response(deadline);
+            let response = cooling_down_response(deadline, refund);
 
             let (stream_builder, mut provided_state, metrics_registry) =
                 new_cooling_down_fixture(&log, cooling_down_topology());
@@ -1465,7 +1482,7 @@ fn build_streams_retains_refunds_to_cooling_down_subnet() {
 fn build_streams_retains_messages_behind_response_to_cooling_down_subnet() {
     with_test_replica_logger(|log| {
         // A response followed by a request, in the same output queue.
-        let response = cooling_down_response(NO_DEADLINE);
+        let response = cooling_down_response(NO_DEADLINE, Cycles::zero());
         let request =
             RequestOrResponse::Request(cooling_down_request(NO_DEADLINE, Cycles::zero()).into());
 
@@ -1538,7 +1555,7 @@ fn build_streams_does_not_exempt_loopback_while_cooling_down() {
 
     // A response to a local canister is retained in the output queue.
     with_test_replica_logger(|log| {
-        let response = cooling_down_response(NO_DEADLINE);
+        let response = cooling_down_response(NO_DEADLINE, Cycles::zero());
 
         let (stream_builder, mut provided_state, metrics_registry) =
             new_loopback_cooling_down_fixture(&log);
