@@ -22,10 +22,10 @@ index 6e58bd4..0161945 100644
              home = repository_ctx.os.environ.get("HOME", "")
              if home:
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index 486cbda..c0d0e7e 100644
+index 486cbda..cc37b1f 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
-@@ -207,6 +207,22 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
+@@ -207,6 +207,36 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
      return code;
  }
  
@@ -62,7 +62,7 @@ index 486cbda..c0d0e7e 100644
  // argv_it is an object that has such method:
  //     fn next(self: *Self) ?[]const u8
  // in non-testing code it is *process.ArgIterator.
-@@ -279,9 +295,18 @@ fn parseArgs(
+@@ -279,9 +309,18 @@ fn parseArgs(
          break :blk @as([]const u8, if (builtin.os.tag == .macos) "/var/tmp/zig-cache" else "/tmp/zig-cache");
      };
  
@@ -83,7 +83,7 @@ index 486cbda..c0d0e7e 100644
  
      // Zig 0.14.0 locates the macOS SDK by running `xcrun --show-sdk-path`.
      // Bazel clears PATH via `exec env -`, making xcrun unfindable. Restore
-@@ -606,7 +631,10 @@ test "zig-wrapper:cache dir override" {
+@@ -606,7 +645,10 @@ test "zig-wrapper:cache dir override" {
      const global_cache_dir = res.exec.env.get("ZIG_GLOBAL_CACHE_DIR").?;
  
      try testing.expectEqualStrings(cache_dir, global_cache_dir);
