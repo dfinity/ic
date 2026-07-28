@@ -551,53 +551,6 @@ fn build_transcript_result(
     }
 }
 
-impl From<SplittingArgs> for pb::SplittingArgs {
-    fn from(args: SplittingArgs) -> Self {
-        Self {
-            destination_subnet_id: Some(subnet_id_into_protobuf(args.destination_subnet_id)),
-            source_subnet_id: Some(subnet_id_into_protobuf(args.source_subnet_id)),
-        }
-    }
-}
-
-impl TryFrom<pb::SplittingArgs> for SplittingArgs {
-    type Error = ProxyDecodeError;
-
-    fn try_from(args: pb::SplittingArgs) -> Result<Self, Self::Error> {
-        Ok(Self {
-            destination_subnet_id: subnet_id_try_from_option(
-                args.destination_subnet_id,
-                "SplittingArgs::destination_subnet_id",
-            )?,
-            source_subnet_id: subnet_id_try_from_option(
-                args.source_subnet_id,
-                "SplittingArgs::source_subnet_id",
-            )?,
-        })
-    }
-}
-
-impl From<PostSplitArgs> for pb::PostSplitArgs {
-    fn from(args: PostSplitArgs) -> Self {
-        Self {
-            new_subnet_id: Some(subnet_id_into_protobuf(args.new_subnet_id)),
-        }
-    }
-}
-
-impl TryFrom<pb::PostSplitArgs> for PostSplitArgs {
-    type Error = ProxyDecodeError;
-
-    fn try_from(args: pb::PostSplitArgs) -> Result<Self, Self::Error> {
-        Ok(Self {
-            new_subnet_id: subnet_id_try_from_option(
-                args.new_subnet_id,
-                "PostSplitArgs::new_subnet_id",
-            )?,
-        })
-    }
-}
-
 impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
     fn from(status: &SubnetSplittingStatus) -> Self {
         match status {
@@ -605,14 +558,21 @@ impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
                 pb::summary::SubnetSplittingStatus::NotScheduled(())
             }
             SubnetSplittingStatus::Scheduled(splitting_args) => {
-                pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs::from(
-                    *splitting_args,
-                ))
+                pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs {
+                    destination_subnet_id: Some(subnet_id_into_protobuf(
+                        *splitting_args.destination_subnet_id,
+                    )),
+                    source_subnet_id: Some(subnet_id_into_protobuf(
+                        *splitting_args.source_subnet_id,
+                    )),
+                })
             }
             SubnetSplittingStatus::PostSplit(post_split_args) => {
-                pb::summary::SubnetSplittingStatus::PostSplit(pb::PostSplitArgs::from(
-                    *post_split_args,
-                ))
+                pb::summary::SubnetSplittingStatus::PostSplit(pb::PostSplitArgs {
+                    new_subnet_id: Some(subnet_id_into_protobuf(
+                        *post_split_args.new_subnet_id,
+                    )),
+                })
             }
         }
     }
@@ -627,10 +587,24 @@ impl TryFrom<pb::summary::SubnetSplittingStatus> for SubnetSplittingStatus {
                 Ok(SubnetSplittingStatus::NotScheduled)
             }
             pb::summary::SubnetSplittingStatus::Scheduled(splitting_args) => {
-                Ok(SubnetSplittingStatus::Scheduled(splitting_args.try_into()?))
+                Ok(SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    destination_subnet_id: subnet_id_try_from_option(
+                        splitting_args.destination_subnet_id,
+                        "SplittingArgs::destination_subnet_id",
+                    )?,
+                    source_subnet_id: subnet_id_try_from_option(
+                        splitting_args.source_subnet_id,
+                        "SplittingArgs::source_subnet_id",
+                    )?,
+                }))
             }
             pb::summary::SubnetSplittingStatus::PostSplit(post_split_args) => Ok(
-                SubnetSplittingStatus::PostSplit(post_split_args.try_into()?),
+                SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                    new_subnet_id: subnet_id_try_from_option(
+                        post_split_args.new_subnet_id,
+                        "PostSplitArgs::new_subnet_id",
+                    )?,
+                })
             ),
         }
     }
