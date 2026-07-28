@@ -9553,6 +9553,43 @@ fn cost_sign_with_ecdsa_fails_bad_key_name() {
 }
 
 #[test]
+fn cost_sign_with_ecdsa_with_huge_key_name() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+          (import "ic0" "cost_sign_with_ecdsa"
+            (func $cost_sign_with_ecdsa (param i64 i64 i32 i64) (result i32)))
+          (import "ic0" "msg_reply" (func $msg_reply))
+
+          (memory i64 1024 1024)
+
+          (func (export "canister_query control")
+            (call $msg_reply)
+          )
+
+          (func (export "canister_query go")
+            (memory.fill
+              (i64.const 0)
+              (i32.const 255)
+              (i64.const 67108864))
+            (drop
+              (call $cost_sign_with_ecdsa
+                (i64.const 0)
+                (i64.const 67108864)
+                (i32.const 0)
+                (i64.const 0)))
+            (call $msg_reply)
+          )
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let control = test.non_replicated_query(canister_id, "control", vec![]);
+    println!("control: {control:?}");
+    let start = std::time::Instant::now();
+    let result = test.non_replicated_query(canister_id, "go", vec![]);
+    println!("go: {:?} in {:?}", result, start.elapsed());
+}
+
+#[test]
 fn invoke_cost_sign_with_schnorr() {
     let key_name = String::from("testkey");
     let algorithm_variant = 0;
