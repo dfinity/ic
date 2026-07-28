@@ -35,10 +35,12 @@ use ic_sns_wasm::{
 };
 use ic_types::CanisterId;
 use ic_types_cycles::Cycles;
-use std::{cell::RefCell, collections::HashMap, convert::TryInto};
+use std::{cell::RefCell, collections::HashMap};
 
 use ic_cdk::{
-    api::{canister_cycle_balance, canister_self, msg_caller},
+    api::{
+        canister_cycle_balance, canister_self, msg_caller, msg_cycles_accept, msg_cycles_available,
+    },
     init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_nervous_system_common::serve_metrics;
@@ -76,14 +78,14 @@ impl CanisterApi for CanisterApiImpl {
             .with_controllers(vec![controller_id])
             .with_wasm_memory_limit(wasm_memory_limit);
 
-        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment(
+        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment128(
             target_subnet.get().0,
             &Method::CreateCanister.to_string(),
             (CreateCanisterArgs {
                 settings: Some(settings.build()),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
             },),
-            cycles.get().try_into().unwrap(),
+            cycles.get(),
         )
         .await;
 
@@ -156,8 +158,8 @@ impl CanisterApi for CanisterApiImpl {
         )))
     }
 
-    fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = canister_cycle_balance() as u64;
+    fn this_canister_has_enough_cycles(&self, required_cycles: u128) -> Result<u128, String> {
+        let available = canister_cycle_balance();
 
         if available < required_cycles {
             return Err(format!(
@@ -167,8 +169,8 @@ impl CanisterApi for CanisterApiImpl {
         Ok(available)
     }
 
-    fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = ic_cdk::api::call::msg_cycles_available();
+    fn message_has_enough_cycles(&self, required_cycles: u128) -> Result<u128, String> {
+        let available = msg_cycles_available();
 
         if available < required_cycles {
             return Err(format!(
@@ -178,16 +180,20 @@ impl CanisterApi for CanisterApiImpl {
         Ok(available)
     }
 
-    fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
-        let cycles = cycles.unwrap_or_else(ic_cdk::api::call::msg_cycles_available);
+    fn accept_message_cycles(&self, cycles: Option<u128>) -> Result<u128, String> {
+        let cycles = cycles.unwrap_or_else(msg_cycles_available);
         self.message_has_enough_cycles(cycles)?;
 
-        let accepted = ic_cdk::api::call::msg_cycles_accept(cycles);
+        let accepted = msg_cycles_accept(cycles);
         Ok(accepted)
     }
 
-    async fn send_cycles_to_canister(&self, target: CanisterId, cycles: u64) -> Result<(), String> {
-        let response: CallResult<()> = ic_cdk::api::call::call_with_payment(
+    async fn send_cycles_to_canister(
+        &self,
+        target: CanisterId,
+        cycles: u128,
+    ) -> Result<(), String> {
+        let response: CallResult<()> = ic_cdk::api::call::call_with_payment128(
             CanisterId::ic_00().get().0,
             "deposit_cycles",
             (CanisterIdRecord::from(target),),

@@ -7,7 +7,8 @@ use exchange_rate_canister::{UpdateExchangeRateError, UpdateExchangeRateState};
 use ic_cdk::{
     api::{
         call::{CallResult, ManualReply},
-        canister_cycle_balance, canister_self, certified_data_set,
+        canister_cycle_balance, canister_self, certified_data_set, msg_cycles_accept,
+        msg_cycles_available,
     },
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
@@ -78,7 +79,7 @@ const MAX_MEMO_LENGTH: usize = 32;
 
 /// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
 /// This is the minimum amount needed for creating a canister as of October 2023.
-const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
+const CREATE_CANISTER_MIN_CYCLES: u128 = 100_000_000_000;
 
 /// Prior to 2024-12-10, we used 50e15, but legitimate users started running
 /// into this. At that time, prices had recently gone up, so we resolved to
@@ -1483,32 +1484,32 @@ async fn create_canister(
         subnet_type,
     }: CreateCanister,
 ) -> Result<CanisterId, CreateCanisterError> {
-    let cycles = ic_cdk::api::call::msg_cycles_available();
+    let cycles = msg_cycles_available();
 
     if cycles < CREATE_CANISTER_MIN_CYCLES {
         return Err(CreateCanisterError::Refunded {
-            refund_amount: cycles.into(),
+            refund_amount: cycles,
             create_error: "Insufficient cycles attached.".to_string(),
         });
     }
     let subnet_selection =
         get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
             CreateCanisterError::Refunded {
-                refund_amount: cycles.into(),
+                refund_amount: cycles,
                 create_error: error_message,
             }
         })?;
 
     match do_create_canister(caller(), cycles.into(), subnet_selection, settings).await {
         Ok(canister_id) => {
-            ic_cdk::api::call::msg_cycles_accept(cycles);
+            msg_cycles_accept(cycles);
             Ok(canister_id)
         }
         Err(create_error) => {
-            ic_cdk::api::call::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
-            let refund_amount = ic_cdk::api::call::msg_cycles_available();
+            msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY);
+            let refund_amount = msg_cycles_available();
             Err(CreateCanisterError::Refunded {
-                refund_amount: refund_amount.into(),
+                refund_amount,
                 create_error,
             })
         }
