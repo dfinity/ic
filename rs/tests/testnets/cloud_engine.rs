@@ -107,6 +107,9 @@ const DEMO_CANISTER_CYCLES: u128 = 300_000_000_000_000;
 /// Cycles to fund the whale application canister with. 100_000T (100 quadrillion) cycles.
 const WHALE_CANISTER_CYCLES: u128 = 100_000_000_000_000_000;
 
+/// Cycles to fund the proxy application canister with. 300T cycles.
+const PROXY_CANISTER_CYCLES: u128 = 300_000_000_000_000;
+
 /// Node providers used in this testnet. Each data center is owned by exactly
 /// one node provider (1 node provider per DC). Providers can own multiple DCs
 /// and do not need to own the same number of DCs / nodes.
@@ -474,14 +477,23 @@ pub fn setup(env: TestEnv) {
     // install II, NNS dapp, and Subnet Rental Canister
     install_ii_nns_dapp_and_subnet_rental_with_dummy_auth(&env, &ic_gateway_url, None);
 
-    // Create an empty (no wasm installed) canister on the Application subnet,
-    // fund it with 300T cycles and set its controllers to
-    // TEST_NEURON_1_OWNER_PRINCIPAL and the anonymous principal.
+    // Empty, funded canisters created up front so that consumers of this testnet
+    // can pin their canister ids. Application-subnet ids are handed out in
+    // allocation order from the subnet's range, so creating them here, before
+    // anything else can allocate, is what makes those ids survive a
+    // redeployment of the testnet. Consumers install into them; the anonymous
+    // principal is a controller so any deploy identity can.
+    //
+    // ORDER IS PART OF THE CONTRACT: each entry claims the next id, so
+    // inserting, removing or reordering one shifts every id after it. Append
+    // only, and expect whoever pins the ids to have to update them otherwise.
+    //
+    //   demo  -> first id in the range, control-panel's frontend
+    //   whale -> second, control-panel's engine canister
+    //   proxy -> third, control-panel's canister_info proxy
     create_empty_canister_on_app_subnet(&env, DEMO_CANISTER_CYCLES, "demo");
-
-    // Create a second empty canister on the Application subnet, seeded with
-    // 100_000T cycles (a "whale" canister), same controllers as the demo one.
     create_empty_canister_on_app_subnet(&env, WHALE_CANISTER_CYCLES, "whale");
+    create_empty_canister_on_app_subnet(&env, PROXY_CANISTER_CYCLES, "proxy");
 }
 
 /// Creates an empty canister (no wasm installed) on the (single) Application
