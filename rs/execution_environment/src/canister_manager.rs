@@ -16,12 +16,10 @@ use crate::types::{IngressResponse, Response};
 use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
 
 use ic_base_types::EnvironmentVariables;
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
 };
-use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
@@ -891,7 +889,8 @@ impl CanisterManager {
             };
         }
 
-        let wasm_execution_mode = wasm_execution_mode(context.wasm_source.clone());
+        // For installing code, Wasm64 does not differ from Wasm32.
+        let wasm_execution_mode = WasmExecutionMode::Wasm32;
 
         let prepaid_execution_cycles = match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
@@ -2236,9 +2235,13 @@ impl CanisterManager {
         }
 
         // All basic checks have passed, prepay cycles for instructions.
-        let wasm_execution_mode = wasm_execution_mode(WasmSource::CanisterModule(
-            snapshot.execution_snapshot().wasm_binary.clone(),
-        ));
+        //
+        // The Wasm execution mode is only used to pick the per-instruction rate
+        // for prepaying (and later refunding) this message. Determining the
+        // actual mode would require decompressing and parsing the untrusted
+        // module outside the sandbox, so we default to Wasm32 (undercharging
+        // Wasm64 canisters for this message only).
+        let wasm_execution_mode = WasmExecutionMode::Wasm32;
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
@@ -3171,41 +3174,6 @@ pub fn uninstall_canister(
                 }
             }
         })
-}
-
-/// Derives the wasm execution mode of the given module.
-/// This is solely for the purpose of installing code and loading canister snapshot
-/// when we need the wasm execution mode to prepay accordingly.
-/// In case of errors, we simply return `WasmExecutionMode::Wasm32`
-/// since the errors will be caught and handled by the sandbox later
-/// without incurring extra overhead specific to `WasmExecutionMode::Wasm64`.
-pub fn wasm_execution_mode(wasm_module_source: WasmSource) -> WasmExecutionMode {
-    let wasm_module = match wasm_module_source.into_canister_module() {
-        Ok(wasm_module) => wasm_module,
-        Err(_err) => {
-            return WasmExecutionMode::Wasm32;
-        }
-    };
-
-    let decoded_wasm_module = match decode_wasm(
-        EmbeddersConfig::new().wasm_max_size,
-        Arc::new(wasm_module.as_slice().to_vec()),
-    ) {
-        Ok(decoded_wasm_module) => decoded_wasm_module,
-        Err(_err) => {
-            return WasmExecutionMode::Wasm32;
-        }
-    };
-
-    let parser = wasmparser::Parser::new(0);
-    for section in parser.parse_all(decoded_wasm_module.as_slice()).flatten() {
-        if let wasmparser::Payload::MemorySection(reader) = section
-            && let Some(memory) = reader.into_iter().flatten().next()
-        {
-            return WasmExecutionMode::from_is_wasm64(memory.memory64);
-        }
-    }
-    WasmExecutionMode::Wasm32
 }
 
 fn globals_match(g1: &[Global], g2: &[Global]) -> bool {
