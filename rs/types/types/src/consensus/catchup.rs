@@ -5,12 +5,15 @@ use crate::{
     consensus::{
         Block, Committee, ConsensusMessageHashable, HasCommittee, HasHeight, HasVersion,
         HashedBlock, HashedRandomBeacon, ThresholdSignature, ThresholdSignatureShare,
+        dkg::SubnetSplittingStatus,
     },
     crypto::*,
     node_id_into_protobuf, node_id_try_from_option,
 };
+use ic_base_types::{SubnetId, subnet_id_try_from_option};
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
+    registry::subnet::v1 as subnet_pb,
     types::v1 as pb,
 };
 use prost::Message;
@@ -178,6 +181,18 @@ impl CatchUpPackage {
     /// This is `false` for Genesis and recovery CUPs.
     pub fn is_signed(&self) -> bool {
         !self.signature.signature.as_ref().0.is_empty()
+    }
+
+    /// Returns the [`SubnetSplittingStatus`] of the summary block contained in this CUP.
+    pub fn subnet_splitting_status(&self) -> SubnetSplittingStatus {
+        self.content
+            .block
+            .get_value()
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .subnet_splitting_status()
     }
 
     /// Return the oldest registry version that is still referenced by
