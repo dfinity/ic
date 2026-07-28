@@ -163,7 +163,7 @@ pub fn generate_vm_config(
 
     let vsock_cid = match guest_vm_slot {
         VmSlot::Plain => None,
-        VmSlot::Multi(v) => Some(Into::<u8>::into(v) as u32 + VIR_VSOCK_GUEST_CID_MIN),
+        VmSlot::Multi(v) => Some(v.get() as u32 + VIR_VSOCK_GUEST_CID_MIN),
     };
 
     GuestOSTemplateProps {
@@ -241,8 +241,14 @@ fn split_resources_for_type_4(
 
 pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: VmSlot) -> String {
     match guest_vm_type {
-        GuestVMType::Default => format!("{DEFAULT_GUEST_VM_DOMAIN_NAME}{slot}"),
-        GuestVMType::Upgrade => format!("{UPGRADE_GUEST_VM_DOMAIN_NAME}{slot}"),
+        GuestVMType::Default => format!(
+            "{DEFAULT_GUEST_VM_DOMAIN_NAME}{suffix}",
+            suffix = slot.to_suffix()
+        ),
+        GuestVMType::Upgrade => format!(
+            "{UPGRADE_GUEST_VM_DOMAIN_NAME}{suffix}",
+            suffix = slot.to_suffix()
+        ),
     }
 }
 
@@ -259,8 +265,14 @@ pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: VmSlot) -> String {
 
 pub fn serial_log_path(guest_vm_type: GuestVMType, slot: VmSlot) -> PathBuf {
     match guest_vm_type {
-        GuestVMType::Default => PathBuf::from(format!("{DEFAULT_SERIAL_LOG_PATH}{slot}")),
-        GuestVMType::Upgrade => PathBuf::from(format!("{UPGRADE_SERIAL_LOG_PATH}{slot}")),
+        GuestVMType::Default => PathBuf::from(format!(
+            "{DEFAULT_SERIAL_LOG_PATH}{suffix}",
+            suffix = slot.to_suffix()
+        )),
+        GuestVMType::Upgrade => PathBuf::from(format!(
+            "{UPGRADE_SERIAL_LOG_PATH}{suffix}",
+            suffix = slot.to_suffix()
+        )),
     }
 }
 

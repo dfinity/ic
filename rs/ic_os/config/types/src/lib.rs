@@ -357,13 +357,11 @@ impl VmSlot {
             v => VmSlot::Multi(NonZeroU8::new(v).unwrap()),
         }
     }
-}
 
-impl fmt::Display for VmSlot {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn to_suffix(&self) -> String {
         match self {
-            VmSlot::Plain => write!(f, ""),
-            VmSlot::Multi(v) => write!(f, "{}", v),
+            VmSlot::Plain => String::new(),
+            VmSlot::Multi(v) => format!("{}", v),
         }
     }
 }

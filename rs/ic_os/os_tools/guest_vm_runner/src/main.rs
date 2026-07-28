@@ -466,21 +466,23 @@ impl GuestVmService {
         )
         .context("Could not initialize SEV certificate provider")?;
 
-        let device_string = format!("{GUESTOS_DEVICE}{guest_vm_slot}");
+        let device = PathBuf::from(format!(
+            "{GUESTOS_DEVICE}{suffix}",
+            suffix = guest_vm_slot.to_suffix()
+        ));
 
         // If this is an Upgrade VM, create a mapped device which protects the data partition of the
         // Guest device.
         let upgrade_mapped_device = (guest_vm_type == GuestVMType::Upgrade)
             .then(|| {
-                create_mapped_device_for_upgrade(Path::new(&device_string))
-                    .context("Cannot create mapped device")
+                create_mapped_device_for_upgrade(&device).context("Cannot create mapped device")
             })
             .transpose()?;
 
         let disk_device = upgrade_mapped_device
             .as_ref()
             .map(|x| x.path())
-            .unwrap_or(Path::new(&device_string));
+            .unwrap_or(&device);
 
         Ok(Self {
             metrics,
@@ -1001,7 +1003,7 @@ mod tests {
             let vm_config = domain.get_xml_desc(0).unwrap();
             Regex::new("<source dev='([^']+)'/>")
                 .unwrap()
-                .captures(&dbg!(vm_config))
+                .captures(&vm_config)
                 .expect("disk path not found in VM config")[1]
                 .to_string()
         }
@@ -1060,7 +1062,10 @@ mod tests {
             let (sev_certificate_provider, sev_certificate_cache_dir) =
                 mock_host_sev_certificate_provider()
                     .expect("Failed to create mock SEV cert provider");
-            let device_string = format!("{GUESTOS_DEVICE}{slot}");
+            let device = PathBuf::from(format!(
+                "{GUESTOS_DEVICE}{suffix}",
+                suffix = slot.to_suffix()
+            ));
             let mut service = GuestVmService {
                 metrics: GuestVmMetrics::new(metrics_file.path().to_path_buf()).unwrap(),
                 libvirt_connection: self.libvirt_connection.clone(),
@@ -1079,7 +1084,7 @@ mod tests {
                 guest_vm_type,
                 guest_vm_slot: slot,
                 sev_certificate_provider,
-                disk_device: device_string.into(),
+                disk_device: device,
                 _upgrade_mapped_device: None,
                 guestos_boot_timeout: self.guestos_boot_timeout,
                 vm_serial_log_path: self.guest_serial_log.path().to_path_buf(),

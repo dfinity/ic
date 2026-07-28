@@ -113,7 +113,7 @@ function resize_partition() {
             local each=$(((min_pv_free / total) * count))
             local i
 
-            for ((i = 0; i < total; i++)); do
+            for ((i = 1; i <= total; i++)); do
                 lvcreate -i "${count}" --type striped -l "${each}" -n "guestos${i}" hostlvm >/dev/null 2>&1
                 log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
             done
