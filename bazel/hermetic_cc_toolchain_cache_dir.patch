@@ -1,10 +1,10 @@
 # work around race condition in zig: https://github.com/ziglang/zig/issues/23993
 # hermetic_cc_toolchain ticket: https://github.com/uber/hermetic_cc_toolchain/issues/224
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
-index 6bc1819..290608c 100644
+index 6e58bd4..0161945 100644
 --- a/toolchain/defs.bzl
 +++ b/toolchain/defs.bzl
-@@ -196,8 +196,7 @@ def _zig_repository_impl(repository_ctx):
+@@ -199,8 +199,7 @@ def _zig_repository_impl(repository_ctx):
  
      if cache_prefix == "":
          if host_os == "windows":
@@ -15,7 +15,7 @@ index 6bc1819..290608c 100644
              home = repository_ctx.os.environ.get("HOME", "")
              if home:
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index c4b1592..14695f0 100644
+index 486cbda..c0d0e7e 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
 @@ -207,6 +207,22 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
@@ -62,3 +62,15 @@ index c4b1592..14695f0 100644
  
      // Zig 0.14.0 locates the macOS SDK by running `xcrun --show-sdk-path`.
      // Bazel clears PATH via `exec env -`, making xcrun unfindable. Restore
+@@ -606,7 +631,10 @@ test "zig-wrapper:cache dir override" {
+     const global_cache_dir = res.exec.env.get("ZIG_GLOBAL_CACHE_DIR").?;
+ 
+     try testing.expectEqualStrings(cache_dir, global_cache_dir);
+-    try testing.expectEqualStrings(CACHE_DIR, cache_dir);
++    // The cache dir carries a per-bazel-config suffix (see makeSuffix). The
++    // test runs from a temporary directory, i.e. outside a bazel output tree,
++    // so it gets the catchall.
++    try testing.expectEqualStrings(CACHE_DIR ++ "/config-catchall", cache_dir);
+ }
+ 
+ fn noExe(b: []const u8) []const u8 {
