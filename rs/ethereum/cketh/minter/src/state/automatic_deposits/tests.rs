@@ -161,7 +161,7 @@ fn should_snapshot_entries_in_time_index_order() {
     );
 }
 
-mod addresses_due_for_scan {
+mod addresses_to_scan_iter {
     use super::{
         BlockNumber, SCAN_GAP_SECS, SECS_PER_BLOCK, account, deposit_address, deposits_from,
         scan_state, ts, window_nanos,
@@ -172,7 +172,7 @@ mod addresses_due_for_scan {
         let deposits = deposits_from(vec![scan_state(account(0), ts(window_nanos()), None, 0)]);
 
         let due: Vec<_> = deposits
-            .addresses_due_for_scan(ts(0), BlockNumber::new(1_000))
+            .addresses_to_scan_iter(ts(0), BlockNumber::new(1_000))
             .collect();
 
         assert_eq!(due, vec![(account(0), deposit_address(&account(0)))]);
@@ -195,13 +195,13 @@ mod addresses_due_for_scan {
         let at_boundary = BlockNumber::new(1_000 + u128::from(gap_blocks));
 
         assert_eq!(
-            deposits.addresses_due_for_scan(ts(0), just_before).count(),
+            deposits.addresses_to_scan_iter(ts(0), just_before).count(),
             0,
             "not due one block before the gap elapses"
         );
         assert_eq!(
             deposits
-                .addresses_due_for_scan(ts(0), at_boundary)
+                .addresses_to_scan_iter(ts(0), at_boundary)
                 .collect::<Vec<_>>(),
             vec![(account(0), deposit_address(&account(0)))],
             "due exactly when the gap elapses"
@@ -214,7 +214,7 @@ mod addresses_due_for_scan {
 
         assert_eq!(
             deposits
-                .addresses_due_for_scan(ts(101), BlockNumber::new(1_000_000))
+                .addresses_to_scan_iter(ts(101), BlockNumber::new(1_000_000))
                 .count(),
             0
         );
@@ -231,7 +231,7 @@ mod addresses_due_for_scan {
 
         assert_eq!(
             deposits
-                .addresses_due_for_scan(ts(0), BlockNumber::new(u128::MAX))
+                .addresses_to_scan_iter(ts(0), BlockNumber::new(u128::MAX))
                 .count(),
             0
         );

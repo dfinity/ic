@@ -114,7 +114,7 @@ impl AutomaticDeposits {
     /// Iterate the live deposit addresses that are due for a balance scan as of the
     /// given latest block height, using elapsed blocks as a proxy for elapsed time
     /// against the backoff schedule. `now` filters expired entries.
-    pub fn addresses_due_for_scan(
+    pub fn addresses_to_scan_iter(
         &self,
         now: Timestamp,
         latest_block: BlockNumber,
