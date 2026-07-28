@@ -1,26 +1,23 @@
 use CanisterHttpResponseContent::Reject;
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
-    CountBytes, NodeId, NumBytes, RegistryVersion,
+    CountBytes, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
     batch::{
         FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     canister_http::{
-        CanisterHttpPaymentReceipt, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
-        CanisterHttpResponseShare, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus, max_http_outcall_spend,
+        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse,
+        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
+        CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
+        CanisterHttpResponseWithConsensus,
     },
     crypto::{Signed, crypto_hash},
     messages::CallbackId,
     signature::{BasicSigBatchEntry, BasicSignature},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    mem::size_of,
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 /// Checks whether the response is consistent
 ///
@@ -77,17 +74,16 @@ pub(crate) fn check_response_consistency(
 
 /// Enforces the per-replica spend limit from the request context: the amount
 /// the replica claims to have `spent` in the payment receipt must never exceed
-/// the maximum returned by [`max_http_outcall_spend`].
+/// the maximum returned by [`CanisterHttpRequestContext::max_http_outcall_spend`].
 ///
 /// On charging subnets this is the `per_replica_allowance`. Free subnets charge
 /// nothing, so their spend (used only for cost accounting) may exceed the (zero)
 /// allowance, but may never exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
 pub(crate) fn check_spent_within_limit(
     receipt: &CanisterHttpPaymentReceipt,
-    per_replica_allowance: Cycles,
-    cost_schedule: CanisterCyclesCostSchedule,
+    context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    let limit = max_http_outcall_spend(cost_schedule, per_replica_allowance);
+    let limit = context.max_http_outcall_spend();
     if receipt.spent > limit {
         return Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit {
             spent: receipt.spent,
@@ -155,8 +151,7 @@ pub(crate) fn validate_flexible_response_with_proof(
     callback_id: CallbackId,
     flex_committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
-    per_replica_allowance: Cycles,
-    cost_schedule: CanisterCyclesCostSchedule,
+    context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if response_with_proof.response.id != callback_id {
         return Err(
@@ -172,8 +167,7 @@ pub(crate) fn validate_flexible_response_with_proof(
         callback_id,
         flex_committee,
         seen_signers,
-        per_replica_allowance,
-        cost_schedule,
+        context,
     )?;
 
     let calculated_hash = crypto_hash(&response_with_proof.response);
@@ -216,14 +210,9 @@ pub(crate) fn validate_response_share(
     callback_id: CallbackId,
     flex_committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
-    per_replica_allowance: Cycles,
-    cost_schedule: CanisterCyclesCostSchedule,
+    context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    check_spent_within_limit(
-        &share.content.payment_receipt,
-        per_replica_allowance,
-        cost_schedule,
-    )?;
+    check_spent_within_limit(&share.content.payment_receipt, context)?;
 
     if share.content.id() != callback_id {
         return Err(
@@ -353,6 +342,7 @@ pub(crate) fn group_shares_by_callback_id<
 pub(crate) fn find_fully_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
@@ -360,9 +350,14 @@ pub(crate) fn find_fully_replicated_response(
         if signers.len() >= threshold {
             pool_access
                 .get_response_content_by_hash(&metadata.content_hash)
-                .map(|content| CanisterHttpResponseWithConsensus {
-                    content,
-                    proof: aggregate_shares(metadata.clone(), shares),
+                .map(|content| {
+                    let proof = aggregate_shares(metadata.clone(), shares);
+                    let initial_spent = non_flexible_initial_spent(&proof, subnet_size);
+                    CanisterHttpResponseWithConsensus {
+                        content,
+                        proof,
+                        initial_spent,
+                    }
                 })
         } else {
             None
@@ -377,6 +372,7 @@ pub(crate) fn find_fully_replicated_response(
 pub(crate) fn find_non_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
@@ -386,9 +382,14 @@ pub(crate) fn find_non_replicated_response(
             .and_then(|correct_share| {
                 pool_access
                     .get_response_content_by_hash(&metadata.content_hash)
-                    .map(|content| CanisterHttpResponseWithConsensus {
-                        content,
-                        proof: aggregate_shares(metadata.clone(), &[correct_share]),
+                    .map(|content| {
+                        let proof = aggregate_shares(metadata.clone(), &[correct_share]);
+                        let initial_spent = non_flexible_initial_spent(&proof, subnet_size);
+                        CanisterHttpResponseWithConsensus {
+                            content,
+                            proof,
+                            initial_spent,
+                        }
                     })
             })
     })
@@ -427,6 +428,7 @@ pub(crate) fn find_flexible_result(
     max_responses: u32,
     accumulated_size: usize,
     max_payload_size: NumBytes,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> FlexibleFindResult {
     let mut entries_sorted_asc: Vec<_> = grouped_shares.iter().collect();
@@ -434,7 +436,7 @@ pub(crate) fn find_flexible_result(
 
     let min_responses = min_responses as usize;
     let mut ok_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
-    let mut ok_responses_size = size_of::<CallbackId>();
+    let mut ok_responses_size = FlexibleCanisterHttpResponses::base_count_bytes();
     // Tracks all signers processed (both OK and reject)
     let mut seen_signers = BTreeSet::new();
     let mut reject_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
@@ -478,6 +480,11 @@ pub(crate) fn find_flexible_result(
 
     // 1. Enough OK responses collected?
     if ok_responses.len() >= min_responses {
+        let initial_spent = flexible_initial_spent(
+            ok_responses.iter().map(|(_, share)| *share),
+            subnet_size,
+            min_responses as u32,
+        );
         return FlexibleFindResult::OkResponses(
             FlexibleCanisterHttpResponses {
                 callback_id,
@@ -488,6 +495,7 @@ pub(crate) fn find_flexible_result(
                         proof: share.clone(),
                     })
                     .collect(),
+                initial_spent,
             },
             ok_responses_size,
         );
@@ -495,6 +503,11 @@ pub(crate) fn find_flexible_result(
 
     // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
     if reject_responses.len() > committee.len().saturating_sub(min_responses) {
+        let initial_spent = flexible_initial_spent(
+            reject_responses.iter().map(|(_, share)| *share),
+            subnet_size,
+            min_responses as u32,
+        );
         let error = FlexibleCanisterHttpError::TooManyRejects {
             callback_id,
             reject_responses: reject_responses
@@ -504,6 +517,7 @@ pub(crate) fn find_flexible_result(
                     proof: share.clone(),
                 })
                 .collect(),
+            initial_spent,
         };
         let error_size = error.count_bytes();
         return FlexibleFindResult::Error(error, error_size);
@@ -544,11 +558,56 @@ pub(crate) fn find_flexible_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_types::canister_http::MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET;
+    use ic_types::{
+        CanisterId, NumberOfNodes,
+        canister_http::{
+            CanisterHttpMethod, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET, PricingVersion, RefundStatus,
+            Replication,
+        },
+        messages::{NO_DEADLINE, Request},
+        time::UNIX_EPOCH,
+    };
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
     fn receipt(spent: u128) -> CanisterHttpPaymentReceipt {
         CanisterHttpPaymentReceipt {
             spent: Cycles::new(spent),
+        }
+    }
+
+    /// Builds a minimal request context pinning the given cost schedule and
+    /// per-replica allowance — the only fields [`check_spent_within_limit`] reads.
+    fn context(
+        cost_schedule: CanisterCyclesCostSchedule,
+        per_replica_allowance: Cycles,
+    ) -> CanisterHttpRequestContext {
+        CanisterHttpRequestContext {
+            request: Request {
+                receiver: CanisterId::from_u64(1),
+                sender: CanisterId::from_u64(1),
+                sender_reply_callback: CallbackId::from(1),
+                payment: Cycles::zero(),
+                method_name: String::new(),
+                method_payload: Vec::new(),
+                metadata: Default::default(),
+                deadline: NO_DEADLINE,
+            },
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus {
+                per_replica_allowance,
+                ..RefundStatus::default()
+            },
+            registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule,
         }
     }
 
@@ -557,8 +616,7 @@ mod tests {
         assert!(
             check_spent_within_limit(
                 &receipt(50),
-                Cycles::new(100),
-                CanisterCyclesCostSchedule::Normal,
+                &context(CanisterCyclesCostSchedule::Normal, Cycles::new(100)),
             )
             .is_ok()
         );
@@ -569,8 +627,7 @@ mod tests {
         assert!(matches!(
             check_spent_within_limit(
                 &receipt(101),
-                Cycles::new(100),
-                CanisterCyclesCostSchedule::Normal,
+                &context(CanisterCyclesCostSchedule::Normal, Cycles::new(100)),
             ),
             Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. })
         ));
@@ -583,8 +640,7 @@ mod tests {
         assert!(matches!(
             check_spent_within_limit(
                 &receipt(1),
-                Cycles::zero(),
-                CanisterCyclesCostSchedule::Normal,
+                &context(CanisterCyclesCostSchedule::Normal, Cycles::zero()),
             ),
             Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. })
         ));
@@ -598,8 +654,7 @@ mod tests {
         assert!(
             check_spent_within_limit(
                 &receipt(1_000_000),
-                Cycles::zero(),
-                CanisterCyclesCostSchedule::Free,
+                &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             )
             .is_ok()
         );
@@ -611,8 +666,7 @@ mod tests {
         assert!(
             check_spent_within_limit(
                 &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get()),
-                Cycles::zero(),
-                CanisterCyclesCostSchedule::Free,
+                &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             )
             .is_ok()
         );
@@ -625,8 +679,7 @@ mod tests {
         assert!(matches!(
             check_spent_within_limit(
                 &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get() + 1),
-                Cycles::zero(),
-                CanisterCyclesCostSchedule::Free,
+                &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             ),
             Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. })
         ));

@@ -6402,7 +6402,7 @@ fn remove_old_diverged_checkpoint() {
                     .state_layout()
                     .diverged_checkpoint_path(Height(1));
                 let Ok(_) = utimensat(
-                    None,
+                    nix::fcntl::AT_FDCWD,
                     &path,
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
@@ -6492,7 +6492,7 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                     .state_layout()
                     .diverged_checkpoint_path(Height(2));
                 let Ok(_) = utimensat(
-                    None,
+                    nix::fcntl::AT_FDCWD,
                     &path,
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
