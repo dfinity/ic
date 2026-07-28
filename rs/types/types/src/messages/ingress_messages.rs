@@ -592,9 +592,6 @@ pub fn extract_effective_canister_id(
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
-        // `uninstall_code` is executed with `UninstallCodeArgs`; resolve the
-        // effective canister id with the same type (see the matching comment in
-        // `Request::extract_effective_canister_id`).
         Ok(Method::UninstallCode) => match UninstallCodeArgs::decode(ingress.arg()) {
             Ok(args) => Ok(Some(args.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),

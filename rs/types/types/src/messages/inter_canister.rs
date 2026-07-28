@@ -160,9 +160,6 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            // `uninstall_code` is executed with `UninstallCodeArgs`. Decode
-            // with the same type here, consistent with the other management
-            // methods.
             Ok(Method::UninstallCode) => match UninstallCodeArgs::decode(&self.method_payload) {
                 Ok(args) => Some(args.get_canister_id()),
                 Err(_) => None,
