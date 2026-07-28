@@ -40,9 +40,9 @@ GUESTOS_TARGET_BOOT_ALTERNATIVE=""
 GUESTOS_WIPE_VAR_PARTITION=false
 
 # TODO: Support reloading for type4.* nodes (with multiple GuestOS VMs)
-if (( $(systemctl list-units --no-legend 'guestos@*.service' | wc -l) > 1 )); then
-  echo "Reloading with multiple GuestOS VMs is not supported. Is this a type 4.* node?" >&2
-  exit 1
+if (($(systemctl list-units --no-legend 'guestos@*.service' | wc -l) > 1)); then
+    echo "Reloading with multiple GuestOS VMs is not supported. Is this a type 4.* node?" >&2
+    exit 1
 fi
 
 usage() {
