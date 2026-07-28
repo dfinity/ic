@@ -42,12 +42,6 @@ rust_library(
 rust_test(
     name = "dfx-core-vendored_test",
     srcs = glob(["src/**/*.rs"]),
-    args = [
-        # This isolation is needed because some of the tests change what's in
-        # the file system. In particular, dfx configuration files. (These
-        # tests also change the process's working directory.)
-        "--test-threads=1",
-    ],
     crate_root = "src/lib.rs",
     deps = [
         # Keep sorted.
