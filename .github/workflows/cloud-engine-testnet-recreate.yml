@@ -1,0 +1,195 @@
+name: Recreate Cloud Engine Testnet
+
+# Recreates the long-lived cloud_engine testnet from scratch every night, so that
+# it keeps matching mainnet: the GuestOS version comes from
+# mainnet-icos-revisions.json (`guestos = "mainnet_nns_dev"`) and the NNS
+# canisters from mainnet-canister-revisions.json (the mainnet-NNS variant that
+# `system_test_nns` declares). Both are resolved at build time, so every run
+# lands on whatever mainnet is on that day.
+#
+# The testnet definition is deliberately NOT taken from this branch. A scheduled
+# run always uses the workflow file from the default branch, so the testnet code
+# is checked out explicitly from TESTNET_REF below, which lets the topology be
+# iterated on in a branch without merging. Point TESTNET_REF at master once the
+# testnet changes have landed there (dfinity/ic#10928).
+#
+# The testnet keeps its URL across recreations because DEMO_DOMAIN is stable:
+# Farm re-issues the certificate for <DEMO_DOMAIN>.demo.farm.dfinity.systems and
+# repoints its DNS records at the new ic-gateway VM. Everything on the
+# Application subnet is destroyed, including canisters that consumers installed
+# there, so consumers have to re-seed after a run.
+
+on:
+  schedule:
+    # 02:11 UTC, offset from the other scheduled workflows.
+    - cron: "11 2 * * *"
+  workflow_dispatch:
+    inputs:
+      testnet_ref:
+        description: 'Branch, tag or SHA holding the testnet definition to deploy'
+        required: false
+        default: ''
+        type: string
+      demo_domain:
+        description: 'Farm demo domain, i.e. <domain>.demo.farm.dfinity.systems'
+        required: false
+        default: ''
+        type: string
+      ic_gw_ipv4:
+        description: 'Static IPv4 for the ic-gateway out of 23.142.184.224/28. Empty leaves the testnet reachable over IPv6 only.'
+        required: false
+        default: ''
+        type: string
+      num_unassigned_nodes:
+        description: 'Unassigned nodes to spin up'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  # Never recreate twice at once: the second run would delete the group the first
+  # one is still bringing up.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  CI_JOB_NAME: ${{ github.job }}
+  # Repository variables allow all of these to be changed without touching this
+  # file; the literals are the fallback for a plain scheduled run.
+  TESTNET_REF: ${{ inputs.testnet_ref || vars.CLOUD_ENGINE_TESTNET_REF || 'pmarco/cloud-engine-dm1-mainnet' }}
+  DEMO_DOMAIN: ${{ inputs.demo_domain || vars.CLOUD_ENGINE_DEMO_DOMAIN || 'opencloud-internal' }}
+  IC_GW_IPV4: ${{ inputs.ic_gw_ipv4 || vars.CLOUD_ENGINE_IC_GW_IPV4 || '' }}
+  NUM_UNASSIGNED_NODES: ${{ inputs.num_unassigned_nodes || vars.CLOUD_ENGINE_NUM_UNASSIGNED_NODES || '20' }}
+  # The hosts that can attach a public IPv4 form their own datacenter, and a
+  # Farm group cannot span two, so the whole testnet is allocated there.
+  DC: dm1-dmz
+  FARM_URL: https://farm.dfinity.systems
+  # Farm group metadata testName of the mainnet-NNS variant. The HEAD-NNS variant
+  # reports cloud_engine_head_nns and is deliberately left alone.
+  TEST_NAME: cloud_engine
+
+jobs:
+  recreate:
+    name: Recreate cloud_engine testnet
+    # dm1 runner: the testnet is allocated on dm1 DMZ hosts, so the images do not
+    # have to cross datacenters. A cross-DC transfer is slow enough to matter.
+    runs-on:
+      group: dm1
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:65ab9023792784e8e13dbdd5b9a63c2dff0cd38237afd1cdbc299577505d4b88
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout the testnet definition
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.TESTNET_REF }}
+
+      - uses: ./.github/actions/netrc
+
+      - name: Report what is being deployed
+        run: |
+          set -euo pipefail
+          echo "::notice title=Testnet ref::${TESTNET_REF} ($(git rev-parse --short HEAD))"
+          echo "guestos: $(jq -r '.guestos.subnets | to_entries[0].value.version' mainnet-icos-revisions.json)"
+
+      - name: Record the existing testnet
+        id: existing
+        # Captured before deploying so the cleanup step can tell the old group
+        # from the new one.
+        run: |
+          set -euo pipefail
+          groups=$(curl -sSf --max-time 60 "${FARM_URL}/group" |
+            jq -r --arg t "${TEST_NAME}" \
+              '.[] | select(.spec.metadata.testName == $t) | .name' | tr '\n' ' ')
+          echo "Existing groups for ${TEST_NAME}: ${groups:-<none>}"
+          echo "groups=${groups}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy the new testnet
+        # The driver holds the testnet only for as long as it runs, so it is
+        # started in the background and killed once the testnet answers. Both
+        # flags are needed for the testnet to outlive this job:
+        #   --no-group-ttl         the group is not garbage collected (GROUP_TTL
+        #                          is 90s, refreshed by the driver's keepalive
+        #                          task only while it runs)
+        #   --no-delete-farm-group teardown does not delete the group
+        # --keepalive additionally disables the driver's overall timeout.
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            set -euo pipefail
+
+            args=(
+              --test_env=DC="${DC}"
+              --test_env=DEMO_DOMAIN="${DEMO_DOMAIN}"
+              --test_env=NUM_UNASSIGNED_NODES="${NUM_UNASSIGNED_NODES}"
+            )
+            # Only request a public IPv4 when one is configured: it makes the
+            # ic-gateway require a DMZ host with that network attached.
+            if [ -n "${IC_GW_IPV4}" ]; then
+              args+=(--test_env=IC_GW_IPV4="${IC_GW_IPV4}")
+            fi
+
+            bazel run //rs/tests/testnets:cloud_engine "${args[@]}" \
+              -- --keepalive --no-group-ttl --no-delete-farm-group \
+              > deploy.log 2>&1 &
+            driver=$!
+
+            url="https://${DEMO_DOMAIN}.demo.farm.dfinity.systems/api/v2/status"
+            deadline=$(( $(date +%s) + 210 * 60 ))
+            until curl -sf --max-time 20 "${url}" -o /dev/null; do
+              if ! kill -0 "${driver}" 2>/dev/null; then
+                echo "::error title=Deploy failed::the driver exited before the testnet answered"
+                tail -200 deploy.log
+                exit 1
+              fi
+              if [ "$(date +%s)" -gt "${deadline}" ]; then
+                echo "::error title=Deploy timed out::${url} never answered"
+                tail -200 deploy.log
+                kill "${driver}" || true
+                exit 1
+              fi
+              sleep 30
+            done
+
+            echo "::notice title=Testnet up::${url} is answering"
+            # SIGKILL so teardown cannot run: the group has to survive.
+            kill -9 "${driver}" || true
+
+      - name: Delete the previous testnet
+        # Only once the new one answers, so a failed deployment leaves the
+        # previous testnet in place rather than leaving no testnet at all.
+        run: |
+          set -euo pipefail
+          for group in ${{ steps.existing.outputs.groups }}; do
+            echo "Deleting Farm group ${group}"
+            curl -sSf --max-time 120 -X DELETE "${FARM_URL}/group/${group}/async"
+          done
+
+      - name: Report the new testnet
+        if: always()
+        run: |
+          set -euo pipefail
+          version=$(jq -r '.guestos.subnets | to_entries[0].value.version' mainnet-icos-revisions.json)
+          {
+            echo "## cloud_engine testnet"
+            echo
+            echo "- URL: https://${DEMO_DOMAIN}.demo.farm.dfinity.systems"
+            echo "- Testnet definition: \`${TESTNET_REF}\`"
+            echo "- GuestOS: \`${version}\` (mainnet NNS subnet)"
+            echo "- Datacenter: \`${DC}\`, unassigned nodes: ${NUM_UNASSIGNED_NODES}"
+            echo "- Public IPv4: ${IC_GW_IPV4:-none, IPv6 only}"
+            echo
+            echo "The Application subnet was recreated: consumers must re-seed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload driver log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: deploy-log
+          path: deploy.log
+          if-no-files-found: warn
