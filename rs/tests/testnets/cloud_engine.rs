@@ -5,12 +5,14 @@
 //   one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
-// The datacenter is decided by the Farm group, not by this file: `system_test`
-// sets ALLOCATE_TESTNET_TO_LOCAL_DC=1 and the DC status variable is derived from
-// the NODE_NAME of the machine running the deployment. Deploy from a dm1 machine
-// or pass --test_env=DC=dm1-dmz to place the testnet in dm1; requesting a
-// datacenter per VM instead would make the VMs unallocatable whenever the group
-// is confined to another DC.
+// Placement: `system_test` sets ALLOCATE_TESTNET_TO_LOCAL_DC=1, which confines
+// the whole Farm group to the DC derived from the deploying machine's NODE_NAME.
+// A group cannot span two DCs, and the hosts that can attach a public IPv4 live
+// in their own DC (dm1-dmz), so requesting IC_GW_IPV4 means the group must not
+// be confined: pass --test_env=ALLOCATE_TESTNET_TO_LOCAL_DC=0 with it. The
+// replicas are then placed wherever Farm has room, and only the ic-gateway is
+// pinned (to dm1-dmz). Without IC_GW_IPV4 nothing is pinned and the default
+// local-DC allocation applies.
 //
 // The nodes run the GuestOS version that mainnet's NNS subnet runs, and the NNS
 // canisters are the ones currently installed on mainnet (`guestos =
@@ -29,7 +31,7 @@
 //
 //   $ ./ci/tools/docker-run
 //   $ bazel run //rs/tests/testnets:cloud_engine --test_tmpdir=./cloud_engine \
-//       --test_env=DC=dm1-dmz \
+//       --test_env=ALLOCATE_TESTNET_TO_LOCAL_DC=0 \
 //       --test_env=IC_GW_IPV4=<free-address-of-the-dm1-dmz-network> \
 //       --test_env=DEMO_DOMAIN=<subdomain> -- --keepalive
 //
@@ -84,6 +86,7 @@ use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
 
 /// dm1-dmz network constants, used to validate and configure IC_GW_IPV4.
+const DM1_DMZ_DC: &str = "dm1-dmz";
 const DM1_DMZ_NETWORK: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 224);
 const DM1_DMZ_PREFIX: u8 = 28;
 const DM1_DMZ_GATEWAY: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 238);
@@ -415,17 +418,19 @@ pub fn setup(env: TestEnv) {
         nns_dapp_customizations(),
     );
     // Given IC_GW_IPV4 the ic-gateway gets a static, publicly routed IPv4
-    // address, which Farm publishes as the testnet's A record; without it the
-    // testnet is reachable over IPv6 only. Attaching that address requires a
-    // DMZ host, hence the host feature. The datacenter is not requested here:
-    // it comes from the group (see the DC note at the top of this file), and
-    // requesting one here that the group does not allow makes the VM
-    // unallocatable.
+    // address out of the dm1-dmz network, which Farm publishes as the testnet's
+    // A record; without it the testnet is reachable over IPv6 only.
+    //
+    // That address only works on a host of that network, so the gateway is the
+    // one VM pinned to dm1-dmz. Farm gates those hosts behind a *mandatory*
+    // "dmz" feature (see https://farm.dfinity.systems/dc), meaning a VM is
+    // placed there only if it asks for it, so both features are requested.
     let mut ic_gateway_vm = IcGatewayVm::new(IC_GATEWAY_VM_NAME);
-    if std::env::var("IC_GW_IPV4").is_ok() {
-        ic_gateway_vm = ic_gateway_vm.with_required_host_features(vec![HostFeature::DMZ]);
-    }
     if let Ok(ic_gw_ipv4) = std::env::var("IC_GW_IPV4") {
+        ic_gateway_vm = ic_gateway_vm.with_required_host_features(vec![
+            HostFeature::DC(DM1_DMZ_DC.to_string()),
+            HostFeature::DMZ,
+        ]);
         let ip: Ipv4Addr = ic_gw_ipv4
             .parse()
             .unwrap_or_else(|e| panic!("invalid IC_GW_IPV4 address '{ic_gw_ipv4}': {e}"));
