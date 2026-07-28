@@ -43,13 +43,22 @@ pub fn spawn_socketed_process(
             }
             // `dup2()` clears `FD_CLOEXEC` on the new descriptor, *except* when
             // it is a self-copy (`newfd == oldfd`), where POSIX requires it to
-            // return `newfd` without touching it. `socket` can already be fd 3:
-            // the kernel hands out the lowest free descriptor, so under the fd
-            // churn of a process that creates and destroys many sandboxes, the
-            // socket pair created for this child can land there. Since
-            // `UnixStream::pair()` creates the sockets with `SOCK_CLOEXEC`,
-            // fd 3 then still has `FD_CLOEXEC` set, `execve()` closes it, and
-            // the child ends up talking to a closed descriptor. Clear the flag
+            // return `newfd` without touching it.
+            //
+            // `socket` can be fd 3, even though callers hand us the *second*
+            // descriptor of a freshly created pair: `socketpair()` allocates its
+            // two descriptors in two separate steps, each taking the lowest free
+            // slot at that moment. In a multi-threaded process another thread can
+            // free a lower slot in between, so the pair can come back out of
+            // order — e.g. `(9, 3)` once fd 3 was released between the two
+            // allocations. fd 3 is precisely such a slot in a process that
+            // creates and destroys many sandboxes: it is the lowest descriptor no
+            // long-lived object holds, so the socket ends that land there are
+            // constantly closed and the slot reused.
+            //
+            // Since `UnixStream::pair()` creates the sockets with `SOCK_CLOEXEC`,
+            // fd 3 then still has `FD_CLOEXEC` set, `execve()` closes it, and the
+            // child ends up talking to a closed descriptor. Clear the flag
             // unconditionally to cover both cases, leaving any other descriptor
             // flag untouched.
             let flags = libc::fcntl(3, libc::F_GETFD);
