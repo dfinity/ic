@@ -14,7 +14,7 @@ message ReplicaVersionRecord {
   GuestLaunchMeasurements guest_launch_measurements = 9;
 
   // The ID used to reference this version.
-  optional string version_id = 10;
+  string version_id = 10;
 
   reserved 1, 2, 3, 4, 5, 8;
   reserved "binary_url";
