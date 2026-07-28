@@ -563,7 +563,7 @@ impl Recovery {
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
         let version_record = ReplicaVersionRecord {
-            replica_version_id: Some(upgrade_version.to_string()),
+            replica_version_id: upgrade_version.to_string(),
             release_package_sha256_hex: sha256,
             release_package_urls: vec![upgrade_url.to_string()],
             guest_launch_measurements: Some(guest_launch_measurements),

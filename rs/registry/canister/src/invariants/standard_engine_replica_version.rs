@@ -105,8 +105,9 @@ mod tests {
             .into_iter()
             .map(|v| {
                 insert(
-                    make_replica_version_key(v).as_bytes(),
+                    make_replica_version_key(&v).as_bytes(),
                     ReplicaVersionRecord {
+                        replica_version_id: v,
                         // Versions of the StandardEngineReplicaVersionRecord must
                         // have launch measurements.
                         guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
