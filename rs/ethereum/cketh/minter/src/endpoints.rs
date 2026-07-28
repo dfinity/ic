@@ -532,7 +532,7 @@ pub mod events {
         RegisteredDepositAddresses {
             scan_window_nanos: u64,
             capacity: u64,
-            addresses: Vec<DepositAddressRegistration>,
+            registrations: Vec<DepositAddressRegistration>,
         },
     }
 
@@ -542,6 +542,8 @@ pub mod events {
         pub subaccount: Option<[u8; 32]>,
         pub address: String,
         pub expires_at_nanos: u64,
+        pub last_scanned_block: Option<Nat>,
+        pub scan_count: u64,
     }
 }
 

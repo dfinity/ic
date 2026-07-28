@@ -411,12 +411,12 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
             EventPayload::RegisteredDepositAddresses {
                 scan_window_nanos,
                 capacity,
-                addresses,
+                registrations,
             } => ET::RegisteredDepositAddresses(
                 ic_cketh_minter::state::event::DepositAddressRegistry {
                     scan_window_nanos,
                     capacity,
-                    registrations: addresses
+                    registrations: registrations
                         .into_iter()
                         .map(
                             |a| ic_cketh_minter::state::event::DepositAddressRegistration {
@@ -424,8 +424,10 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                                 subaccount: a.subaccount,
                                 address: a.address.parse().unwrap(),
                                 expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
-                                last_scanned_block: None,
-                                scan_count: None,
+                                last_scanned_block: a
+                                    .last_scanned_block
+                                    .map(|b| b.try_into().unwrap()),
+                                scan_count: a.scan_count.try_into().unwrap(),
                             },
                         )
                         .collect(),

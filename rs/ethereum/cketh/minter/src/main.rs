@@ -718,7 +718,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::RegisteredDepositAddresses(registry) => EP::RegisteredDepositAddresses {
                     scan_window_nanos: registry.scan_window_nanos,
                     capacity: registry.capacity,
-                    addresses: registry
+                    registrations: registry
                         .registrations
                         .into_iter()
                         .map(|r| CandidDepositAddressRegistration {
@@ -726,6 +726,8 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                             subaccount: r.subaccount,
                             address: r.address.to_string(),
                             expires_at_nanos: r.expires_at_nanos.as_nanos(),
+                            last_scanned_block: r.last_scanned_block.map(Into::into),
+                            scan_count: r.scan_count.into(),
                         })
                         .collect(),
                 },
