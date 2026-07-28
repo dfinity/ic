@@ -11,7 +11,7 @@ filegroup(
 )
 
 configure_make(
-    name = "e2fsprogs_impl",
+    name = "e2fsprogs",
     args = ["-j"],
     configure_in_place = True,
     configure_options = [
@@ -35,14 +35,6 @@ configure_make(
         "--with-crond-dir=no",
         "--with-systemd-unit-dir=no",
     ],
-    # No -static here. zig has no static glibc to offer ("error: libc of the
-    # specified target requires dynamic linking"), and linking the *host's*
-    # libc.a is exactly what we want to get away from: it baked the build
-    # container's glibc into these binaries without being part of Bazel's action
-    # key, so one remote cache entry outlived every container image bump and
-    # broke the build-determinism check. Linked against zig's glibc 2.31 stubs
-    # the binaries end up requiring only glibc >= 2.28 at runtime, and they are
-    # build-time tools; dosfstools and mtools are built the same way.
     env = {
         "CFLAGS": "-O2 -I$$EXT_BUILD_DEPS/include",
         "LDFLAGS": "-L$$EXT_BUILD_DEPS/lib",
@@ -81,14 +73,14 @@ configure_make(
 
 filegroup(
     name = "fuse2fs",
-    srcs = [":e2fsprogs_impl"],
+    srcs = [":e2fsprogs"],
     output_group = "fuse2fs",
     visibility = ["//visibility:public"],
 )
 
 filegroup(
     name = "mke2fs",
-    srcs = [":e2fsprogs_impl"],
+    srcs = [":e2fsprogs"],
     output_group = "mke2fs",
     visibility = ["//visibility:public"],
 )
