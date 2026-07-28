@@ -102,6 +102,7 @@ mod tests {
             insert(
                 make_replica_version_key("version"), // key
                 ReplicaVersionRecord {
+                    version_id: Some("version".to_string()),
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurements: None,

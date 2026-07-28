@@ -99,10 +99,12 @@ mod tests {
     use std::sync::Arc;
 
     fn create_replica_record(
+        version_id: &str,
         package_hash: &str,
         measurements: &[impl AsRef<[u8]>],
     ) -> ReplicaVersionRecord {
         ReplicaVersionRecord {
+            version_id: Some(version_id.to_string()),
             release_package_sha256_hex: package_hash.to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -117,8 +119,12 @@ mod tests {
         }
     }
 
-    fn create_replica_record_without_measurements(package_hash: &str) -> ReplicaVersionRecord {
+    fn create_replica_record_without_measurements(
+        version_id: &str,
+        package_hash: &str,
+    ) -> ReplicaVersionRecord {
         ReplicaVersionRecord {
+            version_id: Some(version_id.to_string()),
             release_package_sha256_hex: package_hash.to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: None,
@@ -137,13 +143,19 @@ mod tests {
         let replica_versions_and_records = vec![
             (
                 "version1",
-                create_replica_record("12345", &[measurement1, measurement2]),
+                create_replica_record("version1", "12345", &[measurement1, measurement2]),
             ),
-            ("version2", create_replica_record("abcde", &[measurement3])),
-            ("version3", create_replica_record("99999", &[measurement4])),
+            (
+                "version2",
+                create_replica_record("version2", "abcde", &[measurement3]),
+            ),
+            (
+                "version3",
+                create_replica_record("version3", "99999", &[measurement4]),
+            ),
             (
                 "version4",
-                create_replica_record_without_measurements("424242"),
+                create_replica_record_without_measurements("version4", "424242"),
             ),
         ];
 

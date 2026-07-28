@@ -182,6 +182,7 @@ mod tests {
                 result.maybe_apply_mutation_internal(vec![insert(
                     make_replica_version_key(version),
                     ReplicaVersionRecord {
+                        version_id: Some(version.to_string()),
                         release_package_sha256_hex: "".into(),
                         release_package_urls: vec![],
                         guest_launch_measurements: None,

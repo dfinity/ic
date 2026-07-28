@@ -42,9 +42,9 @@ impl Registry {
             })
             .collect();
 
-        if let Some(version) = payload.replica_version_to_elect.as_ref() {
+        if let Some(version) = payload.replica_version_to_elect {
             assert!(
-                !versions_to_remove.contains(version),
+                !versions_to_remove.contains(&version),
                 "{LOG_PREFIX}ReviseElectedGuestosVersionsPayload cannot elect and unelect the same version.",
             );
 
@@ -52,8 +52,9 @@ impl Registry {
                 // Register the new version (that is, insert the new ReplicaVersionRecord)
                 RegistryMutation {
                     mutation_type: registry_mutation::Type::Insert as i32,
-                    key: make_replica_version_key(version).as_bytes().to_vec(),
+                    key: make_replica_version_key(&version).as_bytes().to_vec(),
                     value: ReplicaVersionRecord {
+                        version_id: Some(version),
                         release_package_sha256_hex: payload
                             .release_package_sha256_hex
                             .unwrap_or_else(|| {
