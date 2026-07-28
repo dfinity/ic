@@ -546,6 +546,33 @@ impl SubnetMetrics {
         self.consumed_cycles_ecdsa_outcalls
     }
 
+    /// Cycles consumed by Schnorr threshold-signature outcalls. Unlike ECDSA and
+    /// HTTP outcalls, this use case has no dedicated field; it is only tracked in
+    /// the by-use-case map (it can never originate from a deleted canister, so
+    /// the map entry is exactly the subnet-level consumption).
+    pub fn get_consumed_cycles_schnorr_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::SchnorrOutcalls)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
+    }
+
+    /// Cycles consumed by VetKd outcalls. See `get_consumed_cycles_schnorr_outcalls`.
+    pub fn get_consumed_cycles_vetkd(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::VetKd)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
+    }
+
+    /// Cycles lost due to dropped messages. See `get_consumed_cycles_schnorr_outcalls`.
+    pub fn get_consumed_cycles_dropped_messages(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::DroppedMessages)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
+    }
+
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_case
     }
@@ -556,7 +583,78 @@ impl SubnetMetrics {
         &self.consumed_cycles_by_use_case_as_counters
     }
 
+    /// Computes the total consumed cycles on the subnet.
+    ///
+    /// This is the current computation, which avoids double counting the cycles
+    /// consumed by deleted canisters. It is not yet reflected in the certified
+    /// state: the canonical state consumer still uses
+    /// [`Self::consumed_cycles_total_v27`] for all certification versions up to
+    /// and including `V27`. A future certification version should switch the
+    /// consumer over to this function.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
+        let mut total = NominalCycles::zero();
+
+        total += self.consumed_cycles_by_deleted_canisters;
+        total += self.consumed_cycles_http_outcalls;
+        total += self.consumed_cycles_ecdsa_outcalls;
+
+        for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
+            match use_case {
+                // Skip the use cases that are already fully accounted for by the
+                // scalar metrics added above:
+                //
+                // - `ECDSAOutcalls` and `HTTPOutcalls` are supersets of the
+                //   corresponding use case entries (see
+                //   `consumed_cycles_ecdsa_outcalls` and
+                //   `consumed_cycles_http_outcalls`).
+                // - `DeletedCanisters` holds the leftover cycles of deleted
+                //   canisters, which are already included in
+                //   `consumed_cycles_by_deleted_canisters`.
+                // - The remaining canister-level use cases below
+                //   (`Memory`, `ComputeAllocation`, `IngressInduction`,
+                //   `Instructions`, `RequestAndResponseTransmission`,
+                //   `Uninstall`, `CanisterCreation`, `BurnedCycles`) only ever
+                //   end up in this map when a canister is deleted, at which point
+                //   the deleted canister's total consumption (the sum of these
+                //   use cases) is also added to
+                //   `consumed_cycles_by_deleted_canisters`. Summing them here as
+                //   well would double count the cycles consumed by deleted
+                //   canisters.
+                CyclesUseCase::ECDSAOutcalls
+                | CyclesUseCase::HTTPOutcalls
+                | CyclesUseCase::DeletedCanisters
+                | CyclesUseCase::Memory
+                | CyclesUseCase::ComputeAllocation
+                | CyclesUseCase::IngressInduction
+                | CyclesUseCase::Instructions
+                | CyclesUseCase::RequestAndResponseTransmission
+                | CyclesUseCase::Uninstall
+                | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::BurnedCycles => {}
+                // The remaining use cases are only ever recorded at the subnet
+                // level (never charged to a canister's balance), so they are not
+                // covered by any of the scalar metrics above and must be added to
+                // the total.
+                CyclesUseCase::SchnorrOutcalls
+                | CyclesUseCase::VetKd
+                | CyclesUseCase::DroppedMessages => total += *cycles,
+            }
+        }
+
+        total
+    }
+
+    /// Legacy computation of the total consumed cycles, used by the canonical
+    /// state consumer for certification versions up to and including `V27`.
+    ///
+    /// This version double counts the cycles consumed by deleted canisters: at
+    /// deletion, a canister's per-use-case consumption is added both to
+    /// `consumed_cycles_by_deleted_canisters` and to the
+    /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
+    /// unchanged to preserve the certified state for existing certification
+    /// versions; [`Self::consumed_cycles_total`] fixes the double counting for
+    /// future certification versions.
+    pub fn consumed_cycles_total_v27(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;

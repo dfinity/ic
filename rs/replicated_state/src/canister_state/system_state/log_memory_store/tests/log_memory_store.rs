@@ -1,8 +1,9 @@
 use super::super::ring_buffer::RESULT_MAX_SIZE;
 use super::super::*;
 use ic_management_canister_types_private::{
-    DataSize, FetchCanisterLogsFilter, FetchCanisterLogsRange,
+    DataSize, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsResponse, Payload,
 };
+use ic_types::canister_log::MAX_DELTA_LOG_MEMORY_LIMIT;
 use more_asserts::{assert_gt, assert_le, assert_lt};
 
 const KIB: usize = 1024;
@@ -467,6 +468,76 @@ fn max_response_size_respected_with_filtering_by_timestamp() {
     assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
     // Oldest records (head) must be present.
     assert_eq!(result.first().unwrap().timestamp_nanos, partial_start_ts);
+}
+
+#[test]
+fn fetch_canister_logs_response_within_limit() {
+    // `records()` trims the returned set to `RESULT_MAX_SIZE` by stored data size
+    // (`CanisterLogRecord::data_size()` = 40 B + content per record), while Candid
+    // encodes each record's fixed fields in fewer bytes (two `nat64` = 16 B). The
+    // worst case for the encoded size is therefore the fewest/largest records, so we
+    // sweep record sizes from empty content up to a single near-maximal record and
+    // assert the encoded `FetchCanisterLogsResponse` fits within the result cap plus a
+    // 4 KiB page for Candid framing (the bound that `ic-types` asserts fits in an
+    // inter-canister message). `append_deltas` below appends at least `2 * RESULT_MAX_SIZE` bytes
+    // of stored records (across one or more deltas), so the buffer always exceeds the cap and
+    // `records()` must trim.
+    let max_response = RESULT_MAX_SIZE.get() as usize + 4 * KIB;
+    let aggregate_capacity = 3 * RESULT_MAX_SIZE.get() as usize;
+    let content_lens = [
+        0,
+        16 * KIB,
+        128 * KIB,
+        RESULT_MAX_SIZE.get() as usize - CanisterLogRecord::default().data_size(),
+    ];
+    let last = content_lens.len() - 1;
+    for (i, content_len) in content_lens.into_iter().enumerate() {
+        let mut s = LogMemoryStore::new();
+        s.resize_for_testing(aggregate_capacity);
+        // Append records until at least `2 * RESULT_MAX_SIZE` bytes have been added
+        // (so the buffer ends up larger than what can be returned in a single
+        // result), packing each delta up to `MAX_DELTA_LOG_MEMORY_LIMIT`.
+        append_deltas(
+            &mut s,
+            0,
+            2 * RESULT_MAX_SIZE.get() as usize,
+            MAX_DELTA_LOG_MEMORY_LIMIT,
+            content_len,
+        );
+        // The buffer now holds more than the result cap, so `records()` must trim.
+        assert_gt!(s.bytes_used(), RESULT_MAX_SIZE.get() as usize);
+
+        let records = s.records(None);
+        // The returned records are trimmed to `RESULT_MAX_SIZE` by stored data size.
+        let returned_size = total_size(&records);
+        assert_le!(returned_size, RESULT_MAX_SIZE.get() as usize);
+
+        let response = FetchCanisterLogsResponse {
+            canister_log_records: records,
+        };
+        let encoded_len = response.encode().len();
+        assert_le!(
+            encoded_len,
+            max_response,
+            "content_len={content_len}: encoded response of {encoded_len} bytes exceeds \
+             the result cap plus Candid framing ({max_response})"
+        );
+
+        // The last (largest) content case is a single record whose `data_size()` equals
+        // `RESULT_MAX_SIZE` exactly (content = `RESULT_MAX_SIZE` minus the fixed per-record
+        // overhead), so the trim keeps precisely that one record and the returned size hits
+        // the cap exactly — not merely below it. This pins the trim boundary: an off-by-one
+        // that dropped the boundary record (`>` vs `>=`) would leave `returned_size` short
+        // of the cap and fail here. And although the stored per-record overhead (40 B)
+        // exceeds the Candid-encoded fixed fields (16 B), that maximal record's encoding
+        // still spills past `RESULT_MAX_SIZE` once content plus framing are counted — the
+        // exact case the 4 KiB `max_response` margin exists for, so assert the margin is
+        // genuinely exercised rather than slack.
+        if i == last {
+            assert_eq!(returned_size, RESULT_MAX_SIZE.get() as usize);
+            assert_gt!(encoded_len, RESULT_MAX_SIZE.get() as usize);
+        }
+    }
 }
 
 #[test]

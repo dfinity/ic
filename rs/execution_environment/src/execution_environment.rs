@@ -741,7 +741,7 @@ impl ExecutionEnvironment {
                                 "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, reply_callback_id {}, sender {}, process_id {}",
                                 response.payload_size_bytes().get(),
                                 max_response_size,
-                                registry_settings.subnet_size,
+                                context.subnet_size.get(),
                                 context.request.sender_reply_callback,
                                 context.request.sender,
                                 std::process::id(),
@@ -1899,17 +1899,14 @@ impl ExecutionEnvironment {
                                 },
                                 Ok(args) => {
                                     let canister_id = args.get_canister_id();
-                                    let subnet_cycles_config = state.get_own_subnet_cycles_config();
                                     self.execute_mgmt_operation_on_canister(
                                         canister_id,
-                                        |canister, msg, _round_limits, _consumed_cycles| {
+                                        |canister, _msg, round_limits, _consumed_cycles| {
                                             fetch_canister_logs(
                                                 sender,
                                                 canister,
                                                 args,
-                                                msg,
-                                                &self.cycles_account_manager,
-                                                subnet_cycles_config,
+                                                round_limits,
                                             )
                                         },
                                         &mut state,
@@ -4517,6 +4514,7 @@ impl ExecutionEnvironment {
                 .apply_ingress_induction_cycles_debit(
                     canister_id,
                     cost_schedule,
+                    true, // strict
                     log,
                     &self.metrics.charging_from_balance_error,
                 );

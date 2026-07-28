@@ -510,41 +510,19 @@ pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
     .await
 }
 
-/// Runtime must be built from a node belonging to a subnet that can host
-/// EXCHANGE_RATE_CANISTER_ID.
-///
-/// Warning: This assumes that canisters with ID smaller than that of the
-/// Exchange Rate canister have all already been created.
+/// Runtime must be built from a node belonging to a subnet that hosts
+/// EXCHANGE_RATE_CANISTER_ID and supports creating canisters at specified IDs
+/// in the canister ID range containing it. In system tests, such a subnet can
+/// be obtained with `InternetComputer::use_specified_ids_allocation_range`.
 pub async fn create_and_install_mock_exchange_rate_canister(
     runtime: &'_ Runtime,
     price_of_icp_in_xdr_cents: u64,
 ) {
-    // Step 1: Create the canister.
-
-    // Create canisters in a loop until we hit EXCHANGE_RATE_CANISTER_ID. Yes,
-    // this is a hack. You might think that
-    // runtime.create_canister_with_specified_id(...) would get the desired
-    // effect (more straightforwardly), but trying to create an Exchange Rate
-    // canister that way results in
-    //
-    //     The `specified_id` uf6dk-hyaaa-aaaaq-qaaaq-cai is invalid because it belongs to the canister allocation ranges of the test environment.
-    //
-    // This is because of the way that the routing table is set up in system
-    // tests. If we wanted to get rid of this hack, we would have to change how
-    // the routing table is set up in system tests:
-    // https://github.com/dfinity/ic/pull/6053#discussion_r2329340517
-    //
-    // The "Warning" in the triple slash comments of this function is because of
-    // this hack.
-    let mut found = false;
-    for _ in 0..100 {
-        let canister = runtime.create_canister(Some(0)).await.unwrap();
-        if canister.canister_id() == EXCHANGE_RATE_CANISTER_ID {
-            found = true;
-            break;
-        }
-    }
-    assert!(found);
+    // Step 1: Create the canister at its usual (mainnet) canister ID.
+    runtime
+        .create_canister_at_id_max_cycles_with_retries(EXCHANGE_RATE_CANISTER_ID.get())
+        .await
+        .unwrap();
 
     // Step 2: Install code into the canister.
 
@@ -587,9 +565,13 @@ pub async fn create_and_install_mock_exchange_rate_canister(
 /// Warning: This assumes that canisters with ID smaller than that of the
 /// Subnet Rental canister have all already been created.
 pub async fn create_and_install_mock_subnet_rental_canister(runtime: &'_ Runtime) -> Canister<'_> {
-    // Create canisters in a loop until we hit SUBNET_RENTAL_CANISTER_ID.
-    // This is a hack similar to the one in `create_and_install_mock_exchange_rate_canister`.
-    // See the comment there for more details.
+    // Create canisters in a loop until we hit SUBNET_RENTAL_CANISTER_ID. Yes,
+    // this is a hack. You might think that
+    // runtime.create_canister_with_specified_id(...) would get the desired
+    // effect (more straightforwardly), but the Subnet Rental canister ID
+    // belongs to the canister allocation range of the (root) subnet in test
+    // environments, and creating a canister at a specified ID within a
+    // canister allocation range is not allowed.
     for _ in 0..100 {
         let mut canister = runtime.create_canister(Some(0)).await.unwrap();
         if canister.canister_id() == SUBNET_RENTAL_CANISTER_ID {

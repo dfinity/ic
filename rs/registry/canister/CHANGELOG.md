@@ -11,6 +11,14 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-24: Proposal 143074
+
+http://dashboard.internetcomputer.org/proposal/143074
+
+New code for blank replica_version_id is not active yet. Therefore, this is
+"just a maintenance" release.
+
+
 # 2026-07-17: Proposal 142937
 
 http://dashboard.internetcomputer.org/proposal/142937

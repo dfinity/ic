@@ -1507,6 +1507,7 @@ impl CanisterManager {
             sender,
             cycles,
             state.metadata.batch_time,
+            state.metadata.batch_time,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
         );

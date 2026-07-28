@@ -321,6 +321,7 @@ impl InstallCodeHelper {
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.cost_schedule,
+                true, // strict
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -865,6 +866,7 @@ pub(crate) fn finish_err(
         .apply_ingress_induction_cycles_debit(
             new_canister.canister_id(),
             round.cost_schedule,
+            true, // strict
             round.log,
             round.counters.charging_from_balance_error,
         );

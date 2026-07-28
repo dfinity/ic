@@ -649,6 +649,74 @@ fn tip_can_be_recovered_from_empty_checkpoint() {
 }
 
 #[test]
+fn canister_creation_timestamp_survives_a_checkpoint() {
+    use ic_types::time::Time;
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let creation_timestamp = Time::from_nanos_since_unix_epoch(1234);
+
+        let (height, mut state) = state_manager.take_tip();
+        assert_eq!(height, Height(0));
+        insert_dummy_canister(&mut state, canister_id);
+        std::sync::Arc::make_mut(state.canister_state_mut_arc(&canister_id).unwrap())
+            .system_state
+            .canister_creation_timestamp = Some(creation_timestamp);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+
+        // Restart the state manager so the state is reloaded from the checkpoint.
+        let state_manager = restart_fn(state_manager, None);
+
+        let (height, state) = state_manager.take_tip();
+        assert_eq!(height, Height(1));
+        assert_eq!(
+            state
+                .canister_state(&canister_id)
+                .unwrap()
+                .system_state
+                .canister_creation_timestamp,
+            Some(creation_timestamp),
+        );
+    });
+}
+
+#[test]
+fn last_install_timestamp_survives_a_checkpoint() {
+    use ic_types::time::Time;
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let install_timestamp = Time::from_nanos_since_unix_epoch(1234);
+
+        let (height, mut state) = state_manager.take_tip();
+        assert_eq!(height, Height(0));
+        // `insert_dummy_canister` gives the canister an execution state, on which
+        // the install timestamp lives.
+        insert_dummy_canister(&mut state, canister_id);
+        std::sync::Arc::make_mut(state.canister_state_mut_arc(&canister_id).unwrap())
+            .execution_state
+            .as_mut()
+            .unwrap()
+            .last_install_timestamp = Some(install_timestamp);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+
+        // Restart the state manager so the state is reloaded from the checkpoint.
+        let state_manager = restart_fn(state_manager, None);
+
+        let (height, state) = state_manager.take_tip();
+        assert_eq!(height, Height(1));
+        assert_eq!(
+            state
+                .canister_state(&canister_id)
+                .unwrap()
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .last_install_timestamp,
+            Some(install_timestamp),
+        );
+    });
+}
+
+#[test]
 fn tip_can_be_recovered_from_metadata_checkpoint() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let canister_id: CanisterId = canister_test_id(100);
@@ -2532,6 +2600,60 @@ fn state_sync_message_contains_manifest() {
                 absolute_path.display()
             );
         }
+    });
+}
+
+#[test]
+fn state_sync_get_populates_file_group_cache_of_matched_height() {
+    state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
+        // Height 1: default state; without canisters its file group is empty.
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        let hash1 = wait_for_checkpoint(&*state_manager, Height(1));
+
+        // Height 2: contains a canister, so its manifest and file group differ from height 1's.
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(1));
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        let hash2 = wait_for_checkpoint(&*state_manager, Height(2));
+        assert_ne!(hash1, hash2);
+
+        let honest_id1 = StateSyncArtifactId {
+            height: Height(1),
+            hash: hash1.get(),
+        };
+
+        // Honest request for height 1 populates and returns height 1's own file group.
+        let baseline_h1 = state_sync
+            .get(&honest_id1)
+            .expect("honest height-1 request must resolve");
+
+        // Request claiming height 1 but carrying height 2's hash. It is matched by hash to
+        // height 2 and computes height 2's file group. Height 2's cache is still empty here, so
+        // the computed value is written back; the write-back must target the matched height (2).
+        let mismatched_id = StateSyncArtifactId {
+            height: Height(1),
+            hash: hash2.get(),
+        };
+        let mismatched_msg = state_sync
+            .get(&mismatched_id)
+            .expect("hash-matched request must resolve");
+
+        // The two heights must have different file groups, otherwise this test does not make sense.
+        assert_ne!(
+            baseline_h1.state_sync_file_group,
+            mismatched_msg.state_sync_file_group
+        );
+
+        // Height 1's file group must be unchanged: the write-back must not land on the
+        // caller-supplied height.
+        let after_h1 = state_sync
+            .get(&honest_id1)
+            .expect("honest height-1 request must still resolve");
+        assert_eq!(
+            after_h1.state_sync_file_group,
+            baseline_h1.state_sync_file_group
+        );
     });
 }
 
@@ -6280,7 +6402,7 @@ fn remove_old_diverged_checkpoint() {
                     .state_layout()
                     .diverged_checkpoint_path(Height(1));
                 let Ok(_) = utimensat(
-                    None,
+                    nix::fcntl::AT_FDCWD,
                     &path,
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
@@ -6370,7 +6492,7 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                     .state_layout()
                     .diverged_checkpoint_path(Height(2));
                 let Ok(_) = utimensat(
-                    None,
+                    nix::fcntl::AT_FDCWD,
                     &path,
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),

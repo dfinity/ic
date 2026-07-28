@@ -81,6 +81,7 @@ qrcode = { workspace = true }
 async-stream = { workspace = true }
 assert_matches = { workspace = true }
 hyper-util = { workspace = true }
+lazy_static = { workspace = true }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }

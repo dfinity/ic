@@ -1,6 +1,7 @@
 use crate::endpoints::CandidBlockTag;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
+use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::EthTransactions;
 use crate::state::{InvalidStateError, State};
@@ -107,6 +108,7 @@ impl TryFrom<InitArg> for State {
             ckerc20_tokens: Default::default(),
             erc20_balances: Default::default(),
             log_scrapings,
+            automatic_deposits: AutomaticDeposits::default(),
         };
         state.validate_config()?;
         Ok(state)

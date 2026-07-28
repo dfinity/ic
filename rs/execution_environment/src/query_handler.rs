@@ -203,10 +203,10 @@ impl InternalHttpQueryHandler {
                                     format!("Canister {canister_id} not found"),
                                 )
                             })?;
-                    let result = Ok(WasmResult::Reply(
+                    let (reply, _record_count, _content_size) =
                         fetch_canister_logs_response(query.source(), canister, args)
-                            .map_err(UserError::from)?,
-                    ));
+                            .map_err(UserError::from)?;
+                    let result = Ok(WasmResult::Reply(reply));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),

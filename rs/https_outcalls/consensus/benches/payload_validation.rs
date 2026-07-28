@@ -41,6 +41,7 @@ use ic_types::{
     signature::BasicSignature,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 
 /// Registry version that the whole benchmark operates at. The subnet record,
 /// the node signing keys and the responses' metadata all use this version.
@@ -361,6 +362,7 @@ impl<'a> PayloadAssembler<'a> {
                     metadata,
                     signatures,
                 },
+                initial_spent: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -384,6 +386,7 @@ impl<'a> PayloadAssembler<'a> {
                     metadata,
                     signatures,
                 },
+                initial_spent: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -430,6 +433,7 @@ impl<'a> PayloadAssembler<'a> {
             flexible_responses.push(FlexibleCanisterHttpResponses {
                 callback_id: CallbackId::new(callback_id),
                 responses: entries,
+                initial_spent: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -490,7 +494,7 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
         subnet_size: NumberOfNodes::from(13),
-        cost_schedule: None,
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     }
 }
 

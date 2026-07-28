@@ -4,7 +4,6 @@ configargparse
 cryptography>=48.0.1
 cvss>=2.5
 fabric
-GitPython>=3.1.50
 idracredfishsupport>=0.0.8
 invoke
 jira>=3.10.5

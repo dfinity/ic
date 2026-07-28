@@ -6,7 +6,7 @@ use ic_cdk::api::management_canister::main::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CanisterStatusType,
     CreateCanisterArgument, InstallCodeArgument, canister_status, create_canister, install_code,
 };
-use ic_cdk::update;
+use ic_cdk::{api::canister_self, update};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -32,7 +32,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     let canister_id = create_canister(
         CreateCanisterArgument {
             settings: Some(CanisterSettings {
-                controllers: Some(vec![ic_cdk::api::id()]),
+                controllers: Some(vec![canister_self()]),
                 ..CanisterSettings::default()
             }),
         },

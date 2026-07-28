@@ -1684,20 +1684,26 @@ impl ExecutionTest {
         assert!(cycles_used_after >= cycles_used_before);
         let cycles_used = cycles_used_after - cycles_used_before;
         if instructions_used.get() != 0 {
-            let method_name = match message {
+            let method = match &message {
                 SubnetMessage::Response(_) => None,
-                SubnetMessage::Request(ref request) => Some(request.method_name.clone()),
-                SubnetMessage::Ingress(ref ingress) => Some(ingress.method_name.clone()),
-            };
-            assert_eq!(
-                cycles_used,
-                self.expected_cycles_metrics_change(message, instructions_used),
-            );
-            if let Some(method_name) = method_name {
-                assert!(
-                    Ic00MethodPermissions::new(Method::from_str(&method_name).unwrap())
-                        .counts_toward_round_limit()
+                SubnetMessage::Request(request) => Some(Method::from_str(&request.method_name)),
+                SubnetMessage::Ingress(ingress) => Some(Method::from_str(&ingress.method_name)),
+            }
+            .transpose()
+            .unwrap();
+            if method == Some(Method::FetchCanisterLogs) {
+                // `fetch_canister_logs` consumes round instructions but charges no
+                // cycles fee, so the canister's instruction-cycle metric does not
+                // change.
+                assert_eq!(cycles_used.get(), 0);
+            } else {
+                assert_eq!(
+                    cycles_used,
+                    self.expected_cycles_metrics_change(message, instructions_used),
                 );
+            }
+            if let Some(method) = method {
+                assert!(Ic00MethodPermissions::new(method).counts_toward_round_limit());
             }
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
