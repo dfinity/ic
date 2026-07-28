@@ -102,7 +102,7 @@ impl AutomaticDeposits {
                     value: DepositRequest {
                         address: deposit.address,
                         last_scanned_block: deposit.last_scanned_block,
-                        scan_count: deposit.scan_count.unwrap_or(0),
+                        scan_count: deposit.scan_count,
                     },
                     expires_at: deposit.expires_at_nanos,
                 },
@@ -162,7 +162,7 @@ impl AutomaticDeposits {
                 address: deposit.value.address,
                 expires_at_nanos: deposit.expires_at,
                 last_scanned_block: deposit.value.last_scanned_block,
-                scan_count: Some(deposit.value.scan_count),
+                scan_count: deposit.value.scan_count,
             })
             .collect();
         DepositAddressRegistry {

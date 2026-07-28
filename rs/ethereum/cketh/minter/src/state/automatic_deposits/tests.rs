@@ -274,46 +274,6 @@ fn should_reproduce_equal_deposits_across_snapshot_round_trip() {
     assert_eq!(restored.watchlist_snapshot(), registry);
 }
 
-#[test]
-fn should_decode_registration_without_scan_fields() {
-    #[derive(minicbor::Encode)]
-    struct OldRegistration {
-        #[cbor(n(0), with = "icrc_cbor::principal")]
-        owner: Principal,
-        #[cbor(n(1), with = "minicbor::bytes")]
-        subaccount: Option<[u8; 32]>,
-        #[n(2)]
-        address: Address,
-        #[n(3)]
-        expires_at_nanos: Timestamp,
-    }
-
-    let account = account(0);
-    let old = OldRegistration {
-        owner: account.owner,
-        subaccount: account.subaccount,
-        address: deposit_address(&account),
-        expires_at_nanos: ts(42),
-    };
-    let bytes = minicbor::to_vec(&old).unwrap();
-
-    let decoded: DepositAddressRegistration = minicbor::decode(&bytes).unwrap();
-
-    assert_eq!(decoded.last_scanned_block, None);
-    assert_eq!(decoded.scan_count, None);
-
-    // The absent scan_count is restored as 0 through the rebuild path.
-    let mut deposits = AutomaticDeposits::default();
-    deposits.rebuild_watchlist(&DepositAddressRegistry {
-        scan_window_nanos: window_nanos(),
-        capacity: 1,
-        registrations: vec![decoded],
-    });
-    let entry = deposits.get_entry(ts(0), &account).unwrap();
-    assert_eq!(entry.value.last_scanned_block, None);
-    assert_eq!(entry.value.scan_count, 0);
-}
-
 fn deposits_from(states: Vec<DepositAddressRegistration>) -> AutomaticDeposits {
     let mut deposits = AutomaticDeposits::default();
     deposits.rebuild_watchlist(&DepositAddressRegistry {
@@ -336,7 +296,7 @@ fn scan_state(
         address: deposit_address(&account),
         expires_at_nanos: expires_at,
         last_scanned_block,
-        scan_count: Some(scan_count),
+        scan_count,
     }
 }
 
@@ -391,6 +351,6 @@ fn registration(account: Account, expires_at: Timestamp) -> DepositAddressRegist
         address: deposit_address(&account),
         expires_at_nanos: expires_at,
         last_scanned_block: None,
-        scan_count: Some(0),
+        scan_count: 0,
     }
 }
