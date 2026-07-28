@@ -21,8 +21,7 @@ use anyhow::{Context, Result, bail};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_canister_client::Sender;
-use ic_consensus_system_test_utils::get_cup_from_node;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::{get_cup_from_node, rw_message::install_nns_and_check_progress};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -32,20 +31,20 @@ use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, canister_id_into_u64, difference,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::driver::test_env_api::{HasRegistryVersion, get_dependency_path};
-use ic_system_test_driver::nns::vote_and_execute_proposal;
-use ic_system_test_driver::retry_with_msg_async;
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
+    canister_agent::HasCanisterAgentCapability,
     driver::{
+        group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot, HasRegistryVersion, get_dependency_path
         },
     },
     util::runtime_from_url,
+    nns::vote_and_execute_proposal,
+    retry_with_msg_async, retry_with_msg_async_quiet,
+    systest,
 };
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
