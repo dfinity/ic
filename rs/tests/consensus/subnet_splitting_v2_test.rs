@@ -537,7 +537,7 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
 
     let canister_start_arguments = StartArgs {
         network_topology: canister_groups.clone(),
-        canister_to_subnet_rate: 1,
+        canister_to_subnet_rate: 3,
         request_payload_size_bytes: 1,
         call_timeouts_seconds: vec![None],
         response_payload_size_bytes: 1,
