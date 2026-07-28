@@ -9,8 +9,9 @@ name: Recreate Cloud Engine Testnet
 #
 # The testnet definition is deliberately NOT taken from this branch: it is checked
 # out from TESTNET_REF below, which lets the topology be iterated on in a branch
-# without merging, and without the caller having to know which ref to dispatch. Point TESTNET_REF at master once the
-# testnet changes have landed there (dfinity/ic#10928).
+# without merging, and without the caller having to know which ref to dispatch.
+# Point TESTNET_REF at master once the testnet changes land there
+# (dfinity/ic#10928).
 #
 # The testnet keeps its URL across recreations because DEMO_DOMAIN is stable:
 # Farm re-issues the certificate for <DEMO_DOMAIN>.demo.farm.dfinity.systems and
@@ -56,7 +57,7 @@ concurrency:
 env:
   CI_JOB_NAME: ${{ github.job }}
   # Repository variables allow all of these to be changed without touching this
-  # file; the literals are the fallback for a plain scheduled run.
+  # file; the literals apply when a dispatch leaves the inputs empty.
   TESTNET_REF: ${{ inputs.testnet_ref || vars.CLOUD_ENGINE_TESTNET_REF || 'pmarco/cloud-engine-dm1-mainnet' }}
   DEMO_DOMAIN: ${{ inputs.demo_domain || vars.CLOUD_ENGINE_DEMO_DOMAIN || 'opencloud-internal' }}
   IC_GW_IPV4: ${{ inputs.ic_gw_ipv4 || vars.CLOUD_ENGINE_IC_GW_IPV4 || '' }}
