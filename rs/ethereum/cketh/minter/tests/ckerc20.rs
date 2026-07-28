@@ -630,6 +630,7 @@ mod withdraw_erc20 {
 
             ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
             ckerc20.env.tick();
+            ckerc20.env.tick();
             let balance_after_reimbursement = ckerc20.cketh.balance_of(caller);
             assert_eq!(
                 balance_after_reimbursement,
