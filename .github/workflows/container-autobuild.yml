@@ -125,9 +125,8 @@ jobs:
           nsc docker login
           ic_build_repo="ghcr.io/dfinity/ic-build"
           src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
-          nsc base-image upload "$src" "ic-build-worker:${{ needs.build-image-prep.outputs.image_tag }}"
-          worker_image="${NSC_CONTAINER_REGISTRY}/ic-build-worker@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
-          echo "Resolved worker image: $worker_image"
+          nsc base-image upload "$src" "ic-build:${{ needs.build-image-prep.outputs.image_tag }}"
+          worker_image="${NSC_CONTAINER_REGISTRY}/ic-build@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
           nsc base-image optimize --image_ref "$worker_image"
           echo "worker-image=$worker_image" >> "$GITHUB_OUTPUT"
 
@@ -167,7 +166,7 @@ jobs:
           pushd .github
           sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           WORKER_IMAGE='${{ needs.rbe-worker-image.outputs.worker-image }}'
-          sed -i -E "s|nscr\.io/[^\"/]+/ic-build-worker@sha256:[0-9a-f]{64}|${WORKER_IMAGE}|g" -- workflow*/*
+          sed -i -E "s|nscr\.io/[^\"/]+/ic-build@sha256:[0-9a-f]{64}|${WORKER_IMAGE}|g" -- workflow*/*
           popd
 
           git config --global user.name "IDX GitHub Automation"
