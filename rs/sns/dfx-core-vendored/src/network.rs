@@ -53,18 +53,39 @@ pub enum NetworkResolutionError {
     #[error("Failed to determine the shared dfx config directory")]
     DetermineSharedConfigDirectoryFailed(#[source] ConfigError),
 
+    // dfx-core's `Config::from_file` propagates a read failure on an existing
+    // dfx.json as an Err (via `crate::fs::read(path)?`), rather than treating
+    // it the same as dfx.json being absent.
+    #[error("Failed to read {0}")]
+    ReadProjectDfxJsonFailed(PathBuf, #[source] std::io::Error),
+
+    // dfx-core's `Config::from_slice` deserializes dfx.json into a typed
+    // `ConfigInterface` and propagates any resulting serde error as an Err.
     #[error("Failed to parse {0} as JSON")]
     ParseProjectDfxJsonFailed(PathBuf, #[source] serde_json::Error),
 
+    // Same fidelity note as `ParseProjectDfxJsonFailed`: dfx-core's
+    // `ConfigLocalProvider::bind` is a typed `Option<String>` field, so a
+    // non-string "bind" fails that same `Config::from_slice` deserialization.
     #[error("{path}'s local network has a \"bind\" value that is not a string: {value}")]
     InvalidProjectLocalNetworkBind {
         path: PathBuf,
         value: serde_json::Value,
     },
 
+    // dfx-core's `NetworksConfig::new` only defaults when networks.json does
+    // not exist. If it exists but can't be read, `NetworksConfig::from_file`
+    // propagates the error (via `crate::fs::read(path)?`) instead of
+    // defaulting.
+    #[error("Failed to read {0}")]
+    ReadSharedNetworksJsonFailed(PathBuf, #[source] std::io::Error),
+
+    // Mirrors dfx-core's `NetworksConfig::from_file`, which propagates a
+    // deserialization error as an Err.
     #[error("Failed to parse {0} as JSON")]
     ParseSharedNetworksJsonFailed(PathBuf, #[source] serde_json::Error),
 
+    // Same fidelity note as `InvalidProjectLocalNetworkBind`.
     #[error("{path}'s local network has a \"bind\" value that is not a string: {value}")]
     InvalidSharedLocalNetworkBind {
         path: PathBuf,
@@ -186,11 +207,14 @@ fn resolve_local_network_with(
 /// Mirrors dfx's `create_project_network_descriptor`, which only produces a project
 /// network descriptor for networks actually present in the project's `dfx.json`.
 ///
-/// Returns `Err` if the nearest `dfx.json` exists, but cannot be parsed as JSON,
-/// or its local network's "bind" value is present, but is not a string. Unlike
-/// "no dfx.json" or "dfx.json has no local network" (both legitimate, and
-/// treated as `None`), a malformed `dfx.json` is a real problem with the user's
-/// project, and must not be swept under the rug.
+/// Returns `Err` if the nearest `dfx.json` exists, but cannot be read, cannot
+/// be parsed as JSON, or its local network's "bind" value is present, but is
+/// not a string. Unlike "no dfx.json" or "dfx.json has no local network"
+/// (both legitimate, and treated as `None`), these are all real problems with
+/// the user's project, and dfx-core itself surfaces them as errors too (see
+/// `Config::from_file` and `Config::from_slice` in dfx-core's
+/// `config/model/dfinity.rs`), so they must not be swept under the rug here
+/// either.
 fn find_project_local_network(
     start_dir: &Path,
 ) -> Result<Option<(PathBuf, String)>, NetworkResolutionError> {
@@ -208,32 +232,18 @@ fn find_project_local_network(
             continue;
         }
 
-        // Found the nearest dfx.json!
-        let content = match std::fs::read(&dfx_json) {
-            Ok(content) => content,
-            Err(_err) => {
-                // The file exists (we just checked with is_file), but could not
-                // be read (e.g. a permissions problem). Treat this the same as
-                // dfx.json not being here at all, and keep walking up.
-                if !dir.pop() {
-                    return Ok(None);
-                }
-                continue;
-            }
-        };
+        // Found the nearest dfx.json! Read it.
+        let content = std::fs::read(&dfx_json).map_err(|err| {
+            NetworkResolutionError::ReadProjectDfxJsonFailed(dfx_json.clone(), err)
+        })?;
 
-        let dfx_json_value: serde_json::Value = match serde_json::from_slice(&content) {
-            Ok(value) => value,
-            Err(err) => {
-                // dfx.json exists and was read, but is not valid JSON. This is a
-                // real problem with the user's project configuration, so surface
-                // it instead of silently treating dfx.json as absent.
-                return Err(NetworkResolutionError::ParseProjectDfxJsonFailed(
-                    dfx_json, err,
-                ));
-            }
-        };
+        // Parse dfx.json.
+        let dfx_json_value: serde_json::Value =
+            serde_json::from_slice(&content).map_err(|err| {
+                NetworkResolutionError::ParseProjectDfxJsonFailed(dfx_json.clone(), err)
+            })?;
 
+        // Get network.local out of dfx.json. If it doesn't exist, return None.
         let Some(local) = dfx_json_value
             .get("networks")
             .and_then(|networks| networks.get("local"))
@@ -244,9 +254,8 @@ fn find_project_local_network(
             return Ok(None);
         };
 
-        // Look up "bind" ...
         let bind = local.get("bind");
-        // ... and, separately, decide what to do with it.
+        // Fall back to default. If it's not a string, return Err.
         let bind = match bind {
             None => DEFAULT_PROJECT_LOCAL_ADDRESS.to_string(),
             Some(bind) => match bind.as_str() {
@@ -273,9 +282,7 @@ fn find_project_local_network(
 ///
 /// (Otherwise, Err is returned.)
 ///
-/// Mirrors dfx's `create_shared_network_descriptor`. Unlike a project's
-/// `dfx.json`, the shared `networks.json` has no top-level `networks` key: it
-/// is itself the map from network name to configuration.
+/// Mirrors dfx's `create_shared_network_descriptor`.
 ///
 /// `config_root_override`, when `Some`, is used in place of the shared dfx
 /// config directory's usual location, the same way the real `DFX_CONFIG_ROOT`
@@ -296,32 +303,32 @@ fn shared_local_address(
     .map_err(NetworkResolutionError::DetermineSharedConfigDirectoryFailed)?
     .join("networks.json");
 
-    let Ok(content) = std::fs::read(&networks_json) else {
-        // No networks.json (or it could not be read): use the default.
+    if !networks_json.is_file() {
+        // No networks.json: use the default. Mirrors dfx-core's
+        // `NetworksConfig::new`, which only defaults when the file doesn't
+        // exist -- if it exists but can't be read, that's an Err instead (see
+        // `ReadSharedNetworksJsonFailed` below).
         return Ok(DEFAULT_SHARED_LOCAL_ADDRESS.to_string());
-    };
+    }
 
-    let networks_json_value: serde_json::Value = match serde_json::from_slice(&content) {
-        Ok(value) => value,
-        Err(err) => {
-            // networks.json exists and was read, but is not valid JSON. This is
-            // a real problem with the user's dfx configuration, so surface it
-            // instead of silently falling back to the default.
-            return Err(NetworkResolutionError::ParseSharedNetworksJsonFailed(
-                networks_json,
-                err,
-            ));
-        }
-    };
+    // Read it.
+    let content = std::fs::read(&networks_json).map_err(|err| {
+        NetworkResolutionError::ReadSharedNetworksJsonFailed(networks_json.clone(), err)
+    })?;
+
+    // Parse networks.json.
+    let networks_json_value: serde_json::Value =
+        serde_json::from_slice(&content).map_err(|err| {
+            NetworkResolutionError::ParseSharedNetworksJsonFailed(networks_json.clone(), err)
+        })?;
 
     let Some(local) = networks_json_value.get("local") else {
         // No "local" entry: use the default.
         return Ok(DEFAULT_SHARED_LOCAL_ADDRESS.to_string());
     };
 
-    // Look up "bind" ...
     let bind = local.get("bind");
-    // ... and, separately, decide what to do with it.
+    // Fall back to default. If it's not a string, return Err.
     let bind = match bind {
         None => DEFAULT_SHARED_LOCAL_ADDRESS.to_string(),
         Some(bind) => match bind.as_str() {
