@@ -46,8 +46,19 @@ Runbook::
    elected in step 2, demonstrating that
    `StandardEngineReplicaVersionRecord` is being used.
 
+6. Submit (and vote through) a second `UpdateStandardEngineReplicaVersion`
+   proposal, this time reversing direction (old: the version elected in
+   step 2, new: the original replica version), again with deployment
+   progress at 100%.
+
+7. Wait for the Cloud Engine's nodes to actually upgrade back to the
+   original replica version, demonstrating that
+   `StandardEngineReplicaVersionRecord` drives real upgrades, not just
+   the replica version at creation time.
+
 Success::
-Every Cloud Engine node is running the elected replica version.
+Every Cloud Engine node is running the elected replica version, and later
+upgrades back to the original replica version.
 
 end::catalog[] */
 
@@ -237,6 +248,40 @@ fn test(env: TestEnv) {
         "All Cloud Engine nodes are healthy, running {new_replica_version}, \
          confirming that they are taking orders from \
          StandardEngineReplicaVersionRecord."
+    );
+
+    // [Step 6] Upsert StandardEngineReplicaVersionRecord to
+    // {old: new_replica_version, new: original_replica_version,
+    // deployment_progress: 1.0}, i.e. reverse direction from step 3.
+    info!(
+        logger,
+        "Updating StandardEngineReplicaVersionRecord: {new_replica_version} \
+         -> {original_replica_version}"
+    );
+    let proposal_id = block_on(submit_update_standard_engine_replica_version_proposal(
+        &governance,
+        proposal_sender,
+        test_neuron_id,
+        original_replica_version.to_string(),
+        new_replica_version.to_string(),
+        1.0,
+    ));
+    block_on(vote_execute_proposal_assert_executed(
+        &governance,
+        proposal_id,
+    ));
+
+    // [Step 7] Verify that the Cloud Engine upgrades to
+    // original_replica_version, per the updated
+    // StandardEngineReplicaVersionRecord.
+    for node in &engine_nodes {
+        assert_assigned_replica_version(node, &original_replica_version, logger.clone());
+    }
+    info!(
+        logger,
+        "All Cloud Engine nodes upgraded back to {original_replica_version}, \
+         confirming that StandardEngineReplicaVersionRecord drives real \
+         upgrades, not just the replica version at creation time."
     );
 }
 
