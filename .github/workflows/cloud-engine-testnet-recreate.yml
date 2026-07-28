@@ -1,16 +1,15 @@
 name: Recreate Cloud Engine Testnet
 
-# Recreates the long-lived cloud_engine testnet from scratch every night, so that
-# it keeps matching mainnet: the GuestOS version comes from
+# Recreates the long-lived cloud_engine testnet from scratch, so that it keeps
+# matching mainnet: the GuestOS version comes from
 # mainnet-icos-revisions.json (`guestos = "mainnet_nns_dev"`) and the NNS
 # canisters from mainnet-canister-revisions.json (the mainnet-NNS variant that
 # `system_test_nns` declares). Both are resolved at build time, so every run
 # lands on whatever mainnet is on that day.
 #
-# The testnet definition is deliberately NOT taken from this branch. A scheduled
-# run always uses the workflow file from the default branch, so the testnet code
-# is checked out explicitly from TESTNET_REF below, which lets the topology be
-# iterated on in a branch without merging. Point TESTNET_REF at master once the
+# The testnet definition is deliberately NOT taken from this branch: it is checked
+# out from TESTNET_REF below, which lets the topology be iterated on in a branch
+# without merging, and without the caller having to know which ref to dispatch. Point TESTNET_REF at master once the
 # testnet changes have landed there (dfinity/ic#10928).
 #
 # The testnet keeps its URL across recreations because DEMO_DOMAIN is stable:
@@ -20,9 +19,11 @@ name: Recreate Cloud Engine Testnet
 # there, so consumers have to re-seed after a run.
 
 on:
-  schedule:
-    # 02:11 UTC, offset from the other scheduled workflows.
-    - cron: "11 2 * * *"
+  # Dispatch only. The schedule lives with the consumer of the testnet, a
+  # CronJob in the cmh1-dashboard-dev cluster, which triggers this workflow and
+  # then redeploys the control-panel canisters onto the fresh testnet. Keeping
+  # both halves on one schedule avoids a window where the testnet has been
+  # recreated but nothing has been reinstalled on it.
   workflow_dispatch:
     inputs:
       testnet_ref:
