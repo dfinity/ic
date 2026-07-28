@@ -53,7 +53,7 @@ use ic_cdk::println;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
-const INITIAL_CANISTER_CREATION_CYCLES: u64 = 3 * ONE_TRILLION;
+const INITIAL_CANISTER_CREATION_CYCLES: u128 = 3 * ONE_TRILLION as u128;
 
 /// The number of canisters that the SNS-WASM canister will install when deploying
 /// an SNS. This constant is different than `SNS_CANISTER_COUNT` due to the Archive
@@ -64,7 +64,7 @@ const INITIAL_CANISTER_CREATION_CYCLES: u64 = 3 * ONE_TRILLION;
 ///   - SNS Swap Canister
 ///   - ICRC Ledger Canister
 ///   - ICRC Index Canister
-pub const SNS_CANISTER_COUNT_AT_INSTALL: u64 = 5;
+pub const SNS_CANISTER_COUNT_AT_INSTALL: u128 = 5;
 
 /// The total number of SNS canister types that make up an SNS. These are:
 ///   - SNS Governance Canister
@@ -73,7 +73,7 @@ pub const SNS_CANISTER_COUNT_AT_INSTALL: u64 = 5;
 ///   - ICRC Ledger Canister
 ///   - ICRC Index Canister
 ///   - ICRC Ledger Archive Canister
-pub const SNS_CANISTER_TYPE_COUNT: u64 = 6;
+pub const SNS_CANISTER_TYPE_COUNT: u128 = 6;
 
 impl From<SnsCanisterIds> for DeployedSns {
     fn from(src: SnsCanisterIds) -> Self {
@@ -831,7 +831,7 @@ where
             .map_err(validation_deploy_error)?;
 
         canister_api
-            .this_canister_has_enough_cycles(u128::from(SNS_CREATION_FEE))
+            .this_canister_has_enough_cycles(SNS_CREATION_FEE)
             .map_err(validation_deploy_error)?;
 
         // Get the current controllers of each of the dapp_canisters in case of deployment errors.
@@ -1056,7 +1056,7 @@ where
                     cycles_per_canister
                 };
                 canister_api
-                    .send_cycles_to_canister(canister_id, u128::from(cycles_to_provide))
+                    .send_cycles_to_canister(canister_id, cycles_to_provide)
                     .await
                     .map_err(|e| format!("Could not fund {label} canister: {e}"))
             },
@@ -1233,14 +1233,14 @@ where
     async fn create_sns_canisters(
         canister_api: &impl CanisterApi,
         subnet_id: SubnetId,
-        initial_cycles_per_canister: u64,
+        initial_cycles_per_canister: u128,
     ) -> Result<SnsCanisterIds, (String, Option<SnsCanisterIds>)> {
         let this_canister_id = canister_api.local_canister_id().get();
         let new_canister = |canister_type: SnsCanisterType| {
             canister_api.create_canister(
                 subnet_id,
                 this_canister_id,
-                Cycles::new(initial_cycles_per_canister.into()),
+                Cycles::new(initial_cycles_per_canister),
                 if canister_type == SnsCanisterType::Governance {
                     DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT
                 } else {
@@ -2080,7 +2080,7 @@ mod test {
         vec,
     };
 
-    const CANISTER_CREATION_CYCLES: u64 = INITIAL_CANISTER_CREATION_CYCLES * 5;
+    const CANISTER_CREATION_CYCLES: u128 = INITIAL_CANISTER_CREATION_CYCLES * 5;
 
     struct TestCanisterApi {
         canisters_created: Arc<Mutex<u64>>,
@@ -2235,8 +2235,8 @@ mod test {
             cycles_accepted: Arc::new(Mutex::new(vec![])),
             cycles_sent: Arc::new(Mutex::new(vec![])),
             canisters_deleted: Arc::new(Mutex::new(vec![])),
-            canister_cycles_balance: Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE))),
-            cycles_found_in_request: Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE))),
+            canister_cycles_balance: Arc::new(Mutex::new(SNS_CREATION_FEE)),
+            cycles_found_in_request: Arc::new(Mutex::new(SNS_CREATION_FEE)),
             errors_on_create_canister: Arc::new(Mutex::new(vec![])),
             errors_on_set_controller: Arc::new(Mutex::new(vec![])),
             errors_on_delete_canister: Arc::new(Mutex::new(vec![])),
@@ -3984,9 +3984,8 @@ mod test {
         // used to create them, minus the INITIAL_CANISTER_CREATION_CYCLES that is allocated for
         // archive.  Also see below, ledger is given a double share, plus INITIAL_CANISTER_CREATION_CYCLES
         // to account for archive
-        let sent_cycles = u128::from(
-            SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES,
-        ) / 6;
+        let sent_cycles =
+            (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
         let sns_init_payload = SnsInitPayload {
             dapp_canisters: None,
@@ -4005,7 +4004,7 @@ mod test {
                 (governance_id, sent_cycles),
                 (
                     ledger_id,
-                    sent_cycles * 2 + u128::from(INITIAL_CANISTER_CREATION_CYCLES),
+                    sent_cycles * 2 + INITIAL_CANISTER_CREATION_CYCLES,
                 ),
                 (swap_id, sent_cycles),
                 (index_id, sent_cycles),
@@ -4066,7 +4065,7 @@ mod test {
                 Some("Set controller fail".to_string()),
             ]);
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         let this_id = canister_test_id(0);
 
@@ -4085,9 +4084,8 @@ mod test {
         // used to create them, minus the INITIAL_CANISTER_CREATION_CYCLES that is allocated for
         // archive.  Also see below, ledger is given a double share, plus INITIAL_CANISTER_CREATION_CYCLES
         // to account for archive
-        let sent_cycles = u128::from(
-            SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES,
-        ) / 6;
+        let sent_cycles =
+            (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
         let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         add_dapp_canisters(&mut sns_init_payload, &[dapp_id]);
@@ -4117,7 +4115,7 @@ mod test {
                 (governance_id, sent_cycles),
                 (
                     ledger_id,
-                    sent_cycles * 2 + u128::from(INITIAL_CANISTER_CREATION_CYCLES),
+                    sent_cycles * 2 + INITIAL_CANISTER_CREATION_CYCLES,
                 ),
                 (swap_id, sent_cycles),
                 (index_id, sent_cycles),
@@ -4249,7 +4247,7 @@ mod test {
     async fn test_governance_deploy_sends_cycles_but_not_from_request() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         let this_id = canister_test_id(0);
 
@@ -4263,9 +4261,8 @@ mod test {
         // used to create them, minus the INITIAL_CANISTER_CREATION_CYCLES that is allocated for
         // archive.  Also see below, ledger is given a double share, plus INITIAL_CANISTER_CREATION_CYCLES
         // to account for archive
-        let sent_cycles = u128::from(
-            SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES,
-        ) / 6;
+        let sent_cycles =
+            (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
         let sns_init_payload = SnsInitPayload {
             dapp_canisters: Some(DappCanisters::default()),
@@ -4284,7 +4281,7 @@ mod test {
                 (governance_id, sent_cycles),
                 (
                     ledger_id,
-                    sent_cycles * 2 + u128::from(INITIAL_CANISTER_CREATION_CYCLES),
+                    sent_cycles * 2 + INITIAL_CANISTER_CREATION_CYCLES,
                 ),
                 (swap_id, sent_cycles),
                 (index_id, sent_cycles),
@@ -4484,7 +4481,7 @@ mod test {
     async fn test_deploy_new_sns_records_root_canisters() {
         let test_id = subnet_test_id(1);
         let mut canister_api = new_canister_api();
-        canister_api.cycles_found_in_request = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
@@ -4548,7 +4545,7 @@ mod test {
         let test_id = subnet_test_id(1);
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
@@ -4627,8 +4624,7 @@ mod test {
         let test_id = subnet_test_id(1);
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance =
-            Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE) - 1));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE - 1));
 
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
@@ -4705,7 +4701,7 @@ mod test {
     async fn fail_take_sole_control_of_dapps() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         let dapp_ids = [
             canister_test_id(1000).get(),
@@ -4793,7 +4789,7 @@ mod test {
     async fn fail_transfer_all_dapps_to_sns_root() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         let this_id = canister_test_id(0);
         let root_id = canister_test_id(1);
@@ -4850,9 +4846,8 @@ mod test {
         // used to create them, minus the INITIAL_CANISTER_CREATION_CYCLES that is allocated for
         // archive.  Also see below, ledger is given a double share, plus INITIAL_CANISTER_CREATION_CYCLES
         // to account for archive
-        let sent_cycles = u128::from(
-            SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES,
-        ) / 6;
+        let sent_cycles =
+            (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
         test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
@@ -4866,7 +4861,7 @@ mod test {
                 (governance_id, sent_cycles),
                 (
                     ledger_id,
-                    sent_cycles * 2 + u128::from(INITIAL_CANISTER_CREATION_CYCLES),
+                    sent_cycles * 2 + INITIAL_CANISTER_CREATION_CYCLES,
                 ),
                 (swap_id, sent_cycles),
                 (index_id, sent_cycles),
@@ -4931,7 +4926,7 @@ mod test {
     async fn fail_get_controllers_of_dapp_canisters() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         let original_dapp_controller = PrincipalId::new_user_test_id(10);
 
@@ -4994,7 +4989,7 @@ mod test {
     async fn get_controllers_of_dapp_canisters_returns_empty_set() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         let original_dapp_controller = PrincipalId::new_user_test_id(10);
 
@@ -5058,7 +5053,7 @@ mod test {
             .unwrap()
             .push(Some("Install WASM fail".to_string()));
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         let root_id = canister_test_id(1);
         let governance_id = canister_test_id(2);
@@ -5171,7 +5166,7 @@ mod test {
     async fn fail_restore_dapp_canisters_partially_reversible_deployment() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(u128::from(SNS_CREATION_FEE)));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         let this_id = canister_test_id(0);
         let root_id = canister_test_id(1);
@@ -5232,9 +5227,8 @@ mod test {
         // used to create them, minus the INITIAL_CANISTER_CREATION_CYCLES that is allocated for
         // archive.  Also see below, ledger is given a double share, plus INITIAL_CANISTER_CREATION_CYCLES
         // to account for archive
-        let sent_cycles = u128::from(
-            SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES,
-        ) / 6;
+        let sent_cycles =
+            (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
         test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
@@ -5248,7 +5242,7 @@ mod test {
                 (governance_id, sent_cycles),
                 (
                     ledger_id,
-                    sent_cycles * 2 + u128::from(INITIAL_CANISTER_CREATION_CYCLES),
+                    sent_cycles * 2 + INITIAL_CANISTER_CREATION_CYCLES,
                 ),
                 (swap_id, sent_cycles),
                 (index_id, sent_cycles),
