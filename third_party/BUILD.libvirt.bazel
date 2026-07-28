@@ -1,9 +1,26 @@
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 # Use libvirt from the host environment
 cc_import(
-    name = "libvirt",
+    name = "libvirt-internal",
     hdrs = glob(["include/libvirt/*.h"]),
     shared_library = "lib/x86_64-linux-gnu/libvirt.so",
+    visibility = ["//visibility:private"],
+)
+
+# Use an extra cc_library to hide the depth of the include folder and to carry the linkopts below.
+cc_library(
+    name = "libvirt",
+    includes = ["include"],
+    # The host libvirt.so (and the host libsystemd.so it pulls in) is built
+    # against the host glibc, which is newer than the glibc 2.31 the zig
+    # toolchains target. zig 0.15's lld checks the undefined *versioned* symbol
+    # references of every shared library against the target glibc stubs, so it
+    # rejects the ones added after 2.31 (e.g. `dlopen@GLIBC_2.34`). These
+    # libraries come from the host, where glibc resolves those symbols at
+    # runtime, so don't reject them at link time.
+    linkopts = ["-Wl,--allow-shlib-undefined"],
     visibility = ["//visibility:public"],
+    deps = ["libvirt-internal"],
 )
