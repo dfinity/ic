@@ -52,7 +52,7 @@ use ic_types::{
     consensus::{
         HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
-        dkg::SubnetSplittingStatus,
+        dkg::{PostSplitArgs, SubnetSplittingStatus},
     },
     crypto::*,
 };
@@ -441,7 +441,7 @@ impl CatchUpPackageProvider {
 
                 return false;
             }
-            SubnetSplittingStatus::PostSplit { new_subnet_id } => new_subnet_id,
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) => new_subnet_id,
         };
 
         // A post-split CUP's registry version is the version at which the split was set in the

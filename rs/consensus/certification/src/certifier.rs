@@ -26,7 +26,7 @@ use ic_types::{
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
-        dkg::SubnetSplittingStatus,
+        dkg::{PostSplitArgs, SubnetSplittingStatus},
     },
     crypto::{CryptoHash, Signed},
     replica_config::ReplicaConfig,
@@ -661,7 +661,7 @@ impl CertifierImpl {
             // happening as it will be skipped by consensus anyways
             Some(SubnetSplittingStatus::Scheduled(..)) => Ok(true),
             // Wait for the replica to be restarted with the new `subnet_id`
-            Some(SubnetSplittingStatus::PostSplit { new_subnet_id }) => {
+            Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })) => {
                 Ok(new_subnet_id != self.replica_config.subnet_id)
             }
         }
@@ -1708,15 +1708,15 @@ mod tests {
     }
 
     fn done_splitting_different_subnet() -> SubnetSplittingStatus {
-        SubnetSplittingStatus::PostSplit {
+        SubnetSplittingStatus::PostSplit(PostSplitArgs {
             new_subnet_id: subnet_test_id(1),
-        }
+        })
     }
 
     fn done_splitting_same_subnet() -> SubnetSplittingStatus {
-        SubnetSplittingStatus::PostSplit {
+        SubnetSplittingStatus::PostSplit(PostSplitArgs {
             new_subnet_id: subnet_test_id(0),
-        }
+        })
     }
 
     fn assert_for_all_subnet_splitting_statuses(
@@ -1788,7 +1788,7 @@ mod tests {
                                 "Expected no shares during subnet splitting, got: {shares:?}"
                             );
                         }
-                        SubnetSplittingStatus::PostSplit { new_subnet_id }
+                        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
                             if new_subnet_id != subnet_test_id(0) =>
                         {
                             assert!(
@@ -1797,7 +1797,7 @@ mod tests {
                             );
                         }
                         SubnetSplittingStatus::NotScheduled
-                        | SubnetSplittingStatus::PostSplit { .. } => {
+                        | SubnetSplittingStatus::PostSplit(..) => {
                             assert!(
                                 !shares.is_empty(),
                                 "Expected shares when not splitting or splitting with same subnet ID"
@@ -1859,7 +1859,7 @@ mod tests {
                         SubnetSplittingStatus::Scheduled(..) => {
                             assert_eq!(result, None, "Expected None during subnet splitting");
                         }
-                        SubnetSplittingStatus::PostSplit { new_subnet_id }
+                        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
                             if new_subnet_id != subnet_test_id(0) =>
                         {
                             assert_eq!(
@@ -1868,7 +1868,7 @@ mod tests {
                             );
                         }
                         SubnetSplittingStatus::NotScheduled
-                        | SubnetSplittingStatus::PostSplit { .. } => {
+                        | SubnetSplittingStatus::PostSplit(..) => {
                             assert_eq!(
                                 result,
                                 Some(ChangeAction::MoveToValidated(
@@ -1924,7 +1924,7 @@ mod tests {
                         SubnetSplittingStatus::Scheduled(..) => {
                             assert_eq!(result, None, "Expected None during subnet splitting");
                         }
-                        SubnetSplittingStatus::PostSplit { new_subnet_id }
+                        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
                             if new_subnet_id != subnet_test_id(0) =>
                         {
                             assert_eq!(
@@ -1933,7 +1933,7 @@ mod tests {
                             );
                         }
                         SubnetSplittingStatus::NotScheduled
-                        | SubnetSplittingStatus::PostSplit { .. } => {
+                        | SubnetSplittingStatus::PostSplit(..) => {
                             assert_eq!(
                                 result,
                                 Some(ChangeAction::MoveToValidated(

@@ -223,6 +223,15 @@ pub struct SplittingArgs {
     pub source_subnet_id: SubnetId,
 }
 
+/// The subnet-splitting-related information available once the subnet has been
+/// split at the previous summary block.
+#[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct PostSplitArgs {
+    /// The new subnet the replica belongs to after the split.
+    pub new_subnet_id: SubnetId,
+}
+
 #[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug, Default)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 /// Represents the status of subnet splitting at the given summary height.
@@ -234,7 +243,7 @@ pub enum SubnetSplittingStatus {
     /// Contains all the information necessary to determine the new subnet of the replica
     Scheduled(SplittingArgs),
     /// The subnet was split at the previous summary block.
-    PostSplit { new_subnet_id: SubnetId },
+    PostSplit(PostSplitArgs),
 }
 
 /// The DKG summary will be present as the DKG payload at every block,
@@ -580,6 +589,27 @@ impl TryFrom<pb::SplittingArgs> for SplittingArgs {
     }
 }
 
+impl From<PostSplitArgs> for pb::PostSplitArgs {
+    fn from(args: PostSplitArgs) -> Self {
+        Self {
+            new_subnet_id: Some(subnet_id_into_protobuf(args.new_subnet_id)),
+        }
+    }
+}
+
+impl TryFrom<pb::PostSplitArgs> for PostSplitArgs {
+    type Error = ProxyDecodeError;
+
+    fn try_from(args: pb::PostSplitArgs) -> Result<Self, Self::Error> {
+        Ok(Self {
+            new_subnet_id: subnet_id_try_from_option(
+                args.new_subnet_id,
+                "PostSplitArgs::new_subnet_id",
+            )?,
+        })
+    }
+}
+
 impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
     fn from(status: &SubnetSplittingStatus) -> Self {
         match status {
@@ -591,9 +621,9 @@ impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
                     *splitting_args,
                 ))
             }
-            SubnetSplittingStatus::PostSplit { new_subnet_id } => {
-                pb::summary::SubnetSplittingStatus::PostSplit(subnet_id_into_protobuf(
-                    *new_subnet_id,
+            SubnetSplittingStatus::PostSplit(post_split_args) => {
+                pb::summary::SubnetSplittingStatus::PostSplit(pb::PostSplitArgs::from(
+                    *post_split_args,
                 ))
             }
         }
@@ -611,11 +641,9 @@ impl TryFrom<pb::summary::SubnetSplittingStatus> for SubnetSplittingStatus {
             pb::summary::SubnetSplittingStatus::Scheduled(splitting_args) => {
                 Ok(SubnetSplittingStatus::Scheduled(splitting_args.try_into()?))
             }
-            pb::summary::SubnetSplittingStatus::PostSplit(subnet_id) => {
-                Ok(SubnetSplittingStatus::PostSplit {
-                    new_subnet_id: subnet_id_try_from_protobuf(subnet_id)?,
-                })
-            }
+            pb::summary::SubnetSplittingStatus::PostSplit(post_split_args) => Ok(
+                SubnetSplittingStatus::PostSplit(post_split_args.try_into()?),
+            ),
         }
     }
 }

@@ -6,7 +6,10 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     Height, ReplicaVersion, SubnetId,
-    consensus::{Block, dkg::SubnetSplittingStatus},
+    consensus::{
+        Block,
+        dkg::{PostSplitArgs, SubnetSplittingStatus},
+    },
 };
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -98,7 +101,9 @@ pub(crate) fn should_halt(
         {
             SubnetSplittingStatus::NotScheduled => false,
             // After the split, don't produce any blocks until we are on the right subnet.
-            SubnetSplittingStatus::PostSplit { new_subnet_id } => subnet_id != new_subnet_id,
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) => {
+                subnet_id != new_subnet_id
+            }
             SubnetSplittingStatus::Scheduled(..) => height >= summary_block.height,
         }
     });
@@ -272,7 +277,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit { new_subnet_id: SUBNET_0 }),
+        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_0 })),
         subnet_id: SUBNET_1,
         expected_status: Some(Status::Halted),
     })]
@@ -281,7 +286,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit { new_subnet_id: SUBNET_0 }),
+        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_0 })),
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Running),
     })]

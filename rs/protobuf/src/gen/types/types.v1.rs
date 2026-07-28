@@ -369,12 +369,17 @@ pub struct DkgDataPayload {
     #[prost(message, repeated, tag = "3")]
     pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SplittingArgs {
     #[prost(message, optional, tag = "1")]
     pub destination_subnet_id: ::core::option::Option<SubnetId>,
     #[prost(message, optional, tag = "2")]
     pub source_subnet_id: ::core::option::Option<SubnetId>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PostSplitArgs {
+    #[prost(message, optional, tag = "1")]
+    pub new_subnet_id: ::core::option::Option<SubnetId>,
 }
 /// next id: 16
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -402,14 +407,14 @@ pub struct Summary {
 }
 /// Nested message and enum types in `Summary`.
 pub mod summary {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum SubnetSplittingStatus {
         #[prost(message, tag = "13")]
         NotScheduled(()),
         #[prost(message, tag = "14")]
         Scheduled(super::SplittingArgs),
         #[prost(message, tag = "15")]
-        PostSplit(super::SubnetId),
+        PostSplit(super::PostSplitArgs),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

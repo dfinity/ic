@@ -34,6 +34,10 @@ message SplittingArgs {
   SubnetId source_subnet_id = 2;
 }
 
+message PostSplitArgs {
+  SubnetId new_subnet_id = 1;
+}
+
 // next id: 16
 message Summary {
   reserved 5, 6, 8;
@@ -50,7 +54,7 @@ message Summary {
   oneof subnet_splitting_status {
     google.protobuf.Empty not_scheduled = 13;
     SplittingArgs scheduled = 14;
-    SubnetId post_split = 15;
+    PostSplitArgs post_split = 15;
   }
 }
 

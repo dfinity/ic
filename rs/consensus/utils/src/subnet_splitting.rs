@@ -76,7 +76,7 @@ pub fn is_split_scheduled(summary_block: &Block) -> Option<SplittingArgs> {
         .subnet_splitting_status()
     {
         SubnetSplittingStatus::Scheduled(splitting_args) => Some(splitting_args),
-        SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit { .. } => None,
+        SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit(..) => None,
     }
 }
 
@@ -155,7 +155,7 @@ mod tests {
         Height, ReplicaVersion, Time,
         backwards_compatibility::BackwardsCompatible,
         batch::ValidationContext,
-        consensus::{BlockPayload, Payload, Rank, SummaryPayload},
+        consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::PostSplitArgs},
         crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
     };
@@ -388,7 +388,7 @@ mod tests {
     fn should_not_be_scheduled_when_subnet_splitting_not_scheduled_test(
         #[values(
             SubnetSplittingStatus::NotScheduled,
-            SubnetSplittingStatus::PostSplit { new_subnet_id: SOURCE_SUBNET_ID },
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
         )]
         status: SubnetSplittingStatus,
     ) {
