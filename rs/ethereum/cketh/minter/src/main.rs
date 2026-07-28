@@ -998,6 +998,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The last Ethereum block the ckETH minter observed.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_latest_block_height",
+                    s.latest_block_height.map(|n| n.as_f64()).unwrap_or(0.0),
+                    "The latest Ethereum block height the ckETH minter observed for scheduling balance scans.",
+                )?;
+
                 for (id, scraping_state) in s.log_scrapings.iter() {
                     w.encode_gauge(
                         last_processed_block_metric_name(id),
