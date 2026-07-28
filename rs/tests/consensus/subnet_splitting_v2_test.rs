@@ -74,6 +74,12 @@ fn main() -> Result<()> {
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))
         .add_test(systest!(subnet_splitting_test))
+        // When the subnet splits, it is expected that some messages are invalidated because the
+        // two new subnets are still connected through the same underlying p2p network.
+        .remove_metrics_to_check("consensus_invalidated_artifacts")
+        .remove_metrics_to_check("dkg_invalidated_artifacts")
+        // The destination replicas are restarted after the split
+        .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
         .execute_from_args()
 }
 
