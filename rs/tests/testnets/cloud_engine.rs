@@ -5,14 +5,24 @@
 //   one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
-// Placement: `system_test` sets ALLOCATE_TESTNET_TO_LOCAL_DC=1, which confines
-// the whole Farm group to the DC derived from the deploying machine's NODE_NAME.
-// A group cannot span two DCs, and the hosts that can attach a public IPv4 live
-// in their own DC (dm1-dmz), so requesting IC_GW_IPV4 means the group must not
-// be confined: pass --test_env=ALLOCATE_TESTNET_TO_LOCAL_DC=0 with it. The
-// replicas are then placed wherever Farm has room, and only the ic-gateway is
-// pinned (to dm1-dmz). Without IC_GW_IPV4 nothing is pinned and the default
-// local-DC allocation applies.
+// Placement: this testnet runs on Farm's DMZ hosts, because they are the only
+// ones that can attach the publicly routed IPv4 address the testnet is reached
+// at (see IC_GW_IPV4 below). Two consequences, both of which the deployment has
+// to respect:
+//
+//   * Those hosts form their own datacenter, so deploy with
+//     --test_env=DC=dm1-dmz. `system_test` sets ALLOCATE_TESTNET_TO_LOCAL_DC=1
+//     and derives DC from the deploying machine's NODE_NAME, so without the
+//     override the group is confined to the local DC and no VM can be placed.
+//   * Farm marks the "dmz" feature *mandatory* on those hosts, i.e. a VM lands
+//     there only if it asks for the feature. Every VM here therefore asks: the
+//     subnets, the unassigned nodes, the API boundary node, the ic-gateway and
+//     the Prometheus VM (via prometheus_vm_required_host_features in
+//     rs/tests/testnets/BUILD.bazel). The one VM that cannot ask is the vector
+//     log-shipping VM, which the driver creates without host features and with
+//     no way to pass any, so this testnet sets `logs = False`. Restore logs once
+//     the driver can pass host features to that VM, the way it already can for
+//     the Prometheus VM.
 //
 // The nodes run the GuestOS version that mainnet's NNS subnet runs, and the NNS
 // canisters are the ones currently installed on mainnet (`guestos =
@@ -84,9 +94,9 @@ use nns_dapp::{
 };
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
+use std::time::Duration;
 
 /// dm1-dmz network constants, used to validate and configure IC_GW_IPV4.
-const DM1_DMZ_DC: &str = "dm1-dmz";
 const DM1_DMZ_NETWORK: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 224);
 const DM1_DMZ_PREFIX: u8 = 28;
 const DM1_DMZ_GATEWAY: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 238);
@@ -304,14 +314,29 @@ const DATA_CENTERS: &[DcConfig] = &[
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        // Booting 23 VMs from a mainnet GuestOS image and installing the mainnet
+        // NNS does not fit the driver's default 10 minute budget, which
+        // --keepalive does not lift: it is the per-test timeout around setup.
+        // Transferring the images to another datacenter makes it slower still.
+        .with_timeout_per_test(Duration::from_secs(90 * 60))
         .execute_from_args()?;
     Ok(())
 }
 
 pub fn setup(env: TestEnv) {
+    // Every VM of this testnet asks for a DMZ host, because that is the only
+    // place a publicly routed IPv4 can be attached (see IC_GW_IPV4 and the DC
+    // note at the top of this file). `InternetComputer::with_required_host_features`
+    // covers the API boundary nodes but is not inherited by `add_subnet` or
+    // `with_unassigned_node`, so the subnets and the unassigned nodes ask
+    // individually.
+    let dmz = vec![HostFeature::DMZ];
+
     let mut ic = InternetComputer::new()
+        .with_required_host_features(dmz.clone())
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_required_host_features(dmz.clone())
                 .add_nodes(1)
                 // To speed up subnet creation
                 .with_dkg_interval_length(Height::from(10)),
@@ -319,6 +344,7 @@ pub fn setup(env: TestEnv) {
         // A small 1-node Application subnet, used to host a demo canister.
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_required_host_features(dmz.clone())
                 .add_nodes(1)
                 .with_dkg_interval_length(Height::from(10)),
         );
@@ -402,7 +428,8 @@ pub fn setup(env: TestEnv) {
             ic = ic.with_unassigned_node(
                 Node::new()
                     .with_node_operator_principal_id(operator_principal)
-                    .with_node_reward_type(*reward_type),
+                    .with_node_reward_type(*reward_type)
+                    .with_required_host_features(dmz.clone()),
             );
         }
     }
@@ -419,18 +446,10 @@ pub fn setup(env: TestEnv) {
     );
     // Given IC_GW_IPV4 the ic-gateway gets a static, publicly routed IPv4
     // address out of the dm1-dmz network, which Farm publishes as the testnet's
-    // A record; without it the testnet is reachable over IPv6 only.
-    //
-    // That address only works on a host of that network, so the gateway is the
-    // one VM pinned to dm1-dmz. Farm gates those hosts behind a *mandatory*
-    // "dmz" feature (see https://farm.dfinity.systems/dc), meaning a VM is
-    // placed there only if it asks for it, so both features are requested.
-    let mut ic_gateway_vm = IcGatewayVm::new(IC_GATEWAY_VM_NAME);
+    // A record. Without it the testnet still runs on DMZ hosts but is reachable
+    // over IPv6 only, which in practice excludes CI runners and most laptops.
+    let mut ic_gateway_vm = IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(dmz);
     if let Ok(ic_gw_ipv4) = std::env::var("IC_GW_IPV4") {
-        ic_gateway_vm = ic_gateway_vm.with_required_host_features(vec![
-            HostFeature::DC(DM1_DMZ_DC.to_string()),
-            HostFeature::DMZ,
-        ]);
         let ip: Ipv4Addr = ic_gw_ipv4
             .parse()
             .unwrap_or_else(|e| panic!("invalid IC_GW_IPV4 address '{ic_gw_ipv4}': {e}"));

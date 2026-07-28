@@ -240,6 +240,12 @@ system_test_nns(
     # necessary because this testnet brings up a fresh NNS whose public key has to
     # be configured on the nodes.
     guestos = "mainnet_nns_dev",
+    # No vector VM: the driver creates it without host features and with no way
+    # to pass any, so it cannot be placed on the DMZ hosts this testnet runs on.
+    # See the placement note in cloud_engine.rs.
+    logs = False,
+    # The Prometheus VM needs the same mandatory feature as every other VM here.
+    prometheus_vm_required_host_features = ["dmz"],
     tags = [
         "dynamic_testnet",
         "manual",
