@@ -293,6 +293,7 @@ impl DkgSummary {
         next_interval_length: Height,
         height: Height,
         remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
+        subnet_splitting_status: SubnetSplittingStatus,
     ) -> Self {
         Self {
             configs: configs
@@ -450,21 +451,30 @@ fn build_remote_dkg_attempts_vec(
 }
 
 impl From<&DkgSummary> for pb::Summary {
-    fn from(summary: &DkgSummary) -> Self {
+    fn from(
+        DkgSummary {
+            registry_version,
+            configs,
+            current_transcripts,
+            next_transcripts,
+            transcripts_for_remote_subnets,
+            interval_length,
+            next_interval_length,
+            height,
+            remote_dkg_attempts,
+            subnet_splitting_status,
+        }: &DkgSummary,
+    ) -> Self {
         Self {
-            registry_version: summary.registry_version.get(),
-            configs: summary
-                .configs
-                .values()
-                .map(pb::NiDkgConfig::from)
-                .collect(),
-            current_transcripts: build_transcripts_vec(&summary.current_transcripts),
-            next_transcripts: build_transcripts_vec(&summary.next_transcripts),
-            interval_length: summary.interval_length.get(),
-            next_interval_length: summary.next_interval_length.get(),
-            height: summary.height.get(),
+            registry_version: registry_version.get(),
+            configs: configs.values().map(pb::NiDkgConfig::from).collect(),
+            current_transcripts: build_transcripts_vec(current_transcripts),
+            next_transcripts: build_transcripts_vec(next_transcripts),
+            interval_length: interval_length.get(),
+            next_interval_length: next_interval_length.get(),
+            height: height.get(),
             transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
-                summary.transcripts_for_remote_subnets.as_slice(),
+                transcripts_for_remote_subnets,
             ),
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
             subnet_splitting_status: summary
