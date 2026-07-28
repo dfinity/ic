@@ -12,6 +12,9 @@ pub struct ReplicaVersionRecord {
     /// The SEV-SNP measurements that belong to this release
     #[prost(message, optional, tag = "9")]
     pub guest_launch_measurements: ::core::option::Option<GuestLaunchMeasurements>,
+    /// The ID used to reference this version.
+    #[prost(string, optional, tag = "10")]
+    pub version_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
     serde::Serialize,
