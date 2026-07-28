@@ -29,6 +29,7 @@ use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
+use ic_cketh_minter::state::automatic_deposits::DepositRequest;
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
@@ -37,7 +38,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
-use ic_cketh_minter::timed_sized_map::Timestamp;
+use ic_cketh_minter::timed_sized_map::{Entry, Timestamp};
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
     CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -188,19 +189,23 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     };
     let now = Timestamp::from_nanos(ic_cdk::api::time());
     if let Some(entry) = read_state(|s| s.automatic_deposits.get_entry(now, &account).cloned()) {
-        return Ok(DepositErc20Response {
-            address: entry.value.address.to_string(),
-            valid_until: entry.expires_at.as_nanos(),
-        });
+        return Ok(deposit_erc20_response(&entry));
     }
     // Ensure the minter's ECDSA public key has been fetched and cached in the
     // state so that the (synchronous) registration below can derive the address.
     state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    mutate_state(|s| s.register_deposit_address(now, account)).map(|request| DepositErc20Response {
-        address: request.value.address.to_string(),
-        valid_until: request.expires_at.as_nanos(),
-    })
+    mutate_state(|s| s.register_deposit_address(now, account))
+        .map(|request| deposit_erc20_response(&request))
+}
+
+fn deposit_erc20_response(entry: &Entry<DepositRequest>) -> DepositErc20Response {
+    DepositErc20Response {
+        address: entry.value.address.to_string(),
+        valid_until: entry.expires_at.as_nanos(),
+        last_scanned_block: entry.value.last_scanned_block.map(|block| block.into()),
+        scan_count: entry.value.scan_count as u64,
+    }
 }
 
 #[query]
