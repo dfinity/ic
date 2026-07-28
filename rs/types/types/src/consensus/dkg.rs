@@ -792,6 +792,7 @@ pub enum DkgPayloadCreationError {
 }
 
 /// Reasons for why a dkg payload might be invalid.
+#[allow(clippy::large_enum_variant)]
 #[derive(PartialEq, Debug)]
 pub enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
