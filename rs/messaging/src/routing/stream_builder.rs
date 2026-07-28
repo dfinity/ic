@@ -520,11 +520,7 @@ impl StreamBuilderImpl {
                     // cause streams to permanently stall.
                     match msg {
                         // Request at an engine boundary: reject if unbounded-wait or carries cycles.
-                        RequestOrResponse::Request(req)
-                            if (is_engine_dst || is_engine_src)
-                                && (req.deadline == NO_DEADLINE
-                                    || req.payment > Cycles::zero()) =>
-                        {
+                        RequestOrResponse::Request(req) if is_illegal_engine_msg => {
                             self.observe_message_type_status(
                                 LABEL_VALUE_TYPE_REQUEST,
                                 LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
@@ -545,10 +541,7 @@ impl StreamBuilderImpl {
                         // not stranded forever; a best-effort response is dropped (the caller
                         // will time out). Kept above the oversized-response arm so that the
                         // cycle stripping always happens first.
-                        RequestOrResponse::Response(ref mut rep)
-                            if (is_engine_dst || is_engine_src)
-                                && (rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero()) =>
-                        {
+                        RequestOrResponse::Response(ref mut rep) if is_illegal_engine_msg => {
                             error!(
                                 self.log,
                                 "{}: Illegal engine-boundary response (to {}): {:?}",
