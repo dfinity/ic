@@ -9562,11 +9562,7 @@ fn cost_sign_with_ecdsa_with_huge_key_name() {
           (import "ic0" "msg_reply" (func $msg_reply))
 
           (memory i64 1024 1024)
-
-          (func (export "canister_query control")
-            (call $msg_reply)
-          )
-
+          
           (func (export "canister_query go")
             (memory.fill
               (i64.const 0)
@@ -9582,11 +9578,8 @@ fn cost_sign_with_ecdsa_with_huge_key_name() {
           )
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let control = test.non_replicated_query(canister_id, "control", vec![]);
-    println!("control: {control:?}");
-    let start = std::time::Instant::now();
-    let result = test.non_replicated_query(canister_id, "go", vec![]);
-    println!("go: {:?} in {:?}", result, start.elapsed());
+    test.non_replicated_query(canister_id, "go", vec![])
+        .unwrap_err();
 }
 
 #[test]
