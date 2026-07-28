@@ -9562,7 +9562,7 @@ fn cost_sign_with_ecdsa_with_huge_key_name() {
           (import "ic0" "msg_reply" (func $msg_reply))
 
           (memory i64 1024 1024)
-          
+
           (func (export "canister_query go")
             (memory.fill
               (i64.const 0)
@@ -9578,8 +9578,14 @@ fn cost_sign_with_ecdsa_with_huge_key_name() {
           )
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    test.non_replicated_query(canister_id, "go", vec![])
+    let err = test
+        .non_replicated_query(canister_id, "go", vec![])
         .unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterContractViolation,
+        "key name is too large",
+    );
+    println!("{:?}", err);
 }
 
 #[test]
