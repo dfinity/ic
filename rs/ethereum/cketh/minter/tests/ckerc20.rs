@@ -250,31 +250,23 @@ mod deposit_erc20 {
     #[test]
     fn should_update_latest_block_height_and_never_decrease() {
         use ic_cketh_minter::REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL;
-        use ic_cketh_test_utils::MAX_TICKS;
         use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
         use ic_cketh_test_utils::response::block_response;
         use serde_json::json;
 
         fn refresh_latest_block(ckerc20: &CkErc20Setup, block: u64) {
-            // Resolve any in-flight outcalls (e.g. the refresh attempts issued
-            // while the setup installs and upgrades the minter) so the single
-            // refresh triggered below is answered in isolation and reaches
-            // provider consensus instead of having its provider responses
-            // scattered across several concurrent refresh calls.
-            ckerc20.cketh.stop_ongoing_https_outcalls();
             ckerc20
                 .env
                 .advance_time(REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL);
+            ckerc20.env.tick();
+            ckerc20.env.tick();
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
                 .with_request_params(json!(["latest", false]))
                 .respond_for_all_with(block_response(block))
                 .build()
                 .expect_rpc_calls(ckerc20);
-            // Let the evm_rpc -> minter reply propagate so the refresh future
-            // finishes and the latest block height is recorded in the state.
-            for _ in 0..MAX_TICKS {
-                ckerc20.env.tick();
-            }
+
+            ckerc20.env.tick();
         }
 
         let ckerc20 = CkErc20Setup::default();
