@@ -1158,18 +1158,22 @@ const COOLING_DOWN_LOCAL_CANISTER: CanisterId = CanisterId::from_u64(0);
 const COOLING_DOWN_REMOTE_CANISTER: CanisterId = CanisterId::from_u64(1);
 
 /// Sets up a fixture with `COOLING_DOWN_LOCAL_CANISTER` hosted by `LOCAL_SUBNET`
-/// and `COOLING_DOWN_REMOTE_CANISTER` by `REMOTE_SUBNET`, the latter having the
-/// given topology (which is expected to be cooling down).
+/// and `COOLING_DOWN_REMOTE_CANISTER` by `REMOTE_SUBNET`, the latter cooling down
+/// and of the given subnet type.
 fn new_cooling_down_fixture(
     log: &ReplicaLogger,
-    remote_subnet_topology: SubnetTopology,
+    remote_subnet_type: SubnetType,
 ) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
     let (stream_builder, mut state, metrics_registry) = new_fixture(log);
 
     state.metadata.modify_network_topology(|network_topology| {
         network_topology.set_subnets(btreemap! {
             LOCAL_SUBNET => SubnetTopology::default(),
-            REMOTE_SUBNET => remote_subnet_topology,
+            REMOTE_SUBNET => SubnetTopology {
+                subnet_type: remote_subnet_type,
+                cooling_down: true,
+                ..Default::default()
+            },
         });
         network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
@@ -1203,23 +1207,6 @@ fn new_loopback_cooling_down_fixture(
     });
 
     (stream_builder, state, metrics_registry)
-}
-
-/// A `SubnetTopology` for a cooling down application subnet.
-fn cooling_down_topology() -> SubnetTopology {
-    SubnetTopology {
-        cooling_down: true,
-        ..Default::default()
-    }
-}
-
-/// A `SubnetTopology` for a cooling down CloudEngine subnet.
-fn cooling_down_engine_topology() -> SubnetTopology {
-    SubnetTopology {
-        subnet_type: SubnetType::CloudEngine,
-        cooling_down: true,
-        ..Default::default()
-    }
 }
 
 /// Marks `subnet_id` as no longer cooling down.
@@ -1363,7 +1350,7 @@ fn build_streams_rejects_requests_to_cooling_down_subnet() {
     for (deadline, payment) in deadline_and_cycles_matrix() {
         with_test_replica_logger(|log| {
             let (stream_builder, mut provided_state, metrics_registry) =
-                new_cooling_down_fixture(&log, cooling_down_topology());
+                new_cooling_down_fixture(&log, SubnetType::Application);
             provided_state.put_canister_states(canister_states_with_outputs(vec![
                 cooling_down_request(deadline, payment),
             ]));
@@ -1400,7 +1387,7 @@ fn build_streams_retains_responses_to_cooling_down_subnet() {
             let response = cooling_down_response(deadline, refund);
 
             let (stream_builder, mut provided_state, metrics_registry) =
-                new_cooling_down_fixture(&log, cooling_down_topology());
+                new_cooling_down_fixture(&log, SubnetType::Application);
             provided_state
                 .put_canister_states(canister_states_with_outputs(vec![response.clone()]));
 
@@ -1450,7 +1437,7 @@ fn build_streams_retains_responses_to_cooling_down_subnet() {
 fn build_streams_retains_refunds_to_cooling_down_subnet() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) =
-            new_cooling_down_fixture(&log, cooling_down_topology());
+            new_cooling_down_fixture(&log, SubnetType::Application);
         provided_state.add_refund(COOLING_DOWN_REMOTE_CANISTER, Cycles::new(100));
 
         let mut result_state = stream_builder.build_streams(provided_state);
@@ -1487,7 +1474,7 @@ fn build_streams_retains_messages_behind_response_to_cooling_down_subnet() {
             RequestOrResponse::Request(cooling_down_request(NO_DEADLINE, Cycles::zero()).into());
 
         let (stream_builder, mut provided_state, metrics_registry) =
-            new_cooling_down_fixture(&log, cooling_down_topology());
+            new_cooling_down_fixture(&log, SubnetType::Application);
         provided_state.put_canister_states(canister_states_with_outputs(vec![
             response.clone(),
             request.clone(),
@@ -1593,7 +1580,7 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
     // `SysFatal`, not the cooling down `SysTransient`.
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) =
-            new_cooling_down_fixture(&log, cooling_down_engine_topology());
+            new_cooling_down_fixture(&log, SubnetType::CloudEngine);
         provided_state.put_canister_states(canister_states_with_outputs(vec![
             cooling_down_request(NO_DEADLINE, Cycles::new(100)),
         ]));
@@ -1618,7 +1605,7 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
     // rejected because the subnet is cooling down.
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) =
-            new_cooling_down_fixture(&log, cooling_down_engine_topology());
+            new_cooling_down_fixture(&log, SubnetType::CloudEngine);
         provided_state.put_canister_states(canister_states_with_outputs(vec![
             cooling_down_request(SOME_DEADLINE, Cycles::zero()),
         ]));
@@ -1642,7 +1629,7 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
     // dropped with a critical error rather than retained because of cooling down.
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) =
-            new_cooling_down_fixture(&log, cooling_down_engine_topology());
+            new_cooling_down_fixture(&log, SubnetType::CloudEngine);
         provided_state.add_refund(COOLING_DOWN_REMOTE_CANISTER, Cycles::new(100));
 
         let result_state = stream_builder.build_streams(provided_state);
