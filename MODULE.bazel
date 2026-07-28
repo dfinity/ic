@@ -21,11 +21,8 @@ bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.3.0")
 
-# 4.3.0 is not in the Bazel Central Registry yet
-# (https://github.com/bazelbuild/bazel-central-registry/pull/9836), so fetch the
-# release archive directly. The registry entry is byte-identical to the
-# archive's MODULE.bazel, so this can be turned back into a
-# single_version_override (same patches) once that PR lands.
+# can be replaced with `single_version_override` once 4.3.0
+# is released to BCR
 archive_override(
     module_name = "hermetic_cc_toolchain",
     patch_strip = 1,
