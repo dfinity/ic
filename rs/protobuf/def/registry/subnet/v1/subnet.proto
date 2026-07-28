@@ -27,9 +27,14 @@ message SubnetRecord {
   // there is a Registry record (of type ReplicaVersionRecord) with
   // replica_version_${replica_version_id} as its key.
   //
-  // For Cloud Engine subnets, this may be blank. In that case, the Replica
-  // version is determined by StandardEngineReplicaVersionRecord (see
+  // Exception: For Cloud Engines, this is typically blank. When blank, the
+  // Cloud Engine's replica version is determined by
+  // StandardEngineReplicaVersionRecord (see
   // registry/standard_engine_replica_version/v1/standard_engine_replica_version.proto).
+  // This means that Registry must have a StandardEngineReplicaVersionRecord in
+  // order for Cloud Engines to have a blank replica_version_id. But since
+  // StandardEngineReplicaVersionRecord generally exists, this is a minor
+  // technicality.
   string replica_version_id = 9;
 
   // The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
