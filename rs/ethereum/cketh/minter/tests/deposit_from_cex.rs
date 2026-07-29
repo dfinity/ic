@@ -24,7 +24,7 @@ use ic_cketh_minter::balance_scan::batcher::{
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::live_scan::{
-    CkErc20LiveScanSetup, USDT_ERC20_CONTRACT_ADDRESS, default_caller,
+    default_caller, CkErc20LiveScanSetup, USDT_ERC20_CONTRACT_ADDRESS,
 };
 use ic_cketh_test_utils::USDC_ERC20_CONTRACT_ADDRESS;
 use ic_ethereum_types::Address;
