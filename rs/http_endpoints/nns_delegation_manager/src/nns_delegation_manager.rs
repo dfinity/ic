@@ -157,6 +157,7 @@ impl DelegationManager {
                 self.log,
                 "Failed to check if the delegation matches the certified state: {err}"
             );
+            self.metrics.state_comparison_errors.inc();
         })
         .ok()
     }
@@ -193,6 +194,7 @@ impl DelegationManager {
             // will have caught up, `reactive_fetch` will fetch the new delegation.
             // When not being able to determine this (e.g. the call above returned `None`, still
             // accept it)
+            self.metrics.held_back_delegations.inc();
             return None;
         }
 
@@ -208,6 +210,7 @@ impl DelegationManager {
     ) -> Option<Option<NNSDelegationBuilder>> {
         if self.is_delegation_valid_with_respect_to_state(old_delegation) == Some(false) {
             // If the old delegation is incompatible with our state, reactively fetch a new one.
+            self.metrics.reactive_fetches.inc();
             return Some(self.fetch().await);
         }
 
@@ -315,7 +318,7 @@ async fn load_root_delegation(
                     err
                 );
 
-                metrics.errors.inc();
+                metrics.fetch_errors.inc();
             }
         }
 
