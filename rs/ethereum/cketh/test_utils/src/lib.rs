@@ -897,16 +897,21 @@ fn assert_reply(result: Result<Vec<u8>, RejectResponse>) -> Vec<u8> {
 /// where the call is itself awaiting a pending HTTP outcall that only a test can answer.
 ///
 /// Still clears stray latest-block-refresh outcalls between rounds (see
-/// `mock::is_latest_block_refresh`): no test-owned stub ever targets those (mock.rs's own
-/// matching excludes them), so rejecting them here cannot swallow a test's intended stub, and
-/// leaving them unanswered would otherwise let them pile up and starve later polling. Callers
-/// that additionally want every *other* pending outcall drained (currently only
-/// [`CkEthSetup::stop_minter`]) should use [`await_call_draining_outcalls`] instead.
+/// `mock::is_latest_block_refresh`), since leaving them unanswered would otherwise let them pile
+/// up and starve later polling. A stub left without explicit request params never targets one of
+/// these (mock.rs's own matching excludes them), so this cannot swallow it out from under an
+/// awaited call. A stub built with explicit `["latest", false]` params (two exist:
+/// `tests/cketh.rs:842`, `tests/ckerc20.rs:258`) *can* match a refresh outcall too, but is safe
+/// here only because it is built and consumed synchronously by `expect_rpc_calls` before any
+/// await runs, not because of any exclusion — interleaving such a stub with an awaited call would
+/// let this function reject its request instead. Callers that additionally want every *other*
+/// pending outcall drained (currently only [`CkEthSetup::stop_minter`]) should use
+/// [`await_call_draining_outcalls`] instead.
 pub(crate) fn await_call(
     env: &PocketIc,
     message_id: RawMessageId,
 ) -> Result<Vec<u8>, RejectResponse> {
-    poll_for_call(env, message_id, false)
+    poll_for_call(env, message_id, OutcallPolicy::RejectRefreshOnly)
 }
 
 /// Like [`await_call`], but also answers every *other* pending HTTP outcall with an HTTP 500
@@ -916,13 +921,22 @@ pub(crate) fn await_call_draining_outcalls(
     env: &PocketIc,
     message_id: RawMessageId,
 ) -> Result<Vec<u8>, RejectResponse> {
-    poll_for_call(env, message_id, true)
+    poll_for_call(env, message_id, OutcallPolicy::DrainAll)
+}
+
+/// What [`poll_for_call`] does with pending HTTP outcalls between rounds while it waits.
+enum OutcallPolicy {
+    /// Only reject stray latest-block-refresh outcalls (see `mock::is_latest_block_refresh`);
+    /// leave everything else pending for a test's own stub to answer.
+    RejectRefreshOnly,
+    /// Answer every pending outcall with an HTTP 500.
+    DrainAll,
 }
 
 fn poll_for_call(
     env: &PocketIc,
     message_id: RawMessageId,
-    drain_outcalls: bool,
+    outcall_policy: OutcallPolicy,
 ) -> Result<Vec<u8>, RejectResponse> {
     // 100x the ordinary `MAX_TICKS` budget: this replaces `StateMachine`'s
     // `await_ingress(id, MAX_TICKS)`, but a large in-flight log scrape can be sliced (DTS) across
@@ -933,16 +947,19 @@ fn poll_for_call(
             return result;
         }
         let pending = env.get_canister_http();
-        if drain_outcalls {
-            for request in &pending {
-                reply_500(env, request);
+        match outcall_policy {
+            OutcallPolicy::DrainAll => {
+                for request in &pending {
+                    reply_500(env, request);
+                }
             }
-        } else {
-            for request in pending
-                .iter()
-                .filter(|request| mock::is_latest_block_refresh(request))
-            {
-                reject_stray_http_outcall(env, request);
+            OutcallPolicy::RejectRefreshOnly => {
+                for request in pending
+                    .iter()
+                    .filter(|request| mock::is_latest_block_refresh(request))
+                {
+                    reject_stray_http_outcall(env, request);
+                }
             }
         }
         env.tick();
