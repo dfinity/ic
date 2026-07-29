@@ -10,7 +10,9 @@ use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::{TaskType, mutate_state, read_state};
 use crate::timed_sized_map::Timestamp;
 use batcher::BalanceOfCall;
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use ic_canister_log::log;
+use ic_canister_runtime::Runtime;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -25,6 +27,15 @@ pub struct BalanceScanStats {
 }
 
 pub async fn balance_scan() {
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
+    let client = read_state(rpc_client);
+    scan(now, client).await;
+}
+
+async fn scan<R: Runtime>(
+    now: Timestamp,
+    client: EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
+) {
     let _guard = match TimerGuard::new(TaskType::BalanceScan) {
         Ok(guard) => guard,
         Err(_) => return,
@@ -51,7 +62,6 @@ pub async fn balance_scan() {
         );
         return;
     }
-    let now = Timestamp::from_nanos(ic_cdk::api::time());
     let (addresses_to_scan, watchlist_len) = read_state(|s| {
         (
             s.automatic_deposits
@@ -68,7 +78,6 @@ pub async fn balance_scan() {
         return;
     }
 
-    let client = read_state(rpc_client);
     // Chunk by address so an address' per-token calls never straddle a chunk boundary, keeping
     // the per-address scan-state advance all-or-nothing per chunk. `erc20_tokens.len()` is the number of
     // supported ckERC20 tokens (a handful, far below MAX_CALLS_PER_BATCH), so a chunk holds many
@@ -76,7 +85,7 @@ pub async fn balance_scan() {
     // scanned address be advanced — so if the token set ever grew past the cap, one address' calls
     // would still be sent together (the batcher response is only 32 bytes per call, so a larger
     // chunk stays cheap).
-    let addresses_per_chunk = (MAX_CALLS_PER_BATCH / erc20_tokens.len()).max(1);
+    let addresses_per_chunk = addresses_per_chunk(erc20_tokens.len());
     let mut candidates = 0_usize;
     let mut chunks_failed = 0_usize;
     let mut scanned: Vec<Account> = Vec::new();
@@ -122,6 +131,13 @@ pub async fn balance_scan() {
         "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {chunks_failed} chunk(s) failed",
     );
     record_stats(now, addresses_scanned, candidates, chunks_failed);
+}
+
+/// How many deposit addresses fit in one `MAX_CALLS_PER_BATCH`-bounded chunk, given the number of
+/// supported tokens (one `balanceOf` sub-call per address-token pair). At least one address per
+/// chunk even if the token set alone exceeds the cap.
+fn addresses_per_chunk(num_tokens: usize) -> usize {
+    (MAX_CALLS_PER_BATCH / num_tokens.max(1)).max(1)
 }
 
 fn balance_of_calls(addresses: &[(Account, Address)], tokens: &[Address]) -> Vec<BalanceOfCall> {
