@@ -110,6 +110,9 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
         .ledger
         .unwrap();
 
+    // `stop_ongoing_https_outcalls` above guarantees no outcall is left pending (it panics
+    // otherwise), so pocket-ic's own built-in `await_call` can be used as-is here: unlike
+    // elsewhere in this suite, there is nothing left for a test-injected mock response to answer.
     ckerc20.cketh.stop_ongoing_https_outcalls();
     let stop_res = ckerc20.env.await_call(stop_msg_id);
     assert_matches!(stop_res, Ok(_));
