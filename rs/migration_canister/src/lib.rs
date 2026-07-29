@@ -103,6 +103,21 @@ struct CanisterMigrationArgs {
     pub replaced_canister: Principal,
 }
 
+/// The memory allocation of the replaced canister managed by the migration canister
+/// while it is the exclusive controller of the replaced canister.
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplacedCanisterMemoryAllocation {
+    /// The memory allocation of the replaced canister at validation time. It is restored
+    /// together with the original controllers of the replaced canister.
+    /// Note that `0` means that the canister's memory growth is best-effort.
+    pub original: u64,
+    /// The memory allocation to be set for the replaced canister while the migration canister
+    /// is its exclusive controller: the memory usage of the replaced canister at validation time
+    /// plus `MEMORY_RESERVED_FOR_CANISTER_HISTORY` (or `original` if that one is already higher,
+    /// in which case setting it is a no-op).
+    pub reserved: u64,
+}
+
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     migrated_canister: Principal,
@@ -111,24 +126,14 @@ pub struct Request {
     replaced_canister: Principal,
     replaced_canister_subnet: Principal,
     replaced_canister_original_controllers: Vec<Principal>,
-    /// The memory allocation of the replaced canister at validation time. It is restored
-    /// together with the original controllers of the replaced canister.
+    /// The memory allocation of the replaced canister at validation time and the one to be set
+    /// while the migration canister is the exclusive controller of the replaced canister.
     ///
     /// This is `None` if and only if the request was validated by a version of the migration
     /// canister that did not manage the memory allocation of the replaced canister yet: in that
-    /// case, the memory allocation of the replaced canister must be left untouched
-    /// (note that `Some(0)` instead means that its memory growth is best-effort).
+    /// case, the memory allocation of the replaced canister must be left untouched.
     #[serde(default)]
-    replaced_canister_original_memory_allocation: Option<u64>,
-    /// The memory allocation to be set for the replaced canister while the migration canister
-    /// is its exclusive controller: the memory usage of the replaced canister at validation time
-    /// plus `MEMORY_RESERVED_FOR_CANISTER_HISTORY` (or the original memory allocation if that
-    /// one is already higher, in which case setting it is a no-op).
-    ///
-    /// This is `None` under the same condition as
-    /// `replaced_canister_original_memory_allocation`.
-    #[serde(default)]
-    replaced_canister_reserved_memory_allocation: Option<u64>,
+    replaced_canister_memory_allocation: Option<ReplacedCanisterMemoryAllocation>,
     caller: Principal,
 }
 
@@ -141,8 +146,7 @@ impl Request {
         replaced_canister: Principal,
         replaced_canister_subnet: Principal,
         replaced_canister_original_controllers: Vec<Principal>,
-        replaced_canister_original_memory_allocation: Option<u64>,
-        replaced_canister_reserved_memory_allocation: Option<u64>,
+        replaced_canister_memory_allocation: Option<ReplacedCanisterMemoryAllocation>,
         caller: Principal,
     ) -> Self {
         Self {
@@ -152,8 +156,7 @@ impl Request {
             replaced_canister,
             replaced_canister_subnet,
             replaced_canister_original_controllers,
-            replaced_canister_original_memory_allocation,
-            replaced_canister_reserved_memory_allocation,
+            replaced_canister_memory_allocation,
             caller,
         }
     }
@@ -172,13 +175,12 @@ impl Display for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, replaced_canister_original_memory_allocation: {:?}, replaced_canister_reserved_memory_allocation: {:?}, caller: {}, migrated_canister_original_controllers: [",
+            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, replaced_canister_memory_allocation: {:?}, caller: {}, migrated_canister_original_controllers: [",
             self.migrated_canister,
             self.migrated_canister_subnet,
             self.replaced_canister,
             self.replaced_canister_subnet,
-            self.replaced_canister_original_memory_allocation,
-            self.replaced_canister_reserved_memory_allocation,
+            self.replaced_canister_memory_allocation,
             self.caller
         )?;
         for x in self.migrated_canister_original_controllers.iter() {
