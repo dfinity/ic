@@ -463,17 +463,19 @@ impl GetEventsFile {
                 EventPayload::RegisteredDepositAddresses {
                     scan_window_nanos,
                     capacity,
-                    addresses,
+                    registrations,
                 } => ET::RegisteredDepositAddresses(crate::state::event::DepositAddressRegistry {
                     scan_window_nanos,
                     capacity,
-                    registrations: addresses
+                    registrations: registrations
                         .into_iter()
                         .map(|a| crate::state::event::DepositAddressRegistration {
                             owner: a.owner,
                             subaccount: a.subaccount,
                             address: a.address.parse().unwrap(),
                             expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
+                            last_scanned_block: None,
+                            scan_count: 0,
                         })
                         .collect(),
                 }),

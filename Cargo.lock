@@ -7499,6 +7499,7 @@ dependencies = [
  "ic-ledger-suite-orchestrator",
  "ic-ledger-suite-orchestrator-test-utils",
  "ic-management-canister-types-private",
+ "ic-metrics-assert",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",

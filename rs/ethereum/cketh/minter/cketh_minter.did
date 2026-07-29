@@ -626,11 +626,13 @@ type Event = record {
         RegisteredDepositAddresses : record {
             scan_window_nanos : nat64;
             capacity : nat64;
-            addresses : vec record {
+            registrations : vec record {
                 owner : principal;
                 subaccount : opt Subaccount;
                 address : text;
                 expires_at_nanos : nat64;
+                last_scanned_block : opt nat;
+                scan_count : nat64;
             };
         };
     };
