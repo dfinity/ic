@@ -2,8 +2,11 @@ use crate::adapter_metrics_registry::AdapterMetricsRegistry;
 use ic_adapter_metrics_client::AdapterMetrics;
 use prometheus::{
     CounterVec, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec,
-    IntGauge, IntGaugeVec, Opts, core::Collector,
+    IntGauge, IntGaugeVec, Opts,
+    core::{Collector, Desc},
+    proto::MetricFamily,
 };
+use std::collections::HashMap;
 
 /// A wrapper around `prometheus::Registry` with helpers for creating metrics
 ///
@@ -192,6 +195,24 @@ impl MetricsRegistry {
         self.registry.register(Box::new(C::clone(&c))).unwrap();
         c
     }
+
+    /// Exports an already-registered `collector`'s metrics under an additional
+    /// `name`, without duplicating the underlying metric. Both the original and
+    /// the aliased name are collected from the same `collector`, so they always
+    /// report identical values (and share the same help string and type).
+    ///
+    /// This is intended for renaming a metric: register the collector normally
+    /// (exposing the old name), then call `register_alias` to also expose the
+    /// new name. Once the new name has been rolled out everywhere, drop the
+    /// original registration and register directly under the new name.
+    ///
+    /// Only supports collectors that expose exactly one metric (e.g. `Gauge`,
+    /// `GaugeVec`, `CounterVec`); panics otherwise.
+    pub fn register_alias<C: 'static + Collector + Clone>(&self, collector: &C, name: &str) {
+        self.registry
+            .register(Box::new(AliasCollector::new(collector.clone(), name)))
+            .unwrap();
+    }
     /// Since adapter are remote processes and are unaware of the replica metrics registry
     /// we need to make sure that the metrics exported by the adapter are unique. We do this
     /// by namespacing the adapter with a name.
@@ -200,5 +221,118 @@ impl MetricsRegistry {
     /// already registered adapter.
     pub fn register_adapter(&self, adapter_metrics: AdapterMetrics) {
         self.adapter_metrics.register(adapter_metrics).unwrap()
+    }
+}
+
+/// A `Collector` that re-exports the metrics of an inner collector under a
+/// different name, sharing the inner collector's underlying data. See
+/// [`MetricsRegistry::register_alias`].
+#[derive(Clone)]
+struct AliasCollector<C: Collector> {
+    inner: C,
+    /// The name under which the inner collector's metrics are re-exported.
+    name: String,
+    /// Descriptor advertising the aliased `name` (with the inner metric's help
+    /// and labels), used by the registry for collision detection at
+    /// registration time.
+    desc: Desc,
+}
+
+impl<C: Collector> AliasCollector<C> {
+    fn new(inner: C, name: &str) -> Self {
+        let inner_descs = inner.desc();
+        assert_eq!(
+            inner_descs.len(),
+            1,
+            "register_alias only supports collectors with exactly one metric, \
+             but the collector for `{}` exposes {}",
+            name,
+            inner_descs.len(),
+        );
+        let inner_desc = inner_descs[0];
+        let const_labels: HashMap<String, String> = inner_desc
+            .const_label_pairs
+            .iter()
+            .map(|pair| (pair.name().to_string(), pair.value().to_string()))
+            .collect();
+        let desc = Desc::new(
+            name.to_string(),
+            inner_desc.help.clone(),
+            inner_desc.variable_labels.clone(),
+            const_labels,
+        )
+        .unwrap();
+        Self {
+            inner,
+            name: name.to_string(),
+            desc,
+        }
+    }
+}
+
+impl<C: Collector> Collector for AliasCollector<C> {
+    fn desc(&self) -> Vec<&Desc> {
+        vec![&self.desc]
+    }
+
+    fn collect(&self) -> Vec<MetricFamily> {
+        let mut families = self.inner.collect();
+        for family in &mut families {
+            family.set_name(self.name.clone());
+        }
+        families
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn register_alias_exports_same_metric_under_both_names() {
+        let registry = MetricsRegistry::new();
+        let gauge = registry.gauge("original_name", "The help string.");
+        registry.register_alias(&gauge, "aliased_name");
+
+        gauge.set(42.0);
+
+        let families = registry.prometheus_registry().gather();
+        let by_name: HashMap<_, _> = families
+            .iter()
+            .map(|mf| (mf.name().to_string(), mf))
+            .collect();
+
+        for name in ["original_name", "aliased_name"] {
+            let mf = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("missing metric family `{}`", name));
+            // Same help string and value are exported under both names.
+            assert_eq!(mf.help(), "The help string.");
+            assert_eq!(mf.get_metric().len(), 1);
+            assert_eq!(mf.get_metric()[0].get_gauge().value(), 42.0);
+        }
+    }
+
+    #[test]
+    fn register_alias_preserves_labels_of_vec_metric() {
+        let registry = MetricsRegistry::new();
+        let gauge_vec = registry.gauge_vec("original_vec", "The help string.", &["use_case"]);
+        registry.register_alias(&gauge_vec, "aliased_vec");
+
+        gauge_vec.with_label_values(&["foo"]).set(7.0);
+
+        let families = registry.prometheus_registry().gather();
+        for name in ["original_vec", "aliased_vec"] {
+            let mf = families
+                .iter()
+                .find(|mf| mf.name() == name)
+                .unwrap_or_else(|| panic!("missing metric family `{}`", name));
+            assert_eq!(mf.get_metric().len(), 1);
+            let metric = &mf.get_metric()[0];
+            assert_eq!(metric.get_label().len(), 1);
+            assert_eq!(metric.get_label()[0].name(), "use_case");
+            assert_eq!(metric.get_label()[0].value(), "foo");
+            assert_eq!(metric.get_gauge().value(), 7.0);
+        }
     }
 }
