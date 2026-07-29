@@ -55,6 +55,22 @@ jobs:
       pull-requests: write
 
 
+  # This job runs a bazel build & test on the Remote Build Execution cluster @ Namespace.
+  # It's currently in the evaluation phase where we compare its speed and stability with the `bazel-test-all` job.
+  # We expect it to fail and that's OK and it shouldn't block PRs & releases.
+  ci-rbe-evaluation:
+    name: CI RBE Evaluation
+    # for dfinity/ic: run on all events except for forked PRs
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    uses: ./.github/workflows/ci-rbe-evaluation.yml
+    secrets: inherit
+    with:
+      commit-sha: ${{ github.sha }}
+      release-build: ${{ inputs.release-build }}
+    permissions:
+      contents: read
+
 ## Explanation on the below jobs for posting required checks:
 ## For accepting external contributions we need to trigger the workflow from `workflow_dispatch`, not the pull_request directly
 ## We use status checks to post the result back to the PR and mark those checks as "required"
