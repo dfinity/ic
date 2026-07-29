@@ -356,6 +356,12 @@ impl IDkgComplaintHandlerImpl {
         let content = IDkgComplaintContent { idkg_complaint };
         match self.crypto.sign(&content, self.node_id, registry_version) {
             Ok(signature) => {
+                warn!(
+                    every_n_seconds => 10,
+                    self.log,
+                    "Created IDKG complaint: {}",
+                    content
+                );
                 let signed_complaint = SignedIDkgComplaint { content, signature };
                 self.metrics.complaint_metrics_inc("complaints_sent");
                 Some(signed_complaint)
@@ -440,6 +446,12 @@ impl IDkgComplaintHandlerImpl {
                 None
             }
             Ok(()) => {
+                warn!(
+                    every_n_seconds => 10,
+                    self.log,
+                    "Received IDKG complaint: {}",
+                    signed_complaint
+                );
                 self.metrics.complaint_metrics_inc("complaint_received");
                 Some(IDkgChangeAction::MoveToValidated(IDkgMessage::Complaint(
                     signed_complaint,
