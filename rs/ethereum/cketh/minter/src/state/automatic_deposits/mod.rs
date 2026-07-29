@@ -279,15 +279,15 @@ impl Default for AutomaticDeposits {
 /// A funded deposit address moved out of the watchlist and awaiting sweeping, for
 /// one supported ERC-20 token.
 #[derive(Clone, PartialEq, Debug)]
-pub struct SweepEntry {
+struct SweepEntry {
     /// The deposit address (holder) the funds sit at.
-    pub address: Address,
+    address: Address,
     /// The block whose scan found the funds.
-    pub last_scanned_block: BlockNumber,
+    last_scanned_block: BlockNumber,
     /// How many times this address was scanned, including the finding scan.
-    pub scan_count: u32,
+    scan_count: u32,
     /// The balance read for this token at `last_scanned_block`.
-    pub scanned_balance: Erc20Value,
+    scanned_balance: Erc20Value,
 }
 
 #[derive(Clone, PartialEq, Debug)]
