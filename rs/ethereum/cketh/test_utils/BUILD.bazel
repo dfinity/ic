@@ -21,6 +21,7 @@ rust_library(
         "//packages/ic-http-types",
         "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//packages/pocket-ic",
         "//rs/ethereum/cketh/minter",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",

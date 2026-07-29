@@ -23,9 +23,12 @@ use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
 use ic_cketh_minter::numeric::Erc20Value;
+use ic_cketh_test_utils::USDC_ERC20_CONTRACT_ADDRESS;
+use ic_cketh_test_utils::live_scan::{CkErc20LiveScanSetup, USDT_ERC20_CONTRACT_ADDRESS};
 use ic_ethereum_types::Address;
 use serde_json::Value;
 use std::process::{Child, Command, Stdio};
+use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 /// Anvil's first dev account: unlocked and pre-funded, so transfers can go
@@ -180,6 +183,80 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
     );
 }
 
+/// End-to-end balance scan against a real EVM: a live PocketIC runs the minter and the *real* EVM
+/// RPC canister (configured to route every provider to this anvil node), so the minter's periodic
+/// balance scan issues genuine HTTPS outcalls and reads real ERC-20 balances from anvil.
+///
+/// The two supported tokens (ckUSDC, ckUSDT) are placed at their real mainnet addresses via
+/// `anvil_setCode`, and the minter's derived deposit address is credited above the scan's candidate
+/// threshold via `anvil_setStorageAt`. The scan must then flag that address as a deposit candidate
+/// for both tokens.
+#[test]
+fn should_scan_real_erc20_balances_through_the_evm_rpc_canister() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
+    // 20 USDC/USDT (6 decimals), comfortably above each token's ~$10 candidate minimum.
+    const DEPOSIT_BALANCE: u128 = 20_000_000;
+
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    let setup = CkErc20LiveScanSetup::new_live(anvil.url());
+    let deposit = setup.register_deposit_address(DEPOSIT_SUBACCOUNT);
+
+    // Reuse MockUSDT's deployed bytecode to give both supported tokens a working `balanceOf`, then
+    // credit the deposit address on each by writing the `balanceOf` mapping slot directly.
+    let runtime = anvil.code(&deploy_mock_erc20(&anvil, &dev));
+    let tokens = [
+        Address::from_str(USDC_ERC20_CONTRACT_ADDRESS).unwrap(),
+        Address::from_str(USDT_ERC20_CONTRACT_ADDRESS).unwrap(),
+    ];
+    for token in &tokens {
+        anvil.set_code(token, &runtime);
+        anvil.set_storage_at(
+            token,
+            &erc20_balance_slot(&deposit),
+            &u256_be(DEPOSIT_BALANCE),
+        );
+        assert_eq!(
+            anvil.erc20_balance(token, &deposit),
+            Erc20Value::from(DEPOSIT_BALANCE as u64),
+            "the deposit balance should be readable on anvil"
+        );
+    }
+
+    let outcome = setup.await_balance_scan(Duration::from_secs(180));
+    assert_eq!(
+        outcome.addresses_scanned, 1,
+        "the single registered address should have been scanned"
+    );
+    assert_eq!(
+        outcome.candidates_found, 2,
+        "the funded address should be a candidate for both supported tokens"
+    );
+
+    let progress = setup.deposit_erc20(DEPOSIT_SUBACCOUNT);
+    assert!(progress.scan_count >= 1, "the address should report a scan");
+    assert!(
+        progress.last_scanned_block.is_some(),
+        "a scanned address should report the block it was scanned at"
+    );
+}
+
+/// The storage slot of `balanceOf[holder]` for a Solidity `mapping(address => uint256)` declared at
+/// slot 0 (as in `MockUSDT`): `keccak256(pad32(holder) ‖ pad32(0))`.
+fn erc20_balance_slot(holder: &Address) -> [u8; 32] {
+    let mut key = [0_u8; 64];
+    key[12..32].copy_from_slice(holder.as_ref());
+    keccak256(key)
+}
+
+/// A `u128` as a big-endian 32-byte EVM word.
+fn u256_be(value: u128) -> [u8; 32] {
+    let mut word = [0_u8; 32];
+    word[16..].copy_from_slice(&value.to_be_bytes());
+    word
+}
+
 fn holder_at(index: u64) -> Address {
     let mut bytes = [0_u8; 20];
     bytes[..8].copy_from_slice(&index.to_be_bytes());
@@ -329,6 +406,10 @@ impl Anvil {
             .unwrap_or_else(|e| panic!("RPC {method} failed: {e}"))
     }
 
+    fn url(&self) -> &str {
+        &self.url
+    }
+
     fn code(&self, address: &Address) -> Vec<u8> {
         from_hex(
             self.rpc(
@@ -338,6 +419,22 @@ impl Anvil {
             .as_str()
             .unwrap(),
         )
+    }
+
+    /// Places `code` as the runtime bytecode at `address` (foundry's `anvil_setCode` cheatcode).
+    fn set_code(&self, address: &Address, code: &[u8]) {
+        self.rpc(
+            "anvil_setCode",
+            serde_json::json!([to_hex(address.as_ref()), to_hex(code)]),
+        );
+    }
+
+    /// Writes a 32-byte storage `value` at `slot` of `address` (foundry's `anvil_setStorageAt`).
+    fn set_storage_at(&self, address: &Address, slot: &[u8; 32], value: &[u8; 32]) {
+        self.rpc(
+            "anvil_setStorageAt",
+            serde_json::json!([to_hex(address.as_ref()), to_hex(slot), to_hex(value)]),
+        );
     }
 
     /// A create-style `eth_call` (no `to`): anvil runs `data` as init code and
