@@ -16,7 +16,10 @@ use crate::state::{CanisterApi, init_version_and_config, with_canister_state};
 use candid::Principal;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::api::call::call;
-use ic_cdk::{api::msg_caller, init, inspect_message, post_upgrade, query, update};
+use ic_cdk::{
+    api::{accept_message, msg_caller, msg_method_name},
+    init, inspect_message, post_upgrade, query, update,
+};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use rate_limits_api::{
@@ -35,7 +38,7 @@ const REPLICATED_QUERY_METHOD: &str = "get_config";
 fn inspect_message() {
     // In order for this hook to succeed, accept_message() must be invoked.
     let caller_id: Principal = msg_caller();
-    let called_method = ic_cdk::api::call::method_name();
+    let called_method = msg_method_name();
 
     let (has_full_access, has_full_read_access) = with_canister_state(|state| {
         let authorized_principal = state.get_authorized_principal();
@@ -47,7 +50,7 @@ fn inspect_message() {
 
     if called_method == REPLICATED_QUERY_METHOD {
         if has_full_access || has_full_read_access {
-            ic_cdk::api::call::accept_message();
+            accept_message();
         } else {
             ic_cdk::api::trap(
                 "message_inspection_failed: method call is prohibited in the current context",
@@ -55,7 +58,7 @@ fn inspect_message() {
         }
     } else if UPDATE_METHODS.contains(&called_method.as_str()) {
         if has_full_access {
-            ic_cdk::api::call::accept_message();
+            accept_message();
         } else {
             ic_cdk::api::trap("message_inspection_failed: unauthorized caller");
         }
