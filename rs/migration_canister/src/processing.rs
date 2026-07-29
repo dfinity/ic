@@ -105,7 +105,7 @@ pub async fn process_accepted(
     // restored together with the original controllers.
     set_exclusive_controller(
         request.replaced_canister,
-        Some(request.replaced_canister_reserved_memory_allocation),
+        request.replaced_canister_reserved_memory_allocation,
     )
     .await
     .map_success(|_| RequestState::ControllersChanged {
@@ -369,7 +369,7 @@ pub async fn process_migrated_canister_deleted(
     match set_controllers(
         request.migrated_canister,
         controllers,
-        Some(request.replaced_canister_original_memory_allocation),
+        request.replaced_canister_original_memory_allocation,
         request.replaced_canister_subnet,
     )
     .await
@@ -436,7 +436,7 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         // The memory allocation of the replaced canister is bumped in the very same call that
         // makes the migration canister the exclusive controller of the replaced canister and
         // thus it must be restored whenever the controllers are restored.
-        Some(request.replaced_canister_original_memory_allocation),
+        request.replaced_canister_original_memory_allocation,
     )
     .await;
 

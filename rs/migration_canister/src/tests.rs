@@ -25,8 +25,8 @@ fn test() {
         replaced_canister,
         replaced_canister_subnet,
         vec![],
-        0,
-        0,
+        None,
+        None,
         caller,
     );
     insert_request(RequestState::Accepted { request });
