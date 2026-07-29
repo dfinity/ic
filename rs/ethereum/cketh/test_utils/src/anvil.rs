@@ -46,7 +46,7 @@ impl Anvil {
         Self { child, url }
     }
 
-    pub fn url(&self) -> &str {
+    pub(crate) fn url(&self) -> &str {
         &self.url
     }
 
@@ -85,7 +85,7 @@ impl Anvil {
     }
 
     /// Places `code` as the runtime bytecode at `address` (foundry's `anvil_setCode` cheatcode).
-    pub fn set_code(&self, address: &Address, code: &[u8]) {
+    pub(crate) fn set_code(&self, address: &Address, code: &[u8]) {
         self.rpc(
             "anvil_setCode",
             serde_json::json!([to_hex(address.as_ref()), to_hex(code)]),
@@ -93,7 +93,7 @@ impl Anvil {
     }
 
     /// Writes a 32-byte storage `value` at `slot` of `address` (foundry's `anvil_setStorageAt`).
-    pub fn set_storage_at(&self, address: &Address, slot: &[u8; 32], value: &[u8; 32]) {
+    pub(crate) fn set_storage_at(&self, address: &Address, slot: &[u8; 32], value: &[u8; 32]) {
         self.rpc(
             "anvil_setStorageAt",
             serde_json::json!([to_hex(address.as_ref()), to_hex(slot), to_hex(value)]),
@@ -142,7 +142,7 @@ impl Anvil {
         );
     }
 
-    pub fn send_transaction(&self, from: &Address, to: Option<&Address>, data: &[u8]) -> String {
+    fn send_transaction(&self, from: &Address, to: Option<&Address>, data: &[u8]) -> String {
         let mut tx = serde_json::json!({"from": to_hex(from.as_ref()), "input": to_hex(data)});
         if let Some(to) = to {
             tx["to"] = serde_json::json!(to_hex(to.as_ref()));
@@ -153,14 +153,14 @@ impl Anvil {
             .to_string()
     }
 
-    pub fn deploy(&self, from: &Address, code: &[u8]) -> Address {
+    pub(crate) fn deploy(&self, from: &Address, code: &[u8]) -> Address {
         let hash = self.send_transaction(from, None, code);
         let receipt = self.await_receipt(&hash);
         assert!(status_ok(&receipt), "deployment reverted");
         address_from_hex(receipt["contractAddress"].as_str().unwrap())
     }
 
-    pub fn await_receipt(&self, tx_hash: &str) -> Value {
+    fn await_receipt(&self, tx_hash: &str) -> Value {
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
             let receipt = self.rpc("eth_getTransactionReceipt", serde_json::json!([tx_hash]));
@@ -211,14 +211,14 @@ pub fn deploy_mock_erc20(anvil: &Anvil, holder: &Address) -> Address {
 
 /// The storage slot of `balanceOf[holder]` for a Solidity `mapping(address => uint256)` declared at
 /// slot 0 (as in `MockUSDT`): `keccak256(pad32(holder) ‖ pad32(0))`.
-pub fn erc20_balance_slot(holder: &Address) -> [u8; 32] {
+pub(crate) fn erc20_balance_slot(holder: &Address) -> [u8; 32] {
     let mut key = [0_u8; 64];
     key[12..32].copy_from_slice(holder.as_ref());
     keccak256(key)
 }
 
 /// A `u128` as a big-endian 32-byte EVM word.
-pub fn u256_be(value: u128) -> [u8; 32] {
+pub(crate) fn u256_be(value: u128) -> [u8; 32] {
     let mut word = [0_u8; 32];
     word[16..].copy_from_slice(&value.to_be_bytes());
     word

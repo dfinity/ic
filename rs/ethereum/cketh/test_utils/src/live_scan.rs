@@ -47,6 +47,12 @@ pub const USDT_ERC20_CONTRACT_ADDRESS: &str = "0xdAC17F958D2ee523a2206206994597C
 /// derives deposit addresses from.
 const ECDSA_KEY_NAME: &str = "key_1";
 
+/// A fixed non-anonymous principal used as the canisters' controller and as the minter's stand-in
+/// ledger-suite-orchestrator id, so this harness can register supported tokens itself.
+fn controller() -> Principal {
+    Principal::from_slice(&[0x0a; 10])
+}
+
 pub struct CkErc20LiveScanSetup {
     env: PocketIc,
     anvil: Anvil,
@@ -67,9 +73,8 @@ impl CkErc20LiveScanSetup {
             .with_fiduciary_subnet() // holds the secp256k1 `key_1` used by the minter.
             .build();
 
-        let controller = Principal::from_slice(&[0x0a; 10]);
         let settings = CanisterSettings {
-            controllers: Some(vec![controller]),
+            controllers: Some(vec![controller()]),
             ..Default::default()
         };
 
@@ -77,11 +82,11 @@ impl CkErc20LiveScanSetup {
         // balance-scan path, so it is left uninstalled.
         let ledger_id = env.create_canister();
         let evm_rpc_id =
-            env.create_canister_with_settings(Some(controller), Some(settings.clone()));
+            env.create_canister_with_settings(Some(controller()), Some(settings.clone()));
         env.add_cycles(evm_rpc_id, u128::from(u64::MAX));
-        install_evm_rpc(&env, evm_rpc_id, controller, anvil.url());
+        install_evm_rpc(&env, evm_rpc_id, anvil.url());
 
-        let minter_id = env.create_canister_with_settings(Some(controller), Some(settings));
+        let minter_id = env.create_canister_with_settings(Some(controller()), Some(settings));
         env.add_cycles(minter_id, u128::from(u64::MAX));
 
         // Go live *before* installing the minter: its install schedules immediate refresh and
@@ -89,9 +94,9 @@ impl CkErc20LiveScanSetup {
         // if they fired while the outcalls could not be answered.
         let _gateway = env.make_live(None);
 
-        install_minter(&env, minter_id, ledger_id, evm_rpc_id, controller);
-        activate_ckerc20(&env, minter_id, controller);
-        register_supported_tokens(&env, minter_id, controller);
+        install_minter(&env, minter_id, ledger_id, evm_rpc_id);
+        activate_ckerc20(&env, minter_id);
+        register_supported_tokens(&env, minter_id);
 
         Self {
             env,
@@ -221,7 +226,7 @@ impl CkErc20LiveScanSetup {
     }
 }
 
-fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, controller: Principal, anvil_url: &str) {
+fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, anvil_url: &str) {
     let args = InstallArgs {
         override_provider: Some(OverrideProvider {
             override_url: Some(RegexSubstitution {
@@ -235,7 +240,7 @@ fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, controller: Principal,
         evm_rpc_id,
         evm_rpc_wasm(),
         Encode!(&args).unwrap(),
-        Some(controller),
+        Some(controller()),
     );
 }
 
@@ -244,7 +249,6 @@ fn install_minter(
     minter_id: Principal,
     ledger_id: Principal,
     evm_rpc_id: Principal,
-    controller: Principal,
 ) {
     let args = MinterInitArgs {
         ethereum_network: EthereumNetwork::Mainnet,
@@ -262,15 +266,15 @@ fn install_minter(
         minter_id,
         minter_wasm(),
         Encode!(&MinterArg::InitArg(args)).unwrap(),
-        Some(controller),
+        Some(controller()),
     );
 }
 
-/// Activates the ckERC20 feature by pointing the minter's orchestrator id at `controller` (so this
-/// harness can register tokens) and setting the ERC-20 deposit helper contract.
-fn activate_ckerc20(env: &PocketIc, minter_id: Principal, controller: Principal) {
+/// Activates the ckERC20 feature by pointing the minter's orchestrator id at [`controller`] (so
+/// this harness can register tokens) and setting the ERC-20 deposit helper contract.
+fn activate_ckerc20(env: &PocketIc, minter_id: Principal) {
     let upgrade = UpgradeArg {
-        ledger_suite_orchestrator_id: Some(controller),
+        ledger_suite_orchestrator_id: Some(controller()),
         erc20_helper_contract_address: Some(ERC20_HELPER_CONTRACT_ADDRESS.to_string()),
         ..Default::default()
     };
@@ -278,12 +282,12 @@ fn activate_ckerc20(env: &PocketIc, minter_id: Principal, controller: Principal)
         minter_id,
         minter_wasm(),
         Encode!(&MinterArg::UpgradeArg(upgrade)).unwrap(),
-        Some(controller),
+        Some(controller()),
     )
     .expect("BUG: failed to activate the ckERC20 feature");
 }
 
-fn register_supported_tokens(env: &PocketIc, minter_id: Principal, controller: Principal) {
+fn register_supported_tokens(env: &PocketIc, minter_id: Principal) {
     for (address, symbol) in [
         (USDC_ERC20_CONTRACT_ADDRESS, "ckUSDC"),
         (USDT_ERC20_CONTRACT_ADDRESS, "ckUSDT"),
@@ -298,7 +302,7 @@ fn register_supported_tokens(env: &PocketIc, minter_id: Principal, controller: P
         };
         env.update_call(
             minter_id,
-            controller,
+            controller(),
             "add_ckerc20_token",
             Encode!(&arg).unwrap(),
         )
