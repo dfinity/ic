@@ -17,7 +17,7 @@
 //! Other tags use uppercase suffixes (ENV_DEPS__GUESTOS_SEV_RECOVERY_DISK_IMG, etc.).
 
 use crate::driver::local_backend::LocalBackend;
-use crate::driver::resource::{DiskImage, ImageType};
+use crate::driver::resource::DiskImage;
 use crate::driver::serve_files_task::FILE_SERVER_PORT;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
@@ -142,7 +142,6 @@ pub fn get_guestos_disk_image(env: &TestEnv) -> DiskImage {
 pub fn get_tagged_guestos_disk_image(env: &TestEnv, tag: &str) -> DiskImage {
     match SystemTestBackend::read_attribute(env) {
         SystemTestBackend::Farm => DiskImage::Url {
-            image_type: ImageType::IcOsImage,
             url: get_tagged_guestos_img_url(env, tag),
             sha256: get_tagged_guestos_img_sha256(tag),
         },
@@ -150,7 +149,6 @@ pub fn get_tagged_guestos_disk_image(env: &TestEnv, tag: &str) -> DiskImage {
             let suffix = tag_to_env_suffix(tag);
             let var = format!("ENV_DEPS__GUESTOS{suffix}_DISK_IMG_PATH");
             DiskImage::Local {
-                image_type: ImageType::IcOsImage,
                 path: PathBuf::from(
                     std::env::var(&var).unwrap_or_else(|_| panic!("Failed to read '{var}'")),
                 ),
