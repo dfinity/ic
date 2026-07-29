@@ -100,49 +100,49 @@ fn should_bound_addresses_per_chunk_by_the_batch_cap() {
 }
 
 #[tokio::test]
-async fn should_skip_without_recording_stats_when_latest_block_is_unknown() {
-    let now = ts();
-    seed_state(
-        None,
-        Some(MIN_DEPOSITS[0].0),
-        &[(account(1), Address::new([0xa1; 20]))],
-        now,
-    );
+async fn should_skip_without_recording_stats() {
+    struct Case {
+        name: &'static str,
+        latest_block: Option<BlockNumber>,
+        token: Option<Address>,
+        holders: Vec<(Account, Address)>,
+    }
 
-    // No stub responses: the scan must short-circuit before any outcall.
-    scan(now, stub_client(vec![])).await;
+    let holder = (account(1), Address::new([0xa1; 20]));
+    let cases = vec![
+        Case {
+            name: "latest block height unknown",
+            latest_block: None,
+            token: Some(MIN_DEPOSITS[0].0),
+            holders: vec![holder],
+        },
+        Case {
+            name: "no supported tokens",
+            latest_block: Some(BlockNumber::new(1_000)),
+            token: None,
+            holders: vec![holder],
+        },
+        Case {
+            name: "no address due for a scan",
+            latest_block: Some(BlockNumber::new(1_000)),
+            token: Some(MIN_DEPOSITS[0].0),
+            holders: vec![],
+        },
+    ];
 
-    assert!(read_state(|s| s.last_balance_scan.clone()).is_none());
-}
+    for case in cases {
+        let now = ts();
+        seed_state(case.latest_block, case.token, &case.holders, now);
 
-#[tokio::test]
-async fn should_skip_without_recording_stats_when_no_tokens_are_supported() {
-    let now = ts();
-    seed_state(
-        Some(BlockNumber::new(1_000)),
-        None,
-        &[(account(1), Address::new([0xa1; 20]))],
-        now,
-    );
+        // No stub responses: the scan must short-circuit before any outcall.
+        scan(now, stub_client(vec![])).await;
 
-    scan(now, stub_client(vec![])).await;
-
-    assert!(read_state(|s| s.last_balance_scan.clone()).is_none());
-}
-
-#[tokio::test]
-async fn should_skip_without_recording_stats_when_no_address_is_due() {
-    let now = ts();
-    seed_state(
-        Some(BlockNumber::new(1_000)),
-        Some(MIN_DEPOSITS[0].0),
-        &[],
-        now,
-    );
-
-    scan(now, stub_client(vec![])).await;
-
-    assert!(read_state(|s| s.last_balance_scan.clone()).is_none());
+        assert!(
+            read_state(|s| s.last_balance_scan.clone()).is_none(),
+            "case: {}",
+            case.name
+        );
+    }
 }
 
 #[tokio::test]
