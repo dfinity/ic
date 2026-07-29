@@ -241,7 +241,6 @@ pub enum SubnetSplittingStatus {
     #[default]
     NotScheduled,
     /// The subnet is requested to be split at the height of the summary block.
-    /// Contains all the information necessary to determine the new subnet of the replica
     Scheduled(SplittingArgs),
     /// The subnet was split at the previous summary block.
     PostSplit(PostSplitArgs),
