@@ -171,7 +171,7 @@ jobs:
     needs: [config, infer-bazel-targets]
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
     container:
-      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:2ffef7066229c82711025be7a0be86848dc91a2a18d52e3bb3c4864558be261b
+      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:62dc3a0c8ed9bcd60873b4d2bce010432468651116e12a9e3ff5ee2cef9bd4da
       # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
       # this container by --strategy_regexp=ic-os[:/].*=local in bazel/conf/.bazelrc.build.
       # Rootless podman needs to create user namespaces, which fails in an unprivileged
@@ -237,7 +237,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:2ffef7066229c82711025be7a0be86848dc91a2a18d52e3bb3c4864558be261b"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:62dc3a0c8ed9bcd60873b4d2bce010432468651116e12a9e3ff5ee2cef9bd4da"
 
           # Directory for the Build Event Protocol and execution profile files,
           # later uploaded to Namespace Artifact Storage for offline analysis.
@@ -295,7 +295,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:2ffef7066229c82711025be7a0be86848dc91a2a18d52e3bb3c4864558be261b"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:62dc3a0c8ed9bcd60873b4d2bce010432468651116e12a9e3ff5ee2cef9bd4da"
 
           # Directory for the Build Event Protocol and execution profile files,
           # later uploaded to Namespace Artifact Storage for offline analysis.
