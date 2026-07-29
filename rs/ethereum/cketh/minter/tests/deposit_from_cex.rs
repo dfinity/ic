@@ -26,8 +26,7 @@ use ic_cketh_minter::balance_scan::batcher::{
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::live_scan::{
-    address_from_hex, address_token, call, default_caller, deploy_mock_erc20, status_ok,
-    uint_token, Anvil, CkErc20LiveScanSetup, DEV_ACCOUNT,
+    Anvil, CkErc20LiveScanSetup, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20,
 };
 use ic_ethereum_types::Address;
 use std::time::Duration;
@@ -45,10 +44,10 @@ fn should_read_erc20_balances_across_tokens_and_holders() {
     let h2 = Address::new([0x22; 20]);
     let h3 = Address::new([0x33; 20]); // never funded -> balance 0
 
-    fund(&anvil, &token_a, &dev, &h1, 100);
-    fund(&anvil, &token_a, &dev, &h2, 250);
-    fund(&anvil, &token_b, &dev, &h1, 7);
-    fund(&anvil, &token_b, &dev, &h3, 999);
+    anvil.fund(&token_a, &dev, &h1, 100);
+    anvil.fund(&token_a, &dev, &h2, 250);
+    anvil.fund(&token_b, &dev, &h1, 7);
+    anvil.fund(&token_b, &dev, &h3, 999);
 
     let calls = vec![
         BalanceOfCall {
@@ -115,7 +114,7 @@ fn should_read_many_balances_in_a_single_call() {
     const N: u64 = 32;
     let holders: Vec<Address> = (0..N).map(holder_at).collect();
     for (i, holder) in holders.iter().enumerate() {
-        fund(&anvil, &token, &dev, holder, (i as u128 + 1) * 1_000);
+        anvil.fund(&token, &dev, holder, (i as u128 + 1) * 1_000);
     }
 
     let calls: Vec<BalanceOfCall> = holders
@@ -143,7 +142,7 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
     let dev = address_from_hex(DEV_ACCOUNT);
     let token = deploy_mock_erc20(&anvil, &dev);
     let holder = Address::new([0x11; 20]);
-    fund(&anvil, &token, &dev, &holder, 500);
+    anvil.fund(&token, &dev, &holder, 500);
 
     // A "token" with no code: STATICCALL succeeds with empty return data, which
     // is not the 32 bytes the batcher requires, so it reverts the whole call
@@ -193,7 +192,7 @@ fn should_scan_real_erc20_balances_through_the_evm_rpc_canister() {
     const DEPOSIT_BALANCE: u128 = 20_000_000;
 
     let setup = CkErc20LiveScanSetup::new_live();
-    let user = default_caller();
+    let user = setup.caller();
     let deposit = setup.register_deposit_address(user, DEPOSIT_SUBACCOUNT);
     setup.credit_deposit(&deposit, DEPOSIT_BALANCE);
 
@@ -218,20 +217,4 @@ fn holder_at(index: u64) -> Address {
     // Offset so no holder collides with the deployer or a low reserved address.
     bytes[0] = 0xd0;
     Address::new(bytes)
-}
-
-/// Transfers `amount` of `token` from `dev` to `holder`.
-fn fund(anvil: &Anvil, token: &Address, dev: &Address, holder: &Address, amount: u128) {
-    let tx = anvil.send_transaction(
-        dev,
-        Some(token),
-        &call(
-            "transfer(address,uint256)",
-            &[address_token(holder), uint_token(amount)],
-        ),
-    );
-    assert!(
-        status_ok(&anvil.await_receipt(&tx)),
-        "ERC-20 transfer failed"
-    );
 }

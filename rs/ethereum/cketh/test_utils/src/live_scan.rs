@@ -59,15 +59,12 @@ pub const TOKEN_SUPPLY: u128 = 1_000_000_000;
 /// derives deposit addresses from.
 const ECDSA_KEY_NAME: &str = "key_1";
 
-/// The default depositing user, matching [`crate::ckerc20::CkErc20Setup`]'s caller.
-pub fn default_caller() -> Principal {
-    PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into()
-}
-
 pub struct CkErc20LiveScanSetup {
     env: PocketIc,
     anvil: Anvil,
     minter_id: Principal,
+    /// The default depositing user, matching [`crate::ckerc20::CkErc20Setup`]'s caller.
+    caller: Principal,
 }
 
 impl CkErc20LiveScanSetup {
@@ -112,7 +109,13 @@ impl CkErc20LiveScanSetup {
             env,
             anvil,
             minter_id,
+            caller: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
         }
+    }
+
+    /// The default depositing user, matching [`crate::ckerc20::CkErc20Setup`]'s caller.
+    pub fn caller(&self) -> Principal {
+        self.caller
     }
 
     /// Registers a deposit address for `caller`'s `subaccount` and returns the Ethereum address the
@@ -348,16 +351,16 @@ pub fn deploy_mock_erc20(anvil: &Anvil, holder: &Address) -> Address {
 // ---------------------------------------------------------------------------
 
 /// A function call: the 4-byte selector followed by the ABI-encoded arguments.
-pub fn call(signature: &str, tokens: &[Token]) -> Vec<u8> {
+fn call(signature: &str, tokens: &[Token]) -> Vec<u8> {
     let selector = &keccak256(signature.as_bytes())[..4];
     [selector, &ethers_core::abi::encode(tokens)].concat()
 }
 
-pub fn address_token(address: &Address) -> Token {
+fn address_token(address: &Address) -> Token {
     Token::Address(EthAddress::from_slice(address.as_ref()))
 }
 
-pub fn uint_token(value: u128) -> Token {
+fn uint_token(value: u128) -> Token {
     Token::Uint(U256::from(value))
 }
 
@@ -516,6 +519,22 @@ impl Anvil {
         Erc20Value::from(decode_uint(&out))
     }
 
+    /// Transfers `amount` of `token` from `from` to `to` via a plain ERC-20 `transfer`.
+    pub fn fund(&self, token: &Address, from: &Address, to: &Address, amount: u128) {
+        let tx = self.send_transaction(
+            from,
+            Some(token),
+            &call(
+                "transfer(address,uint256)",
+                &[address_token(to), uint_token(amount)],
+            ),
+        );
+        assert!(
+            status_ok(&self.await_receipt(&tx)),
+            "ERC-20 transfer failed"
+        );
+    }
+
     pub fn send_transaction(&self, from: &Address, to: Option<&Address>, data: &[u8]) -> String {
         let mut tx = serde_json::json!({"from": to_hex(from.as_ref()), "input": to_hex(data)});
         if let Some(to) = to {
@@ -578,7 +597,7 @@ fn wait_until_ready(child: &mut Child, bin: &str, url: &str) {
 // Small hex / receipt helpers.
 // ---------------------------------------------------------------------------
 
-pub fn status_ok(receipt: &Value) -> bool {
+fn status_ok(receipt: &Value) -> bool {
     receipt["status"] == "0x1"
 }
 
