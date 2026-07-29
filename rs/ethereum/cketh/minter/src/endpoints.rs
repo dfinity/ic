@@ -539,6 +539,15 @@ pub mod events {
             capacity: u64,
             registrations: Vec<DepositAddressRegistration>,
         },
+        MovedToSweepQueue {
+            owner: Principal,
+            subaccount: Option<[u8; 32]>,
+            token: String,
+            address: String,
+            last_scanned_block: Nat,
+            scan_count: u64,
+            scanned_balance: Nat,
+        },
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]

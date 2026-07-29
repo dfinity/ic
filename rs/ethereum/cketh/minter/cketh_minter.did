@@ -640,6 +640,15 @@ type Event = record {
                 scan_count : nat64;
             };
         };
+        MovedToSweepQueue : record {
+            owner : principal;
+            subaccount : opt Subaccount;
+            token : text;
+            address : text;
+            last_scanned_block : nat;
+            scan_count : nat64;
+            scanned_balance : nat;
+        };
     };
 };
 

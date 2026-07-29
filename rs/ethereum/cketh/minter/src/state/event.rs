@@ -176,6 +176,12 @@ pub enum EventType {
     /// Emitted at pre-upgrade and replayed to restore the in-heap registry.
     #[n(25)]
     RegisteredDepositAddresses(#[n(0)] DepositAddressRegistry),
+    /// A funded deposit address was found by a balance scan and moved out of the
+    /// watchlist into the balance-sweep queue for one `(account, token)`. Recorded
+    /// the moment the funds are detected, so the sweep queue is durable even across
+    /// an ungraceful trap (unlike the pre-upgrade snapshot).
+    #[n(26)]
+    MovedToSweepQueue(#[n(0)] SweepMove),
 }
 
 /// Full snapshot of the ckERC20 deposit address registry. Carries the limits in
@@ -193,15 +199,12 @@ pub struct DepositAddressRegistry {
     /// order within a shared expiry), as produced by `snapshot`.
     #[n(2)]
     pub registrations: Vec<DepositAddressRegistration>,
-    /// Funded deposit addresses moved out of the watchlist and awaiting sweeping,
-    /// one entry per `(account, token)`, in `(account, token)` order.
-    #[n(3)]
-    pub sweep_queue: Vec<SweepQueueEntry>,
 }
 
-/// A single `(account, token)` entry of the balance-sweep queue snapshot.
+/// Payload of [`EventType::MovedToSweepQueue`]: a funded deposit address moved
+/// into the balance-sweep queue for one `(account, token)`.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
-pub struct SweepQueueEntry {
+pub struct SweepMove {
     #[cbor(n(0), with = "icrc_cbor::principal")]
     pub owner: Principal,
     #[cbor(n(1), with = "minicbor::bytes")]

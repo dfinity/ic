@@ -478,7 +478,23 @@ impl GetEventsFile {
                             scan_count: 0,
                         })
                         .collect(),
-                    sweep_queue: vec![],
+                }),
+                EventPayload::MovedToSweepQueue {
+                    owner,
+                    subaccount,
+                    token,
+                    address,
+                    last_scanned_block,
+                    scan_count,
+                    scanned_balance,
+                } => ET::MovedToSweepQueue(crate::state::event::SweepMove {
+                    owner,
+                    subaccount,
+                    token: token.parse().unwrap(),
+                    address: address.parse().unwrap(),
+                    last_scanned_block: last_scanned_block.try_into().unwrap(),
+                    scan_count: scan_count.try_into().unwrap(),
+                    scanned_balance: scanned_balance.try_into().unwrap(),
                 }),
             },
         }

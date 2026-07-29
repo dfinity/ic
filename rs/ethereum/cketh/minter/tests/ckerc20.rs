@@ -350,10 +350,21 @@ mod deposit_erc20 {
                 r"cketh_minter_sweep_queue_size {tokens} \d+"
             ));
 
-        // The populated sweep queue must survive a real pre_upgrade snapshot -> post_upgrade
-        // replay: check_audit_log emits the snapshot, CBOR-encodes and replays it, and asserts the
-        // replayed state is_equivalent_to the live one (which compares the sweep map). A wrong
-        // minicbor annotation on SweepQueueEntry would fail here.
+        // The move is event-sourced: one MovedToSweepQueue event per funded token, recorded the
+        // moment the funds were detected (durable even across an ungraceful trap).
+        let moved = ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .filter(|event| matches!(event.payload, EventPayload::MovedToSweepQueue { .. }))
+            .count();
+        assert_eq!(moved, tokens);
+
+        // The sweep queue must survive a real pre_upgrade -> post_upgrade cycle. It is rebuilt by
+        // replaying the CBOR-encoded MovedToSweepQueue events (not the watchlist snapshot):
+        // check_audit_log emits, CBOR-encodes, replays, and asserts the replayed state
+        // is_equivalent_to the live one (which compares the sweep map). A wrong minicbor annotation
+        // on SweepMove would fail here.
         ckerc20
             .cketh
             .check_audit_logs_and_upgrade_as_ref(Default::default());

@@ -431,9 +431,25 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                             },
                         )
                         .collect(),
-                    sweep_queue: vec![],
                 },
             ),
+            EventPayload::MovedToSweepQueue {
+                owner,
+                subaccount,
+                token,
+                address,
+                last_scanned_block,
+                scan_count,
+                scanned_balance,
+            } => ET::MovedToSweepQueue(ic_cketh_minter::state::event::SweepMove {
+                owner,
+                subaccount,
+                token: token.parse().unwrap(),
+                address: address.parse().unwrap(),
+                last_scanned_block: last_scanned_block.try_into().unwrap(),
+                scan_count: scan_count.try_into().unwrap(),
+                scanned_balance: scanned_balance.try_into().unwrap(),
+            }),
         },
     }
 }

@@ -1,10 +1,10 @@
 use super::{
     AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSIT_ADDRESSES,
-    SCAN_GAP_SECS, SECS_PER_BLOCK,
+    SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry, SweepKey,
 };
 use crate::endpoints::DepositErc20Error;
 use crate::numeric::{BlockNumber, Erc20Value};
-use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry, SweepQueueEntry};
+use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry, SweepMove};
 use crate::timed_sized_map::{Entry, Timestamp};
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -126,7 +126,6 @@ fn should_restore_the_limits_recorded_in_the_snapshot() {
             registration(account(0), ts(50)),
             registration(account(1), ts(100)),
         ],
-        sweep_queue: vec![],
     };
     let mut deposits = AutomaticDeposits::default();
 
@@ -257,7 +256,7 @@ fn scan_gap_secs_invariants_hold() {
 }
 
 #[test]
-fn should_reproduce_equal_deposits_across_snapshot_round_trip() {
+fn should_reproduce_equal_watchlist_across_snapshot_round_trip() {
     let mut deposits = AutomaticDeposits::default();
     deposits
         .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
@@ -268,22 +267,10 @@ fn should_reproduce_equal_deposits_across_snapshot_round_trip() {
     deposits
         .watch_address_for_account(ts(20), account(2), deposit_address(&account(2)))
         .unwrap();
-    // account(1) keeps advancing along the schedule; account(2) is found funded for two tokens
-    // and moved to the sweep queue.
     deposits.record_scan(ts(30), &account(1), BlockNumber::new(500));
-    deposits.move_to_sweep(
-        ts(30),
-        &account(2),
-        BlockNumber::new(1_234),
-        &[
-            (token(0xaa), Erc20Value::new(1_000)),
-            (token(0xbb), Erc20Value::new(2_000)),
-        ],
-    );
 
     let registry = deposits.snapshot();
-    assert_eq!(registry.registrations.len(), 2);
-    assert_eq!(registry.sweep_queue.len(), 2);
+    assert_eq!(registry.registrations.len(), 3);
 
     let mut restored = AutomaticDeposits::default();
     restored.rebuild(&registry);
@@ -292,13 +279,34 @@ fn should_reproduce_equal_deposits_across_snapshot_round_trip() {
     assert_eq!(restored.snapshot(), registry);
 }
 
+#[test]
+fn snapshot_does_not_carry_the_sweep_queue() {
+    // The sweep queue is event-sourced (via MovedToSweepQueue), not part of the watchlist
+    // snapshot, so rebuild() from a snapshot must NOT resurrect it.
+    let mut deposits = AutomaticDeposits::default();
+    deposits.apply_sweep_move(&sweep_move(
+        account(0),
+        token(0xaa),
+        BlockNumber::new(900),
+        3,
+        10,
+    ));
+    assert_eq!(deposits.sweep_len(), 1);
+
+    let registry = deposits.snapshot();
+    assert!(registry.registrations.is_empty());
+
+    let mut restored = AutomaticDeposits::default();
+    restored.rebuild(&registry);
+    assert_eq!(restored.sweep_len(), 0);
+}
+
 fn deposits_from(states: Vec<DepositAddressRegistration>) -> AutomaticDeposits {
     let mut deposits = AutomaticDeposits::default();
     deposits.rebuild(&DepositAddressRegistry {
         scan_window_nanos: window_nanos(),
         capacity: MAX_ACTIVE_DEPOSIT_ADDRESSES.get() as u64,
         registrations: states,
-        sweep_queue: vec![],
     });
     deposits
 }
@@ -374,98 +382,74 @@ fn record_scan_is_a_noop_for_an_expired_account() {
 }
 
 #[test]
-fn move_to_sweep_moves_a_funded_address_and_queues_one_entry_per_token() {
+fn apply_sweep_move_removes_the_watchlist_entry_and_queues_each_token() {
     let mut deposits = AutomaticDeposits::default();
     deposits
         .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
         .unwrap();
-    // Two prior scans, so the finding scan is the third (scan_count = 2 + 1 = 3).
-    deposits.record_scan(ts(0), &account(0), BlockNumber::new(400));
-    deposits.record_scan(ts(0), &account(0), BlockNumber::new(500));
 
-    deposits.move_to_sweep(
-        ts(0),
-        &account(0),
+    // One address found funded for two tokens => two SweepMoves (as balance_scan emits).
+    deposits.apply_sweep_move(&sweep_move(
+        account(0),
+        token(0xaa),
         BlockNumber::new(900),
-        &[
-            (token(0xaa), Erc20Value::new(10)),
-            (token(0xbb), Erc20Value::new(20)),
-        ],
-    );
+        3,
+        10,
+    ));
+    deposits.apply_sweep_move(&sweep_move(
+        account(0),
+        token(0xbb),
+        BlockNumber::new(900),
+        3,
+        20,
+    ));
 
-    // The watchlist entry is gone.
+    // The watchlist entry is gone (removed by the first move).
     assert_eq!(deposits.get_entry(ts(0), &account(0)), None);
     assert_eq!(deposits.watchlist_len(), 0);
 
-    // One sweep entry per token, each carrying the removed address, the finding block, the
-    // advanced scan_count, and its own scanned balance.
+    // One sweep entry per token, each carrying the deposit address, the finding block, the
+    // scan_count, and its own scanned balance.
     assert_eq!(deposits.sweep_len(), 2);
     assert_eq!(
-        deposits.snapshot().sweep_queue,
-        vec![
-            sweep_entry(account(0), token(0xaa), BlockNumber::new(900), 3, 10),
-            sweep_entry(account(0), token(0xbb), BlockNumber::new(900), 3, 20),
-        ]
+        deposits.sweep.get(&SweepKey {
+            account: account(0),
+            token: token(0xaa),
+        }),
+        Some(&sweep_entry(BlockNumber::new(900), 3, 10))
+    );
+    assert_eq!(
+        deposits.sweep.get(&SweepKey {
+            account: account(0),
+            token: token(0xbb),
+        }),
+        Some(&sweep_entry(BlockNumber::new(900), 3, 20))
     );
 }
 
 #[test]
-fn move_to_sweep_is_a_noop() {
-    struct Case {
-        desc: &'static str,
-        arm: bool,
-        now: Timestamp,
-        candidates: Vec<(Address, Erc20Value)>,
-        expected_watchlist_len: usize,
-    }
+fn apply_sweep_move_inserts_unconditionally_without_a_watchlist_entry() {
+    // No watchlist entry for account(0): apply still queues the move. This is exactly how event
+    // replay reconstructs the queue, since the watchlist is empty until the final snapshot event.
+    let mut deposits = AutomaticDeposits::default();
 
-    let cases = vec![
-        Case {
-            desc: "expired account",
-            arm: true,
-            now: ts(window_nanos() + 1),
-            candidates: vec![(token(0xaa), Erc20Value::new(10))],
-            expected_watchlist_len: 1,
-        },
-        Case {
-            desc: "empty candidate list",
-            arm: true,
-            now: ts(0),
-            candidates: vec![],
-            expected_watchlist_len: 1,
-        },
-        Case {
-            desc: "absent account",
-            arm: false,
-            now: ts(0),
-            candidates: vec![(token(0xaa), Erc20Value::new(10))],
-            expected_watchlist_len: 0,
-        },
-    ];
+    deposits.apply_sweep_move(&sweep_move(
+        account(0),
+        token(0xaa),
+        BlockNumber::new(900),
+        3,
+        10,
+    ));
 
-    for case in cases {
-        let mut deposits = AutomaticDeposits::default();
-        if case.arm {
-            deposits
-                .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
-                .unwrap();
-        }
-
-        deposits.move_to_sweep(
-            case.now,
-            &account(0),
-            BlockNumber::new(900),
-            &case.candidates,
-        );
-
-        assert_eq!(deposits.sweep_len(), 0, "case: {}", case.desc);
-        assert_eq!(
-            deposits.watchlist_len(),
-            case.expected_watchlist_len,
-            "case: {}",
-            case.desc
-        );
-    }
+    assert_eq!(deposits.watchlist_len(), 0);
+    assert_eq!(deposits.sweep_len(), 1);
+    assert_eq!(
+        deposits.sweep.get(&SweepKey {
+            account: account(0),
+            token: token(0xaa),
+        }),
+        Some(&sweep_entry(BlockNumber::new(900), 3, 10))
+    );
 }
 
 fn ts(nanos: u64) -> Timestamp {
@@ -476,18 +460,31 @@ fn token(byte: u8) -> Address {
     Address::new([byte; 20])
 }
 
-fn sweep_entry(
+fn sweep_move(
     account: Account,
     token: Address,
     last_scanned_block: BlockNumber,
     scan_count: u32,
     scanned_balance: u128,
-) -> SweepQueueEntry {
-    SweepQueueEntry {
+) -> SweepMove {
+    SweepMove {
         owner: account.owner,
         subaccount: account.subaccount,
         token,
         address: deposit_address(&account),
+        last_scanned_block,
+        scan_count,
+        scanned_balance: Erc20Value::new(scanned_balance),
+    }
+}
+
+fn sweep_entry(
+    last_scanned_block: BlockNumber,
+    scan_count: u32,
+    scanned_balance: u128,
+) -> SweepEntry {
+    SweepEntry {
+        address: deposit_address(&account(0)),
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),

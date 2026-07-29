@@ -7,6 +7,9 @@ use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, r
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
+use crate::state::audit::process_event;
+use crate::state::automatic_deposits::AutomaticDeposits;
+use crate::state::event::{EventType, SweepMove};
 use crate::state::{TaskType, mutate_state, read_state};
 use crate::timed_sized_map::Timestamp;
 use batcher::BalanceOfCall;
@@ -135,15 +138,18 @@ async fn scan<R: Runtime>(
     let candidates_found: usize = candidates_by_account.values().map(Vec::len).sum();
 
     // Advance only the addresses actually scanned, so a failed chunk is retried next tick rather
-    // than silently skipped until its next scheduled slot. A funded address is moved to the sweep
-    // queue instead of being advanced, so it is no longer re-scanned.
+    // than silently skipped until its next scheduled slot. A funded address is event-sourced into
+    // the sweep queue (durable the moment funds are detected) instead of being advanced, so it is
+    // no longer re-scanned.
     let addresses_scanned = scanned.len();
     mutate_state(|s| {
         for account in &scanned {
             match candidates_by_account.get(account) {
                 Some(cands) => {
-                    s.automatic_deposits
-                        .move_to_sweep(now, account, latest_block, cands)
+                    for mv in sweep_moves(&s.automatic_deposits, now, account, latest_block, cands)
+                    {
+                        process_event(s, EventType::MovedToSweepQueue(mv));
+                    }
                 }
                 None => s.automatic_deposits.record_scan(now, account, latest_block),
             }
@@ -230,6 +236,36 @@ fn collect_candidates(
             account: batch.addresses[i / tokens.len()].0,
             token: call.token,
             balance: *balance,
+        })
+        .collect()
+}
+
+/// Build one [`SweepMove`] per candidate `(token, balance)` for a scanned, funded `account`,
+/// reading the address and scan count from its watchlist entry (the moved `scan_count` counts this
+/// finding scan). Empty if the account is no longer live as of `now`. All moves are built here,
+/// before any of them is applied, since applying the first one removes the watchlist entry.
+fn sweep_moves(
+    deposits: &AutomaticDeposits,
+    now: Timestamp,
+    account: &Account,
+    block: BlockNumber,
+    candidates: &[(Address, Erc20Value)],
+) -> Vec<SweepMove> {
+    let Some(entry) = deposits.get_entry(now, account) else {
+        return Vec::new();
+    };
+    let address = entry.value.address;
+    let scan_count = entry.value.scan_count.saturating_add(1);
+    candidates
+        .iter()
+        .map(|(token, balance)| SweepMove {
+            owner: account.owner,
+            subaccount: account.subaccount,
+            token: *token,
+            address,
+            last_scanned_block: block,
+            scan_count,
+            scanned_balance: *balance,
         })
         .collect()
 }

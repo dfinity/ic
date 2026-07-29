@@ -244,34 +244,94 @@ async fn should_skip_without_recording_stats() {
     }
 }
 
+#[test]
+fn should_build_one_sweep_move_per_candidate_token() {
+    let now = ts();
+    let block = BlockNumber::new(900);
+    let address = Address::new([0xa1; 20]);
+    let acc = account(1);
+    let mut deposits = AutomaticDeposits::default();
+    deposits
+        .watch_address_for_account(now, acc, address)
+        .unwrap();
+    // Two prior scans, so the finding scan is the third (moved scan_count = 2 + 1 = 3).
+    deposits.record_scan(now, &acc, BlockNumber::new(400));
+    deposits.record_scan(now, &acc, BlockNumber::new(500));
+
+    let moves = sweep_moves(
+        &deposits,
+        now,
+        &acc,
+        block,
+        &[
+            (TOKEN_A, Erc20Value::from(10_u8)),
+            (TOKEN_B, Erc20Value::from(20_u8)),
+        ],
+    );
+
+    // One move per token, each carrying the watchlist address, the finding block, scan_count = 3,
+    // and its own balance.
+    assert_eq!(
+        moves,
+        vec![
+            SweepMove {
+                owner: acc.owner,
+                subaccount: acc.subaccount,
+                token: TOKEN_A,
+                address,
+                last_scanned_block: block,
+                scan_count: 3,
+                scanned_balance: Erc20Value::from(10_u8),
+            },
+            SweepMove {
+                owner: acc.owner,
+                subaccount: acc.subaccount,
+                token: TOKEN_B,
+                address,
+                last_scanned_block: block,
+                scan_count: 3,
+                scanned_balance: Erc20Value::from(20_u8),
+            },
+        ]
+    );
+
+    // No live watchlist entry -> nothing to move.
+    assert!(
+        sweep_moves(
+            &deposits,
+            now,
+            &account(999),
+            block,
+            &[(TOKEN_A, Erc20Value::from(1_u8))]
+        )
+        .is_empty()
+    );
+}
+
 #[tokio::test]
-async fn should_move_candidates_to_sweep_and_advance_the_rest() {
+async fn should_advance_scanned_non_candidate_addresses() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
     let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
-    let candidate = (account(1), Address::new([0xa1; 20]));
-    let non_candidate = (account(2), Address::new([0xa2; 20]));
-    seed_state(Some(latest), Some(token), &[candidate, non_candidate], now);
+    let a = (account(1), Address::new([0xa1; 20]));
+    let b = (account(2), Address::new([0xa2; 20]));
+    seed_state(Some(latest), Some(token), &[a, b], now);
 
-    // Single chunk, holders in call order: first at the minimum (candidate), second below it.
-    scan(now, stub_client(vec![ok_balances(&[min, below_min])])).await;
+    // Both balances are below the minimum, so neither is a candidate: they advance the schedule
+    // and nothing is moved to the sweep queue.
+    scan(now, stub_client(vec![ok_balances(&[below_min, below_min])])).await;
 
-    // The funded address leaves the watchlist for the sweep queue; it is no longer scanned.
-    assert!(read_state(|s| s
-        .automatic_deposits
-        .get_entry(now, &candidate.0)
-        .is_none()));
-    assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 1);
-
-    // The non-candidate is advanced along the schedule and stays armed.
-    let entry = live_entry(now, &non_candidate.0);
-    assert_eq!(entry.scan_count, 1);
-    assert_eq!(entry.last_scanned_block, Some(latest));
+    for (account, _) in [a, b] {
+        let entry = live_entry(now, &account);
+        assert_eq!(entry.scan_count, 1);
+        assert_eq!(entry.last_scanned_block, Some(latest));
+    }
+    assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 0);
 
     let stats = last_stats();
     assert_eq!(stats.addresses_scanned, 2);
-    assert_eq!(stats.candidates_found, 1);
+    assert_eq!(stats.candidates_found, 0);
     assert_eq!(stats.chunks_failed, 0);
 }
 
@@ -280,6 +340,7 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
+    let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
     // One token, so addresses_per_chunk == MAX_CALLS_PER_BATCH; this many holders spills into a
     // second chunk.
     let extra = 50_usize;
@@ -293,19 +354,20 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
         .collect();
     seed_state(Some(latest), Some(token), &holders, now);
 
-    // Two responses, one per chunk, sized to the chunk's call count; all balances are candidates.
+    // Two responses, one per chunk, sized to the chunk's call count. Below-min balances so the
+    // whole set advances (no sweep events), letting the test assert the chunk split directly.
     scan(
         now,
         stub_client(vec![
-            ok_balances(&vec![min; MAX_CALLS_PER_BATCH]),
-            ok_balances(&vec![min; extra]),
+            ok_balances(&vec![below_min; MAX_CALLS_PER_BATCH]),
+            ok_balances(&vec![below_min; extra]),
         ]),
     )
     .await;
 
     let stats = last_stats();
     assert_eq!(stats.addresses_scanned, MAX_CALLS_PER_BATCH + extra);
-    assert_eq!(stats.candidates_found, MAX_CALLS_PER_BATCH + extra);
+    assert_eq!(stats.candidates_found, 0);
     assert_eq!(stats.chunks_failed, 0);
 }
 

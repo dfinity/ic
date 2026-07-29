@@ -148,7 +148,7 @@ fn emit_preupgrade_events() {
     });
 
     let registry = read_state(|s| s.automatic_deposits.snapshot());
-    if !registry.registrations.is_empty() || !registry.sweep_queue.is_empty() {
+    if !registry.registrations.is_empty() {
         storage::record_event(EventType::RegisteredDepositAddresses(registry));
     }
 }
@@ -742,6 +742,15 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                             scan_count: r.scan_count.into(),
                         })
                         .collect(),
+                },
+                EventType::MovedToSweepQueue(mv) => EP::MovedToSweepQueue {
+                    owner: mv.owner,
+                    subaccount: mv.subaccount,
+                    token: mv.token.to_string(),
+                    address: mv.address.to_string(),
+                    last_scanned_block: mv.last_scanned_block.into(),
+                    scan_count: mv.scan_count.into(),
+                    scanned_balance: mv.scanned_balance.into(),
                 },
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),

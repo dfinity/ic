@@ -3,7 +3,7 @@ mod tests;
 
 use crate::endpoints::DepositErc20Error;
 use crate::numeric::{BlockNumber, Erc20Value};
-use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry, SweepQueueEntry};
+use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry, SweepMove};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -82,9 +82,8 @@ impl AutomaticDeposits {
         }
     }
 
-    /// Rebuild this state exactly from a registry previously produced by
-    /// [`Self::snapshot`], replacing any existing content (both the watchlist and
-    /// the sweep queue).
+    /// Rebuild the watchlist exactly from a registry previously produced by
+    /// [`Self::snapshot`], replacing any existing watchlist content.
     ///
     /// The watchlist is restored verbatim under the limits recorded in the
     /// registry (`scan_window_nanos`, `capacity`), not the current code
@@ -93,6 +92,10 @@ impl AutomaticDeposits {
     /// `capacity` (no admission check). This makes the restored state equal to
     /// the one that produced the registry, which the event-log equivalence
     /// check relies on. Changing the limits across versions is future work.
+    ///
+    /// The sweep queue is deliberately left untouched: it is reconstructed from
+    /// the mid-stream `MovedToSweepQueue` events that precede the final snapshot
+    /// event in the log, so clearing it here would wipe them.
     pub fn rebuild(&mut self, registry: &DepositAddressRegistry) {
         let ttl = Duration::from_nanos(registry.scan_window_nanos);
         let capacity = NonZeroUsize::new(usize::try_from(registry.capacity).unwrap_or(usize::MAX))
@@ -114,27 +117,6 @@ impl AutomaticDeposits {
             )
         });
         self.watchlist = TimedSizedMap::from_ordered_entries(ttl, capacity, entries);
-        self.sweep = registry
-            .sweep_queue
-            .iter()
-            .map(|entry| {
-                (
-                    SweepKey {
-                        account: Account {
-                            owner: entry.owner,
-                            subaccount: entry.subaccount,
-                        },
-                        token: entry.token,
-                    },
-                    SweepEntry {
-                        address: entry.address,
-                        last_scanned_block: entry.last_scanned_block,
-                        scan_count: entry.scan_count,
-                        scanned_balance: entry.scanned_balance,
-                    },
-                )
-            })
-            .collect();
     }
 
     /// Iterate the live deposit addresses that are due for a balance scan as of the
@@ -185,45 +167,36 @@ impl AutomaticDeposits {
         }
     }
 
-    /// Move `account`'s deposit address out of the watchlist into the sweep queue, recording one
-    /// entry per `(token, balance)` candidate found at `block`. No-op if `account` is not live as
-    /// of `now` or if `candidates` is empty.
-    pub fn move_to_sweep(
-        &mut self,
-        now: Timestamp,
-        account: &Account,
-        block: BlockNumber,
-        candidates: &[(Address, Erc20Value)],
-    ) {
-        if candidates.is_empty() || self.watchlist.get_entry(now, account).is_none() {
-            return;
-        }
-        let removed = self
-            .watchlist
-            .remove(account)
-            .expect("BUG: entry is live right after a successful get_entry")
-            .value;
-        let scan_count = removed.scan_count.saturating_add(1);
-        for (token, balance) in candidates {
-            self.sweep.insert(
-                SweepKey {
-                    account: *account,
-                    token: *token,
-                },
-                SweepEntry {
-                    address: removed.address,
-                    last_scanned_block: block,
-                    scan_count,
-                    scanned_balance: *balance,
-                },
-            );
-        }
+    /// Apply a [`SweepMove`]: drop the account's deposit address from the watchlist (if still
+    /// present) and record the funded `(account, token)` in the sweep queue. Unconditional and
+    /// idempotent per key, so replaying the event log reconstructs the queue. Removing the
+    /// watchlist entry is a no-op on replay (the watchlist is only rebuilt by the final snapshot
+    /// event), which is intended.
+    pub fn apply_sweep_move(&mut self, mv: &SweepMove) {
+        let account = Account {
+            owner: mv.owner,
+            subaccount: mv.subaccount,
+        };
+        self.watchlist.remove(&account);
+        self.sweep.insert(
+            SweepKey {
+                account,
+                token: mv.token,
+            },
+            SweepEntry {
+                address: mv.address,
+                last_scanned_block: mv.last_scanned_block,
+                scan_count: mv.scan_count,
+                scanned_balance: mv.scanned_balance,
+            },
+        );
     }
 
-    /// Full snapshot of this state, faithful enough to reconstruct it exactly via
-    /// [`Self::rebuild`]: it records the current limits, lists every watchlist
-    /// entry (live and expired-but-unevicted) in time-index order, and lists the
-    /// sweep queue in `(account, token)` order.
+    /// Snapshot of the watchlist, faithful enough to reconstruct it exactly via
+    /// [`Self::rebuild`]: it records the current limits and lists every watchlist
+    /// entry (live and expired-but-unevicted) in time-index order. The sweep queue
+    /// is not part of the snapshot; it is event-sourced via `MovedToSweepQueue`
+    /// events.
     pub fn snapshot(&self) -> DepositAddressRegistry {
         let registrations = self
             .watchlist
@@ -237,24 +210,10 @@ impl AutomaticDeposits {
                 scan_count: deposit.value.scan_count,
             })
             .collect();
-        let sweep_queue = self
-            .sweep
-            .iter()
-            .map(|(key, entry)| SweepQueueEntry {
-                owner: key.account.owner,
-                subaccount: key.account.subaccount,
-                token: key.token,
-                address: entry.address,
-                last_scanned_block: entry.last_scanned_block,
-                scan_count: entry.scan_count,
-                scanned_balance: entry.scanned_balance,
-            })
-            .collect();
         DepositAddressRegistry {
             scan_window_nanos: u64::try_from(self.watchlist.ttl().as_nanos()).unwrap_or(u64::MAX),
             capacity: self.watchlist.capacity().get() as u64,
             registrations,
-            sweep_queue,
         }
     }
 
