@@ -44,6 +44,8 @@ pub struct BalanceScanStats {
 
 pub async fn balance_scan() {
     let now = Timestamp::from_nanos(ic_cdk::api::time());
+    // TODO DEFI-2923: use a lower threshold rpc client, e.g. 2-out-of-3 since we use latest block height
+    // and only to notify the sweeper (no minting)
     let client = read_state(rpc_client);
     scan(now, client).await;
 }

@@ -89,14 +89,53 @@ fn should_build_no_calls_when_no_addresses_or_no_tokens() {
 }
 
 #[test]
-fn should_bound_addresses_per_chunk_by_the_batch_cap() {
-    assert_eq!(addresses_per_chunk(1), MAX_CALLS_PER_BATCH);
-    assert_eq!(addresses_per_chunk(2), MAX_CALLS_PER_BATCH / 2);
-    assert_eq!(addresses_per_chunk(MAX_CALLS_PER_BATCH), 1);
-    // More tokens than the whole cap still keeps one address per chunk.
-    assert_eq!(addresses_per_chunk(MAX_CALLS_PER_BATCH + 1), 1);
-    // Defensive against a zero token count.
-    assert_eq!(addresses_per_chunk(0), MAX_CALLS_PER_BATCH);
+fn should_never_split_an_address_across_chunks() {
+    // Scan-state is tracked per address, not per (address, token): `record_scan` advances a whole
+    // address once its chunk succeeds. So every `balanceOf` for an address must ride in the same
+    // chunk; otherwise a chunk failure could advance an address whose balances were only partially
+    // read. Chunking is by address (as `scan` does: `addresses.chunks(addresses_per_chunk(..))`),
+    // which holds even when a single address's token calls alone exceed MAX_CALLS_PER_BATCH.
+    fn address_at(index: u64) -> Address {
+        let mut bytes = [0_u8; 20];
+        bytes[..8].copy_from_slice(&index.to_be_bytes());
+        Address::new(bytes)
+    }
+
+    let addresses: Vec<(Account, Address)> = (0..5)
+        .map(|i| (account(i), address_at(1_000 + i)))
+        .collect();
+
+    for num_tokens in [1, 2, 7, MAX_CALLS_PER_BATCH, MAX_CALLS_PER_BATCH + 1] {
+        let tokens: Vec<Address> = (0..num_tokens as u64).map(address_at).collect();
+
+        let per_chunk = addresses_per_chunk(tokens.len());
+        assert!(
+            per_chunk >= 1,
+            "num_tokens={num_tokens}: a chunk must hold at least one whole address"
+        );
+
+        let mut addresses_covered = 0;
+        for chunk in addresses.chunks(per_chunk) {
+            let calls = balance_of_calls(chunk, &tokens);
+            for (_, holder) in chunk {
+                let queried: Vec<Address> = calls
+                    .iter()
+                    .filter(|call| call.holder == *holder)
+                    .map(|call| call.token)
+                    .collect();
+                assert_eq!(
+                    queried, tokens,
+                    "num_tokens={num_tokens}: address {holder:?} is not fully covered by a single chunk"
+                );
+                addresses_covered += 1;
+            }
+        }
+        assert_eq!(
+            addresses_covered,
+            addresses.len(),
+            "num_tokens={num_tokens}: every address must be scanned in exactly one chunk"
+        );
+    }
 }
 
 #[tokio::test]
@@ -204,42 +243,43 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
 }
 
 #[tokio::test]
-async fn should_not_advance_addresses_when_the_chunk_rpc_call_fails() {
-    let now = ts();
-    let latest = BlockNumber::new(1_000);
-    let holder = (account(1), Address::new([0xa1; 20]));
-    seed_state(Some(latest), Some(MIN_DEPOSITS[0].0), &[holder], now);
+async fn should_not_advance_addresses_when_the_chunk_fails() {
+    struct Case {
+        name: &'static str,
+        response: Result<MultiRpcResult<Hex>, IcError>,
+    }
 
-    scan(now, stub_client(vec![Err(IcError::CallPerformFailed)])).await;
+    let cases = vec![
+        Case {
+            name: "rpc call fails",
+            response: Err(IcError::CallPerformFailed),
+        },
+        Case {
+            // A one-call chunk expects a single 32-byte word; five bytes cannot decode.
+            name: "response fails to decode",
+            response: Ok(MultiRpcResult::Consistent(Ok(Hex::from(vec![0_u8; 5])))),
+        },
+    ];
 
-    let entry = live_entry(now, &holder.0);
-    assert_eq!(
-        entry.scan_count, 0,
-        "a failed chunk must be retried, not advanced"
-    );
-    assert_eq!(entry.last_scanned_block, None);
-    let stats = last_stats();
-    assert_eq!(stats.addresses_scanned, 0);
-    assert_eq!(stats.chunks_failed, 1);
-}
+    for case in cases {
+        let now = ts();
+        let latest = BlockNumber::new(1_000);
+        let holder = (account(1), Address::new([0xa1; 20]));
+        seed_state(Some(latest), Some(MIN_DEPOSITS[0].0), &[holder], now);
 
-#[tokio::test]
-async fn should_not_advance_addresses_when_the_chunk_response_fails_to_decode() {
-    let now = ts();
-    let latest = BlockNumber::new(1_000);
-    let holder = (account(1), Address::new([0xa1; 20]));
-    seed_state(Some(latest), Some(MIN_DEPOSITS[0].0), &[holder], now);
+        scan(now, stub_client(vec![case.response])).await;
 
-    // A one-call chunk expects a single 32-byte word; five bytes cannot decode.
-    let malformed = MultiRpcResult::Consistent(Ok(Hex::from(vec![0_u8; 5])));
-    scan(now, stub_client(vec![Ok(malformed)])).await;
-
-    let entry = live_entry(now, &holder.0);
-    assert_eq!(entry.scan_count, 0);
-    assert_eq!(entry.last_scanned_block, None);
-    let stats = last_stats();
-    assert_eq!(stats.addresses_scanned, 0);
-    assert_eq!(stats.chunks_failed, 1);
+        let entry = live_entry(now, &holder.0);
+        assert_eq!(
+            entry.scan_count, 0,
+            "case '{}': a failed chunk must be retried, not advanced",
+            case.name
+        );
+        assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
+        let stats = last_stats();
+        assert_eq!(stats.addresses_scanned, 0, "case: {}", case.name);
+        assert_eq!(stats.chunks_failed, 1, "case: {}", case.name);
+    }
 }
 
 fn ts() -> Timestamp {
