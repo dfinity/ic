@@ -261,7 +261,7 @@ rust_test(
         "tests/deposit_from_cex_demo/CkSweeperViaHelper.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
     ],
-    edition = "2021",
+    edition = "2024",
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
         "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
@@ -295,7 +295,7 @@ rust_test(
         # Reuses the mock ERC-20 source compiled at test time by the vendored solc.
         "tests/deposit_from_cex_demo/MockUSDT.sol",
     ],
-    edition = "2021",
+    edition = "2024",
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
