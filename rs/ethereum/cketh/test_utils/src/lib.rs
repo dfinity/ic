@@ -52,6 +52,10 @@ mod tests;
 pub const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
 pub const CKETH_MINIMUM_WITHDRAWAL_AMOUNT: u64 = 30_000_000_000_000_000;
 pub const MAX_TICKS: usize = 10;
+
+// `ic_error_types::RejectCode` values relevant to canister-http mocking.
+pub(crate) const REJECT_CODE_SYS_FATAL: u64 = 1;
+pub(crate) const REJECT_CODE_SYS_TRANSIENT: u64 = 2;
 pub const DEFAULT_PRINCIPAL_ID: u64 = 10352385;
 pub const DEFAULT_USER_SUBACCOUNT: [u8; 32] = [42; 32];
 pub const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
@@ -536,16 +540,11 @@ impl CkEthSetup {
     /// Try to stop the minter without first stopping the ongoing HTTPS outcalls. Assert that the
     /// call is still processing (i.e. blocked on the open call contexts for those outcalls).
     pub fn try_stop_minter_without_stopping_ongoing_https_outcalls(&self) {
-        const MAX_TICKS: u64 = 10;
         let stop_msg_id = self.submit_stop_minter();
-        for _ in 0..MAX_TICKS {
-            self.env.tick();
-            if self.env.ingress_status(stop_msg_id.clone()).is_none() {
-                return;
-            }
-        }
-        panic!(
-            "expected the minter's stop_canister call to still be processing after {MAX_TICKS} ticks"
+        self.env.tick();
+        assert!(
+            self.env.ingress_status(stop_msg_id).is_none(),
+            "expected the minter's stop_canister call to still be processing after one tick"
         );
     }
 
@@ -556,6 +555,7 @@ impl CkEthSetup {
             if status == expected_canister_status {
                 break;
             }
+            self.env.tick();
             status = self.minter_status();
         }
         assert_eq!(status, expected_canister_status);
@@ -563,7 +563,7 @@ impl CkEthSetup {
 
     pub fn stop_minter(&self) {
         let stop_msg_id = self.submit_stop_minter();
-        let stop_res = await_call(&self.env, stop_msg_id);
+        let stop_res = await_call_draining_outcalls(&self.env, stop_msg_id);
         assert_matches!(stop_res, Ok(_));
     }
 
@@ -573,12 +573,17 @@ impl CkEthSetup {
                 return;
             }
             // The block height refresh timer can be mid-backoff after hitting ic-cdk-timers'
-            // per-timer concurrent-call cap (see `mock::tick_until_next_http_request`), with
-            // nothing currently pending for us to drain; nanosecond ticking can't cross that gap,
-            // so jump forward to give it a chance to resurface before `await_call` gives up.
+            // per-timer concurrent-call cap (see
+            // `JsonRpcRequestMatcher::find_rpc_call_retrying` in mock.rs), with nothing
+            // currently pending for us to drain; nanosecond ticking can't cross that gap, so
+            // jump forward to give it a chance to resurface before giving up.
             self.env
                 .advance_time(ic_cketh_minter::REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL);
         }
+        panic!(
+            "failed to drain pending https outcalls after {MAX_TICKS} attempts, still pending: {}",
+            mock::debug_http_outcalls(&self.env)
+        );
     }
 
     fn drain_pending_https_outcalls(&self) -> bool {
@@ -588,17 +593,7 @@ impl CkEthSetup {
                 return true;
             }
             for request in requests {
-                self.env
-                    .mock_canister_http_response(MockCanisterHttpResponse {
-                        subnet_id: request.subnet_id,
-                        request_id: request.request_id,
-                        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-                            status: 500,
-                            headers: vec![],
-                            body: vec![],
-                        }),
-                        additional_responses: vec![],
-                    });
+                reply_500(&self.env, &request);
             }
             self.env.tick();
         }
@@ -837,13 +832,17 @@ fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal) {
 fn drain_startup_http_outcalls(env: &PocketIc) {
     for _ in 0..MAX_TICKS {
         env.tick();
-        for request in env.get_canister_http() {
+        let pending = env.get_canister_http();
+        if pending.is_empty() {
+            return;
+        }
+        for request in &pending {
             // Reject rather than answer: these are the startup timers' one-shot log-scraping and
             // block-height-refresh calls, which no test expects to have already succeeded (e.g.
             // `last_observed_block_number` is asserted `None` right after install).
             // Rejecting them still resolves the outcall, so it cannot later cross PocketIC's 60s
             // canister-http timeout.
-            reject_stray_http_outcall(env, &request);
+            reject_stray_http_outcall(env, request);
         }
     }
 }
@@ -851,13 +850,15 @@ fn drain_startup_http_outcalls(env: &PocketIc) {
 fn drain_stray_latest_block_refresh_calls(env: &PocketIc) {
     for _ in 0..MAX_TICKS {
         env.tick();
-        for request in env.get_canister_http() {
-            let json_request: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
-            if json_request["method"] == "eth_getBlockByNumber"
-                && json_request["params"] == serde_json::json!(["latest", false])
-            {
-                reject_stray_http_outcall(env, &request);
-            }
+        let pending = env.get_canister_http();
+        if pending.is_empty() {
+            return;
+        }
+        for request in pending
+            .iter()
+            .filter(|request| mock::is_latest_block_refresh(request))
+        {
+            reject_stray_http_outcall(env, request);
         }
     }
 }
@@ -867,8 +868,21 @@ fn reject_stray_http_outcall(env: &PocketIc, request: &CanisterHttpRequest) {
         subnet_id: request.subnet_id,
         request_id: request.request_id,
         response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-            reject_code: 2, // SysTransient
+            reject_code: REJECT_CODE_SYS_TRANSIENT,
             message: "Canister http request timed out".to_string(),
+        }),
+        additional_responses: vec![],
+    });
+}
+
+fn reply_500(env: &PocketIc, request: &CanisterHttpRequest) {
+    env.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: request.subnet_id,
+        request_id: request.request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 500,
+            headers: vec![],
+            body: vec![],
         }),
         additional_responses: vec![],
     });
@@ -878,30 +892,58 @@ fn assert_reply(result: Result<Vec<u8>, RejectResponse>) -> Vec<u8> {
     result.unwrap_or_else(|reject| panic!("Expected a successful reply, got a reject: {reject}"))
 }
 
-/// Like [`PocketIc::await_call`], but keeps rejecting any pending HTTP outcalls (typically the
-/// block height refresh timer's) between rounds, since `await_call`'s own internal ticking gives
-/// callers no chance to do so and can give up before a slow background timer or a large in-flight
-/// scrape (deterministic time slicing can spread these over many rounds) settles.
+/// Polls `ingress_status` until `message_id` completes. Unlike [`PocketIc::await_call`], which
+/// ticks internally with no injection point, this gives the caller a chance to break a deadlock
+/// where the call is itself awaiting a pending HTTP outcall that only a test can answer.
+///
+/// Still clears stray latest-block-refresh outcalls between rounds (see
+/// `mock::is_latest_block_refresh`): no test-owned stub ever targets those (mock.rs's own
+/// matching excludes them), so rejecting them here cannot swallow a test's intended stub, and
+/// leaving them unanswered would otherwise let them pile up and starve later polling. Callers
+/// that additionally want every *other* pending outcall drained (currently only
+/// [`CkEthSetup::stop_minter`]) should use [`await_call_draining_outcalls`] instead.
 pub(crate) fn await_call(
     env: &PocketIc,
     message_id: RawMessageId,
 ) -> Result<Vec<u8>, RejectResponse> {
-    const MAX_AWAIT_TICKS: usize = 100 * MAX_TICKS;
+    poll_for_call(env, message_id, false)
+}
+
+/// Like [`await_call`], but also answers every *other* pending HTTP outcall with an HTTP 500
+/// between rounds, since a slow background timer or a large in-flight scrape (deterministic time
+/// slicing can spread these over many rounds) can otherwise keep the call from ever settling.
+pub(crate) fn await_call_draining_outcalls(
+    env: &PocketIc,
+    message_id: RawMessageId,
+) -> Result<Vec<u8>, RejectResponse> {
+    poll_for_call(env, message_id, true)
+}
+
+fn poll_for_call(
+    env: &PocketIc,
+    message_id: RawMessageId,
+    drain_outcalls: bool,
+) -> Result<Vec<u8>, RejectResponse> {
+    // 100x the ordinary `MAX_TICKS` budget: this replaces `StateMachine`'s
+    // `await_ingress(id, MAX_TICKS)`, but a large in-flight log scrape can be sliced (DTS) across
+    // many more rounds than that on PocketIC.
+    const MAX_AWAIT_TICKS: usize = 1000;
     for _ in 0..MAX_AWAIT_TICKS {
         if let Some(result) = env.ingress_status(message_id.clone()) {
             return result;
         }
-        for request in env.get_canister_http() {
-            env.mock_canister_http_response(MockCanisterHttpResponse {
-                subnet_id: request.subnet_id,
-                request_id: request.request_id,
-                response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-                    status: 500,
-                    headers: vec![],
-                    body: vec![],
-                }),
-                additional_responses: vec![],
-            });
+        let pending = env.get_canister_http();
+        if drain_outcalls {
+            for request in &pending {
+                reply_500(env, request);
+            }
+        } else {
+            for request in pending
+                .iter()
+                .filter(|request| mock::is_latest_block_refresh(request))
+            {
+                reject_stray_http_outcall(env, request);
+            }
         }
         env.tick();
     }
