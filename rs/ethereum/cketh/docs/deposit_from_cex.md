@@ -464,15 +464,31 @@ Detection runs as a **minter background task over "active" addresses**:
 
 Scanning itself is a two-filter funnel, cheap-first:
 
-**Filter 1 — balances.** One [Multicall3](https://www.multicall3.com/)
-`aggregate3` `eth_call` reads `balanceOf(addr)` for every active address ×
-supported token (one HTTPS outcall per provider; later a plain JSON-RPC batch once
-the EVM-RPC canister supports `eth_batch`,
-[dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561)).
-Addresses with a balance at or above the per-token minimum proceed to filter 2; the
-rest cost nothing further this tick. A balance is only ever a trigger, never a
-source of truth (see the screening discussion below). For native ETH (Phase 2),
-`getEthBalance` rides in the same call and the finalized balance delta *is* the
+**Filter 1 — balances.** One create-style `eth_call` (`to` omitted) runs a
+**deployless balance batcher**: a fixed ~165-byte init-code program with the
+`(token, holder)` pairs for every active address × supported token appended as
+calldata. The node executes it as init code and returns its `RETURN` without
+deploying anything or touching state — a pure read. The program `STATICCALL`s
+`balanceOf` for each pair and returns the balances as a flat `uint256[]` (32 bytes
+each). The token list is a trusted whitelist, so a sub-call that reverts or does
+not return exactly 32 bytes (e.g. a non-contract address) is treated as an anomaly
+rather than "no balance": the whole call reverts, surfacing as an `eth_call` error
+that fails the tick loudly (the affected addresses are retried, not silently
+recorded as empty). One HTTPS outcall per provider; later a plain
+JSON-RPC batch once the EVM-RPC canister supports `eth_batch`,
+[dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561).
+This deployless batcher was chosen over a
+[Multicall3](https://www.multicall3.com/) `aggregate3` call: Multicall3's
+`(bool, bytes)[]` return wraps each 32-byte balance in ~160 bytes of ABI framing
+(≈5× the response size, and a fiddly nested-offset decode), whereas the batcher's
+flat `uint256[]` is 32 bytes per result with a trivial fixed-width decode, needs no
+deployed contract, and — validated against Ethereum mainnet — is honored with
+byte-identical results by all four providers the minter uses, and forwarded
+unchanged by the EVM-RPC canister (which omits an absent `to`). Addresses with a
+balance at or above the per-token minimum proceed to filter 2; the rest cost nothing
+further this tick. A balance is only ever a trigger, never a source of truth (see
+the screening discussion below). For native ETH (Phase 2), the batcher reads the
+address' ETH balance in the same call and the finalized balance delta *is* the
 observation (`R11`) — there are no logs to confirm against.
 
 **Filter 2 — logs and screening.** For the filter-1 candidates, a single `eth_getLogs` from
@@ -564,7 +580,7 @@ optional sender-screening enrichment for native ETH.
 
 | Variant | Pros | Cons |
 |---|---|---|
-| **Registration-armed scanning** (chosen): two-filter background scan (Multicall3 balances, then batched `eth_getLogs`) over a capped active set with per-address cycles budgets | Single-step UX (`R15`) — no second call to lose; bounded, attacker-resistant cost (capped set, per-address budget); re-armed for free by `deposit_erc20`; both filters batch natively | Deposits after budget exhaustion wait for re-arming; filter 1 depends on Multicall3 (or `eth_batch`, #561) |
+| **Registration-armed scanning** (chosen): two-filter background scan (deployless-batcher balances, then batched `eth_getLogs`) over a capped active set with per-address cycles budgets | Single-step UX (`R15`) — no second call to lose; bounded, attacker-resistant cost (capped set, per-address budget); re-armed for free by `deposit_erc20`; both filters batch natively | Deposits after budget exhaustion wait for re-arming; filter 1 relies on providers honoring a create-style `eth_call` (validated across all four) |
 | **Claim endpoint only** (`notify_deposit`, ckBTC's `update_balance` model) | Cheapest possible: minter does nothing unprompted; precise targeting | Two-step flow breaks the target UX — a frontend cannot reliably guarantee the second call (browser closed after the CEX withdrawal); kept only as optional accelerator |
 | **User supplies the transaction ID** (`claim_deposit(account, tx_hash)`: the minter fetches the receipt, verifies a finalized `Transfer` to the caller's deposit address, credits from its logs) | Cheapest and most precise of all: one targeted receipt query per claim, O(1) in the registered-set size, no scanning state, no `eth_batch` dependency; no window expiry; sender screening comes directly from the receipt logs | Worst UX of all: the tx hash is only known to the CEX/user (not derivable by a frontend, unlike `notify_deposit`), so the second step is genuinely *manual* — many users cannot find the hash in their exchange UI; does not even fully work for native ETH (a contract-batched CEX withdrawal moves ETH in an *internal* transaction: the receipt shows no value transfer and no log — verification would need trace APIs) |
 | **Continuous scraping of all registered addresses forever** | Best possible UX, no windows | Same batched-`eth_getLogs` mechanism as the chosen variant — the rejection is about the *unbounded* set, not the mechanism: cost grows without bound with the (attacker-inflatable, free) registered set, a standing cycles drain (`R13`); still misses native ETH |
@@ -705,13 +721,13 @@ function sweepErc20(
   deposit address, `eth_getBalance`, `eth_getTransactionCount` for deposit EOAs) must
   use the same reduction strategies.
 * Each EVM-RPC call today is one HTTPS outcall *per provider* and each outcall burns
-  cycles. The bulk balance scans of step 3 collapse to a single `eth_call` via
-  Multicall3 `aggregate3`, and the log scan is a single OR-list `eth_getLogs`, so no
-  JSON-RPC batching is required for correctness. **JSON-RPC batch support in the
-  EVM-RPC canister** (`eth_batch`,
+  cycles. The bulk balance scans of step 3 collapse to a single create-style
+  `eth_call` via the deployless balance batcher, and the log scan is a single OR-list
+  `eth_getLogs`, so no JSON-RPC batching is required for correctness. **JSON-RPC batch
+  support in the EVM-RPC canister** (`eth_batch`,
   [dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561),
-  in progress) is a later cycles optimization — it would drop the Multicall3 hop and
-  bundle multi-window log chunks into one outcall.
+  in progress) is a later cycles optimization — it would bundle multi-window log
+  chunks (and, if ever needed, multiple balance-batch chunks) into one outcall.
 * The minter is event-sourced (`src/state/audit.rs`, `src/state/event.rs`): all new
   state must be reconstructible from persisted events (`R8`).
 * Deposits are only credited at *finalized* blocks, as today.
@@ -1081,25 +1097,33 @@ caller-gating**, for the two batch extremes and two latencies.
 
 Assumptions: each logical EVM-RPC call fans out to **≈ 3 providers** (raw outcalls =
 logical × 3, each charged fully); reserved `max_response_bytes` ≈ 2 KB for small calls,
-≈ 8 KB for a 20-address Multicall3, ≈ 16 KB for `eth_getLogs` — so a small logical call
+≈ 1 KB for a 20-address balance batch (the deployless batcher returns 32 bytes/result,
+~5× less than a Multicall3 `aggregate3`), ≈ 16 KB for `eth_getLogs` — so a small logical call
 ≈ $0.00084 and an `eth_getLogs` ≈ $0.0027 (the base dominates until responses grow). ETH
 at $2'500 and the sweep-gas figures from the
 [demo](deposit_from_cex_demo/README.md) (variant B: 82'207 gas for a single sweep,
 ≈ 42'000 gas per address in a batch of 20).
 
 **Detection schedule** — per armed address, backing off over the 24h scanning window of
-`R15`; the basis for the outcall counts below:
+`R15`; the basis for the outcall counts below. Scheduling is **block-based, not wall-clock**:
+elapsed time is measured as `elapsed_blocks × SECS_PER_BLOCK` (≈ 12 s/block) against a
+33-entry gap table (`SCAN_GAP_SECS` in `automatic_deposits/mod.rs::addresses_to_scan_iter`).
+The scan task itself fires on a fixed **30 s** timer (`BALANCE_SCAN_INTERVAL`), which quantizes
+each address' due time to that cadence:
 
-| Phase | Cadence | Ticks |
+| Phase | Cadence | Scans |
 |---|---|---|
+| Initial | immediate on registration | 1 |
 | Burst | 30s, 30s, 1m, 2m, 2m, 4m (→ 10 min) | 6 |
 | Ramp | every 5 min (10 → 30 min) | 4 |
-| Tail | hourly (30 min → 24h) | 24 |
+| Tail | hourly (30 min → 23.5h) | 23 |
 | **Total** | | **34** |
 
-Each tick is one **shared** Multicall3 `eth_call` over the whole active set (filter 1),
-so its cost divides across the batch; a deposit landing in the first 10 min is seen
-within 30s–4 min, and after 30 min within the hour.
+The initial scan runs immediately; the remaining 33 are gated by the 33 `SCAN_GAP_SECS` gaps
+(all of them used — the first backoff gap is `SCAN_GAP_SECS[0]` = 30 s). Each scan is one
+**shared** deployless-batcher `eth_call` over the whole active set (filter 1), so its cost
+divides across the batch; a deposit landing in the first 10 min is seen within 30s–4 min, and
+after 30 min within the hour.
 
 **Scenarios** (`B` = number of addresses sharing this address' scan and sweep):
 
@@ -1129,7 +1153,7 @@ latency and scales linearly with the gas price (B=1: $0.021 / $0.206 / $2.06 at
 * **Fee floor (`R7`):** to break even excluding gas, `deposit_fee` must cover ≈ $0.04
   (batched) to ≈ $0.11 (solo, full-window scan) of IC resources plus the prevailing
   sweep gas — so at low gas the signature, not the gas, sets the floor. The estimate is
-  sensitive to the reserved `max_response_bytes` for `eth_getLogs`/Multicall3 and to the
+  sensitive to the reserved `max_response_bytes` for `eth_getLogs`/the balance batcher and to the
   XDR→USD and ETH/gas market inputs.
 
 ## Discussed Alternatives

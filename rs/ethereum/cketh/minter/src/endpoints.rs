@@ -240,6 +240,11 @@ pub struct DepositErc20Response {
     /// Timestamp in nanoseconds since the Unix epoch until which a deposit sent
     /// to `address` is guaranteed to be noticed by the minter.
     pub valid_until: u64,
+    /// The latest Ethereum block at which this address' balance was scanned, or
+    /// `None` if it has not been scanned yet. Surfaces the balance-scan progress.
+    pub last_scanned_block: Option<Nat>,
+    /// How many times this address' balance has been scanned so far.
+    pub scan_count: u64,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
