@@ -22,7 +22,7 @@
 //! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
 
 use ic_cketh_minter::balance_scan::batcher::{
-    decode_balance_batch, encode_balance_batch, BalanceOfCall,
+    BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::live_scan::{
