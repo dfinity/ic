@@ -54,12 +54,6 @@ pub struct ManagedCanistersAssert {
     pub canister_ids: ManagedCanisterIds,
 }
 
-impl AsRef<PocketIc> for ManagedCanistersAssert {
-    fn as_ref(&self) -> &PocketIc {
-        self.setup.env.as_ref()
-    }
-}
-
 impl ManagedCanistersAssert {
     pub fn assert_all_controlled_by(self, expected_controllers: &[Principal]) -> Self {
         for canister_id in self.all_canister_ids() {

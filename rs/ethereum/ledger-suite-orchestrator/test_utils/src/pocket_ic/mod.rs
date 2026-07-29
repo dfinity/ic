@@ -31,12 +31,6 @@ impl Default for LedgerSuiteOrchestrator {
     }
 }
 
-impl AsRef<PocketIc> for LedgerSuiteOrchestrator {
-    fn as_ref(&self) -> &PocketIc {
-        &self.env
-    }
-}
-
 impl LedgerSuiteOrchestrator {
     pub fn with_cycles_management(cycles_management: CyclesManagement) -> Self {
         let init_arg = InitArg {
