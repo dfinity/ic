@@ -39,7 +39,6 @@ pub struct BalanceScanStats {
     pub scanned_at_ns: u64,
     pub addresses_scanned: usize,
     pub candidates_found: usize,
-    pub chunks_failed: usize,
 }
 
 pub async fn balance_scan() {
@@ -97,7 +96,8 @@ async fn scan<R: Runtime>(
     }
 
     let mut candidates = 0_usize;
-    let mut chunks_failed = 0_usize;
+    let mut decode_errors = 0_usize;
+    let mut call_errors = 0_usize;
     let mut scanned: Vec<Account> = Vec::new();
 
     for batch in plan_batches(&addresses_to_scan, &erc20_tokens) {
@@ -115,31 +115,34 @@ async fn scan<R: Runtime>(
                     scanned.extend(batch.addresses.iter().map(|(account, _)| *account));
                 }
                 Err(e) => {
-                    chunks_failed += 1;
+                    decode_errors += 1;
                     log!(INFO, "balance scan decode error: {e:?}");
                 }
             },
             Err(e) => {
-                chunks_failed += 1;
+                call_errors += 1;
                 log!(INFO, "balance scan eth_call error: {e:?}");
             }
         }
     }
 
     // Advance only the addresses actually scanned, so a failed chunk is retried next tick rather
-    // than silently skipped until its next scheduled slot.
+    // than silently skipped until its next scheduled slot. The per-kind failure counts are folded
+    // into the cumulative State counters exposed as monotonic metrics.
     let addresses_scanned = scanned.len();
     mutate_state(|s| {
         for account in &scanned {
             s.automatic_deposits.record_scan(now, account, latest_block);
         }
+        s.balance_scan_decode_errors += decode_errors as u64;
+        s.balance_scan_call_errors += call_errors as u64;
     });
 
     log!(
         INFO,
-        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {chunks_failed} chunk(s) failed",
+        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
     );
-    record_stats(now, addresses_scanned, candidates, chunks_failed);
+    record_stats(now, addresses_scanned, candidates);
 }
 
 /// One balance-scan batch: the deposit addresses whose balances are read together in a single
@@ -317,18 +320,12 @@ const MIN_DEPOSITS: &[(Address, Erc20Value)] = &[
     ), // ckSepoliaPEPE
 ];
 
-fn record_stats(
-    now: Timestamp,
-    addresses_scanned: usize,
-    candidates_found: usize,
-    chunks_failed: usize,
-) {
+fn record_stats(now: Timestamp, addresses_scanned: usize, candidates_found: usize) {
     mutate_state(|s| {
         s.last_balance_scan = Some(BalanceScanStats {
             scanned_at_ns: now.as_nanos(),
             addresses_scanned,
             candidates_found,
-            chunks_failed,
         })
     });
 }

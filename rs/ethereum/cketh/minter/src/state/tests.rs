@@ -1068,6 +1068,8 @@ fn state_equivalence() {
         pending_withdrawal_principals: Default::default(),
         active_tasks: Default::default(),
         last_balance_scan: None,
+        balance_scan_decode_errors: 0,
+        balance_scan_call_errors: 0,
         http_request_counter: 100,
         eth_balance: Default::default(),
         erc20_balances: Default::default(),

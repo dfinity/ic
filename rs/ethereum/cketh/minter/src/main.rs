@@ -1034,12 +1034,18 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         stats.candidates_found as f64,
                         "Number of deposit candidates found in the last balance scan.",
                     )?;
-                    w.encode_gauge(
-                        "cketh_minter_balance_scan_failed_chunks",
-                        stats.chunks_failed as f64,
-                        "Number of multicall chunks that failed in the last balance scan.",
-                    )?;
                 }
+
+                w.encode_counter(
+                    "cketh_minter_balance_scan_decode_errors_total",
+                    s.balance_scan_decode_errors as f64,
+                    "Total number of deployless-batcher balance-scan chunks whose response failed to decode.",
+                )?;
+                w.encode_counter(
+                    "cketh_minter_balance_scan_call_errors_total",
+                    s.balance_scan_call_errors as f64,
+                    "Total number of deployless-batcher balance-scan eth_call requests that failed.",
+                )?;
 
                 for (id, scraping_state) in s.log_scrapings.iter() {
                     w.encode_gauge(

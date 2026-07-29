@@ -212,7 +212,10 @@ async fn should_advance_scanned_addresses_and_count_candidates() {
     let stats = last_stats();
     assert_eq!(stats.addresses_scanned, 2);
     assert_eq!(stats.candidates_found, 1);
-    assert_eq!(stats.chunks_failed, 0);
+    assert_eq!(
+        read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
+        (0, 0)
+    );
 }
 
 #[tokio::test]
@@ -246,7 +249,10 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     let stats = last_stats();
     assert_eq!(stats.addresses_scanned, MAX_CALLS_PER_BATCH + extra);
     assert_eq!(stats.candidates_found, MAX_CALLS_PER_BATCH + extra);
-    assert_eq!(stats.chunks_failed, 0);
+    assert_eq!(
+        read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
+        (0, 0)
+    );
 }
 
 #[tokio::test]
@@ -254,17 +260,23 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
     struct Case {
         name: &'static str,
         response: Result<MultiRpcResult<Hex>, IcError>,
+        expected_decode_errors: u64,
+        expected_call_errors: u64,
     }
 
     let cases = vec![
         Case {
             name: "rpc call fails",
             response: Err(IcError::CallPerformFailed),
+            expected_decode_errors: 0,
+            expected_call_errors: 1,
         },
         Case {
             // A one-call chunk expects a single 32-byte word; five bytes cannot decode.
             name: "response fails to decode",
             response: Ok(MultiRpcResult::Consistent(Ok(Hex::from(vec![0_u8; 5])))),
+            expected_decode_errors: 1,
+            expected_call_errors: 0,
         },
     ];
 
@@ -285,7 +297,12 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
         assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
         let stats = last_stats();
         assert_eq!(stats.addresses_scanned, 0, "case: {}", case.name);
-        assert_eq!(stats.chunks_failed, 1, "case: {}", case.name);
+        assert_eq!(
+            read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
+            (case.expected_decode_errors, case.expected_call_errors),
+            "case: {}",
+            case.name
+        );
     }
 }
 
