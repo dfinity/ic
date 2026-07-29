@@ -202,11 +202,13 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     /// `now`/liveness filtering: the caller decides liveness.
     pub fn remove(&mut self, key: &K) -> Option<Entry<V>> {
         let entry = self.entries.remove(key)?;
-        if let Some(bucket) = self.by_time.get_mut(&entry.expires_at) {
-            bucket.retain(|k| k != key);
-            if bucket.is_empty() {
-                self.by_time.remove(&entry.expires_at);
-            }
+        let bucket = self
+            .by_time
+            .get_mut(&entry.expires_at)
+            .expect("BUG: entry timestamp missing from time index");
+        bucket.retain(|k| k != key);
+        if bucket.is_empty() {
+            self.by_time.remove(&entry.expires_at);
         }
         Some(entry)
     }
