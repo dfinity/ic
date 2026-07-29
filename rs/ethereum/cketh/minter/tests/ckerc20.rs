@@ -152,7 +152,18 @@ mod deposit_erc20 {
     use ic_cketh_test_utils::DEFAULT_USER_SUBACCOUNT;
     use ic_cketh_test_utils::ckerc20::CkErc20Setup;
     use ic_ledger_suite_orchestrator_test_utils::new_state_machine;
+    use std::collections::BTreeSet;
     use std::sync::Arc;
+
+    /// Number of `MovedToSweepQueue` events currently in the minter's audit log.
+    fn count_sweep_moves(ckerc20: &CkErc20Setup) -> usize {
+        ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .filter(|event| matches!(event.payload, EventPayload::MovedToSweepQueue { .. }))
+            .count()
+    }
 
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
@@ -310,10 +321,14 @@ mod deposit_erc20 {
         );
 
         // The balances were below every token's minimum, so nothing was moved to the sweep queue.
-        ckerc20
-            .cketh
-            .check_minter_metrics()
-            .assert_contains_metric_matching(r"cketh_minter_sweep_queue_size 0 \d+");
+        assert!(
+            ckerc20
+                .cketh
+                .get_all_events()
+                .iter()
+                .all(|event| !matches!(event.payload, EventPayload::MovedToSweepQueue { .. })),
+            "below-minimum balances must not emit a MovedToSweepQueue event"
+        );
     }
 
     #[test]
@@ -327,10 +342,7 @@ mod deposit_erc20 {
         );
 
         // Nothing awaits sweeping before any scan.
-        ckerc20
-            .cketh
-            .check_minter_metrics()
-            .assert_contains_metric_matching(r"cketh_minter_sweep_queue_size 0 \d+");
+        assert_eq!(count_sweep_moves(&ckerc20), 0);
 
         let (ckerc20, before) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
@@ -343,22 +355,41 @@ mod deposit_erc20 {
         ckerc20.refresh_latest_block(scanned_at);
         ckerc20.run_balance_scan(&vec![1_000_000_000_u128; tokens]);
 
-        ckerc20
-            .cketh
-            .check_minter_metrics()
-            .assert_contains_metric_matching(format!(
-                r"cketh_minter_sweep_queue_size {tokens} \d+"
-            ));
-
-        // The move is event-sourced: one MovedToSweepQueue event per funded token, recorded the
-        // moment the funds were detected (durable even across an ungraceful trap).
-        let moved = ckerc20
+        // The move is event-sourced (metrics are deferred to DEFI-2965, so get_events is the sole
+        // observable): one MovedToSweepQueue event per funded (account, token), recorded the moment
+        // the funds were detected (durable even across an ungraceful trap).
+        let moves: Vec<(Principal, Option<[u8; 32]>, String, String)> = ckerc20
             .cketh
             .get_all_events()
             .into_iter()
-            .filter(|event| matches!(event.payload, EventPayload::MovedToSweepQueue { .. }))
-            .count();
-        assert_eq!(moved, tokens);
+            .filter_map(|event| match event.payload {
+                EventPayload::MovedToSweepQueue {
+                    owner,
+                    subaccount,
+                    token,
+                    address,
+                    ..
+                } => Some((owner, subaccount, token, address)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            moves.len(),
+            tokens,
+            "one MovedToSweepQueue event per funded token"
+        );
+        let distinct_tokens: BTreeSet<&String> =
+            moves.iter().map(|(_, _, token, _)| token).collect();
+        assert_eq!(
+            distinct_tokens.len(),
+            tokens,
+            "one event per distinct token"
+        );
+        for (owner, subaccount, _token, address) in &moves {
+            assert_eq!(*owner, caller);
+            assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
+            assert_eq!(*address, before.address);
+        }
 
         // The sweep queue must survive a real pre_upgrade -> post_upgrade cycle. It is rebuilt by
         // replaying the CBOR-encoded MovedToSweepQueue events (not the watchlist snapshot):
@@ -368,12 +399,11 @@ mod deposit_erc20 {
         ckerc20
             .cketh
             .check_audit_logs_and_upgrade_as_ref(Default::default());
-        ckerc20
-            .cketh
-            .check_minter_metrics()
-            .assert_contains_metric_matching(format!(
-                r"cketh_minter_sweep_queue_size {tokens} \d+"
-            ));
+        assert_eq!(
+            count_sweep_moves(&ckerc20),
+            tokens,
+            "MovedToSweepQueue events must survive the upgrade round-trip"
+        );
 
         // The funded address left the watchlist, so re-registering the same account arms it afresh
         // (scan_count back to 0) rather than reporting the earlier scan — it is no longer scanned.

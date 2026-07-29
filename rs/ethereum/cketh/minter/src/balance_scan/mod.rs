@@ -38,13 +38,6 @@ use std::collections::BTreeMap;
 /// the supported tokens grow or skew more gas-heavy.
 const MAX_CALLS_PER_BATCH: usize = 1_000;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct BalanceScanStats {
-    pub scanned_at_ns: u64,
-    pub addresses_scanned: usize,
-    pub candidates_found: usize,
-}
-
 pub async fn balance_scan() {
     let now = Timestamp::from_nanos(ic_cdk::api::time());
     // TODO DEFI-2923: use a lower threshold rpc client, e.g. 2-out-of-3 since we use latest block height
@@ -140,8 +133,7 @@ async fn scan<R: Runtime>(
     // Advance only the addresses actually scanned, so a failed chunk is retried next tick rather
     // than silently skipped until its next scheduled slot. A funded address is event-sourced into
     // the sweep queue (durable the moment funds are detected) instead of being advanced, so it is
-    // no longer re-scanned; the per-kind failure counts fold into the cumulative State counters
-    // exposed as monotonic metrics.
+    // no longer re-scanned.
     let addresses_scanned = scanned.len();
     mutate_state(|s| {
         for account in &scanned {
@@ -155,15 +147,12 @@ async fn scan<R: Runtime>(
                 None => s.automatic_deposits.record_scan(now, account, latest_block),
             }
         }
-        s.balance_scan_decode_errors += decode_errors as u64;
-        s.balance_scan_call_errors += call_errors as u64;
     });
 
     log!(
         INFO,
         "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates_found} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
     );
-    record_stats(now, addresses_scanned, candidates_found);
 }
 
 /// One balance-scan batch: the deposit addresses whose balances are read together in a single
@@ -392,16 +381,6 @@ const MIN_DEPOSITS: &[(Address, Erc20Value)] = &[
         Erc20Value::new(3_500_000_000_000_000_000_000_000),
     ), // ckSepoliaPEPE
 ];
-
-fn record_stats(now: Timestamp, addresses_scanned: usize, candidates_found: usize) {
-    mutate_state(|s| {
-        s.last_balance_scan = Some(BalanceScanStats {
-            scanned_at_ns: now.as_nanos(),
-            addresses_scanned,
-            candidates_found,
-        })
-    });
-}
 
 fn call_args(input: Vec<u8>, block: BlockNumber) -> evm_rpc_types::CallArgs {
     evm_rpc_types::CallArgs {

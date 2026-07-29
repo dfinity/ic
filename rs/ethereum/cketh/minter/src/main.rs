@@ -1027,41 +1027,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The latest Ethereum block height the ckETH minter observed for scheduling balance scans.",
                 )?;
 
-                w.encode_gauge(
-                    "cketh_minter_sweep_queue_size",
-                    s.automatic_deposits.sweep_len() as f64,
-                    "Number of (account, token) balance-sweep candidates awaiting sweeping.",
-                )?;
-
-                if let Some(stats) = &s.last_balance_scan {
-                    w.encode_gauge(
-                        "cketh_minter_balance_scan_last_run_timestamp_seconds",
-                        stats.scanned_at_ns as f64 / 1_000_000_000.0,
-                        "Timestamp of the last balance scan.",
-                    )?;
-                    w.encode_gauge(
-                        "cketh_minter_balance_scan_addresses_scanned",
-                        stats.addresses_scanned as f64,
-                        "Number of deposit addresses scanned in the last balance scan.",
-                    )?;
-                    w.encode_gauge(
-                        "cketh_minter_balance_scan_candidates",
-                        stats.candidates_found as f64,
-                        "Number of deposit candidates found in the last balance scan.",
-                    )?;
-                }
-
-                w.encode_counter(
-                    "cketh_minter_balance_scan_decode_errors_total",
-                    s.balance_scan_decode_errors as f64,
-                    "Total number of deployless-batcher balance-scan chunks whose response failed to decode.",
-                )?;
-                w.encode_counter(
-                    "cketh_minter_balance_scan_call_errors_total",
-                    s.balance_scan_call_errors as f64,
-                    "Total number of deployless-batcher balance-scan eth_call requests that failed.",
-                )?;
-
                 for (id, scraping_state) in s.log_scrapings.iter() {
                     w.encode_gauge(
                         last_processed_block_metric_name(id),

@@ -244,7 +244,7 @@ fn should_never_split_an_address_across_batches() {
 }
 
 #[tokio::test]
-async fn should_skip_without_recording_stats() {
+async fn should_skip_without_scanning() {
     struct Case {
         name: &'static str,
         latest_block: Option<BlockNumber>,
@@ -281,11 +281,12 @@ async fn should_skip_without_recording_stats() {
         // No stub responses: the scan must short-circuit before any outcall.
         scan(now, stub_client(vec![])).await;
 
-        assert!(
-            read_state(|s| s.last_balance_scan.clone()).is_none(),
-            "case: {}",
-            case.name
-        );
+        // A skipped scan advances no watchlist entry.
+        for (account, _) in &case.holders {
+            let entry = live_entry(now, account);
+            assert_eq!(entry.scan_count, 0, "case: {}", case.name);
+            assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
+        }
     }
 }
 
@@ -373,14 +374,6 @@ async fn should_advance_scanned_non_candidate_addresses() {
         assert_eq!(entry.last_scanned_block, Some(latest));
     }
     assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 0);
-
-    let stats = last_stats();
-    assert_eq!(stats.addresses_scanned, 2);
-    assert_eq!(stats.candidates_found, 0);
-    assert_eq!(
-        read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
-        (0, 0)
-    );
 }
 
 #[tokio::test]
@@ -413,13 +406,18 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     )
     .await;
 
-    let stats = last_stats();
-    assert_eq!(stats.addresses_scanned, MAX_CALLS_PER_BATCH + extra);
-    assert_eq!(stats.candidates_found, 0);
-    assert_eq!(
-        read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
-        (0, 0)
-    );
+    // Both chunks succeeded, so every address across the split is advanced. Check the boundary
+    // holders of each chunk (first/last of chunk 1, first/last of chunk 2).
+    for i in [
+        0,
+        MAX_CALLS_PER_BATCH - 1,
+        MAX_CALLS_PER_BATCH,
+        MAX_CALLS_PER_BATCH + extra - 1,
+    ] {
+        let entry = live_entry(now, &holders[i].0);
+        assert_eq!(entry.scan_count, 1, "holder {i} must be advanced");
+        assert_eq!(entry.last_scanned_block, Some(latest), "holder {i}");
+    }
 }
 
 #[tokio::test]
@@ -427,23 +425,17 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
     struct Case {
         name: &'static str,
         response: Result<MultiRpcResult<Hex>, IcError>,
-        expected_decode_errors: u64,
-        expected_call_errors: u64,
     }
 
     let cases = vec![
         Case {
             name: "rpc call fails",
             response: Err(IcError::CallPerformFailed),
-            expected_decode_errors: 0,
-            expected_call_errors: 1,
         },
         Case {
             // A one-call chunk expects a single 32-byte word; five bytes cannot decode.
             name: "response fails to decode",
             response: Ok(MultiRpcResult::Consistent(Ok(Hex::from(vec![0_u8; 5])))),
-            expected_decode_errors: 1,
-            expected_call_errors: 0,
         },
     ];
 
@@ -462,14 +454,6 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
             case.name
         );
         assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
-        let stats = last_stats();
-        assert_eq!(stats.addresses_scanned, 0, "case: {}", case.name);
-        assert_eq!(
-            read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
-            (case.expected_decode_errors, case.expected_call_errors),
-            "case: {}",
-            case.name
-        );
     }
 }
 
@@ -532,8 +516,4 @@ fn live_entry(now: Timestamp, account: &Account) -> DepositRequest {
     read_state(|s| s.automatic_deposits.get_entry(now, account).cloned())
         .expect("BUG: expected a live watchlist entry")
         .value
-}
-
-fn last_stats() -> BalanceScanStats {
-    read_state(|s| s.last_balance_scan.clone()).expect("BUG: expected balance scan stats")
 }

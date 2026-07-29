@@ -1,5 +1,4 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::balance_scan::BalanceScanStats;
 use crate::deposit_address::{DepositAddressSchema, deposit_address};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
@@ -90,17 +89,6 @@ pub struct State {
 
     /// Locks preventing concurrent execution timer tasks
     pub active_tasks: HashSet<TaskType>,
-
-    /// Statistics from the most recent balance scan, if any.
-    pub last_balance_scan: Option<BalanceScanStats>,
-
-    /// Cumulative count of balance-scan chunks whose response failed to decode.
-    /// Monotonic in-memory counter, reset on upgrade.
-    pub balance_scan_decode_errors: u64,
-
-    /// Cumulative count of balance-scan `eth_call`s that failed.
-    /// Monotonic in-memory counter, reset on upgrade.
-    pub balance_scan_call_errors: u64,
 
     /// Number of HTTP outcalls since the last upgrade.
     /// Used to correlate request and response in logs.
