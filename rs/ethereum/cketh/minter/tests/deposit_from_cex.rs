@@ -20,7 +20,7 @@ use ethers_core::abi::{ParamType, Token};
 use ethers_core::types::{Address as EthAddress, U256};
 use ethers_core::utils::keccak256;
 use ic_cketh_minter::balance_scan::batcher::{
-    BalanceOfCall, decode_balance_batch, encode_balance_batch,
+    decode_balance_batch, encode_balance_batch, BalanceOfCall,
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
