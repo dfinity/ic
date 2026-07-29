@@ -118,15 +118,7 @@ impl JsonRpcRequestMatcher {
                 .iter()
                 .filter(|request| is_latest_block_refresh(request))
             {
-                env.mock_canister_http_response(MockCanisterHttpResponse {
-                    subnet_id: request.subnet_id,
-                    request_id: request.request_id,
-                    response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-                        reject_code: 2, // SysTransient
-                        message: "Canister http request timed out".to_string(),
-                    }),
-                    additional_responses: vec![],
-                });
+                crate::reject_stray_http_outcall(env, request);
             }
             env.tick();
             env.advance_time(Duration::from_nanos(1));
@@ -149,8 +141,15 @@ impl JsonRpcRequestMatcher {
     // never cross that gap on its own, so jump forward to unstick it, then retry. This must not
     // be used for negative expectations (no call should appear): jumping forward burns simulated
     // time regardless of outcome, which can itself trigger unrelated periodic minter work.
+    //
+    // Capped at `SCRAPING_ETH_LOGS_INTERVAL` (3 minutes): retrying for longer than that could
+    // itself trigger an extra, unrelated log scrape, whose outcall the very next stub might then
+    // answer instead of the one this call is actually waiting for. A smaller cap (5 attempts,
+    // 150s) was tried and is not enough: several tests then failed to find their target call
+    // within budget, so this stays at the interval's exact boundary rather than strictly under it.
     fn find_rpc_call_retrying(&self, env: &PocketIc) -> Option<CanisterHttpRequest> {
-        for _ in 0..MAX_TICKS {
+        const MAX_RETRY_ATTEMPTS: usize = 6; // 6 * REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL (30s) = 180s
+        for _ in 0..MAX_RETRY_ATTEMPTS {
             if let Some(request) = self.find_rpc_call(env) {
                 return Some(request);
             }
@@ -184,17 +183,14 @@ impl Matcher for JsonRpcRequestMatcher {
                 .match_request_params
                 .as_ref()
                 .map(|expected_params| expected_params == &json_rpc_request.params)
-                .unwrap_or_else(|| {
-                    !(self.json_rpc_method == JsonRpcMethod::EthGetBlockByNumber
-                        && json_rpc_request.params == json!(["latest", false]))
-                })
+                .unwrap_or_else(|| !is_latest_block_refresh(request))
     }
 }
 
 // The minter also polls `eth_getBlockByNumber("latest")` on its own periodic schedule (unrelated
 // to log scraping) to refresh a metric. A mock that doesn't constrain params is only ever meant to
 // answer the scrape-triggered call, so it must not accidentally swallow that unrelated poll.
-fn is_latest_block_refresh(request: &CanisterHttpRequest) -> bool {
+pub(crate) fn is_latest_block_refresh(request: &CanisterHttpRequest) -> bool {
     let request_body = std::str::from_utf8(&request.body).unwrap();
     match JsonRpcRequest::from_str(request_body) {
         Ok(json_rpc_request) => {
@@ -246,7 +242,7 @@ impl StubOnce {
         let response = match request.max_response_bytes {
             Some(max_response_bytes) if (response_body.len() as u64) > max_response_bytes => {
                 CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-                    reject_code: 1, // SysFatal
+                    reject_code: crate::REJECT_CODE_SYS_FATAL,
                     message: format!("Http body exceeds size limit of {max_response_bytes} bytes."),
                 })
             }
