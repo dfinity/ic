@@ -202,8 +202,9 @@ rust_ic_test_suite(
         ["tests/**/*.rs"],
         exclude = [
             "tests/dump_stable_memory.rs",
-            # Runs against a local foundry anvil node, not the IC test suite.
+            # Run against a local foundry anvil node, not the IC test suite.
             "tests/deposit_from_cex_demo.rs",
+            "tests/deposit_from_cex.rs",
         ],
     ),
     data = [
@@ -260,7 +261,6 @@ rust_test(
         "tests/deposit_from_cex_demo/CkSweeperViaHelper.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
     ],
-    edition = "2021",
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
         "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
@@ -279,6 +279,32 @@ rust_test(
         "@crate_index//:ethnum",
         "@crate_index//:hex",
         "@crate_index//:ic-sha3",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "deposit_from_cex_test",
+    size = "small",
+    srcs = ["tests/deposit_from_cex.rs"],
+    data = [
+        "//:anvil",
+        "//:solc",
+        # Reuses the mock ERC-20 source compiled at test time by the vendored solc.
+        "tests/deposit_from_cex_demo/MockUSDT.sol",
+    ],
+    env = {
+        "ANVIL_BIN": "$(rootpath //:anvil)",
+        "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
+        "SOLC_BIN": "$(rootpath //:solc)",
+    },
+    deps = [
+        # Keep sorted.
+        ":minter",
+        "//packages/ic-ethereum-types",
+        "@crate_index//:ethers-core",
+        "@crate_index//:hex",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
     ],

@@ -180,32 +180,44 @@ mod addresses_to_scan_iter {
 
     #[test]
     fn should_mark_scanned_address_due_only_after_the_current_gap() {
-        // scan_count 2 selects a 60s gap, i.e. 5 blocks at 12s per block.
-        let last_scanned = BlockNumber::new(1_000);
-        let deposits = deposits_from(vec![scan_state(
-            account(0),
-            ts(window_nanos()),
-            Some(last_scanned),
-            2,
-        )]);
-        let gap_blocks = SCAN_GAP_SECS[2] / SECS_PER_BLOCK;
-        assert_eq!(gap_blocks, 5);
+        // A scanned address with scan_count N consults SCAN_GAP_SECS[N-1] (the first backoff scan,
+        // scan_count 1, uses SCAN_GAP_SECS[0]).
+        struct Case {
+            scan_count: u32,
+        }
+        // scan_count 1 -> SCAN_GAP_SECS[0] = 30s; scan_count 3 -> SCAN_GAP_SECS[2] = 60s.
+        let cases = vec![Case { scan_count: 1 }, Case { scan_count: 3 }];
 
-        let just_before = BlockNumber::new(1_000 + u128::from(gap_blocks) - 1);
-        let at_boundary = BlockNumber::new(1_000 + u128::from(gap_blocks));
+        for case in cases {
+            let last_scanned = BlockNumber::new(1_000);
+            let deposits = deposits_from(vec![scan_state(
+                account(0),
+                ts(window_nanos()),
+                Some(last_scanned),
+                case.scan_count,
+            )]);
+            let gap_secs = SCAN_GAP_SECS[(case.scan_count - 1) as usize];
+            // First block count whose elapsed seconds (blocks * 12) reaches the gap.
+            let gap_blocks = gap_secs.div_ceil(SECS_PER_BLOCK);
 
-        assert_eq!(
-            deposits.addresses_to_scan_iter(ts(0), just_before).count(),
-            0,
-            "not due one block before the gap elapses"
-        );
-        assert_eq!(
-            deposits
-                .addresses_to_scan_iter(ts(0), at_boundary)
-                .collect::<Vec<_>>(),
-            vec![(account(0), deposit_address(&account(0)))],
-            "due exactly when the gap elapses"
-        );
+            let just_before = BlockNumber::new(1_000 + u128::from(gap_blocks) - 1);
+            let at_boundary = BlockNumber::new(1_000 + u128::from(gap_blocks));
+
+            assert_eq!(
+                deposits.addresses_to_scan_iter(ts(0), just_before).count(),
+                0,
+                "scan_count {}: not due one block before the gap elapses",
+                case.scan_count
+            );
+            assert_eq!(
+                deposits
+                    .addresses_to_scan_iter(ts(0), at_boundary)
+                    .collect::<Vec<_>>(),
+                vec![(account(0), deposit_address(&account(0)))],
+                "scan_count {}: due exactly when the gap elapses",
+                case.scan_count
+            );
+        }
     }
 
     #[test]
@@ -222,11 +234,13 @@ mod addresses_to_scan_iter {
 
     #[test]
     fn should_not_yield_address_past_the_schedule_end() {
+        // scan_count N consults SCAN_GAP_SECS[N-1], so the schedule is exhausted once N exceeds the
+        // number of gaps (index N-1 falls outside SCAN_GAP_SECS).
         let deposits = deposits_from(vec![scan_state(
             account(0),
             ts(window_nanos()),
             Some(BlockNumber::new(1)),
-            SCAN_GAP_SECS.len() as u32,
+            SCAN_GAP_SECS.len() as u32 + 1,
         )]);
 
         assert_eq!(
@@ -305,6 +319,60 @@ fn scan_state(
         last_scanned_block,
         scan_count,
     }
+}
+
+#[test]
+fn record_scan_advances_the_schedule() {
+    let mut deposits = AutomaticDeposits::default();
+    deposits
+        .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
+        .unwrap();
+    // Never scanned -> due immediately.
+    assert_eq!(
+        deposits
+            .addresses_to_scan_iter(ts(0), BlockNumber::new(1_000))
+            .count(),
+        1
+    );
+
+    deposits.record_scan(ts(0), &account(0), BlockNumber::new(1_000));
+
+    // The scan bookkeeping is advanced, and survives into the snapshot.
+    let snapshot = deposits.watchlist_snapshot();
+    assert_eq!(
+        snapshot.registrations[0].last_scanned_block,
+        Some(BlockNumber::new(1_000))
+    );
+    assert_eq!(snapshot.registrations[0].scan_count, 1);
+
+    // Not due at the just-scanned block; due again well after the next gap.
+    assert_eq!(
+        deposits
+            .addresses_to_scan_iter(ts(0), BlockNumber::new(1_000))
+            .count(),
+        0
+    );
+    assert_eq!(
+        deposits
+            .addresses_to_scan_iter(ts(0), BlockNumber::new(2_000))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn record_scan_is_a_noop_for_an_expired_account() {
+    let mut deposits = AutomaticDeposits::default();
+    deposits
+        .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
+        .unwrap();
+
+    // Past the scan window the entry is no longer live; record_scan must not touch it.
+    deposits.record_scan(ts(window_nanos() + 1), &account(0), BlockNumber::new(1_000));
+
+    let snapshot = deposits.watchlist_snapshot();
+    assert_eq!(snapshot.registrations[0].last_scanned_block, None);
+    assert_eq!(snapshot.registrations[0].scan_count, 0);
 }
 
 fn ts(nanos: u64) -> Timestamp {
