@@ -10,7 +10,9 @@ use candid::Principal;
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::{data_certificate, in_replicated_execution, msg_caller, time};
+use ic_cdk::api::{
+    data_certificate, in_replicated_execution, msg_caller, msg_cycles_refunded, time,
+};
 use ic_cdk::spawn;
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
@@ -172,7 +174,9 @@ async fn send_request_with_refund_callback(
             Err((r, m))
         }
     };
-    let refunded_cycles = ic_cdk::api::call::msg_cycles_refunded();
+    // `ResponseWithRefundedCycles::refunded_cycles` is `nat64` on the wire, so keep the
+    // 64-bit width the Candid interface of this test canister already exposes.
+    let refunded_cycles = msg_cycles_refunded() as u64;
     ResponseWithRefundedCycles {
         result,
         refunded_cycles,
