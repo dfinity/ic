@@ -127,7 +127,7 @@ jobs:
           src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
           dst="ic-build:${{ needs.build-image-prep.outputs.image_tag }}"
           nsc base-image upload "$src" "$dst"
-          worker_image="$(docker inspect --format '{{index .RepoDigests 0}}' "$NSC_CONTAINER_REGISTRY/$dst")"
+          worker_image="$(nsc registry describe "$dst" | sed -n 's/^Image Reference: *//p')"
           nsc base-image optimize --image_ref "$worker_image"
           echo "worker-image=$worker_image" >> "$GITHUB_OUTPUT"
 
