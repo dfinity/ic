@@ -30,6 +30,7 @@ ic-types-cycles = { path = "../../../types/cycles" }
 ic-types = { path = "../../../types/types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }

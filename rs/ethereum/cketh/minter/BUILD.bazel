@@ -316,10 +316,6 @@ rust_test(
         ":minter",
         "//packages/ic-ethereum-types",
         "//rs/ethereum/cketh/test_utils",
-        "@crate_index//:ethers-core",
-        "@crate_index//:hex",
-        "@crate_index//:reqwest",
-        "@crate_index//:serde_json",
     ],
 )
 
