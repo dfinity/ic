@@ -510,8 +510,7 @@ pub fn setup(env: TestEnv) {
     //   spare1 -> 54yea-6qaaa-aaaaa-qaabq-cai  unclaimed
     //   spare2 -> 5j7vn-7yaaa-aaaaa-qaaca-cai  unclaimed
     //   spare3 -> 5o6tz-saaaa-aaaaa-qaacq-cai  unclaimed
-    //   spare4 -> 5h5yf-eiaaa-aaaaa-qaada-cai  unclaimed; the id the backend
-    //             pinned for the canister_info proxy before it moved to `proxy`
+    //   spare4 -> 5h5yf-eiaaa-aaaaa-qaada-cai  unclaimed
     //   spare5 -> 5a46r-jqaaa-aaaaa-qaadq-cai  unclaimed
     //
     // The spares exist so a consumer can pin a new id without a change here and a
