@@ -103,6 +103,8 @@ impl TryFrom<InitArg> for State {
             skipped_blocks: Default::default(),
             active_tasks: Default::default(),
             last_balance_scan: None,
+            balance_scan_decode_errors: 0,
+            balance_scan_call_errors: 0,
             http_request_counter: 0,
             last_transaction_price_estimate: None,
             ledger_suite_orchestrator_id: None,

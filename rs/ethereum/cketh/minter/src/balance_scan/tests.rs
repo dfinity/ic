@@ -104,6 +104,51 @@ fn should_not_collect_candidates_for_an_unsupported_token() {
 }
 
 #[test]
+fn should_have_a_min_deposit_for_every_deployed_supported_token() {
+    // Independently transcribed list of the ckERC20 contract addresses the mainnet
+    // (sv3dd-oaaaa-aaaar-qacoa-cai) and Sepolia (jzenf-aiaaa-aaaar-qaa7q-cai) minters currently
+    // support (hex form, so it does not share the byte-array representation of `MIN_DEPOSITS`). A
+    // supported token missing from `MIN_DEPOSITS` would be scanned but never flagged, so its
+    // deposits would go undetected; this test catches a dropped or typo'd entry.
+    let deployed: &[(&str, &str)] = &[
+        // --- mainnet ---
+        ("ckUSDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+        ("ckLINK", "0x514910771AF9Ca656af840dff83E8264EcF986CA"),
+        ("ckPEPE", "0x6982508145454Ce325dDbE47a25d4ec3d2311933"),
+        ("ckOCT", "0xF5cFBC74057C610c8EF151A439252680AC68c6dc"),
+        ("ckSHIB", "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"),
+        ("ckWBTC", "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"),
+        ("ckUSDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7"),
+        ("ckWSTETH", "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+        ("ckUNI", "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"),
+        ("ckEURC", "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c"),
+        ("ckXAUT", "0x68749665FF8D2d112Fa859AA293F07A622782F38"),
+        // --- sepolia ---
+        (
+            "ckSepoliaUSDC",
+            "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        ),
+        (
+            "ckSepoliaLINK",
+            "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+        ),
+        (
+            "ckSepoliaPEPE",
+            "0x560ef9f39e4b08f9693987cad307f6fbfd97b2f6",
+        ),
+    ];
+
+    for (symbol, address) in deployed {
+        let contract = Address::from_str(address)
+            .unwrap_or_else(|e| panic!("{symbol}: invalid test address {address}: {e}"));
+        assert!(
+            MIN_DEPOSITS.iter().any(|(c, _)| *c == contract),
+            "{symbol} ({address}) has no MIN_DEPOSITS entry"
+        );
+    }
+}
+
+#[test]
 fn should_build_one_call_per_address_and_token_in_order() {
     let holders = vec![DEPOSIT_ADDRESS, Address::new([0x99; 20])];
     let tokens = vec![TOKEN_A, TOKEN_B];
@@ -332,7 +377,10 @@ async fn should_advance_scanned_non_candidate_addresses() {
     let stats = last_stats();
     assert_eq!(stats.addresses_scanned, 2);
     assert_eq!(stats.candidates_found, 0);
-    assert_eq!(stats.chunks_failed, 0);
+    assert_eq!(
+        read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
+        (0, 0)
+    );
 }
 
 #[tokio::test]
@@ -368,7 +416,10 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     let stats = last_stats();
     assert_eq!(stats.addresses_scanned, MAX_CALLS_PER_BATCH + extra);
     assert_eq!(stats.candidates_found, 0);
-    assert_eq!(stats.chunks_failed, 0);
+    assert_eq!(
+        read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
+        (0, 0)
+    );
 }
 
 #[tokio::test]
@@ -376,17 +427,23 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
     struct Case {
         name: &'static str,
         response: Result<MultiRpcResult<Hex>, IcError>,
+        expected_decode_errors: u64,
+        expected_call_errors: u64,
     }
 
     let cases = vec![
         Case {
             name: "rpc call fails",
             response: Err(IcError::CallPerformFailed),
+            expected_decode_errors: 0,
+            expected_call_errors: 1,
         },
         Case {
             // A one-call chunk expects a single 32-byte word; five bytes cannot decode.
             name: "response fails to decode",
             response: Ok(MultiRpcResult::Consistent(Ok(Hex::from(vec![0_u8; 5])))),
+            expected_decode_errors: 1,
+            expected_call_errors: 0,
         },
     ];
 
@@ -407,7 +464,12 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
         assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
         let stats = last_stats();
         assert_eq!(stats.addresses_scanned, 0, "case: {}", case.name);
-        assert_eq!(stats.chunks_failed, 1, "case: {}", case.name);
+        assert_eq!(
+            read_state(|s| (s.balance_scan_decode_errors, s.balance_scan_call_errors)),
+            (case.expected_decode_errors, case.expected_call_errors),
+            "case: {}",
+            case.name
+        );
     }
 }
 

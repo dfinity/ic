@@ -135,7 +135,7 @@ impl AutomaticDeposits {
             let due = match request.last_scanned_block {
                 None => true,
                 Some(last_scanned_block) => {
-                    let index = request.scan_count as usize;
+                    let index = (request.scan_count as usize).saturating_sub(1);
                     index < SCAN_GAP_SECS.len() && {
                         let elapsed_blocks = latest_block
                             .checked_sub(last_scanned_block)

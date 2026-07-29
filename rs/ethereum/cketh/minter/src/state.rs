@@ -94,6 +94,14 @@ pub struct State {
     /// Statistics from the most recent balance scan, if any.
     pub last_balance_scan: Option<BalanceScanStats>,
 
+    /// Cumulative count of balance-scan chunks whose response failed to decode.
+    /// Monotonic in-memory counter, reset on upgrade.
+    pub balance_scan_decode_errors: u64,
+
+    /// Cumulative count of balance-scan `eth_call`s that failed.
+    /// Monotonic in-memory counter, reset on upgrade.
+    pub balance_scan_call_errors: u64,
+
     /// Number of HTTP outcalls since the last upgrade.
     /// Used to correlate request and response in logs.
     pub http_request_counter: u64,
