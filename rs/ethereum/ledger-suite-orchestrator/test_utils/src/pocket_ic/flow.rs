@@ -6,7 +6,7 @@ use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
 use ic_management_canister_types::{
-    CanisterInfoResult, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
+    CanisterId, CanisterInfoResult, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
 };
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
@@ -416,7 +416,7 @@ impl PocketIcHttpQuery for ManagedCanistersAssert {
         self.setup.get_pocket_ic()
     }
 
-    fn get_canister_id(&self) -> ic_management_canister_types::CanisterId {
+    fn get_canister_id(&self) -> CanisterId {
         self.setup.get_canister_id()
     }
 }

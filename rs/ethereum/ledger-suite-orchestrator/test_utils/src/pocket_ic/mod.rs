@@ -1,5 +1,11 @@
 use crate::pocket_ic::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
+use crate::{
+    GIT_COMMIT_HASH, MAX_TICKS, archive_wasm, default_init_arg, index_wasm,
+    ledger_get_blocks_disabled_wasm, ledger_suite_orchestrator_get_blocks_disabled_wasm,
+    ledger_suite_orchestrator_wasm, ledger_wasm,
+};
 use candid::{Decode, Encode, Principal};
+use ic_cdk::management_canister::CanisterStatusResult as CdkCanisterStatusResult;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledLedgerSuite,
     ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
@@ -27,7 +33,7 @@ pub struct LedgerSuiteOrchestrator {
 
 impl Default for LedgerSuiteOrchestrator {
     fn default() -> Self {
-        Self::new(Arc::new(new_pocket_ic()), crate::default_init_arg()).register_embedded_wasms()
+        Self::new(Arc::new(new_pocket_ic()), default_init_arg()).register_embedded_wasms()
     }
 }
 
@@ -35,7 +41,7 @@ impl LedgerSuiteOrchestrator {
     pub fn with_cycles_management(cycles_management: CyclesManagement) -> Self {
         let init_arg = InitArg {
             cycles_management: Some(cycles_management),
-            ..crate::default_init_arg()
+            ..default_init_arg()
         };
         Self::new(Arc::new(new_pocket_ic()), init_arg)
     }
@@ -46,10 +52,10 @@ impl LedgerSuiteOrchestrator {
         Self {
             env,
             ledger_suite_orchestrator_id,
-            ledger_suite_orchestrator_wasm: crate::ledger_suite_orchestrator_wasm(),
-            embedded_ledger_wasm_hash: crate::ledger_wasm().hash().clone(),
-            embedded_index_wasm_hash: crate::index_wasm().hash().clone(),
-            embedded_archive_wasm_hash: crate::archive_wasm().hash().clone(),
+            ledger_suite_orchestrator_wasm: ledger_suite_orchestrator_wasm(),
+            embedded_ledger_wasm_hash: ledger_wasm().hash().clone(),
+            embedded_index_wasm_hash: index_wasm().hash().clone(),
+            embedded_archive_wasm_hash: archive_wasm().hash().clone(),
         }
         .install_ledger_suite_orchestrator(init_arg)
     }
@@ -60,11 +66,10 @@ impl LedgerSuiteOrchestrator {
         Self {
             env,
             ledger_suite_orchestrator_id,
-            ledger_suite_orchestrator_wasm:
-                crate::ledger_suite_orchestrator_get_blocks_disabled_wasm(),
-            embedded_ledger_wasm_hash: crate::ledger_get_blocks_disabled_wasm().hash().clone(),
-            embedded_index_wasm_hash: crate::index_wasm().hash().clone(),
-            embedded_archive_wasm_hash: crate::archive_wasm().hash().clone(),
+            ledger_suite_orchestrator_wasm: ledger_suite_orchestrator_get_blocks_disabled_wasm(),
+            embedded_ledger_wasm_hash: ledger_get_blocks_disabled_wasm().hash().clone(),
+            embedded_index_wasm_hash: index_wasm().hash().clone(),
+            embedded_archive_wasm_hash: archive_wasm().hash().clone(),
         }
         .install_ledger_suite_orchestrator(init_arg)
     }
@@ -91,7 +96,7 @@ impl LedgerSuiteOrchestrator {
     pub fn register_embedded_wasms(self) -> Self {
         self.upgrade_ledger_suite_orchestrator_expecting_ok(&OrchestratorArg::UpgradeArg(
             UpgradeArg {
-                git_commit_hash: Some(crate::GIT_COMMIT_HASH.to_string()),
+                git_commit_hash: Some(GIT_COMMIT_HASH.to_string()),
                 ledger_compressed_wasm_hash: None,
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
@@ -122,7 +127,7 @@ impl LedgerSuiteOrchestrator {
         )
     }
 
-    pub fn get_canister_status(&self) -> ic_cdk::management_canister::CanisterStatusResult {
+    pub fn get_canister_status(&self) -> CdkCanisterStatusResult {
         Decode!(
             &self
                 .env
@@ -133,7 +138,7 @@ impl LedgerSuiteOrchestrator {
                     Encode!().unwrap()
                 )
                 .expect("failed to call get_canister_status"),
-            ic_cdk::management_canister::CanisterStatusResult
+            CdkCanisterStatusResult
         )
         .unwrap()
     }
@@ -290,7 +295,7 @@ impl LedgerSuiteOrchestrator {
         E: std::fmt::Debug,
     {
         let mut last_error = None;
-        for _ in 0..crate::MAX_TICKS {
+        for _ in 0..MAX_TICKS {
             self.env.tick();
             match f() {
                 Ok(t) => return t,
@@ -299,10 +304,7 @@ impl LedgerSuiteOrchestrator {
                 }
             }
         }
-        panic!(
-            "Failed to get result after {} ticks: {last_error:?}",
-            crate::MAX_TICKS
-        );
+        panic!("Failed to get result after {MAX_TICKS} ticks: {last_error:?}");
     }
 
     pub fn wait_for_canister_to_be_installed_and_running(&self, canister_id: Principal) {
