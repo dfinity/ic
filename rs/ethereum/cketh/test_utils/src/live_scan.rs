@@ -48,13 +48,6 @@ pub fn default_caller() -> Principal {
     PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into()
 }
 
-/// The outcome of a completed balance scan, read back from the minter's metrics.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BalanceScanOutcome {
-    pub addresses_scanned: u64,
-    pub candidates_found: u64,
-}
-
 pub struct CkErc20LiveScanSetup {
     env: PocketIc,
     minter_id: Principal,
@@ -127,28 +120,38 @@ impl CkErc20LiveScanSetup {
             .expect("BUG: deposit_erc20 returned an error")
     }
 
-    /// Waits for the minter's periodic balance scan to run over at least one address (which, given
-    /// a single registered address, means that address), then returns its outcome. Panics if no
-    /// scan completes within `deadline`.
-    pub fn await_balance_scan(&self, deadline: Duration) -> BalanceScanOutcome {
+    /// Waits until the minter's periodic balance scan has scanned `caller`'s deposit address —
+    /// observed through `deposit_erc20`'s own scan progress — and returns that progress. A failing
+    /// batch never advances an address, so `scan_count >= 1` already proves the `eth_call` against
+    /// anvil succeeded and decoded. Panics if no scan completes within `deadline`.
+    ///
+    /// Whether the address' balance made it a deposit *candidate* is not surfaced by
+    /// `deposit_erc20`; read that from [`Self::balance_scan_candidates`].
+    pub fn await_scan(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        deadline: Duration,
+    ) -> DepositErc20Response {
         let start = Instant::now();
         loop {
-            let metrics = self.metrics();
-            if let Some(scanned) = gauge(&metrics, "cketh_minter_balance_scan_addresses_scanned")
-                && scanned >= 1.0
-            {
-                return BalanceScanOutcome {
-                    addresses_scanned: scanned as u64,
-                    candidates_found: gauge(&metrics, "cketh_minter_balance_scan_candidates")
-                        .unwrap_or(0.0) as u64,
-                };
+            let progress = self.deposit_erc20(caller, subaccount);
+            if progress.scan_count >= 1 {
+                return progress;
             }
             assert!(
                 start.elapsed() <= deadline,
-                "the balance scan did not run within {deadline:?}"
+                "the deposit address was not scanned within {deadline:?}"
             );
             std::thread::sleep(Duration::from_secs(2));
         }
+    }
+
+    /// The number of deposit candidates the minter's most recent balance scan found, read from its
+    /// metrics — `deposit_erc20` reports that an address was scanned but not whether its balance
+    /// cleared the candidate threshold. `0` if no scan has recorded statistics yet.
+    pub fn balance_scan_candidates(&self) -> u64 {
+        gauge(&self.metrics(), "cketh_minter_balance_scan_candidates").unwrap_or(0.0) as u64
     }
 
     fn metrics(&self) -> String {

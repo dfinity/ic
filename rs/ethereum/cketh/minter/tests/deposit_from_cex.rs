@@ -227,21 +227,18 @@ fn should_scan_real_erc20_balances_through_the_evm_rpc_canister() {
         );
     }
 
-    let outcome = setup.await_balance_scan(Duration::from_secs(180));
-    assert_eq!(
-        outcome.addresses_scanned, 1,
-        "the single registered address should have been scanned"
-    );
-    assert_eq!(
-        outcome.candidates_found, 2,
-        "the funded address should be a candidate for both supported tokens"
-    );
-
-    let progress = setup.deposit_erc20(user, DEPOSIT_SUBACCOUNT);
+    // deposit_erc20 reports the address as scanned (a failed batch would never advance it), and the
+    // scan flags it as a candidate for both supported tokens whose real balances it read from anvil.
+    let progress = setup.await_scan(user, DEPOSIT_SUBACCOUNT, Duration::from_secs(180));
     assert!(progress.scan_count >= 1, "the address should report a scan");
     assert!(
         progress.last_scanned_block.is_some(),
         "a scanned address should report the block it was scanned at"
+    );
+    assert_eq!(
+        setup.balance_scan_candidates(),
+        2,
+        "the funded address should be a candidate for both supported tokens"
     );
 }
 
