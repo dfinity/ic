@@ -15,6 +15,7 @@ use ic_canister_log::log;
 use ic_canister_runtime::Runtime;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeMap;
 
 /// Maximum number of `balanceOf` sub-calls in a single deployless-batcher `eth_call`.
 ///
@@ -96,7 +97,7 @@ async fn scan<R: Runtime>(
         return;
     }
 
-    let mut candidates = 0_usize;
+    let mut candidates_by_account: BTreeMap<Account, Vec<(Address, Erc20Value)>> = BTreeMap::new();
     let mut chunks_failed = 0_usize;
     let mut scanned: Vec<Account> = Vec::new();
 
@@ -111,7 +112,12 @@ async fn scan<R: Runtime>(
         {
             Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), batch.calls.len()) {
                 Ok(balances) => {
-                    candidates += count_candidates(&batch.calls, &balances);
+                    for candidate in collect_candidates(&batch, &erc20_tokens, &balances) {
+                        candidates_by_account
+                            .entry(candidate.account)
+                            .or_default()
+                            .push((candidate.token, candidate.balance));
+                    }
                     scanned.extend(batch.addresses.iter().map(|(account, _)| *account));
                 }
                 Err(e) => {
@@ -126,20 +132,29 @@ async fn scan<R: Runtime>(
         }
     }
 
+    let candidates_found: usize = candidates_by_account.values().map(Vec::len).sum();
+
     // Advance only the addresses actually scanned, so a failed chunk is retried next tick rather
-    // than silently skipped until its next scheduled slot.
+    // than silently skipped until its next scheduled slot. A funded address is moved to the sweep
+    // queue instead of being advanced, so it is no longer re-scanned.
     let addresses_scanned = scanned.len();
     mutate_state(|s| {
         for account in &scanned {
-            s.automatic_deposits.record_scan(now, account, latest_block);
+            match candidates_by_account.get(account) {
+                Some(cands) => {
+                    s.automatic_deposits
+                        .move_to_sweep(now, account, latest_block, cands)
+                }
+                None => s.automatic_deposits.record_scan(now, account, latest_block),
+            }
         }
     });
 
     log!(
         INFO,
-        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {chunks_failed} chunk(s) failed",
+        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates_found} candidate(s), {chunks_failed} chunk(s) failed",
     );
-    record_stats(now, addresses_scanned, candidates, chunks_failed);
+    record_stats(now, addresses_scanned, candidates_found, chunks_failed);
 }
 
 /// One balance-scan batch: the deposit addresses whose balances are read together in a single
@@ -189,12 +204,34 @@ fn balance_of_calls(holders: &[Address], tokens: &[Address]) -> Vec<BalanceOfCal
     calls
 }
 
-fn count_candidates(calls: &[BalanceOfCall], balances: &[Erc20Value]) -> usize {
-    calls
+/// A scanned `(account, token)` whose balance is at or above the token's minimum deposit.
+struct Candidate {
+    account: Account,
+    token: Address,
+    balance: Erc20Value,
+}
+
+/// Collect the candidates from one scanned batch. `balances` is aligned with `batch.calls`, which
+/// are laid out holder-major/token-minor by [`balance_of_calls`], so call index `i` maps to holder
+/// `i / tokens.len()` (its account) and `batch.calls[i].token` (its token). Keeps a candidate iff
+/// its balance is at or above the token's minimum deposit.
+fn collect_candidates(
+    batch: &ScanBatch,
+    tokens: &[Address],
+    balances: &[Erc20Value],
+) -> Vec<Candidate> {
+    batch
+        .calls
         .iter()
         .zip(balances)
-        .filter(|(call, balance)| **balance >= min_deposit(&call.token))
-        .count()
+        .enumerate()
+        .filter(|(_, (call, balance))| **balance >= min_deposit(&call.token))
+        .map(|(i, (call, balance))| Candidate {
+            account: batch.addresses[i / tokens.len()].0,
+            token: call.token,
+            balance: *balance,
+        })
+        .collect()
 }
 
 /// Minimum balance for `token` to count as a scan candidate; a token absent from

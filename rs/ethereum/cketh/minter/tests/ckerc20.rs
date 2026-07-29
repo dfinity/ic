@@ -299,7 +299,7 @@ mod deposit_erc20 {
         ckerc20.run_balance_scan(&vec![2_000_000_u128; tokens]);
 
         // deposit_erc20 now reports the address as scanned once, at that block height.
-        let (_ckerc20, after) = ckerc20
+        let (ckerc20, after) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
         assert_eq!(after.address, before.address);
@@ -308,6 +308,56 @@ mod deposit_erc20 {
             after.last_scanned_block,
             Some(candid::Nat::from(scanned_at))
         );
+
+        // The balances were below every token's minimum, so nothing was moved to the sweep queue.
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(r"cketh_minter_sweep_queue_size 0 \d+");
+    }
+
+    #[test]
+    fn should_move_funded_addresses_to_the_sweep_queue() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let tokens = ckerc20.supported_erc20_tokens.len();
+        assert!(
+            tokens >= 1,
+            "BUG: expected at least one supported ckERC20 token"
+        );
+
+        // Nothing awaits sweeping before any scan.
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(r"cketh_minter_sweep_queue_size 0 \d+");
+
+        let (ckerc20, before) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+
+        // A balance well above every supported token's minimum makes the address a candidate for
+        // each token, so it is moved out of the watchlist into the sweep queue (one entry per
+        // token).
+        let scanned_at = 4_500_000_u64;
+        ckerc20.refresh_latest_block(scanned_at);
+        ckerc20.run_balance_scan(&vec![1_000_000_000_u128; tokens]);
+
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(format!(
+                r"cketh_minter_sweep_queue_size {tokens} \d+"
+            ));
+
+        // The funded address left the watchlist, so re-registering the same account arms it afresh
+        // (scan_count back to 0) rather than reporting the earlier scan — it is no longer scanned.
+        let (_ckerc20, after) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(after.address, before.address);
+        assert_eq!(after.scan_count, 0);
+        assert_eq!(after.last_scanned_block, None);
     }
 
     #[test]

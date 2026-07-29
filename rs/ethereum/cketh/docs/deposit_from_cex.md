@@ -485,7 +485,9 @@ flat `uint256[]` is 32 bytes per result with a trivial fixed-width decode, needs
 deployed contract, and — validated against Ethereum mainnet — is honored with
 byte-identical results by all four providers the minter uses, and forwarded
 unchanged by the EVM-RPC canister (which omits an absent `to`). Addresses with a
-balance at or above the per-token minimum proceed to filter 2; the rest cost nothing
+balance at or above the per-token minimum are moved out of the active-address
+watchlist into a **balance-sweep queue** (one entry per funded `(account, token)`)
+handed to the sweeper, and are no longer re-scanned; the rest cost nothing
 further this tick. A balance is only ever a trigger, never a source of truth (see
 the screening discussion below). For native ETH (Phase 2), the batcher reads the
 address' ETH balance in the same call and the finalized balance delta *is* the

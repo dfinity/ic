@@ -478,6 +478,7 @@ impl GetEventsFile {
                             scan_count: 0,
                         })
                         .collect(),
+                    sweep_queue: vec![],
                 }),
             },
         }

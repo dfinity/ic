@@ -198,6 +198,19 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         evicted
     }
 
+    /// Remove and return the entry under `key`, if present, keeping the time index consistent. No
+    /// `now`/liveness filtering: the caller decides liveness.
+    pub fn remove(&mut self, key: &K) -> Option<Entry<V>> {
+        let entry = self.entries.remove(key)?;
+        if let Some(bucket) = self.by_time.get_mut(&entry.expires_at) {
+            bucket.retain(|k| k != key);
+            if bucket.is_empty() {
+                self.by_time.remove(&entry.expires_at);
+            }
+        }
+        Some(entry)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&K, &Entry<V>)> {
         self.entries.iter()
     }

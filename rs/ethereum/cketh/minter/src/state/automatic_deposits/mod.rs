@@ -2,11 +2,12 @@
 mod tests;
 
 use crate::endpoints::DepositErc20Error;
-use crate::numeric::BlockNumber;
-use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry};
+use crate::numeric::{BlockNumber, Erc20Value};
+use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry, SweepQueueEntry};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
@@ -46,6 +47,9 @@ const MAX_ACTIVE_DEPOSIT_ADDRESSES: NonZeroUsize = NonZeroUsize::new(7_000).unwr
 #[derive(Clone, PartialEq, Debug)]
 pub struct AutomaticDeposits {
     watchlist: TimedSizedMap<Account, DepositRequest>,
+    /// Funded deposit addresses moved out of the watchlist, awaiting sweeping,
+    /// keyed per `(account, ERC-20 token contract)`.
+    sweep: BTreeMap<(Account, Address), SweepEntry>,
 }
 
 impl AutomaticDeposits {
@@ -78,8 +82,9 @@ impl AutomaticDeposits {
         }
     }
 
-    /// Rebuild the watchlist exactly from a registry previously produced by
-    /// [`Self::watchlist_snapshot`], replacing any existing content.
+    /// Rebuild this state exactly from a registry previously produced by
+    /// [`Self::snapshot`], replacing any existing content (both the watchlist and
+    /// the sweep queue).
     ///
     /// The watchlist is restored verbatim under the limits recorded in the
     /// registry (`scan_window_nanos`, `capacity`), not the current code
@@ -88,7 +93,7 @@ impl AutomaticDeposits {
     /// `capacity` (no admission check). This makes the restored state equal to
     /// the one that produced the registry, which the event-log equivalence
     /// check relies on. Changing the limits across versions is future work.
-    pub fn rebuild_watchlist(&mut self, registry: &DepositAddressRegistry) {
+    pub fn rebuild(&mut self, registry: &DepositAddressRegistry) {
         let ttl = Duration::from_nanos(registry.scan_window_nanos);
         let capacity = NonZeroUsize::new(usize::try_from(registry.capacity).unwrap_or(usize::MAX))
             .expect("BUG: deposit address registry capacity must be non-zero");
@@ -109,6 +114,27 @@ impl AutomaticDeposits {
             )
         });
         self.watchlist = TimedSizedMap::from_ordered_entries(ttl, capacity, entries);
+        self.sweep = registry
+            .sweep_queue
+            .iter()
+            .map(|entry| {
+                (
+                    (
+                        Account {
+                            owner: entry.owner,
+                            subaccount: entry.subaccount,
+                        },
+                        entry.token,
+                    ),
+                    SweepEntry {
+                        address: entry.address,
+                        last_scanned_block: entry.last_scanned_block,
+                        scan_count: entry.scan_count,
+                        scanned_balance: entry.scanned_balance,
+                    },
+                )
+            })
+            .collect();
     }
 
     /// Iterate the live deposit addresses that are due for a balance scan as of the
@@ -152,7 +178,6 @@ impl AutomaticDeposits {
     /// Record that `account`'s deposit address was scanned at `block`, advancing it along the
     /// backoff schedule (`last_scanned_block = block`, `scan_count += 1`). No-op if the account is
     /// no longer live as of `now` (expired or evicted).
-    // TODO DEFI-2923: move the watched address with balance to a separate queue for sweeping.
     pub fn record_scan(&mut self, now: Timestamp, account: &Account, block: BlockNumber) {
         if let Some(request) = self.watchlist.get_value_mut(now, account) {
             request.last_scanned_block = Some(block);
@@ -160,10 +185,43 @@ impl AutomaticDeposits {
         }
     }
 
-    /// Full snapshot of the watchlist, faithful enough to reconstruct it exactly
-    /// via [`Self::rebuild_watchlist`]: it records the current limits and lists
-    /// every entry (live and expired-but-unevicted) in time-index order.
-    pub fn watchlist_snapshot(&self) -> DepositAddressRegistry {
+    /// Move `account`'s deposit address out of the watchlist into the sweep queue, recording one
+    /// entry per `(token, balance)` candidate found at `block`. No-op if `account` is not live as
+    /// of `now` or if `candidates` is empty.
+    pub fn move_to_sweep(
+        &mut self,
+        now: Timestamp,
+        account: &Account,
+        block: BlockNumber,
+        candidates: &[(Address, Erc20Value)],
+    ) {
+        if candidates.is_empty() || self.watchlist.get_entry(now, account).is_none() {
+            return;
+        }
+        let removed = self
+            .watchlist
+            .remove(account)
+            .expect("BUG: entry is live right after a successful get_entry")
+            .value;
+        let scan_count = removed.scan_count.saturating_add(1);
+        for (token, balance) in candidates {
+            self.sweep.insert(
+                (*account, *token),
+                SweepEntry {
+                    address: removed.address,
+                    last_scanned_block: block,
+                    scan_count,
+                    scanned_balance: *balance,
+                },
+            );
+        }
+    }
+
+    /// Full snapshot of this state, faithful enough to reconstruct it exactly via
+    /// [`Self::rebuild`]: it records the current limits, lists every watchlist
+    /// entry (live and expired-but-unevicted) in time-index order, and lists the
+    /// sweep queue in `(account, token)` order.
+    pub fn snapshot(&self) -> DepositAddressRegistry {
         let registrations = self
             .watchlist
             .iter_by_expiry()
@@ -176,15 +234,33 @@ impl AutomaticDeposits {
                 scan_count: deposit.value.scan_count,
             })
             .collect();
+        let sweep_queue = self
+            .sweep
+            .iter()
+            .map(|((account, token), entry)| SweepQueueEntry {
+                owner: account.owner,
+                subaccount: account.subaccount,
+                token: *token,
+                address: entry.address,
+                last_scanned_block: entry.last_scanned_block,
+                scan_count: entry.scan_count,
+                scanned_balance: entry.scanned_balance,
+            })
+            .collect();
         DepositAddressRegistry {
             scan_window_nanos: u64::try_from(self.watchlist.ttl().as_nanos()).unwrap_or(u64::MAX),
             capacity: self.watchlist.capacity().get() as u64,
             registrations,
+            sweep_queue,
         }
     }
 
     pub fn watchlist_len(&self) -> usize {
         self.watchlist.len()
+    }
+
+    pub fn sweep_len(&self) -> usize {
+        self.sweep.len()
     }
 }
 
@@ -195,8 +271,23 @@ impl Default for AutomaticDeposits {
                 DEPOSIT_ADDRESS_SCAN_WINDOW,
                 MAX_ACTIVE_DEPOSIT_ADDRESSES,
             ),
+            sweep: BTreeMap::new(),
         }
     }
+}
+
+/// A funded deposit address moved out of the watchlist and awaiting sweeping, for
+/// one supported ERC-20 token.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct SweepEntry {
+    /// The deposit address (holder) the funds sit at.
+    pub address: Address,
+    /// The block whose scan found the funds.
+    pub last_scanned_block: BlockNumber,
+    /// How many times this address was scanned, including the finding scan.
+    pub scan_count: u32,
+    /// The balance read for this token at `last_scanned_block`.
+    pub scanned_balance: Erc20Value,
 }
 
 #[derive(Clone, PartialEq, Debug)]

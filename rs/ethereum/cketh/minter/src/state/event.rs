@@ -2,7 +2,7 @@ use crate::erc20::CkErc20Token;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
-use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
+use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
@@ -190,9 +190,32 @@ pub struct DepositAddressRegistry {
     #[n(1)]
     pub capacity: u64,
     /// Registered addresses in time-index order (ascending expiry, insertion
-    /// order within a shared expiry), as produced by `watchlist_snapshot`.
+    /// order within a shared expiry), as produced by `snapshot`.
     #[n(2)]
     pub registrations: Vec<DepositAddressRegistration>,
+    /// Funded deposit addresses moved out of the watchlist and awaiting sweeping,
+    /// one entry per `(account, token)`, in `(account, token)` order.
+    #[n(3)]
+    pub sweep_queue: Vec<SweepQueueEntry>,
+}
+
+/// A single `(account, token)` entry of the balance-sweep queue snapshot.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct SweepQueueEntry {
+    #[cbor(n(0), with = "icrc_cbor::principal")]
+    pub owner: Principal,
+    #[cbor(n(1), with = "minicbor::bytes")]
+    pub subaccount: Option<[u8; 32]>,
+    #[n(2)]
+    pub token: Address,
+    #[n(3)]
+    pub address: Address,
+    #[n(4)]
+    pub last_scanned_block: BlockNumber,
+    #[n(5)]
+    pub scan_count: u32,
+    #[n(6)]
+    pub scanned_balance: Erc20Value,
 }
 
 /// A single entry of the ckERC20 deposit address registry snapshot.

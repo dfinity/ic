@@ -147,8 +147,8 @@ fn emit_preupgrade_events() {
         }
     });
 
-    let registry = read_state(|s| s.automatic_deposits.watchlist_snapshot());
-    if !registry.registrations.is_empty() {
+    let registry = read_state(|s| s.automatic_deposits.snapshot());
+    if !registry.registrations.is_empty() || !registry.sweep_queue.is_empty() {
         storage::record_event(EventType::RegisteredDepositAddresses(registry));
     }
 }
@@ -1016,6 +1016,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_latest_block_height",
                     s.latest_block_height.map(|n| n.as_f64()).unwrap_or(0.0),
                     "The latest Ethereum block height the ckETH minter observed for scheduling balance scans.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_sweep_queue_size",
+                    s.automatic_deposits.sweep_len() as f64,
+                    "Number of (account, token) balance-sweep candidates awaiting sweeping.",
                 )?;
 
                 if let Some(stats) = &s.last_balance_scan {

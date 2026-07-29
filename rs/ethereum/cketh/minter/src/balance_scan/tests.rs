@@ -19,35 +19,88 @@ fn account(owner: u64) -> Account {
 }
 
 #[test]
-fn should_count_candidates_at_and_above_the_per_token_minimum() {
-    let (token, min) = MIN_DEPOSITS[0]; // ckUSDC
-    let calls = vec![
-        BalanceOfCall {
-            token,
-            holder: DEPOSIT_ADDRESS,
-        };
-        4
+fn should_collect_candidates_at_and_above_the_per_token_minimum() {
+    let (usdc, usdc_min) = MIN_DEPOSITS[0]; // min 10_000_000
+    let (link, link_min) = MIN_DEPOSITS[1]; // min 1e18
+    let tokens = vec![usdc, link];
+    let addresses = vec![
+        (account(1), Address::new([0xa1; 20])),
+        (account(2), Address::new([0xa2; 20])),
     ];
-    let balances = vec![
-        min,                                              // == min      -> candidate
-        min.checked_sub(Erc20Value::from(1_u8)).unwrap(), // < min      -> excluded
-        min.checked_add(Erc20Value::from(1_u8)).unwrap(), // > min      -> candidate
-        Erc20Value::from(0_u8),                           // failed/zero -> excluded
+    let holders: Vec<Address> = addresses.iter().map(|(_, holder)| *holder).collect();
+    let batch = ScanBatch {
+        addresses: &addresses,
+        calls: balance_of_calls(&holders, &tokens),
+    };
+
+    struct Case {
+        desc: &'static str,
+        // One balance per call, holder-major/token-minor:
+        // [a1/usdc, a1/link, a2/usdc, a2/link].
+        balances: Vec<Erc20Value>,
+        expected: Vec<(Account, Address, Erc20Value)>,
+    }
+
+    let cases = vec![
+        Case {
+            desc: "at, above, and below/zero the minimum across two addresses and tokens",
+            balances: vec![
+                usdc_min,                                       // a1/usdc == min -> candidate
+                link_min.checked_add(Erc20Value::ONE).unwrap(), // a1/link > min -> candidate
+                usdc_min.checked_add(Erc20Value::ONE).unwrap(), // a2/usdc > min -> candidate
+                link_min,                                       // a2/link == min -> candidate
+            ],
+            expected: vec![
+                (account(1), usdc, usdc_min),
+                (
+                    account(1),
+                    link,
+                    link_min.checked_add(Erc20Value::ONE).unwrap(),
+                ),
+                (
+                    account(2),
+                    usdc,
+                    usdc_min.checked_add(Erc20Value::ONE).unwrap(),
+                ),
+                (account(2), link, link_min),
+            ],
+        },
+        Case {
+            // Only the second address' ckUSDC clears its minimum; a wrong holder index would
+            // wrongly attribute it to account(1).
+            desc: "single surviving candidate is attributed to the right address",
+            balances: vec![
+                usdc_min.checked_sub(Erc20Value::ONE).unwrap(), // a1/usdc < min -> excluded
+                Erc20Value::ZERO,                               // a1/link zero  -> excluded
+                usdc_min,                                       // a2/usdc == min -> candidate
+                link_min.checked_sub(Erc20Value::ONE).unwrap(), // a2/link < min -> excluded
+            ],
+            expected: vec![(account(2), usdc, usdc_min)],
+        },
     ];
 
-    assert_eq!(count_candidates(&calls, &balances), 2);
+    for case in cases {
+        let collected: Vec<(Account, Address, Erc20Value)> =
+            collect_candidates(&batch, &tokens, &case.balances)
+                .into_iter()
+                .map(|c| (c.account, c.token, c.balance))
+                .collect();
+        assert_eq!(collected, case.expected, "case: {}", case.desc);
+    }
 }
 
 #[test]
-fn should_not_count_candidates_for_an_unsupported_token() {
+fn should_not_collect_candidates_for_an_unsupported_token() {
     // TOKEN_A is absent from MIN_DEPOSITS, so even a huge balance is never a candidate.
-    let calls = vec![BalanceOfCall {
-        token: TOKEN_A,
-        holder: DEPOSIT_ADDRESS,
-    }];
+    let addresses = vec![(account(1), DEPOSIT_ADDRESS)];
+    let tokens = vec![TOKEN_A];
+    let batch = ScanBatch {
+        addresses: &addresses,
+        calls: balance_of_calls(&[DEPOSIT_ADDRESS], &tokens),
+    };
     let balances = vec![Erc20Value::from(u128::MAX)];
 
-    assert_eq!(count_candidates(&calls, &balances), 0);
+    assert!(collect_candidates(&batch, &tokens, &balances).is_empty());
 }
 
 #[test]
@@ -192,7 +245,7 @@ async fn should_skip_without_recording_stats() {
 }
 
 #[tokio::test]
-async fn should_advance_scanned_addresses_and_count_candidates() {
+async fn should_move_candidates_to_sweep_and_advance_the_rest() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
@@ -204,11 +257,18 @@ async fn should_advance_scanned_addresses_and_count_candidates() {
     // Single chunk, holders in call order: first at the minimum (candidate), second below it.
     scan(now, stub_client(vec![ok_balances(&[min, below_min])])).await;
 
-    for (account, _) in [candidate, non_candidate] {
-        let entry = live_entry(now, &account);
-        assert_eq!(entry.scan_count, 1);
-        assert_eq!(entry.last_scanned_block, Some(latest));
-    }
+    // The funded address leaves the watchlist for the sweep queue; it is no longer scanned.
+    assert!(read_state(|s| s
+        .automatic_deposits
+        .get_entry(now, &candidate.0)
+        .is_none()));
+    assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 1);
+
+    // The non-candidate is advanced along the schedule and stays armed.
+    let entry = live_entry(now, &non_candidate.0);
+    assert_eq!(entry.scan_count, 1);
+    assert_eq!(entry.last_scanned_block, Some(latest));
+
     let stats = last_stats();
     assert_eq!(stats.addresses_scanned, 2);
     assert_eq!(stats.candidates_found, 1);

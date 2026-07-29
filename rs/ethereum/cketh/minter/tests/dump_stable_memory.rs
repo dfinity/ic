@@ -431,6 +431,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                             },
                         )
                         .collect(),
+                    sweep_queue: vec![],
                 },
             ),
         },
