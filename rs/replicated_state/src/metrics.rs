@@ -539,7 +539,7 @@ impl ReplicatedStateMetrics {
             state
                 .metadata
                 .subnet_metrics
-                .get_consumed_cycles_by_use_case_as_counters(),
+                .get_consumed_cycles_by_use_case(),
         );
 
         // Add the consumed cycles in ecdsa outcalls.
