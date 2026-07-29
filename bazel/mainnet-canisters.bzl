@@ -62,6 +62,13 @@ def _canisters_impl(repository_ctx):
 
     repository_ctx.file("BUILD.bazel", content = 'exports_files(glob(["*"]))', executable = False)
 
+    # This repo is reproducible: all downloads are pinned by sha256 and
+    # everything else is derived from the watched canister-revisions JSON and
+    # the rule attributes. Declaring this makes the repo eligible for Bazel 9's
+    # repo contents cache so the canister WASMs are shared across output
+    # bases/workspaces instead of being re-downloaded on every fetch.
+    return repository_ctx.repo_metadata(reproducible = True)
+
 canisters = repository_rule(
     implementation = _canisters_impl,
     attrs = {

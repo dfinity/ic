@@ -236,6 +236,16 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 23 * DEFAULT_VCPUS_PER_VM,  # 1 System + 20 unassigned nodes (NUM_UNASSIGNED_NODES default) + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    # Boot the GuestOS version that mainnet's NNS subnet runs. The _dev variant is
+    # necessary because this testnet brings up a fresh NNS whose public key has to
+    # be configured on the nodes.
+    guestos = "mainnet_nns_dev",
+    # No vector VM: the driver creates it without host features and with no way
+    # to pass any, so it cannot be placed on the DMZ hosts this testnet runs on.
+    # See the placement note in cloud_engine.rs.
+    logs = False,
+    # The Prometheus VM needs the same mandatory feature as every other VM here.
+    prometheus_vm_required_host_features = ["dmz"],
     tags = [
         "dynamic_testnet",
         "manual",
@@ -248,6 +258,7 @@ system_test_nns(
     },
     deps = [
         # Keep sorted.
+        "//rs/nervous_system/common/test_keys",
         "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
@@ -255,6 +266,9 @@ system_test_nns(
         "//rs/tests/nns/nns_dapp",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-utils",
+        "@crate_index//:slog",
     ],
 )
 
@@ -286,7 +300,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SNS_CANISTER_RUNTIME_DEPS | {
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | SNS_CANISTER_RUNTIME_DEPS | {
         "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
         "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",

@@ -259,7 +259,7 @@ system_test(
 
 system_test(
     name = "rent_subnet_test",
-    cpus = MIN_LOCAL_CPUS + 32 * 1 + 3 * DEFAULT_VCPUS_PER_VM,  # 32 App IC Node VMs with 1 vCPU override + 1 System + 1 fast System + 1 unassigned IC Node VMs * 6 vCPUs.
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 fast System + 1 unassigned IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # The test takes over 10 minutes so let's not run it on PRs by default.
     ],

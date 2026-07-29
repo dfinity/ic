@@ -863,6 +863,9 @@ pub fn load_canister_state(
         canister_state_bits.task_queue,
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
+        canister_state_bits
+            .canister_creation_timestamp_nanos
+            .map(Time::from_nanos_since_unix_epoch),
         canister_state_bits.canister_history,
         wasm_chunk_store_data,
         canister_state_bits.wasm_chunk_store_metadata,

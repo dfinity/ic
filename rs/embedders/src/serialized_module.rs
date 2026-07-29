@@ -1,11 +1,6 @@
 use std::{
-    collections::BTreeSet,
-    convert::TryFrom,
-    fs::File,
-    io::Write,
-    os::{fd::AsRawFd, unix::fs::MetadataExt},
-    path::Path,
-    sync::Arc,
+    collections::BTreeSet, convert::TryFrom, fs::File, io::Write, num::NonZeroUsize,
+    os::unix::fs::MetadataExt, path::Path, ptr::NonNull, sync::Arc,
 };
 
 use ic_heap_bytes::DeterministicHeapBytes;
@@ -246,17 +241,18 @@ impl OnDiskSerializedModule {
         // argument implies that this won't mess with any existing memory.
         let mmap_ptr = unsafe {
             mmap(
-                std::ptr::null_mut(),
-                mmap_size,
+                None,
+                NonZeroUsize::new(mmap_size).expect("mmap length must be non-zero"),
                 ProtFlags::PROT_READ,
                 MapFlags::MAP_PRIVATE,
-                self.initial_state_data.as_raw_fd(),
+                &self.initial_state_data,
                 0,
             )
         }
         .unwrap_or_else(|err| {
             panic!("Reading OnDiskSerializedModule initial_state failed: {err:?}")
-        }) as *mut u8;
+        })
+        .as_ptr() as *mut u8;
         // Safety: allocation was made with length `mmap_size`.
         let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
         let initial_state_data = bincode::deserialize::<InitialStateData>(data)
@@ -264,8 +260,11 @@ impl OnDiskSerializedModule {
         // Safety: `mmap_ptr`/`mmap_size` are the pointer and length returned by
         // the `mmap` above; `data` is not used past this point.
         unsafe {
-            munmap(mmap_ptr as *mut std::ffi::c_void, mmap_size)
-                .expect("Unable to unmap initial state data file");
+            munmap(
+                NonNull::new(mmap_ptr as *mut std::ffi::c_void).expect("mmap pointer is null"),
+                mmap_size,
+            )
+            .expect("Unable to unmap initial state data file");
         }
         initial_state_data
     }
@@ -283,16 +282,16 @@ mod test {
         let mmap_size = file.metadata().unwrap().size() as usize;
         let mmap_ptr = unsafe {
             mmap(
-                std::ptr::null_mut(),
-                mmap_size,
+                None,
+                NonZeroUsize::new(mmap_size).expect("mmap length must be non-zero"),
                 ProtFlags::PROT_READ,
                 MapFlags::MAP_PRIVATE,
-                file.as_raw_fd(),
+                file,
                 0,
             )
         }
         .unwrap_or_else(|err| panic!("Reading OnDiskSerializedModule failed: {err:?}"))
-            as *mut u8;
+        .as_ptr() as *mut u8;
         unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }.to_vec()
     }
 

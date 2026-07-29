@@ -571,6 +571,12 @@ pub struct SystemState {
     /// Canister version.
     canister_version: u64,
 
+    /// The round time at which the canister was created, in nanoseconds since the
+    /// Unix epoch. It is `None` only for canisters created before this field was
+    /// introduced (i.e. loaded from a checkpoint that predates it); every newly
+    /// created canister has it set.
+    pub canister_creation_timestamp: Option<Time>,
+
     /// Canister history.
     #[validate_eq(CompareWithValidateEq)]
     canister_history: CanisterHistory,
@@ -726,6 +732,7 @@ impl SystemState {
         controller: PrincipalId,
         initial_cycles: Cycles,
         time_of_last_allocation_charge: Time,
+        canister_creation_timestamp: Time,
         freeze_threshold: NumSeconds,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
@@ -734,6 +741,7 @@ impl SystemState {
             controller,
             initial_cycles,
             time_of_last_allocation_charge,
+            Some(canister_creation_timestamp),
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
@@ -745,6 +753,7 @@ impl SystemState {
         controller: PrincipalId,
         initial_cycles: Cycles,
         time_of_last_allocation_charge: Time,
+        canister_creation_timestamp: Option<Time>,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
@@ -771,6 +780,7 @@ impl SystemState {
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
+            canister_creation_timestamp,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
@@ -808,6 +818,7 @@ impl SystemState {
         task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
+        canister_creation_timestamp: Option<Time>,
         canister_history: CanisterHistory,
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
@@ -843,6 +854,7 @@ impl SystemState {
             task_queue,
             global_timer,
             canister_version,
+            canister_creation_timestamp,
             canister_history,
             wasm_chunk_store: WasmChunkStore::from_checkpoint(
                 wasm_chunk_store_data,
@@ -926,6 +938,7 @@ impl SystemState {
             controller,
             initial_cycles,
             UNIX_EPOCH,
+            None,
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
@@ -1002,41 +1015,42 @@ impl SystemState {
         self.ingress_induction_cycles_debit += charge;
     }
 
-    /// Removes a previously postponed charge for ingress messages from the balance
-    /// of the canister.
-    ///
-    /// Note that this will saturate the balance to zero if the charge to remove is
-    /// larger than the current debit.
-    pub fn remove_charge_from_ingress_induction_cycles_debit(&mut self, charge: Cycles) {
-        self.ingress_induction_cycles_debit -= charge;
-    }
-
     /// Charges the pending 'ingress_induction_cycles_debit' from the balance.
     ///
-    /// Precondition:
-    /// - The balance is large enough to cover the debit.
+    /// If `strict` is `true`, the caller guarantees that the balance is large
+    /// enough to cover the debit and it is a bug if that is not the case.
+    ///
+    /// If `strict` is `false`, the balance is allowed to be smaller than the
+    /// debit: only the available cycles are charged and the rest of the debit is
+    /// silently dropped (making some of the postponed ingress induction charges
+    /// free). This is used after a cleanup callback, which can burn the canister's
+    /// cycles balance below the pending debit and must always be allowed to
+    /// succeed.
     pub fn apply_ingress_induction_cycles_debit(
         &mut self,
         canister_id: CanisterId,
         cost_schedule: CanisterCyclesCostSchedule,
+        strict: bool,
         log: &ReplicaLogger,
         charging_from_balance_error: &IntCounter,
     ) {
         // We rely on saturating operations of `Cycles` here.
         let remaining_debit = self.ingress_induction_cycles_debit - self.cycles_balance;
-        debug_assert_eq!(remaining_debit.get(), 0);
-        if remaining_debit.get() > 0 {
-            // This case is unreachable and may happen only due to a bug: if the
-            // caller has reduced the cycles balance below the cycles debit.
-            charging_from_balance_error.inc();
-            error!(
-                log,
-                "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {} in install_code",
-                canister_id,
-                remaining_debit,
-            );
-            // Continue the execution by dropping the remaining debit, which makes
-            // some of the postponed charges free.
+        if strict {
+            debug_assert_eq!(remaining_debit.get(), 0);
+            if remaining_debit.get() > 0 {
+                // This case is unreachable and may happen only due to a bug: if the
+                // caller has reduced the cycles balance below the cycles debit.
+                charging_from_balance_error.inc();
+                error!(
+                    log,
+                    "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {}",
+                    canister_id,
+                    remaining_debit,
+                );
+                // Continue the execution by dropping the remaining debit, which makes
+                // some of the postponed charges free.
+            }
         }
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
             self.ingress_induction_cycles_debit,
@@ -2139,6 +2153,8 @@ impl SystemState {
         // The use cases below are not valid on the canister
         // level, they should only appear on the subnet level.
         debug_assert_ne!(use_case, CyclesUseCase::ECDSAOutcalls);
+        debug_assert_ne!(use_case, CyclesUseCase::SchnorrOutcalls);
+        debug_assert_ne!(use_case, CyclesUseCase::VetKd);
         debug_assert_ne!(use_case, CyclesUseCase::HTTPOutcalls);
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
         debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
@@ -2682,6 +2698,7 @@ pub mod testing {
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: Default::default(),
+            canister_creation_timestamp: Default::default(),
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),

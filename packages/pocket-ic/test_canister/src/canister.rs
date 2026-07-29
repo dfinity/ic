@@ -1,7 +1,6 @@
 #![allow(deprecated)]
 use candid::{CandidType, Nat, Principal, define_function};
-use ic_cdk::api::call::{RejectionCode, accept_message, arg_data_raw, reject};
-use ic_cdk::api::instruction_counter;
+use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::ecdsa::{
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
     SignWithEcdsaResponse, ecdsa_public_key as ic_cdk_ecdsa_public_key,
@@ -10,7 +9,10 @@ use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs, TransformContext,
     TransformFunc, http_request as canister_http_outcall,
 };
-use ic_cdk::api::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
+use ic_cdk::api::{
+    accept_message, canister_self, debug_print, instruction_counter, msg_arg_data, msg_reject,
+};
+use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -374,7 +376,7 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse 
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 method: "transform".to_string(),
-                principal: ic_cdk::id(),
+                principal: canister_self(),
             }),
             context,
         }),
@@ -387,7 +389,7 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse 
 
 #[update]
 async fn whoami() -> String {
-    ic_cdk::id().to_string()
+    canister_self().to_string()
 }
 
 #[update]
@@ -464,7 +466,7 @@ async fn execute_many_instructions(n: u64) {
 
 #[update]
 async fn canister_log(msg: String) {
-    ic_cdk::print(msg);
+    debug_print(msg);
 }
 
 // time
@@ -478,7 +480,7 @@ fn time() -> u64 {
 
 #[inspect_message]
 fn inspect_message() {
-    let arg_data = arg_data_raw();
+    let arg_data = msg_arg_data();
     if arg_data == b"trap" {
         trap("trap in inspect message");
     } else if arg_data == b"skip" {
@@ -489,12 +491,12 @@ fn inspect_message() {
 
 #[query(manual_reply = true)]
 fn reject_query() {
-    reject("reject in query method");
+    msg_reject("reject in query method");
 }
 
 #[update(manual_reply = true)]
 fn reject_update() {
-    reject("reject in update method");
+    msg_reject("reject in update method");
 }
 
 #[query]

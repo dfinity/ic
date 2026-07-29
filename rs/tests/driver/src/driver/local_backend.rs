@@ -238,18 +238,36 @@ impl LocalBackend {
                  networking without host capabilities",
             );
         }
-        // Identity-map the caller's uid/gid into the new user namespace, so it
-        // keeps its usual identity (files, `/dev/kvm` and `/dev/net/tun` are
-        // opened exactly as before) while being the namespace owner. `setgroups`
-        // must be denied before an unprivileged process may write `gid_map`; that
-        // is fine here because nothing in the process tree calls `setgroups`
-        // (`dnsmasq`, the only program that would, stays unprivileged and so
-        // skips its privilege-drop entirely — see `start_ra_daemon`).
+        // Map the caller's uid/gid into the new user namespace so it keeps its
+        // usual identity (files, `/dev/kvm` and `/dev/net/tun` are opened exactly
+        // as before) while being the namespace owner. The mapping is an identity
+        // one, with a single exception: if the caller is (fake-)root we map it to
+        // a *non-zero* inner uid/gid instead of `0`.
+        //
+        // The reason: the backend relies on `dnsmasq` staying unprivileged so it
+        // skips its privilege-drop path (see `start_ra_daemon`). That path is
+        // gated purely on `getuid() == 0`, and when taken it fails in this
+        // namespace — `setgroups` is denied (below) and the default `dip` gid is
+        // unmapped. This normally holds because the action runs as an ordinary
+        // user, but under an RBE sandbox that runs actions as uid 0 in its own
+        // user namespace (e.g. Namespace's `namespace_action_isolation=sandboxed`)
+        // an identity map would make the driver root here too and trip that path.
+        // Presenting a non-zero uid keeps `dnsmasq` (and any other root-sensitive
+        // child) out of it regardless of the outer uid. On-disk ownership,
+        // `/dev/kvm` and `/dev/net/tun` are still accessed as the mapping's
+        // *outer* uid, so nothing else changes.
+        //
+        // `setgroups` must be denied before an unprivileged process may write
+        // `gid_map`; that is fine here because nothing in the process tree needs
+        // `setgroups` to succeed. A single-line self-map is always permitted, with
+        // or without `CAP_SETUID`/`CAP_SETGID` in the parent user namespace.
+        let inner_uid = if uid == 0 { 1 } else { uid };
+        let inner_gid = if gid == 0 { 1 } else { gid };
         std::fs::write("/proc/self/setgroups", "deny")
             .context("denying setgroups for the private user namespace")?;
-        std::fs::write("/proc/self/uid_map", format!("{uid} {uid} 1"))
+        std::fs::write("/proc/self/uid_map", format!("{inner_uid} {uid} 1"))
             .context("writing uid_map for the private user namespace")?;
-        std::fs::write("/proc/self/gid_map", format!("{gid} {gid} 1"))
+        std::fs::write("/proc/self/gid_map", format!("{inner_gid} {gid} 1"))
             .context("writing gid_map for the private user namespace")?;
         // Raise the networking capabilities into the ambient set so the
         // unprivileged `ip`/`dnsmasq`/QEMU children inherit them across `exec`.
@@ -635,12 +653,13 @@ impl LocalBackend {
         // (`enp2s0`). `--port=0` disables DNS. `dnsmasq` daemonizes (writing its
         // pid-file) and is signalled via it in teardown.
         //
-        // `dnsmasq` runs unprivileged (the driver keeps
-        // its real, non-root uid — see `ensure_administrable_netns`), so it skips
+        // `dnsmasq` runs unprivileged: `ensure_administrable_netns` guarantees a
+        // non-zero uid inside the driver's user namespace (identity-mapped, or
+        // remapped away from `0` when the caller is fake-root), so `dnsmasq` skips
         // its privilege-drop path entirely, which is what we want. That path is
-        // taken only when started as root and would otherwise `setgroups(2)` —
-        // denied in the driver's user namespace — and drop to a user/group id
-        // that is unmapped there.
+        // gated on `getuid() == 0` and would otherwise `setgroups(2)` — denied in
+        // the driver's user namespace — and drop to a user/group id that is
+        // unmapped there.
         let dnsmasq_path = get_dependency_path_from_env("ENV_DEPS__DNSMASQ_PATH");
         let dnsmasq_script = format!(
             "exec {dnsmasq_path:?} \
@@ -901,7 +920,7 @@ impl LocalBackend {
     /// overlays at the end of the group.
     fn ensure_base_image(&self, src: &Path) -> Result<PathBuf> {
         use ic_crypto_sha2::Sha256;
-        use std::os::unix::io::AsRawFd;
+        use nix::fcntl::{Flock, FlockArg};
 
         let cache_dir = self.active_local_backend.working_dir.join("image_cache");
         std::fs::create_dir_all(&cache_dir)
@@ -921,13 +940,14 @@ impl LocalBackend {
             .append(true)
             .open(&lock_path)
             .with_context(|| format!("opening image cache lock {}", lock_path.display()))?;
-        nix::fcntl::flock(lock.as_raw_fd(), nix::fcntl::FlockArg::LockExclusive)
+        // Hold an exclusive advisory lock through a `Flock` guard. The lock is
+        // released when the guard is dropped at the end of this function (which
+        // also closes the underlying `File`). Rust opens files `O_CLOEXEC`, so a
+        // forked task subprocess that `exec`s does not inherit this fd and
+        // therefore cannot keep the lock held after we return.
+        let _image_cache_lock = Flock::lock(lock, FlockArg::LockExclusive)
+            .map_err(|(_, errno)| errno)
             .with_context(|| format!("locking image cache lock {}", lock_path.display()))?;
-        // The lock is released when `lock` is dropped at the end of this function
-        // (its `File` closes the fd, which drops the advisory lock). Rust opens
-        // files `O_CLOEXEC`, so a forked task subprocess that `exec`s does not
-        // inherit this fd and therefore cannot keep the lock held after we
-        // return.
 
         if !base.exists() {
             // Extract to a temp file on the same filesystem, then atomically
@@ -1036,18 +1056,28 @@ impl LocalBackend {
         let uuid = vm_uuid(group_name, vm_name);
 
         // Create the per-VM TAP, attach it to the group bridge, and bring it up.
-        // `user <current>` tags the TAP as owned by the driver's (unprivileged)
-        // user, letting QEMU — which runs as that same user — open it via
+        // `user <uid>` tags the TAP as owned by the driver's effective uid,
+        // letting QEMU — which runs as that same uid — open it via
         // `-netdev tap,ifname=...,script=no,downscript=no` by owner match, so
-        // QEMU itself needs no capability. Recreating it fresh (delete first)
-        // keeps this idempotent across a re-used VM (e.g. `vm().kill()` +
-        // `vm().start()`).
+        // opening the device relies on no QEMU capability (even though QEMU does
+        // inherit the ambient net caps — see `raise_ambient_net_caps`). Recreating
+        // it fresh (delete first) keeps this idempotent across a re-used VM (e.g.
+        // `vm().kill()` + `vm().start()`).
+        //
+        // We pass the numeric effective uid, not a username: the kernel resolves
+        // the `TUNSETOWNER` uid through the driver's private user namespace, whose
+        // only mapped uid is the driver's own (see `ensure_administrable_netns`,
+        // which maps a single uid — the caller's, or `1` when the caller is
+        // fake-root). Any other uid — e.g. the one a username like `ubuntu`
+        // resolves to — is unmapped there, so `ioctl(TUNSETOWNER)` fails with
+        // `EINVAL`. `geteuid()` here returns that inner uid, which is also the uid
+        // QEMU runs as, so the owner match holds.
         let tap = Self::tap_name(group_name, vm_name);
         let bridge = Self::bridge_name(group_name);
-        let user = current_username();
+        let uid = nix::unistd::geteuid().as_raw();
         let tap_script = format!(
             "ip link del {tap} 2>/dev/null; \
-             ip tuntap add dev {tap} mode tap user {user} && \
+             ip tuntap add dev {tap} mode tap user {uid} && \
              ip link set dev {tap} master {bridge} && \
              ip link set dev {tap} up"
         );
@@ -1061,7 +1091,7 @@ impl LocalBackend {
         if has_ipv4 {
             let tap_ipv4_script = format!(
                 "ip link del {tap_ipv4} 2>/dev/null; \
-                 ip tuntap add dev {tap_ipv4} mode tap user {user} && \
+                 ip tuntap add dev {tap_ipv4} mode tap user {uid} && \
                  ip link set dev {tap_ipv4} master {bridge} && \
                  ip link set dev {tap_ipv4} up"
             );
@@ -1434,14 +1464,6 @@ fn sanitize_name(s: &str) -> String {
             }
         })
         .collect()
-}
-
-/// The current user's login name, used to tag TAP device ownership so the
-/// unprivileged QEMU (which runs as the same user) may open them. Falls back to
-/// the `USER` environment variable and finally to `ubuntu` (the container's
-/// default user).
-fn current_username() -> String {
-    std::env::var("USER").unwrap_or_else(|_| "ubuntu".to_string())
 }
 
 /// Send a single no-argument QMP command to a VM's monitor socket and wait for
