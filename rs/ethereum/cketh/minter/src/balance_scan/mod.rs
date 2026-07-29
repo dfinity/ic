@@ -96,21 +96,12 @@ async fn scan<R: Runtime>(
         return;
     }
 
-    // Chunk by address so an address' per-token calls never straddle a chunk boundary, keeping
-    // the per-address scan-state advance all-or-nothing per chunk. `erc20_tokens.len()` is the number of
-    // supported ckERC20 tokens (a handful, far below MAX_CALLS_PER_BATCH), so a chunk holds many
-    // addresses. A single address is never split across chunks — that would let a partially
-    // scanned address be advanced — so if the token set ever grew past the cap, one address' calls
-    // would still be sent together (the batcher response is only 32 bytes per call, so a larger
-    // chunk stays cheap).
-    let addresses_per_chunk = addresses_per_chunk(erc20_tokens.len());
     let mut candidates = 0_usize;
     let mut chunks_failed = 0_usize;
     let mut scanned: Vec<Account> = Vec::new();
 
-    for chunk in addresses_to_scan.chunks(addresses_per_chunk) {
-        let calls = balance_of_calls(chunk, &erc20_tokens);
-        let input = batcher::encode_balance_batch(&calls);
+    for batch in plan_batches(&addresses_to_scan, &erc20_tokens) {
+        let input = batcher::encode_balance_batch(&batch.calls);
         match client
             .call(call_args(input, latest_block))
             .with_cycles(MIN_ATTACHED_CYCLES)
@@ -118,10 +109,10 @@ async fn scan<R: Runtime>(
             .await
             .reduce_with_strategy(AnyOf)
         {
-            Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), calls.len()) {
+            Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), batch.calls.len()) {
                 Ok(balances) => {
-                    candidates += count_candidates(&calls, &balances);
-                    scanned.extend(chunk.iter().map(|(account, _)| *account));
+                    candidates += count_candidates(&batch.calls, &balances);
+                    scanned.extend(batch.addresses.iter().map(|(account, _)| *account));
                 }
                 Err(e) => {
                     chunks_failed += 1;
@@ -151,16 +142,43 @@ async fn scan<R: Runtime>(
     record_stats(now, addresses_scanned, candidates, chunks_failed);
 }
 
-/// How many deposit addresses fit in one `MAX_CALLS_PER_BATCH`-bounded chunk, given the number of
+/// One balance-scan batch: the deposit addresses whose balances are read together in a single
+/// `eth_call`, and the flat `(token, holder)` calls for exactly those addresses.
+struct ScanBatch<'a> {
+    addresses: &'a [(Account, Address)],
+    calls: Vec<BalanceOfCall>,
+}
+
+/// Split the due addresses into `eth_call`-sized batches, chunking *by address* so an address'
+/// per-token calls never straddle a batch boundary. This keeps the per-address scan-state advance
+/// all-or-nothing per batch: were an address split, a failing batch could advance it with only
+/// part of its balances read. The supported token set is a handful (far below
+/// `MAX_CALLS_PER_BATCH`), so a batch holds many addresses; if the set ever grew past the cap, a
+/// single address' calls would still be sent together (the batcher response is only 32 bytes per
+/// call, so an oversized batch stays cheap).
+fn plan_batches<'a>(addresses: &'a [(Account, Address)], tokens: &[Address]) -> Vec<ScanBatch<'a>> {
+    addresses
+        .chunks(addresses_per_chunk(tokens.len()))
+        .map(|chunk| {
+            let holders: Vec<Address> = chunk.iter().map(|(_account, holder)| *holder).collect();
+            ScanBatch {
+                addresses: chunk,
+                calls: balance_of_calls(&holders, tokens),
+            }
+        })
+        .collect()
+}
+
+/// How many deposit addresses fit in one `MAX_CALLS_PER_BATCH`-bounded batch, given the number of
 /// supported tokens (one `balanceOf` sub-call per address-token pair). At least one address per
-/// chunk even if the token set alone exceeds the cap.
+/// batch even if the token set alone exceeds the cap.
 fn addresses_per_chunk(num_tokens: usize) -> usize {
     (MAX_CALLS_PER_BATCH / num_tokens.max(1)).max(1)
 }
 
-fn balance_of_calls(addresses: &[(Account, Address)], tokens: &[Address]) -> Vec<BalanceOfCall> {
-    let mut calls = Vec::with_capacity(addresses.len() * tokens.len());
-    for (_account, holder) in addresses {
+fn balance_of_calls(holders: &[Address], tokens: &[Address]) -> Vec<BalanceOfCall> {
+    let mut calls = Vec::with_capacity(holders.len() * tokens.len());
+    for holder in holders {
         for token in tokens {
             calls.push(BalanceOfCall {
                 token: *token,

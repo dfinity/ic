@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use super::*;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::state::automatic_deposits::DepositRequest;
@@ -51,13 +52,10 @@ fn should_not_count_candidates_for_an_unsupported_token() {
 
 #[test]
 fn should_build_one_call_per_address_and_token_in_order() {
-    let addresses = vec![
-        (account(1), DEPOSIT_ADDRESS),
-        (account(2), Address::new([0x99; 20])),
-    ];
+    let holders = vec![DEPOSIT_ADDRESS, Address::new([0x99; 20])];
     let tokens = vec![TOKEN_A, TOKEN_B];
 
-    let calls = balance_of_calls(&addresses, &tokens);
+    let calls = balance_of_calls(&holders, &tokens);
 
     assert_eq!(
         calls,
@@ -85,16 +83,15 @@ fn should_build_one_call_per_address_and_token_in_order() {
 #[test]
 fn should_build_no_calls_when_no_addresses_or_no_tokens() {
     assert!(balance_of_calls(&[], &[TOKEN_A]).is_empty());
-    assert!(balance_of_calls(&[(account(1), DEPOSIT_ADDRESS)], &[]).is_empty());
+    assert!(balance_of_calls(&[DEPOSIT_ADDRESS], &[]).is_empty());
 }
 
 #[test]
-fn should_never_split_an_address_across_chunks() {
+fn should_never_split_an_address_across_batches() {
     // Scan-state is tracked per address, not per (address, token): `record_scan` advances a whole
-    // address once its chunk succeeds. So every `balanceOf` for an address must ride in the same
-    // chunk; otherwise a chunk failure could advance an address whose balances were only partially
-    // read. Chunking is by address (as `scan` does: `addresses.chunks(addresses_per_chunk(..))`),
-    // which holds even when a single address's token calls alone exceed MAX_CALLS_PER_BATCH.
+    // address once its batch succeeds. `plan_batches` must therefore keep every `balanceOf` for an
+    // address in the same batch — otherwise a failing batch could advance an address whose balances
+    // were only partially read — even when a single address's token calls alone exceed the cap.
     fn address_at(index: u64) -> Address {
         let mut bytes = [0_u8; 20];
         bytes[..8].copy_from_slice(&index.to_be_bytes());
@@ -108,32 +105,42 @@ fn should_never_split_an_address_across_chunks() {
     for num_tokens in [1, 2, 7, MAX_CALLS_PER_BATCH, MAX_CALLS_PER_BATCH + 1] {
         let tokens: Vec<Address> = (0..num_tokens as u64).map(address_at).collect();
 
-        let per_chunk = addresses_per_chunk(tokens.len());
-        assert!(
-            per_chunk >= 1,
-            "num_tokens={num_tokens}: a chunk must hold at least one whole address"
-        );
+        let batches = plan_batches(&addresses, &tokens);
 
-        let mut addresses_covered = 0;
-        for chunk in addresses.chunks(per_chunk) {
-            let calls = balance_of_calls(chunk, &tokens);
-            for (_, holder) in chunk {
-                let queried: Vec<Address> = calls
+        let mut seen: BTreeSet<Address> = BTreeSet::new();
+        for batch in &batches {
+            let batch_holders: Vec<Address> = batch.addresses.iter().map(|(_, h)| *h).collect();
+            for holder in &batch_holders {
+                // Batches never intersect: an address belongs to exactly one batch.
+                assert!(
+                    !seen.contains(holder),
+                    "num_tokens={num_tokens}: address {holder:?} appears in more than one batch"
+                );
+                // The batch queries every token for the address, and only for its own addresses.
+                let queried: Vec<Address> = batch
+                    .calls
                     .iter()
                     .filter(|call| call.holder == *holder)
                     .map(|call| call.token)
                     .collect();
                 assert_eq!(
                     queried, tokens,
-                    "num_tokens={num_tokens}: address {holder:?} is not fully covered by a single chunk"
+                    "num_tokens={num_tokens}: address {holder:?} is not fully covered by its batch"
                 );
-                addresses_covered += 1;
             }
+            assert!(
+                batch
+                    .calls
+                    .iter()
+                    .all(|call| batch_holders.contains(&call.holder)),
+                "num_tokens={num_tokens}: batch issues a call for an address outside it"
+            );
+            seen.extend(batch_holders);
         }
         assert_eq!(
-            addresses_covered,
+            seen.len(),
             addresses.len(),
-            "num_tokens={num_tokens}: every address must be scanned in exactly one chunk"
+            "num_tokens={num_tokens}: every address must be scanned in exactly one batch"
         );
     }
 }
