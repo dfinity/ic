@@ -90,8 +90,8 @@ impl CanisterAccounting {
 ///    possibly in a later block than the response. A node is accounted at most
 ///    once (tracked via `refunding_nodes`), which makes these idempotent.
 pub(crate) fn deliver_canister_http_spent(
-    spent: &CanisterHttpSpent,
     state: &mut ReplicatedState,
+    spent: &CanisterHttpSpent,
     log: &ReplicaLogger,
     metrics: &CanisterHttpSpentMetrics,
 ) {
@@ -255,17 +255,26 @@ fn apply_capped(
 
 /// Credits the accumulated per-canister `refund` to the corresponding canisters'
 /// balances and reports the accumulated `consumed` cycles in their cost metrics
-/// as well as in the subnet's, logging any whose canister no longer exists.
+/// as well as in the subnet's.
+///
+/// If the calling canister no longer exists, its refund cannot be credited back
+/// and is lost. It was taken out of the canister's balance when the request was
+/// made, so it is reported as consumed by deleted canisters; otherwise these cycles
+/// would silently disappear from [`SubnetMetrics::consumed_cycles_total()`].
 fn apply_accounting(
     state: &mut ReplicatedState,
     accounting: BTreeMap<CanisterId, CanisterAccounting>,
     log: &ReplicaLogger,
 ) {
     let mut subnet_consumed = NominalCycles::zero();
+    let mut lost_by_deleted_canisters = NominalCycles::zero();
     for (sender, accounting) in accounting {
         if accounting.refund.is_zero() && accounting.consumed.is_zero() {
             continue;
         }
+        // The spend was consumed by the subnet whether or not the calling canister
+        // is still around.
+        subnet_consumed += accounting.consumed;
         match state.canister_state_make_mut(&sender) {
             Some(canister) => {
                 canister.system_state.add_cycles(accounting.refund);
@@ -273,31 +282,38 @@ fn apply_accounting(
                     canister
                         .system_state
                         .observe_consumed_cycles_for_https_outcall(accounting.consumed);
-                    subnet_consumed += accounting.consumed;
                 }
             }
             None => {
                 info!(
                     log,
-                    "Canister {} for an HTTP outcall no longer exists; dropping refund of {} \
-                     cycles and consumed report of {} cycles.",
+                    "Canister {} for an HTTP outcall no longer exists; its refund of {} cycles is \
+                     lost and reported as consumed by deleted canisters (consumed {} cycles).",
                     sender,
                     accounting.refund,
                     accounting.consumed
+                );
+                lost_by_deleted_canisters += CompoundCycles::<HTTPOutcalls>::new(
+                    accounting.refund,
+                    CanisterCyclesCostSchedule::Normal,
                 )
+                .nominal();
             }
         }
     }
 
+    let subnet_metrics = &mut state.metadata.subnet_metrics;
     if !subnet_consumed.is_zero() {
-        state
-            .metadata
-            .subnet_metrics
-            .observe_consumed_cycles_http_outcalls(subnet_consumed);
-        state
-            .metadata
-            .subnet_metrics
+        subnet_metrics.observe_consumed_cycles_http_outcalls(subnet_consumed);
+        subnet_metrics
             .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, subnet_consumed);
+    }
+    if !lost_by_deleted_canisters.is_zero() {
+        subnet_metrics.observe_consumed_cycles_with_use_case(
+            CyclesUseCase::DeletedCanisters,
+            lost_by_deleted_canisters,
+        );
+        subnet_metrics.observe_consumed_cycles_by_deleted_canisters(lost_by_deleted_canisters);
     }
 }
 
@@ -338,9 +354,9 @@ mod tests {
 
     /// Builds a state holding a single caller canister (`canister_test_id(1)`) on
     /// a [`SUBNET_SIZE`]-node subnet and, if `context` is `Some`, a delivered
-    /// `CanisterHttpRequestContext` registered under [`CALLBACK`], with a
-    /// [`CanisterCyclesCostSchedule::Normal`] cost schedule and the refund
-    /// status of a request that paid the given refundable cycles (see
+    /// `CanisterHttpRequestContext` registered under [`CALLBACK`], with the given
+    /// replication, a [`CanisterCyclesCostSchedule::Normal`] cost schedule and the
+    /// refund status of a request that paid the given refundable cycles (see
     /// [`refund_status()`]).
     fn setup(context: Option<(Replication, Cycles)>) -> (ReplicatedState, CanisterId) {
         setup_with_cost_schedule(context, CanisterCyclesCostSchedule::Normal)
@@ -482,19 +498,48 @@ mod tests {
             .unwrap_or(0)
     }
 
-    /// The cycles reported as consumed for HTTPS outcalls at the subnet level,
-    /// both in the dedicated field and in the by-use-case map. The two must
-    /// always agree, as they are observed together.
+    /// The cycles reported as consumed for HTTPS outcalls at the subnet level, in
+    /// the dedicated field as well as in the by-use-case gauge and counter maps.
+    /// All three must always agree, as they are observed together.
     fn subnet_consumed(state: &ReplicatedState) -> u128 {
+        subnet_consumed_for(state, CyclesUseCase::HTTPOutcalls)
+    }
+
+    /// The cycles reported at the subnet level as lost because the calling canister
+    /// was deleted. This module observes the same amount as the `DeletedCanisters`
+    /// use case and in the dedicated field, so the two must agree.
+    fn subnet_lost_by_deleted_canisters(state: &ReplicatedState) -> u128 {
+        let by_use_case = subnet_consumed_for(state, CyclesUseCase::DeletedCanisters);
+        assert_eq!(
+            by_use_case,
+            state
+                .metadata
+                .subnet_metrics
+                .get_consumed_cycles_by_deleted_canisters()
+                .get()
+        );
+        by_use_case
+    }
+
+    /// The cycles reported as consumed for `use_case` at the subnet level, both in
+    /// the by-use-case gauge and counter maps (which must agree). For
+    /// [`CyclesUseCase::HTTPOutcalls`] the legacy scalar field must agree, too.
+    fn subnet_consumed_for(state: &ReplicatedState, use_case: CyclesUseCase) -> u128 {
         let subnet_metrics = &state.metadata.subnet_metrics;
-        let http_outcalls = subnet_metrics.get_consumed_cycles_http_outcalls();
-        let by_use_case = subnet_metrics
-            .get_consumed_cycles_by_use_case()
-            .get(&CyclesUseCase::HTTPOutcalls)
-            .copied()
-            .unwrap_or_else(NominalCycles::zero);
-        assert_eq!(http_outcalls, by_use_case);
-        http_outcalls.get()
+        let get = |map: &BTreeMap<CyclesUseCase, NominalCycles>| {
+            map.get(&use_case)
+                .copied()
+                .unwrap_or_else(NominalCycles::zero)
+        };
+        let gauge = get(subnet_metrics.get_consumed_cycles_by_use_case());
+        assert_eq!(
+            gauge,
+            get(subnet_metrics.get_consumed_cycles_by_use_case_as_counters())
+        );
+        if use_case == CyclesUseCase::HTTPOutcalls {
+            assert_eq!(gauge, subnet_metrics.get_consumed_cycles_http_outcalls());
+        }
+        gauge.get()
     }
 
     fn get_refund_status(state: &ReplicatedState) -> RefundStatus {
@@ -552,7 +597,7 @@ mod tests {
             }],
             asynchronous: vec![],
         };
-        deliver_canister_http_spent(&report, &mut state, &no_op_logger(), &metrics);
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         // refund = 13 * 1_000 − 9_500 = 3_500.
         assert_eq!(
@@ -564,7 +609,44 @@ mod tests {
         assert_eq!(subnet_consumed(&state), spent.get());
         let status = get_refund_status(&state);
         assert_eq!(status.refunded_cycles, Cycles::new(3_500));
-        assert_eq!(status.refunding_nodes.len(), 13);
+        assert_eq!(status.refunding_nodes, all_nodes());
+        assert_errors(&[], &metrics_registry);
+    }
+
+    /// An asynchronous report on a normal subnet credits `allowance − spent` for
+    /// each reporting node and reports the per-node spend as consumed. Only the
+    /// reporting nodes are accounted; the rest are refunded on timeout.
+    #[test]
+    fn asynchronous_report_credits_refund_and_reports_consumed() {
+        let allowance = Cycles::new(1_000);
+        let refundable = allowance * SUBNET_SIZE; // 13_000
+        let (mut state, caller) = setup(Some((Replication::FullyReplicated, refundable)));
+        let (metrics_registry, metrics) = metrics();
+
+        let report = CanisterHttpSpent {
+            initial: vec![],
+            asynchronous: vec![CanisterHttpAsyncSpent {
+                callback: CALLBACK,
+                shares: BTreeMap::from([
+                    (node_test_id(1), Cycles::new(250)),
+                    (node_test_id(2), Cycles::new(400)),
+                    (node_test_id(3), Cycles::new(900)),
+                ]),
+            }],
+        };
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
+
+        // refund = (1_000 − 250) + (1_000 − 400) + (1_000 − 900) = 1_450;
+        // consumed = 250 + 400 + 900 = 1_550.
+        assert_eq!(
+            balance(&state, caller),
+            INITIAL_BALANCE + Cycles::new(1_450)
+        );
+        assert_eq!(consumed(&state, caller), 1_550);
+        assert_eq!(subnet_consumed(&state), 1_550);
+        let status = get_refund_status(&state);
+        assert_eq!(status.refunded_cycles, Cycles::new(1_450));
+        assert_eq!(status.refunding_nodes, node_set(&[1, 2, 3]));
         assert_errors(&[], &metrics_registry);
     }
 
@@ -586,12 +668,14 @@ mod tests {
             }],
             asynchronous: vec![],
         };
-        deliver_canister_http_spent(&report, &mut state, &no_op_logger(), &metrics);
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), spent.get());
         assert_eq!(subnet_consumed(&state), spent.get());
-        assert_eq!(get_refund_status(&state).refunded_cycles, Cycles::zero());
+        let status = get_refund_status(&state);
+        assert_eq!(status.refunded_cycles, Cycles::zero());
+        assert_eq!(status.refunding_nodes, node_set(&[1, 2, 3]));
         assert_errors(&[], &metrics_registry);
     }
 
@@ -613,12 +697,14 @@ mod tests {
                 ]),
             }],
         };
-        deliver_canister_http_spent(&report, &mut state, &no_op_logger(), &metrics);
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), 1_000);
         assert_eq!(subnet_consumed(&state), 1_000);
-        assert_eq!(get_refund_status(&state).refunded_cycles, Cycles::zero());
+        let status = get_refund_status(&state);
+        assert_eq!(status.refunded_cycles, Cycles::zero());
+        assert_eq!(status.refunding_nodes, node_set(&[1, 2]));
         assert_errors(&[], &metrics_registry);
     }
 
@@ -669,17 +755,15 @@ mod tests {
                 callback: CALLBACK,
                 shares: BTreeMap::from([
                     (node_test_id(1), Cycles::new(400)),
-                    (node_test_id(2), Cycles::new(600)),
+                    (node_test_id(2), Cycles::new(750)),
                 ]),
             }],
         };
-        deliver_canister_http_spent(&first, &mut state, &log, &metrics);
-        // refund = (1_000 − 400) + (1_000 − 600) = 1_000; consumed = 1_000.
-        assert_eq!(
-            balance(&state, caller),
-            INITIAL_BALANCE + Cycles::new(1_000)
-        );
-        assert_eq!(consumed(&state, caller), 1_000);
+        deliver_canister_http_spent(&mut state, &first, &log, &metrics);
+        // refund = (1_000 − 400) + (1_000 − 750) = 850; consumed = 1_150.
+        assert_eq!(balance(&state, caller), INITIAL_BALANCE + Cycles::new(850));
+        assert_eq!(consumed(&state, caller), 1_150);
+        assert_eq!(get_refund_status(&state).refunding_nodes, node_set(&[1, 2]));
         assert_errors(&[], &metrics_registry);
 
         // Second report repeats node 1 (must be ignored) and adds node 3.
@@ -693,14 +777,17 @@ mod tests {
                 ]),
             }],
         };
-        deliver_canister_http_spent(&second, &mut state, &log, &metrics);
+        deliver_canister_http_spent(&mut state, &second, &log, &metrics);
         // Only node 3 is newly accounted: refund += 1_000 − 700 = 300; consumed += 700.
         assert_eq!(
             balance(&state, caller),
-            INITIAL_BALANCE + Cycles::new(1_300)
+            INITIAL_BALANCE + Cycles::new(1_150)
         );
-        assert_eq!(consumed(&state, caller), 1_700);
-        assert_eq!(get_refund_status(&state).refunding_nodes.len(), 3);
+        assert_eq!(consumed(&state, caller), 1_850);
+        assert_eq!(
+            get_refund_status(&state).refunding_nodes,
+            node_set(&[1, 2, 3])
+        );
         // Node 1's repeated report was observed as an error.
         assert_errors(&[(ERROR_DUPLICATE_NODE_REPORT, 1)], &metrics_registry);
     }
@@ -724,7 +811,7 @@ mod tests {
                 shares: BTreeMap::from([(node_test_id(1), Cycles::new(400))]),
             }],
         };
-        deliver_canister_http_spent(&async_report, &mut state, &log, &metrics);
+        deliver_canister_http_spent(&mut state, &async_report, &log, &metrics);
         let balance_after_async = balance(&state, caller);
         let consumed_after_async = consumed(&state, caller);
 
@@ -737,7 +824,7 @@ mod tests {
             }],
             asynchronous: vec![],
         };
-        deliver_canister_http_spent(&initial_report, &mut state, &log, &metrics);
+        deliver_canister_http_spent(&mut state, &initial_report, &log, &metrics);
 
         assert_eq!(balance(&state, caller), balance_after_async);
         assert_eq!(consumed(&state, caller), consumed_after_async);
@@ -766,7 +853,7 @@ mod tests {
             }],
             asynchronous: vec![],
         };
-        deliver_canister_http_spent(&initial_report, &mut state, &log, &metrics);
+        deliver_canister_http_spent(&mut state, &initial_report, &log, &metrics);
         let balance_after_initial = balance(&state, caller);
         let consumed_after_initial = consumed(&state, caller);
 
@@ -778,7 +865,7 @@ mod tests {
                 shares: BTreeMap::from([(node_test_id(1), Cycles::new(400))]),
             }],
         };
-        deliver_canister_http_spent(&async_report, &mut state, &log, &metrics);
+        deliver_canister_http_spent(&mut state, &async_report, &log, &metrics);
 
         assert_eq!(balance(&state, caller), balance_after_initial);
         assert_eq!(consumed(&state, caller), consumed_after_initial);
@@ -827,7 +914,7 @@ mod tests {
                 ]),
             }],
         };
-        deliver_canister_http_spent(&report, &mut state, &no_op_logger(), &metrics);
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         // refund = (13 * 1_000 − 9_500) + (1_000 − 400) + (1_000 − 600) = 4_500;
         // consumed = 9_500 + 400 + 600 = 10_500.
@@ -862,7 +949,7 @@ mod tests {
             }],
             asynchronous: vec![],
         };
-        deliver_canister_http_spent(&report, &mut state, &no_op_logger(), &metrics);
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE + refundable);
         assert_eq!(get_refund_status(&state).refunded_cycles, refundable);
@@ -889,7 +976,7 @@ mod tests {
                 shares: BTreeMap::from([(node_test_id(2), Cycles::new(1))]),
             }],
         };
-        deliver_canister_http_spent(&report, &mut state, &no_op_logger(), &metrics);
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), 0);
@@ -897,9 +984,12 @@ mod tests {
         assert_errors(&[], &metrics_registry);
     }
 
-    /// A refund for a canister that no longer exists is dropped.
+    /// A refund for a canister that no longer exists cannot be credited back and
+    /// is reported as consumed by deleted canisters, so that the cycles do not
+    /// disappear from the subnet's totals. The spend is reported as consumed as
+    /// usual.
     #[test]
-    fn report_for_missing_canister_is_dropped() {
+    fn report_for_missing_canister_is_reported_as_lost() {
         let allowance = Cycles::new(1_000);
         let (mut state, caller) = setup(Some((
             Replication::FullyReplicated,
@@ -918,12 +1008,37 @@ mod tests {
             }],
             asynchronous: vec![],
         };
-        deliver_canister_http_spent(&report, &mut state, &no_op_logger(), &metrics);
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert!(state.canister_state(&caller).is_none());
-        // Nothing is reported at the subnet level either, as the cycles were never
-        // credited back to (nor consumed by) an existing canister.
-        assert_eq!(subnet_consumed(&state), 0);
+        assert_eq!(subnet_consumed(&state), 9_500);
+        // refund = 13 * 1_000 − 9_500 = 3_500, all of it lost.
+        assert_eq!(subnet_lost_by_deleted_canisters(&state), 3_500);
+        assert_errors(&[], &metrics_registry);
+    }
+
+    /// On a free subnet nothing was charged, so a deleted canister loses nothing;
+    /// the spend is still reported as consumed.
+    #[test]
+    fn free_subnet_report_for_missing_canister_loses_nothing() {
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (metrics_registry, metrics) = metrics();
+
+        state.remove_canister(&caller);
+
+        let report = CanisterHttpSpent {
+            initial: vec![CanisterHttpInitialSpent {
+                callback: CALLBACK,
+                amount: Cycles::new(9_500),
+                nodes: all_nodes(),
+            }],
+            asynchronous: vec![],
+        };
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
+
+        assert_eq!(subnet_consumed(&state), 9_500);
+        assert_eq!(subnet_lost_by_deleted_canisters(&state), 0);
         assert_errors(&[], &metrics_registry);
     }
 
@@ -979,7 +1094,7 @@ mod tests {
                 ]),
             }],
         };
-        deliver_canister_http_spent(&report, &mut state, &log, &metrics);
+        deliver_canister_http_spent(&mut state, &report, &log, &metrics);
         assert_eq!(
             balance(&state, caller),
             INITIAL_BALANCE + allowance * 3_usize

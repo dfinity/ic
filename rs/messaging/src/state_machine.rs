@@ -254,8 +254,8 @@ impl StateMachine for StateMachineImpl {
         // delivered collection and can therefore receive their refunds and have
         // their consumed cycles reported.
         deliver_canister_http_spent(
-            &canister_http_spent,
             &mut state_after_execution,
+            &canister_http_spent,
             &self.log,
             &self.metrics.canister_http_spent_metrics,
         );

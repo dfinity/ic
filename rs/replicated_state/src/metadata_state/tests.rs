@@ -1083,6 +1083,7 @@ fn time_out_delivered_canister_http_request_contexts() {
         vec![contexts[0].clone()],
         manager.time_out_delivered_canister_http_request_contexts(at_first_timeout)
     );
+    assert_eq!(1, manager.delivered_canister_http_request_contexts.len());
 
     // And a second later, the second one.
     let at_second_timeout = at_first_timeout + Duration::from_secs(1);

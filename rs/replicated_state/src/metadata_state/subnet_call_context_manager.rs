@@ -329,8 +329,8 @@ impl SubnetCallContextManager {
                         if context.pricing_version == PricingVersion::PayAsYouGo {
                             // If the pricing version is pay-as-you-go, move the context
                             // to the delivered contexts. This lets us keep accounting
-                            // late per-replica spend reports (and refund the replicas
-                            // that never responded on timeout).
+                            // late per-replica spend reports (and refund cycles from the
+                            // replicas that never responded on timeout).
                             self.delivered_canister_http_request_contexts
                                 .insert(callback_id, context.clone());
                         }

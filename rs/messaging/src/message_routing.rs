@@ -360,7 +360,7 @@ pub(crate) struct MessageRoutingMetrics {
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
 
-    /// Metrics for the accounting of HTTP outcall spend reports and refunds.
+    /// Metrics for the accounting of HTTP outcall (cycles) spent reports and refunds.
     pub(crate) canister_http_spent_metrics: CanisterHttpSpentMetrics,
 
     /// Metrics for the `next_checkpoint_height` passed to `process_batch`.
