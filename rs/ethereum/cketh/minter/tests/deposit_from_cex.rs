@@ -20,11 +20,11 @@ use ethers_core::abi::{ParamType, Token};
 use ethers_core::types::{Address as EthAddress, U256};
 use ethers_core::utils::keccak256;
 use ic_cketh_minter::balance_scan::batcher::{
-    BalanceOfCall, decode_balance_batch, encode_balance_batch,
+    decode_balance_batch, encode_balance_batch, BalanceOfCall,
 };
 use ic_cketh_minter::numeric::Erc20Value;
-use ic_cketh_test_utils::USDC_ERC20_CONTRACT_ADDRESS;
 use ic_cketh_test_utils::live_scan::{CkErc20LiveScanSetup, USDT_ERC20_CONTRACT_ADDRESS};
+use ic_cketh_test_utils::USDC_ERC20_CONTRACT_ADDRESS;
 use ic_ethereum_types::Address;
 use serde_json::Value;
 use std::process::{Child, Command, Stdio};
