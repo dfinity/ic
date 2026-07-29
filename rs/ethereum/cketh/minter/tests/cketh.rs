@@ -34,13 +34,12 @@ use ic_cketh_test_utils::{
     LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
-use ic_management_canister_types_private::CanisterStatusType;
+use ic_management_canister_types::CanisterStatusType;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
-use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -80,7 +79,7 @@ fn should_deposit_and_withdraw() {
                 subaccount: params.recipient_subaccount,
             },
         };
-        let minter: Principal = cketh.minter_id.into();
+        let minter: Principal = cketh.minter_id;
         let withdrawal_amount = Nat::from(withdrawal_amount);
 
         let cketh = cketh
@@ -182,7 +181,7 @@ fn should_retrieve_cache_transaction_price() {
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
     let result = cketh.eip_1559_transaction_price(None);
-    assert_matches!(result, Err(e) if e.code() == ic_state_machine_tests::ErrorCode::CanisterCalledTrap);
+    assert_matches!(result, Err(e) if e.error_code == pocket_ic::ErrorCode::CanisterCalledTrap);
 
     let cketh = cketh
         .deposit(DepositParams::default())
@@ -213,7 +212,7 @@ fn should_retrieve_cache_transaction_price() {
     assert_eq!(price, second_price);
 
     let price_using_ledger_id =
-        cketh.eip_1559_transaction_price_expecting_ok(Some(cketh.ledger_id.into()));
+        cketh.eip_1559_transaction_price_expecting_ok(Some(cketh.ledger_id));
     assert_eq!(price, price_using_ledger_id);
 }
 
@@ -437,7 +436,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
 #[test]
 fn should_reimburse() {
     let cketh = CkEthSetup::default();
-    let minter: Principal = cketh.minter_id.into();
+    let minter: Principal = cketh.minter_id;
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string();
@@ -628,7 +627,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
-    let resubmitted_sent_tx = "0x02f873018084625900808507b81d70e382520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cc412e75c2de80c001a03d58ee49c9dce3b3c646eeb18317b46cc852a5384be9026cb0aa3d59f9b16292a007276dfb5e003bd7f527675e15c8512f1324e6434c62e7ffa4c68971d726fa0b";
+    let resubmitted_sent_tx = "0x02f873018084625900808507b81d70e382520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cc412e75c2de80c001a0a50a97743db2c45bfafaa668abb848ea6a15818d7c704b06c8957827fa68c6e8a04175e5fa7fbda1bb84e254f31acafd0fdf95f094127b0520b4e447e80d1afe37";
     let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
     let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
     assert_eq!(
@@ -871,7 +870,7 @@ fn should_be_able_to_stop_canister_during_scraping() {
     cketh.env.tick();
     cketh.env.tick();
     assert_eq!(
-        cketh.env.canister_http_request_contexts().len(),
+        cketh.env.get_canister_http().len(),
         4,
         "Expected HTTPS outcalls since scraping is still in progress: {}",
         debug_http_outcalls(&cketh.env)
@@ -904,8 +903,8 @@ fn should_be_able_to_stop_canister_during_scraping() {
 
     cketh.tick_until_minter_canister_status(CanisterStatusType::Stopped);
     assert_eq!(
-        cketh.env.canister_http_request_contexts(),
-        BTreeMap::default(),
+        cketh.env.get_canister_http(),
+        Vec::new(),
         "Unexpected pending HTTPS outcalls"
     );
 
@@ -1208,8 +1207,8 @@ fn should_retrieve_minter_info() {
             last_deposit_with_subaccount_scraped_block_number: Some(
                 LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
             ),
-            cketh_ledger_id: Some(cketh.ledger_id.into()),
-            evm_rpc_id: Some(cketh.evm_rpc_id.into()),
+            cketh_ledger_id: Some(cketh.ledger_id),
+            evm_rpc_id: Some(cketh.evm_rpc_id),
         }
     );
 
@@ -1326,7 +1325,7 @@ mod cketh_evm_rpc {
         cketh.stop_minter();
         cketh
             .env
-            .stop_canister(cketh.evm_rpc_id)
+            .stop_canister(cketh.evm_rpc_id, None)
             .expect("Failed to stop EVM RPC canister");
         cketh.start_minter();
 
