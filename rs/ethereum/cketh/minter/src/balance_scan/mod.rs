@@ -43,8 +43,13 @@ pub async fn balance_scan() {
     };
 
     let client = read_state(rpc_client);
-    // Chunk by address so an address' per-token calls never straddle a chunk boundary; this keeps
-    // the per-address scan-state advance below all-or-nothing per chunk.
+    // Chunk by address so an address' per-token calls never straddle a chunk boundary, keeping
+    // the per-address scan-state advance all-or-nothing per chunk. `tokens.len()` is the number of
+    // supported ckERC20 tokens (a handful, far below MAX_CALLS_PER_BATCH), so a chunk holds many
+    // addresses. A single address is never split across chunks — that would let a partially
+    // scanned address be advanced — so if the token set ever grew past the cap, one address' calls
+    // would still be sent together (the batcher response is only 32 bytes per call, so a larger
+    // chunk stays cheap).
     let addresses_per_chunk = (MAX_CALLS_PER_BATCH / tokens.len()).max(1);
     let mut candidates = 0_usize;
     let mut chunks_failed = 0_usize;

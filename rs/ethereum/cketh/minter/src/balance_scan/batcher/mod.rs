@@ -41,7 +41,8 @@ pub const BATCHER_INITCODE: [u8; 165] = [
 ];
 
 /// Function selector for `balanceOf(address)`, i.e. `keccak256("balanceOf(address)")[..4]`.
-/// Embedded in [`BATCHER_INITCODE`] right after its leading `PUSH32` opcode.
+/// Embedded in [`BATCHER_INITCODE`] right after its leading `PUSH32` opcode; asserted by tests.
+#[cfg(test)]
 const BALANCE_OF_SELECTOR: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
 
 /// One `balanceOf(holder)` sub-call to be executed against an ERC-20 `token` contract.
