@@ -373,7 +373,7 @@ mod tests {
             decoded_payload,
             ChangeCanisterRequest {
                 stop_before_installing: true,
-                mode: RootCanisterInstallMode::Upgrade,
+                mode: CanisterInstallModeV2::Upgrade(None),
                 canister_id: REGISTRY_CANISTER_ID,
                 wasm_module: vec![1, 2, 3],
                 arg: vec![4, 5, 6],
@@ -444,7 +444,7 @@ mod tests {
             decoded_payload,
             ChangeCanisterRequest {
                 stop_before_installing: false,
-                mode: RootCanisterInstallMode::Reinstall,
+                mode: CanisterInstallModeV2::Reinstall,
                 canister_id: SNS_WASM_CANISTER_ID,
                 wasm_module: vec![1, 2, 3],
                 arg: vec![],

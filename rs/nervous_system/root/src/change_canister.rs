@@ -399,7 +399,7 @@ mod tests {
         let conflicting_request = ChangeCanisterRequest {
             stop_before_installing: false,
             canister_id,
-            mode: CanisterInstallMode::Install,
+            mode: CanisterInstallModeV2::Install,
             wasm_module: vec![1, 2, 3],
             chunked_canister_wasm: None,
             arg: vec![7, 8, 9],
@@ -417,7 +417,7 @@ mod tests {
         let new_request = ChangeCanisterRequest {
             stop_before_installing: true,
             canister_id,
-            mode: CanisterInstallMode::Upgrade,
+            mode: CanisterInstallModeV2::Upgrade(None),
             wasm_module: vec![10, 11, 12],
             chunked_canister_wasm: None,
             arg: vec![16, 17, 18],
