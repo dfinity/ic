@@ -23,7 +23,9 @@ use ic_cketh_minter::balance_scan::batcher::{
     decode_balance_batch, encode_balance_batch, BalanceOfCall,
 };
 use ic_cketh_minter::numeric::Erc20Value;
-use ic_cketh_test_utils::live_scan::{CkErc20LiveScanSetup, USDT_ERC20_CONTRACT_ADDRESS};
+use ic_cketh_test_utils::live_scan::{
+    CkErc20LiveScanSetup, USDT_ERC20_CONTRACT_ADDRESS, default_caller,
+};
 use ic_cketh_test_utils::USDC_ERC20_CONTRACT_ADDRESS;
 use ic_ethereum_types::Address;
 use serde_json::Value;
@@ -201,7 +203,8 @@ fn should_scan_real_erc20_balances_through_the_evm_rpc_canister() {
     let dev = address_from_hex(DEV_ACCOUNT);
 
     let setup = CkErc20LiveScanSetup::new_live(anvil.url());
-    let deposit = setup.register_deposit_address(DEPOSIT_SUBACCOUNT);
+    let user = default_caller();
+    let deposit = setup.register_deposit_address(user, DEPOSIT_SUBACCOUNT);
 
     // Reuse MockUSDT's deployed bytecode to give both supported tokens a working `balanceOf`, then
     // credit the deposit address on each by writing the `balanceOf` mapping slot directly.
@@ -234,7 +237,7 @@ fn should_scan_real_erc20_balances_through_the_evm_rpc_canister() {
         "the funded address should be a candidate for both supported tokens"
     );
 
-    let progress = setup.deposit_erc20(DEPOSIT_SUBACCOUNT);
+    let progress = setup.deposit_erc20(user, DEPOSIT_SUBACCOUNT);
     assert!(progress.scan_count >= 1, "the address should report a scan");
     assert!(
         progress.last_scanned_block.is_some(),

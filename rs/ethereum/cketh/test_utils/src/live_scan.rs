@@ -17,6 +17,7 @@
 
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
+use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
 };
@@ -30,8 +31,8 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CKETH_MINIMUM_WITHDRAWAL_AMOUNT, ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS,
-    USDC_ERC20_CONTRACT_ADDRESS, evm_rpc_wasm, minter_wasm,
+    CKETH_MINIMUM_WITHDRAWAL_AMOUNT, DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS,
+    ETH_HELPER_CONTRACT_ADDRESS, USDC_ERC20_CONTRACT_ADDRESS, evm_rpc_wasm, minter_wasm,
 };
 
 /// USDT's mainnet address, the second token registered so the scan reads more than one token per
@@ -41,6 +42,11 @@ pub const USDT_ERC20_CONTRACT_ADDRESS: &str = "0xdAC17F958D2ee523a2206206994597C
 /// PocketIC's fiduciary subnet holds the secp256k1 test key named `key_1`, the key the minter
 /// derives deposit addresses from.
 const ECDSA_KEY_NAME: &str = "key_1";
+
+/// The default depositing user, matching [`crate::ckerc20::CkErc20Setup`]'s caller.
+pub fn default_caller() -> Principal {
+    PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into()
+}
 
 /// The outcome of a completed balance scan, read back from the minter's metrics.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,8 +58,6 @@ pub struct BalanceScanOutcome {
 pub struct CkErc20LiveScanSetup {
     env: PocketIc,
     minter_id: Principal,
-    /// Doubles as the deposit caller and as the orchestrator id authorised to register tokens.
-    controller: Principal,
 }
 
 impl CkErc20LiveScanSetup {
@@ -91,23 +95,19 @@ impl CkErc20LiveScanSetup {
         activate_ckerc20(&env, minter_id, controller);
         register_supported_tokens(&env, minter_id, controller);
 
-        Self {
-            env,
-            minter_id,
-            controller,
-        }
+        Self { env, minter_id }
     }
 
-    /// Registers a deposit address for `subaccount` and returns the Ethereum address the minter
-    /// derived for it, so the caller can fund it on anvil.
-    pub fn register_deposit_address(&self, subaccount: [u8; 32]) -> Address {
-        Address::from_str(&self.deposit_erc20(subaccount).address)
+    /// Registers a deposit address for `caller`'s `subaccount` and returns the Ethereum address the
+    /// minter derived for it, so the caller can fund it on anvil.
+    pub fn register_deposit_address(&self, caller: Principal, subaccount: [u8; 32]) -> Address {
+        Address::from_str(&self.deposit_erc20(caller, subaccount).address)
             .expect("BUG: minter returned an invalid deposit address")
     }
 
-    /// Calls `deposit_erc20`, which registers (idempotently) the caller's deposit address for
-    /// balance scanning and reports its scan progress.
-    pub fn deposit_erc20(&self, subaccount: [u8; 32]) -> DepositErc20Response {
+    /// Calls `deposit_erc20` as `caller`, which registers (idempotently) that user's deposit
+    /// address for balance scanning and reports its scan progress.
+    pub fn deposit_erc20(&self, caller: Principal, subaccount: [u8; 32]) -> DepositErc20Response {
         let arg = DepositErc20Arg {
             mode: DepositMode::Unsponsored {
                 subaccount: Some(subaccount),
@@ -117,7 +117,7 @@ impl CkErc20LiveScanSetup {
             .env
             .update_call(
                 self.minter_id,
-                self.controller,
+                caller,
                 "deposit_erc20",
                 Encode!(&arg).unwrap(),
             )

@@ -286,7 +286,7 @@ rust_test(
 )
 
 rust_test(
-    name = "deposit_from_cex_test",
+    name = "deposit_from_cex",
     # The end-to-end balance-scan test runs a live PocketIC and waits (wall-clock) for the minter's
     # periodic scan, so it needs a larger timeout than the pure-anvil tests.
     size = "medium",
