@@ -13,8 +13,8 @@ const METRIC_ACCOUNTING_ERRORS_TOTAL: &str = "mr_canister_http_accounting_errors
 
 const LABEL_ERROR: &str = "error";
 
-/// An initial spend report was received for a callback for which some node(s)
-/// had already been accounted (through an asynchronous report).
+/// An initial spend report was received for a callback for which some node(s) had
+/// already been accounted (through an early asynchronous, or duplicate initial report).
 const ERROR_INITIAL_AFTER_NODE_REPORT: &str = "initial_after_node_report";
 /// A node reported its spend more than once for the same callback.
 const ERROR_DUPLICATE_NODE_REPORT: &str = "duplicate_node_report";
@@ -95,10 +95,10 @@ pub(crate) fn deliver_canister_http_spent(
     log: &ReplicaLogger,
     metrics: &CanisterHttpSpentMetrics,
 ) {
-    // First update the contexts' refund status and accumulate the amounts to
-    // credit/report per canister. The crediting happens in a second pass to
-    // avoid borrowing both the subnet call context manager and the canister
-    // states at once.
+    // First update the contexts' refund status and accumulate the amounts to credit /
+    // report per canister; the crediting happens in a second pass, in
+    // `apply_accounting()`. This aggregates all reports of a canister into a single
+    // balance and metric update.
     let mut accounting: BTreeMap<CanisterId, CanisterAccounting> = BTreeMap::new();
     {
         let contexts = &mut state
@@ -206,10 +206,10 @@ pub(crate) fn refund_timed_out_canister_http_contexts(
 
     let mut accounting: BTreeMap<CanisterId, CanisterAccounting> = BTreeMap::new();
     for (callback, mut context) in timed_out {
-        // The number of replicas assigned to the request; the responders already
-        // refunded via `deliver_canister_http_spent`, the rest refund in full
-        // here.
+        // The number of replicas assigned to the request.
         let node_count = context.replication.node_count(context.subnet_size);
+        // Unresponsive nodes (those who haven't already refunded via `deliver_canister_http_spent`)
+        // are refunded in full here.
         let unresponsive_replicas =
             node_count.saturating_sub(context.refund_status.refunding_nodes.len());
         let refund = context.refund_status.per_replica_allowance * unresponsive_replicas;
@@ -339,6 +339,14 @@ mod tests {
     const INITIAL_BALANCE: Cycles = Cycles::new(1_000_000_000_000);
     const CALLBACK: CallbackId = CallbackId::new(42);
 
+    /// Cycles that the subnet has already observed as consumed for HTTP outcalls
+    /// before the reports under test are delivered.
+    ///
+    /// The subnet-level metric is cumulative across all canisters, so seeding it
+    /// ensures that it is never trivially equal to the caller's own metric (and that
+    /// the reports are added to it rather than overwriting it).
+    const SUBNET_CONSUMED_BEFORE: u128 = 7_000_000;
+
     fn node_set(ids: &[u64]) -> BTreeSet<NodeId> {
         ids.iter().copied().map(node_test_id).collect()
     }
@@ -406,17 +414,29 @@ mod tests {
     }
 
     /// Builds a state holding a single caller canister (`canister_test_id(1)`)
-    /// on a [`SUBNET_SIZE`]-node subnet, but no delivered contexts.
+    /// on a [`SUBNET_SIZE`]-node subnet, but no delivered contexts. The subnet has
+    /// already consumed [`SUBNET_CONSUMED_BEFORE`] cycles for HTTP outcalls.
     fn setup_state() -> (ReplicatedState, CanisterId) {
         let caller = canister_test_id(1);
         let canister = CanisterStateBuilder::new()
             .with_canister_id(caller)
             .with_cycles(INITIAL_BALANCE)
             .build();
-        let state = ReplicatedStateBuilder::new()
+        let mut state = ReplicatedStateBuilder::new()
             .with_canister(canister)
             .with_node_ids(all_nodes().into_iter().collect())
             .build();
+
+        let consumed_before = CompoundCycles::<HTTPOutcalls>::new(
+            Cycles::new(SUBNET_CONSUMED_BEFORE),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .nominal();
+        let subnet_metrics = &mut state.metadata.subnet_metrics;
+        subnet_metrics.observe_consumed_cycles_http_outcalls(consumed_before);
+        subnet_metrics
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, consumed_before);
+
         (state, caller)
     }
 
@@ -506,24 +526,14 @@ mod tests {
     }
 
     /// The cycles reported at the subnet level as lost because the calling canister
-    /// was deleted. This module observes the same amount as the `DeletedCanisters`
-    /// use case and in the dedicated field, so the two must agree.
+    /// was deleted.
     fn subnet_lost_by_deleted_canisters(state: &ReplicatedState) -> u128 {
-        let by_use_case = subnet_consumed_for(state, CyclesUseCase::DeletedCanisters);
-        assert_eq!(
-            by_use_case,
-            state
-                .metadata
-                .subnet_metrics
-                .get_consumed_cycles_by_deleted_canisters()
-                .get()
-        );
-        by_use_case
+        subnet_consumed_for(state, CyclesUseCase::DeletedCanisters)
     }
 
     /// The cycles reported as consumed for `use_case` at the subnet level, both in
-    /// the by-use-case gauge and counter maps (which must agree). For
-    /// [`CyclesUseCase::HTTPOutcalls`] the legacy scalar field must agree, too.
+    /// the by-use-case gauge and counter maps (which must agree). For the use cases
+    /// that also have a dedicated field, that field must agree, too.
     fn subnet_consumed_for(state: &ReplicatedState, use_case: CyclesUseCase) -> u128 {
         let subnet_metrics = &state.metadata.subnet_metrics;
         let get = |map: &BTreeMap<CyclesUseCase, NominalCycles>| {
@@ -536,8 +546,15 @@ mod tests {
             gauge,
             get(subnet_metrics.get_consumed_cycles_by_use_case_as_counters())
         );
-        if use_case == CyclesUseCase::HTTPOutcalls {
-            assert_eq!(gauge, subnet_metrics.get_consumed_cycles_http_outcalls());
+        match use_case {
+            CyclesUseCase::HTTPOutcalls => {
+                assert_eq!(gauge, subnet_metrics.get_consumed_cycles_http_outcalls())
+            }
+            CyclesUseCase::DeletedCanisters => assert_eq!(
+                gauge,
+                subnet_metrics.get_consumed_cycles_by_deleted_canisters()
+            ),
+            _ => {}
         }
         gauge.get()
     }
@@ -606,7 +623,10 @@ mod tests {
         );
         assert_eq!(consumed(&state, caller), spent.get());
         // The spend is also reported at the subnet level, like the base fee.
-        assert_eq!(subnet_consumed(&state), spent.get());
+        assert_eq!(
+            subnet_consumed(&state),
+            SUBNET_CONSUMED_BEFORE + spent.get()
+        );
         let status = get_refund_status(&state);
         assert_eq!(status.refunded_cycles, Cycles::new(3_500));
         assert_eq!(status.refunding_nodes, all_nodes());
@@ -643,7 +663,7 @@ mod tests {
             INITIAL_BALANCE + Cycles::new(1_450)
         );
         assert_eq!(consumed(&state, caller), 1_550);
-        assert_eq!(subnet_consumed(&state), 1_550);
+        assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE + 1_550);
         let status = get_refund_status(&state);
         assert_eq!(status.refunded_cycles, Cycles::new(1_450));
         assert_eq!(status.refunding_nodes, node_set(&[1, 2, 3]));
@@ -672,7 +692,10 @@ mod tests {
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), spent.get());
-        assert_eq!(subnet_consumed(&state), spent.get());
+        assert_eq!(
+            subnet_consumed(&state),
+            SUBNET_CONSUMED_BEFORE + spent.get()
+        );
         let status = get_refund_status(&state);
         assert_eq!(status.refunded_cycles, Cycles::zero());
         assert_eq!(status.refunding_nodes, node_set(&[1, 2, 3]));
@@ -701,7 +724,7 @@ mod tests {
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), 1_000);
-        assert_eq!(subnet_consumed(&state), 1_000);
+        assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE + 1_000);
         let status = get_refund_status(&state);
         assert_eq!(status.refunded_cycles, Cycles::zero());
         assert_eq!(status.refunding_nodes, node_set(&[1, 2]));
@@ -721,6 +744,7 @@ mod tests {
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), 0);
+        assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE);
         assert!(
             state
                 .metadata
@@ -923,7 +947,7 @@ mod tests {
             INITIAL_BALANCE + Cycles::new(4_500)
         );
         assert_eq!(consumed(&state, caller), 10_500);
-        assert_eq!(subnet_consumed(&state), 10_500);
+        assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE + 10_500);
         assert_errors(&[], &metrics_registry);
     }
 
@@ -980,7 +1004,7 @@ mod tests {
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), 0);
-        assert_eq!(subnet_consumed(&state), 0);
+        assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE);
         assert_errors(&[], &metrics_registry);
     }
 
@@ -1011,7 +1035,7 @@ mod tests {
         deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert!(state.canister_state(&caller).is_none());
-        assert_eq!(subnet_consumed(&state), 9_500);
+        assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE + 9_500);
         // refund = 13 * 1_000 − 9_500 = 3_500, all of it lost.
         assert_eq!(subnet_lost_by_deleted_canisters(&state), 3_500);
         assert_errors(&[], &metrics_registry);
@@ -1037,7 +1061,7 @@ mod tests {
         };
         deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
-        assert_eq!(subnet_consumed(&state), 9_500);
+        assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE + 9_500);
         assert_eq!(subnet_lost_by_deleted_canisters(&state), 0);
         assert_errors(&[], &metrics_registry);
     }
@@ -1059,7 +1083,7 @@ mod tests {
         // No node responded, so all 13 allowances are returned.
         assert_eq!(balance(&state, caller), INITIAL_BALANCE + refundable);
         assert_eq!(consumed(&state, caller), 0);
-        assert_eq!(subnet_consumed(&state), 0);
+        assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE);
         // The context has been removed.
         assert!(
             state
