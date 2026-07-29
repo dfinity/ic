@@ -51,6 +51,51 @@ fn should_not_count_candidates_for_an_unsupported_token() {
 }
 
 #[test]
+fn should_have_a_min_deposit_for_every_deployed_supported_token() {
+    // Independently transcribed list of the ckERC20 contract addresses the mainnet
+    // (sv3dd-oaaaa-aaaar-qacoa-cai) and Sepolia (jzenf-aiaaa-aaaar-qaa7q-cai) minters currently
+    // support (hex form, so it does not share the byte-array representation of `MIN_DEPOSITS`). A
+    // supported token missing from `MIN_DEPOSITS` would be scanned but never flagged, so its
+    // deposits would go undetected; this test catches a dropped or typo'd entry.
+    let deployed: &[(&str, &str)] = &[
+        // --- mainnet ---
+        ("ckUSDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+        ("ckLINK", "0x514910771AF9Ca656af840dff83E8264EcF986CA"),
+        ("ckPEPE", "0x6982508145454Ce325dDbE47a25d4ec3d2311933"),
+        ("ckOCT", "0xF5cFBC74057C610c8EF151A439252680AC68c6dc"),
+        ("ckSHIB", "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"),
+        ("ckWBTC", "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"),
+        ("ckUSDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7"),
+        ("ckWSTETH", "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+        ("ckUNI", "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"),
+        ("ckEURC", "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c"),
+        ("ckXAUT", "0x68749665FF8D2d112Fa859AA293F07A622782F38"),
+        // --- sepolia ---
+        (
+            "ckSepoliaUSDC",
+            "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        ),
+        (
+            "ckSepoliaLINK",
+            "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+        ),
+        (
+            "ckSepoliaPEPE",
+            "0x560ef9f39e4b08f9693987cad307f6fbfd97b2f6",
+        ),
+    ];
+
+    for (symbol, address) in deployed {
+        let contract = Address::from_str(address)
+            .unwrap_or_else(|e| panic!("{symbol}: invalid test address {address}: {e}"));
+        assert!(
+            MIN_DEPOSITS.iter().any(|(c, _)| *c == contract),
+            "{symbol} ({address}) has no MIN_DEPOSITS entry"
+        );
+    }
+}
+
+#[test]
 fn should_build_one_call_per_address_and_token_in_order() {
     let holders = vec![DEPOSIT_ADDRESS, Address::new([0x99; 20])];
     let tokens = vec![TOKEN_A, TOKEN_B];
