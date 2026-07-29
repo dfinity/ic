@@ -26,6 +26,10 @@ pub enum CertificationVersion {
     V27 = 27,
     /// Add `/canister/<canister_id>/canister_creation_timestamp` leaf.
     V28 = 28,
+    /// Fix double counting of cycles consumed by deleted canisters in
+    /// `/subnet/<subnet_id>/metrics` and additionally include the cycles
+    /// consumed by all non-deleted canisters in the reported total.
+    V29 = 29,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -69,7 +73,7 @@ pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V28;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V29;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.
