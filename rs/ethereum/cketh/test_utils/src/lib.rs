@@ -37,6 +37,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+pub mod anvil;
 pub mod ckerc20;
 pub mod events;
 mod evm_rpc_provider;

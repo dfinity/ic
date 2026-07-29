@@ -18,16 +18,15 @@
 //! [`ic_cketh_test_utils::live_scan`]).
 //!
 //! The anvil node client and its ABI/solc helpers live in
-//! [`ic_cketh_test_utils::live_scan`]; `anvil` and `solc` are vendored via Bazel
+//! [`ic_cketh_test_utils::anvil`]; `anvil` and `solc` are vendored via Bazel
 //! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
 
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
 use ic_cketh_minter::numeric::Erc20Value;
-use ic_cketh_test_utils::live_scan::{
-    Anvil, CkErc20LiveScanSetup, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20,
-};
+use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
+use ic_cketh_test_utils::live_scan::CkErc20LiveScanSetup;
 use ic_ethereum_types::Address;
 use std::time::Duration;
 
