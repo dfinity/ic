@@ -23907,7 +23907,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-testnet-mainnet-nns",
  "ic-types",
- "ic-utils 0.47.3",
+ "ic-utils 0.49.1",
  "ic-xrc-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
