@@ -181,6 +181,10 @@ impl AutomaticDeposits {
             registrations,
         }
     }
+
+    pub fn watchlist_len(&self) -> usize {
+        self.watchlist.len()
+    }
 }
 
 impl Default for AutomaticDeposits {

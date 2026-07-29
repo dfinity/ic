@@ -5,9 +5,9 @@ mod tests;
 
 use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, rpc_client};
 use crate::guard::TimerGuard;
-use crate::logs::INFO;
+use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
-use crate::state::{State, TaskType, mutate_state, read_state};
+use crate::state::{TaskType, mutate_state, read_state};
 use crate::timed_sized_map::Timestamp;
 use batcher::BalanceOfCall;
 use ic_canister_log::log;
@@ -29,34 +29,60 @@ pub async fn balance_scan() {
         Ok(guard) => guard,
         Err(_) => return,
     };
-    let now = Timestamp::from_nanos(ic_cdk::api::time());
-    let (latest_block, tokens, due) = read_state(|s| select(s, now));
-
-    // Nothing to do this tick if the latest block height hasn't been refreshed yet, there are no
-    // supported tokens, or no address is due for a scan.
-    let latest_block = match latest_block {
-        Some(latest_block) if !tokens.is_empty() && !due.is_empty() => latest_block,
-        _ => {
-            record_stats(now, 0, 0, 0);
+    let latest_block = match read_state(|s| s.latest_block_height) {
+        Some(b) => b,
+        None => {
+            log!(
+                DEBUG,
+                "[balance_scan] SKIPPING: latest block height unknown"
+            );
             return;
         }
     };
+    let erc20_tokens: Vec<_> = read_state(|s| {
+        s.supported_ck_erc20_tokens()
+            .map(|t| t.erc20_contract_address)
+            .collect()
+    });
+    if erc20_tokens.is_empty() {
+        log!(
+            DEBUG,
+            "[balance_scan] SKIPPING: no ERC-20 contracts supported"
+        );
+        return;
+    }
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
+    let (addresses_to_scan, watchlist_len) = read_state(|s| {
+        (
+            s.automatic_deposits
+                .addresses_to_scan_iter(now, latest_block)
+                .collect::<Vec<_>>(),
+            s.automatic_deposits.watchlist_len(),
+        )
+    });
+    if addresses_to_scan.is_empty() {
+        log!(
+            DEBUG,
+            "[balance_scan] SKIPPING: 0/{watchlist_len} user addresses ready to be scanned"
+        );
+        return;
+    }
 
     let client = read_state(rpc_client);
     // Chunk by address so an address' per-token calls never straddle a chunk boundary, keeping
-    // the per-address scan-state advance all-or-nothing per chunk. `tokens.len()` is the number of
+    // the per-address scan-state advance all-or-nothing per chunk. `erc20_tokens.len()` is the number of
     // supported ckERC20 tokens (a handful, far below MAX_CALLS_PER_BATCH), so a chunk holds many
     // addresses. A single address is never split across chunks — that would let a partially
     // scanned address be advanced — so if the token set ever grew past the cap, one address' calls
     // would still be sent together (the batcher response is only 32 bytes per call, so a larger
     // chunk stays cheap).
-    let addresses_per_chunk = (MAX_CALLS_PER_BATCH / tokens.len()).max(1);
+    let addresses_per_chunk = (MAX_CALLS_PER_BATCH / erc20_tokens.len()).max(1);
     let mut candidates = 0_usize;
     let mut chunks_failed = 0_usize;
     let mut scanned: Vec<Account> = Vec::new();
 
-    for chunk in due.chunks(addresses_per_chunk) {
-        let calls = balance_of_calls(chunk, &tokens);
+    for chunk in addresses_to_scan.chunks(addresses_per_chunk) {
+        let calls = balance_of_calls(chunk, &erc20_tokens);
         let input = batcher::encode_balance_batch(&calls);
         match client
             .call(call_args(input, latest_block))
@@ -96,27 +122,6 @@ pub async fn balance_scan() {
         "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {chunks_failed} chunk(s) failed",
     );
     record_stats(now, addresses_scanned, candidates, chunks_failed);
-}
-
-/// The latest known block height, the supported ERC-20 token contracts, and the deposit addresses
-/// due for a scan at that height.
-fn select(
-    state: &State,
-    now: Timestamp,
-) -> (Option<BlockNumber>, Vec<Address>, Vec<(Account, Address)>) {
-    let latest_block = state.latest_block_height;
-    let tokens: Vec<Address> = state
-        .supported_ck_erc20_tokens()
-        .map(|token| token.erc20_contract_address)
-        .collect();
-    let due: Vec<(Account, Address)> = match latest_block {
-        Some(latest_block) => state
-            .automatic_deposits
-            .addresses_to_scan_iter(now, latest_block)
-            .collect(),
-        None => Vec::new(),
-    };
-    (latest_block, tokens, due)
 }
 
 fn balance_of_calls(addresses: &[(Account, Address)], tokens: &[Address]) -> Vec<BalanceOfCall> {
