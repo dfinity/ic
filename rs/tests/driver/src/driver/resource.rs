@@ -1,6 +1,7 @@
 use crate::driver::farm::FarmResult;
 use crate::driver::farm::FileId;
 use crate::driver::farm::ImageLocation;
+use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use crate::driver::farm::VMCreateResponse;
 use crate::driver::farm::VmAllocationMode;
 use crate::driver::farm::{CreateVmRequest, HostFeature};
@@ -55,21 +56,34 @@ pub struct ResourceRequest {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub enum DiskImage {
     /// Image downloaded by a Farm host via URL with sha256 verification.
-    Url { url: Url, sha256: String },
+    Url {
+        /// Whether this is an IC-OS image (GuestOS, HostOS, SetupOS).
+        ///
+        /// Farm applies IC-OS-specific handling to images announced as IC-OS
+        /// images (`icOsImageViaUrl`) and attaches all other images as-is
+        /// (`imageViaUrl`).
+        ic_os_image: bool,
+        url: Url,
+        sha256: String,
+    },
     /// Image already present locally on disk. Used by the Local backend.
     Local { path: PathBuf },
 }
 
-fn ic_os_image_via_url_from_disk_image(disk_image: &DiskImage) -> ImageLocation {
-    match disk_image {
-        DiskImage::Url { url, sha256 } => ImageLocation::IcOsImageViaUrl {
-            url: url.clone(),
-            sha256: sha256.clone(),
-        },
-        DiskImage::Local { path } => panic!(
-            "DiskImage::Local is not supported by the Farm backend. Path: {:?}",
-            path
-        ),
+impl From<DiskImage> for ImageLocation {
+    fn from(src: DiskImage) -> ImageLocation {
+        match src {
+            DiskImage::Url {
+                ic_os_image: true,
+                url,
+                sha256,
+            } => IcOsImageViaUrl { url, sha256 },
+            DiskImage::Url { url, sha256, .. } => ImageViaUrl { url, sha256 },
+            DiskImage::Local { path } => panic!(
+                "DiskImage::Local is not supported by the Farm backend. Path: {:?}",
+                path
+            ),
+        }
     }
 }
 
@@ -165,6 +179,7 @@ pub fn get_resource_request(
     // must not call `get_guestos_img_url`/`get_guestos_img_sha256` there.
     let primary_image = match SystemTestBackend::read_attribute(test_env) {
         SystemTestBackend::Farm => DiskImage::Url {
+            ic_os_image: true,
             url: get_guestos_img_url(test_env),
             sha256: get_guestos_img_sha256(),
         },
@@ -225,6 +240,7 @@ pub fn get_resource_request_for_nested_nodes(
 
     // Add a VM request for each node.
     let mut res_req = ResourceRequest::new(DiskImage::Url {
+        ic_os_image: true,
         url: empty_disk_img_url,
         sha256: empty_disk_img_sha256,
     });
@@ -249,6 +265,7 @@ pub const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
 /// Returns the default Universal VM disk image as a Farm-style URL.
 pub fn default_universal_vm_disk_image() -> DiskImage {
     DiskImage::Url {
+        ic_os_image: false,
         url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
         sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
     }
@@ -320,12 +337,8 @@ pub fn allocate_resources(req: &ResourceRequest, env: &TestEnv) -> FarmResult<Re
                     vm_config.memory_kibibytes,
                     vec![],
                     match &vm_config.boot_image {
-                        BootImage::GroupDefault => {
-                            ic_os_image_via_url_from_disk_image(&req.primary_image)
-                        }
-                        BootImage::Image(disk_image) => {
-                            ic_os_image_via_url_from_disk_image(disk_image)
-                        }
+                        BootImage::GroupDefault => From::from(req.primary_image.clone()),
+                        BootImage::Image(disk_image) => From::from(disk_image.clone()),
                         BootImage::File(id) => ImageLocation::IcOsImageViaId { id: id.clone() },
                     },
                     vm_config.boot_image_minimal_size_gibibytes,

@@ -142,6 +142,7 @@ pub fn get_guestos_disk_image(env: &TestEnv) -> DiskImage {
 pub fn get_tagged_guestos_disk_image(env: &TestEnv, tag: &str) -> DiskImage {
     match SystemTestBackend::read_attribute(env) {
         SystemTestBackend::Farm => DiskImage::Url {
+            ic_os_image: true,
             url: get_tagged_guestos_img_url(env, tag),
             sha256: get_tagged_guestos_img_sha256(tag),
         },

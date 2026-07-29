@@ -120,6 +120,7 @@ impl PrometheusVm {
     pub fn new(env: &TestEnv) -> Self {
         let disk_image = match SystemTestBackend::read_attribute(env) {
             SystemTestBackend::Farm => DiskImage::Url {
+                ic_os_image: false,
                 url: Url::parse(&get_default_prometheus_vm_img_url()).expect("should not fail!"),
                 sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
             },
