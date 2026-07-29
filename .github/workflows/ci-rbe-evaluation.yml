@@ -169,9 +169,6 @@ jobs:
   bazel-test-all-rbe:
     name: Bazel Test All on RBE
     needs: [config, infer-bazel-targets]
-    # This job is currently in the evaluation phase where we compare its speed and stability with the `bazel-test-all` job.
-    # We expect it to fail and that's OK and it shouldn't block PRs.
-    continue-on-error: true
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
     container:
       image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:2ffef7066229c82711025be7a0be86848dc91a2a18d52e3bb3c4864558be261b
