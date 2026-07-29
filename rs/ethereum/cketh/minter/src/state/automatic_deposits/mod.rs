@@ -152,7 +152,7 @@ impl AutomaticDeposits {
     /// Record that `account`'s deposit address was scanned at `block`, advancing it along the
     /// backoff schedule (`last_scanned_block = block`, `scan_count += 1`). No-op if the account is
     /// no longer live as of `now` (expired or evicted).
-    // TODO DEFI-2923: move the watched address with balance to a separate queue for sweeeping.
+    // TODO DEFI-2923: move the watched address with balance to a separate queue for sweeping.
     pub fn record_scan(&mut self, now: Timestamp, account: &Account, block: BlockNumber) {
         if let Some(request) = self.watchlist.get_value_mut(now, account) {
             request.last_scanned_block = Some(block);
