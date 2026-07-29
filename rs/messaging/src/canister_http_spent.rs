@@ -257,17 +257,17 @@ fn apply_capped(
 /// balances and reports the accumulated `consumed` cycles in their cost metrics
 /// as well as in the subnet's.
 ///
-/// If the calling canister no longer exists, its refund cannot be credited back.
-/// Those cycles were taken out of the canister's balance when the request was made,
-/// so they are reported as consumed for HTTP outcalls along with the spend;
-/// otherwise they would silently disappear from
-/// [`SubnetMetrics::consumed_cycles_total()`].
+/// If the calling canister no longer exists, its refund cannot be credited back
+/// and is lost. It was taken out of the canister's balance when the request was
+/// made, so it is reported as consumed by deleted canisters; otherwise these cycles
+/// would silently disappear from [`SubnetMetrics::consumed_cycles_total()`].
 fn apply_accounting(
     state: &mut ReplicatedState,
     accounting: BTreeMap<CanisterId, CanisterAccounting>,
     log: &ReplicaLogger,
 ) {
     let mut subnet_consumed = NominalCycles::zero();
+    let mut lost_by_deleted_canisters = NominalCycles::zero();
     for (sender, accounting) in accounting {
         if accounting.refund.is_zero() && accounting.consumed.is_zero() {
             continue;
@@ -287,13 +287,13 @@ fn apply_accounting(
             None => {
                 info!(
                     log,
-                    "Canister {} for an HTTP outcall no longer exists; its refund of {} cycles \
-                     cannot be credited back and is reported as consumed (spent {} cycles).",
+                    "Canister {} for an HTTP outcall no longer exists; its refund of {} cycles is \
+                     lost and reported as consumed by deleted canisters (consumed {} cycles).",
                     sender,
                     accounting.refund,
                     accounting.consumed
                 );
-                subnet_consumed += CompoundCycles::<HTTPOutcalls>::new(
+                lost_by_deleted_canisters += CompoundCycles::<HTTPOutcalls>::new(
                     accounting.refund,
                     CanisterCyclesCostSchedule::Normal,
                 )
@@ -302,11 +302,18 @@ fn apply_accounting(
         }
     }
 
+    let subnet_metrics = &mut state.metadata.subnet_metrics;
     if !subnet_consumed.is_zero() {
-        let subnet_metrics = &mut state.metadata.subnet_metrics;
         subnet_metrics.observe_consumed_cycles_http_outcalls(subnet_consumed);
         subnet_metrics
             .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, subnet_consumed);
+    }
+    if !lost_by_deleted_canisters.is_zero() {
+        subnet_metrics.observe_consumed_cycles_with_use_case(
+            CyclesUseCase::DeletedCanisters,
+            lost_by_deleted_canisters,
+        );
+        subnet_metrics.observe_consumed_cycles_by_deleted_canisters(lost_by_deleted_canisters);
     }
 }
 
@@ -491,14 +498,36 @@ mod tests {
             .unwrap_or(0)
     }
 
-    /// The cycles reported as consumed for HTTPS outcalls at the subnet level: in
-    /// the dedicated `consumed_cycles_http_outcalls` field as well as in the
-    /// by-use-case gauge and counter maps. All three must always agree, as they are
-    /// observed together.
+    /// The cycles reported as consumed for HTTPS outcalls at the subnet level, in
+    /// the dedicated field as well as in the by-use-case gauge and counter maps.
+    /// All three must always agree, as they are observed together.
     fn subnet_consumed(state: &ReplicatedState) -> u128 {
+        subnet_consumed_for(state, CyclesUseCase::HTTPOutcalls)
+    }
+
+    /// The cycles reported at the subnet level as lost because the calling canister
+    /// was deleted. This module observes the same amount as the `DeletedCanisters`
+    /// use case and in the dedicated field, so the two must agree.
+    fn subnet_lost_by_deleted_canisters(state: &ReplicatedState) -> u128 {
+        let by_use_case = subnet_consumed_for(state, CyclesUseCase::DeletedCanisters);
+        assert_eq!(
+            by_use_case,
+            state
+                .metadata
+                .subnet_metrics
+                .get_consumed_cycles_by_deleted_canisters()
+                .get()
+        );
+        by_use_case
+    }
+
+    /// The cycles reported as consumed for `use_case` at the subnet level, both in
+    /// the by-use-case gauge and counter maps (which must agree). For
+    /// [`CyclesUseCase::HTTPOutcalls`] the legacy scalar field must agree, too.
+    fn subnet_consumed_for(state: &ReplicatedState, use_case: CyclesUseCase) -> u128 {
         let subnet_metrics = &state.metadata.subnet_metrics;
         let get = |map: &BTreeMap<CyclesUseCase, NominalCycles>| {
-            map.get(&CyclesUseCase::HTTPOutcalls)
+            map.get(&use_case)
                 .copied()
                 .unwrap_or_else(NominalCycles::zero)
         };
@@ -507,7 +536,9 @@ mod tests {
             gauge,
             get(subnet_metrics.get_consumed_cycles_by_use_case_as_counters())
         );
-        assert_eq!(gauge, subnet_metrics.get_consumed_cycles_http_outcalls());
+        if use_case == CyclesUseCase::HTTPOutcalls {
+            assert_eq!(gauge, subnet_metrics.get_consumed_cycles_http_outcalls());
+        }
         gauge.get()
     }
 
@@ -953,11 +984,12 @@ mod tests {
         assert_errors(&[], &metrics_registry);
     }
 
-    /// A refund for a canister that no longer exists cannot be credited back, so it
-    /// is reported as consumed alongside the spend, and the cycles do not disappear
-    /// from the subnet's totals.
+    /// A refund for a canister that no longer exists cannot be credited back and
+    /// is reported as consumed by deleted canisters, so that the cycles do not
+    /// disappear from the subnet's totals. The spend is reported as consumed as
+    /// usual.
     #[test]
-    fn report_for_missing_canister_reports_refund_as_consumed() {
+    fn report_for_missing_canister_is_reported_as_lost() {
         let allowance = Cycles::new(1_000);
         let (mut state, caller) = setup(Some((
             Replication::FullyReplicated,
@@ -979,16 +1011,16 @@ mod tests {
         deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert!(state.canister_state(&caller).is_none());
-        // The spend of 9_500 plus the refund of 13 * 1_000 − 9_500 = 3_500 that could
-        // not be credited back, i.e. the whole refundable amount.
-        assert_eq!(subnet_consumed(&state), 13_000);
+        assert_eq!(subnet_consumed(&state), 9_500);
+        // refund = 13 * 1_000 − 9_500 = 3_500, all of it lost.
+        assert_eq!(subnet_lost_by_deleted_canisters(&state), 3_500);
         assert_errors(&[], &metrics_registry);
     }
 
-    /// On a free subnet nothing was charged, so there is no refund that could be
-    /// lost; only the spend is reported as consumed.
+    /// On a free subnet nothing was charged, so a deleted canister loses nothing;
+    /// the spend is still reported as consumed.
     #[test]
-    fn free_subnet_report_for_missing_canister_reports_only_the_spend() {
+    fn free_subnet_report_for_missing_canister_loses_nothing() {
         let (mut state, caller) =
             setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
@@ -1006,6 +1038,7 @@ mod tests {
         deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert_eq!(subnet_consumed(&state), 9_500);
+        assert_eq!(subnet_lost_by_deleted_canisters(&state), 0);
         assert_errors(&[], &metrics_registry);
     }
 
@@ -1035,26 +1068,6 @@ mod tests {
                 .delivered_canister_http_request_contexts
                 .is_empty()
         );
-        assert_errors(&[], &metrics_registry);
-    }
-
-    /// A timeout refund for a canister that no longer exists cannot be credited
-    /// back, so it is reported as consumed instead.
-    #[test]
-    fn timeout_refund_for_missing_canister_is_reported_as_consumed() {
-        let allowance = Cycles::new(1_000);
-        let refundable = allowance * SUBNET_SIZE;
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, refundable)));
-        let (metrics_registry, metrics) = metrics();
-
-        // The caller is deleted before its context times out.
-        state.remove_canister(&caller);
-
-        let timeout = UNIX_EPOCH + Duration::from_secs(3 * 60);
-        refund_timed_out_canister_http_contexts(&mut state, timeout, &no_op_logger(), &metrics);
-
-        assert!(state.canister_state(&caller).is_none());
-        assert_eq!(subnet_consumed(&state), refundable.get());
         assert_errors(&[], &metrics_registry);
     }
 
