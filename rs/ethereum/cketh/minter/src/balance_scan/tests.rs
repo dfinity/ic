@@ -1,10 +1,10 @@
-use std::collections::BTreeSet;
 use super::*;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::state::automatic_deposits::DepositRequest;
 use crate::test_fixtures;
 use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
 use ic_canister_runtime::{IcError, StubRuntime};
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 const DEPOSIT_ADDRESS: Address = Address::new([0x11; 20]);
