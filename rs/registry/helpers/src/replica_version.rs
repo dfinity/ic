@@ -2,7 +2,6 @@ use crate::deserialize_registry_value;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_registry_keys::{REPLICA_VERSION_KEY_PREFIX, make_replica_version_key};
-use ic_types::registry::RegistryClientError;
 pub use ic_types::replica_version::ReplicaVersion;
 pub use ic_types::{NodeId, RegistryVersion, SubnetId};
 
@@ -10,7 +9,7 @@ pub trait ReplicaVersionRegistry {
     fn get_all_replica_version_records(
         &self,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<(String, ReplicaVersionRecord)>>;
+    ) -> RegistryClientResult<Vec<ReplicaVersionRecord>>;
 
     fn get_replica_version_record(
         &self,
@@ -33,8 +32,7 @@ impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
     fn get_all_replica_version_records(
         &self,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<(String, ReplicaVersionRecord)>> {
-        // Note this `get_key_family` impl does not strip the prefix from keys. The impl in the registry canister, does.
+    ) -> RegistryClientResult<Vec<ReplicaVersionRecord>> {
         let keys = self.get_key_family(REPLICA_VERSION_KEY_PREFIX, version)?;
 
         let mut records = Vec::new();
@@ -42,13 +40,7 @@ impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
             let bytes = self.get_value(&key, version);
             let replica_version_proto =
                 deserialize_registry_value::<ReplicaVersionRecord>(bytes)?.unwrap_or_default();
-            let id = key
-                .strip_prefix(REPLICA_VERSION_KEY_PREFIX)
-                .ok_or_else(|| RegistryClientError::DecodeError {
-                    error: format!("Replica Version Record key {key} does not start with prefix {REPLICA_VERSION_KEY_PREFIX}"),
-                })?
-                .to_string();
-            records.push((id, replica_version_proto))
+            records.push(replica_version_proto)
         }
 
         Ok(Some(records))
@@ -74,7 +66,7 @@ impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
 
         let measurements = replica_versions
             .into_iter()
-            .flat_map(|(_, record)| {
+            .flat_map(|record| {
                 record
                     .guest_launch_measurements
                     .unwrap_or_default()
@@ -104,7 +96,7 @@ mod tests {
         measurements: &[impl AsRef<[u8]>],
     ) -> ReplicaVersionRecord {
         ReplicaVersionRecord {
-            version_id: Some(version_id.to_string()),
+            version_id: version_id.to_string(),
             release_package_sha256_hex: package_hash.to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -124,7 +116,7 @@ mod tests {
         package_hash: &str,
     ) -> ReplicaVersionRecord {
         ReplicaVersionRecord {
-            version_id: Some(version_id.to_string()),
+            version_id: version_id.to_string(),
             release_package_sha256_hex: package_hash.to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: None,
@@ -141,32 +133,20 @@ mod tests {
         let measurement4 = [16, 17, 18, 19, 20]; // From removed version
 
         let replica_versions_and_records = vec![
-            (
-                "version1",
-                create_replica_record("version1", "12345", &[measurement1, measurement2]),
-            ),
-            (
-                "version2",
-                create_replica_record("version2", "abcde", &[measurement3]),
-            ),
-            (
-                "version3",
-                create_replica_record("version3", "99999", &[measurement4]),
-            ),
-            (
-                "version4",
-                create_replica_record_without_measurements("version4", "424242"),
-            ),
+            create_replica_record("version1", "12345", &[measurement1, measurement2]),
+            create_replica_record("version2", "abcde", &[measurement3]),
+            create_replica_record("version3", "99999", &[measurement4]),
+            create_replica_record_without_measurements("version4", "424242"),
         ];
 
         // Set up registry data provider
         let data_provider = ProtoRegistryDataProvider::new();
 
         // Add replica version records
-        for (version_id, record) in &replica_versions_and_records {
+        for record in &replica_versions_and_records {
             data_provider
                 .add(
-                    &make_replica_version_key(version_id),
+                    &make_replica_version_key(&record.version_id),
                     registry_version,
                     Some(record.clone()),
                 )
