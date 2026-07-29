@@ -245,7 +245,6 @@ impl ManagedCanistersAssert {
         let module_hash_before = self
             .ledger_canister_status()
             .module_hash
-            .clone()
             .expect("BUG: ledger is not installed");
 
         let upgrade_args = Some(LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
@@ -272,7 +271,6 @@ impl ManagedCanistersAssert {
         let module_hash_after = self
             .ledger_canister_status()
             .module_hash
-            .clone()
             .expect("BUG: ledger is not installed");
         assert_eq!(
             module_hash_before, module_hash_after,
