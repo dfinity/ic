@@ -10,9 +10,9 @@ const DEPOSIT_ADDRESS: Address = Address::new([0x11; 20]);
 const TOKEN_A: Address = Address::new([0x22; 20]);
 const TOKEN_B: Address = Address::new([0x33; 20]);
 
-fn account(owner: u8) -> Account {
+fn account(owner: u64) -> Account {
     Account {
-        owner: candid::Principal::from_slice(&[owner]),
+        owner: candid::Principal::from_slice(&owner.to_be_bytes()),
         subaccount: None,
     }
 }
@@ -178,7 +178,12 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     // second chunk.
     let extra = 50_usize;
     let holders: Vec<_> = (0..MAX_CALLS_PER_BATCH + extra)
-        .map(|i| (account(i as u8), Address::new([i as u8; 20])))
+        .map(|i| {
+            let i = i as u64;
+            let mut address = [0_u8; 20];
+            address[..8].copy_from_slice(&i.to_be_bytes());
+            (account(i), Address::new(address))
+        })
         .collect();
     seed_state(Some(latest), Some(token), &holders, now);
 
