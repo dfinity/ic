@@ -190,7 +190,7 @@ impl BlockMaker {
         let height = parent.height().increment();
         let certified_height = self.state_reader.latest_certified_height();
 
-        let Some(last_summary_block) = pool.dkg_summary_block(parent.get_value()) else {
+        let Some(last_summary_block) = pool.dkg_summary_block(parent.as_ref()) else {
             warn!(self.log, "Couldn't find the summary block");
             return None;
         };

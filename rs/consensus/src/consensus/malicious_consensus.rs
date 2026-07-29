@@ -143,7 +143,7 @@ impl ConsensusImpl {
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
         let registry_version = pool.registry_version(height)?;
-        let last_summary_block = pool.dkg_summary_block(parent.get_value())?;
+        let last_summary_block = pool.dkg_summary_block(parent.as_ref())?;
 
         // Get the subnet records that are relevant to making a block
         let stable_registry_version = self

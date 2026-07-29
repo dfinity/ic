@@ -133,9 +133,11 @@ pub(crate) fn should_halt(
     ])
 }
 
-/// Returns `true` if any of the provided values is known to be `true`.
+/// Returns `Some(true)` if any of the provided values is known to be `true`.
+/// Returns `Some(false)` if all of the provided values are known to be `false`.
+/// Returns `None` if at least one of the provided values is otherwise unknown.
 fn any(values: &[Option<bool>]) -> Option<bool> {
-    if values.contains(&Some(true)) {
+    if values.iter().any(|value| *value == Some(true)) {
         Some(true)
     } else if values.iter().all(|value| *value == Some(false)) {
         Some(false)
