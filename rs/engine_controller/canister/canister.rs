@@ -103,7 +103,7 @@ fn ensure_authorized() -> Result<Principal, String> {
 
 #[update]
 async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
-    let caller = ensure_authorized()?;
+    ensure_authorized()?;
 
     // Validate node list.
     if args.node_ids.len() < REQUIRED_NODE_COUNT {
@@ -119,13 +119,9 @@ async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
         }
     }
 
-    // Make sure the caller is part of the subnet admins.
-    let mut subnet_admins: Vec<PrincipalId> =
-        args.subnet_admins.into_iter().map(PrincipalId).collect();
-    let caller_pid = PrincipalId(caller);
-    if !subnet_admins.contains(&caller_pid) {
-        subnet_admins.push(caller_pid);
-    }
+    // Forward the supplied `subnet_admins` list to the registry as-is; the
+    // engine controller does not manipulate it.
+    let subnet_admins: Vec<PrincipalId> = args.subnet_admins.into_iter().map(PrincipalId).collect();
 
     let node_ids: Vec<NodeId> = args
         .node_ids

@@ -229,7 +229,7 @@ mod stability_tests {
                 KeyId::from(&test.input),
                 test.expected_key_id(),
                 "Parameterized test {:?} failed",
-                &test
+                test
             );
         }
     }
@@ -255,7 +255,7 @@ mod stability_tests {
                 KeyId::from(&test.input),
                 test.expected_key_id(),
                 "Parameterized test {:?} failed",
-                &test
+                test
             );
         }
     }
@@ -299,7 +299,7 @@ mod stability_tests {
                 KeyId::from(&test.input),
                 test.expected_key_id(),
                 "Parameterized test {:?} failed",
-                &test
+                test
             );
         }
     }
@@ -387,7 +387,7 @@ t7Ica9iKR8XXVy+W5eyW52YYPbGzXZ0FgxPcOMk3Tm2qx/zJJ7pkN+rJeIEgQHEj
                 KeyId::try_from(&test.input),
                 Ok(test.expected_key_id()),
                 "Parameterized test {:?} failed",
-                &test
+                test
             )
         }
     }

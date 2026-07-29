@@ -999,12 +999,17 @@ pub struct StateManagerImpl {
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     deallocator_thread: DeallocatorThread,
-    // Cached latest state height.  We cache it separately because it's
-    // requested quite often and this causes high contention on the lock.
+    /// Cached latest state height.  We cache it separately because it's
+    /// requested quite often and this causes high contention on the lock.
     latest_state_height: Arc<AtomicU64>,
     latest_certified_height: Arc<AtomicU64>,
     fast_forward_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
+    /// Queue of checkpoint work, processed sequentially by the tip thread.
+    ///
+    /// `ComputeManifest` requests (only) are forwarded by the tip thread to a
+    /// dedicated manifest thread, to be processed concurrently with validation. The
+    /// tip thread then publishes the result via a paired `WaitForManifest` request.
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
     hash_channel: Sender<HashRequest>,
@@ -1347,12 +1352,13 @@ fn persist_metadata_or_die(
 }
 
 struct CreateCheckpointResult {
-    // ReplicatedState switched to the new checkpoint.
+    /// ReplicatedState switched to the new checkpoint.
     state: Arc<ReplicatedState>,
     state_metadata: StateMetadata,
-    // TipRequest to compute manifest.
-    compute_manifest_request: TipRequest,
-    // Other TipRequests to perform after the compute manifest.
+    /// TipRequests to enqueue after `ValidateReplicatedStateAndFinalize`: the
+    /// paired `WaitForManifest` (iff a manifest is not already available, e.g. from
+    /// state sync), which publishes the manifest once the checkpoint is verified;
+    /// followed by `ResetTipAndMerge`.
     tip_requests: Vec<TipRequest>,
 }
 
@@ -1681,14 +1687,28 @@ impl StateManagerImpl {
                     _ => None,
                 });
 
+            // Same split as the steady-state path: compute on the manifest thread, publish
+            // via `WaitForManifest` on the tip thread. Here the recovered checkpoint is
+            // already verified, so the two are enqueued back-to-back (no concurrent
+            // validation).
+            let height = checkpoint_layout.height();
+            #[allow(clippy::disallowed_methods)]
+            let (manifest_sender, manifest_receiver) = crossbeam_channel::unbounded();
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
                     base_manifest_info,
+                    manifest_sender,
+                })
+                .expect("failed to send ComputeManifest");
+            tip_channel
+                .send(TipRequest::WaitForManifest {
+                    height,
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
+                    manifest_receiver,
                 })
-                .expect("failed to send ComputeManifestRequest");
+                .expect("failed to send WaitForManifest");
         }
 
         report_last_diverged_state(&log, &metrics, &state_layout);
@@ -2583,7 +2603,16 @@ impl StateManagerImpl {
         heights.into_iter().collect()
     }
 
-    // Creates a checkpoint and switches state to it.
+    /// Creates a checkpoint and switches state to it.
+    ///
+    /// Issues and awaits the completion of a `TipToCheckpointAndSwitch` request to
+    /// the tip thread, to serialize the Wasms and protos to disk and create an
+    /// unvalidated checkpoint. Then enqueues a `ValidateReplicatedStateAndFinalize`
+    /// request and (if the manifest is not already available, e.g. from state sync)
+    /// a `ComputeManifest` request to the tip thread. Returns the checkpoint layout
+    /// and the list of tip requests to be enqueued after `states_metadata` has been
+    /// populated with the root hash (`WaitForManifest`, if needed, and
+    /// `ResetTipAndMerge`).
     fn create_checkpoint_and_switch(
         &self,
         state: ReplicatedState,
@@ -2644,6 +2673,55 @@ impl StateManagerImpl {
             )
         });
 
+        // One-shot channel carrying the computed manifest from the manifest thread to
+        // the tip thread's `WaitForManifest` handler.
+        #[allow(clippy::disallowed_methods)]
+        let (manifest_sender, manifest_receiver) = crossbeam_channel::unbounded();
+
+        // Enqueue `ComputeManifest` *before* `ValidateReplicatedStateAndFinalize`: the
+        // tip thread forwards it to the dedicated manifest thread only _after_ the
+        // preceding `TipToCheckpointAndSwitch` has finished serializing the protos;
+        // then `ValidateReplicatedStateAndFinalize` runs validation concurrently with
+        // manifest computation; finally, `WaitForManifest` waits for the manifest
+        // computation to complete and publishes the manifest.
+        //
+        // Skip it (and the paired `WaitForManifest`) iff a manifest is already present
+        // (e.g. populated by state sync).
+        let already_has_manifest = self
+            .states
+            .read()
+            .states_metadata
+            .get(&height)
+            .and_then(|m| m.bundled_manifest.as_ref())
+            .is_some();
+        let mut tip_requests = Vec::new();
+        if !already_has_manifest {
+            let base_manifest_info =
+                previous_checkpoint_info.map(|(base_manifest, checkpoint_layout)| {
+                    manifest::BaseManifestInfo {
+                        base_manifest,
+                        base_height: checkpoint_layout.height(),
+                        target_height: height,
+                        base_checkpoint: checkpoint_layout,
+                    }
+                });
+            self.tip_channel
+                .send(TipRequest::ComputeManifest {
+                    checkpoint_layout: cp_layout.clone(),
+                    base_manifest_info,
+                    manifest_sender,
+                })
+                .expect("failed to send ComputeManifest");
+
+            // Publish the computed manifest once the checkpoint is verified.
+            tip_requests.push(TipRequest::WaitForManifest {
+                height,
+                states: self.states.clone(),
+                persist_metadata_guard: self.persist_metadata_guard.clone(),
+                manifest_receiver,
+            });
+        }
+
         self.tip_channel
             .send(TipRequest::ValidateReplicatedStateAndFinalize {
                 checkpoint_layout: cp_layout.clone(),
@@ -2653,23 +2731,6 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
-        let base_manifest_info = {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
-                .with_label_values(&["base_manifest_info"])
-                .start_timer();
-            previous_checkpoint_info.map(|(base_manifest, checkpoint_layout)| {
-                manifest::BaseManifestInfo {
-                    base_manifest,
-                    base_height: checkpoint_layout.height(),
-                    target_height: height,
-                    base_checkpoint: checkpoint_layout,
-                }
-            })
-        };
-
         let result = {
             let _timer = self
                 .metrics
@@ -2677,24 +2738,18 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
-            let tip_requests = vec![TipRequest::ResetTipAndMerge {
+            tip_requests.push(TipRequest::ResetTipAndMerge {
                 checkpoint_layout: cp_layout.clone(),
                 pagemaptypes: PageMapType::list_all(&state),
-            }];
+            });
 
             CreateCheckpointResult {
                 tip_requests,
                 state,
                 state_metadata: StateMetadata {
-                    checkpoint_layout: Some(cp_layout.clone()),
+                    checkpoint_layout: Some(cp_layout),
                     bundled_manifest: None,
                     state_sync_file_group: None,
-                },
-                compute_manifest_request: TipRequest::ComputeManifest {
-                    checkpoint_layout: cp_layout,
-                    base_manifest_info,
-                    states: self.states.clone(),
-                    persist_metadata_guard: self.persist_metadata_guard.clone(),
                 },
             }
         };
@@ -3536,7 +3591,6 @@ impl StateManager for StateManagerImpl {
             .set(self.tip_channel.len() as i64);
 
         let mut state_metadata: Option<StateMetadata> = None;
-        let mut compute_manifest_request: Option<TipRequest> = None;
         let mut follow_up_tip_requests = Vec::new();
 
         let state = match scope {
@@ -3544,11 +3598,9 @@ impl StateManager for StateManagerImpl {
                 let CreateCheckpointResult {
                     state,
                     state_metadata: metadata,
-                    compute_manifest_request: req,
                     tip_requests,
                 } = self.create_checkpoint_and_switch(state, height);
                 state_metadata = Some(metadata);
-                compute_manifest_request = Some(req);
                 follow_up_tip_requests = tip_requests;
 
                 state
@@ -3598,30 +3650,6 @@ impl StateManager for StateManagerImpl {
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
 
         assert_tip_is_none(&states);
-
-        if let Some(compute_manifest_request) = compute_manifest_request {
-            // The hash thread inserted `states_metadata` for this height under the same
-            // lock, and we just awaited it above via `flush_hash_channel`, so an entry
-            // must be present.
-            debug_assert!(states.states_metadata.contains_key(&height));
-            debug_assert!(self.tip_channel.len() <= 2);
-            // Skip the manifest request only if a manifest is already present (e.g.
-            // populated by state sync). Otherwise — including the case where the entry
-            // is unexpectedly missing in release — send the request; the tip thread
-            // handles a missing `states_metadata` entry gracefully.
-            let already_has_manifest = states
-                .states_metadata
-                .get(&height)
-                .and_then(|m| m.bundled_manifest.as_ref())
-                .is_some();
-            if !already_has_manifest {
-                self.tip_channel
-                    .send(compute_manifest_request)
-                    .expect("failed to send ComputeManifestRequest message");
-            }
-        } else {
-            debug_assert!(scope != CertificationScope::Full);
-        }
 
         self.metrics
             .resident_state_count
@@ -4465,11 +4493,8 @@ impl PageAllocatorFileDescriptorImpl {
             return self.create_backing_file_portable();
         }
 
-        match nix::sys::memfd::memfd_create(
-            &std::ffi::CString::default(),
-            nix::sys::memfd::MemFdCreateFlag::empty(),
-        ) {
-            Ok(fd) => fd,
+        match nix::sys::memfd::memfd_create(c"", nix::sys::memfd::MFdFlags::empty()) {
+            Ok(fd) => fd.into_raw_fd(),
             Err(err) => {
                 panic!("MmapPageAllocatorCore failed to create the memory backing file {err}")
             }

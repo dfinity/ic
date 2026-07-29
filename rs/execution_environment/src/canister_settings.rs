@@ -2,6 +2,7 @@ use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     BoundedAllowedViewers, CanisterSettingsArgs, LogVisibilityV2, SnapshotVisibility,
+    StatusVisibility,
 };
 use ic_types::{ComputeAllocation, InvalidComputeAllocationError, MemoryAllocation, PrincipalId};
 use ic_types_cycles::Cycles;
@@ -29,12 +30,14 @@ pub(crate) struct CanisterSettings {
     pub(crate) minimum_incoming_canister_call_cycles: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) snapshot_visibility: Option<SnapshotVisibility>,
+    pub(crate) status_visibility: Option<StatusVisibility>,
     pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
 }
 
 impl CanisterSettings {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         controllers: Option<Vec<PrincipalId>>,
         compute_allocation: Option<ComputeAllocation>,
@@ -45,6 +48,7 @@ impl CanisterSettings {
         minimum_incoming_canister_call_cycles: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
         snapshot_visibility: Option<SnapshotVisibility>,
+        status_visibility: Option<StatusVisibility>,
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
@@ -59,6 +63,7 @@ impl CanisterSettings {
             minimum_incoming_canister_call_cycles,
             log_visibility,
             snapshot_visibility,
+            status_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -99,6 +104,10 @@ impl CanisterSettings {
 
     pub fn snapshot_visibility(&self) -> Option<&SnapshotVisibility> {
         self.snapshot_visibility.as_ref()
+    }
+
+    pub fn status_visibility(&self) -> Option<&StatusVisibility> {
+        self.status_visibility.as_ref()
     }
 
     pub fn log_memory_limit(&self) -> Option<NumBytes> {
@@ -223,6 +232,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             minimum_incoming_canister_call_cycles,
             input.log_visibility,
             input.snapshot_visibility,
+            input.status_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -251,6 +261,7 @@ pub(crate) struct CanisterSettingsBuilder {
     minimum_incoming_canister_call_cycles: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
     snapshot_visibility: Option<SnapshotVisibility>,
+    status_visibility: Option<StatusVisibility>,
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
@@ -269,6 +280,7 @@ impl CanisterSettingsBuilder {
             minimum_incoming_canister_call_cycles: None,
             log_visibility: None,
             snapshot_visibility: None,
+            status_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit: None,
             environment_variables: None,
@@ -286,6 +298,7 @@ impl CanisterSettingsBuilder {
             minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
             log_visibility: self.log_visibility,
             snapshot_visibility: self.snapshot_visibility,
+            status_visibility: self.status_visibility,
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
@@ -354,6 +367,13 @@ impl CanisterSettingsBuilder {
     pub fn with_snapshot_visibility(self, snapshot_visibility: SnapshotVisibility) -> Self {
         Self {
             snapshot_visibility: Some(snapshot_visibility),
+            ..self
+        }
+    }
+
+    pub fn with_status_visibility(self, status_visibility: StatusVisibility) -> Self {
+        Self {
+            status_visibility: Some(status_visibility),
             ..self
         }
     }
@@ -483,6 +503,16 @@ impl<'a> From<&'a SnapshotVisibility> for VisibilitySettings<'a> {
             SnapshotVisibility::Public => Self::Public,
             SnapshotVisibility::Controllers => Self::Controllers,
             SnapshotVisibility::AllowedViewers(principals) => Self::AllowedViewers(principals),
+        }
+    }
+}
+
+impl<'a> From<&'a StatusVisibility> for VisibilitySettings<'a> {
+    fn from(v: &'a StatusVisibility) -> Self {
+        match v {
+            StatusVisibility::Public => Self::Public,
+            StatusVisibility::Controllers => Self::Controllers,
+            StatusVisibility::AllowedViewers(principals) => Self::AllowedViewers(principals),
         }
     }
 }

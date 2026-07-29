@@ -44,13 +44,19 @@ def _mainnet_icos_images_impl(repository_ctx):
 
     url_fn = icos_dev_image_download_url if repository_ctx.attr.dev else icos_image_download_url
 
-    repository_ctx.download(url_fn(git_commit_id, "setup-os", False), "disk-img.tar.zst")  # download the disk image
+    # Pass the sha256 of each image so the download can be served from the local
+    # repository cache / Remote Asset API CAS instead of re-fetched from the CDN.
+    setupos_disk_img_hash = info["setupos_disk_img_hash_dev"] if repository_ctx.attr.dev else info["setupos_disk_img_hash"]
+
+    # download the disk image
+    repository_ctx.download(url_fn(git_commit_id, "setup-os", False), "disk-img.tar.zst", sha256 = setupos_disk_img_hash)
 
     # For GuestOS repositories also download the GuestOS update image so the
     # local system-test file server can serve it to the IC nodes.
     is_guestos = parts[0] == "guestos"
     if is_guestos:
-        repository_ctx.download(url_fn(git_commit_id, "guest-os", True), "guest-update-img.tar.zst")
+        update_img_hash = info["update_img_hash_dev"] if repository_ctx.attr.dev else info["update_img_hash"]
+        repository_ctx.download(url_fn(git_commit_id, "guest-os", True), "guest-update-img.tar.zst", sha256 = update_img_hash)
 
     if repository_ctx.attr.dev:
         json_measurements = json.encode(info["launch_measurements_dev"])
@@ -72,7 +78,9 @@ genrule(
     name = "guest-img",
     srcs = ["disk-img.tar.zst"],
     outs = ["guest-img.tar.zst"],
-    tags = [ "manual" ],
+    # no-remote-exec because the setupOS image input is a multi gigabyte file
+    # which would then have to be copied to the remote worker.
+    tags = [ "manual", "no-remote-exec" ],
     cmd = \"""#!/bin/bash
         $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
     \""",

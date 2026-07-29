@@ -351,7 +351,7 @@ fn frames_post_processor() -> impl Fn(&mut pprof::Frames) {
 #[cfg(feature = "profiler")]
 fn finalize_report(guard: &ProfilerGuard) {
     if let Ok(report) = guard.report().build() {
-        println!("report: {:?}", &report);
+        println!("report: {:?}", report);
 
         let file = File::create("flamegraph.svg").unwrap();
         report.flamegraph(file).unwrap();
@@ -363,7 +363,7 @@ fn finalize_report(guard: &ProfilerGuard) {
         profile.encode(&mut content).unwrap();
         file.write_all(&content).unwrap();
 
-        println!("report: {:?}", &report);
+        println!("report: {:?}", report);
     };
 
     if let Ok(report) = guard

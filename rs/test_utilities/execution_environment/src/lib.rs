@@ -51,6 +51,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::testing::heap_delta_capacity_for_message_memory;
 use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
@@ -1683,20 +1684,26 @@ impl ExecutionTest {
         assert!(cycles_used_after >= cycles_used_before);
         let cycles_used = cycles_used_after - cycles_used_before;
         if instructions_used.get() != 0 {
-            let method_name = match message {
+            let method = match &message {
                 SubnetMessage::Response(_) => None,
-                SubnetMessage::Request(ref request) => Some(request.method_name.clone()),
-                SubnetMessage::Ingress(ref ingress) => Some(ingress.method_name.clone()),
-            };
-            assert_eq!(
-                cycles_used,
-                self.expected_cycles_metrics_change(message, instructions_used),
-            );
-            if let Some(method_name) = method_name {
-                assert!(
-                    Ic00MethodPermissions::new(Method::from_str(&method_name).unwrap())
-                        .counts_toward_round_limit()
+                SubnetMessage::Request(request) => Some(Method::from_str(&request.method_name)),
+                SubnetMessage::Ingress(ingress) => Some(Method::from_str(&ingress.method_name)),
+            }
+            .transpose()
+            .unwrap();
+            if method == Some(Method::FetchCanisterLogs) {
+                // `fetch_canister_logs` consumes round instructions but charges no
+                // cycles fee, so the canister's instruction-cycle metric does not
+                // change.
+                assert_eq!(cycles_used.get(), 0);
+            } else {
+                assert_eq!(
+                    cycles_used,
+                    self.expected_cycles_metrics_change(message, instructions_used),
                 );
+            }
+            if let Some(method) = method {
+                assert!(Ic00MethodPermissions::new(method).counts_toward_round_limit());
             }
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
@@ -2047,7 +2054,7 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let cost_schedule = state.get_own_cost_schedule();
         abort_all_paused_executions(&mut state, &self.exec_env, cost_schedule, &self.log);
-        for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
+        for paused_subnet_message in self.paused_subnet_messages.values_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
         self.state = Some(state);
@@ -2614,9 +2621,9 @@ impl ExecutionTestBuilder {
         mut self,
         subnet_guaranteed_response_message_memory: u64,
     ) -> Self {
-        self.execution_config
-            .guaranteed_response_message_memory_capacity =
-            NumBytes::from(subnet_guaranteed_response_message_memory);
+        self.resource_limits.maximum_state_delta = Some(heap_delta_capacity_for_message_memory(
+            NumBytes::from(subnet_guaranteed_response_message_memory),
+        ));
         self
     }
 
@@ -2666,16 +2673,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_disabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
         self
     }
 
@@ -2983,6 +2980,7 @@ impl ExecutionTestBuilder {
             own_subnet_info.subnet_features =
                 SubnetFeatures::from_str(&self.subnet_features).unwrap();
         }
+        own_subnet_info.resource_limits = self.resource_limits;
 
         let metrics_registry = MetricsRegistry::new();
 

@@ -10,8 +10,8 @@ documentation.workspace = true
 assert_matches = { workspace = true }
 ed25519-dalek = { workspace = true }
 bitcoin = { workspace = true }
-hex = "0.4"
-secp256k1 = { version = "0.29", features = ["global-context", "std", "rand"] }
+hex = { workspace = true }
+secp256k1 = { workspace = true }
 ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = ".." }
 ic-crypto-sha2 = { path = "../../../../../sha2" }
 ic-types = { path = "../../../../../../types/types" }

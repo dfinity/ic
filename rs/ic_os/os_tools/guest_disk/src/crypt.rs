@@ -9,8 +9,7 @@ use libcryptsetup_rs::{
 use prometheus::Registry;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tracing::{info, warn};
@@ -274,100 +273,6 @@ pub fn check_encryption_key(
         .activate_by_passphrase(None, None, encryption_key, CryptActivate::empty())
         .context("Failed to activate device")?;
 
-    Ok(())
-}
-
-pub fn backup_luks_header_to_file(device_path: &Path, header_path: &Path) -> Result<()> {
-    let parent_dir = header_path
-        .parent()
-        .context("LUKS header path does not have a parent directory")?;
-    fs::create_dir_all(parent_dir).with_context(|| {
-        format!(
-            "Failed to create parent directory for LUKS header {}",
-            header_path.display()
-        )
-    })?;
-
-    // Export into a temporary sibling path and rename it into place so we only replace an existing
-    // detached header once cryptsetup has produced a complete backup.
-    let temp_dir = tempfile::tempdir_in(parent_dir)
-        .context("Failed to create temporary directory for LUKS header backup")?;
-    let temp_header_path = temp_dir.path().join("header");
-
-    let mut crypt_device = open_luks2_device(device_path, LuksHeaderLocation::Attached)
-        .context("Failed to open LUKS2 device for header backup")?;
-    crypt_device
-        .backup_handle()
-        .header_backup(Some(EncryptionFormat::Luks2), &temp_header_path)
-        .with_context(|| {
-            format!(
-                "Failed to back up LUKS header to {}",
-                temp_header_path.display()
-            )
-        })?;
-
-    // We allow every user to read the header. The replica (running as user ic-replica) needs
-    // access to this file so that it can share it during an upgrade.
-    fs::set_permissions(&temp_header_path, fs::Permissions::from_mode(0o644))
-        .context("Failed to set permissions on temporary detached LUKS header file")?;
-
-    fs::rename(&temp_header_path, header_path)
-        .with_context(|| format!("Failed to persist LUKS header to {}", header_path.display()))?;
-
-    Ok(())
-}
-
-/// Checks whether the device at `device_path` contains a valid LUKS2 header in the attached
-/// (on-device) position.
-pub fn has_attached_luks_header(device_path: &Path) -> Result<bool> {
-    const LUKS_MAGIC: &[u8; 4] = b"LUKS";
-
-    let mut start = vec![];
-    std::fs::File::open(device_path)
-        .context("Failed to open device for header check")?
-        .take(LUKS_MAGIC.len() as u64)
-        .read_to_end(&mut start)
-        .context("Failed to read first few bytes for header check")?;
-
-    Ok(start == LUKS_MAGIC)
-}
-
-/// Wipes (zeroizes) the header area of the device at `device_path`, removing any attached LUKS
-/// header.
-///
-/// This is used when the Store partition is opened with a detached header: if the data device still
-/// carries a legacy attached header (from an older GuestOS that wrote both), we wipe it so that
-/// only the detached header remains going forward.
-pub fn wipe_attached_luks_header(device_path: &Path) -> Result<()> {
-    let mut crypt_device = open_luks2_device(device_path, LuksHeaderLocation::Attached)
-        .context("Failed to open LUKS device to determine header size")?;
-    // `get_data_offset` returns the offset in 512-byte sectors; convert to bytes.
-    let data_offset_sectors = crypt_device.status_handle().get_data_offset();
-    let header_size_bytes = data_offset_sectors * 512;
-
-    let mut device = OpenOptions::new()
-        .write(true)
-        .open(device_path)
-        .with_context(|| {
-            format!(
-                "Failed to open device {} for writing",
-                device_path.display()
-            )
-        })?;
-    device
-        .write_all(&vec![0_u8; header_size_bytes as usize])
-        .with_context(|| {
-            format!(
-                "Failed to wipe LUKS header on device {}",
-                device_path.display()
-            )
-        })?;
-    device.flush().with_context(|| {
-        format!(
-            "Failed to flush LUKS header wipe on device {}",
-            device_path.display()
-        )
-    })?;
     Ok(())
 }
 

@@ -349,6 +349,7 @@ mod tests {
 
         let execution_state = ExecutionState::new(
             wasm_binary,
+            Some(ic_types::Time::from_nanos_since_unix_epoch(1234)),
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory,
             Memory::new_for_testing(),
@@ -386,6 +387,10 @@ mod tests {
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
+                // The `last_install_timestamp` leaf is only present from `V27`
+                // onwards, and sorts between `controllers` and `metadata`.
+                (certification_version >= CertificationVersion::V27)
+                    .then(|| vec![edge("last_install_timestamp"), leb_num(1234)]),
                 Some(vec![
                     edge("metadata"),
                     E::StartSubtree,
@@ -430,6 +435,172 @@ mod tests {
                 expected_traversal,
                 traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
+            );
+        }
+    }
+
+    /// The `last_install_timestamp` leaf is omitted (rather than present with a
+    /// default value) whenever there is no timestamp to report. This covers the
+    /// two such conditions: a canister with no installed code, and a canister
+    /// whose code was installed before the field existed (`last_install_timestamp`
+    /// is `None`).
+    #[test]
+    fn last_install_timestamp_leaf_is_omitted_without_a_timestamp() {
+        use ic_canonical_state_tree_hash::lazy_tree::follow_path;
+
+        let controller = user_test_id(24);
+
+        // (a) A canister with no installed code.
+        let codeless_id = canister_test_id(1);
+        let codeless = new_canister_state(
+            codeless_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+
+        // (b) A canister with installed code but no recorded install timestamp.
+        let no_timestamp_id = canister_test_id(2);
+        let mut with_code = new_canister_state(
+            no_timestamp_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        with_code.execution_state = Some(ExecutionState::new(
+            WasmBinary::new(CanisterModule::new(vec![])),
+            None,
+            ExportedFunctions::new(BTreeSet::new()),
+            Memory::new_for_testing(),
+            Memory::new_for_testing(),
+            vec![],
+            WasmMetadata::new(Default::default()),
+        ));
+
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.put_canister_state(codeless);
+        state.put_canister_state(with_code);
+        state.metadata.certification_version = CertificationVersion::V27;
+
+        let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
+
+        for canister_id in [codeless_id, no_timestamp_id] {
+            let principal = canister_id.get();
+            let path: [&[u8]; 3] = [b"canister", principal.as_slice(), b"last_install_timestamp"];
+            assert!(
+                follow_path(&tree, &path).is_none(),
+                "`last_install_timestamp` leaf should be omitted for {canister_id}"
+            );
+        }
+    }
+
+    /// The `canister_creation_timestamp` leaf is exposed from certification
+    /// version `V28` onwards for every canister (with or without installed code)
+    /// that has a recorded creation timestamp, and omitted below `V28` or for
+    /// canisters created before the field existed.
+    #[test]
+    fn canister_creation_timestamp_leaf() {
+        use ic_canonical_state_tree_hash::lazy_tree::{LazyTree, follow_path};
+
+        let controller = user_test_id(24);
+        let creation_time = ic_types::Time::from_nanos_since_unix_epoch(1234);
+
+        // (a) A canister with no installed code, with a creation timestamp.
+        let codeless_id = canister_test_id(1);
+        let mut codeless = new_canister_state(
+            codeless_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        codeless.system_state.canister_creation_timestamp = Some(creation_time);
+
+        // (b) A canister with installed code, with a creation timestamp.
+        let with_code_id = canister_test_id(2);
+        let mut with_code = new_canister_state(
+            with_code_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        with_code.execution_state = Some(ExecutionState::new(
+            WasmBinary::new(CanisterModule::new(vec![])),
+            None,
+            ExportedFunctions::new(BTreeSet::new()),
+            Memory::new_for_testing(),
+            Memory::new_for_testing(),
+            vec![],
+            WasmMetadata::new(Default::default()),
+        ));
+        with_code.system_state.canister_creation_timestamp = Some(creation_time);
+
+        // (c) A canister created before the field existed (no creation timestamp).
+        let no_timestamp_id = canister_test_id(3);
+        let no_timestamp = new_canister_state(
+            no_timestamp_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.put_canister_state(codeless);
+        state.put_canister_state(with_code);
+        state.put_canister_state(no_timestamp);
+
+        let expected_leaf = {
+            let mut buf = Vec::new();
+            leb128::write::unsigned(&mut buf, 1234).unwrap();
+            buf
+        };
+
+        // Below `V28` the leaf is never present.
+        state.metadata.certification_version = CertificationVersion::V27;
+        {
+            let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
+            for id in [codeless_id, with_code_id, no_timestamp_id] {
+                let principal = id.get();
+                let path: [&[u8]; 3] = [
+                    b"canister",
+                    principal.as_slice(),
+                    b"canister_creation_timestamp",
+                ];
+                assert!(
+                    follow_path(&tree, &path).is_none(),
+                    "creation leaf should be absent below V28 for {id}"
+                );
+            }
+        }
+
+        // From `V28`, canisters with a recorded creation timestamp expose it (as
+        // the LEB128-encoded nanoseconds), regardless of whether they have code.
+        state.metadata.certification_version = CertificationVersion::V28;
+        {
+            let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
+            for id in [codeless_id, with_code_id] {
+                let principal = id.get();
+                let path: [&[u8]; 3] = [
+                    b"canister",
+                    principal.as_slice(),
+                    b"canister_creation_timestamp",
+                ];
+                let leaf = follow_path(&tree, &path)
+                    .unwrap_or_else(|| panic!("creation leaf missing for {id}"));
+                let LazyTree::LazyBlob(thunk) = leaf else {
+                    unreachable!("the `canister_creation_timestamp` leaf is a lazy blob");
+                };
+                assert_eq!(thunk(), expected_leaf);
+            }
+            // A canister created before the field existed still omits the leaf.
+            let principal = no_timestamp_id.get();
+            let path: [&[u8]; 3] = [
+                b"canister",
+                principal.as_slice(),
+                b"canister_creation_timestamp",
+            ];
+            assert!(
+                follow_path(&tree, &path).is_none(),
+                "creation leaf should be omitted without a creation timestamp"
             );
         }
     }

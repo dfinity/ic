@@ -163,6 +163,8 @@ message CanisterHttpRequestContext {
   optional PricingVersion pricing_version = 12;
   optional RefundStatus refund_status = 13;
   uint64 registry_version = 14;
+  uint32 subnet_size = 15;
+  registry.subnet.v1.CanisterCyclesCostSchedule cost_schedule = 16;
   reserved 5;
 }
 

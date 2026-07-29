@@ -203,15 +203,10 @@ impl InternalHttpQueryHandler {
                                     format!("Canister {canister_id} not found"),
                                 )
                             })?;
-                    let result = Ok(WasmResult::Reply(
-                        fetch_canister_logs_response(
-                            query.source(),
-                            canister,
-                            args,
-                            self.config.log_memory_store_feature,
-                        )
-                        .map_err(UserError::from)?,
-                    ));
+                    let (reply, _record_count, _content_size) =
+                        fetch_canister_logs_response(query.source(), canister, args)
+                            .map_err(UserError::from)?;
+                    let result = Ok(WasmResult::Reply(reply));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),
@@ -329,8 +324,7 @@ impl InternalHttpQueryHandler {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory =
-            full_subnet_memory_capacity(&self.config, state.get_ref().resource_limits());
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config, state.get_ref());
         // Letting the canister use the full subnet memory reservation
         // is fine as we do not persist state modifications.
         let subnet_memory_reservation = self.config.subnet_memory_reservation;

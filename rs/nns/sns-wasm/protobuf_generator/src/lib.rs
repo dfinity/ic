@@ -34,7 +34,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
     );
     // Add additional customizations
-    ic_sns_type_attr(&mut config, "SnsVersion", "#[derive(Eq, Hash)]");
     ic_sns_type_attr(&mut config, "SnsCanisterIds", "#[derive(Copy)]");
 
     // Add serde_bytes for efficiently parsing blobs.

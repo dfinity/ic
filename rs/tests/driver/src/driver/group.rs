@@ -1427,6 +1427,19 @@ impl SystemTestGroup {
         let args = CliArgs::parse().validate()?;
         let is_parent_process = matches!(args.action, SystemTestsSubcommand::Run);
 
+        // Under the Local backend, move this (unprivileged) driver process into a
+        // private user + network namespace it owns, so it can administer its
+        // networking (bridge, TAPs, dnsmasq) with no host capabilities. This MUST
+        // happen here — before `GroupContext::new` builds the async (threaded)
+        // logger, and before the tokio runtime and any task subprocess — because
+        // `unshare(CLONE_NEWUSER)` requires a single-threaded process, and so the
+        // whole process tree (task subprocesses, QEMU, dnsmasq) inherits the
+        // namespaces. Only the parent (`Run`) process sets them up; subprocesses
+        // inherit them across fork/exec.
+        if is_parent_process && SystemTestBackend::from_env() == SystemTestBackend::Local {
+            crate::driver::local_backend::LocalBackend::ensure_administrable_netns()?;
+        }
+
         let group_ctx = GroupContext::new(
             args.group_dir.path.clone(),
             args.subproc_id(),
@@ -1452,17 +1465,6 @@ impl SystemTestGroup {
             }
             let backend = SystemTestBackend::from_env();
             backend.write_attribute(&root_env);
-            // Under the Local backend, make sure this (root) driver process can
-            // administer its network namespace, unsharing a fresh one when it
-            // cannot — e.g. on RBE, where the action runs as root but inside a
-            // netns owned by an ancestor user namespace, so RTNETLINK operations
-            // are denied. This must happen before the tokio runtime and any task
-            // subprocess is spawned so the whole process tree shares the netns.
-            if backend == SystemTestBackend::Local {
-                crate::driver::local_backend::LocalBackend::ensure_administrable_netns(
-                    group_ctx.log(),
-                )?;
-            }
             if with_farm {
                 root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
             }

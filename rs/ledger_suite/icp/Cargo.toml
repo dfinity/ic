@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
-crc32fast = "1.2.0"
+comparable = { workspace = true, features = ["derive"] }
+crc32fast = { workspace = true }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -43,7 +43,7 @@ ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_s
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = { workspace = true }
 rand = { workspace = true }

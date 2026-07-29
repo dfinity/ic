@@ -2,8 +2,6 @@ use crate::message_routing::{
     CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics,
     MessageRoutingMetrics,
 };
-use ic_base_types::NumBytes;
-use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
 use ic_interfaces::messaging::{
     LABEL_VALUE_CANISTER_METHOD_NOT_FOUND, LABEL_VALUE_CANISTER_NOT_FOUND,
@@ -202,9 +200,6 @@ pub(crate) trait StreamHandler: Send {
 pub(crate) struct StreamHandlerImpl {
     subnet_id: SubnetId,
 
-    /// The memory allocated for guaranteed response messages on the subnet.
-    guaranteed_response_message_memory_capacity: NumBytes,
-
     metrics: StreamHandlerMetrics,
     /// Per-destination-subnet histogram of wall time spent by messages in the
     /// stream before they are garbage collected.
@@ -219,7 +214,6 @@ pub(crate) struct StreamHandlerImpl {
 impl StreamHandlerImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
-        hypervisor_config: HypervisorConfig,
         metrics_registry: &MetricsRegistry,
         message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
@@ -227,8 +221,6 @@ impl StreamHandlerImpl {
     ) -> Self {
         Self {
             subnet_id,
-            guaranteed_response_message_memory_capacity: hypervisor_config
-                .guaranteed_response_message_memory_capacity,
             metrics: StreamHandlerMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
             time_in_backlog_metrics: RefCell::new(LatencyMetrics::new_time_in_backlog(
@@ -1258,7 +1250,10 @@ impl StreamHandlerImpl {
     /// difference between the subnet's guaranteed response message memory capacity
     /// and its current usage.
     fn available_guaranteed_response_memory(&self, state: &ReplicatedState) -> i64 {
-        self.guaranteed_response_message_memory_capacity.get() as i64
+        state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
+            .get() as i64
             - state.guaranteed_response_message_memory_taken().get() as i64
     }
 

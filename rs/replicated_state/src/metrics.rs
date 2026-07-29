@@ -535,6 +535,21 @@ impl ReplicatedStateMetrics {
             .subnet_metrics
             .get_consumed_cycles_http_outcalls();
 
+        // Add the remaining subnet-level use cases. Unlike ECDSA/HTTP outcalls
+        // and deleted canisters, these have no dedicated scalar field, but their
+        // getters read the by-use-case map. The canister-level use cases in that
+        // map originate from deleted canisters and are already covered by
+        // `get_consumed_cycles_by_deleted_canisters()`.
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_schnorr_outcalls();
+        consumed_cycles_total += state.metadata.subnet_metrics.get_consumed_cycles_vetkd();
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_dropped_messages();
+
         self.consumed_cycles.set(consumed_cycles_total.get() as f64);
 
         self.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
@@ -647,21 +662,10 @@ impl ReplicatedStateMetrics {
         self.canister_compute_allocation
             .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
 
-        let log_memory_usage = if canister.system_state.log_memory_store.is_migrated() {
-            canister.system_state.log_memory_store.memory_usage()
-        } else {
-            canister.system_state.canister_log.bytes_used()
-        };
         self.canister_log_memory_usage_v3
-            .observe(log_memory_usage as f64);
+            .observe(canister.system_state.log_memory_store.memory_usage() as f64);
 
-        // Observe retention from whichever log store is active.
-        let retention = if canister.system_state.log_memory_store.is_migrated() {
-            canister.system_state.log_memory_store.retention()
-        } else {
-            canister.system_state.canister_log.retention()
-        };
-        if let Some(retention) = retention {
+        if let Some(retention) = canister.system_state.log_memory_store.retention() {
             self.canister_log_retention.observe(retention.as_secs_f64());
         }
 

@@ -158,6 +158,7 @@ impl Hypervisor {
         &self,
         canister_module: CanisterModule,
         canister_id: CanisterId,
+        last_install_timestamp: Time,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
     ) -> (NumInstructions, HypervisorResult<ExecutionState>) {
@@ -185,7 +186,7 @@ impl Hypervisor {
             Arc::clone(&self.compilation_cache),
         );
         match creation_result {
-            Ok((execution_state, compilation_cost, compilation_result)) => {
+            Ok((mut execution_state, compilation_cost, compilation_result)) => {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
@@ -193,6 +194,11 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
+                // Stamp the deployment-round install time onto the freshly
+                // created execution state. This is the single choke point for
+                // creating execution states, so every install/upgrade/snapshot
+                // restore is forced to provide it.
+                execution_state.last_install_timestamp = Some(last_install_timestamp);
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
                 round_limits.instructions -= as_round_instructions(total_cost);

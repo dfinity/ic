@@ -425,7 +425,7 @@ impl CatchUpPackageProvider {
         );
         write_protobuf_using_tmp_file(&cup_file_path, cup_proto).map_err(|e| {
             OrchestratorError::IoError(
-                format!("Failed to serialize protobuf to disk: {:?}", &cup_file_path),
+                format!("Failed to serialize protobuf to disk: {:?}", cup_file_path),
                 e,
             )
         })?;

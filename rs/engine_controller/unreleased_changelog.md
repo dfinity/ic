@@ -25,4 +25,8 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* `create_engine` no longer forces the engine controller's authorized caller
+  (super admin) into the `subnet_admins` list. The supplied list is now
+  forwarded to the registry as-is.
+
 ## Security

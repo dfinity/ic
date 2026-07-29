@@ -1334,7 +1334,7 @@ mod tests {
 
             // Test the regular case (Both DKGs succeeded)
             let next_summary = create_summary_payload(&genesis_summary);
-            for (_, conf) in next_summary.configs.iter() {
+            for conf in next_summary.configs.values() {
                 let tag = &conf.dkg_id().dkg_tag;
                 match tag {
                     NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => assert_eq!(
@@ -1350,7 +1350,7 @@ mod tests {
             // In this case, the `current_transcripts` are being reshared.
             genesis_summary.configs.clear();
             let next_summary = create_summary_payload(&genesis_summary);
-            for (_, conf) in next_summary.configs.iter() {
+            for conf in next_summary.configs.values() {
                 let tag = &conf.dkg_id().dkg_tag;
                 match tag {
                     NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => assert_eq!(

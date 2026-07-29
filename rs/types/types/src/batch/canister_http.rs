@@ -189,7 +189,7 @@ impl CanisterHttpPayload {
 impl From<CanisterHttpPaymentReceipt> for pb::CanisterHttpPaymentReceipt {
     fn from(receipt: CanisterHttpPaymentReceipt) -> Self {
         pb::CanisterHttpPaymentReceipt {
-            refund: Some(receipt.refund.into()),
+            spent: Some(receipt.spent.into()),
         }
     }
 }
@@ -198,7 +198,7 @@ impl TryFrom<pb::CanisterHttpPaymentReceipt> for CanisterHttpPaymentReceipt {
     type Error = ProxyDecodeError;
     fn try_from(receipt: pb::CanisterHttpPaymentReceipt) -> Result<Self, Self::Error> {
         Ok(CanisterHttpPaymentReceipt {
-            refund: try_from_option_field(receipt.refund, "CanisterHttpPaymentReceipt::refund")?,
+            spent: try_from_option_field(receipt.spent, "CanisterHttpPaymentReceipt::spent")?,
         })
     }
 }
@@ -643,7 +643,7 @@ mod tests {
                     replica_version: ReplicaVersion::default(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt {
-                    refund: Cycles::new(42),
+                    spent: Cycles::new(42),
                 },
             },
             signature: BasicSignature {

@@ -1096,7 +1096,7 @@ mod crypto_hash_stability {
         let receipt_share = CanisterHttpResponseReceipt {
             metadata,
             payment_receipt: CanisterHttpPaymentReceipt {
-                refund: Cycles::new(42),
+                spent: Cycles::new(42),
             },
         };
         let data = Signed {

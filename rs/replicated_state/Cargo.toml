@@ -7,8 +7,8 @@ name = "ic-replicated-state"
 version.workspace = true
 
 [dependencies]
-bit-vec = "0.6.3"
-cvt = "0.1.1"
+bit-vec = { workspace = true }
+cvt = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
@@ -35,7 +35,7 @@ ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 more-asserts = { workspace = true }
 nix = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
@@ -71,7 +71,7 @@ ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 proptest = { workspace = true }
-scoped_threadpool = "0.1.*"
+scoped_threadpool = { workspace = true }
 serde_cbor = { workspace = true }
 test-strategy = "0.4.0"
 

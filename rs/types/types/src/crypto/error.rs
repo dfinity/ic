@@ -13,7 +13,7 @@ pub struct InvalidArgumentError {
 
 impl fmt::Display for InvalidArgumentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Semantic error in argument: {}", &self.message)
+        write!(f, "Semantic error in argument: {}", self.message)
     }
 }
 
@@ -25,7 +25,7 @@ pub struct InternalError {
 
 impl fmt::Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Internal error: {}", &self.internal_error)
+        write!(f, "Internal error: {}", self.internal_error)
     }
 }
 
@@ -42,9 +42,9 @@ impl fmt::Display for MalformedPublicKeyError {
         write!(
             f,
             "Malformed {:?} public key: 0x{:?}. Internal error: {}",
-            &self.algorithm,
-            &self.key_bytes.as_ref().map(hex::encode),
-            &self.internal_error
+            self.algorithm,
+            self.key_bytes.as_ref().map(hex::encode),
+            self.internal_error
         )
     }
 }
@@ -62,9 +62,9 @@ impl fmt::Display for MalformedDataError {
         write!(
             f,
             "Malformed {:?} data: 0x{:?}. Internal error: {}",
-            &self.algorithm,
-            &self.data.as_ref().map(hex::encode),
-            &self.internal_error
+            self.algorithm,
+            self.data.as_ref().map(hex::encode),
+            self.internal_error
         )
     }
 }
@@ -81,7 +81,7 @@ impl fmt::Display for KeyNotFoundError {
         write!(
             f,
             "Secret key with id {} not found in secret key store. Internal error: {}",
-            &self.key_id, &self.internal_error
+            self.key_id, self.internal_error
         )
     }
 }

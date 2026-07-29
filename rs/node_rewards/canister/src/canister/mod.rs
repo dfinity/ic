@@ -29,14 +29,19 @@ use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_reward
 use ic_stable_structures::StableCell;
 use ic_types::{RegistryVersion, Time};
 use rewards_calculation::AlgorithmVersion;
-use rewards_calculation::performance_based_algorithm::results::DailyResults;
+use rewards_calculation::performance_based_algorithm::results::{
+    DailyNodeProviderRewards, DailyResults,
+};
 use rewards_calculation::performance_based_algorithm::{
     v1::RewardsCalculationV1, v2::RewardsCalculationV2,
 };
 use rewards_calculation::types::{NodeMetricsDailyRaw, RewardableNode};
+use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -186,7 +191,7 @@ impl NodeRewardsCanister {
         // Default to currently used algorithm
         let rewards_calculator_version = algorithm_version.unwrap_or_default();
 
-        match rewards_calculator_version.version {
+        let mut daily_results = match rewards_calculator_version.version {
             RewardsCalculationV1::VERSION => {
                 RewardsCalculationV1::calculate_rewards_for_date(date, &self)
                     .map_err(|e| format!("Could not calculate rewards: {e:?}"))
@@ -198,7 +203,137 @@ impl NodeRewardsCanister {
             _ => Err(format!(
                 "Rewards Calculation Version: {rewards_calculator_version:?} is not supported"
             )),
+        }?;
+
+        // Apply the temporary node provider reward reduction mandated by NNS motion
+        // proposal 142724. This is applied here, at the canister boundary, rather than inside the
+        // versioned reward-calculation algorithm, so the algorithm stays pure and reproducible.
+        apply_node_provider_reward_reduction(&mut daily_results, date);
+
+        Ok(daily_results)
+    }
+}
+
+// ================================================================================================
+// Temporary node provider reward reduction (NNS motion proposal 142724)
+// ================================================================================================
+//
+// The motion "Follow-up on Node Provider Standards, Incident Response Readiness" mandates a 50%
+// reduction of node provider rewards for a period of three months, for the node providers that
+// failed to respond to both incident-response smoke tests.
+//
+// Design notes:
+//   * The reduction is applied here, at the canister boundary, on top of the performance-based
+//     adjustment, i.e. final = base * performance_multiplier * REWARD_REDUCTION_MULTIPLIER. It is
+//     intentionally NOT baked into the versioned reward-calculation algorithm, so that the
+//     algorithm stays pure and historically reproducible.
+//   * The window is expressed as fixed UTC calendar dates. Reward calculation is deterministic
+//     given the stored daily metrics, so querying any past day always returns the same result, and
+//     the reduction reverts automatically at REWARD_REDUCTION_END without a further upgrade.
+//   * The start and end dates are fixed UTC calendar dates chosen per NNS motion proposal 142724.
+
+/// First day (inclusive, UTC) on which the reduction applies.
+const REWARD_REDUCTION_START: (i32, u32, u32) = (2026, 7, 15);
+/// First day (exclusive, UTC) on which the reduction no longer applies.
+const REWARD_REDUCTION_END: (i32, u32, u32) = (2026, 10, 15);
+
+// Node providers subject to the reduction: those that failed to respond within the 24h window in
+// BOTH incident-response smoke tests (May 20 and June 13, 2026), per NNS motion proposal 142724.
+// A late (>24h) response counts as a failure. Principals were taken from the node provider registry
+// and cross-checked against the on-chain `list_node_providers`.
+const REDUCED_NODE_PROVIDERS: &[&str] = &[
+    "sqhxa-h6ili-qkwup-ohzwn-yofnm-vvnp5-kxdhg-saabw-rvua3-xp325-zqe", // 43rd Big Idea Films
+    "eipr5-izbom-neyqh-s3ec2-52eww-cyfpg-qfomg-3dpwj-4pffh-34xcu-7qe", // 87m Neuron
+    "2dgp4-h57n4-a4kgx-n4uun-huo3a-wbdlc-m57wd-jtkuh-g5vcc-fcbby-6qe", // 100 Count Holdings
+    "ss6oe-fm7b2-b5r57-y3x74-omrz5-d5pgy-5iwtw-4aew5-aqj3l-6ydra-wqe", // Arceau NP LLC
+    "mjnyf-lzqq6-s7fzb-62rqm-xzvge-5oa26-humwp-dvwxp-jxxkf-hoel7-fqe", // Bitmoon
+    "sma3p-ivkif-hz7nu-ngmvq-ibnjg-nubke-zf6gh-wbnfc-2dlng-l3die-zqe", // BLP22
+    "ks7ow-zvs7i-ratdk-azq34-zio2b-gbekj-qjicg-pfhp3-ovhgu-k5qql-dae", // BlockTech Ventures
+    "i3cfo-s2tgu-qe5ym-wk7e6-y7ura-pptgu-kevuf-2feh7-z4enq-5hz4s-mqe", // Conic Ventures
+    "w4buy-lgwzr-pccs7-huzhh-qqnws-rns75-iaoox-jolrm-xs2ra-vdu3o-2qe", // Decentralized Entities Foundation
+    "7ryes-jnj73-bsyu4-lo6h7-lbxk5-x4ien-lylws-5qwzl-hxd5f-xjh3w-mqe", // Extragone SA
+    "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
+    "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
+    "4dibr-2alzr-h6kva-bvwn2-yqgsl-o577t-od46o-v275p-a2zov-tcw4f-eae", // Neptune Partners
+    "r3yjn-kthmg-pfgmb-2fngg-5c7d7-t6kqg-wi37r-j7gy6-iee64-kjdja-jae", // Pindar Technology Limited
+    "4fedi-eu6ue-nd7ts-vnof5-hzg66-hgzl7-liy5n-3otyp-h7ipw-owycg-uae", // Power Meta Corporation
+    "g2ax6-jrkmb-3zuh3-jibtb-q5xoq-njrgo-5utbc-j2o7g-zfq2w-yyhky-dqe", // Wancloud limited
+    "glrjs-2dbzh-owbdd-fpp5e-eweoz-nsuto-e3jmk-tl42c-wem4f-qfpfa-qqe", // Zarety
+    "pa5mu-yxsey-b4yrk-bodka-dhjnm-a3nx4-w2grw-3b766-ddr6e-nupu4-pqe", // Zenith Code LLC
+    "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
+];
+
+/// Multiplier applied to the adjusted rewards of affected node providers within the window.
+fn reward_reduction_multiplier() -> Decimal {
+    Decimal::new(5, 1) // 0.5
+}
+
+fn reward_reduction_window() -> (NaiveDate, NaiveDate) {
+    let to_date = |(y, m, d): (i32, u32, u32)| {
+        NaiveDate::from_ymd_opt(y, m, d).expect("invalid reward reduction date constant")
+    };
+    (
+        to_date(REWARD_REDUCTION_START),
+        to_date(REWARD_REDUCTION_END),
+    )
+}
+
+thread_local! {
+    /// The affected node providers, parsed from `REDUCED_NODE_PROVIDERS` once and reused across
+    /// calculations (parsing panics here on the first access if a principal is malformed).
+    static REDUCED_NODE_PROVIDER_SET: BTreeSet<PrincipalId> = REDUCED_NODE_PROVIDERS
+        .iter()
+        .map(|p| PrincipalId::from_str(p).expect("invalid principal in REDUCED_NODE_PROVIDERS"))
+        .collect();
+}
+
+/// Applies the temporary node provider reward reduction (proposal 142724) to `results` for `date`.
+fn apply_node_provider_reward_reduction(results: &mut DailyResults, date: &NaiveDate) {
+    let (start, end) = reward_reduction_window();
+    REDUCED_NODE_PROVIDER_SET.with(|reduced| {
+        reduce_provider_results(
+            &mut results.provider_results,
+            date,
+            start,
+            end,
+            reduced,
+            reward_reduction_multiplier(),
+        );
+    });
+}
+
+/// Pure implementation of the reward reduction, split out for testing.
+///
+/// For each affected node provider, this scales every node's adjusted rewards (which already
+/// include the performance multiplier) by `multiplier`, then recomputes the provider total from
+/// the scaled node values so that the per-node breakdown stays consistent with the total. Base
+/// rewards are left untouched.
+fn reduce_provider_results(
+    provider_results: &mut BTreeMap<PrincipalId, DailyNodeProviderRewards>,
+    date: &NaiveDate,
+    start: NaiveDate,
+    end: NaiveDate,
+    reduced_providers: &BTreeSet<PrincipalId>,
+    multiplier: Decimal,
+) {
+    if *date < start || *date >= end || reduced_providers.is_empty() {
+        return;
+    }
+
+    for (provider_id, provider_rewards) in provider_results.iter_mut() {
+        if !reduced_providers.contains(provider_id) {
+            continue;
         }
+
+        let mut total_adjusted = Decimal::ZERO;
+        for node in provider_rewards.daily_nodes_rewards.iter_mut() {
+            node.adjusted_rewards_xdr_permyriad *= multiplier;
+            total_adjusted += node.adjusted_rewards_xdr_permyriad;
+        }
+        provider_rewards.total_adjusted_rewards_xdr_permyriad = total_adjusted
+            .trunc()
+            .to_u64()
+            .expect("adjusted rewards should fit into u64");
     }
 }
 
@@ -386,4 +521,163 @@ fn decoded_key_value_pairs_for_prefix<T: prost::Message + Default>(
                 .map(|record| (k.strip_prefix(key_prefix).unwrap().to_string(), record))
         })
         .collect::<Result<Vec<_>, String>>()
+}
+
+#[cfg(test)]
+mod reward_reduction_tests {
+    use super::*;
+    use ic_base_types::NodeId;
+    use ic_protobuf::registry::node::v1::NodeRewardType;
+    use rewards_calculation::performance_based_algorithm::results::{
+        DailyNodeFailureRate, DailyNodeRewards,
+    };
+
+    fn node(adjusted: Decimal) -> DailyNodeRewards {
+        DailyNodeRewards {
+            node_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+            node_reward_type: NodeRewardType::Type1,
+            region: "Europe,CH".to_string(),
+            dc_id: "dc1".to_string(),
+            daily_node_failure_rate: DailyNodeFailureRate::NonSubnetMember {
+                extrapolated_failure_rate: Decimal::ZERO,
+            },
+            performance_multiplier: Decimal::ONE,
+            rewards_reduction: Decimal::ZERO,
+            base_rewards_xdr_permyriad: adjusted,
+            adjusted_rewards_xdr_permyriad: adjusted,
+        }
+    }
+
+    /// Builds a provider with one node per value in `adjusted_values`, mirroring the algorithm's
+    /// invariant that the provider total equals the truncated sum of the node adjusted rewards.
+    fn provider_rewards(adjusted_values: &[i64]) -> DailyNodeProviderRewards {
+        let daily_nodes_rewards: Vec<_> = adjusted_values
+            .iter()
+            .map(|v| node(Decimal::from(*v)))
+            .collect();
+        let total: i64 = adjusted_values.iter().sum();
+        DailyNodeProviderRewards {
+            total_base_rewards_xdr_permyriad: total as u64,
+            total_adjusted_rewards_xdr_permyriad: total as u64,
+            base_rewards: vec![],
+            type3_base_rewards: vec![],
+            daily_nodes_rewards,
+        }
+    }
+
+    fn d(y: i32, m: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    fn reduce(
+        results: &mut BTreeMap<PrincipalId, DailyNodeProviderRewards>,
+        on: NaiveDate,
+        reduced: &[PrincipalId],
+    ) {
+        reduce_provider_results(
+            results,
+            &on,
+            d(2026, 7, 15),
+            d(2026, 10, 15),
+            &reduced.iter().cloned().collect(),
+            Decimal::new(5, 1), // 0.5
+        );
+    }
+
+    #[test]
+    fn affected_provider_is_halved_within_window() {
+        let affected = PrincipalId::new_node_test_id(1);
+        let mut results = BTreeMap::from([(affected, provider_rewards(&[100, 51]))]);
+
+        reduce(&mut results, d(2026, 7, 15), &[affected]);
+
+        let pr = &results[&affected];
+        // Nodes are individually halved and the total is recomputed from the scaled nodes.
+        assert_eq!(
+            pr.daily_nodes_rewards[0].adjusted_rewards_xdr_permyriad,
+            Decimal::from(50)
+        );
+        assert_eq!(
+            pr.daily_nodes_rewards[1].adjusted_rewards_xdr_permyriad,
+            Decimal::new(255, 1) // 25.5
+        );
+        // trunc(50 + 25.5) == 75; total stays consistent with the node breakdown.
+        assert_eq!(pr.total_adjusted_rewards_xdr_permyriad, 75);
+        // Base rewards are untouched.
+        assert_eq!(pr.total_base_rewards_xdr_permyriad, 151);
+    }
+
+    #[test]
+    fn unaffected_provider_is_untouched() {
+        let affected = PrincipalId::new_node_test_id(1);
+        let other = PrincipalId::new_node_test_id(2);
+        let mut results = BTreeMap::from([(other, provider_rewards(&[100, 50]))]);
+
+        reduce(&mut results, d(2026, 7, 15), &[affected]);
+
+        assert_eq!(results[&other].total_adjusted_rewards_xdr_permyriad, 150);
+    }
+
+    #[test]
+    fn no_reduction_before_window() {
+        let affected = PrincipalId::new_node_test_id(1);
+        let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
+
+        // The day before the (inclusive) start is not reduced.
+        reduce(&mut results, d(2026, 7, 14), &[affected]);
+
+        assert_eq!(results[&affected].total_adjusted_rewards_xdr_permyriad, 100);
+    }
+
+    #[test]
+    fn no_reduction_on_end_date_or_after() {
+        let affected = PrincipalId::new_node_test_id(1);
+
+        // End date is exclusive.
+        let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
+        reduce(&mut results, d(2026, 10, 15), &[affected]);
+        assert_eq!(results[&affected].total_adjusted_rewards_xdr_permyriad, 100);
+
+        // A day well after the window (reproducibility: a later query still yields full rewards
+        // for out-of-window days).
+        let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
+        reduce(&mut results, d(2026, 12, 1), &[affected]);
+        assert_eq!(results[&affected].total_adjusted_rewards_xdr_permyriad, 100);
+    }
+
+    #[test]
+    fn reduction_applies_on_start_and_last_in_window_day() {
+        let affected = PrincipalId::new_node_test_id(1);
+
+        for day in [d(2026, 7, 15), d(2026, 10, 14)] {
+            let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
+            reduce(&mut results, day, &[affected]);
+            assert_eq!(
+                results[&affected].total_adjusted_rewards_xdr_permyriad, 50,
+                "expected reduction on {day}"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_reduced_set_is_noop_even_within_window() {
+        let affected = PrincipalId::new_node_test_id(1);
+        let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
+
+        reduce(&mut results, d(2026, 8, 1), &[]);
+
+        assert_eq!(results[&affected].total_adjusted_rewards_xdr_permyriad, 100);
+    }
+
+    #[test]
+    fn all_reduced_node_providers_parse() {
+        // Fails fast in CI when REDUCED_NODE_PROVIDERS is populated with an invalid principal,
+        // rather than only panicking on the first access of the thread_local initializer.
+        for p in REDUCED_NODE_PROVIDERS {
+            assert!(
+                PrincipalId::from_str(p).is_ok(),
+                "REDUCED_NODE_PROVIDERS entry is not a valid principal: {p}"
+            );
+        }
+    }
 }

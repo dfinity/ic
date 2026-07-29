@@ -125,7 +125,8 @@ async fn add_controller(
 ) {
     let (status_result,) = management_canister
         .canister_status(&canister.canister_id())
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .expect("Failed to query canister controllers.");
 

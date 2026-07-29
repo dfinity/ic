@@ -11,6 +11,18 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-17: Proposal 142936
+
+http://dashboard.internetcomputer.org/proposal/142936
+
+## Fixed
+
+* Corrected the `DeleteSubnet` proposal description: dropped the outdated
+  "Currently limited to CloudEngine subnets" clause, added that the subnet
+  is also removed from the subnet list, and noted that system subnets cannot
+  be deleted.
+
+
 # 2026-07-03: Proposal 142679
 
 http://dashboard.internetcomputer.org/proposal/142679

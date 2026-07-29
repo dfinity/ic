@@ -46,7 +46,7 @@ num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
-scoped_threadpool = "0.1.*"
+scoped_threadpool = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
@@ -82,7 +82,7 @@ ic-universal-canister = { path = "../universal_canister/lib" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 libflate = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 proptest = { workspace = true }
 regex-lite = { workspace = true }
 rstest = { workspace = true }
@@ -92,7 +92,7 @@ wat = { workspace = true }
 wirm = { workspace = true }
 
 [build-dependencies]
-escargot = "0.5"
+escargot = { workspace = true }
 
 [features]
 default = []

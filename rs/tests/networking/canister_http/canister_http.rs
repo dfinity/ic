@@ -13,7 +13,7 @@ use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
 pub use ic_types::{CanisterId, PrincipalId};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use slog::info;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -26,6 +26,7 @@ pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 const APP_SUBNET_SIZES: [usize; 3] = [13, 28, 40];
 pub const CONCURRENCY_LEVELS: [u64; 3] = [200, 500, 1000];
 const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
+const SYSTEM_PROXY_CANISTER_ID_PATH: &str = "system_proxy_canister_id";
 
 pub enum PemType {
     PemCert,
@@ -63,17 +64,49 @@ pub fn install_nns_canisters(env: &TestEnv) {
 }
 
 pub fn setup(env: TestEnv) {
+    setup_with_cost_schedule(
+        env,
+        CanisterCyclesCostSchedule::Normal,
+        /*system_subnet_outcalls=*/ false,
+    );
+}
+
+/// Like [`setup`], but the application subnet uses a free cost schedule (enabling
+/// flexible HTTP outcalls via the legacy pricing fallback) and the system subnet
+/// also runs HTTP outcalls with its own proxy canister — system subnets are free
+/// for outcalls too, despite a normal cost schedule.
+pub fn setup_with_free_cost_schedule(env: TestEnv) {
+    setup_with_cost_schedule(
+        env,
+        CanisterCyclesCostSchedule::Free,
+        /*system_subnet_outcalls=*/ true,
+    );
+}
+
+fn setup_with_cost_schedule(
+    env: TestEnv,
+    cost_schedule: CanisterCyclesCostSchedule,
+    system_subnet_outcalls: bool,
+) {
     std::thread::scope(|s| {
         // Set up IC with 1 system subnet with one node, and one application subnet with 4 nodes.
         s.spawn(|| {
+            let mut system_subnet = Subnet::new(SubnetType::System).add_nodes(1);
+            if system_subnet_outcalls {
+                system_subnet = system_subnet.with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                });
+            }
             InternetComputer::new()
-                .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+                .add_subnet(system_subnet)
                 .add_subnet(
                     Subnet::new(SubnetType::Application)
                         .with_features(SubnetFeatures {
                             http_requests: true,
                             ..SubnetFeatures::default()
                         })
+                        .with_cost_schedule(cost_schedule)
                         .add_nodes(4),
                 )
                 .setup_and_start(&env)
@@ -83,6 +116,18 @@ pub fn setup(env: TestEnv) {
 
             s.spawn(|| {
                 install_nns_canisters(&env);
+                if system_subnet_outcalls {
+                    let node = get_system_subnet_node_snapshots(&env)
+                        .next()
+                        .expect("there is no system-subnet node");
+                    let runtime = get_runtime_from_node(&node);
+                    let _ = create_proxy_canister_with_name(
+                        &env,
+                        &runtime,
+                        &node,
+                        SYSTEM_PROXY_CANISTER_ID_PATH,
+                    );
+                }
             });
             s.spawn(|| {
                 // Get application subnet node to deploy canister to.
@@ -422,9 +467,15 @@ pub fn create_proxy_canister_with_cycles<'a>(
 
 pub fn get_proxy_canister_id_with_name(env: &TestEnv, name: &str) -> PrincipalId {
     env.read_json_object(name)
-        .expect("Proxy canister should should .")
+        .unwrap_or_else(|e| panic!("proxy canister id '{name}' not found in TestEnv: {e}"))
 }
 
 pub fn get_proxy_canister_id(env: &TestEnv) -> PrincipalId {
     get_proxy_canister_id_with_name(env, PROXY_CANISTER_ID_PATH)
+}
+
+/// The proxy canister installed on the system subnet (available only with a
+/// setup that enables HTTP outcalls there, e.g. [`setup_with_free_cost_schedule`]).
+pub fn get_system_proxy_canister_id(env: &TestEnv) -> PrincipalId {
+    get_proxy_canister_id_with_name(env, SYSTEM_PROXY_CANISTER_ID_PATH)
 }
