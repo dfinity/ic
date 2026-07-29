@@ -360,7 +360,7 @@ impl IDkgComplaintHandlerImpl {
                     every_n_seconds => 10,
                     self.log,
                     "Created IDKG complaint: {}",
-                    content
+                    content.idkg_complaint
                 );
                 let signed_complaint = SignedIDkgComplaint { content, signature };
                 self.metrics.complaint_metrics_inc("complaints_sent");
