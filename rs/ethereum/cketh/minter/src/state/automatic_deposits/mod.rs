@@ -278,7 +278,7 @@ impl Default for AutomaticDeposits {
 
 /// A funded deposit address moved out of the watchlist and awaiting sweeping, for
 /// one supported ERC-20 token.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SweepEntry {
     /// The deposit address (holder) the funds sit at.
     pub address: Address,
