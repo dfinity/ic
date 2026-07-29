@@ -248,6 +248,51 @@ mod deposit_erc20 {
     }
 
     #[test]
+    fn should_update_latest_block_height_and_never_decrease() {
+        use ic_cketh_minter::REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL;
+        use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
+        use ic_cketh_test_utils::response::block_response;
+        use serde_json::json;
+
+        fn refresh_latest_block(ckerc20: &CkErc20Setup, block: u64) {
+            ckerc20
+                .env
+                .advance_time(REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL);
+            MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+                .with_request_params(json!(["latest", false]))
+                .respond_for_all_with(block_response(block))
+                .build()
+                .expect_rpc_calls(ckerc20);
+            ckerc20.env.tick();
+        }
+
+        let ckerc20 = CkErc20Setup::default();
+
+        // The refresh timer records the latest block height in the metric.
+        refresh_latest_block(&ckerc20, 1_000);
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(r"cketh_minter_latest_block_height 1000 \d+");
+
+        // A higher latest block advances the metric.
+        refresh_latest_block(&ckerc20, 2_000);
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(r"cketh_minter_latest_block_height 2000 \d+");
+
+        // A lower latest block (a lagging or reorged provider) must not move the
+        // metric backwards.
+        refresh_latest_block(&ckerc20, 1_500);
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(r"cketh_minter_latest_block_height 2000 \d+")
+            .assert_does_not_contain_metric_matching(r"cketh_minter_latest_block_height 1500 \d+");
+    }
+
+    #[test]
     fn should_not_record_one_event_per_registered_deposit_address() {
         let mut ckerc20 = CkErc20Setup::default();
         let caller = ckerc20.caller();
@@ -293,9 +338,9 @@ mod deposit_erc20 {
         assert_matches!(
             snapshot_and_upgrade.as_slice(),
             [
-                EventPayload::RegisteredDepositAddresses { addresses, .. },
+                EventPayload::RegisteredDepositAddresses { registrations, .. },
                 EventPayload::Upgrade(_)
-            ] if addresses.len() == subaccounts.len(),
+            ] if registrations.len() == subaccounts.len(),
             "BUG: expected a single deposit-address snapshot with all addresses and one upgrade event, got {new_events:#?}"
         );
 
@@ -629,6 +674,7 @@ mod withdraw_erc20 {
             ]);
 
             ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
+            ckerc20.env.tick();
             ckerc20.env.tick();
             let balance_after_reimbursement = ckerc20.cketh.balance_of(caller);
             assert_eq!(
