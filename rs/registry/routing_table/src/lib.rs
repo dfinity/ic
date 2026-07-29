@@ -552,13 +552,25 @@ impl RoutingTable {
     /// Returns the corresponding `CanisterIdRange` and `SubnetId` that the given `canister_id` is assigned to
     /// or `None` if an assignment cannot be found.
     pub fn lookup_entry(&self, canister_id: CanisterId) -> Option<(CanisterIdRange, SubnetId)> {
-        lookup_in_ranges(&self.0, canister_id)
+        lookup_in_ranges(
+            &self.0,
+            CanisterIdRange {
+                start: canister_id,
+                end: canister_id,
+            },
+        )
     }
 
     /// Returns the corresponding `SubnetId` that the given `range` is assigned to or `None` if an
     /// assignment cannot be found.
+    ///
+    /// False-negatives: if the routing table is not optimized and some neighboring ranges could
+    /// actually be merged, this function might return `None` even if the range is actually assigned
+    /// to a subnet.
+    /// Example: `routing_table == [[1, 2], [3, 4]]`, querying for `[1, 4]` will return `None` even
+    /// if both ranges are assigned to the same subnet.
     pub fn lookup_range(&self, range: CanisterIdRange) -> Option<SubnetId> {
-        self.0.get(&range).copied()
+        lookup_in_ranges(&self.0, range).map(|(_range, subnet_id)| subnet_id)
     }
 
     /// Find all canister ranges that are assigned to subnet_id.
@@ -674,7 +686,14 @@ impl CanisterMigrations {
     }
 
     pub fn lookup(&self, canister_id: CanisterId) -> Option<Vec<SubnetId>> {
-        lookup_in_ranges(&self.0, canister_id).map(|(_range, trace)| trace)
+        lookup_in_ranges(
+            &self.0,
+            CanisterIdRange {
+                start: canister_id,
+                end: canister_id,
+            },
+        )
+        .map(|(_range, trace)| trace)
     }
 
     /// For each range in the canister ID ranges, inserts a mapping from the
@@ -728,46 +747,50 @@ impl CanisterMigrations {
 
 fn lookup_in_ranges<V: Clone>(
     canister_id_range_to_value: &BTreeMap<CanisterIdRange, V>,
-    canister_id: CanisterId,
+    canister_range: CanisterIdRange,
 ) -> Option<(CanisterIdRange, V)> {
     // In simple terms, we need to do a binary search of all the interval
-    // ranges tracked in self to see if `canister_id` in included in any of
-    // them.  BTreeMap offers this functionality in the form of the
-    // `range()` function.  In particular, assume self is [a1, b1] ... [an,
-    // bn].  Pretend to insert [canister_id, u64::MAX] into this sequence.
-    // We look for the interval [i1, i2] that is before (or equal to) the
-    // position where [canister_id, u64::MAX] would be inserted.
+    // ranges tracked in self to see if `canister_range` is included *in
+    // full* in any of them.  BTreeMap offers this functionality in the
+    // form of the `range()` function.  In particular, assume self is
+    // `[a1, b1] ... [an, bn]`. Pretend to insert
+    // [canister_range.start, u64::MAX] into this sequence. We look for the
+    // interval [i1, i2] that is before (or equal to) the position where
+    // [canister_range.start, u64::MAX] would be inserted.
     let before = canister_id_range_to_value
         .range(
             ..=(CanisterIdRange {
-                start: canister_id,
+                start: canister_range.start,
                 end: CanisterId::from(u64::MAX),
             }),
         )
         .next_back();
 
     if let Some((interval, value)) = before {
-        // We found an interval [star, end], it must be the case that
-        // [start, end]<=[canister_id, u64::MAX] lexicographically, whence
-        // start <= canister_id.
-        assert!(interval.start <= canister_id);
-        // If canister_id is in the interval then we found our answer.
-        if canister_id <= interval.end {
+        // We found an interval [start, end], it must be the case that
+        // [start, end]<=[canister_range.start, u64::MAX] lexicographically,
+        // whence start <= canister_range.start.
+        assert!(interval.start <= canister_range.start);
+        // If the range's end is in the interval then we found our answer.
+        if canister_range.end <= interval.end {
             Some((*interval, value.clone()))
         } else {
-            // In this case, either [start, end] is the last interval in the
-            // map and c comes after end, or there is an interval [a, b] in
-            // the map such that lexicographically [start, end] <= [c,
-            // u64::MAX] < [a, b]. This means that canister_id < a so
-            // canister_id is not assigned to any subnetwork. Because if
-            // canister_id == a, then u64::MAX < b which is impossible.
+            // In this case, `interval := [a, b]` cannot include the provided
+            // `range := [start, end]` because `end > b`. If `interval` is the last
+            // interval in the map, then there are no other candidates to check. Otherwise,
+            // there exists an interval [c, d] such that lexicographically
+            // [a, b] <= [start, u64::MAX] < [c, d].
+            // start cannot be equal to c because that would mean that u64::MAX < d
+            // => start < c => [start, end] is not included in [c, d] either.
             None
         }
     } else {
         // All intervals [a, b] of the map are lexicographically > than
-        // [canister_id, u64::MAX]. But if [a, b] > [canister_id, u64::MAX]
-        // then a > canister_id, which means that canister_id is unassigned
-        // (or a == b and b > u64::MAX which is impossible).
+        // [canister_range.start, u64::MAX]. But if
+        // [a, b] > [canister_range.start, u64::MAX], then a > canister_range.start,
+        // which means that the provided range cannot be included *in full*
+        // in any interval. (or a == canister_range.start and b > u64::MAX
+        // which is impossible).
         None
     }
 }

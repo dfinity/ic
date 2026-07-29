@@ -276,7 +276,6 @@ fn valid_routing_table() {
             ((0x50000, 0x50fff), 1),
             ((0x80000, 0x8ffff), 8),
             ((0x90000, 0xfffff), 9),
-            ((0x1000000000000000, 0xffffffffffffffff), 0xf),
         ]
         .to_vec(),
     );
@@ -288,8 +287,8 @@ fn valid_routing_table() {
     let range3 = new_canister_id_range(0x50000, 0x50fff);
     let range4 = new_canister_id_range(0x80000, 0x8ffff);
     let range5 = new_canister_id_range(0x90000, 0xfffff);
-    let range6 = new_canister_id_range(0x1000000000000000, 0xffffffffffffffff);
 
+    // `lookup_entry` (single canisters)
     assert!(rt.lookup_entry(CanisterId::from(0)).is_none());
     assert!(rt.lookup_entry(CanisterId::from(0x99)).is_none());
     assert_eq!(
@@ -326,10 +325,147 @@ fn valid_routing_table() {
         rt.lookup_entry(CanisterId::from(0x90000)),
         Some((range5, subnet_test_id(9)))
     );
+
+    // `lookup_range` (ranges)
+    assert!(rt.lookup_range(new_canister_id_range(0, 0)).is_none());
+    assert!(rt.lookup_range(new_canister_id_range(0, 0x99)).is_none());
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x99, 0x100))
+            .is_none()
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x99, 0x101))
+            .is_none()
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(0x100, 0x100)),
+        Some(subnet_test_id(1))
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(0x100, 0x101)),
+        Some(subnet_test_id(1))
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(0x100, 0x100ff)),
+        Some(subnet_test_id(1))
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100, 0x10100))
+            .is_none(),
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100, 0x20000))
+            .is_none(),
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100, 0x2ffff))
+            .is_none(),
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100, 0x50000))
+            .is_none(),
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100, 0x50fff))
+            .is_none(),
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(0x10000, 0x10001)),
+        Some(subnet_test_id(1))
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(0x10000, 0x100ff)),
+        Some(subnet_test_id(1))
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x10000, 0x10100))
+            .is_none()
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100ff, 0x10100))
+            .is_none()
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100ff, 0x20000))
+            .is_none()
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x10100, 0x1ffff))
+            .is_none()
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x10100, 0x20000))
+            .is_none()
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(0x90000, 0xfffff)),
+        Some(subnet_test_id(9))
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x90000, 0x100000))
+            .is_none(),
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x90000, 0xffffffffffffffff))
+            .is_none(),
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0xfffff, 0xffffffffffffffff))
+            .is_none(),
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100000, 0x100000))
+            .is_none(),
+    );
+    assert!(
+        rt.lookup_range(new_canister_id_range(0x100000, 0xffffffffffffffff))
+            .is_none(),
+    );
+}
+
+#[test]
+fn valid_routing_table_with_max_canister_id() {
+    let rt = new_routing_table(vec![
+        ((0x100, 0x100ff), 1),
+        ((0x1000000000000000, 0xffffffffffffffff), 0xf),
+    ]);
+    assert_eq!(rt.well_formed(), Ok(()));
+
+    let range = new_canister_id_range(0x1000000000000000, 0xffffffffffffffff);
+
     assert_eq!(
         rt.lookup_entry(CanisterId::from(0xffffffffffffffff)),
-        Some((range6, subnet_test_id(0xf)))
+        Some((range, subnet_test_id(0xf)))
     );
+    assert!(
+        rt.lookup_range(new_canister_id_range(
+            0x0fffffffffffffff,
+            0xffffffffffffffff
+        ))
+        .is_none(),
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(
+            0x1000000000000000,
+            0xffffffffffffffff
+        )),
+        Some(subnet_test_id(0xf))
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(
+            0xffffffffffffffff,
+            0xffffffffffffffff
+        )),
+        Some(subnet_test_id(0xf))
+    );
+}
+
+#[test]
+fn lookup_range_returns_false_negative_on_non_optimized_routing_table() {
+    let rt = new_routing_table(vec![((0, 5), 1), ((6, 10), 1)]);
+    assert!(!rt.is_optimized());
+
+    assert!(rt.lookup_range(new_canister_id_range(0, 10)).is_none());
 }
 
 #[test]
@@ -346,6 +482,10 @@ fn can_insert_valid_route() {
     assert_eq!(
         rt.lookup_entry(CanisterId::from(1001_u64)),
         Some((new_range, new_subnet_id))
+    );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(1001_u64, 2000_u64)),
+        Some(new_subnet_id)
     );
 }
 
@@ -369,6 +509,10 @@ fn cannot_insert_invalid_route() {
         rt.lookup_entry(CanisterId::from(101_u64)),
         Some((original_range, subnet_test_id(1)))
     );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(101_u64, 1000_u64)),
+        Some(subnet_test_id(1))
+    );
     assert_eq!(rt.well_formed(), Ok(()));
 }
 
@@ -386,9 +530,17 @@ fn can_remove_subnet() {
             subnet_test_id(1)
         ))
     );
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(1_u64, 1000_u64)),
+        Some(subnet_test_id(1))
+    );
     rt.remove_subnet(subnet_test_id(1));
     assert_eq!(rt.well_formed(), Ok(()));
     assert_eq!(rt.lookup_entry(CanisterId::from(100_u64)), None);
+    assert_eq!(
+        rt.lookup_range(new_canister_id_range(1_u64, 1000_u64)),
+        None,
+    );
 }
 
 #[test]
@@ -464,6 +616,16 @@ fn can_optimize_routing_table() {
             rt.lookup_entry(CanisterId::from(i)).map(|(_, s)| s)
         );
     }
+    assert!(rt.lookup_range(new_canister_id_range(0, 10)).is_none());
+    assert_eq!(
+        rt_optimized.lookup_range(new_canister_id_range(0, 10)),
+        Some(subnet_test_id(1)),
+    );
+    assert!(rt.lookup_range(new_canister_id_range(21, 27)).is_none());
+    assert_eq!(
+        rt_optimized.lookup_range(new_canister_id_range(21, 27)),
+        Some(subnet_test_id(1)),
+    );
 }
 
 #[test]
