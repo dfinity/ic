@@ -20,6 +20,7 @@ use crate::{ValidationError, processing::ProcessingResult};
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct CanisterSettings {
     pub controllers: Option<Vec<Principal>>,
+    pub memory_allocation: Option<candid::Nat>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -28,14 +29,23 @@ struct UpdateSettingsArgs {
     pub settings: CanisterSettings,
 }
 
+/// Makes the migration canister the only controller of the given canister and,
+/// if `memory_allocation` is not `None`, sets its memory allocation in the same call
+/// (so that the memory of the canister history entry recorded for the controllers change
+/// is already covered by the new memory allocation).
+///
 /// This is a success if the call is a success
 /// and a fatal failure otherwise.
 /// We never retry this due to potential data races.
-pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResult<(), String> {
+pub async fn set_exclusive_controller(
+    canister_id: Principal,
+    memory_allocation: Option<u64>,
+) -> ProcessingResult<(), String> {
     let args = UpdateSettingsArgs {
         canister_id,
         settings: CanisterSettings {
             controllers: Some(vec![canister_self()]),
+            memory_allocation: memory_allocation.map(candid::Nat::from),
         },
     };
     match Call::bounded_wait(Principal::management_canister(), "update_settings")
@@ -52,6 +62,10 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
     }
 }
 
+/// Sets the controllers of the given canister and, if `memory_allocation` is not `None`,
+/// its memory allocation in the same call: the memory freed by lowering the memory allocation
+/// covers the memory of the canister history entry recorded for the controllers change.
+///
 /// This is a success if the call is a success
 /// and a fatal failure if the canister does not exist.
 /// Otherwise, this function returns no progress.
@@ -60,12 +74,14 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
 pub async fn set_controllers(
     canister_id: Principal,
     controllers: Vec<Principal>,
+    memory_allocation: Option<u64>,
     subnet_id: Principal,
 ) -> ProcessingResult<(), ()> {
     let args = UpdateSettingsArgs {
         canister_id,
         settings: CanisterSettings {
             controllers: Some(controllers),
+            memory_allocation: memory_allocation.map(candid::Nat::from),
         },
     };
     match Call::bounded_wait(subnet_id, "update_settings")
@@ -103,9 +119,23 @@ pub struct CanisterStatusResponse {
     pub ready_for_migration: bool,
     pub version: u64,
     pub settings: DefiniteCanisterSettingsArgs,
+    pub memory_size: candid::Nat,
     pub cycles: candid::Nat,
     pub freezing_threshold: candid::Nat,
     pub reserved_cycles: candid::Nat,
+}
+
+impl CanisterStatusResponse {
+    /// The canister's memory usage in bytes (saturating at `u64::MAX`).
+    pub fn memory_usage(&self) -> u64 {
+        u64::try_from(&self.memory_size.0).unwrap_or(u64::MAX)
+    }
+
+    /// The canister's memory allocation in bytes (saturating at `u64::MAX`);
+    /// `0` means that the canister's memory growth is best-effort.
+    pub fn memory_allocation(&self) -> u64 {
+        u64::try_from(&self.settings.memory_allocation.0).unwrap_or(u64::MAX)
+    }
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -122,6 +152,7 @@ pub enum CanisterStatusType {
 pub struct DefiniteCanisterSettingsArgs {
     pub controller: Principal,
     pub controllers: Vec<Principal>,
+    pub memory_allocation: candid::Nat,
     pub freezing_threshold: candid::Nat,
     pub reserved_cycles_limit: candid::Nat,
 }

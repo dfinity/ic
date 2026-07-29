@@ -12,7 +12,7 @@ use candid::{Principal, Reserved};
 use ic_cdk::api::canister_self;
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, Request, ValidationError,
+    CYCLES_COST_PER_MIGRATION, MEMORY_RESERVED_FOR_CANISTER_HISTORY, Request, ValidationError,
     canister_state::CanisterGuard,
     canister_state::requests::list_by,
     external_interfaces::{
@@ -166,6 +166,15 @@ pub async fn validate_request(
 
     let mut migrated_canister_original_controllers = migrated_canister_status.settings.controllers;
     migrated_canister_original_controllers.retain(|e| *e != canister_self());
+    let replaced_canister_original_memory_allocation = replaced_canister_status.memory_allocation();
+    // The memory allocation must cover the memory usage of the replaced canister
+    // plus the canister history entries recorded by the migration canister.
+    let replaced_canister_reserved_memory_allocation = std::cmp::max(
+        replaced_canister_original_memory_allocation,
+        replaced_canister_status
+            .memory_usage()
+            .saturating_add(MEMORY_RESERVED_FOR_CANISTER_HISTORY),
+    );
     let mut replaced_canister_original_controllers = replaced_canister_status.settings.controllers;
     replaced_canister_original_controllers.retain(|e| *e != canister_self());
     let request = Request {
@@ -175,6 +184,8 @@ pub async fn validate_request(
         replaced_canister,
         replaced_canister_subnet,
         replaced_canister_original_controllers,
+        replaced_canister_original_memory_allocation,
+        replaced_canister_reserved_memory_allocation,
         caller,
     };
 

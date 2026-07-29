@@ -42,6 +42,20 @@ const RATE_LIMIT: u64 = 50;
 const MAX_ONGOING_VALIDATIONS: u64 = 200;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
+/// Every management canister call performed by the migration canister on the replaced canister
+/// records a canister history entry and thus increases the canister's memory usage. If the subnet
+/// of the replaced canister cannot accommodate that increase, then the call fails, e.g., the call
+/// to `rename_canister` in `RequestState::StoppedAndReady` would keep failing forever.
+///
+/// To prevent this, the migration canister bumps the memory allocation of the replaced canister
+/// to its memory usage plus this amount when making itself the exclusive controller of the
+/// replaced canister (and restores the original memory allocation when restoring the original
+/// controllers).
+///
+/// A canister history entry (of a canister with at most 10 controllers) takes way less than
+/// 1KiB and hence this amount is a safe bound on the memory usage increase caused by the few
+/// canister history entries recorded by the migration canister.
+const MEMORY_RESERVED_FOR_CANISTER_HISTORY: u64 = 4 * 1024;
 
 #[derive(Clone, Display, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
@@ -97,10 +111,21 @@ pub struct Request {
     replaced_canister: Principal,
     replaced_canister_subnet: Principal,
     replaced_canister_original_controllers: Vec<Principal>,
+    /// The memory allocation of the replaced canister at validation time. It is restored
+    /// together with the original controllers of the replaced canister.
+    #[serde(default)]
+    replaced_canister_original_memory_allocation: u64,
+    /// The memory allocation to be set for the replaced canister while the migration canister
+    /// is its exclusive controller: the memory usage of the replaced canister at validation time
+    /// plus `MEMORY_RESERVED_FOR_CANISTER_HISTORY` (or the original memory allocation if that
+    /// one is already higher, in which case setting it is a no-op).
+    #[serde(default)]
+    replaced_canister_reserved_memory_allocation: u64,
     caller: Principal,
 }
 
 impl Request {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         migrated_canister: Principal,
         migrated_canister_subnet: Principal,
@@ -108,6 +133,8 @@ impl Request {
         replaced_canister: Principal,
         replaced_canister_subnet: Principal,
         replaced_canister_original_controllers: Vec<Principal>,
+        replaced_canister_original_memory_allocation: u64,
+        replaced_canister_reserved_memory_allocation: u64,
         caller: Principal,
     ) -> Self {
         Self {
@@ -117,6 +144,8 @@ impl Request {
             replaced_canister,
             replaced_canister_subnet,
             replaced_canister_original_controllers,
+            replaced_canister_original_memory_allocation,
+            replaced_canister_reserved_memory_allocation,
             caller,
         }
     }
@@ -135,11 +164,13 @@ impl Display for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, caller: {}, migrated_canister_original_controllers: [",
+            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, replaced_canister_original_memory_allocation: {}, replaced_canister_reserved_memory_allocation: {}, caller: {}, migrated_canister_original_controllers: [",
             self.migrated_canister,
             self.migrated_canister_subnet,
             self.replaced_canister,
             self.replaced_canister_subnet,
+            self.replaced_canister_original_memory_allocation,
+            self.replaced_canister_reserved_memory_allocation,
             self.caller
         )?;
         for x in self.migrated_canister_original_controllers.iter() {
@@ -220,7 +251,9 @@ pub enum RequestState {
     #[strum(to_string = "RequestState::Accepted {{ request: {request} }}")]
     Accepted { request: Request },
 
-    /// Called mgmt `update_settings` to make us the only controller.
+    /// Called mgmt `update_settings` to make us the only controller and, in the same call,
+    /// to bump the memory allocation of the replaced canister so that recording canister
+    /// history entries for it cannot fail (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
     ///
     /// Certain checks are not informative before this state because the original controller
     /// could still interfere until this state.
@@ -288,11 +321,12 @@ pub enum RequestState {
 
     /// Six minutes have passed since `stopped_since` such that any messages to the
     /// migrated canister subnet have expired by now.
-    /// Restored the controllers of the replaced canister (now addressed with migrated canister's id).
+    /// Restored the controllers of the replaced canister (now addressed with migrated canister's id)
+    /// and its original memory allocation.
     ///
     /// This state transitions to a success event without any additional work.
     ///
-    /// Called `update_settings` to restore controllers.
+    /// Called `update_settings` to restore controllers and the original memory allocation.
     #[strum(to_string = "RequestState::RestoredControllers {{ request: {request} }}")]
     RestoredControllers { request: Request },
 
