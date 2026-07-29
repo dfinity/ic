@@ -327,9 +327,12 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    // Every VM of this testnet asks for a DMZ host, because that is the only
-    // place a publicly routed IPv4 can be attached (see IC_GW_IPV4 and the DC
-    // note at the top of this file). `InternetComputer::with_required_host_features`
+    // Every VM of this testnet asks for a DMZ host, because Farm marks the "dmz"
+    // feature mandatory on those hosts: a VM without it never lands there. That
+    // feature alone does not buy a publicly routed IPv4 though — of the DMZ
+    // datacenters only dm1-dmz has a public IPv4 network, so what actually makes
+    // IC_GW_IPV4 attachable is pinning the group to that DC (see the DC note at
+    // the top of this file). `InternetComputer::with_required_host_features`
     // covers the API boundary nodes but is not inherited by `add_subnet` or
     // `with_unassigned_node`, so the subnets and the unassigned nodes ask
     // individually.
@@ -525,7 +528,7 @@ fn create_empty_canister_on_app_subnet(env: &TestEnv, cycles: u128, label: &str)
             .with_controller(anonymous_principal)
             .call_and_wait()
             .await
-            .map_err(|err| anyhow!("failed to create demo canister: {err}"))
+            .map_err(|err| anyhow!("failed to create {label} canister: {err}"))
             .unwrap();
         canister_id
     });
