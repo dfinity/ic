@@ -22,12 +22,12 @@
 //! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
 
 use ic_cketh_minter::balance_scan::batcher::{
-    BalanceOfCall, decode_balance_batch, encode_balance_batch,
+    decode_balance_batch, encode_balance_batch, BalanceOfCall,
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::live_scan::{
-    Anvil, CkErc20LiveScanSetup, DEV_ACCOUNT, address_from_hex, address_token, call,
-    default_caller, deploy_mock_erc20, status_ok, uint_token,
+    address_from_hex, address_token, call, default_caller, deploy_mock_erc20, status_ok,
+    uint_token, Anvil, CkErc20LiveScanSetup, DEV_ACCOUNT,
 };
 use ic_ethereum_types::Address;
 use std::time::Duration;
