@@ -110,6 +110,16 @@ const WHALE_CANISTER_CYCLES: u128 = 100_000_000_000_000_000;
 /// Cycles to fund the proxy application canister with. 300T cycles.
 const PROXY_CANISTER_CYCLES: u128 = 300_000_000_000_000;
 
+/// Unclaimed ids reserved after the three above, so that a consumer can pin a new
+/// canister id without changing this testnet and redeploying it first. Raising this
+/// is safe — the new ids come after the existing ones; lowering it retires ids from
+/// the end, which is only safe if nothing pins them.
+const SPARE_CANISTERS: u8 = 5;
+
+/// Cycles to fund each spare application canister with. 300T cycles, as for the
+/// demo canister: enough to install into and exercise, and free to mint here.
+const SPARE_CANISTER_CYCLES: u128 = 300_000_000_000_000;
+
 /// Node providers used in this testnet. Each data center is owned by exactly
 /// one node provider (1 node provider per DC). Providers can own multiple DCs
 /// and do not need to own the same number of DCs / nodes.
@@ -484,19 +494,35 @@ pub fn setup(env: TestEnv) {
     // can pin their canister ids. Application-subnet ids are handed out in
     // allocation order from the subnet's range, so creating them here, before
     // anything else can allocate, is what makes those ids survive a
-    // redeployment of the testnet. Consumers install into them; the anonymous
-    // principal is a controller so any deploy identity can.
+    // redeployment of the testnet. Consumers install into them, as one of the two
+    // controllers they are created with (see `create_empty_canister_on_app_subnet`).
     //
     // ORDER IS PART OF THE CONTRACT: each entry claims the next id, so
     // inserting, removing or reordering one shifts every id after it. Append
     // only, and expect whoever pins the ids to have to update them otherwise.
     //
-    //   demo  -> first id in the range, control-panel's frontend
-    //   whale -> second, control-panel's engine canister
-    //   proxy -> third, control-panel's canister_info proxy
+    // The ids are the Application subnet range from index 1048576 up, so they are
+    // the same after every redeployment:
+    //
+    //   demo   -> 5v3p4-iyaaa-aaaaa-qaaaa-cai  control-panel's frontend
+    //   whale  -> 5s2ji-faaaa-aaaaa-qaaaq-cai  control-panel's engine canister
+    //   proxy  -> 53zcu-tiaaa-aaaaa-qaaba-cai  control-panel's canister_info proxy
+    //   spare1 -> 54yea-6qaaa-aaaaa-qaabq-cai  unclaimed
+    //   spare2 -> 5j7vn-7yaaa-aaaaa-qaaca-cai  unclaimed
+    //   spare3 -> 5o6tz-saaaa-aaaaa-qaacq-cai  unclaimed
+    //   spare4 -> 5h5yf-eiaaa-aaaaa-qaada-cai  unclaimed; the id the backend
+    //             pinned for the canister_info proxy before it moved to `proxy`
+    //   spare5 -> 5a46r-jqaaa-aaaaa-qaadq-cai  unclaimed
+    //
+    // The spares exist so a consumer can pin a new id without a change here and a
+    // testnet redeployment first. Claiming one means renaming it above, not moving
+    // it. Being empty they cost only their cycles, which the provisional API mints.
     create_empty_canister_on_app_subnet(&env, DEMO_CANISTER_CYCLES, "demo");
     create_empty_canister_on_app_subnet(&env, WHALE_CANISTER_CYCLES, "whale");
     create_empty_canister_on_app_subnet(&env, PROXY_CANISTER_CYCLES, "proxy");
+    for i in 1..=SPARE_CANISTERS {
+        create_empty_canister_on_app_subnet(&env, SPARE_CANISTER_CYCLES, &format!("spare{i}"));
+    }
 }
 
 /// Creates an empty canister (no wasm installed) on the (single) Application
