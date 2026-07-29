@@ -48,8 +48,8 @@ const MAX_ACTIVE_DEPOSIT_ADDRESSES: NonZeroUsize = NonZeroUsize::new(7_000).unwr
 pub struct AutomaticDeposits {
     watchlist: TimedSizedMap<Account, DepositRequest>,
     /// Funded deposit addresses moved out of the watchlist, awaiting sweeping,
-    /// keyed per `(account, ERC-20 token contract)`.
-    sweep: BTreeMap<(Account, Address), SweepEntry>,
+    /// keyed per account and ERC-20 token contract.
+    sweep: BTreeMap<SweepKey, SweepEntry>,
 }
 
 impl AutomaticDeposits {
@@ -119,13 +119,13 @@ impl AutomaticDeposits {
             .iter()
             .map(|entry| {
                 (
-                    (
-                        Account {
+                    SweepKey {
+                        account: Account {
                             owner: entry.owner,
                             subaccount: entry.subaccount,
                         },
-                        entry.token,
-                    ),
+                        token: entry.token,
+                    },
                     SweepEntry {
                         address: entry.address,
                         last_scanned_block: entry.last_scanned_block,
@@ -206,7 +206,10 @@ impl AutomaticDeposits {
         let scan_count = removed.scan_count.saturating_add(1);
         for (token, balance) in candidates {
             self.sweep.insert(
-                (*account, *token),
+                SweepKey {
+                    account: *account,
+                    token: *token,
+                },
                 SweepEntry {
                     address: removed.address,
                     last_scanned_block: block,
@@ -237,10 +240,10 @@ impl AutomaticDeposits {
         let sweep_queue = self
             .sweep
             .iter()
-            .map(|((account, token), entry)| SweepQueueEntry {
-                owner: account.owner,
-                subaccount: account.subaccount,
-                token: *token,
+            .map(|(key, entry)| SweepQueueEntry {
+                owner: key.account.owner,
+                subaccount: key.account.subaccount,
+                token: key.token,
                 address: entry.address,
                 last_scanned_block: entry.last_scanned_block,
                 scan_count: entry.scan_count,
@@ -274,6 +277,15 @@ impl Default for AutomaticDeposits {
             sweep: BTreeMap::new(),
         }
     }
+}
+
+/// Key into the sweep queue: the user account together with the ERC-20 token
+/// contract whose balance was found. Names the token address so it is not
+/// conflated with the user-derived deposit address in [`SweepEntry`].
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct SweepKey {
+    account: Account,
+    token: Address,
 }
 
 /// A funded deposit address moved out of the watchlist and awaiting sweeping, for
