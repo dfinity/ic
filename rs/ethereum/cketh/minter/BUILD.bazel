@@ -301,7 +301,6 @@ rust_test(
         "//rs/pocket_ic_server:pocket-ic-server",
         "@evm_rpc.wasm.gz//file",
     ],
-    edition = "2021",
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
