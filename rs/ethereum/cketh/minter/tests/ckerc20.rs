@@ -350,6 +350,20 @@ mod deposit_erc20 {
                 r"cketh_minter_sweep_queue_size {tokens} \d+"
             ));
 
+        // The populated sweep queue must survive a real pre_upgrade snapshot -> post_upgrade
+        // replay: check_audit_log emits the snapshot, CBOR-encodes and replays it, and asserts the
+        // replayed state is_equivalent_to the live one (which compares the sweep map). A wrong
+        // minicbor annotation on SweepQueueEntry would fail here.
+        ckerc20
+            .cketh
+            .check_audit_logs_and_upgrade_as_ref(Default::default());
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(format!(
+                r"cketh_minter_sweep_queue_size {tokens} \d+"
+            ));
+
         // The funded address left the watchlist, so re-registering the same account arms it afresh
         // (scan_count back to 0) rather than reporting the earlier scan — it is no longer scanned.
         let (_ckerc20, after) = ckerc20
