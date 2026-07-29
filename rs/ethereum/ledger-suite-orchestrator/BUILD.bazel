@@ -165,7 +165,6 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ledger_suite_orchestrator",
-        "//:pocket-ic-server",
         "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
