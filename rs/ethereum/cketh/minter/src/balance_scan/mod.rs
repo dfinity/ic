@@ -394,11 +394,42 @@ impl<'a> BalanceScan<'a> {
             size >= self.tokens.len(),
             "BUG: batch of size {size} would split an address across multiple batches"
         );
-        let addresses_per_chunk = (MAX_CALLS_PER_BATCH / self.tokens.len().max(1)).max(1);
+        let addresses_per_chunk = (size / self.tokens.len().max(1)).max(1);
         BalanceScanBatch {
             accounts: self.accounts.chunks(addresses_per_chunk),
             tokens: &self.tokens,
         }
+    }
+
+    pub fn balance_calls(&self) -> Vec<BalanceOfCall> {
+        self.iter()
+            .map(|(account, token)| BalanceOfCall {
+                token: *token,
+                holder: account.address(),
+            })
+            .collect()
+    }
+
+    pub fn collect_balances(self, balances: Vec<Erc20Value>) -> Vec<BalanceScanResult> {
+        assert_eq!(
+            self.accounts.len() * self.tokens.len(),
+            balances.len(),
+            "BUG: expected 1 result per (deposit_account, erc_20 token)"
+        );
+        self.iter()
+            .zip(balances)
+            .map(|((account, token), balance)| BalanceScanResult {
+                account: account.clone(),
+                token: *token,
+                balance,
+            })
+            .collect()
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&DepositAccount, &Address)> {
+        self.accounts
+            .iter()
+            .flat_map(|account| self.tokens.iter().map(move |token| (account, token)))
     }
 }
 
