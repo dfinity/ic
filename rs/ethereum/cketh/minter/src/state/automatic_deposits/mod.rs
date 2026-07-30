@@ -181,7 +181,7 @@ impl AutomaticDeposits {
         self.sweep.insert(
             SweepKey {
                 account,
-                token: deposit.token,
+                erc20_token: deposit.token,
             },
             SweepEntry {
                 address: deposit.address,
@@ -260,7 +260,7 @@ impl Default for AutomaticDeposits {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct SweepKey {
     account: Account,
-    token: Address,
+    erc20_token: Address,
 }
 
 /// A funded token awaiting sweeping for a deposit address, as surfaced by
