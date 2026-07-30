@@ -9,18 +9,18 @@
 use candid::Principal;
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
-use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::{
     data_certificate, in_replicated_execution, msg_caller, msg_cycles_refunded, time,
 };
+use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::spawn;
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{
-    FlexibleRemoteHttpRequest, RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest,
-    RemoteHttpStressResponse, ResponseWithRefundedCycles,
+    FlexibleRemoteHttpRequest, RejectionCode, RemoteHttpRequest, RemoteHttpResponse,
+    RemoteHttpStressRequest, RemoteHttpStressResponse, ResponseWithRefundedCycles,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -33,19 +33,31 @@ thread_local! {
 
 const MAX_TRANSFORM_SIZE: usize = 2_000_000;
 
+/// Translates a failed call into the reject code and message this canister
+/// reports back over Candid.
+fn map_call_error(err: CallFailed) -> (RejectionCode, String) {
+    match err {
+        CallFailed::CallRejected(rejected) => (
+            RejectionCode::from_raw(rejected.raw_reject_code()),
+            rejected.reject_message().to_string(),
+        ),
+        CallFailed::InsufficientLiquidCycleBalance(e) => (RejectionCode::Unknown, e.to_string()),
+        CallFailed::CallPerformFailed(e) => (RejectionCode::Unknown, e.to_string()),
+    }
+}
+
 #[update]
 async fn send_flexible_request(
     request: FlexibleRemoteHttpRequest,
 ) -> Result<Vec<u8>, (RejectionCode, String)> {
     let FlexibleRemoteHttpRequest { request, cycles } = request;
 
-    ic_cdk::api::call::call_raw(
-        Principal::management_canister(),
-        "flexible_http_request",
-        &request.encode(),
-        cycles,
-    )
-    .await
+    Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
+        .with_raw_args(&request.encode())
+        .with_cycles(u128::from(cycles))
+        .await
+        .map(|response| response.into_bytes())
+        .map_err(map_call_error)
 }
 
 #[update]
@@ -134,13 +146,12 @@ async fn send_request_with_refund_callback(
     let request_url = request.url.clone();
     println!("send_request making IC call.");
 
-    let result = match ic_cdk::api::call::call_raw(
-        Principal::management_canister(),
-        "http_request",
-        &request.encode(),
-        cycles,
-    )
-    .await
+    let result = match Call::unbounded_wait(Principal::management_canister(), "http_request")
+        .with_raw_args(&request.encode())
+        .with_cycles(u128::from(cycles))
+        .await
+        .map(|response| response.into_bytes())
+        .map_err(map_call_error)
     {
         Ok(raw_response) => {
             println!("send_request returning with success case.");
