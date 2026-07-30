@@ -50,7 +50,9 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
-use ic_interfaces_registry::{RegistryClient, RegistryRecord};
+use ic_interfaces_registry::{
+    RegistryClient, RegistryDataProvider, RegistryRecord, ZERO_REGISTRY_VERSION,
+};
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateHashMetadata,
     StateManager, StateReader,
@@ -86,7 +88,7 @@ use ic_protobuf::{
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
         },
-        subnet::v1::CatchUpPackageContents,
+        subnet::v1::{CatchUpPackageContents, SubnetRecord},
     },
     types::{
         v1 as pb,
@@ -101,11 +103,12 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_keys::{
-    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY, make_canister_migrations_record_key,
-    make_canister_ranges_key, make_catch_up_package_contents_key,
-    make_chain_key_enabled_subnet_list_key, make_crypto_node_key,
-    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_subnet_record_key,
+    CANISTER_RANGES_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    make_canister_migrations_record_key, make_canister_ranges_key,
+    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
+    make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
+    make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -294,6 +297,29 @@ pub fn add_global_registry_records(
         .unwrap();
 }
 
+/// Returns all registry keys with the given prefix whose latest value in the registry
+/// managed by the registry data provider is not a deletion (tombstone).
+fn live_registry_keys_with_prefix(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    prefix: &str,
+) -> Vec<String> {
+    // The records are sorted by version (and key) and thus the last value
+    // for a given key is that key's latest value.
+    let mut latest_value_is_set: BTreeMap<String, bool> = BTreeMap::new();
+    for record in registry_data_provider
+        .get_updates_since(ZERO_REGISTRY_VERSION)
+        .expect("Failed to get registry records")
+    {
+        if record.key.starts_with(prefix) {
+            latest_value_is_set.insert(record.key, record.value.is_some());
+        }
+    }
+    latest_value_is_set
+        .into_iter()
+        .filter_map(|(key, is_set)| is_set.then_some(key))
+        .collect()
+}
+
 /// Updates global registry records (routing table, subnet list, chain keys) at the given
 /// registry version. Used both during initial setup and after removing a subnet.
 pub fn update_global_registry_records(
@@ -303,15 +329,32 @@ pub fn update_global_registry_records(
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) {
-    // routing table record
+    // routing table record: the whole routing table is stored in a single shard
+    let routing_table_key = make_canister_ranges_key(CanisterId::from_u64(0));
     let pb_routing_table = PbRoutingTable::from(routing_table.clone());
     registry_data_provider
         .add(
-            &make_canister_ranges_key(CanisterId::from_u64(0)),
+            &routing_table_key,
             registry_version,
             Some(pb_routing_table.clone()),
         )
         .unwrap();
+
+    // Delete all other canister ranges shards: consumers of the routing table read
+    // the union of all shards and thus stale shards (e.g., created by the registry
+    // canister which splits the routing table into multiple shards) would result in
+    // duplicate canister ranges.
+    let stale_shards: Vec<RegistryRecord> =
+        live_registry_keys_with_prefix(&registry_data_provider, CANISTER_RANGES_PREFIX)
+            .into_iter()
+            .filter(|key| *key != routing_table_key)
+            .map(|key| RegistryRecord {
+                key,
+                version: registry_version,
+                value: None,
+            })
+            .collect();
+    registry_data_provider.add_registry_records(stale_shards);
 
     // subnet list record
     add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_list);
@@ -376,9 +419,16 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
 /// - subnet record;
 /// - subnet threshold key record.
 ///
+/// If a base subnet record is provided, then the subnet record is derived from that
+/// base subnet record by only overriding the settings that the `StateMachine` must own
+/// (see the comments at the merge below). In particular, the arguments `features`,
+/// `cost_schedule`, `subnet_admins`, and `resource_limits` are then ignored in favor of
+/// the corresponding settings in the base subnet record.
+///
 /// Note: initial and global registry records must be added to the registry
 /// (using the fuctions `add_initial_registry_records` and `add_global_registry_records`)
 /// before any messages are executed on the `StateMachine`.
+#[allow(clippy::too_many_arguments)]
 fn add_subnet_local_registry_records(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
@@ -392,6 +442,7 @@ fn add_subnet_local_registry_records(
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
     resource_limits: ResourceLimits,
+    base_subnet_record: Option<SubnetRecord>,
 ) {
     for node in nodes {
         let node_record = NodeRecord {
@@ -482,7 +533,7 @@ fn add_subnet_local_registry_records(
     let max_block_payload_size = 4 * 1024 * 1024;
 
     let node_ids: Vec<_> = nodes.iter().map(|n| n.node_id).collect();
-    let record = SubnetRecordBuilder::from(&node_ids)
+    let mut record = SubnetRecordBuilder::from(&node_ids)
         .with_subnet_type(subnet_type)
         .with_max_ingress_bytes_per_message(max_ingress_bytes_per_message)
         .with_max_ingress_messages_per_block(max_ingress_messages_per_block)
@@ -508,6 +559,53 @@ fn add_subnet_local_registry_records(
         .with_subnet_admins(subnet_admins)
         .with_resource_limits(resource_limits)
         .build();
+
+    if let Some(base_subnet_record) = base_subnet_record {
+        // The base subnet record must describe the same subnet type as the `StateMachine`:
+        // otherwise, the `StateMachine` and the replica reading the subnet type from the
+        // registry would disagree on the subnet type.
+        assert_eq!(
+            base_subnet_record.subnet_type,
+            record.subnet_type,
+            "The subnet type {:?} in the base subnet record of the subnet {} does not match its actual subnet type {:?}.",
+            base_subnet_record.subnet_type(),
+            subnet_id,
+            subnet_type,
+        );
+        // A value of 0 means that the corresponding limit has not been specified
+        // in the base subnet record in which case we keep the value used for
+        // subnets created by the `StateMachine` itself. Note that a value of 0 for
+        // `max_ingress_bytes_per_message` and `max_ingress_messages_per_block` would
+        // make the subnet reject every ingress message
+        // (unlike `max_ingress_bytes_per_block` for which a value of 0 is interpreted
+        // as the default value `ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`).
+        let unless_zero = |value: u64, if_zero: u64| if value == 0 { if_zero } else { value };
+        record = SubnetRecord {
+            // The subnet's nodes are generated by the `StateMachine` (which must hold
+            // their private keys) and thus the membership in the base subnet record
+            // cannot be used.
+            membership: record.membership,
+            // The DKG interval length must be such that the genesis CUP is used
+            // throughout the test.
+            dkg_interval_length: record.dkg_interval_length,
+            // The chain keys are generated by the `StateMachine`.
+            chain_key_config: record.chain_key_config,
+            max_ingress_bytes_per_message: unless_zero(
+                base_subnet_record.max_ingress_bytes_per_message,
+                record.max_ingress_bytes_per_message,
+            ),
+            max_ingress_messages_per_block: unless_zero(
+                base_subnet_record.max_ingress_messages_per_block,
+                record.max_ingress_messages_per_block,
+            ),
+            max_block_payload_size: unless_zero(
+                base_subnet_record.max_block_payload_size,
+                record.max_block_payload_size,
+            ),
+            // All remaining settings are taken from the base subnet record.
+            ..base_subnet_record
+        };
+    }
 
     add_cup_contents_and_key_record(
         subnet_id,
@@ -1344,6 +1442,10 @@ pub struct StateMachineBuilder {
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
     resource_limits: ResourceLimits,
+    /// If a subnet record is provided, then the subnet record created for the `StateMachine`
+    /// is derived from the provided subnet record (see `add_subnet_local_registry_records`).
+    /// Otherwise, the subnet record is created from scratch.
+    subnet_record: Option<SubnetRecord>,
 }
 
 impl StateMachineBuilder {
@@ -1386,6 +1488,7 @@ impl StateMachineBuilder {
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: vec![],
             resource_limits: Default::default(),
+            subnet_record: None,
         }
     }
 
@@ -1632,6 +1735,16 @@ impl StateMachineBuilder {
         }
     }
 
+    /// The subnet record created for the `StateMachine` is derived from the provided
+    /// subnet record by only overriding the settings that the `StateMachine` must own
+    /// (see `add_subnet_local_registry_records`).
+    pub fn with_subnet_record(self, subnet_record: SubnetRecord) -> Self {
+        Self {
+            subnet_record: Some(subnet_record),
+            ..self
+        }
+    }
+
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
     /// Otherwise, no new registry records are created.
@@ -1678,6 +1791,7 @@ impl StateMachineBuilder {
             self.cost_schedule,
             self.subnet_admins,
             self.resource_limits,
+            self.subnet_record,
         )
     }
 
@@ -2062,6 +2176,7 @@ impl StateMachine {
         cost_schedule: CanisterCyclesCostSchedule,
         subnet_admins: Vec<PrincipalId>,
         resource_limits: ResourceLimits,
+        subnet_record: Option<SubnetRecord>,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
@@ -2151,6 +2266,7 @@ impl StateMachine {
                 cost_schedule,
                 subnet_admins,
                 resource_limits,
+                subnet_record,
             );
         }
 
@@ -3681,6 +3797,7 @@ impl StateMachine {
             cost_schedule,
             subnet_admins,
             resource_limits,
+            None,
         );
     }
 

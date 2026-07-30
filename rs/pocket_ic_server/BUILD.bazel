@@ -40,6 +40,7 @@ LIB_DEPENDENCIES = [
     "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
     "//rs/nns/sns-wasm",
+    "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/canister/api",
     "//rs/registry/client",

@@ -83,6 +83,7 @@ fn test_remove_subnet_local_registry_records() {
         CanisterCyclesCostSchedule::Normal,
         vec![],
         ResourceLimits::default(),
+        None,
     );
 
     let global_keys: HashSet<String> = HashSet::from([
@@ -151,6 +152,91 @@ fn test_remove_subnet_local_registry_records() {
             key
         );
     }
+}
+
+#[test]
+fn test_update_global_registry_records_removes_stale_canister_ranges_shards() {
+    use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+    use ic_registry_keys::{CANISTER_RANGES_PREFIX, make_canister_ranges_key};
+    use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
+    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+    use ic_types::{CanisterId, PrincipalId, SubnetId};
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    let subnet_id: SubnetId = PrincipalId::new_subnet_test_id(1).into();
+    let other_subnet_id: SubnetId = PrincipalId::new_subnet_test_id(2).into();
+
+    let range = |start: u64, end: u64| CanisterIdRange {
+        start: CanisterId::from_u64(start),
+        end: CanisterId::from_u64(end),
+    };
+
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+    // The routing table initially consists of two shards, mimicking the sharding
+    // performed by the registry canister.
+    let mut first_shard = RoutingTable::new();
+    first_shard.insert(range(0, 9), subnet_id).unwrap();
+    let mut second_shard = RoutingTable::new();
+    second_shard.insert(range(10, 19), other_subnet_id).unwrap();
+    let stale_shard_key = make_canister_ranges_key(CanisterId::from_u64(10));
+    for (key, shard) in [
+        (
+            make_canister_ranges_key(CanisterId::from_u64(0)),
+            first_shard,
+        ),
+        (stale_shard_key.clone(), second_shard),
+    ] {
+        registry_data_provider
+            .add(
+                &key,
+                INITIAL_REGISTRY_VERSION,
+                Some(PbRoutingTable::from(shard)),
+            )
+            .unwrap();
+    }
+
+    // Both shards are live initially.
+    assert_eq!(
+        super::live_registry_keys_with_prefix(&registry_data_provider, CANISTER_RANGES_PREFIX),
+        vec![
+            make_canister_ranges_key(CanisterId::from_u64(0)),
+            stale_shard_key.clone()
+        ]
+    );
+
+    // Updating the global registry records writes the whole routing table into the
+    // single shard for canister ID 0 and must delete the other (now stale) shard.
+    let mut routing_table = RoutingTable::new();
+    routing_table.insert(range(0, 19), subnet_id).unwrap();
+    let next_version = INITIAL_REGISTRY_VERSION.increment();
+    super::update_global_registry_records(
+        next_version,
+        routing_table.clone(),
+        vec![subnet_id],
+        BTreeMap::new(),
+        registry_data_provider.clone(),
+    );
+
+    assert_eq!(
+        super::live_registry_keys_with_prefix(&registry_data_provider, CANISTER_RANGES_PREFIX),
+        vec![make_canister_ranges_key(CanisterId::from_u64(0))]
+    );
+
+    // Since the stale shard has been deleted, the routing table read back from the
+    // registry contains no duplicate canister ranges.
+    let registry_client = FakeRegistryClient::new(registry_data_provider.clone());
+    registry_client.update_to_latest_version();
+    assert_eq!(
+        registry_client
+            .get_routing_table(next_version)
+            .unwrap()
+            .unwrap(),
+        routing_table
+    );
 }
 
 #[test]

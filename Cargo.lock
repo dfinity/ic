@@ -19696,6 +19696,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-handler-root",
+ "ic-protobuf",
  "ic-registry-canister-api",
  "ic-registry-client",
  "ic-registry-client-helpers",

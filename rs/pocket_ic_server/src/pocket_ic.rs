@@ -89,9 +89,11 @@ use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_canister_api::GetChunkRequest;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
@@ -650,6 +652,7 @@ impl PocketIcSubnets {
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
         dogecoin_adapter_uds_path: Option<PathBuf>,
+        subnet_record: Option<SubnetRecord>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -730,6 +733,9 @@ impl PocketIcSubnets {
             .create_at_registry_version(create_at_registry_version);
         if let Some(subnet_admins) = subnet_admins {
             builder = builder.with_subnet_admins(subnet_admins);
+        }
+        if let Some(subnet_record) = subnet_record {
+            builder = builder.with_subnet_record(subnet_record);
         }
         builder
     }
@@ -841,6 +847,7 @@ impl PocketIcSubnets {
             cost_schedule,
             instruction_config,
             expected_state_time,
+            subnet_record,
         } = subnet_config_info;
 
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
@@ -895,6 +902,7 @@ impl PocketIcSubnets {
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
             dogecoin_adapter_uds_path.clone(),
+            subnet_record,
         );
 
         if let Some(subnet_id) = subnet_id {
@@ -2711,7 +2719,18 @@ impl PocketIcSubnets {
         );
     }
 
-    fn sync_registry_from_canister(&mut self) {
+    /// Syncs the registry versions and their content from the registry canister
+    /// to the registry used by PocketIC and creates a new subnet in PocketIC
+    /// for every subnet record that has been added to the registry
+    /// (e.g., by the registry canister's `create_subnet` endpoint)
+    /// and for which no subnet exists in this PocketIC instance yet.
+    /// All settings of such a subnet record are preserved, except for those
+    /// that PocketIC must own (see `add_subnet_local_registry_records`).
+    ///
+    /// Returns `true` if the PocketIC topology changed, i.e., at least one
+    /// new subnet has been created.
+    fn sync_registry_from_canister(&mut self) -> bool {
+        let mut topology_changed = false;
         if let Some(icp_features) = &self.icp_features
             && icp_features.registry.is_some()
         {
@@ -2754,17 +2773,105 @@ impl PocketIcSubnets {
             }
             if synced_registry_version_before != self.synced_registry_version {
                 self.persist_registry_changes();
-                // update routing table
                 let registry_client =
                     RegistryClientImpl::new(self.registry_data_provider.clone(), None);
                 registry_client.poll_once().unwrap();
+                let registry_version = self.registry_data_provider.latest_version();
+                // update routing table
                 let routing_table = registry_client
-                    .get_routing_table(self.registry_data_provider.latest_version())
+                    .get_routing_table(registry_version)
                     .expect("Failed to get routing table")
                     .expect("Failed to get routing table");
                 self.routing_table = routing_table;
+                // create a subnet in PocketIC for every new subnet record in the registry
+                for subnet_config_info in
+                    self.new_subnet_config_infos(&registry_client, registry_version)
+                {
+                    let subnet_id = subnet_config_info.subnet_id.unwrap();
+                    // The canister ranges of the new subnet have already been assigned to
+                    // the new subnet in the routing table synced from the registry canister above.
+                    // We remove them here so that `create_subnet` (which inserts the canister ranges
+                    // of the subnet it creates into the routing table) does not fail
+                    // due to overlapping canister ranges.
+                    self.routing_table.remove_subnet(subnet_id);
+                    // This subnet has not been created within PocketIC yet and thus we need to
+                    // update the registry (with the subnet's nodes, keys, and subnet record
+                    // as generated by PocketIC) and system canisters.
+                    let update_registry_and_system_canisters = true;
+                    self.create_subnet(subnet_config_info, update_registry_and_system_canisters)
+                        .unwrap_or_else(|err| {
+                            panic!("Failed to create subnet {subnet_id} from the registry: {err}")
+                        });
+                    topology_changed = true;
+                }
             }
         }
+        topology_changed
+    }
+
+    /// Derives the subnet configurations of all subnets that are contained in the subnet list
+    /// in the registry, but for which no subnet exists in this PocketIC instance yet.
+    fn new_subnet_config_infos(
+        &self,
+        registry_client: &RegistryClientImpl,
+        registry_version: RegistryVersion,
+    ) -> Vec<SubnetConfigInfo> {
+        let subnet_ids = registry_client
+            .get_subnet_ids(registry_version)
+            .expect("Failed to get subnet list")
+            .expect("Failed to get subnet list");
+        let mut subnet_config_infos = vec![];
+        for subnet_id in subnet_ids {
+            if self.subnets.get_subnet(subnet_id).is_some() {
+                continue;
+            }
+            let subnet_record = registry_client
+                .get_subnet_record(subnet_id, registry_version)
+                .expect("Failed to get subnet record")
+                .unwrap_or_else(|| panic!("Subnet record of subnet {subnet_id} not found"));
+            let subnet_type = SubnetType::try_from(subnet_record.subnet_type())
+                .unwrap_or_else(|err| panic!("Invalid subnet type of subnet {subnet_id}: {err}"));
+            let ranges: Vec<CanisterIdRange> = self
+                .routing_table
+                .ranges(subnet_id)
+                .iter()
+                .cloned()
+                .collect();
+            // Canister ranges are required to route canisters to the subnet and they are also
+            // used to derive the subnet seed used by PocketIC.
+            assert!(
+                !ranges.is_empty(),
+                "No canister ranges assigned to the subnet {subnet_id} in the routing table."
+            );
+            // The cost schedule and subnet admins are also reported in the PocketIC topology
+            // and thus we derive them from the subnet record here. All remaining settings of
+            // the subnet record are preserved by passing the subnet record itself.
+            let cost_schedule = subnet_record.canister_cycles_cost_schedule().into();
+            let subnet_admins: Vec<PrincipalId> = subnet_record
+                .subnet_admins
+                .iter()
+                .map(|subnet_admin| {
+                    PrincipalId::try_from(subnet_admin.clone()).unwrap_or_else(|err| {
+                        panic!("Invalid subnet admin of subnet {subnet_id}: {err}")
+                    })
+                })
+                .collect();
+            subnet_config_infos.push(SubnetConfigInfo {
+                ranges,
+                // The canister ranges assigned to the subnet in the registry
+                // are also used for canister ID allocation.
+                alloc_range: None,
+                subnet_id: Some(subnet_id),
+                subnet_state_dir: None,
+                subnet_kind: subnet_kind_from_subnet_type(subnet_type),
+                subnet_admins: (!subnet_admins.is_empty()).then_some(subnet_admins),
+                cost_schedule,
+                instruction_config: SubnetInstructionConfig::Production,
+                expected_state_time: None,
+                subnet_record: Some(subnet_record),
+            });
+        }
+        subnet_config_infos
     }
 
     fn persist_registry_changes(&mut self) {
@@ -3137,6 +3244,7 @@ impl PocketIc {
                         cost_schedule: config.cost_schedule,
                         instruction_config: config.instruction_config,
                         expected_state_time,
+                        subnet_record: None,
                     }
                 })
                 .collect()
@@ -3346,6 +3454,7 @@ impl PocketIc {
                     cost_schedule,
                     instruction_config,
                     expected_state_time: None,
+                    subnet_record: None,
                 });
             }
 
@@ -3421,7 +3530,11 @@ impl PocketIc {
     }
 
     pub(crate) fn sync_registry_from_canister(&mut self) {
-        self.subnets.sync_registry_from_canister();
+        if self.subnets.sync_registry_from_canister() {
+            // New subnets have been created and thus we need to persist the new topology.
+            self.subnets
+                .persist_topology(self.default_effective_canister_id);
+        }
     }
 
     pub(crate) fn bump_state_label(&mut self) {
@@ -3464,6 +3577,17 @@ fn conv_type(inp: rest::SubnetKind) -> SubnetType {
         CloudEngine => SubnetType::CloudEngine,
         Bitcoin | II | NNS | System => SubnetType::System,
         VerifiedApplication => SubnetType::VerifiedApplication,
+    }
+}
+
+/// Derives the `SubnetKind` of a subnet that has been created in the registry
+/// (and thus PocketIC only knows its `SubnetType` from its subnet record).
+fn subnet_kind_from_subnet_type(subnet_type: SubnetType) -> SubnetKind {
+    match subnet_type {
+        SubnetType::Application => SubnetKind::Application,
+        SubnetType::CloudEngine => SubnetKind::CloudEngine,
+        SubnetType::System => SubnetKind::System,
+        SubnetType::VerifiedApplication => SubnetKind::VerifiedApplication,
     }
 }
 
@@ -3625,6 +3749,10 @@ struct SubnetConfigInfo {
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub instruction_config: SubnetInstructionConfig,
     pub expected_state_time: Option<SystemTime>,
+    /// If the subnet has already been created in the registry (e.g., by the registry
+    /// canister's `create_subnet` endpoint), then its subnet record is provided here
+    /// so that all settings that PocketIC does not need to own are preserved.
+    pub subnet_record: Option<SubnetRecord>,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -5799,6 +5927,7 @@ fn route(
                             cost_schedule: Default::default(),
                             instruction_config,
                             expected_state_time: None,
+                            subnet_record: None,
                         },
                         update_registry_and_system_canisters,
                     )?;
