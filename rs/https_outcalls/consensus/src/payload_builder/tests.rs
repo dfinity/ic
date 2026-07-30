@@ -13,7 +13,9 @@ use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
-use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
+use ic_https_outcalls_pricing::fees::{
+    consensus_cost_coefficient, flexible_initial_spent, non_flexible_initial_spent,
+};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
@@ -1409,6 +1411,7 @@ fn validate_payload_fails_for_spent_exceeding_allowance_flexible_response() {
     );
     let payload = CanisterHttpPayload {
         flexible_responses: vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![FlexibleCanisterHttpResponseWithProof {
@@ -1421,7 +1424,10 @@ fn validate_payload_fails_for_spent_exceeding_allowance_flexible_response() {
 
     assert_payload_rejected_for_excess_spent(
         num_nodes,
-        vec![(callback_id, flexible_request_context(committee, 1, 4))],
+        vec![(
+            callback_id,
+            flexible_request_context_without_allowance(committee, 1, 4),
+        )],
         default_validation_context(),
         payload,
     );
@@ -1442,6 +1448,7 @@ fn validate_payload_fails_for_spent_exceeding_allowance_too_many_rejects() {
     );
     let payload = CanisterHttpPayload {
         flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             reject_responses: vec![FlexibleCanisterHttpResponseWithProof {
@@ -1454,7 +1461,10 @@ fn validate_payload_fails_for_spent_exceeding_allowance_too_many_rejects() {
 
     assert_payload_rejected_for_excess_spent(
         num_nodes,
-        vec![(callback_id, flexible_request_context(committee, 1, 4))],
+        vec![(
+            callback_id,
+            flexible_request_context_without_allowance(committee, 1, 4),
+        )],
         default_validation_context(),
         payload,
     );
@@ -1481,7 +1491,10 @@ fn validate_payload_fails_for_spent_exceeding_allowance_responses_too_large() {
 
     assert_payload_rejected_for_excess_spent(
         num_nodes,
-        vec![(callback_id, flexible_request_context(committee, 2, 4))],
+        vec![(
+            callback_id,
+            flexible_request_context_without_allowance(committee, 2, 4),
+        )],
         default_validation_context(),
         payload,
     );
@@ -1885,6 +1898,17 @@ pub(crate) fn metadata_to_share(
     metadata: &CanisterHttpResponseMetadata,
 ) -> CanisterHttpResponseShare {
     metadata_to_share_with_signature(from_node, metadata, vec![])
+}
+
+/// Creates a [`CanisterHttpResponseShare`] for `metadata` claiming `spent` cycles.
+fn metadata_to_share_with_spent(
+    from_node: u64,
+    metadata: &CanisterHttpResponseMetadata,
+    spent: Cycles,
+) -> CanisterHttpResponseShare {
+    let mut share = metadata_to_share(from_node, metadata);
+    share.content.payment_receipt = CanisterHttpPaymentReceipt { spent };
+    share
 }
 
 pub(crate) fn metadata_to_share_with_signature(
@@ -2585,6 +2609,7 @@ fn flexible_valid_with_zero_min_and_max_responses() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 0, 0, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![],
@@ -2654,6 +2679,7 @@ fn flexible_invalid_already_delivered_callback_id() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let group = FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![flexible_response(42, 0, b"a")],
@@ -2668,6 +2694,7 @@ fn flexible_invalid_already_delivered_callback_id() {
         }];
 
         let current_payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![flexible_response(42, 1, b"b")],
@@ -2697,6 +2724,7 @@ fn flexible_invalid_fewer_than_min_responses() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![flexible_response(42, 0, b"only_one")],
@@ -2731,6 +2759,7 @@ fn flexible_invalid_more_than_max_responses() {
 
     setup_test_with_flexible_context(5, callback_id, committee, 1, 2, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![
@@ -2769,6 +2798,7 @@ fn flexible_invalid_empty_group_with_nonzero_min() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![],
@@ -2803,6 +2833,7 @@ fn flexible_valid_empty_group_with_zero_min() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 0, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![],
@@ -2829,6 +2860,7 @@ fn flexible_invalid_callback_id_mismatch_in_proof() {
         entry.proof.content.metadata.id = mismatched_id;
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![entry],
@@ -2858,6 +2890,7 @@ fn flexible_invalid_duplicate_signer() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![
@@ -2890,6 +2923,7 @@ fn flexible_invalid_signer_not_in_committee() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 1, 3, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![
@@ -2927,6 +2961,7 @@ fn flexible_invalid_content_hash_mismatch() {
         entry.proof.content.metadata.content_hash = wrong_metadata_hash.clone();
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![entry],
@@ -2964,6 +2999,7 @@ fn flexible_invalid_content_size_mismatch() {
         let wrong_size = entry.proof.content.metadata.content_size;
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![entry],
@@ -2999,6 +3035,7 @@ fn flexible_invalid_is_reject_mismatch() {
         entry.proof.content.metadata.is_reject = !entry.proof.content.metadata.is_reject;
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![entry],
@@ -3063,6 +3100,7 @@ fn non_flexible_response_in_flexible_section_rejected() {
         vec![(callback_id, request_context(Replication::FullyReplicated))],
         |payload_builder, _pool| {
             let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 responses: vec![
@@ -3105,6 +3143,7 @@ fn flexible_invalid_unknown_callback_id() {
 
         let unknown_id = CallbackId::from(999);
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id: unknown_id,
             initial_spent: Cycles::zero(),
             responses: vec![flexible_response(999, 0, b"a")],
@@ -3134,6 +3173,7 @@ fn flexible_invalid_rejects_in_ok_responses() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![
@@ -3173,6 +3213,7 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
         entry.response.id = mismatched_id;
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             responses: vec![entry],
@@ -3258,6 +3299,7 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
     let entry_b = flexible_response(42, 1, &Encode!(&payload_b).unwrap());
 
     let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+        extra_shares: vec![],
         callback_id,
         initial_spent: Cycles::zero(),
         responses: vec![entry_a, entry_b],
@@ -3304,6 +3346,7 @@ fn into_messages_emits_initial_spend_reports() {
     })
     .unwrap();
     let flex_group = FlexibleCanisterHttpResponses {
+        extra_shares: vec![],
         callback_id: flex_callback,
         initial_spent: Cycles::new(3_000),
         responses: vec![
@@ -3314,6 +3357,7 @@ fn into_messages_emits_initial_spend_reports() {
 
     let err_callback = CallbackId::from(200);
     let flex_error = FlexibleCanisterHttpError::TooManyRejects {
+        extra_shares: vec![],
         callback_id: err_callback,
         reject_responses: vec![
             flexible_reject_response(err_callback.get(), 0),
@@ -3457,6 +3501,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
     };
 
     let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+        extra_shares: vec![],
         callback_id,
         initial_spent: Cycles::zero(),
         responses: vec![success_entry, reject_entry],
@@ -3489,16 +3534,19 @@ fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
     .unwrap();
 
     let group_a = FlexibleCanisterHttpResponses {
+        extra_shares: vec![],
         callback_id: CallbackId::from(1),
         initial_spent: Cycles::zero(),
         responses: vec![flexible_response(1, 0, &payload_data)],
     };
     let group_b = FlexibleCanisterHttpResponses {
+        extra_shares: vec![],
         callback_id: CallbackId::from(2),
         initial_spent: Cycles::zero(),
         responses: vec![flexible_response(2, 1, &payload_data)],
     };
     let group_c = FlexibleCanisterHttpResponses {
+        extra_shares: vec![],
         callback_id: CallbackId::from(3),
         initial_spent: Cycles::zero(),
         responses: vec![flexible_response(3, 2, &payload_data)],
@@ -3528,6 +3576,7 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
     let invalid_entry = flexible_response(42, 1, b"this is invalid candid");
 
     let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+        extra_shares: vec![],
         callback_id,
         initial_spent: Cycles::zero(),
         responses: vec![valid_entry, invalid_entry],
@@ -3589,6 +3638,7 @@ fn flexible_error_into_messages_too_many_rejects() {
 
     let payload = CanisterHttpPayload {
         flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+            extra_shares: vec![],
             callback_id,
             initial_spent: Cycles::zero(),
             reject_responses: reject_entries,
@@ -4830,12 +4880,14 @@ fn validate_payload_fails_for_initial_spent_mismatch_too_many_rejects() {
         // receipts and subnet size...
         let computed = flexible_initial_spent(
             reject_entries.iter().map(|r| &r.proof),
+            std::iter::empty(),
             NumberOfNodes::from(num_nodes as u32),
             min,
         );
         // ...but the payload claims one cycle more.
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 reject_responses: reject_entries,
                 initial_spent: computed + Cycles::new(1),
@@ -4923,6 +4975,7 @@ fn flexible_error_too_many_rejects_non_reject_content() {
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 reject_responses: vec![ok_entry, reject_entry],
@@ -4958,6 +5011,7 @@ fn flexible_error_too_many_rejects_duplicate_signer() {
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 reject_responses: vec![entry_a, entry_b],
@@ -4994,6 +5048,7 @@ fn flexible_error_too_many_rejects_signer_not_in_committee() {
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 reject_responses: vec![entry_a, entry_b],
@@ -5030,6 +5085,7 @@ fn flexible_error_too_many_rejects_callback_id_mismatch_in_response() {
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 reject_responses: vec![entry_ok, entry_wrong],
@@ -5067,6 +5123,7 @@ fn flexible_error_too_many_rejects_content_hash_mismatch() {
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 reject_responses: vec![entry_ok, entry_bad],
@@ -5103,6 +5160,7 @@ fn flexible_error_too_many_rejects_content_size_mismatch() {
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 reject_responses: vec![entry_ok, entry_bad],
@@ -5139,6 +5197,7 @@ fn flexible_error_too_many_rejects_is_reject_mismatch() {
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 reject_responses: vec![entry_ok, entry_bad],
@@ -5176,6 +5235,7 @@ fn flexible_error_too_many_rejects_proof_id_mismatch() {
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                extra_shares: vec![],
                 callback_id,
                 initial_spent: Cycles::zero(),
                 reject_responses: vec![entry_ok, entry_bad],
@@ -5247,6 +5307,907 @@ fn flexible_error_too_many_rejects_invalid_signature() {
                 ))
             );
         },
+    );
+}
+
+// ===================================================================
+// Keeping the collective initial spend within the collective allowance
+// ===================================================================
+
+/// Prices `context` with pay-as-you-go, granting each of its replicas
+/// `per_replica_allowance`.
+fn with_payg_allowance(
+    mut context: CanisterHttpRequestContext,
+    per_replica_allowance: Cycles,
+) -> CanisterHttpRequestContext {
+    context.pricing_version = ic_types::canister_http::PricingVersion::PayAsYouGo;
+    context.refund_status.per_replica_allowance = per_replica_allowance;
+    context
+}
+
+/// The consensus cost of a fully-replicated response of `content_size` bytes on
+/// a subnet of `num_nodes` nodes, i.e. the part of the collective initial spend
+/// that the signing replicas' unspent allowances have to cover.
+fn non_flexible_consensus_cost(num_nodes: usize, content_size: u32) -> Cycles {
+    Cycles::from(
+        consensus_cost_coefficient(NumberOfNodes::from(num_nodes as u32)) * content_size as u128,
+    )
+}
+
+/// Adds a share (and its response) for every node in `nodes` to the pool, all
+/// agreeing on the same successful response `content` and claiming no spend.
+fn add_flexible_ok_shares(
+    pool: &Arc<RwLock<CanisterHttpPoolImpl>>,
+    callback_id: CallbackId,
+    nodes: impl IntoIterator<Item = u64>,
+    content: &[u8],
+) {
+    add_flexible_shares(
+        pool,
+        callback_id,
+        nodes,
+        CanisterHttpResponseContent::Success(content.to_vec()),
+        Cycles::zero(),
+    );
+}
+
+/// Adds a reject share (and its response) for every node in `nodes` to the pool.
+fn add_flexible_reject_shares(
+    pool: &Arc<RwLock<CanisterHttpPoolImpl>>,
+    callback_id: CallbackId,
+    nodes: impl IntoIterator<Item = u64>,
+) {
+    add_flexible_shares(
+        pool,
+        callback_id,
+        nodes,
+        CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "could not connect".to_string(),
+        }),
+        Cycles::zero(),
+    );
+}
+
+fn add_flexible_shares(
+    pool: &Arc<RwLock<CanisterHttpPoolImpl>>,
+    callback_id: CallbackId,
+    nodes: impl IntoIterator<Item = u64>,
+    content: CanisterHttpResponseContent,
+    spent: Cycles,
+) {
+    let (response, metadata) =
+        test_response_and_metadata_with_content(callback_id.get(), content.clone());
+    let mut pool_access = pool.write().unwrap();
+    for node in nodes {
+        let share = metadata_to_share_with_spent(node, &metadata, spent);
+        add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+    }
+}
+
+/// A fully-replicated response is only delivered once the signing replicas have
+/// left enough of their allowances unspent to cover its consensus cost: with
+/// `threshold` many shares their collective allowance falls short, so the
+/// response is held back until the remaining shares have arrived.
+#[test]
+fn fully_replicated_response_waits_for_shares_covering_consensus_cost() {
+    let num_nodes = 4;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let cb_id = 0;
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
+    // An allowance that all `num_nodes` replicas together just cover, while the
+    // `threshold` many that suffice to reach consensus do not.
+    let allowance = Cycles::new(consensus_cost.get() / num_nodes as u128 + 1);
+    assert!(allowance * threshold < consensus_cost);
+    assert!(consensus_cost <= allowance * num_nodes);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            CallbackId::new(cb_id),
+            with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
+        )],
+        |payload_builder, canister_http_pool| {
+            let shares = metadata_to_shares(num_nodes, &metadata);
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[1..threshold].to_vec());
+            }
+
+            // Consensus is reached, but the signers' collective allowance does
+            // not cover the consensus cost yet.
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.num_responses(), 0);
+
+            // The remaining shares tip the collective allowance over the cost.
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[threshold..].to_vec());
+            }
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.num_responses(), 1);
+            assert_eq!(payload.responses[0].content, response);
+            assert_eq!(payload.responses[0].initial_spent, consensus_cost);
+        },
+    );
+}
+
+/// Builds a payload from `threshold` many fully-replicated shares for a request
+/// with the given `context`, and asserts that it carries `expected_responses`
+/// many responses.
+fn assert_responses_from_threshold_shares(
+    num_nodes: usize,
+    context: CanisterHttpRequestContext,
+    expected_responses: usize,
+) {
+    let cb_id = 0;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    // The consensus cost is nonzero, so a zero collective allowance can only be
+    // covered if the request is not subject to the limit at all.
+    assert!(!non_flexible_consensus_cost(num_nodes, metadata.content_size).is_zero());
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(CallbackId::new(cb_id), context)],
+        |payload_builder, canister_http_pool| {
+            let shares = metadata_to_shares(num_nodes, &metadata);
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[1..threshold].to_vec());
+            }
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.num_responses(), expected_responses);
+        },
+    );
+}
+
+/// Legacy-priced requests are not refunded from a per-replica allowance, so
+/// their responses are delivered no matter how small that allowance is.
+#[test]
+fn initial_spent_is_not_limited_under_legacy_pricing() {
+    // `request_context` is priced with legacy pricing and has a zero allowance.
+    assert_responses_from_threshold_shares(4, request_context(Replication::FullyReplicated), 1);
+}
+
+/// Free subnets charge — and hence refund — nothing, so their responses are
+/// delivered despite the (zero) collective allowance.
+#[test]
+fn initial_spent_is_not_limited_on_a_free_subnet() {
+    let mut context = with_payg_allowance(
+        request_context(Replication::FullyReplicated),
+        Cycles::zero(),
+    );
+    context.cost_schedule = CanisterCyclesCostSchedule::Free;
+    assert_responses_from_threshold_shares(4, context, 1);
+}
+
+/// The counterpart of the two tests above: on a charging subnet with
+/// pay-as-you-go pricing, a zero collective allowance holds the response back.
+#[test]
+fn initial_spent_is_limited_under_pay_as_you_go_pricing() {
+    assert_responses_from_threshold_shares(
+        4,
+        with_payg_allowance(
+            request_context(Replication::FullyReplicated),
+            Cycles::zero(),
+        ),
+        0,
+    );
+}
+
+/// A non-replicated response is held back while the designated replica's own
+/// allowance does not cover the consensus cost. No other replica contributes an
+/// allowance to a non-replicated outcall, so such a request can only time out.
+#[test]
+fn non_replicated_response_needs_the_designated_replicas_allowance() {
+    let num_nodes = 4;
+    let cb_id = 0;
+    let designated = node_test_id(0);
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
+
+    // Once the single allowance covers the consensus cost, the response is
+    // delivered; one cycle short of it, it never is.
+    for (allowance, expected_responses) in [
+        (consensus_cost, 1),
+        (consensus_cost - Cycles::new(1), 0),
+        (Cycles::zero(), 0),
+    ] {
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(
+                CallbackId::new(cb_id),
+                with_payg_allowance(
+                    request_context(Replication::NonReplicated(designated)),
+                    allowance,
+                ),
+            )],
+            |payload_builder, canister_http_pool| {
+                let share = metadata_to_share(node_id_to_u64(designated), &metadata);
+                {
+                    let mut pool_access = canister_http_pool.write().unwrap();
+                    add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+                }
+                let payload = build_and_validate_and_parse_payload(&payload_builder);
+                assert_eq!(
+                    payload.num_responses(),
+                    expected_responses,
+                    "unexpected payload for allowance {allowance}"
+                );
+            },
+        );
+    }
+}
+
+/// A flexible response group whose delivering replica cannot cover the group's
+/// consensus cost on its own is topped up with extra shares from the committee
+/// members whose responses are not delivered. Those replicas contribute their
+/// allowance and are reported as contributors of the collective spend.
+#[test]
+fn flexible_response_group_is_topped_up_with_extra_shares() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    // `max_responses` of 1 means exactly one response is delivered, leaving the
+    // other three committee members' shares as extra-share candidates.
+    let (min, max) = (1, 1);
+
+    // Candid-encoded, so that the delivered response can be turned into a
+    // consensus response (and hence a spend report) further down.
+    let content = Encode!(&CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: vec![],
+    })
+    .unwrap();
+    let (_, metadata) = test_response_and_metadata_with_content(
+        callback_id.get(),
+        CanisterHttpResponseContent::Success(content.clone()),
+    );
+    let group_spend = flexible_initial_spent(
+        std::iter::once(&metadata_to_share(0, &metadata)),
+        std::iter::empty(),
+        NumberOfNodes::from(num_nodes as u32),
+        min,
+    );
+    // An allowance that the delivering replica and two extra shares together
+    // just cover, while fewer replicas do not.
+    let allowance = Cycles::new(group_spend.get() / 3 + 1);
+    assert!(allowance * 2_usize < group_spend);
+    assert!(group_spend <= allowance * 3_usize);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            callback_id,
+            flexible_request_context_with_allowance(committee, min, max, allowance),
+        )],
+        |payload_builder, pool| {
+            add_flexible_ok_shares(&pool, callback_id, 0..num_nodes as u64, &content);
+
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.flexible_responses.len(), 1);
+            let group = &payload.flexible_responses[0];
+            assert_eq!(group.responses.len(), 1);
+            assert_eq!(group.extra_shares.len(), 2);
+            assert_eq!(group.initial_spent, group_spend);
+
+            // Each contributing replica is counted exactly once, and together
+            // they cover the collective spend.
+            let signers: BTreeSet<_> = group
+                .responses
+                .iter()
+                .map(|r| r.proof.signature.signer)
+                .chain(group.extra_shares.iter().map(|s| s.signature.signer))
+                .collect();
+            assert_eq!(signers.len(), 3);
+            assert!(group.initial_spent <= allowance * signers.len());
+
+            // The spend report covers all three of them, so the caller is
+            // refunded their three allowances minus the collective spend.
+            let (_, spent, _) = CanisterHttpPayloadBuilderImpl::into_messages(
+                &payload_to_bytes_max_4mb(payload.clone()),
+            );
+            assert_eq!(spent.initial.len(), 1);
+            assert_eq!(spent.initial[0].callback, callback_id);
+            assert_eq!(spent.initial[0].amount, group_spend);
+            assert_eq!(spent.initial[0].nodes, signers);
+        },
+    );
+}
+
+/// While the shares seen so far do not cover a flexible response group's
+/// consensus cost, but committee members that have yet to respond could still
+/// contribute the allowance it takes, the group is held back.
+#[test]
+fn flexible_response_group_waits_for_shares_covering_consensus_cost() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    let (min, max) = (1, 1);
+
+    let content = Encode!(&CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: vec![],
+    })
+    .unwrap();
+    let (_, metadata) = test_response_and_metadata_with_content(
+        callback_id.get(),
+        CanisterHttpResponseContent::Success(content.clone()),
+    );
+    let group_spend = flexible_initial_spent(
+        std::iter::once(&metadata_to_share(0, &metadata)),
+        std::iter::empty(),
+        NumberOfNodes::from(num_nodes as u32),
+        min,
+    );
+    // Three replicas' allowances are needed to cover the group's spend.
+    let allowance = Cycles::new(group_spend.get() / 3 + 1);
+    assert!(allowance * 2_usize < group_spend);
+    assert!(group_spend <= allowance * 3_usize);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            callback_id,
+            flexible_request_context_with_allowance(committee, min, max, allowance),
+        )],
+        |payload_builder, pool| {
+            // Only two replicas have responded so far, so the group cannot be
+            // paid for yet.
+            add_flexible_ok_shares(&pool, callback_id, 0..2, &content);
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.num_responses(), 0);
+
+            // A third replica's share tips the collective allowance over.
+            add_flexible_ok_shares(&pool, callback_id, [2], &content);
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.flexible_responses.len(), 1);
+            let group = &payload.flexible_responses[0];
+            assert_eq!(group.responses.len(), 1);
+            assert_eq!(group.extra_shares.len(), 2);
+            assert_eq!(group.initial_spent, group_spend);
+        },
+    );
+}
+
+/// Once the committee's remaining allowances can no longer cover the consensus
+/// cost of any response — here because every committee member has spent its
+/// whole allowance — the outcall is reported as out of cycles rather than left to
+/// time out.
+#[test]
+fn flexible_outcall_is_out_of_cycles_when_allowances_are_exhausted() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    let allowance = TEST_PER_REPLICA_ALLOWANCE;
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            callback_id,
+            flexible_request_context_with_allowance(committee, 1, 4, allowance),
+        )],
+        |payload_builder, pool| {
+            // Every committee member reports having spent its whole allowance,
+            // leaving nothing to pay for delivering a response with.
+            add_flexible_shares(
+                &pool,
+                callback_id,
+                0..num_nodes as u64,
+                CanisterHttpResponseContent::Success(b"response".to_vec()),
+                allowance,
+            );
+
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.flexible_errors.len(), 1);
+            let FlexibleCanisterHttpError::OutOfCycles {
+                all_seen_shares, ..
+            } = &payload.flexible_errors[0]
+            else {
+                panic!("expected OutOfCycles, got {:?}", payload.flexible_errors[0]);
+            };
+            // Every replica's share is included as evidence.
+            assert_eq!(all_seen_shares.len(), num_nodes);
+
+            let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(
+                &payload_to_bytes_max_4mb(payload.clone()),
+            );
+            assert_eq!(stats.flexible_errors, 1);
+            assert_eq!(responses.len(), 1);
+            let Payload::Data(ref data) = responses[0].payload else {
+                panic!("Expected Payload::Data, got {:?}", responses[0].payload);
+            };
+            let FlexibleHttpRequestResult::Err(err) =
+                Decode!(data, FlexibleHttpRequestResult).unwrap()
+            else {
+                panic!("Expected Err variant");
+            };
+            assert_eq!(
+                err.global_error,
+                Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved))
+            );
+            assert_eq!(err.node_details.len(), num_nodes);
+
+            // The error delivers no body, so its spend is just what the replicas
+            // reported: their whole allowances, and nothing is refunded.
+            assert_eq!(spent.initial.len(), 1);
+            assert_eq!(spent.initial[0].amount, allowance * num_nodes);
+            assert_eq!(spent.initial[0].nodes.len(), num_nodes);
+        },
+    );
+}
+
+/// The validator rejects an `OutOfCycles` error while the committee's remaining
+/// allowances could still cover the cost of delivering a response.
+#[test]
+fn validate_payload_fails_for_out_of_cycles_that_can_still_be_paid_for() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
+            callback_id,
+            // A single replica that spent nothing; the rest of the committee is
+            // credited a full allowance each.
+            all_seen_shares: vec![metadata_to_share(0, &metadata)],
+        }],
+        ..Default::default()
+    };
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            TEST_PER_REPLICA_ALLOWANCE,
+            payload,
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+                    unspent_allowance,
+                    min_cost,
+                    ..
+                },
+            ),
+        )) if unspent_allowance == TEST_PER_REPLICA_ALLOWANCE * num_nodes
+            && unspent_allowance >= min_cost
+    );
+}
+
+/// Legacy-priced and free-subnet outcalls refund nothing from an allowance, so
+/// they can never run out of one: an `OutOfCycles` error for them is invalid.
+#[test]
+fn validate_payload_fails_for_out_of_cycles_without_a_refundable_allowance() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
+            callback_id,
+            all_seen_shares: vec![metadata_to_share(0, &metadata)],
+        }],
+        ..Default::default()
+    };
+
+    // A zero allowance would be exhausted under pay-as-you-go pricing, but this
+    // request is priced with legacy pricing.
+    let mut context =
+        flexible_request_context_with_allowance(committee, 1, num_nodes as u32, Cycles::zero());
+    context.pricing_version = ic_types::canister_http::PricingVersion::Legacy;
+
+    let mut result = None;
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(callback_id, context)],
+        |payload_builder, _pool| {
+            result = Some(payload_builder.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            ));
+        },
+    );
+    assert_matches!(
+        result.expect("validation did not run"),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles { .. },
+            ),
+        ))
+    );
+}
+
+/// An `OutOfCycles` error may only rest on shares from distinct committee
+/// members, since it credits every replica it does not mention a full allowance.
+#[test]
+fn validate_payload_fails_for_out_of_cycles_with_a_duplicate_share() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
+            callback_id,
+            all_seen_shares: vec![
+                metadata_to_share(0, &metadata),
+                metadata_to_share(0, &metadata),
+            ],
+        }],
+        ..Default::default()
+    };
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            Cycles::zero(),
+            payload
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { signer, .. },
+            ),
+        )) if signer == node_test_id(0)
+    );
+}
+
+/// A `TooManyRejects` error delivers reject bodies, so it is topped up with
+/// extra shares just like a group of successful responses.
+#[test]
+fn too_many_rejects_is_topped_up_with_extra_shares() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    // Three of the four committee members reject, which is more than the
+    // `committee.len() - min_responses` = 2 that the request tolerates. The
+    // fourth member's OK share is left as an extra-share candidate.
+    let (min, max) = (2, 4);
+    let num_rejects = 3;
+
+    let (_, reject_metadata) = test_response_and_metadata_with_content(
+        callback_id.get(),
+        CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "could not connect".to_string(),
+        }),
+    );
+    let reject_shares: Vec<_> = (0..num_rejects as u64)
+        .map(|node| metadata_to_share(node, &reject_metadata))
+        .collect();
+    let error_spend = flexible_initial_spent(
+        reject_shares.iter(),
+        std::iter::empty(),
+        NumberOfNodes::from(num_nodes as u32),
+        min,
+    );
+    // An allowance that the three rejecting replicas and one extra share
+    // together just cover, while the three rejecting ones alone do not.
+    let allowance = Cycles::new(error_spend.get() / 4 + 1);
+    assert!(allowance * num_rejects < error_spend);
+    assert!(error_spend <= allowance * (num_rejects + 1));
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            callback_id,
+            flexible_request_context_with_allowance(committee, min, max, allowance),
+        )],
+        |payload_builder, pool| {
+            add_flexible_reject_shares(&pool, callback_id, 0..num_rejects as u64);
+            add_flexible_ok_shares(&pool, callback_id, [num_rejects as u64], b"ok");
+
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.flexible_errors.len(), 1);
+            let FlexibleCanisterHttpError::TooManyRejects {
+                reject_responses,
+                extra_shares,
+                initial_spent,
+                ..
+            } = &payload.flexible_errors[0]
+            else {
+                panic!(
+                    "expected TooManyRejects, got {:?}",
+                    payload.flexible_errors[0]
+                );
+            };
+            assert_eq!(reject_responses.len(), num_rejects);
+            assert_eq!(extra_shares.len(), 1);
+            assert_eq!(*initial_spent, error_spend);
+            assert!(*initial_spent <= allowance * (num_rejects + extra_shares.len()));
+        },
+    );
+}
+
+/// The validator rejects a fully-replicated response whose collective initial
+/// spend exceeds the signers' collective allowance.
+#[test]
+fn validate_payload_fails_for_initial_spent_exceeding_allowance() {
+    let num_nodes = 4;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let cb_id = 0;
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for signer in 0..threshold as u64 {
+        add_signer_to_proof(&mut proof, node_test_id(signer));
+    }
+    // An honestly computed spend, which a zero collective allowance still cannot
+    // cover.
+    proof.initial_spent =
+        non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(num_nodes as u32));
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            CallbackId::new(cb_id),
+            with_payg_allowance(
+                request_context(Replication::FullyReplicated),
+                Cycles::zero(),
+            ),
+        )],
+        |payload_builder, _pool| {
+            let payload = CanisterHttpPayload {
+                responses: vec![proof.clone()],
+                ..Default::default()
+            };
+            let result = payload_builder.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            );
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit {
+                            callback_id,
+                            initial_spent,
+                            per_replica_allowance,
+                            num_replicas,
+                        },
+                    ),
+                )) if callback_id == CallbackId::new(cb_id)
+                    && initial_spent == proof.initial_spent
+                    && per_replica_allowance == Cycles::zero()
+                    && num_replicas == threshold
+            );
+        },
+    );
+}
+
+/// Validates `payload` against a flexible request with the given allowance and
+/// returns the validation result.
+fn validate_flexible_payload_with_allowance(
+    num_nodes: usize,
+    callback_id: CallbackId,
+    min_responses: u32,
+    per_replica_allowance: Cycles,
+    payload: CanisterHttpPayload,
+) -> Result<(), PayloadValidationError> {
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let mut result = None;
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            callback_id,
+            flexible_request_context_with_allowance(
+                committee,
+                min_responses,
+                num_nodes as u32,
+                per_replica_allowance,
+            ),
+        )],
+        |payload_builder, _pool| {
+            result = Some(payload_builder.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            ));
+        },
+    );
+    result.expect("validation did not run")
+}
+
+/// The validator rejects a flexible response group whose collective initial
+/// spend exceeds the collective allowance of its contributors.
+#[test]
+fn validate_payload_fails_for_flexible_initial_spent_exceeding_allowance() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let group = flexible_group(
+        callback_id,
+        num_nodes as u32,
+        1,
+        vec![flexible_response(callback_id.get(), 0, b"a")],
+    );
+    let initial_spent = group.initial_spent;
+
+    let result = validate_flexible_payload_with_allowance(
+        num_nodes,
+        callback_id,
+        1,
+        Cycles::zero(),
+        flexible_payload(vec![group]),
+    );
+    assert_matches!(
+        result,
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit {
+                    per_replica_allowance,
+                    ..
+                },
+            ),
+        )) if per_replica_allowance == Cycles::zero()
+    );
+    // With an allowance covering it, the very same group is accepted.
+    let group = flexible_group(
+        callback_id,
+        num_nodes as u32,
+        1,
+        vec![flexible_response(callback_id.get(), 0, b"a")],
+    );
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            initial_spent,
+            flexible_payload(vec![group]),
+        ),
+        Ok(())
+    );
+}
+
+/// The validator rejects a `TooManyRejects` error whose collective initial spend
+/// exceeds the collective allowance of its contributors.
+#[test]
+fn validate_payload_fails_for_too_many_rejects_initial_spent_exceeding_allowance() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let reject_responses = (0..3)
+        .map(|node| flexible_reject_response(callback_id.get(), node))
+        .collect();
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![too_many_rejects(
+            callback_id,
+            num_nodes as u32,
+            2,
+            reject_responses,
+        )],
+        ..Default::default()
+    };
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            2,
+            Cycles::zero(),
+            payload
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit {
+                    per_replica_allowance,
+                    ..
+                },
+            ),
+        )) if per_replica_allowance == Cycles::zero()
+    );
+}
+
+/// The extra shares' claimed spends are part of the collective initial spend, so
+/// a group that leaves them out is rejected.
+#[test]
+fn validate_payload_fails_for_initial_spent_ignoring_extra_shares() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let extra_spent = Cycles::new(7);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let extra_share = metadata_to_share_with_spent(1, &metadata, extra_spent);
+
+    // The `initial_spent` is computed without the extra share's spend...
+    let mut group = flexible_group(
+        callback_id,
+        num_nodes as u32,
+        1,
+        vec![flexible_response(callback_id.get(), 0, b"a")],
+    );
+    let claimed = group.initial_spent;
+    // ...while the group does carry it.
+    group.extra_shares = vec![extra_share];
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            TEST_PER_REPLICA_ALLOWANCE,
+            flexible_payload(vec![group]),
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                    received,
+                    expected,
+                    ..
+                },
+            ),
+        )) if received == claimed && expected == claimed + extra_spent
+    );
+}
+
+/// A replica may only contribute its allowance once, so an extra share signed by
+/// a replica that already delivers a response is rejected.
+#[test]
+fn validate_payload_fails_for_extra_share_of_a_responding_signer() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let group = flexible_group_with_extra_shares(
+        callback_id,
+        num_nodes as u32,
+        1,
+        vec![flexible_response(callback_id.get(), 0, b"a")],
+        vec![metadata_to_share(0, &metadata)],
+    );
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            TEST_PER_REPLICA_ALLOWANCE,
+            flexible_payload(vec![group]),
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { signer, .. },
+            ),
+        )) if signer == node_test_id(0)
+    );
+}
+
+/// Only committee members were granted an allowance, so an extra share signed by
+/// a non-member is rejected.
+#[test]
+fn validate_payload_fails_for_extra_share_outside_the_committee() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let outsider = node_test_id(num_nodes as u64);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let group = flexible_group_with_extra_shares(
+        callback_id,
+        num_nodes as u32,
+        1,
+        vec![flexible_response(callback_id.get(), 0, b"a")],
+        vec![metadata_to_share(node_id_to_u64(outsider), &metadata)],
+    );
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            TEST_PER_REPLICA_ALLOWANCE,
+            flexible_payload(vec![group]),
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee { signer, .. },
+            ),
+        )) if signer == outsider
     );
 }
 
@@ -5359,10 +6320,39 @@ pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestCo
     }
 }
 
+/// A per-replica allowance for pay-as-you-go contexts in tests, generous enough
+/// that the collective allowance of the contributing replicas always covers the
+/// consensus cost. Tests that exercise that limit pin their own allowance.
+const TEST_PER_REPLICA_ALLOWANCE: Cycles = Cycles::new(1_000_000_000_000_000);
+
 fn flexible_request_context(
     committee: BTreeSet<NodeId>,
     min_responses: u32,
     max_responses: u32,
+) -> CanisterHttpRequestContext {
+    flexible_request_context_with_allowance(
+        committee,
+        min_responses,
+        max_responses,
+        TEST_PER_REPLICA_ALLOWANCE,
+    )
+}
+
+/// A flexible request context whose per-replica allowance is zero, so that any
+/// nonzero claimed spend exceeds it (see [`share_with_excess_spent`]).
+fn flexible_request_context_without_allowance(
+    committee: BTreeSet<NodeId>,
+    min_responses: u32,
+    max_responses: u32,
+) -> CanisterHttpRequestContext {
+    flexible_request_context_with_allowance(committee, min_responses, max_responses, Cycles::zero())
+}
+
+fn flexible_request_context_with_allowance(
+    committee: BTreeSet<NodeId>,
+    min_responses: u32,
+    max_responses: u32,
+    per_replica_allowance: Cycles,
 ) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
         request: RequestBuilder::default().build(),
@@ -5379,7 +6369,10 @@ fn flexible_request_context(
             max_responses,
         },
         pricing_version: ic_types::canister_http::PricingVersion::PayAsYouGo,
-        refund_status: ic_types::canister_http::RefundStatus::default(),
+        refund_status: ic_types::canister_http::RefundStatus {
+            per_replica_allowance,
+            ..ic_types::canister_http::RefundStatus::default()
+        },
         registry_version: RegistryVersion::from(1),
         subnet_size: NumberOfNodes::from(13),
         cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -5426,14 +6419,28 @@ fn flexible_group(
     min_responses: u32,
     responses: Vec<FlexibleCanisterHttpResponseWithProof>,
 ) -> FlexibleCanisterHttpResponses {
+    flexible_group_with_extra_shares(callback_id, subnet_size, min_responses, responses, vec![])
+}
+
+/// Same as [`flexible_group`], but with extra shares contributing their unspent
+/// allowance to the group.
+fn flexible_group_with_extra_shares(
+    callback_id: CallbackId,
+    subnet_size: u32,
+    min_responses: u32,
+    responses: Vec<FlexibleCanisterHttpResponseWithProof>,
+    extra_shares: Vec<CanisterHttpResponseShare>,
+) -> FlexibleCanisterHttpResponses {
     let initial_spent = flexible_initial_spent(
         responses.iter().map(|r| &r.proof),
+        extra_shares.iter(),
         NumberOfNodes::from(subnet_size),
         min_responses,
     );
     FlexibleCanisterHttpResponses {
         callback_id,
         responses,
+        extra_shares,
         initial_spent,
     }
 }
@@ -5446,14 +6453,34 @@ fn too_many_rejects(
     min_responses: u32,
     reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
 ) -> FlexibleCanisterHttpError {
+    too_many_rejects_with_extra_shares(
+        callback_id,
+        subnet_size,
+        min_responses,
+        reject_responses,
+        vec![],
+    )
+}
+
+/// Same as [`too_many_rejects`], but with extra shares contributing their unspent
+/// allowance to the error.
+fn too_many_rejects_with_extra_shares(
+    callback_id: CallbackId,
+    subnet_size: u32,
+    min_responses: u32,
+    reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
+    extra_shares: Vec<CanisterHttpResponseShare>,
+) -> FlexibleCanisterHttpError {
     let initial_spent = flexible_initial_spent(
         reject_responses.iter().map(|r| &r.proof),
+        extra_shares.iter(),
         NumberOfNodes::from(subnet_size),
         min_responses,
     );
     FlexibleCanisterHttpError::TooManyRejects {
         callback_id,
         reject_responses,
+        extra_shares,
         initial_spent,
     }
 }

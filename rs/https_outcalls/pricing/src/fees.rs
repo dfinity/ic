@@ -129,9 +129,17 @@ pub fn non_flexible_initial_spent(
 /// `N * (HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * N * (K - min_responses)`
 /// `   + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * (K - min_responses))`
 /// charged for every response beyond the `min_responses` required to reach
-/// consensus, where `K` is the number of shares.
+/// consensus, where `K` is the number of shares in `shares`.
+///
+/// `extra_shares` are shares whose responses are not delivered (see
+/// [`FlexibleCanisterHttpResponses::extra_shares`]). They only add their claimed
+/// per-replica spend: since they carry no response, they neither incur a
+/// consensus cost nor count towards `K`.
+///
+/// [`FlexibleCanisterHttpResponses::extra_shares`]: ic_types::batch::FlexibleCanisterHttpResponses::extra_shares
 pub fn flexible_initial_spent<'a>(
     shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
+    extra_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
     subnet_size: NumberOfNodes,
     min_responses: u32,
 ) -> Cycles {
@@ -143,6 +151,9 @@ pub fn flexible_initial_spent<'a>(
         size_term += FLEXIBLE_RESPONSE_SIZE_OVERHEAD + share.content.content_size() as u128;
         count += 1;
     }
+    for share in extra_shares {
+        spent_sum += share.content.payment_receipt.spent;
+    }
     let n = subnet_size.get() as u128;
     let consensus_cost = Cycles::from(consensus_cost_coefficient(subnet_size) * size_term);
     let extra_responses = count.saturating_sub(min_responses) as u128;
@@ -151,6 +162,29 @@ pub fn flexible_initial_spent<'a>(
             + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * extra_responses),
     );
     spent_sum + consensus_cost + extra_cost
+}
+
+/// A lower bound on the [`flexible_initial_spent`] of any flexible outcall
+/// result that delivers response bodies, for a committee of `committee_size`
+/// replicas that has to produce `min_responses` responses.
+///
+/// The cheapest such result delivers as few bodies as it may — `min_responses`
+/// of them for a group of successful responses, or the
+/// `committee_size - min_responses + 1` rejects that a `TooManyRejects` error
+/// needs — each of them empty, and none of them claiming any per-replica spend.
+/// Even then, every delivered body costs the per-response consensus overhead of
+/// [`FLEXIBLE_RESPONSE_SIZE_OVERHEAD`] bytes.
+pub fn min_flexible_consensus_cost(
+    subnet_size: NumberOfNodes,
+    committee_size: usize,
+    min_responses: u32,
+) -> Cycles {
+    let min_ok_responses = min_responses as u128;
+    let min_reject_responses = (committee_size as u128).saturating_sub(min_ok_responses) + 1;
+    let min_delivered = min_ok_responses.min(min_reject_responses).max(1);
+    Cycles::from(
+        consensus_cost_coefficient(subnet_size) * FLEXIBLE_RESPONSE_SIZE_OVERHEAD * min_delivered,
+    )
 }
 
 #[cfg(test)]
@@ -262,8 +296,31 @@ mod tests {
         //   consensus_cost = 9_490 * 603                                    = 5_722_470
         //   extra_cost     = 13 * (2_000 * 13 * 2 + 100_000 * 2)            = 3_276_000
         let shares = [share(0, 10, 100), share(1, 20, 200), share(2, 30, 300)];
-        let spent = flexible_initial_spent(shares.iter(), NumberOfNodes::from(13), 1);
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            std::iter::empty(),
+            NumberOfNodes::from(13),
+            1,
+        );
         assert_eq!(spent, Cycles::new(600 + 5_722_470 + 3_276_000));
+    }
+
+    #[test]
+    fn flexible_initial_spent_adds_only_the_spends_of_extra_shares() {
+        // Same K = 3 shares and min_responses = 1 as above, plus two extra
+        // shares. Their responses are not delivered, so despite their sizes they
+        // add neither consensus cost nor extra-response cost — only their
+        // spends:
+        //   extra_spent_sum = 1_000 + 2_000 = 3_000
+        let shares = [share(0, 10, 100), share(1, 20, 200), share(2, 30, 300)];
+        let extra_shares = [share(3, 40, 1_000), share(4, 50, 2_000)];
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            extra_shares.iter(),
+            NumberOfNodes::from(13),
+            1,
+        );
+        assert_eq!(spent, Cycles::new(600 + 5_722_470 + 3_276_000 + 3_000));
     }
 
     #[test]
@@ -273,8 +330,29 @@ mod tests {
         //   size_term      = (181+10) + (181+20)           = 392
         //   consensus_cost = 9_490 * 392                   = 3_720_080
         let shares = [share(0, 10, 100), share(1, 20, 200)];
-        let spent = flexible_initial_spent(shares.iter(), NumberOfNodes::from(13), 2);
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            std::iter::empty(),
+            NumberOfNodes::from(13),
+            2,
+        );
         assert_eq!(spent, Cycles::new(300 + 3_720_080));
+    }
+
+    #[test]
+    fn flexible_initial_spent_does_not_count_extra_shares_as_extra_responses() {
+        // K == min_responses == 2 as above, plus an extra share: the extra share
+        // must not push `K` beyond `min_responses`, so extra_cost stays 0 and
+        // only the extra share's spend of 500 is added.
+        let shares = [share(0, 10, 100), share(1, 20, 200)];
+        let extra_shares = [share(2, 30, 500)];
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            extra_shares.iter(),
+            NumberOfNodes::from(13),
+            2,
+        );
+        assert_eq!(spent, Cycles::new(300 + 3_720_080 + 500));
     }
 
     #[test]
@@ -283,13 +361,65 @@ mod tests {
         // so only the single receipt and its consensus cost are charged.
         //   consensus_cost = 9_490 * (181 + 30) = 9_490 * 211 = 2_002_390
         let shares = [share(0, 30, 500)];
-        let spent = flexible_initial_spent(shares.iter(), NumberOfNodes::from(13), 3);
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            std::iter::empty(),
+            NumberOfNodes::from(13),
+            3,
+        );
         assert_eq!(spent, Cycles::new(500 + 2_002_390));
     }
 
     #[test]
+    fn min_flexible_consensus_cost_charges_the_overhead_of_the_fewest_bodies() {
+        // At N = 13 the per-response overhead costs 9_490 * 181 = 1_717_690.
+        const PER_RESPONSE: u128 = 1_717_690;
+        let n = NumberOfNodes::from(13);
+        // A committee of 13 needing 7 responses delivers 7 bodies either way
+        // (7 successes, or the 13 - 7 + 1 = 7 rejects of a `TooManyRejects`).
+        assert_eq!(
+            min_flexible_consensus_cost(n, 13, 7),
+            Cycles::new(7 * PER_RESPONSE)
+        );
+        // Needing just one response, a single body suffices.
+        assert_eq!(
+            min_flexible_consensus_cost(n, 4, 1),
+            Cycles::new(PER_RESPONSE)
+        );
+        // Needing all four, a single reject already makes the outcall fail, so
+        // one body suffices here too.
+        assert_eq!(
+            min_flexible_consensus_cost(n, 4, 4),
+            Cycles::new(PER_RESPONSE)
+        );
+        // Every result that delivers bodies delivers at least one, even for a
+        // (nonsensical) `min_responses` of zero.
+        assert_eq!(
+            min_flexible_consensus_cost(n, 4, 0),
+            Cycles::new(PER_RESPONSE)
+        );
+    }
+
+    #[test]
+    fn min_flexible_consensus_cost_is_a_lower_bound_on_the_initial_spent() {
+        // The bound has to hold for the cheapest group there is: exactly
+        // `min_responses` empty responses claiming no spend.
+        let n = NumberOfNodes::from(13);
+        let shares = [share(0, 0, 0), share(1, 0, 0)];
+        assert!(
+            min_flexible_consensus_cost(n, 4, 2)
+                <= flexible_initial_spent(shares.iter(), std::iter::empty(), n, 2)
+        );
+    }
+
+    #[test]
     fn flexible_initial_spent_empty_is_zero() {
-        let spent = flexible_initial_spent(std::iter::empty(), NumberOfNodes::from(13), 0);
+        let spent = flexible_initial_spent(
+            std::iter::empty(),
+            std::iter::empty(),
+            NumberOfNodes::from(13),
+            0,
+        );
         assert_eq!(spent, Cycles::zero());
     }
 }

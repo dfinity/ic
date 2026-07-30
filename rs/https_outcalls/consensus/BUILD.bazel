@@ -105,6 +105,7 @@ rust_bench(
         "//rs/config",
         "//rs/consensus/mocks",
         "//rs/crypto/temp_crypto",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",

@@ -9,6 +9,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::crypto::BasicSigner;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
@@ -41,7 +42,7 @@ use ic_types::{
     signature::BasicSignature,
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::CanisterCyclesCostSchedule;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
 /// Registry version that the whole benchmark operates at. The subnet record,
 /// the node signing keys and the responses' metadata all use this version.
@@ -356,13 +357,17 @@ impl<'a> PayloadAssembler<'a> {
                     )
                 })
                 .collect();
+            let proof = CanisterHttpResponseProof {
+                metadata,
+                signatures,
+            };
             responses.push(CanisterHttpResponseWithConsensus {
                 content: response,
-                proof: CanisterHttpResponseProof {
-                    metadata,
-                    signatures,
-                },
-                initial_spent: ic_types_cycles::Cycles::zero(),
+                initial_spent: non_flexible_initial_spent(
+                    &proof,
+                    NumberOfNodes::from(subnet_size as u32),
+                ),
+                proof,
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -380,13 +385,17 @@ impl<'a> PayloadAssembler<'a> {
                 self.committee[designated],
                 self.signature(signer, designated, &metadata),
             );
+            let proof = CanisterHttpResponseProof {
+                metadata,
+                signatures,
+            };
             responses.push(CanisterHttpResponseWithConsensus {
                 content: response,
-                proof: CanisterHttpResponseProof {
-                    metadata,
-                    signatures,
-                },
-                initial_spent: ic_types_cycles::Cycles::zero(),
+                initial_spent: non_flexible_initial_spent(
+                    &proof,
+                    NumberOfNodes::from(subnet_size as u32),
+                ),
+                proof,
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -424,7 +433,7 @@ impl<'a> PayloadAssembler<'a> {
         for _ in 0..self.config.num_flexible {
             let callback_id = self.alloc_callback_id();
             let (response, metadata) = response_and_metadata(callback_id, success_content());
-            let entries = (0..threshold)
+            let entries: Vec<FlexibleCanisterHttpResponseWithProof> = (0..threshold)
                 .map(|node| FlexibleCanisterHttpResponseWithProof {
                     response: response.clone(),
                     proof: self.share(signer, node, metadata.clone()),
@@ -432,8 +441,14 @@ impl<'a> PayloadAssembler<'a> {
                 .collect();
             flexible_responses.push(FlexibleCanisterHttpResponses {
                 callback_id: CallbackId::new(callback_id),
+                initial_spent: flexible_initial_spent(
+                    entries.iter().map(|entry| &entry.proof),
+                    std::iter::empty(),
+                    NumberOfNodes::from(subnet_size as u32),
+                    1,
+                ),
                 responses: entries,
-                initial_spent: ic_types_cycles::Cycles::zero(),
+                extra_shares: vec![],
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -509,6 +524,9 @@ fn flexible_request_context(
         max_responses,
     });
     context.pricing_version = PricingVersion::PayAsYouGo;
+    // Generous enough that the collective allowance of the responding replicas
+    // always covers the consensus cost of the response group.
+    context.refund_status.per_replica_allowance = Cycles::new(1_000_000_000_000_000);
     context
 }
 

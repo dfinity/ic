@@ -68,6 +68,15 @@ pub enum InvalidCanisterHttpPayloadReason {
         /// The initial spend the validator recomputed and expected.
         expected: Cycles,
     },
+    /// The collective initial spent cycles of a response exceed the collective
+    /// allowance of the replicas that contributed to it, i.e. the sum of their
+    /// per-replica allowances.
+    InitialSpentExceedsLimit {
+        callback_id: CallbackId,
+        initial_spent: Cycles,
+        per_replica_allowance: Cycles,
+        num_replicas: usize,
+    },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
     SignersNotMembers {
@@ -143,6 +152,17 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
     FlexibleResponsesNotTooLarge(CallbackId),
+    /// An OutOfCycles error is invalid: what is left of the committee's
+    /// per-replica allowances can still cover the cost of delivering a response.
+    FlexibleNotOutOfCycles {
+        callback_id: CallbackId,
+        /// The committee's collective allowance that is still unspent, assuming
+        /// that every committee member that has not reported a spend yet has
+        /// spent nothing.
+        unspent_allowance: Cycles,
+        /// The least it can cost to deliver a response.
+        min_cost: Cycles,
+    },
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
 }
