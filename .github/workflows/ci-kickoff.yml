@@ -61,12 +61,8 @@ jobs:
   ci-rbe-evaluation:
     name: CI RBE Evaluation
     # for dfinity/ic: run on all events except for forked PRs
-    # NOTE: currently disabled due to the following error:
-    #
-    # Internal: cache operation failed: The item (1435805793) + reserved space (68494077610) is larger than the cache's maximum size (68719476736).
-    # Unrecognized error detail: type_url: "type.googleapis.com/nsl.clusters.v1.UserMessage"
-    #    value: "\n\026cache operation failed"
-    if: false
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     uses: ./.github/workflows/ci-rbe-evaluation.yml
     secrets: inherit
     with:
