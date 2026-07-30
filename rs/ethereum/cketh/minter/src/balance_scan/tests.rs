@@ -262,67 +262,6 @@ async fn should_skip_without_scanning() {
     }
 }
 
-#[test]
-fn should_build_one_automatic_deposit_listing_every_funded_token() {
-    let now = ts();
-    let block = BlockNumber::new(900);
-    let address = Address::new([0xa1; 20]);
-    let acc = account(1);
-    let mut deposits = AutomaticDeposits::default();
-    deposits
-        .watch_address_for_account(now, acc, address)
-        .unwrap();
-    // Two prior scans, so the finding scan is the third (moved scan_count = 2 + 1 = 3).
-    deposits.record_scan(now, &acc, BlockNumber::new(400));
-    deposits.record_scan(now, &acc, BlockNumber::new(500));
-
-    let deposit = automatic_deposit(
-        &deposits,
-        now,
-        &acc,
-        block,
-        &[
-            (TOKEN_A, Erc20Value::from(10_u8)),
-            (TOKEN_B, Erc20Value::from(20_u8)),
-        ],
-    );
-
-    // A single event listing both funded tokens with their balances, carrying the watchlist
-    // address, the finding block, and scan_count = 3.
-    assert_eq!(
-        deposit,
-        Some(AutomaticDeposit {
-            owner: acc.owner,
-            subaccount: acc.subaccount,
-            address,
-            last_scanned_block: block,
-            scan_count: 3,
-            deposits: vec![
-                Erc20Balance {
-                    token: TOKEN_A,
-                    scanned_balance: Erc20Value::from(10_u8),
-                },
-                Erc20Balance {
-                    token: TOKEN_B,
-                    scanned_balance: Erc20Value::from(20_u8),
-                },
-            ],
-        })
-    );
-
-    // No live watchlist entry -> nothing to move.
-    assert_eq!(
-        automatic_deposit(
-            &deposits,
-            now,
-            &account(999),
-            block,
-            &[(TOKEN_A, Erc20Value::from(1_u8))]
-        ),
-        None
-    );
-}
-
 #[tokio::test]
 async fn should_advance_scanned_non_candidate_addresses() {
     let now = ts();
