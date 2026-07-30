@@ -205,7 +205,7 @@ impl NodeRewardsCanister {
             )),
         }?;
 
-        // Apply the temporary node provider reward reduction mandated by NNS motion
+        // Apply the temporary node provider reward reductions introduced under NNS motion
         // proposal 142724. This is applied here, at the canister boundary, rather than inside the
         // versioned reward-calculation algorithm, so the algorithm stays pure and reproducible.
         apply_node_provider_reward_reduction(&mut daily_results, date);
@@ -215,13 +215,15 @@ impl NodeRewardsCanister {
 }
 
 // ================================================================================================
-// Temporary node provider reward reductions (NNS motions)
+// Temporary node provider reward reductions (NNS motion proposal 142724)
 // ================================================================================================
 //
-// NNS motions on node provider standards may mandate a temporary reduction of node provider
-// rewards for the providers that failed to meet those standards, e.g. that failed to respond to an
-// incident-response smoke test. Each such motion contributes one cohort to `REWARD_REDUCTIONS`
-// below: a set of node providers, a fixed UTC date window, and a multiplier.
+// The motion "Follow-up on Node Provider Standards, Incident Response Readiness" (proposal 142724)
+// established this mechanism: a temporary reduction of node provider rewards for the providers
+// that failed to meet the incident-response standards. The motion set the mechanism, not the
+// providers it applies to — each round's cohort and window are set by upgrading this canister,
+// and no further motion is needed to add one. Every round therefore appends one entry to
+// `REWARD_REDUCTIONS` below: a set of node providers, a fixed UTC date window, and a multiplier.
 //
 // Design notes:
 //   * Reductions are applied here, at the canister boundary, on top of the performance-based
@@ -230,18 +232,18 @@ impl NodeRewardsCanister {
 //     and historically reproducible.
 //   * Each window is expressed as fixed UTC calendar dates. Reward calculation is deterministic
 //     given the stored daily metrics, so querying any past day always returns the same result, and
-//     each cohort's reduction reverts automatically at its `end` without a further upgrade.
-//   * Cohorts are only ever APPENDED, never edited or removed — not even once their window has
+//     each entry's reduction reverts automatically at its `end` without a further upgrade.
+//   * Entries are only ever APPENDED, never edited or removed — not even once their window has
 //     passed. Nothing in this canister persists computed rewards: every query recomputes the
 //     requested days from the stored raw metrics using the table compiled into the running Wasm.
-//     Editing or deleting a past cohort therefore silently rewrites the canister's account of days
+//     Editing or deleting a past entry therefore silently rewrites the canister's account of days
 //     that have already been minted.
-//   * A new cohort's `start` must not predate the first day of the current, not-yet-minted reward
+//   * A new entry's `start` must not predate the first day of the current, not-yet-minted reward
 //     period. Governance advances its reward period past every day it has minted and never
 //     recomputes those days, so a reduction reaching further back is a no-op in terms of tokens
 //     while still making this table claim a penalty that was never applied.
-//   * When several cohorts cover the same provider on the same day, the SMALLEST multiplier wins.
-//     Reductions deliberately do NOT compound: a provider in two overlapping 50% cohorts is
+//   * When several entries cover the same provider on the same day, the SMALLEST multiplier wins.
+//     Reductions deliberately do NOT compound: a provider caught by two overlapping 50% rounds is
 //     reduced to 50% on the overlapping days, not to 25%.
 
 /// A temporary reward reduction for a cohort of node providers over a fixed UTC date window.
@@ -257,11 +259,10 @@ struct RewardReduction {
     providers: &'static [&'static str],
 }
 
-/// The reward reductions mandated so far, in the order they were mandated. Append-only; see the
+/// The reward reductions applied so far, in the order they were introduced. Append-only; see the
 /// design notes above before touching an existing entry.
 const REWARD_REDUCTIONS: &[RewardReduction] = &[
-    // NNS motion proposal 142724, "Follow-up on Node Provider Standards, Incident Response
-    // Readiness": 50% for three months for the node providers that failed to respond within the
+    // First round: 50% for three months for the node providers that failed to respond within the
     // 24h window in BOTH incident-response smoke tests (May 20 and June 13, 2026). A late (>24h)
     // response counts as a failure.
     RewardReduction {
@@ -290,13 +291,12 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
             "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
         ],
     },
-    // Follow-up review of incident-response readiness: 50% for three months for the node providers
-    // that failed the requirement in this round. Providers from the cohort above that have since
-    // recovered are deliberately absent here, so their reduction ends with that cohort's window on
-    // 2026-10-15 and they are rewarded in full from the second half of October on. Providers in
-    // both cohorts are reduced continuously from 2026-07-15 to 2026-11-01 — at 50%, not 25%, on
-    // the overlapping days.
-    // TODO: replace with the NNS motion proposal number once the motion has been submitted.
+    // Second round: 50% for three months for the node providers that failed the incident-response
+    // requirement in the follow-up review. Providers from the round above that have since recovered
+    // are deliberately absent here, so their reduction ends with that round's window on 2026-10-15
+    // and they are rewarded in full from the second half of October on. Providers in both rounds
+    // are reduced continuously from 2026-07-15 to 2026-11-01 — at 50%, not 25%, on the overlapping
+    // days.
     RewardReduction {
         start: (2026, 8, 1),
         end: (2026, 11, 1),
@@ -335,7 +335,7 @@ thread_local! {
 }
 
 /// Turns the `REWARD_REDUCTIONS` constants into a per-node-provider lookup table, panicking on a
-/// malformed constant. A provider appearing in several cohorts gets one window per cohort.
+/// malformed constant. A provider appearing in several rounds gets one window per round.
 fn parse_reward_reductions(
     reductions: &[RewardReduction],
 ) -> BTreeMap<PrincipalId, Vec<ReductionWindow>> {
@@ -789,7 +789,7 @@ mod reward_reduction_tests {
         ];
 
         // 0.25 on the overlap (not 0.125, which is what compounding would give), and the
-        // surrounding days keep their own cohort's multiplier.
+        // surrounding days keep their own round's multiplier.
         for (day, expected) in [
             (d(2026, 7, 20), 50),
             (d(2026, 9, 1), 25),
@@ -812,13 +812,13 @@ mod reward_reduction_tests {
     // Tests against the real, compiled-in `REWARD_REDUCTIONS` table.
     // ------------------------------------------------------------------------------------------
 
-    /// In both cohorts: reduced continuously from 2026-07-15 to 2026-11-01.
+    /// In both rounds: reduced continuously from 2026-07-15 to 2026-11-01.
     const CONTINUING_PROVIDER: &str =
         "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae"; // Zondax AG
-    /// First cohort only: recovered, so rewarded in full again from 2026-10-15.
+    /// First round only: recovered, so rewarded in full again from 2026-10-15.
     const RECOVERED_PROVIDER: &str =
         "eipr5-izbom-neyqh-s3ec2-52eww-cyfpg-qfomg-3dpwj-4pffh-34xcu-7qe"; // 87m Neuron
-    /// Second cohort only: newly added, reduced from 2026-08-01 to 2026-11-01.
+    /// Second round only: newly added, reduced from 2026-08-01 to 2026-11-01.
     const NEWLY_ADDED_PROVIDER: &str =
         "kos24-5xact-6aror-uofg2-tnvt6-dq3bk-c2c5z-jtptt-jbqvc-lmegy-qae"; // Anonstake
 
@@ -874,7 +874,7 @@ mod reward_reduction_tests {
             half
         );
 
-        // Not in the second cohort, so the reduction ends with the first cohort's window.
+        // Not in the second round, so the reduction ends with the first round's window.
         assert_eq!(
             real_multiplier_on(RECOVERED_PROVIDER, d(2026, 10, 15)),
             None
@@ -907,10 +907,10 @@ mod reward_reduction_tests {
     }
 
     #[test]
-    fn reward_reduction_cohort_membership_is_as_mandated() {
+    fn reward_reduction_round_membership_is_as_intended() {
         let by_provider = parse_reward_reductions(REWARD_REDUCTIONS);
 
-        // 19 providers in the first cohort, 18 in the second, 13 in both.
+        // 19 providers in the first round, 18 in the second, 13 in both.
         assert_eq!(REWARD_REDUCTIONS.len(), 2);
         assert_eq!(REWARD_REDUCTIONS[0].providers.len(), 19);
         assert_eq!(REWARD_REDUCTIONS[1].providers.len(), 18);
@@ -918,13 +918,13 @@ mod reward_reduction_tests {
         assert_eq!(in_both, 13);
         assert_eq!(by_provider.len(), 19 + 18 - 13);
 
-        // No cohort lists a provider twice.
+        // No round lists a provider twice.
         for reduction in REWARD_REDUCTIONS {
             let unique: BTreeSet<_> = reduction.providers.iter().collect();
             assert_eq!(
                 unique.len(),
                 reduction.providers.len(),
-                "duplicate provider in a reward reduction cohort"
+                "duplicate provider in a reward reduction round"
             );
         }
     }
