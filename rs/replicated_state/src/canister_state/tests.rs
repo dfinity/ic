@@ -31,6 +31,7 @@ use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Time};
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
+    NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;

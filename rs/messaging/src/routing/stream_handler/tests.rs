@@ -35,6 +35,7 @@ use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue
 use ic_types::{CanisterId, CountBytes};
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+    NominalCyclesTesting,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;

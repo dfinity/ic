@@ -3,7 +3,9 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::CallbackId;
 use ic_types::{CanisterId, Time, batch::CanisterHttpSpent, canister_http::RefundStatus};
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, HTTPOutcalls, NominalCycles,
+};
 use prometheus::IntCounterVec;
 use std::collections::BTreeMap;
 
@@ -16,6 +18,9 @@ const LABEL_ERROR: &str = "error";
 const ERROR_INITIAL_AFTER_NODE_REPORT: &str = "initial_after_node_report";
 /// A node reported its spend more than once for the same callback.
 const ERROR_DUPLICATE_NODE_REPORT: &str = "duplicate_node_report";
+/// The reported spend exceeded the per-replica allowance(s) it was supposed to be
+/// covered by, i.e. the caller ended up paying less than the outcall cost.
+const ERROR_SPENT_EXCEEDS_ALLOWANCE: &str = "spent_exceeds_allowance";
 /// A refund had to be capped, because it would have exceeded the context's
 /// refundable amount.
 const ERROR_REFUND_CAPPED: &str = "refund_capped";
@@ -23,6 +28,7 @@ const ERROR_REFUND_CAPPED: &str = "refund_capped";
 const ERRORS: &[&str] = &[
     ERROR_INITIAL_AFTER_NODE_REPORT,
     ERROR_DUPLICATE_NODE_REPORT,
+    ERROR_SPENT_EXCEEDS_ALLOWANCE,
     ERROR_REFUND_CAPPED,
 ];
 
@@ -114,11 +120,21 @@ pub(crate) fn deliver_canister_http_spent(
                 );
                 continue;
             }
-            // The caller's refund for these nodes is their collective allowance
-            // minus what they collectively spent. `Cycles::sub` saturates at
-            // zero (e.g. on a free subnet, where the allowance is zero).
-            let allowance = context.refund_status.per_replica_allowance;
-            let refund = (allowance * report.nodes.len()) - report.amount;
+            // What the reporting nodes collectively spent. The `real()` part is what
+            // the caller is actually charged, i.e. zero where HTTP outcalls are free;
+            // the `nominal()` part is what the outcall cost, charged or not.
+            let spent = CompoundCycles::<HTTPOutcalls>::new(report.amount, context.cost_schedule);
+            let allowance = context.refund_status.per_replica_allowance * report.nodes.len();
+            observe_spent_exceeding_allowance(
+                spent.real(),
+                allowance,
+                report.callback,
+                log,
+                metrics,
+            );
+            // The caller's refund for these nodes is their collective allowance minus
+            // what they collectively spent.
+            let refund = allowance - spent.real();
             let applied = apply_capped(
                 &mut context.refund_status,
                 refund,
@@ -134,7 +150,7 @@ pub(crate) fn deliver_canister_http_spent(
                 .extend(report.nodes.iter());
             let entry = accounting.entry(context.request.sender).or_default();
             entry.refund += applied;
-            entry.consumed += NominalCycles::new(report.amount.get());
+            entry.consumed += spent.nominal();
         }
 
         // Asynchronous spending
@@ -143,11 +159,19 @@ pub(crate) fn deliver_canister_http_spent(
                 continue;
             };
             let allowance = context.refund_status.per_replica_allowance;
+            let cost_schedule = context.cost_schedule;
             let entry = accounting.entry(context.request.sender).or_default();
             for (node_id, node_spent) in &report.shares {
                 if context.refund_status.refunding_nodes.insert(*node_id) {
-                    // `Cycles::sub` saturates at zero.
-                    let refund = allowance - *node_spent;
+                    let spent = CompoundCycles::<HTTPOutcalls>::new(*node_spent, cost_schedule);
+                    observe_spent_exceeding_allowance(
+                        spent.real(),
+                        allowance,
+                        report.callback,
+                        log,
+                        metrics,
+                    );
+                    let refund = allowance - spent.real();
                     entry.refund += apply_capped(
                         &mut context.refund_status,
                         refund,
@@ -155,7 +179,7 @@ pub(crate) fn deliver_canister_http_spent(
                         log,
                         metrics,
                     );
-                    entry.consumed += NominalCycles::new(node_spent.get());
+                    entry.consumed += spent.nominal();
                 } else {
                     metrics.observe_accounting_error(ERROR_DUPLICATE_NODE_REPORT);
                     error!(
@@ -207,6 +231,29 @@ pub(crate) fn refund_timed_out_canister_http_contexts(
     }
 
     apply_accounting(state, accounting, log);
+}
+
+/// Observes an error if the reported `spent` cycles exceed the `allowance`
+/// i.e. if the caller ends up paying less than the outcall cost.
+/// The refund saturates at zero either way; this only flags that it did.
+fn observe_spent_exceeding_allowance(
+    spent: Cycles,
+    allowance: Cycles,
+    callback: CallbackId,
+    log: &ReplicaLogger,
+    metrics: &CanisterHttpSpentMetrics,
+) {
+    if spent > allowance {
+        metrics.observe_accounting_error(ERROR_SPENT_EXCEEDS_ALLOWANCE);
+        error!(
+            log,
+            "HTTP outcall spend report for callback {} exceeds the allowance it is covered by: \
+             spent {}, allowance {}.",
+            callback,
+            spent,
+            allowance
+        );
+    }
 }
 
 /// Records `amount` as refunded against `refund_status`, capped so that
@@ -282,7 +329,11 @@ fn apply_accounting(
                     accounting.refund,
                     accounting.consumed
                 );
-                lost_by_deleted_canisters += NominalCycles::new(accounting.refund.get());
+                lost_by_deleted_canisters += CompoundCycles::<HTTPOutcalls>::new(
+                    accounting.refund,
+                    CanisterCyclesCostSchedule::Normal,
+                )
+                .nominal();
             }
         }
     }
@@ -318,7 +369,6 @@ mod tests {
     };
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{NodeId, NumberOfNodes, RegistryVersion};
-    use ic_types_cycles::CanisterCyclesCostSchedule;
     use std::collections::BTreeSet;
     use std::time::Duration;
 
@@ -349,13 +399,34 @@ mod tests {
     /// Builds a state holding a single caller canister (`canister_test_id(1)`) on
     /// a [`SUBNET_SIZE`]-node subnet and, if `context` is `Some`, a delivered
     /// `CanisterHttpRequestContext` registered under [`CALLBACK`], with the given
-    /// replication, and the refund status of a request that paid the given refundable
-    /// cycles (see [`refund_status()`]).
+    /// replication, a [`CanisterCyclesCostSchedule::Normal`] cost schedule and the
+    /// refund status of a request that paid the given refundable cycles (see
+    /// [`refund_status()`]).
     fn setup(context: Option<(Replication, Cycles)>) -> (ReplicatedState, CanisterId) {
+        setup_with_cost_schedule(context, CanisterCyclesCostSchedule::Normal)
+    }
+
+    /// Same as [`setup()`], except that the context is that of a request made on
+    /// a free subnet.
+    fn setup_free_subnet(context: Option<(Replication, Cycles)>) -> (ReplicatedState, CanisterId) {
+        setup_with_cost_schedule(context, CanisterCyclesCostSchedule::Free)
+    }
+
+    fn setup_with_cost_schedule(
+        context: Option<(Replication, Cycles)>,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> (ReplicatedState, CanisterId) {
         let (mut state, caller) = setup_state();
         if let Some((replication, refundable)) = context {
             let refund_status = refund_status(refundable, &replication);
-            insert_context(&mut state, CALLBACK, caller, replication, refund_status);
+            insert_context(
+                &mut state,
+                CALLBACK,
+                caller,
+                replication,
+                refund_status,
+                cost_schedule,
+            );
         }
         (state, caller)
     }
@@ -367,7 +438,14 @@ mod tests {
         refund_status: RefundStatus,
     ) -> (ReplicatedState, CanisterId) {
         let (mut state, caller) = setup_state();
-        insert_context(&mut state, CALLBACK, caller, replication, refund_status);
+        insert_context(
+            &mut state,
+            CALLBACK,
+            caller,
+            replication,
+            refund_status,
+            CanisterCyclesCostSchedule::Normal,
+        );
         (state, caller)
     }
 
@@ -385,7 +463,11 @@ mod tests {
             .with_node_ids(all_nodes().into_iter().collect())
             .build();
 
-        let consumed_before = NominalCycles::new(SUBNET_CONSUMED_BEFORE);
+        let consumed_before = CompoundCycles::<HTTPOutcalls>::new(
+            Cycles::new(SUBNET_CONSUMED_BEFORE),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .nominal();
         let subnet_metrics = &mut state.metadata.subnet_metrics;
         subnet_metrics.observe_consumed_cycles_http_outcalls(consumed_before);
         subnet_metrics
@@ -402,6 +484,7 @@ mod tests {
         sender: CanisterId,
         replication: Replication,
         refund_status: RefundStatus,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) {
         let context = CanisterHttpRequestContext {
             request: RequestBuilder::default().sender(sender).build(),
@@ -417,7 +500,7 @@ mod tests {
             refund_status,
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(SUBNET_SIZE as u32),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
+            cost_schedule,
         };
         state
             .metadata
@@ -623,13 +706,75 @@ mod tests {
         assert_errors(&[], &metrics_registry);
     }
 
+    /// A charged-for outcall whose collective spend exceeds the allowance
+    /// means the caller paid less than the outcall cost. Nothing is
+    /// refunded, and the error is reported.
+    #[test]
+    fn initial_report_exceeding_allowance_is_reported() {
+        let allowance = Cycles::new(1_000);
+        let (mut state, caller) = setup(Some((
+            Replication::FullyReplicated,
+            allowance * SUBNET_SIZE,
+        )));
+        let (metrics_registry, metrics) = metrics();
+
+        // The 3 reporting nodes are covered by 3 * 1_000, but spent more than that.
+        let spent = Cycles::new(4_200);
+        let report = CanisterHttpSpent {
+            initial: vec![CanisterHttpInitialSpent {
+                callback: CALLBACK,
+                amount: spent,
+                nodes: node_set(&[1, 2, 3]),
+            }],
+            asynchronous: vec![],
+        };
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
+
+        assert_eq!(balance(&state, caller), INITIAL_BALANCE);
+        assert_eq!(consumed(&state, caller), spent.get());
+        assert_eq!(get_refund_status(&state).refunded_cycles, Cycles::zero());
+        assert_errors(&[(ERROR_SPENT_EXCEEDS_ALLOWANCE, 1)], &metrics_registry);
+    }
+
+    /// Same as above, per node, for an asynchronous report: only the nodes that
+    /// exceeded their own per-replica allowance are reported.
+    #[test]
+    fn asynchronous_report_exceeding_allowance_is_reported() {
+        let allowance = Cycles::new(1_000);
+        let (mut state, caller) = setup(Some((
+            Replication::FullyReplicated,
+            allowance * SUBNET_SIZE,
+        )));
+        let (metrics_registry, metrics) = metrics();
+
+        // Nodes 2 and 3 exceed their per-replica allowance, node 1 does not.
+        let report = CanisterHttpSpent {
+            initial: vec![],
+            asynchronous: vec![CanisterHttpAsyncSpent {
+                callback: CALLBACK,
+                shares: BTreeMap::from([
+                    (node_test_id(1), Cycles::new(400)),
+                    (node_test_id(2), Cycles::new(1_100)),
+                    (node_test_id(3), Cycles::new(3_000)),
+                ]),
+            }],
+        };
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
+
+        // Only node 1's unused allowance is refunded; the other two refund nothing.
+        assert_eq!(balance(&state, caller), INITIAL_BALANCE + Cycles::new(600));
+        assert_eq!(consumed(&state, caller), 4_500);
+        assert_errors(&[(ERROR_SPENT_EXCEEDS_ALLOWANCE, 2)], &metrics_registry);
+    }
+
     /// On a free subnet the per-replica allowance is zero, so nothing is
     /// refunded, but the spent cycles are still reported as consumed. This is the
     /// whole reason spend (rather than refund) is delivered.
     #[test]
     fn free_subnet_initial_report_reports_consumed_without_refund() {
         let spent = Cycles::new(9_500);
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
 
         let report = CanisterHttpSpent {
@@ -658,7 +803,8 @@ mod tests {
     /// as consumed, while the (zero) per-replica allowance refunds nothing.
     #[test]
     fn free_subnet_asynchronous_report_reports_consumed_without_refund() {
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
 
         let report = CanisterHttpSpent {
@@ -686,7 +832,8 @@ mod tests {
     /// per-replica allowance of the replicas that never responded is zero.
     #[test]
     fn free_subnet_timeout_refunds_nothing() {
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
 
         let timeout = UNIX_EPOCH + Duration::from_secs(3 * 60); // > 2min timeout.
@@ -870,6 +1017,7 @@ mod tests {
             caller,
             other_replication,
             other_refund_status,
+            CanisterCyclesCostSchedule::Normal,
         );
         let (metrics_registry, metrics) = metrics();
 
@@ -994,7 +1142,8 @@ mod tests {
     /// the spend is still reported as consumed.
     #[test]
     fn free_subnet_report_for_missing_canister_loses_nothing() {
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
 
         state.remove_canister(&caller);
