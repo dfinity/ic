@@ -188,10 +188,14 @@ pub async fn validate_request(
         migrated_canister_subnet,
         migrated_canister_original_controllers,
         migrated_canister_memory_allocation,
+        // The migration canister has not made itself the exclusive controller
+        // of the migrated and replaced canisters yet.
+        migrated_canister_exclusive_controller: Some(false),
         replaced_canister,
         replaced_canister_subnet,
         replaced_canister_original_controllers,
         replaced_canister_memory_allocation,
+        replaced_canister_exclusive_controller: Some(false),
         caller,
     };
 

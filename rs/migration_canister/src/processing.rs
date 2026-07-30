@@ -75,7 +75,7 @@ pub async fn process_all_by_predicate<F>(
 pub async fn process_accepted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
-    let RequestState::Accepted { request } = request else {
+    let RequestState::Accepted { mut request } = request else {
         println!("Error: list_by Accepted returned bad variant");
         return ProcessingResult::NoProgress;
     };
@@ -88,15 +88,22 @@ pub async fn process_accepted(
             .migrated_canister_memory_allocation
             .map(|memory_allocation| memory_allocation.reserved),
     )
-    .await
-    .map_success(|_| RequestState::ControllersChanged {
-        request: request.clone(),
-    })
-    .map_failure(|reason| RequestState::Failed {
-        request: request.clone(),
-        recovery_state: RecoveryState::new(),
-        reason,
-    });
+    .await;
+    // Track whether the migration canister became the exclusive controller of the migrated
+    // canister so that its original controllers (and memory allocation) are only restored
+    // if the migration canister might have changed them: the outcome of a failed call
+    // is unknown and thus we must not rule out that the call took effect.
+    request.migrated_canister_exclusive_controller =
+        if res.is_success() { Some(true) } else { None };
+    let res = res
+        .map_success(|_| RequestState::ControllersChanged {
+            request: request.clone(),
+        })
+        .map_failure(|reason| RequestState::Failed {
+            request: request.clone(),
+            recovery_state: RecoveryState::new(),
+            reason,
+        });
     if !res.is_success() {
         return res;
     }
@@ -109,14 +116,17 @@ pub async fn process_accepted(
     // of the replaced canister in the very same call that makes the migration canister the
     // exclusive controller of the replaced canister. The original memory allocation is
     // restored together with the original controllers.
-    set_exclusive_controller(
+    let res = set_exclusive_controller(
         request.replaced_canister,
         request
             .replaced_canister_memory_allocation
             .map(|memory_allocation| memory_allocation.reserved),
     )
-    .await
-    .map_success(|_| RequestState::ControllersChanged {
+    .await;
+    // See the comment on the migrated canister above.
+    request.replaced_canister_exclusive_controller =
+        if res.is_success() { Some(true) } else { None };
+    res.map_success(|_| RequestState::ControllersChanged {
         request: request.clone(),
     })
     .map_failure(|reason| RequestState::Failed {
@@ -441,6 +451,7 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         request
             .migrated_canister_memory_allocation
             .map(|memory_allocation| memory_allocation.original),
+        request.migrated_canister_exclusive_controller,
     )
     .await;
     recovery_state.restore_replaced_canister_controllers = controller_recovery(
@@ -453,6 +464,7 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         request
             .replaced_canister_memory_allocation
             .map(|memory_allocation| memory_allocation.original),
+        request.replaced_canister_exclusive_controller,
     )
     .await;
 
