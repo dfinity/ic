@@ -937,6 +937,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL - 1))
         .build()
         .expect_rpc_calls(&cketh);
@@ -952,6 +953,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
     let last_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 10;
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(last_finalized_block))
         .build()
         .expect_rpc_calls(&cketh);

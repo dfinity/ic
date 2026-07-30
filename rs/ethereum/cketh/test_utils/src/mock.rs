@@ -109,6 +109,7 @@ impl JsonRpcRequestMatcher {
     }
 
     fn tick_until_next_http_request(&self, env: &PocketIc) {
+        env.tick();
         for _ in 0..MAX_TICKS {
             let has_matching_request = env
                 .get_canister_http()
