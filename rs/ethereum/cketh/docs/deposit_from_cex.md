@@ -409,6 +409,14 @@ unique, deterministic deposit address, derived from the minter's threshold-ECDSA
   vector. With `fee = {from_subaccount, max_fee}`, the call is *sponsored*: the
   caller pays the sweep gas in ckETH and detection/sweep/crediting run on demand
   (step 0). Repeated calls are cheap lookups that re-arm the window.
+* The response carries the address plus a **status** so a caller can follow the
+  (multi-minute) detection progress: `Scanning { valid_until, last_scanned_block,
+  scan_count }` while the address is armed and no balance at or above the per-token
+  minimum has been seen yet, or `AwaitingSweep([{ token, amount, detected_at_block }, …])`
+  — one entry per funded token — once a balance has been detected and queued for
+  sweeping. Once detected, the address is **not re-armed** by further `deposit_erc20`
+  calls (they return the same `AwaitingSweep`) until it is swept (DEFI-2924); the
+  status is designed to extend with `Sweeping`/`Swept` then.
 
 **Variants — address layout across asset classes** (decided: per-asset, introduced
 with Phase 2):

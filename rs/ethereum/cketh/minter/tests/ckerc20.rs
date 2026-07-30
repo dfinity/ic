@@ -147,6 +147,7 @@ fn should_mint_with_ckerc20_setup() {
 mod deposit_erc20 {
     use assert_matches::assert_matches;
     use candid::Principal;
+    use ic_cketh_minter::endpoints::DepositStatus;
     use ic_cketh_minter::endpoints::events::EventPayload;
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::DEFAULT_USER_SUBACCOUNT;
@@ -197,11 +198,15 @@ mod deposit_erc20 {
             response.address, "0x9cEc8260d73Be0C2f2cC217808bf21008Bf22E4C",
             "BUG: key derivation should be stable"
         );
+        let valid_until = match &response.status {
+            DepositStatus::Scanning { valid_until, .. } => *valid_until,
+            other => panic!("BUG: expected Scanning, got {other:?}"),
+        };
         assert!(
             (time_before + scan_window_nanos..=time_after + scan_window_nanos)
-                .contains(&response.valid_until),
+                .contains(&valid_until),
             "BUG: valid_until {} not in [{}, {}]",
-            response.valid_until,
+            valid_until,
             time_before + scan_window_nanos,
             time_after + scan_window_nanos,
         );
@@ -300,8 +305,14 @@ mod deposit_erc20 {
         let (ckerc20, before) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
-        assert_eq!(before.scan_count, 0);
-        assert_eq!(before.last_scanned_block, None);
+        assert_matches!(
+            before.status,
+            DepositStatus::Scanning {
+                scan_count: 0,
+                last_scanned_block: None,
+                ..
+            }
+        );
 
         // Establish a latest block height, then run one balance-scan tick over the single armed
         // address (one balance per supported token; the values are irrelevant to scan progress).
@@ -314,10 +325,10 @@ mod deposit_erc20 {
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
         assert_eq!(after.address, before.address);
-        assert_eq!(after.scan_count, 1);
-        assert_eq!(
-            after.last_scanned_block,
-            Some(candid::Nat::from(scanned_at))
+        assert_matches!(
+            after.status,
+            DepositStatus::Scanning { scan_count, last_scanned_block, .. }
+                if scan_count == 1 && last_scanned_block == Some(candid::Nat::from(scanned_at))
         );
 
         // The balances were below every token's minimum, so nothing was moved to the sweep queue.
@@ -391,11 +402,51 @@ mod deposit_erc20 {
             assert_eq!(*address, before.address);
         }
 
-        // The sweep queue must survive a real pre_upgrade -> post_upgrade cycle. It is rebuilt by
-        // replaying the CBOR-encoded MovedToSweepQueue events (not the watchlist snapshot):
-        // check_audit_log emits, CBOR-encodes, replays, and asserts the replayed state
-        // is_equivalent_to the live one (which compares the sweep map). A wrong minicbor annotation
-        // on SweepMove would fail here.
+        // deposit_erc20 now reports the detected funds (AwaitingSweep) at the same address, with one
+        // DetectedDeposit per funded token — the scanned balance, at the scan block.
+        let expected_tokens: BTreeSet<String> = ckerc20
+            .supported_erc20_tokens
+            .iter()
+            .map(|t| t.contract.address.clone())
+            .collect();
+        let (ckerc20, detected) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(detected.address, before.address);
+        let deposits = match &detected.status {
+            DepositStatus::AwaitingSweep(deposits) => deposits.clone(),
+            other => panic!("BUG: expected AwaitingSweep, got {other:?}"),
+        };
+        assert_eq!(
+            deposits.len(),
+            tokens,
+            "one DetectedDeposit per funded token"
+        );
+        assert_eq!(
+            deposits
+                .iter()
+                .map(|d| d.token.clone())
+                .collect::<BTreeSet<_>>(),
+            expected_tokens,
+            "detected tokens must be the supported ckERC20 contracts"
+        );
+        for d in &deposits {
+            assert_eq!(
+                d.amount,
+                candid::Nat::from(1_000_000_000_u64),
+                "detected amount is the scanned balance"
+            );
+            assert_eq!(
+                d.detected_at_block,
+                candid::Nat::from(scanned_at),
+                "detected at the scan block"
+            );
+        }
+
+        // The sweep queue must survive a real pre_upgrade -> post_upgrade cycle: it is rebuilt by
+        // replaying the CBOR-encoded MovedToSweepQueue events (not the watchlist snapshot), which
+        // check_audit_log asserts is_equivalent_to the live state. A wrong minicbor annotation on
+        // SweepMove would fail here.
         ckerc20
             .cketh
             .check_audit_logs_and_upgrade_as_ref(Default::default());
@@ -405,14 +456,15 @@ mod deposit_erc20 {
             "MovedToSweepQueue events must survive the upgrade round-trip"
         );
 
-        // The funded address left the watchlist, so re-registering the same account arms it afresh
-        // (scan_count back to 0) rather than reporting the earlier scan — it is no longer scanned.
-        let (_ckerc20, after) = ckerc20
+        // A second deposit_erc20 returns the SAME AwaitingSweep and still does NOT re-arm the
+        // address (a detected address is never put back on the watchlist / re-scanned).
+        let (_ckerc20, again) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
-        assert_eq!(after.address, before.address);
-        assert_eq!(after.scan_count, 0);
-        assert_eq!(after.last_scanned_block, None);
+        assert_eq!(
+            again, detected,
+            "a detected address is reported identically and never re-armed"
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use super::{
-    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSIT_ADDRESSES,
-    SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry, SweepKey,
+    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, DetectedSweep,
+    MAX_ACTIVE_DEPOSIT_ADDRESSES, SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry, SweepKey,
 };
 use crate::endpoints::DepositErc20Error;
 use crate::numeric::{BlockNumber, Erc20Value};
@@ -464,6 +464,58 @@ fn apply_sweep_move_inserts_unconditionally_without_a_watchlist_entry() {
         }),
         Some(&sweep_entry(BlockNumber::new(900), 3, 10))
     );
+}
+
+#[test]
+fn sweep_entries_for_account_returns_one_entry_per_funded_token() {
+    let mut deposits = AutomaticDeposits::default();
+
+    // Unknown account -> no entries.
+    assert!(deposits.sweep_entries_for_account(&account(0)).is_empty());
+
+    deposits.apply_sweep_move(&sweep_move(
+        account(0),
+        token(0xaa),
+        BlockNumber::new(900),
+        3,
+        10,
+    ));
+    deposits.apply_sweep_move(&sweep_move(
+        account(0),
+        token(0xbb),
+        BlockNumber::new(900),
+        3,
+        20,
+    ));
+    // A different account's move must not leak into account(0)'s entries.
+    deposits.apply_sweep_move(&sweep_move(
+        account(1),
+        token(0xaa),
+        BlockNumber::new(901),
+        4,
+        30,
+    ));
+
+    // One projection per funded token, carrying the token, the shared deposit address, the detected
+    // balance, and the finding block.
+    assert_eq!(
+        deposits.sweep_entries_for_account(&account(0)),
+        vec![
+            DetectedSweep {
+                token: token(0xaa),
+                address: deposit_address(&account(0)),
+                scanned_balance: Erc20Value::new(10),
+                last_scanned_block: BlockNumber::new(900),
+            },
+            DetectedSweep {
+                token: token(0xbb),
+                address: deposit_address(&account(0)),
+                scanned_balance: Erc20Value::new(20),
+                last_scanned_block: BlockNumber::new(900),
+            },
+        ]
+    );
+    assert!(deposits.sweep_entries_for_account(&account(2)).is_empty());
 }
 
 fn ts(nanos: u64) -> Timestamp {

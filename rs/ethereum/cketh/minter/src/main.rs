@@ -14,9 +14,10 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
-    DepositErc20Error, DepositErc20Response, DepositMode, Eip1559TransactionPrice,
-    Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
-    RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
+    DepositErc20Error, DepositErc20Response, DepositMode, DepositStatus, DetectedDeposit,
+    Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo,
+    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -188,23 +189,46 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
         subaccount,
     };
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    if let Some(entry) = read_state(|s| s.automatic_deposits.get_entry(now, &account).cloned()) {
-        return Ok(deposit_erc20_response(&entry));
+
+    // Funds already detected and queued for sweeping: report them and do NOT re-arm the address
+    // (nor fetch the ECDSA key). All of an account's sweep entries share the same deposit address.
+    let detected = read_state(|s| s.automatic_deposits.sweep_entries_for_account(&account));
+    if let Some(first) = detected.first() {
+        let deposits = detected
+            .iter()
+            .map(|d| DetectedDeposit {
+                token: d.token.to_string(),
+                amount: d.scanned_balance.into(),
+                detected_at_block: d.last_scanned_block.into(),
+            })
+            .collect();
+        return Ok(DepositErc20Response {
+            address: first.address.to_string(),
+            status: DepositStatus::AwaitingSweep(deposits),
+        });
     }
-    // Ensure the minter's ECDSA public key has been fetched and cached in the
-    // state so that the (synchronous) registration below can derive the address.
+
+    // Already armed: report the balance-scan progress.
+    if let Some(entry) = read_state(|s| s.automatic_deposits.get_entry(now, &account).cloned()) {
+        return Ok(scanning_response(&entry));
+    }
+
+    // Not armed yet: register. Ensure the minter's ECDSA public key has been fetched and cached in
+    // the state so that the (synchronous) registration below can derive the address.
     state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
     mutate_state(|s| s.register_deposit_address(now, account))
-        .map(|request| deposit_erc20_response(&request))
+        .map(|request| scanning_response(&request))
 }
 
-fn deposit_erc20_response(entry: &Entry<DepositRequest>) -> DepositErc20Response {
+fn scanning_response(entry: &Entry<DepositRequest>) -> DepositErc20Response {
     DepositErc20Response {
         address: entry.value.address.to_string(),
-        valid_until: entry.expires_at.as_nanos(),
-        last_scanned_block: entry.value.last_scanned_block.map(|block| block.into()),
-        scan_count: entry.value.scan_count as u64,
+        status: DepositStatus::Scanning {
+            valid_until: entry.expires_at.as_nanos(),
+            last_scanned_block: entry.value.last_scanned_block.map(Into::into),
+            scan_count: entry.value.scan_count as u64,
+        },
     }
 }
 
