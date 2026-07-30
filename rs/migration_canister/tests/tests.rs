@@ -815,6 +815,137 @@ async fn metrics() {
         get_gauge(&metrics, "migration_canister_migrations_enabled"),
         1.0
     );
+
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_requests_in_flight"),
+        0.0
+    );
+
+    assert_eq!(oldest_request_age(&metrics), None);
+}
+
+const OLDEST_REQUEST_AGE_METRIC: &str = "migration_canister_oldest_request_in_flight_age_seconds";
+
+/// Reads the age (in seconds) of the oldest request in flight from a metrics scrape.
+/// Returns `None` if the metric is not set, i.e., if no request is in flight.
+fn oldest_request_age(metrics: &Scrape) -> Option<f64> {
+    let is_metric_set = metrics
+        .samples
+        .iter()
+        .any(|sample| sample.metric == OLDEST_REQUEST_AGE_METRIC);
+    if !is_metric_set {
+        return None;
+    }
+    Some(get_gauge(metrics, OLDEST_REQUEST_AGE_METRIC))
+}
+
+#[tokio::test]
+async fn oldest_request_in_flight_metric() {
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        ..
+    } = setup(Settings {
+        num_migrations: 2,
+        ..Default::default()
+    })
+    .await;
+    let sender = migrated_canister_controllers[0];
+    let first = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canisters[0],
+        replaced_canister_id: replaced_canisters[0],
+    };
+    let second = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canisters[1],
+        replaced_canister_id: replaced_canisters[1],
+    };
+
+    // Without any request in flight, the metric is not set.
+    assert_eq!(oldest_request_age(&fetch_metrics(&pic).await), None);
+
+    migrate_canister(&pic, sender, &first).await.unwrap();
+    pic.advance_time(Duration::from_secs(10)).await;
+    pic.tick().await;
+
+    // The age of the (only) request in flight grows with time.
+    let metrics = fetch_metrics(&pic).await;
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_requests_in_flight"),
+        1.0
+    );
+    let age = oldest_request_age(&metrics).unwrap();
+    assert!(age >= 10.0, "unexpected age {age}");
+
+    // A second, younger request does not affect the metric:
+    // it keeps reporting the age of the first request.
+    migrate_canister(&pic, sender, &second).await.unwrap();
+    let metrics = fetch_metrics(&pic).await;
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_requests_in_flight"),
+        2.0
+    );
+    let age = oldest_request_age(&metrics).unwrap();
+    assert!(age >= 10.0, "unexpected age {age}");
+
+    // Drive both migrations to completion. We advance time by a lot so that
+    // the task waiting for 6 minutes can succeed quickly.
+    for _ in 0..100 {
+        pic.advance_time(Duration::from_secs(250)).await;
+        pic.tick().await;
+    }
+    for args in [&first, &second] {
+        assert!(matches!(
+            get_status(&pic, sender, args).await.unwrap(),
+            MigrationStatus::Succeeded { .. }
+        ));
+    }
+
+    // Successful requests are not in flight anymore.
+    let metrics = fetch_metrics(&pic).await;
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_requests_in_flight"),
+        0.0
+    );
+    assert_eq!(oldest_request_age(&metrics), None);
+}
+
+#[tokio::test]
+async fn oldest_request_in_flight_metric_reset_on_failure() {
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let args = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canisters[0],
+    };
+
+    migrate_canister(&pic, sender, &args).await.unwrap();
+    // Validation succeeded. Now we break migration by interfering.
+    pic.start_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
+    for _ in 0..4 {
+        advance(&pic).await;
+    }
+    let MigrationStatus::Failed { .. } = get_status(&pic, sender, &args).await.unwrap() else {
+        panic!("expected the migration to fail")
+    };
+
+    // Failed requests are not in flight anymore either.
+    let metrics = fetch_metrics(&pic).await;
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_requests_in_flight"),
+        0.0
+    );
+    assert_eq!(oldest_request_age(&metrics), None);
 }
 
 async fn concurrent_migration(
