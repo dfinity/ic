@@ -20,6 +20,18 @@ pub const DEV_ACCOUNT: &str = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 /// The whole supply minted to the deployer when deploying a [`deploy_mock_erc20`] token.
 const TOKEN_SUPPLY: u128 = 1_000_000_000;
 
+/// Per-request timeout for the anvil JSON-RPC client. Without it a stuck node would hang a
+/// `send()` indefinitely, defeating [`wait_until_ready`]'s deadline and, ultimately, the bazel
+/// test timeout; with it a wedged connection fails fast and the caller can retry or panic.
+const RPC_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn rpc_client() -> reqwest::blocking::Client {
+    reqwest::blocking::Client::builder()
+        .timeout(RPC_TIMEOUT)
+        .build()
+        .expect("failed to build the anvil RPC client")
+}
+
 pub struct Anvil {
     child: Child,
     url: String,
@@ -53,7 +65,7 @@ impl Anvil {
     /// Sends a JSON-RPC request, returning the raw `result`/`error` body so the caller can decide
     /// whether an error is a failure.
     fn rpc_result(&self, method: &str, params: Value) -> Result<Value, String> {
-        let body: Value = reqwest::blocking::Client::new()
+        let body: Value = rpc_client()
             .post(&self.url)
             .json(
                 &serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
@@ -186,7 +198,7 @@ fn wait_until_ready(child: &mut Child, bin: &str, url: &str) {
         if let Some(status) = child.try_wait().expect("failed to poll anvil") {
             panic!("anvil ({bin}) exited early with {status} before serving {url}");
         }
-        let ready = reqwest::blocking::Client::new()
+        let ready = rpc_client()
             .post(url)
             .json(&serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}))
             .send()

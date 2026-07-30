@@ -1,13 +1,13 @@
-//! A live [`PocketIc`] harness for the ckERC20 balance scan, driving *real* HTTPS outcalls against
-//! a local anvil node that the harness owns (see [`crate::anvil`]).
+//! A live [`PocketIc`] harness for the ckERC20 balance scan, driving *real* canister outcalls
+//! against a local anvil node that the harness owns (see [`crate::anvil`]).
 //!
 //! Unlike [`crate::ckerc20::CkErc20Setup`] — which runs on `StateMachine` and answers the EVM RPC
 //! canister's JSON-RPC outcalls with canned mocks ([`crate::mock::MockJsonRpcProviders`]) — this
-//! harness runs PocketIC in *live* mode so the EVM RPC canister issues genuine HTTPS outcalls, and
-//! installs it with an `overrideProvider` that rewrites every provider URL to the harness' anvil
-//! node (mirroring the `evm_rpc_local` configuration of the EVM RPC canister). The minter therefore
-//! reads real Ethereum state from anvil, exercising the balance scan end to end: minter → EVM RPC
-//! canister → anvil.
+//! harness runs PocketIC in *live* mode so the EVM RPC canister makes genuine outcalls through the
+//! IC's HTTPS-outcalls feature, and installs it with an `overrideProvider` that rewrites every
+//! provider URL to the harness' anvil node (reached over HTTP, mirroring the `evm_rpc_local`
+//! configuration of the EVM RPC canister). The minter therefore reads real Ethereum state from
+//! anvil, exercising the balance scan end to end: minter → EVM RPC canister → anvil.
 //!
 //! Only the minter and the EVM RPC canister are installed. The full ckERC20 feature is activated by
 //! pointing the minter's ledger-suite-orchestrator id at a principal this harness controls, so

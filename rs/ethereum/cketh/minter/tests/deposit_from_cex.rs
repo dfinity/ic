@@ -179,7 +179,8 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
 
 /// End-to-end balance scan against a real EVM: a live PocketIC runs the minter and the *real* EVM
 /// RPC canister (configured to route every provider to the harness' anvil node), so the minter's
-/// periodic balance scan issues genuine HTTPS outcalls and reads real ERC-20 balances from anvil.
+/// periodic balance scan makes genuine outcalls through the IC's HTTPS-outcalls feature — reaching
+/// anvil over HTTP — and reads real ERC-20 balances from it.
 ///
 /// Three independent depositors each fund a single token — 20 USDT, 15 USDC and 1 USDT — so the
 /// scan reads several addresses and tokens and must apply the per-token minimum to each. Only the
