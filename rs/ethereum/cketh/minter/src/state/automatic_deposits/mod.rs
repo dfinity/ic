@@ -7,8 +7,6 @@ use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositA
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
-use std::borrow::Borrow;
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -247,21 +245,19 @@ impl AutomaticDeposits {
         account: &Account,
     ) -> Option<DepositErc20Response> {
         if let Some((deposit_account, entries)) = self.sweep.get_key_value(account) {
-            if !entries.is_empty() {
-                return Some(DepositErc20Response {
-                    address: deposit_account.address.to_string(),
-                    status: DepositStatus::AwaitingSweep(
-                        entries
-                            .iter()
-                            .map(|entry| DetectedDeposit {
-                                token: entry.erc20_token.to_string(),
-                                amount: entry.scanned_balance.into(),
-                                detected_at_block: entry.last_scanned_block.into(),
-                            })
-                            .collect(),
-                    ),
-                });
-            }
+            return Some(DepositErc20Response {
+                address: deposit_account.address.to_string(),
+                status: DepositStatus::AwaitingSweep(
+                    entries
+                        .iter()
+                        .map(|entry| DetectedDeposit {
+                            token: entry.erc20_token.to_string(),
+                            amount: entry.scanned_balance.into(),
+                            detected_at_block: entry.last_scanned_block.into(),
+                        })
+                        .collect(),
+                ),
+            });
         }
         self.get_entry(now, account)
             .map(|entry| DepositErc20Response {
