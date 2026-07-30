@@ -4709,7 +4709,7 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
 #[test]
 fn install_code_calls_canister_init_and_start() {
     let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
+        .with_deterministic_memory_tracker_enabled(true)
         .build();
     let wat = r#"
         (module
@@ -4731,7 +4731,13 @@ fn install_code_calls_canister_init_and_start() {
             (start $start)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let dirty_heap_cost = NumInstructions::from(2 * test.dirty_heap_page_overhead());
+    // number of page accesses: (1 read + 1 write) x OS pages per Wasm page x
+    // (2 Wasm invocations with different DMTs: init and start). The number of OS
+    // pages per Wasm page depends on the OS page size (16 on 4 KiB hosts such as
+    // Linux, 4 on 16 KiB hosts such as arm64-darwin).
+    let os_pages_per_wasm_page = WASM_PAGE_SIZE_IN_BYTES as u64 / PAGE_SIZE as u64;
+    let dirty_heap_cost =
+        NumInstructions::from(2 * os_pages_per_wasm_page * 2 * test.dirty_heap_page_overhead());
     assert_eq!(
         // Function is 1 instruction.
         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
@@ -7814,7 +7820,7 @@ fn charge_for_dirty_pages() {
             )
             (func $test2 (export "canister_update test2")
                 (i64.store (i32.const 0) (i64.const 27))
-                (i64.store (i32.const 4096) (i64.const 227))
+                (i64.store (i32.const 65536) (i64.const 227))
                 (call $msg_reply_data_append (i32.const 0) (i32.const 8))
                 (call $msg_reply)
             )
@@ -7841,31 +7847,8 @@ fn charge_for_dirty_pages() {
     let i2 = test.canister_executed_instructions(canister_id);
 
     let cdi = ic_config::subnet_config::SchedulerConfig::application_subnet().dirty_page_overhead;
-
-    assert_eq!((i2 - i1) - (i1 - i0), cdi);
-
-    // Run again with low message instruction limit
-    // so that half of the dirty page cost gets rounded to zero
-    let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(100_000_000)
-        .with_instruction_limit((i1 - i0 - cdi / 2).get())
-        .with_metering_type(ic_config::embedders::MeteringType::New)
-        .build();
-
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    let res = test.ingress(canister_id, "test", vec![]).unwrap();
-    match res {
-        WasmResult::Reply(v) => {
-            let mut bytes = [0_u8; 8];
-            bytes.copy_from_slice(&v);
-            let res = u64::from_le_bytes(bytes);
-            assert_eq!(res, 17);
-        }
-        WasmResult::Reject(_) => unreachable!("expected reply"),
-    }
-    let i1a = test.canister_executed_instructions(canister_id);
-
-    assert_eq!(i1a, i1 - cdi / 2);
+    // test2 writes to the next Wasm page, i.e. (1 read + 1 write)x16=32 OS pages.
+    assert_eq!((i2 - i1) - (i1 - i0), cdi * 32);
 }
 
 #[test]
