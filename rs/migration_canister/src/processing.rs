@@ -4,7 +4,8 @@
 //! process several requests concurrently.
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, EventType, RecoveryState, RequestState, ValidationError,
+    CYCLES_COST_PER_MIGRATION, EventType, ManagedMemoryAllocation, RecoveryState, RequestState,
+    ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
@@ -13,9 +14,9 @@ use crate::{
     controller_recovery::controller_recovery,
     external_interfaces::{
         management::{
-            CanisterStatusType, assert_no_snapshots, canister_status, delete_canister,
-            get_canister_info, get_registry_version, rename_canister, set_controllers,
-            set_exclusive_controller,
+            CanisterStatusResponse, CanisterStatusType, assert_no_snapshots, canister_status,
+            delete_canister, get_canister_info, get_registry_version, rename_canister,
+            set_controllers, set_exclusive_controller,
         },
         registry::migrate_canister,
     },
@@ -135,6 +136,25 @@ pub async fn process_accepted(
     })
 }
 
+/// Checks that the memory usage of the given canister excluding its canister history
+/// did not change since the request was validated: the memory allocation that the migration
+/// canister set for the canister only reserves memory for the canister history entries that
+/// the migration canister records for the canister (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`)
+/// and thus recording those entries could fail if the rest of the canister's memory usage grew
+/// after validation.
+///
+/// This check is vacuous for a request validated by a version of the migration canister
+/// that did not manage the memory allocation of the canister yet.
+fn memory_usage_unchanged(
+    memory_allocation: Option<ManagedMemoryAllocation>,
+    canister_status: &CanisterStatusResponse,
+) -> bool {
+    memory_allocation.is_none_or(|memory_allocation| {
+        canister_status.memory_usage_excluding_canister_history()
+            == memory_allocation.usage_excluding_canister_history
+    })
+}
+
 pub async fn process_controllers_changed(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
@@ -216,6 +236,31 @@ pub async fn process_controllers_changed(
                 "Migrated canister does not have sufficient cycles: {} < {}.",
                 migrated_canister_status.cycles, CYCLES_COST_PER_MIGRATION
             ),
+        });
+    }
+
+    // The migration canister is the exclusive controller of the migrated and replaced canisters
+    // at this point and both of them are stopped. Hence, only the migration canister can change
+    // their memory usage from now on (by recording canister history entries for them) and thus
+    // it suffices to check here that their memory usage did not change since validation.
+    if !memory_usage_unchanged(
+        request.migrated_canister_memory_allocation,
+        &migrated_canister_status,
+    ) {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            recovery_state: RecoveryState::new(),
+            reason: "Migrated canister memory usage changed.".to_string(),
+        });
+    }
+    if !memory_usage_unchanged(
+        request.replaced_canister_memory_allocation,
+        &replaced_canister_status,
+    ) {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            recovery_state: RecoveryState::new(),
+            reason: "Replaced canister memory usage changed.".to_string(),
         });
     }
 

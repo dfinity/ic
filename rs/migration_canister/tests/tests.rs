@@ -1694,6 +1694,64 @@ async fn after_validation_insufficient_cycles() {
     assert!(reason.contains("Migrated canister does not have sufficient cycles"));
 }
 
+/// The migration fails if the memory usage of the migrated or replaced canister changed after
+/// validation: the memory allocation that the migration canister sets for those canisters when
+/// making itself their exclusive controller only reserves memory for the canister history
+/// entries that the migration canister records for them.
+#[tokio::test]
+async fn after_validation_memory_usage_changed() {
+    for interfere_with_migrated_canister in [true, false] {
+        let Setup {
+            pic,
+            migrated_canisters,
+            replaced_canisters,
+            migrated_canister_controllers,
+            ..
+        } = setup(Settings::default()).await;
+        // The first controller of the migrated canister is also a controller
+        // of the replaced canister.
+        let sender = migrated_canister_controllers[0];
+        let migrated_canister = migrated_canisters[0];
+        let replaced_canister = replaced_canisters[0];
+        let args = MigrateCanisterArgs {
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
+        };
+        migrate_canister(&pic, sender, &args).await.unwrap();
+        // Validation succeeded. Now we break migration by interfering: installing a minimal
+        // Wasm module increases the memory usage of the canister (by way less than the memory
+        // reserved for the canister history entries recorded by the migration canister so that
+        // the migration canister still becomes the exclusive controller of that canister).
+        let canister = if interfere_with_migrated_canister {
+            migrated_canister
+        } else {
+            replaced_canister
+        };
+        pic.install_canister(
+            canister,
+            b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
+            vec![],
+            Some(sender),
+        )
+        .await;
+        for _ in 0..4 {
+            advance(&pic).await;
+        }
+        let status = get_status(&pic, sender, &args).await;
+        let MigrationStatus::Failed { ref reason, .. } = status.clone().unwrap() else {
+            panic!("Unexpected status: {:?}", status.unwrap())
+        };
+        let expected_reason = if interfere_with_migrated_canister {
+            "Migrated canister memory usage changed."
+        } else {
+            "Replaced canister memory usage changed."
+        };
+        assert_eq!(reason, expected_reason);
+
+        pic.drop().await;
+    }
+}
+
 /// The amount of memory that the migration canister reserves for the canister history
 /// entries it records for the migrated and replaced canisters
 /// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY` in the migration canister).

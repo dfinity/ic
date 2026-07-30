@@ -118,6 +118,12 @@ pub struct ManagedMemoryAllocation {
     /// plus `MEMORY_RESERVED_FOR_CANISTER_HISTORY` (or `original` if that one is already higher,
     /// in which case setting it is a no-op).
     pub reserved: u64,
+    /// The memory usage of the canister at validation time excluding its canister history:
+    /// `reserved` only accounts for the canister history entries recorded by the migration
+    /// canister and thus the rest of the canister's memory usage must not have grown since
+    /// validation (which is checked once the migration canister is the exclusive controller
+    /// of the canister).
+    pub usage_excluding_canister_history: u64,
 }
 
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]

@@ -175,7 +175,12 @@ pub async fn validate_request(
                 .memory_usage()
                 .saturating_add(MEMORY_RESERVED_FOR_CANISTER_HISTORY),
         );
-        Some(ManagedMemoryAllocation { original, reserved })
+        Some(ManagedMemoryAllocation {
+            original,
+            reserved,
+            usage_excluding_canister_history: canister_status
+                .memory_usage_excluding_canister_history(),
+        })
     };
     let migrated_canister_memory_allocation = managed_memory_allocation(&migrated_canister_status);
     let replaced_canister_memory_allocation = managed_memory_allocation(&replaced_canister_status);

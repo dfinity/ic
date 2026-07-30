@@ -129,12 +129,18 @@ struct CanisterStatusArgs {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct MemoryMetrics {
+    pub canister_history_size: candid::Nat,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResponse {
     pub status: CanisterStatusType,
     pub ready_for_migration: bool,
     pub version: u64,
     pub settings: DefiniteCanisterSettingsArgs,
     pub memory_size: candid::Nat,
+    pub memory_metrics: MemoryMetrics,
     pub cycles: candid::Nat,
     pub freezing_threshold: candid::Nat,
     pub reserved_cycles: candid::Nat,
@@ -144,6 +150,16 @@ impl CanisterStatusResponse {
     /// The canister's memory usage in bytes (saturating at `u64::MAX`).
     pub fn memory_usage(&self) -> u64 {
         u64::try_from(&self.memory_size.0).unwrap_or(u64::MAX)
+    }
+
+    /// The canister's memory usage in bytes excluding its canister history
+    /// (saturating at `u64::MAX`). Only the canister history of a canister under
+    /// the exclusive control of the migration canister is expected to grow
+    /// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
+    pub fn memory_usage_excluding_canister_history(&self) -> u64 {
+        self.memory_usage().saturating_sub(
+            u64::try_from(&self.memory_metrics.canister_history_size.0).unwrap_or(u64::MAX),
+        )
     }
 
     /// The canister's memory allocation in bytes (saturating at `u64::MAX`);
