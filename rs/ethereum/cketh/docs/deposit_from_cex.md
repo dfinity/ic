@@ -1105,18 +1105,25 @@ at $2'500 and the sweep-gas figures from the
 ≈ 42'000 gas per address in a batch of 20).
 
 **Detection schedule** — per armed address, backing off over the 24h scanning window of
-`R15`; the basis for the outcall counts below:
+`R15`; the basis for the outcall counts below. Scheduling is **block-based, not wall-clock**:
+elapsed time is measured as `elapsed_blocks × SECS_PER_BLOCK` (≈ 12 s/block) against a
+33-entry gap table (`SCAN_GAP_SECS` in `automatic_deposits/mod.rs::addresses_to_scan_iter`).
+The scan task itself fires on a fixed **30 s** timer (`BALANCE_SCAN_INTERVAL`), which quantizes
+each address' due time to that cadence:
 
-| Phase | Cadence | Ticks |
+| Phase | Cadence | Scans |
 |---|---|---|
+| Initial | immediate on registration | 1 |
 | Burst | 30s, 30s, 1m, 2m, 2m, 4m (→ 10 min) | 6 |
 | Ramp | every 5 min (10 → 30 min) | 4 |
-| Tail | hourly (30 min → 24h) | 24 |
+| Tail | hourly (30 min → 23.5h) | 23 |
 | **Total** | | **34** |
 
-Each tick is one **shared** deployless-batcher `eth_call` over the whole active set (filter 1),
-so its cost divides across the batch; a deposit landing in the first 10 min is seen
-within 30s–4 min, and after 30 min within the hour.
+The initial scan runs immediately; the remaining 33 are gated by the 33 `SCAN_GAP_SECS` gaps
+(all of them used — the first backoff gap is `SCAN_GAP_SECS[0]` = 30 s). Each scan is one
+**shared** deployless-batcher `eth_call` over the whole active set (filter 1), so its cost
+divides across the batch; a deposit landing in the first 10 min is seen within 30s–4 min, and
+after 30 min within the hour.
 
 **Scenarios** (`B` = number of addresses sharing this address' scan and sweep):
 

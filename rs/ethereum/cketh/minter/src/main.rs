@@ -1018,29 +1018,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The latest Ethereum block height the ckETH minter observed for scheduling balance scans.",
                 )?;
 
-                if let Some(stats) = &s.last_balance_scan {
-                    w.encode_gauge(
-                        "cketh_minter_balance_scan_last_run_timestamp_seconds",
-                        stats.scanned_at_ns as f64 / 1_000_000_000.0,
-                        "Timestamp of the last balance scan.",
-                    )?;
-                    w.encode_gauge(
-                        "cketh_minter_balance_scan_addresses_scanned",
-                        stats.addresses_scanned as f64,
-                        "Number of deposit addresses scanned in the last balance scan.",
-                    )?;
-                    w.encode_gauge(
-                        "cketh_minter_balance_scan_candidates",
-                        stats.candidates_found as f64,
-                        "Number of deposit candidates found in the last balance scan.",
-                    )?;
-                    w.encode_gauge(
-                        "cketh_minter_balance_scan_failed_chunks",
-                        stats.chunks_failed as f64,
-                        "Number of multicall chunks that failed in the last balance scan.",
-                    )?;
-                }
-
                 for (id, scraping_state) in s.log_scrapings.iter() {
                     w.encode_gauge(
                         last_processed_block_metric_name(id),

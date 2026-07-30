@@ -34,14 +34,6 @@ use icrc_ledger_types::icrc1::account::Account;
 /// the supported tokens grow or skew more gas-heavy.
 const MAX_CALLS_PER_BATCH: usize = 1_000;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct BalanceScanStats {
-    pub scanned_at_ns: u64,
-    pub addresses_scanned: usize,
-    pub candidates_found: usize,
-    pub chunks_failed: usize,
-}
-
 pub async fn balance_scan() {
     let now = Timestamp::from_nanos(ic_cdk::api::time());
     // TODO DEFI-2923: use a lower threshold rpc client, e.g. 2-out-of-3 since we use latest block height
@@ -97,7 +89,8 @@ async fn scan<R: Runtime>(
     }
 
     let mut candidates = 0_usize;
-    let mut chunks_failed = 0_usize;
+    let mut decode_errors = 0_usize;
+    let mut call_errors = 0_usize;
     let mut scanned: Vec<Account> = Vec::new();
 
     for batch in plan_batches(&addresses_to_scan, &erc20_tokens) {
@@ -115,12 +108,12 @@ async fn scan<R: Runtime>(
                     scanned.extend(batch.addresses.iter().map(|(account, _)| *account));
                 }
                 Err(e) => {
-                    chunks_failed += 1;
+                    decode_errors += 1;
                     log!(INFO, "balance scan decode error: {e:?}");
                 }
             },
             Err(e) => {
-                chunks_failed += 1;
+                call_errors += 1;
                 log!(INFO, "balance scan eth_call error: {e:?}");
             }
         }
@@ -137,9 +130,8 @@ async fn scan<R: Runtime>(
 
     log!(
         INFO,
-        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {chunks_failed} chunk(s) failed",
+        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
     );
-    record_stats(now, addresses_scanned, candidates, chunks_failed);
 }
 
 /// One balance-scan batch: the deposit addresses whose balances are read together in a single
@@ -316,22 +308,6 @@ const MIN_DEPOSITS: &[(Address, Erc20Value)] = &[
         Erc20Value::new(3_500_000_000_000_000_000_000_000),
     ), // ckSepoliaPEPE
 ];
-
-fn record_stats(
-    now: Timestamp,
-    addresses_scanned: usize,
-    candidates_found: usize,
-    chunks_failed: usize,
-) {
-    mutate_state(|s| {
-        s.last_balance_scan = Some(BalanceScanStats {
-            scanned_at_ns: now.as_nanos(),
-            addresses_scanned,
-            candidates_found,
-            chunks_failed,
-        })
-    });
-}
 
 fn call_args(input: Vec<u8>, block: BlockNumber) -> evm_rpc_types::CallArgs {
     evm_rpc_types::CallArgs {

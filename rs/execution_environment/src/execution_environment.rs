@@ -2696,6 +2696,11 @@ impl ExecutionEnvironment {
         time: Time,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         self.execute_mgmt_operation_on_canister(
             canister_id,
             |canister, _msg, round_limits, _consumed_cycles| {
@@ -2705,6 +2710,8 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_admins,
                     time,
+                    subnet_cycles_config,
+                    &resource_saturation,
                 )
             },
             state,
@@ -3191,6 +3198,11 @@ impl ExecutionEnvironment {
         let to_total_num_changes = args.rename_to.total_num_changes;
         let requested_by = args.requested_by();
 
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
+
         // Take canister out.
         let mut canister = match state.take_canister_state(&old_id) {
             None => {
@@ -3215,6 +3227,7 @@ impl ExecutionEnvironment {
                 requested_by,
                 state,
                 round_limits,
+                &resource_saturation,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());

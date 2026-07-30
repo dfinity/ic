@@ -51,6 +51,51 @@ fn should_not_count_candidates_for_an_unsupported_token() {
 }
 
 #[test]
+fn should_have_a_min_deposit_for_every_deployed_supported_token() {
+    // Independently transcribed list of the ckERC20 contract addresses the mainnet
+    // (sv3dd-oaaaa-aaaar-qacoa-cai) and Sepolia (jzenf-aiaaa-aaaar-qaa7q-cai) minters currently
+    // support (hex form, so it does not share the byte-array representation of `MIN_DEPOSITS`). A
+    // supported token missing from `MIN_DEPOSITS` would be scanned but never flagged, so its
+    // deposits would go undetected; this test catches a dropped or typo'd entry.
+    let deployed: &[(&str, &str)] = &[
+        // --- mainnet ---
+        ("ckUSDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+        ("ckLINK", "0x514910771AF9Ca656af840dff83E8264EcF986CA"),
+        ("ckPEPE", "0x6982508145454Ce325dDbE47a25d4ec3d2311933"),
+        ("ckOCT", "0xF5cFBC74057C610c8EF151A439252680AC68c6dc"),
+        ("ckSHIB", "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"),
+        ("ckWBTC", "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"),
+        ("ckUSDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7"),
+        ("ckWSTETH", "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+        ("ckUNI", "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"),
+        ("ckEURC", "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c"),
+        ("ckXAUT", "0x68749665FF8D2d112Fa859AA293F07A622782F38"),
+        // --- sepolia ---
+        (
+            "ckSepoliaUSDC",
+            "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        ),
+        (
+            "ckSepoliaLINK",
+            "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+        ),
+        (
+            "ckSepoliaPEPE",
+            "0x560ef9f39e4b08f9693987cad307f6fbfd97b2f6",
+        ),
+    ];
+
+    for (symbol, address) in deployed {
+        let contract = Address::from_str(address)
+            .unwrap_or_else(|e| panic!("{symbol}: invalid test address {address}: {e}"));
+        assert!(
+            MIN_DEPOSITS.iter().any(|(c, _)| *c == contract),
+            "{symbol} ({address}) has no MIN_DEPOSITS entry"
+        );
+    }
+}
+
+#[test]
 fn should_build_one_call_per_address_and_token_in_order() {
     let holders = vec![DEPOSIT_ADDRESS, Address::new([0x99; 20])];
     let tokens = vec![TOKEN_A, TOKEN_B];
@@ -146,7 +191,7 @@ fn should_never_split_an_address_across_batches() {
 }
 
 #[tokio::test]
-async fn should_skip_without_recording_stats() {
+async fn should_skip_without_scanning() {
     struct Case {
         name: &'static str,
         latest_block: Option<BlockNumber>,
@@ -183,16 +228,17 @@ async fn should_skip_without_recording_stats() {
         // No stub responses: the scan must short-circuit before any outcall.
         scan(now, stub_client(vec![])).await;
 
-        assert!(
-            read_state(|s| s.last_balance_scan.clone()).is_none(),
-            "case: {}",
-            case.name
-        );
+        // A skipped scan advances no watchlist entry.
+        for (account, _) in &case.holders {
+            let entry = live_entry(now, account);
+            assert_eq!(entry.scan_count, 0, "case: {}", case.name);
+            assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
+        }
     }
 }
 
 #[tokio::test]
-async fn should_advance_scanned_addresses_and_count_candidates() {
+async fn should_advance_scanned_addresses() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
@@ -204,15 +250,12 @@ async fn should_advance_scanned_addresses_and_count_candidates() {
     // Single chunk, holders in call order: first at the minimum (candidate), second below it.
     scan(now, stub_client(vec![ok_balances(&[min, below_min])])).await;
 
+    // Both scanned addresses are advanced along the schedule at the scanned block.
     for (account, _) in [candidate, non_candidate] {
         let entry = live_entry(now, &account);
         assert_eq!(entry.scan_count, 1);
         assert_eq!(entry.last_scanned_block, Some(latest));
     }
-    let stats = last_stats();
-    assert_eq!(stats.addresses_scanned, 2);
-    assert_eq!(stats.candidates_found, 1);
-    assert_eq!(stats.chunks_failed, 0);
 }
 
 #[tokio::test]
@@ -233,7 +276,7 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
         .collect();
     seed_state(Some(latest), Some(token), &holders, now);
 
-    // Two responses, one per chunk, sized to the chunk's call count; all balances are candidates.
+    // Two responses, one per chunk, sized to the chunk's call count.
     scan(
         now,
         stub_client(vec![
@@ -243,10 +286,18 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     )
     .await;
 
-    let stats = last_stats();
-    assert_eq!(stats.addresses_scanned, MAX_CALLS_PER_BATCH + extra);
-    assert_eq!(stats.candidates_found, MAX_CALLS_PER_BATCH + extra);
-    assert_eq!(stats.chunks_failed, 0);
+    // Both chunks succeeded, so every address across the split is advanced. Check the boundary
+    // holders of each chunk (first/last of chunk 1, first/last of chunk 2).
+    for i in [
+        0,
+        MAX_CALLS_PER_BATCH - 1,
+        MAX_CALLS_PER_BATCH,
+        MAX_CALLS_PER_BATCH + extra - 1,
+    ] {
+        let entry = live_entry(now, &holders[i].0);
+        assert_eq!(entry.scan_count, 1, "holder {i} must be advanced");
+        assert_eq!(entry.last_scanned_block, Some(latest), "holder {i}");
+    }
 }
 
 #[tokio::test]
@@ -283,9 +334,6 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
             case.name
         );
         assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
-        let stats = last_stats();
-        assert_eq!(stats.addresses_scanned, 0, "case: {}", case.name);
-        assert_eq!(stats.chunks_failed, 1, "case: {}", case.name);
     }
 }
 
@@ -348,8 +396,4 @@ fn live_entry(now: Timestamp, account: &Account) -> DepositRequest {
     read_state(|s| s.automatic_deposits.get_entry(now, account).cloned())
         .expect("BUG: expected a live watchlist entry")
         .value
-}
-
-fn last_stats() -> BalanceScanStats {
-    read_state(|s| s.last_balance_scan.clone()).expect("BUG: expected balance scan stats")
 }

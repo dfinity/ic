@@ -25,9 +25,7 @@ use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
-use ic_http_types::{HttpRequest, HttpResponse};
 use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder};
-use serde_bytes::ByteBuf;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 
@@ -198,32 +196,34 @@ impl CkErc20LiveScanSetup {
         }
     }
 
-    /// The number of deposit candidates the minter's most recent balance scan found, read from its
-    /// metrics — `deposit_erc20` reports that an address was scanned but not whether its balance
-    /// cleared the candidate threshold. `0` if no scan has recorded statistics yet.
+    /// The greatest number of deposit candidates any balance scan reported, parsed from the
+    /// minter's `[balance_scan]` logs — the scan only logs the count, it is not otherwise exposed.
+    /// `deposit_erc20` reports that an address was scanned but not whether its balance cleared the
+    /// candidate threshold. `0` if no scan has logged a count yet.
     pub fn balance_scan_candidates(&self) -> u64 {
-        gauge(&self.metrics(), "cketh_minter_balance_scan_candidates").unwrap_or(0.0) as u64
+        // Canister logs are controller-only by default, so query them as the controller.
+        self.env
+            .fetch_canister_logs(self.minter_id, controller())
+            .expect("BUG: fetching the minter's canister logs failed")
+            .into_iter()
+            .filter_map(|record| candidates_in_log(&String::from_utf8_lossy(&record.content)))
+            .max()
+            .unwrap_or(0)
     }
+}
 
-    fn metrics(&self) -> String {
-        let request = HttpRequest {
-            method: "GET".to_string(),
-            url: "/metrics".to_string(),
-            headers: vec![],
-            body: ByteBuf::default(),
-        };
-        let reply = self
-            .env
-            .query_call(
-                self.minter_id,
-                Principal::anonymous(),
-                "http_request",
-                Encode!(&request).unwrap(),
-            )
-            .expect("BUG: the metrics query was rejected");
-        let response = Decode!(&reply, HttpResponse).unwrap();
-        String::from_utf8(response.body.into_vec()).expect("BUG: metrics are not valid UTF-8")
+/// Extracts `N` from a `[balance_scan]: ... found N candidate(s) ...` log line, or `None` for any
+/// other line.
+fn candidates_in_log(line: &str) -> Option<u64> {
+    if !line.contains("[balance_scan]") {
+        return None;
     }
+    line.split("found ")
+        .nth(1)?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
 }
 
 fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, anvil_url: &str) {
@@ -308,17 +308,4 @@ fn register_supported_tokens(env: &PocketIc, minter_id: Principal) {
         )
         .expect("BUG: add_ckerc20_token was rejected");
     }
-}
-
-/// Reads the value of a Prometheus gauge line `"<name> <value> [timestamp]"`, or `None` if the
-/// metric is absent (e.g. no balance scan has run yet).
-fn gauge(metrics: &str, name: &str) -> Option<f64> {
-    metrics.lines().find_map(|line| {
-        let rest = line.strip_prefix(name)?;
-        rest.strip_prefix(' ')?
-            .split_whitespace()
-            .next()?
-            .parse()
-            .ok()
-    })
 }

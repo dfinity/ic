@@ -2454,7 +2454,7 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     // + 64 (instructions) + 128 (request and response transmission)
     // + 256 (uninstall) + 512 (canister creation) + 1024 (burned cycles).
     assert_eq!(
-        subnet_metrics.consumed_cycles_total_v27(),
+        subnet_metrics.consumed_cycles_total_v28(),
         NominalCycles::new(131064)
     );
 }

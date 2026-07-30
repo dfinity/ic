@@ -16,7 +16,21 @@ pub struct SubnetRecord {
     /// propagation.
     #[prost(uint64, tag = "8")]
     pub initial_notary_delay_millis: u64,
-    /// ID of the Replica version to run
+    /// Replica version IDs are generally git commit IDs in the ic git repository,
+    /// pointing to the sources from which the Replica was built.
+    ///
+    /// Must refer to an "elected" Replica version. Concretely, this means that
+    /// there is a Registry record (of type ReplicaVersionRecord) with
+    /// replica_version\_${replica_version_id} as its key.
+    ///
+    /// Exception: For Cloud Engines, this is typically blank. When blank, the
+    /// Cloud Engine's replica version is determined by
+    /// StandardEngineReplicaVersionRecord (see
+    /// registry/standard_engine_replica_version/v1/standard_engine_replica_version.proto).
+    /// This means that Registry must have a StandardEngineReplicaVersionRecord in
+    /// order for Cloud Engines to have a blank replica_version_id. But since
+    /// StandardEngineReplicaVersionRecord generally exists, this is a minor
+    /// technicality.
     #[prost(string, tag = "9")]
     pub replica_version_id: ::prost::alloc::string::String,
     /// The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
