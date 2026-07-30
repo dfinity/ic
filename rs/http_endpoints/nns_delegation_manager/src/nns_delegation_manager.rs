@@ -46,9 +46,9 @@ use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
-use crate::{
-    CanisterRangesFilter, NNSDelegationReader, metrics::DelegationManagerMetrics,
-    nns_delegation_reader::NNSDelegationBuilder,
+use crate::metrics::DelegationManagerMetrics;
+use ic_nns_delegation_reader::{
+    DelegationValidationError, NNSDelegationBuilder, NNSDelegationReader,
 };
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
@@ -507,9 +507,26 @@ async fn try_fetch_delegation_from_nns(
         log,
     );
 
-    nns_delegation_builder.observe_delegation_sizes(metrics);
+    observe_delegation_sizes(&nns_delegation_builder, metrics);
 
     Ok(nns_delegation_builder)
+}
+
+/// Records the sizes of the delegation certificates which can be served for the
+/// given delegation.
+fn observe_delegation_sizes(builder: &NNSDelegationBuilder, metrics: &DelegationManagerMetrics) {
+    metrics
+        .delegation_size
+        .with_label_values(&["both_canister_ranges"])
+        .observe(builder.original_certificate_size_bytes() as f64);
+    metrics
+        .delegation_size
+        .with_label_values(&["no_canister_ranges"])
+        .observe(builder.pruned_certificate_size_bytes() as f64);
+    metrics
+        .delegation_size
+        .with_label_values(&["flat_canister_ranges"])
+        .observe(builder.flat_certificate_size_bytes() as f64);
 }
 
 async fn connect(
@@ -1185,7 +1202,7 @@ mod tests {
             CancellationToken::new(),
         );
 
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
 
         assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
     }
@@ -1219,7 +1236,7 @@ mod tests {
                 CancellationToken::new(),
             );
 
-            reader.receiver.changed().await.unwrap();
+            reader.wait_until_initialized().await.unwrap();
 
             let delegation = reader
                 .get_delegation(CanisterRangesFilter::Flat)
@@ -1261,13 +1278,13 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_PROACTIVE_UPDATE_INTERVAL`
         // has elapsed.
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL / 2,
-                reader.receiver.changed()
+                reader.wait_until_initialized()
             )
             .await
             .is_err()
@@ -1299,14 +1316,14 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_PROACTIVE_UPDATE_INTERVAL`
         // has passed. We use a timeout of 2x the interval to give enough margin for the
         // time it takes to fetch the delegation (TLS handshake, HTTP request, etc.).
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL * 2,
-                reader.receiver.changed()
+                reader.wait_until_initialized()
             )
             .await
             .is_ok()
@@ -1339,7 +1356,7 @@ mod tests {
         );
 
         // The initial *valid* delegation should be fetched immediately.
-        assert!(reader.receiver.changed().await.is_ok());
+        assert!(reader.wait_until_initialized().await.is_ok());
 
         // Mock an *invalid* certificate delegation.
         *override_nns_delegation.write().unwrap() = Some(CertificateDelegation {
@@ -1352,7 +1369,7 @@ mod tests {
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL,
-                reader.receiver.changed()
+                reader.wait_until_initialized()
             )
             .await
             .is_err()
@@ -1361,7 +1378,7 @@ mod tests {
         *override_nns_delegation.write().unwrap() = None;
         // The mocked NNS node should now return a valid certification, so we expect that
         // the manager will fetch and send it to all receivers.
-        assert!(reader.receiver.changed().await.is_ok());
+        assert!(reader.wait_until_initialized().await.is_ok());
     }
 
     #[tokio::test]
@@ -1715,12 +1732,12 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
 
         // The next refresh can only be produced by `proactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect_err(
@@ -1754,7 +1771,7 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
 
         // Change the public key in the state, which should trigger a reactive refresh.
         {
@@ -1774,7 +1791,7 @@ mod tests {
         // The next refresh should be produced by `reactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect("`reactive_fetch` should refresh the delegation when the public key changed")
@@ -1784,7 +1801,7 @@ mod tests {
         // to refresh the delegation until it matches the current state.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect("Should try to reactively refresh the delegation until the latter matches the current state")
@@ -1857,7 +1874,7 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
 
         // Change the canister ranges in the state, which should trigger a reactive refresh.
         {
@@ -1877,7 +1894,7 @@ mod tests {
         // The next refresh should be produced by `reactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect("`reactive_fetch` should refresh the delegation when the canister ranges changed")
@@ -1887,7 +1904,7 @@ mod tests {
         // to refresh the delegation until it matches the current state.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect("Should try to reactively refresh the delegation until the latter matches the current state")
