@@ -22,6 +22,7 @@ fn test() {
         migrated_canister,
         migrated_canister_subnet,
         vec![],
+        None,
         replaced_canister,
         replaced_canister_subnet,
         vec![],

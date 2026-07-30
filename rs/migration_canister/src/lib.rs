@@ -42,15 +42,17 @@ const RATE_LIMIT: u64 = 50;
 const MAX_ONGOING_VALIDATIONS: u64 = 200;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
-/// Every management canister call performed by the migration canister on the replaced canister
-/// records a canister history entry and thus increases the canister's memory usage. If the subnet
-/// of the replaced canister cannot accommodate that increase, then the call fails, e.g., the call
-/// to `rename_canister` in `RequestState::StoppedAndReady` would keep failing forever.
+/// Changing the controllers of a canister (and renaming it) records a canister history entry and
+/// thus increases the canister's memory usage. If the subnet of that canister cannot accommodate
+/// that increase, then the corresponding management canister call fails: the call to
+/// `rename_canister` in `RequestState::StoppedAndReady` and the call restoring the original
+/// controllers of a failed request would keep failing forever.
 ///
-/// To prevent this, the migration canister bumps the memory allocation of the replaced canister
-/// to its memory usage plus this amount when making itself the exclusive controller of the
-/// replaced canister (and restores the original memory allocation when restoring the original
-/// controllers).
+/// To prevent this, the migration canister bumps the memory allocation of the migrated and
+/// replaced canisters to their memory usage plus this amount when making itself their exclusive
+/// controller (and restores the original memory allocation when restoring the original
+/// controllers: the memory freed by lowering the memory allocation covers the canister history
+/// entry recorded by that very call).
 ///
 /// A canister history entry (of a canister with at most 10 controllers) takes way less than
 /// 1KiB and hence this amount is a safe bound on the memory usage increase caused by the few
@@ -103,16 +105,16 @@ struct CanisterMigrationArgs {
     pub replaced_canister: Principal,
 }
 
-/// The memory allocation of the replaced canister managed by the migration canister
-/// while it is the exclusive controller of the replaced canister.
+/// The memory allocation of a canister managed by the migration canister
+/// while it is the exclusive controller of that canister.
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReplacedCanisterMemoryAllocation {
-    /// The memory allocation of the replaced canister at validation time. It is restored
-    /// together with the original controllers of the replaced canister.
+pub struct ManagedMemoryAllocation {
+    /// The memory allocation of the canister at validation time. It is restored
+    /// together with the original controllers of the canister.
     /// Note that `0` means that the canister's memory growth is best-effort.
     pub original: u64,
-    /// The memory allocation to be set for the replaced canister while the migration canister
-    /// is its exclusive controller: the memory usage of the replaced canister at validation time
+    /// The memory allocation to be set for the canister while the migration canister
+    /// is its exclusive controller: the memory usage of the canister at validation time
     /// plus `MEMORY_RESERVED_FOR_CANISTER_HISTORY` (or `original` if that one is already higher,
     /// in which case setting it is a no-op).
     pub reserved: u64,
@@ -123,17 +125,23 @@ pub struct Request {
     migrated_canister: Principal,
     migrated_canister_subnet: Principal,
     migrated_canister_original_controllers: Vec<Principal>,
+    /// The memory allocation of the migrated canister at validation time and the one to be set
+    /// while the migration canister is the exclusive controller of the migrated canister.
+    ///
+    /// This is `None` if and only if the request was validated by a version of the migration
+    /// canister that did not manage the memory allocation of the migrated canister yet: in that
+    /// case, the memory allocation of the migrated canister must be left untouched.
+    #[serde(default)]
+    migrated_canister_memory_allocation: Option<ManagedMemoryAllocation>,
     replaced_canister: Principal,
     replaced_canister_subnet: Principal,
     replaced_canister_original_controllers: Vec<Principal>,
     /// The memory allocation of the replaced canister at validation time and the one to be set
     /// while the migration canister is the exclusive controller of the replaced canister.
     ///
-    /// This is `None` if and only if the request was validated by a version of the migration
-    /// canister that did not manage the memory allocation of the replaced canister yet: in that
-    /// case, the memory allocation of the replaced canister must be left untouched.
+    /// This is `None` under the same condition as `migrated_canister_memory_allocation`.
     #[serde(default)]
-    replaced_canister_memory_allocation: Option<ReplacedCanisterMemoryAllocation>,
+    replaced_canister_memory_allocation: Option<ManagedMemoryAllocation>,
     caller: Principal,
 }
 
@@ -143,16 +151,18 @@ impl Request {
         migrated_canister: Principal,
         migrated_canister_subnet: Principal,
         migrated_canister_original_controllers: Vec<Principal>,
+        migrated_canister_memory_allocation: Option<ManagedMemoryAllocation>,
         replaced_canister: Principal,
         replaced_canister_subnet: Principal,
         replaced_canister_original_controllers: Vec<Principal>,
-        replaced_canister_memory_allocation: Option<ReplacedCanisterMemoryAllocation>,
+        replaced_canister_memory_allocation: Option<ManagedMemoryAllocation>,
         caller: Principal,
     ) -> Self {
         Self {
             migrated_canister,
             migrated_canister_subnet,
             migrated_canister_original_controllers,
+            migrated_canister_memory_allocation,
             replaced_canister,
             replaced_canister_subnet,
             replaced_canister_original_controllers,
@@ -175,11 +185,12 @@ impl Display for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, replaced_canister_memory_allocation: {:?}, caller: {}, migrated_canister_original_controllers: [",
+            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, migrated_canister_memory_allocation: {:?}, replaced_canister_memory_allocation: {:?}, caller: {}, migrated_canister_original_controllers: [",
             self.migrated_canister,
             self.migrated_canister_subnet,
             self.replaced_canister,
             self.replaced_canister_subnet,
+            self.migrated_canister_memory_allocation,
             self.replaced_canister_memory_allocation,
             self.caller
         )?;
@@ -262,8 +273,9 @@ pub enum RequestState {
     Accepted { request: Request },
 
     /// Called mgmt `update_settings` to make us the only controller and, in the same call,
-    /// to bump the memory allocation of the replaced canister so that recording canister
-    /// history entries for it cannot fail (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
+    /// to bump the memory allocation of the migrated and replaced canisters so that recording
+    /// canister history entries for them cannot fail
+    /// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
     ///
     /// Certain checks are not informative before this state because the original controller
     /// could still interfere until this state.

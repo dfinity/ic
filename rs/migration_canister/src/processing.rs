@@ -80,17 +80,23 @@ pub async fn process_accepted(
         return ProcessingResult::NoProgress;
     };
 
-    // Set controller of migrated canister
-    let res = set_exclusive_controller(request.migrated_canister, None)
-        .await
-        .map_success(|_| RequestState::ControllersChanged {
-            request: request.clone(),
-        })
-        .map_failure(|reason| RequestState::Failed {
-            request: request.clone(),
-            recovery_state: RecoveryState::new(),
-            reason,
-        });
+    // Set controller and memory allocation of migrated canister:
+    // see the comment on the replaced canister below.
+    let res = set_exclusive_controller(
+        request.migrated_canister,
+        request
+            .migrated_canister_memory_allocation
+            .map(|memory_allocation| memory_allocation.reserved),
+    )
+    .await
+    .map_success(|_| RequestState::ControllersChanged {
+        request: request.clone(),
+    })
+    .map_failure(|reason| RequestState::Failed {
+        request: request.clone(),
+        recovery_state: RecoveryState::new(),
+        reason,
+    });
     if !res.is_success() {
         return res;
     }
@@ -429,8 +435,12 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         recovery_state.restore_migrated_canister_controllers,
         request.migrated_canister,
         request.migrated_canister_original_controllers.clone(),
-        // The memory allocation of the migrated canister is never changed.
-        None,
+        // The memory allocation of the migrated canister is bumped in the very same call that
+        // makes the migration canister the exclusive controller of the migrated canister and
+        // thus it must be restored whenever the controllers are restored.
+        request
+            .migrated_canister_memory_allocation
+            .map(|memory_allocation| memory_allocation.original),
     )
     .await;
     recovery_state.restore_replaced_canister_controllers = controller_recovery(

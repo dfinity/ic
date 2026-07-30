@@ -12,8 +12,8 @@ use candid::{Principal, Reserved};
 use ic_cdk::api::canister_self;
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, MEMORY_RESERVED_FOR_CANISTER_HISTORY,
-    ReplacedCanisterMemoryAllocation, Request, ValidationError,
+    CYCLES_COST_PER_MIGRATION, MEMORY_RESERVED_FOR_CANISTER_HISTORY, ManagedMemoryAllocation,
+    Request, ValidationError,
     canister_state::CanisterGuard,
     canister_state::requests::list_by,
     external_interfaces::{
@@ -165,25 +165,29 @@ pub async fn validate_request(
         ));
     }
 
+    // The memory allocation must cover the memory usage of the canister
+    // plus the canister history entries recorded by the migration canister.
+    let managed_memory_allocation = |canister_status: &CanisterStatusResponse| {
+        let original = canister_status.memory_allocation();
+        let reserved = std::cmp::max(
+            original,
+            canister_status
+                .memory_usage()
+                .saturating_add(MEMORY_RESERVED_FOR_CANISTER_HISTORY),
+        );
+        Some(ManagedMemoryAllocation { original, reserved })
+    };
+    let migrated_canister_memory_allocation = managed_memory_allocation(&migrated_canister_status);
+    let replaced_canister_memory_allocation = managed_memory_allocation(&replaced_canister_status);
     let mut migrated_canister_original_controllers = migrated_canister_status.settings.controllers;
     migrated_canister_original_controllers.retain(|e| *e != canister_self());
-    let original = replaced_canister_status.memory_allocation();
-    // The memory allocation must cover the memory usage of the replaced canister
-    // plus the canister history entries recorded by the migration canister.
-    let reserved = std::cmp::max(
-        original,
-        replaced_canister_status
-            .memory_usage()
-            .saturating_add(MEMORY_RESERVED_FOR_CANISTER_HISTORY),
-    );
-    let replaced_canister_memory_allocation =
-        Some(ReplacedCanisterMemoryAllocation { original, reserved });
     let mut replaced_canister_original_controllers = replaced_canister_status.settings.controllers;
     replaced_canister_original_controllers.retain(|e| *e != canister_self());
     let request = Request {
         migrated_canister,
         migrated_canister_subnet,
         migrated_canister_original_controllers,
+        migrated_canister_memory_allocation,
         replaced_canister,
         replaced_canister_subnet,
         replaced_canister_original_controllers,
