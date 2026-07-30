@@ -213,7 +213,7 @@ mod tests {
             ],
         );
 
-        pool.advance_round_normal_operation_no_cup_n(CUP_HEIGHT.get());
+        pool.advance_round_normal_operation_n(CUP_HEIGHT.get());
         Round::new(&mut pool)
             .with_certified_height(certified_height)
             .advance();
@@ -270,7 +270,7 @@ mod tests {
         expected_status: Some(Status::Halting),
     })]
     #[case::post_subnet_splitting_old_subnet_id(TestCase{
-        certified_height: CUP_HEIGHT.decrement(),
+        certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
@@ -279,7 +279,7 @@ mod tests {
         expected_status: Some(Status::Halted),
     })]
     #[case::post_subnet_splitting_new_subnet_id(TestCase{
-        certified_height: CUP_HEIGHT.decrement(),
+        certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
