@@ -3,7 +3,9 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::CallbackId;
 use ic_types::{CanisterId, Time, batch::CanisterHttpSpent, canister_http::RefundStatus};
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, HTTPOutcalls, NominalCycles,
+};
 use prometheus::IntCounterVec;
 use std::collections::BTreeMap;
 
@@ -64,6 +66,14 @@ struct CanisterAccounting {
     /// Nominal cycles the caller consumed, to report in its cost metrics. This
     /// is nonzero also on free subnets.
     consumed: NominalCycles,
+}
+
+impl CanisterAccounting {
+    /// Accumulates `amount` as consumed by the caller, according to the cost
+    /// schedule of the context the amount was reported for.
+    fn observe_consumed(&mut self, amount: Cycles, cost_schedule: CanisterCyclesCostSchedule) {
+        self.consumed += CompoundCycles::<HTTPOutcalls>::new(amount, cost_schedule).nominal();
+    }
 }
 
 /// Applies the HTTP outcall spend reports carried by `spent` to the calling
@@ -134,7 +144,7 @@ pub(crate) fn deliver_canister_http_spent(
                 .extend(report.nodes.iter());
             let entry = accounting.entry(context.request.sender).or_default();
             entry.refund += applied;
-            entry.consumed += NominalCycles::new(report.amount.get());
+            entry.observe_consumed(report.amount, context.cost_schedule);
         }
 
         // Asynchronous spending
@@ -143,6 +153,7 @@ pub(crate) fn deliver_canister_http_spent(
                 continue;
             };
             let allowance = context.refund_status.per_replica_allowance;
+            let cost_schedule = context.cost_schedule;
             let entry = accounting.entry(context.request.sender).or_default();
             for (node_id, node_spent) in &report.shares {
                 if context.refund_status.refunding_nodes.insert(*node_id) {
@@ -155,7 +166,7 @@ pub(crate) fn deliver_canister_http_spent(
                         log,
                         metrics,
                     );
-                    entry.consumed += NominalCycles::new(node_spent.get());
+                    entry.observe_consumed(*node_spent, cost_schedule);
                 } else {
                     metrics.observe_accounting_error(ERROR_DUPLICATE_NODE_REPORT);
                     error!(
@@ -282,7 +293,11 @@ fn apply_accounting(
                     accounting.refund,
                     accounting.consumed
                 );
-                lost_by_deleted_canisters += NominalCycles::new(accounting.refund.get());
+                lost_by_deleted_canisters += CompoundCycles::<HTTPOutcalls>::new(
+                    accounting.refund,
+                    CanisterCyclesCostSchedule::Normal,
+                )
+                .nominal();
             }
         }
     }
@@ -318,7 +333,6 @@ mod tests {
     };
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{NodeId, NumberOfNodes, RegistryVersion};
-    use ic_types_cycles::CanisterCyclesCostSchedule;
     use std::collections::BTreeSet;
     use std::time::Duration;
 
@@ -349,13 +363,34 @@ mod tests {
     /// Builds a state holding a single caller canister (`canister_test_id(1)`) on
     /// a [`SUBNET_SIZE`]-node subnet and, if `context` is `Some`, a delivered
     /// `CanisterHttpRequestContext` registered under [`CALLBACK`], with the given
-    /// replication, and the refund status of a request that paid the given refundable
-    /// cycles (see [`refund_status()`]).
+    /// replication, a [`CanisterCyclesCostSchedule::Normal`] cost schedule and the
+    /// refund status of a request that paid the given refundable cycles (see
+    /// [`refund_status()`]).
     fn setup(context: Option<(Replication, Cycles)>) -> (ReplicatedState, CanisterId) {
+        setup_with_cost_schedule(context, CanisterCyclesCostSchedule::Normal)
+    }
+
+    /// Same as [`setup()`], except that the context is that of a request made on
+    /// a free subnet.
+    fn setup_free_subnet(context: Option<(Replication, Cycles)>) -> (ReplicatedState, CanisterId) {
+        setup_with_cost_schedule(context, CanisterCyclesCostSchedule::Free)
+    }
+
+    fn setup_with_cost_schedule(
+        context: Option<(Replication, Cycles)>,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> (ReplicatedState, CanisterId) {
         let (mut state, caller) = setup_state();
         if let Some((replication, refundable)) = context {
             let refund_status = refund_status(refundable, &replication);
-            insert_context(&mut state, CALLBACK, caller, replication, refund_status);
+            insert_context(
+                &mut state,
+                CALLBACK,
+                caller,
+                replication,
+                refund_status,
+                cost_schedule,
+            );
         }
         (state, caller)
     }
@@ -367,7 +402,14 @@ mod tests {
         refund_status: RefundStatus,
     ) -> (ReplicatedState, CanisterId) {
         let (mut state, caller) = setup_state();
-        insert_context(&mut state, CALLBACK, caller, replication, refund_status);
+        insert_context(
+            &mut state,
+            CALLBACK,
+            caller,
+            replication,
+            refund_status,
+            CanisterCyclesCostSchedule::Normal,
+        );
         (state, caller)
     }
 
@@ -385,7 +427,11 @@ mod tests {
             .with_node_ids(all_nodes().into_iter().collect())
             .build();
 
-        let consumed_before = NominalCycles::new(SUBNET_CONSUMED_BEFORE);
+        let consumed_before = CompoundCycles::<HTTPOutcalls>::new(
+            Cycles::new(SUBNET_CONSUMED_BEFORE),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .nominal();
         let subnet_metrics = &mut state.metadata.subnet_metrics;
         subnet_metrics.observe_consumed_cycles_http_outcalls(consumed_before);
         subnet_metrics
@@ -402,6 +448,7 @@ mod tests {
         sender: CanisterId,
         replication: Replication,
         refund_status: RefundStatus,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) {
         let context = CanisterHttpRequestContext {
             request: RequestBuilder::default().sender(sender).build(),
@@ -417,7 +464,7 @@ mod tests {
             refund_status,
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(SUBNET_SIZE as u32),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
+            cost_schedule,
         };
         state
             .metadata
@@ -629,7 +676,8 @@ mod tests {
     #[test]
     fn free_subnet_initial_report_reports_consumed_without_refund() {
         let spent = Cycles::new(9_500);
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
 
         let report = CanisterHttpSpent {
@@ -658,7 +706,8 @@ mod tests {
     /// as consumed, while the (zero) per-replica allowance refunds nothing.
     #[test]
     fn free_subnet_asynchronous_report_reports_consumed_without_refund() {
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
 
         let report = CanisterHttpSpent {
@@ -686,7 +735,8 @@ mod tests {
     /// per-replica allowance of the replicas that never responded is zero.
     #[test]
     fn free_subnet_timeout_refunds_nothing() {
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
 
         let timeout = UNIX_EPOCH + Duration::from_secs(3 * 60); // > 2min timeout.
@@ -870,6 +920,7 @@ mod tests {
             caller,
             other_replication,
             other_refund_status,
+            CanisterCyclesCostSchedule::Normal,
         );
         let (metrics_registry, metrics) = metrics();
 
@@ -994,7 +1045,8 @@ mod tests {
     /// the spend is still reported as consumed.
     #[test]
     fn free_subnet_report_for_missing_canister_loses_nothing() {
-        let (mut state, caller) = setup(Some((Replication::FullyReplicated, Cycles::zero())));
+        let (mut state, caller) =
+            setup_free_subnet(Some((Replication::FullyReplicated, Cycles::zero())));
         let (metrics_registry, metrics) = metrics();
 
         state.remove_canister(&caller);

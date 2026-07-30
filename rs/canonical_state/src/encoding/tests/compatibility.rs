@@ -27,7 +27,7 @@ use ic_types::{
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndex},
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting};
 use serde_cbor::value::Value;
 use std::collections::{BTreeMap, VecDeque};
 

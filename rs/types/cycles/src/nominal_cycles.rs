@@ -23,7 +23,7 @@ use std::convert::{From, TryFrom};
 pub struct NominalCycles(u128);
 
 impl NominalCycles {
-    pub fn new(amount: u128) -> Self {
+    pub(crate) fn new_private(amount: u128) -> Self {
         Self(amount)
     }
 
@@ -123,8 +123,26 @@ impl TryFrom<pb::NominalCycles> for NominalCycles {
     }
 }
 
+pub mod testing {
+    use super::NominalCycles;
+
+    /// Publicly exposes a testing only constructor for `NominalCycles`
+    /// for use in tests.
+    pub trait NominalCyclesTesting {
+        #[allow(clippy::new_ret_no_self)]
+        fn new(amount: u128) -> NominalCycles;
+    }
+
+    impl NominalCyclesTesting for NominalCycles {
+        fn new(amount: u128) -> NominalCycles {
+            NominalCycles(amount)
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use super::testing::NominalCyclesTesting;
     use super::*;
 
     #[test]

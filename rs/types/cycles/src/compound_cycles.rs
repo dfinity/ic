@@ -28,7 +28,7 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// ```
 /// use ic_types_cycles::{
 ///     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
-///     CyclesUseCaseKind, Instructions, NominalCycles,
+///     CyclesUseCaseKind, Instructions, NominalCycles, NominalCyclesTesting,
 /// };
 /// use std::collections::BTreeMap;
 ///
@@ -84,7 +84,7 @@ pub struct CompoundCycles<T: CyclesUseCaseKind> {
 impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     pub fn new(amount: Cycles, cost_schedule: CanisterCyclesCostSchedule) -> Self {
         let use_case = T::cycles_use_case();
-        let nominal = NominalCycles::new(amount.get());
+        let nominal = NominalCycles::new_private(amount.get());
         let real = match (use_case, cost_schedule) {
             (_, CanisterCyclesCostSchedule::Normal)
             // BurnedCycles represents the amount requested explicitly to be
