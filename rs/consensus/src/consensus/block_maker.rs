@@ -191,7 +191,12 @@ impl BlockMaker {
         let certified_height = self.state_reader.latest_certified_height();
 
         let Some(last_summary_block) = pool.dkg_summary_block(parent.as_ref()) else {
-            warn!(self.log, "Couldn't find the summary block");
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "Couldn't find the DKG summary block for parent height {}",
+                parent.height()
+            );
             return None;
         };
 
