@@ -755,6 +755,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
         .expect_rpc_calls(&cketh);
@@ -784,6 +785,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
         .expect_rpc_calls(&cketh);
