@@ -34,9 +34,10 @@ struct UpdateSettingsArgs {
 /// (so that the memory of the canister history entry recorded for the controllers change
 /// is already covered by the new memory allocation).
 ///
-/// This is a success if the call is a success
-/// and a fatal failure otherwise.
-/// We never retry this due to potential data races.
+/// This is a success if the call is a success and a fatal failure if the call definitely
+/// had no effect. If the outcome of the call is unknown (its response might have been dropped),
+/// then this function returns no progress so that the call is retried: this way, the caller
+/// always knows whether the migration canister became the exclusive controller.
 pub async fn set_exclusive_controller(
     canister_id: Principal,
     memory_allocation: Option<u64>,
@@ -53,11 +54,27 @@ pub async fn set_exclusive_controller(
         .await
     {
         Ok(_) => ProcessingResult::Success(()),
-        Err(e) => {
+        Err(ref e) => {
             println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
-            ProcessingResult::FatalFailure(format!(
-                "Failed to set the migration canister as the exclusive controller of canister {canister_id}: {e}",
-            ))
+            let no_effect = match e {
+                // The call has not even been enqueued.
+                CallFailed::InsufficientLiquidCycleBalance(_)
+                | CallFailed::CallPerformFailed(_) => true,
+                // A call rejected with a recognized reject code other than `SysUnknown`
+                // has been rejected without taking effect. In particular, `SysUnknown`
+                // (and an unrecognized reject code) means that the outcome of the call
+                // is unknown, i.e., the call might have taken effect.
+                CallFailed::CallRejected(e) => {
+                    !matches!(e.reject_code(), Ok(RejectCode::SysUnknown) | Err(_))
+                }
+            };
+            if no_effect {
+                ProcessingResult::FatalFailure(format!(
+                    "Failed to set the migration canister as the exclusive controller of canister {canister_id}: {e}",
+                ))
+            } else {
+                ProcessingResult::NoProgress
+            }
         }
     }
 }

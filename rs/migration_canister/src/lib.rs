@@ -137,11 +137,16 @@ pub struct Request {
     /// of the migrated canister:
     /// - `Some(true)`: the corresponding call succeeded and thus the original controllers and
     ///   memory allocation of the migrated canister must be restored if the request fails;
-    /// - `Some(false)`: no such call has been made and thus there is nothing to restore;
-    /// - `None`: the outcome of the corresponding call is unknown (or the request was validated
-    ///   by a version of the migration canister that did not track this yet) and thus the
-    ///   canister history of the migrated canister must be inspected to determine whether
-    ///   there is anything to restore.
+    /// - `Some(false)`: no such call has been made or the call definitely had no effect
+    ///   and thus there is nothing to restore;
+    /// - `None`: the request was validated by a version of the migration canister that did not
+    ///   track this yet and thus the original controllers of the migrated canister must be
+    ///   restored if its canister history reveals that the migration canister is its exclusive
+    ///   controller.
+    ///
+    /// This is never `None` for requests validated by this version of the migration canister:
+    /// the call is retried as long as its outcome is unknown
+    /// (see `set_exclusive_controller`).
     #[serde(default)]
     migrated_canister_exclusive_controller: Option<bool>,
     replaced_canister: Principal,

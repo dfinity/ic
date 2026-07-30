@@ -91,10 +91,9 @@ pub async fn process_accepted(
     .await;
     // Track whether the migration canister became the exclusive controller of the migrated
     // canister so that its original controllers (and memory allocation) are only restored
-    // if the migration canister might have changed them: the outcome of a failed call
-    // is unknown and thus we must not rule out that the call took effect.
-    request.migrated_canister_exclusive_controller =
-        if res.is_success() { Some(true) } else { None };
+    // if the migration canister actually changed them. This is unambiguous because a call
+    // whose outcome is unknown results in no progress and is thus retried.
+    request.migrated_canister_exclusive_controller = Some(res.is_success());
     let res = res
         .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
@@ -124,8 +123,7 @@ pub async fn process_accepted(
     )
     .await;
     // See the comment on the migrated canister above.
-    request.replaced_canister_exclusive_controller =
-        if res.is_success() { Some(true) } else { None };
+    request.replaced_canister_exclusive_controller = Some(res.is_success());
     res.map_success(|_| RequestState::ControllersChanged {
         request: request.clone(),
     })

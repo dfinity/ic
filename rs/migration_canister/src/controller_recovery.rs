@@ -75,7 +75,11 @@ pub enum ControllerRecoveryState {
 ///
 /// Nothing is done at all if `exclusive_controller` is `Some(false)`, i.e., if the migration
 /// canister never made itself the exclusive controller of the given canister and thus it
-/// cannot have changed the canister's controllers or memory allocation.
+/// cannot have changed the canister's controllers or memory allocation. If
+/// `exclusive_controller` is `None` (which only happens for requests validated by a version
+/// of the migration canister that did not track this yet), then the recovery is performed
+/// unless the canister history reveals that the migration canister is not the exclusive
+/// controller of the given canister.
 pub async fn controller_recovery(
     state: ControllerRecoveryState,
     canister_id: Principal,
@@ -102,8 +106,9 @@ async fn controller_recovery_internal<IC: InternetComputer>(
     memory_allocation: Option<u64>,
     exclusive_controller: Option<bool>,
 ) -> ControllerRecoveryState {
-    // Controller recovery is only performed after a call making the migration canister
-    // the exclusive controller of the given canister succeeded or had an unknown outcome.
+    // Controller recovery is only performed if a call making the migration canister
+    // the exclusive controller of the given canister succeeded (or if it is unknown
+    // whether such a call has been made at all).
     if exclusive_controller == Some(false) {
         return ControllerRecoveryState::Done;
     }
@@ -272,7 +277,11 @@ mod test {
 
     #[tokio::test]
     async fn controller_recovery_happy_path() {
-        for seed in 0..1_000_000 {
+        // `None` is the legacy value for requests validated before the outcome of the call
+        // making the migration canister the exclusive controller was tracked.
+        for (seed, exclusive_controller) in
+            (0..1_000_000).zip([Some(true), None].into_iter().cycle())
+        {
             let mut state = ControllerRecoveryState::NoProgress;
             let canister_id = CANISTER_ID;
             let new_controllers = vec![Principal::anonymous()];
@@ -287,7 +296,7 @@ mod test {
                     canister_id,
                     new_controllers.clone(),
                     Some(RESTORED_MEMORY_ALLOCATION),
-                    Some(true),
+                    exclusive_controller,
                 )
                 .await;
             }
