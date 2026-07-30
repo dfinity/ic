@@ -24,7 +24,6 @@ use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::HttpMethod;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -39,7 +38,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{RejectionCode, RemoteHttpRequest, RemoteHttpResponse};
 use slog::Logger;
 use slog::info;
 use std::net::{IpAddr, SocketAddr};
