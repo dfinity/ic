@@ -8,7 +8,7 @@ use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::audit::process_event;
-use crate::state::automatic_deposits::AutomaticDeposits;
+use crate::state::automatic_deposits::{AutomaticDeposits, DepositAccount};
 use crate::state::event::{AutomaticDeposit, EventType};
 use crate::state::{TaskType, mutate_state, read_state};
 use crate::timed_sized_map::Timestamp;
@@ -114,7 +114,7 @@ async fn scan<R: Runtime>(
                             .or_default()
                             .push((candidate.token, candidate.balance));
                     }
-                    scanned.extend(batch.addresses.iter().map(|(account, _)| *account));
+                    scanned.extend(batch.addresses.iter().map(|da| da.account));
                 }
                 Err(e) => {
                     decode_errors += 1;
@@ -160,10 +160,10 @@ async fn scan<R: Runtime>(
     );
 }
 
-/// One balance-scan batch: the deposit addresses whose balances are read together in a single
+/// One balance-scan batch: the [`DepositAccount`]s whose balances are read together in a single
 /// `eth_call`, and the flat `(token, holder)` calls for exactly those addresses.
 struct ScanBatch<'a> {
-    addresses: &'a [(Account, Address)],
+    addresses: &'a [DepositAccount],
     calls: Vec<BalanceOfCall>,
 }
 
@@ -174,11 +174,11 @@ struct ScanBatch<'a> {
 /// `MAX_CALLS_PER_BATCH`), so a batch holds many addresses; if the set ever grew past the cap, a
 /// single address' calls would still be sent together (the batcher response is only 32 bytes per
 /// call, so an oversized batch stays cheap).
-fn plan_batches<'a>(addresses: &'a [(Account, Address)], tokens: &[Address]) -> Vec<ScanBatch<'a>> {
+fn plan_batches<'a>(addresses: &'a [DepositAccount], tokens: &[Address]) -> Vec<ScanBatch<'a>> {
     addresses
         .chunks(addresses_per_chunk(tokens.len()))
         .map(|chunk| {
-            let holders: Vec<Address> = chunk.iter().map(|(_account, holder)| *holder).collect();
+            let holders: Vec<Address> = chunk.iter().map(|da| da.address).collect();
             ScanBatch {
                 addresses: chunk,
                 calls: balance_of_calls(&holders, tokens),
@@ -230,7 +230,7 @@ fn collect_candidates(
         .enumerate()
         .filter(|(_, (call, balance))| **balance >= min_deposit(&call.token))
         .map(|(i, (call, balance))| Candidate {
-            account: batch.addresses[i / tokens.len()].0,
+            account: batch.addresses[i / tokens.len()].account,
             token: call.token,
             balance: *balance,
         })

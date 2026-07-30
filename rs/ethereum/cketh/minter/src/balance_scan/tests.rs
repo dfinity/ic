@@ -18,16 +18,20 @@ fn account(owner: u64) -> Account {
     }
 }
 
+fn deposit_account(account: Account, address: Address) -> DepositAccount {
+    DepositAccount { account, address }
+}
+
 #[test]
 fn should_collect_candidates_at_and_above_the_per_token_minimum() {
     let (usdc, usdc_min) = MIN_DEPOSITS[0]; // min 10_000_000
     let (link, link_min) = MIN_DEPOSITS[1]; // min 1e18
     let tokens = vec![usdc, link];
     let addresses = vec![
-        (account(1), Address::new([0xa1; 20])),
-        (account(2), Address::new([0xa2; 20])),
+        deposit_account(account(1), Address::new([0xa1; 20])),
+        deposit_account(account(2), Address::new([0xa2; 20])),
     ];
-    let holders: Vec<Address> = addresses.iter().map(|(_, holder)| *holder).collect();
+    let holders: Vec<Address> = addresses.iter().map(|da| da.address).collect();
     let batch = ScanBatch {
         addresses: &addresses,
         calls: balance_of_calls(&holders, &tokens),
@@ -92,7 +96,7 @@ fn should_collect_candidates_at_and_above_the_per_token_minimum() {
 #[test]
 fn should_not_collect_candidates_for_an_unsupported_token() {
     // TOKEN_A is absent from MIN_DEPOSITS, so even a huge balance is never a candidate.
-    let addresses = vec![(account(1), DEPOSIT_ADDRESS)];
+    let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
     let tokens = vec![TOKEN_A];
     let batch = ScanBatch {
         addresses: &addresses,
@@ -196,8 +200,8 @@ fn should_never_split_an_address_across_batches() {
         Address::new(bytes)
     }
 
-    let addresses: Vec<(Account, Address)> = (0..5)
-        .map(|i| (account(i), address_at(1_000 + i)))
+    let addresses: Vec<DepositAccount> = (0..5)
+        .map(|i| deposit_account(account(i), address_at(1_000 + i)))
         .collect();
 
     for num_tokens in [1, 2, 7, MAX_CALLS_PER_BATCH, MAX_CALLS_PER_BATCH + 1] {
@@ -207,7 +211,7 @@ fn should_never_split_an_address_across_batches() {
 
         let mut seen: BTreeSet<Address> = BTreeSet::new();
         for batch in &batches {
-            let batch_holders: Vec<Address> = batch.addresses.iter().map(|(_, h)| *h).collect();
+            let batch_holders: Vec<Address> = batch.addresses.iter().map(|da| da.address).collect();
             for holder in &batch_holders {
                 // Batches never intersect: an address belongs to exactly one batch.
                 assert!(

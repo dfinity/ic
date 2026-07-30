@@ -122,14 +122,14 @@ impl AutomaticDeposits {
         self.watchlist = TimedSizedMap::from_ordered_entries(ttl, capacity, entries);
     }
 
-    /// Iterate the live deposit addresses that are due for a balance scan as of the
+    /// Iterate the live [`DepositAccount`]s that are due for a balance scan as of the
     /// given latest block height, using elapsed blocks as a proxy for elapsed time
     /// against the backoff schedule. `now` filters expired entries.
     pub fn addresses_to_scan_iter(
         &self,
         now: Timestamp,
         latest_block: BlockNumber,
-    ) -> impl Iterator<Item = (Account, Address)> + '_ {
+    ) -> impl Iterator<Item = DepositAccount> + '_ {
         self.watchlist.iter().filter_map(move |(account, entry)| {
             if entry.expires_at < now {
                 return None;
@@ -150,7 +150,10 @@ impl AutomaticDeposits {
                     }
                 }
             };
-            due.then_some((*account, request.address))
+            due.then_some(DepositAccount {
+                account: *account,
+                address: request.address,
+            })
         })
     }
 
@@ -285,16 +288,16 @@ impl Default for AutomaticDeposits {
     }
 }
 
-/// A funded deposit account in the sweep queue: the user `account` together with
-/// the deposit `address` derived for it. The address is a pure function of the
-/// account, so the account alone is the identity; ordering and equality ignore
-/// the `address`, which is carried here once instead of being repeated on every
-/// [`SweepEntry`]. The [`Borrow<Account>`] impl lets the queue be looked up by
-/// account.
+/// A user `account` paired with the deposit `address` derived for it: the unit
+/// scanned for balances ([`AutomaticDeposits::addresses_to_scan_iter`]) and, once
+/// funded, keyed in the sweep queue. The address is a pure function of the account,
+/// so the account alone is the identity: ordering and equality ignore the `address`
+/// (carried so it need not be repeated on every [`SweepEntry`]), and the
+/// [`Borrow<Account>`] impl lets collections keyed by it be looked up by account.
 #[derive(Clone, Debug)]
-struct DepositAccount {
-    account: Account,
-    address: Address,
+pub struct DepositAccount {
+    pub account: Account,
+    pub address: Address,
 }
 
 impl PartialEq for DepositAccount {

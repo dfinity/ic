@@ -173,6 +173,7 @@ mod addresses_to_scan_iter {
 
         let due: Vec<_> = deposits
             .addresses_to_scan_iter(ts(0), BlockNumber::new(1_000))
+            .map(|da| (da.account, da.address))
             .collect();
 
         assert_eq!(due, vec![(account(0), deposit_address(&account(0)))]);
@@ -212,6 +213,7 @@ mod addresses_to_scan_iter {
             assert_eq!(
                 deposits
                     .addresses_to_scan_iter(ts(0), at_boundary)
+                    .map(|da| (da.account, da.address))
                     .collect::<Vec<_>>(),
                 vec![(account(0), deposit_address(&account(0)))],
                 "scan_count {}: due exactly when the gap elapses",
