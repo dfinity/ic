@@ -1,12 +1,12 @@
 use super::{
-    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, DetectedSweep,
-    MAX_ACTIVE_DEPOSIT_ADDRESSES, SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry,
+    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSIT_ADDRESSES,
+    SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry,
 };
-use crate::endpoints::DepositErc20Error;
+use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::timed_sized_map::{Entry, Timestamp};
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_ethereum_types::Address;
 use ic_sha3::Keccak256;
 use icrc_ledger_types::icrc1::account::Account;
@@ -422,15 +422,17 @@ fn record_automatic_deposit_received_removes_the_watchlist_entry_and_queues_each
     assert_eq!(deposits.get_entry(ts(0), &account(0)), None);
     assert_eq!(deposits.watchlist_len(), 0);
 
-    // One sweep entry per token, each carrying the deposit address, the finding block, the
-    // scan_count, and its own scanned balance.
+    // One sweep entry per token, each carrying the finding block, the scan_count, and its own
+    // scanned balance; the shared deposit address is carried once on the key.
     assert_eq!(deposits.sweep_len(), 2);
+    let (deposit_account, entries) = deposits.sweep.get_key_value(&account(0)).unwrap();
+    assert_eq!(deposit_account.address, deposit_address(&account(0)));
     assert_eq!(
-        deposits.sweep.get(&account(0)),
-        Some(&vec![
+        entries,
+        &vec![
             sweep_entry(token(0xaa), BlockNumber::new(900), 3, 10),
             sweep_entry(token(0xbb), BlockNumber::new(900), 3, 20),
-        ])
+        ]
     );
 }
 
@@ -462,11 +464,27 @@ fn record_automatic_deposit_received_inserts_unconditionally_without_a_watchlist
 }
 
 #[test]
-fn sweep_entries_for_account_returns_one_entry_per_funded_token() {
+fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
     let mut deposits = AutomaticDeposits::default();
 
-    // Unknown account -> no entries.
-    assert!(deposits.sweep_entries_for_account(&account(0)).is_empty());
+    // Unknown account: neither armed nor funded.
+    assert_eq!(deposits.deposit_status(ts(0), &account(0)), None);
+
+    // Armed but not yet funded: Scanning until the window closes.
+    deposits
+        .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
+        .unwrap();
+    assert_eq!(
+        deposits.deposit_status(ts(0), &account(0)),
+        Some(DepositErc20Response {
+            address: deposit_address(&account(0)).to_string(),
+            status: DepositStatus::Scanning {
+                valid_until: window_nanos(),
+                last_scanned_block: None,
+                scan_count: 0,
+            },
+        })
+    );
 
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
@@ -482,7 +500,7 @@ fn sweep_entries_for_account_returns_one_entry_per_funded_token() {
         3,
         20,
     ));
-    // A different account's move must not leak into account(0)'s entries.
+    // A different account's move must not leak into account(0)'s status.
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(1),
         token(0xaa),
@@ -491,26 +509,27 @@ fn sweep_entries_for_account_returns_one_entry_per_funded_token() {
         30,
     ));
 
-    // One projection per funded token, carrying the token, the shared deposit address, the detected
-    // balance, and the finding block.
+    // Once funds are detected, AwaitingSweep takes precedence over Scanning: one entry per funded
+    // token, all sharing the deposit address, each carrying its balance and finding block.
     assert_eq!(
-        deposits.sweep_entries_for_account(&account(0)),
-        vec![
-            DetectedSweep {
-                token: token(0xaa),
-                address: deposit_address(&account(0)),
-                scanned_balance: Erc20Value::new(10),
-                last_scanned_block: BlockNumber::new(900),
-            },
-            DetectedSweep {
-                token: token(0xbb),
-                address: deposit_address(&account(0)),
-                scanned_balance: Erc20Value::new(20),
-                last_scanned_block: BlockNumber::new(900),
-            },
-        ]
+        deposits.deposit_status(ts(0), &account(0)),
+        Some(DepositErc20Response {
+            address: deposit_address(&account(0)).to_string(),
+            status: DepositStatus::AwaitingSweep(vec![
+                DetectedDeposit {
+                    token: token(0xaa).to_string(),
+                    amount: Nat::from(10_u8),
+                    detected_at_block: Nat::from(900_u16),
+                },
+                DetectedDeposit {
+                    token: token(0xbb).to_string(),
+                    amount: Nat::from(20_u8),
+                    detected_at_block: Nat::from(900_u16),
+                },
+            ]),
+        })
     );
-    assert!(deposits.sweep_entries_for_account(&account(2)).is_empty());
+    assert_eq!(deposits.deposit_status(ts(0), &account(2)), None);
 }
 
 fn ts(nanos: u64) -> Timestamp {
@@ -547,7 +566,6 @@ fn sweep_entry(
 ) -> SweepEntry {
     SweepEntry {
         erc20_token,
-        address: deposit_address(&account(0)),
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),

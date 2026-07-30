@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests;
 
-use crate::endpoints::DepositErc20Error;
+use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -48,8 +50,9 @@ const MAX_ACTIVE_DEPOSIT_ADDRESSES: NonZeroUsize = NonZeroUsize::new(7_000).unwr
 pub struct AutomaticDeposits {
     watchlist: TimedSizedMap<Account, DepositRequest>,
     /// Funded deposit addresses moved out of the watchlist, awaiting sweeping,
-    /// keyed per account; each account holds one entry per funded ERC-20 token.
-    sweep: BTreeMap<Account, Vec<SweepEntry>>,
+    /// keyed by the funded [`DepositAccount`]; each holds one [`SweepEntry`] per
+    /// funded ERC-20 token.
+    sweep: BTreeMap<DepositAccount, Vec<SweepEntry>>,
 }
 
 impl AutomaticDeposits {
@@ -180,12 +183,17 @@ impl AutomaticDeposits {
         self.watchlist.remove(&account);
         let entry = SweepEntry {
             erc20_token: deposit.token,
-            address: deposit.address,
             last_scanned_block: deposit.last_scanned_block,
             scan_count: deposit.scan_count,
             scanned_balance: deposit.scanned_balance,
         };
-        let entries = self.sweep.entry(account).or_default();
+        let entries = self
+            .sweep
+            .entry(DepositAccount {
+                account,
+                address: deposit.address,
+            })
+            .or_default();
         match entries
             .iter_mut()
             .find(|e| e.erc20_token == entry.erc20_token)
@@ -228,21 +236,42 @@ impl AutomaticDeposits {
         self.sweep.values().map(Vec::len).sum()
     }
 
-    /// The sweep-queue entries for `account` (one per funded token), if any. Backs
-    /// both the `deposit_erc20` response and the re-registration guard. Returns a
-    /// public projection so [`SweepEntry`] stays private to this module.
-    pub fn sweep_entries_for_account(&self, account: &Account) -> Vec<DetectedSweep> {
-        self.sweep
-            .get(account)
-            .into_iter()
-            .flatten()
-            .map(|entry| DetectedSweep {
-                token: entry.erc20_token,
-                address: entry.address,
-                scanned_balance: entry.scanned_balance,
-                last_scanned_block: entry.last_scanned_block,
+    /// Where `account`'s deposit currently stands, or `None` if the account is neither armed nor
+    /// has funds queued for sweeping (so it must be registered). Reports
+    /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued (one entry per
+    /// funded token, all sharing the deposit address), otherwise [`DepositStatus::Scanning`] while
+    /// the address is armed and being scanned as of `now`.
+    pub fn deposit_status(
+        &self,
+        now: Timestamp,
+        account: &Account,
+    ) -> Option<DepositErc20Response> {
+        if let Some((deposit_account, entries)) = self.sweep.get_key_value(account) {
+            if !entries.is_empty() {
+                return Some(DepositErc20Response {
+                    address: deposit_account.address.to_string(),
+                    status: DepositStatus::AwaitingSweep(
+                        entries
+                            .iter()
+                            .map(|entry| DetectedDeposit {
+                                token: entry.erc20_token.to_string(),
+                                amount: entry.scanned_balance.into(),
+                                detected_at_block: entry.last_scanned_block.into(),
+                            })
+                            .collect(),
+                    ),
+                });
+            }
+        }
+        self.get_entry(now, account)
+            .map(|entry| DepositErc20Response {
+                address: entry.value.address.to_string(),
+                status: DepositStatus::Scanning {
+                    valid_until: entry.expires_at.as_nanos(),
+                    last_scanned_block: entry.value.last_scanned_block.map(Into::into),
+                    scan_count: entry.value.scan_count as u64,
+                },
             })
-            .collect()
     }
 }
 
@@ -258,33 +287,22 @@ impl Default for AutomaticDeposits {
     }
 }
 
-/// A funded token awaiting sweeping for a deposit address, as surfaced by
-/// [`AutomaticDeposits::sweep_entries_for_account`]. Flattens the private
-/// [`SweepEntry`] into the values callers need.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub struct DetectedSweep {
-    /// The ERC-20 token contract whose balance was found.
-    pub token: Address,
-    /// The deposit address (holder) the funds sit at.
-    pub address: Address,
-    /// The balance read for `token` at `last_scanned_block`.
-    pub scanned_balance: Erc20Value,
-    /// The block whose scan found the funds.
-    pub last_scanned_block: BlockNumber,
+/// A funded deposit account in the sweep queue: the user `account` together with
+/// the deposit `address` derived for it.
+#[derive(Clone, Debug)]
+struct DepositAccount {
+    account: Account,
+    address: Address,
 }
 
-/// A funded deposit address moved out of the watchlist and awaiting sweeping, for
-/// one supported ERC-20 token.
+/// A funded token awaiting sweeping at a [`DepositAccount`]'s deposit address.
 #[derive(Clone, PartialEq, Debug)]
 struct SweepEntry {
-    /// The ERC-20 token contract whose balance was found. Named so it is not
-    /// conflated with the user-derived deposit `address`.
+    /// The ERC-20 token contract whose balance was found.
     erc20_token: Address,
-    /// The deposit address (holder) the funds sit at.
-    address: Address,
     /// The block whose scan found the funds.
     last_scanned_block: BlockNumber,
-    /// How many times this address was scanned, including the finding scan.
+    /// How many times the address was scanned, including the finding scan.
     scan_count: u32,
     /// The balance read for this token at `last_scanned_block`.
     scanned_balance: Erc20Value,
