@@ -256,7 +256,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 })),
+        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_1, source_subnet_id: SUBNET_0 })),
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Halted),
     })]
@@ -265,7 +265,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 })),
+        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_1, source_subnet_id: SUBNET_0 })),
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Halting),
     })]
@@ -274,8 +274,8 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_0 })),
-        subnet_id: SUBNET_1,
+        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_1 })),
+        subnet_id: SUBNET_0,
         expected_status: Some(Status::Halted),
     })]
     #[case::post_subnet_splitting_new_subnet_id(TestCase{
@@ -283,8 +283,8 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_0 })),
-        subnet_id: SUBNET_0,
+        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_1 })),
+        subnet_id: SUBNET_1,
         expected_status: Some(Status::Running),
     })]
     #[case::halt_at_cup_height(TestCase{
