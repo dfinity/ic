@@ -30,10 +30,10 @@ pub(crate) enum Status {
 /// Returns
 /// * [Status::Halting] when there is a pending upgrade or the registry instructs the subnet to halt
 /// * [Status::Halted] when the subnet is splitting or when the validation context's certified
-/// height reached the CUP height and either an upgrade is in progress or the registry instructs
-/// the subnet to halt;
+///   height reached the CUP height and either an upgrade is in progress or the registry instructs
+///   the subnet to halt;
 /// * [Status::Running] when there is no upgrade, no split, and the registry doesn't instruct the
-/// subnet to halt.
+///   subnet to halt.
 pub(crate) fn get_status(
     height: Height,
     last_summary_block: &Block,
