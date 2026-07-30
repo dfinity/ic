@@ -89,62 +89,64 @@ pub async fn process_accepted(
     // we bump the memory allocation of the migrated canister in the very same call that
     // makes the migration canister the exclusive controller of the migrated canister.
     // The original memory allocation is restored together with the original controllers.
-    let res = set_exclusive_controller(
+    //
+    // Whether the migration canister became the exclusive controller of the migrated canister
+    // is tracked so that the original controllers (and memory allocation) of that canister are
+    // only restored if the migration canister actually changed them.
+    match set_exclusive_controller(
         request.migrated_canister,
         request
             .migrated_canister_memory_allocation
             .map(|memory_allocation| memory_allocation.reserved),
     )
-    .await;
-    // Track whether the migration canister became the exclusive controller of the migrated
-    // canister so that its original controllers (and memory allocation) are only restored
-    // if the migration canister actually changed them. This is unambiguous because a call
-    // whose outcome is unknown results in no progress and is thus retried.
-    //
-    // Note that `Some(false)` is assigned if the call resulted in no progress, too, i.e., if the
-    // outcome of the call is in fact unknown. This is sound because such an assignment is
-    // discarded: the mutated request is only persisted as part of the `RequestState` returned in
-    // `ProcessingResult::Success` and `ProcessingResult::FatalFailure`, while the request keeps
-    // its previous state (and thus its previous field values) for `ProcessingResult::NoProgress`
-    // (see `ProcessingResult::transition`). The same holds for the assignment for the replaced
-    // canister below: if that call results in no progress, then the `Some(true)` assigned here
-    // is discarded as well. Because a request only ever leaves `RequestState::Accepted` in this
-    // function, the calls making the migration canister the exclusive controller are simply made
-    // again (they are idempotent) and their outcome is tracked afresh.
-    request.migrated_canister_exclusive_controller = Some(res.is_success());
-    let res = res
-        .map_success(|_| RequestState::ControllersChanged {
-            request: request.clone(),
-        })
-        .map_failure(|reason| RequestState::Failed {
-            request: request.clone(),
-            recovery_state: RecoveryState::new(),
-            reason,
-        });
-    if !res.is_success() {
-        return res;
+    .await
+    {
+        ProcessingResult::Success(()) => {
+            request.migrated_canister_exclusive_controller = Some(true);
+        }
+        // The outcome of the call is unknown: nothing is tracked (the request keeps its previous
+        // state) and the call is retried (making the migration canister the exclusive controller
+        // of a canister is idempotent).
+        ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
+        // The call definitely had no effect and thus there is nothing to restore.
+        ProcessingResult::FatalFailure(reason) => {
+            request.migrated_canister_exclusive_controller = Some(false);
+            return ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                recovery_state: RecoveryState::new(),
+                reason,
+            });
+        }
     }
 
     // Set controller and memory allocation of replaced canister:
     // see the comment on the migrated canister above (the calls that the migration canister
     // performs on the replaced canister include renaming it).
-    let res = set_exclusive_controller(
+    match set_exclusive_controller(
         request.replaced_canister,
         request
             .replaced_canister_memory_allocation
             .map(|memory_allocation| memory_allocation.reserved),
     )
-    .await;
-    // See the comment on the migrated canister above.
-    request.replaced_canister_exclusive_controller = Some(res.is_success());
-    res.map_success(|_| RequestState::ControllersChanged {
-        request: request.clone(),
-    })
-    .map_failure(|reason| RequestState::Failed {
-        request,
-        recovery_state: RecoveryState::new(),
-        reason,
-    })
+    .await
+    {
+        ProcessingResult::Success(()) => {
+            request.replaced_canister_exclusive_controller = Some(true);
+            ProcessingResult::Success(RequestState::ControllersChanged { request })
+        }
+        // See the comment on the migrated canister above: retrying this call also makes the
+        // (idempotent) call for the migrated canister again and thus it is irrelevant that
+        // the tracking for the migrated canister is dropped along with the request state.
+        ProcessingResult::NoProgress => ProcessingResult::NoProgress,
+        ProcessingResult::FatalFailure(reason) => {
+            request.replaced_canister_exclusive_controller = Some(false);
+            ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                recovery_state: RecoveryState::new(),
+                reason,
+            })
+        }
+    }
 }
 
 /// Checks that the memory usage of the given canister excluding its canister history
