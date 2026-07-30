@@ -1101,7 +1101,9 @@ impl
 
         // Divergences deliver no response body, so their consensus cost is zero:
         // the initial spend is just the per-replica cost each diverging signer
-        // incurred, summed on the fly from the shares.
+        // incurred, summed on the fly from the shares. Since every share is
+        // individually bounded by its signer's allowance and signers are
+        // distinct, the sum always stays within their collective allowance.
         for divergence_response in messages.divergence_responses {
             let nodes: BTreeSet<NodeId> = divergence_response
                 .shares

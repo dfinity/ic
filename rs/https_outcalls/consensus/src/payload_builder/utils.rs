@@ -112,8 +112,9 @@ fn per_replica_consensus_allowance(context: &CanisterHttpRequestContext) -> Opti
 }
 
 /// Enforces that `initial_spent`, the collective spend of the `num_replicas`
-/// replicas contributing to a response, stays within their collective allowance
-/// (see [`max_collective_spend`]).
+/// replicas contributing to a response, stays within their collective allowance,
+/// i.e. the sum of their [per-replica
+/// allowances](per_replica_consensus_allowance).
 ///
 /// Unlike the per-replica spends, which are bounded individually by
 /// [`check_spent_within_limit`], the collective spend also contains the consensus
