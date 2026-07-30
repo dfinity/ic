@@ -171,10 +171,11 @@ impl AutomaticDeposits {
     }
 
     /// Record an [`AutomaticDeposit`]: drop the account's deposit address from the watchlist (if
-    /// still present) and queue each funded token for the account in the sweep queue. Unconditional
-    /// and idempotent per `(account, token)`, so replaying the event log reconstructs the queue.
-    /// Removing the watchlist entry is a no-op on replay (the watchlist is only rebuilt by the final
-    /// snapshot event), which is intended.
+    /// still present) and queue each funded token for the account in the sweep queue. A funded
+    /// address leaves the watchlist and is never re-scanned, so every `(account, token)` is queued
+    /// at most once; a second entry for the same token means the same funds were recorded twice and
+    /// traps. Removing the watchlist entry is a no-op on replay (the watchlist is only rebuilt by
+    /// the final snapshot event), which is intended.
     pub fn record_automatic_deposit_received(&mut self, deposit: &AutomaticDeposit) {
         let account = Account {
             owner: deposit.owner,
@@ -186,19 +187,17 @@ impl AutomaticDeposits {
             .entry(DepositAccount::new(account, deposit.address))
             .or_default();
         for detected in &deposit.deposits {
-            let entry = SweepEntry {
+            assert!(
+                !entries.iter().any(|e| e.erc20_token == detected.token),
+                "BUG: sweep queue already has an entry for account {account:?} token {}",
+                detected.token
+            );
+            entries.push(SweepEntry {
                 erc20_token: detected.token,
                 last_scanned_block: deposit.last_scanned_block,
                 scan_count: deposit.scan_count,
                 scanned_balance: detected.scanned_balance,
-            };
-            match entries
-                .iter_mut()
-                .find(|e| e.erc20_token == entry.erc20_token)
-            {
-                Some(existing) => *existing = entry,
-                None => entries.push(entry),
-            }
+            });
         }
     }
 
