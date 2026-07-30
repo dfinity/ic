@@ -30,9 +30,7 @@ struct UpdateSettingsArgs {
 }
 
 /// Makes the migration canister the only controller of the given canister and,
-/// if `memory_allocation` is not `None`, sets its memory allocation in the same call
-/// (so that the memory of the canister history entry recorded for the controllers change
-/// is already covered by the new memory allocation).
+/// if `memory_allocation` is not `None`, sets its memory allocation in the same call.
 ///
 /// This is a success if the call is a success and a fatal failure if the call definitely
 /// had no effect. If the outcome of the call is unknown (its response might have been dropped),
