@@ -181,7 +181,7 @@ pub enum EventType {
     /// the moment the funds are detected, so the sweep queue is durable even across
     /// an ungraceful trap (unlike the pre-upgrade snapshot).
     #[n(26)]
-    MovedToSweepQueue(#[n(0)] SweepMove),
+    AutomaticDepositReceived(#[n(0)] AutomaticDeposit),
 }
 
 /// Full snapshot of the ckERC20 deposit address registry. Carries the limits in
@@ -201,10 +201,10 @@ pub struct DepositAddressRegistry {
     pub registrations: Vec<DepositAddressRegistration>,
 }
 
-/// Payload of [`EventType::MovedToSweepQueue`]: a funded deposit address moved
+/// Payload of [`EventType::AutomaticDepositReceived`]: a funded deposit address moved
 /// into the balance-sweep queue for one `(account, token)`.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
-pub struct SweepMove {
+pub struct AutomaticDeposit {
     #[cbor(n(0), with = "icrc_cbor::principal")]
     pub owner: Principal,
     #[cbor(n(1), with = "minicbor::bytes")]

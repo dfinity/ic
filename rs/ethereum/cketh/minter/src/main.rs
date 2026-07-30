@@ -767,14 +767,14 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         })
                         .collect(),
                 },
-                EventType::MovedToSweepQueue(mv) => EP::MovedToSweepQueue {
-                    owner: mv.owner,
-                    subaccount: mv.subaccount,
-                    token: mv.token.to_string(),
-                    address: mv.address.to_string(),
-                    last_scanned_block: mv.last_scanned_block.into(),
-                    scan_count: mv.scan_count.into(),
-                    scanned_balance: mv.scanned_balance.into(),
+                EventType::AutomaticDepositReceived(deposit) => EP::AutomaticDepositReceived {
+                    owner: deposit.owner,
+                    subaccount: deposit.subaccount,
+                    token: deposit.token.to_string(),
+                    address: deposit.address.to_string(),
+                    last_scanned_block: deposit.last_scanned_block.into(),
+                    scan_count: deposit.scan_count.into(),
+                    scanned_balance: deposit.scanned_balance.into(),
                 },
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),

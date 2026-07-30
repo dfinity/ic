@@ -4,7 +4,7 @@ use super::{
 };
 use crate::endpoints::DepositErc20Error;
 use crate::numeric::{BlockNumber, Erc20Value};
-use crate::state::event::{DepositAddressRegistration, DepositAddressRegistry, SweepMove};
+use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::timed_sized_map::{Entry, Timestamp};
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -295,10 +295,10 @@ fn should_reproduce_equal_watchlist_across_snapshot_round_trip() {
 
 #[test]
 fn snapshot_does_not_carry_the_sweep_queue() {
-    // The sweep queue is event-sourced (via MovedToSweepQueue), not part of the watchlist
+    // The sweep queue is event-sourced (via AutomaticDepositReceived), not part of the watchlist
     // snapshot, so rebuild() from a snapshot must NOT resurrect it.
     let mut deposits = AutomaticDeposits::default();
-    deposits.apply_sweep_move(&sweep_move(
+    deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
         token(0xaa),
         BlockNumber::new(900),
@@ -396,21 +396,21 @@ fn record_scan_is_a_noop_for_an_expired_account() {
 }
 
 #[test]
-fn apply_sweep_move_removes_the_watchlist_entry_and_queues_each_token() {
+fn record_automatic_deposit_received_removes_the_watchlist_entry_and_queues_each_token() {
     let mut deposits = AutomaticDeposits::default();
     deposits
         .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
         .unwrap();
 
-    // One address found funded for two tokens => two SweepMoves (as balance_scan emits).
-    deposits.apply_sweep_move(&sweep_move(
+    // One address found funded for two tokens => two AutomaticDeposit records (as balance_scan emits).
+    deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
         token(0xaa),
         BlockNumber::new(900),
         3,
         10,
     ));
-    deposits.apply_sweep_move(&sweep_move(
+    deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
         token(0xbb),
         BlockNumber::new(900),
@@ -442,12 +442,12 @@ fn apply_sweep_move_removes_the_watchlist_entry_and_queues_each_token() {
 }
 
 #[test]
-fn apply_sweep_move_inserts_unconditionally_without_a_watchlist_entry() {
+fn record_automatic_deposit_received_inserts_unconditionally_without_a_watchlist_entry() {
     // No watchlist entry for account(0): apply still queues the move. This is exactly how event
     // replay reconstructs the queue, since the watchlist is empty until the final snapshot event.
     let mut deposits = AutomaticDeposits::default();
 
-    deposits.apply_sweep_move(&sweep_move(
+    deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
         token(0xaa),
         BlockNumber::new(900),
@@ -473,14 +473,14 @@ fn sweep_entries_for_account_returns_one_entry_per_funded_token() {
     // Unknown account -> no entries.
     assert!(deposits.sweep_entries_for_account(&account(0)).is_empty());
 
-    deposits.apply_sweep_move(&sweep_move(
+    deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
         token(0xaa),
         BlockNumber::new(900),
         3,
         10,
     ));
-    deposits.apply_sweep_move(&sweep_move(
+    deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
         token(0xbb),
         BlockNumber::new(900),
@@ -488,7 +488,7 @@ fn sweep_entries_for_account_returns_one_entry_per_funded_token() {
         20,
     ));
     // A different account's move must not leak into account(0)'s entries.
-    deposits.apply_sweep_move(&sweep_move(
+    deposits.record_automatic_deposit_received(&automatic_deposit(
         account(1),
         token(0xaa),
         BlockNumber::new(901),
@@ -526,14 +526,14 @@ fn token(byte: u8) -> Address {
     Address::new([byte; 20])
 }
 
-fn sweep_move(
+fn automatic_deposit(
     account: Account,
     token: Address,
     last_scanned_block: BlockNumber,
     scan_count: u32,
     scanned_balance: u128,
-) -> SweepMove {
-    SweepMove {
+) -> AutomaticDeposit {
+    AutomaticDeposit {
         owner: account.owner,
         subaccount: account.subaccount,
         token,

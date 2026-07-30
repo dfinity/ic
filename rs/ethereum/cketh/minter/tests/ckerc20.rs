@@ -156,13 +156,13 @@ mod deposit_erc20 {
     use std::collections::BTreeSet;
     use std::sync::Arc;
 
-    /// Number of `MovedToSweepQueue` events currently in the minter's audit log.
-    fn count_sweep_moves(ckerc20: &CkErc20Setup) -> usize {
+    /// Number of `AutomaticDepositReceived` events currently in the minter's audit log.
+    fn count_automatic_deposits_received(ckerc20: &CkErc20Setup) -> usize {
         ckerc20
             .cketh
             .get_all_events()
             .into_iter()
-            .filter(|event| matches!(event.payload, EventPayload::MovedToSweepQueue { .. }))
+            .filter(|event| matches!(event.payload, EventPayload::AutomaticDepositReceived { .. }))
             .count()
     }
 
@@ -333,12 +333,11 @@ mod deposit_erc20 {
 
         // The balances were below every token's minimum, so nothing was moved to the sweep queue.
         assert!(
-            ckerc20
-                .cketh
-                .get_all_events()
-                .iter()
-                .all(|event| !matches!(event.payload, EventPayload::MovedToSweepQueue { .. })),
-            "below-minimum balances must not emit a MovedToSweepQueue event"
+            ckerc20.cketh.get_all_events().iter().all(|event| !matches!(
+                event.payload,
+                EventPayload::AutomaticDepositReceived { .. }
+            )),
+            "below-minimum balances must not emit a AutomaticDepositReceived event"
         );
     }
 
@@ -353,7 +352,7 @@ mod deposit_erc20 {
         );
 
         // Nothing awaits sweeping before any scan.
-        assert_eq!(count_sweep_moves(&ckerc20), 0);
+        assert_eq!(count_automatic_deposits_received(&ckerc20), 0);
 
         let (ckerc20, before) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
@@ -367,14 +366,14 @@ mod deposit_erc20 {
         ckerc20.run_balance_scan(&vec![1_000_000_000_u128; tokens]);
 
         // The move is event-sourced (metrics are deferred to DEFI-2965, so get_events is the sole
-        // observable): one MovedToSweepQueue event per funded (account, token), recorded the moment
+        // observable): one AutomaticDepositReceived event per funded (account, token), recorded the moment
         // the funds were detected (durable even across an ungraceful trap).
         let moves: Vec<(Principal, Option<[u8; 32]>, String, String)> = ckerc20
             .cketh
             .get_all_events()
             .into_iter()
             .filter_map(|event| match event.payload {
-                EventPayload::MovedToSweepQueue {
+                EventPayload::AutomaticDepositReceived {
                     owner,
                     subaccount,
                     token,
@@ -387,7 +386,7 @@ mod deposit_erc20 {
         assert_eq!(
             moves.len(),
             tokens,
-            "one MovedToSweepQueue event per funded token"
+            "one AutomaticDepositReceived event per funded token"
         );
         let distinct_tokens: BTreeSet<&String> =
             moves.iter().map(|(_, _, token, _)| token).collect();
@@ -444,16 +443,16 @@ mod deposit_erc20 {
         }
 
         // The sweep queue must survive a real pre_upgrade -> post_upgrade cycle: it is rebuilt by
-        // replaying the CBOR-encoded MovedToSweepQueue events (not the watchlist snapshot), which
+        // replaying the CBOR-encoded AutomaticDepositReceived events (not the watchlist snapshot), which
         // check_audit_log asserts is_equivalent_to the live state. A wrong minicbor annotation on
-        // SweepMove would fail here.
+        // AutomaticDeposit would fail here.
         ckerc20
             .cketh
             .check_audit_logs_and_upgrade_as_ref(Default::default());
         assert_eq!(
-            count_sweep_moves(&ckerc20),
+            count_automatic_deposits_received(&ckerc20),
             tokens,
-            "MovedToSweepQueue events must survive the upgrade round-trip"
+            "AutomaticDepositReceived events must survive the upgrade round-trip"
         );
 
         // A second deposit_erc20 returns the SAME AwaitingSweep and still does NOT re-arm the

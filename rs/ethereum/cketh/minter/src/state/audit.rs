@@ -168,9 +168,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::RegisteredDepositAddresses(registry) => {
             state.automatic_deposits.rebuild(registry)
         }
-        EventType::MovedToSweepQueue(sweep_move) => {
-            state.automatic_deposits.apply_sweep_move(sweep_move)
-        }
+        EventType::AutomaticDepositReceived(automatic_deposit) => state
+            .automatic_deposits
+            .record_automatic_deposit_received(automatic_deposit),
     }
 }
 

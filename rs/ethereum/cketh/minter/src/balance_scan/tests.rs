@@ -291,7 +291,7 @@ async fn should_skip_without_scanning() {
 }
 
 #[test]
-fn should_build_one_sweep_move_per_candidate_token() {
+fn should_build_one_automatic_deposit_per_candidate_token() {
     let now = ts();
     let block = BlockNumber::new(900);
     let address = Address::new([0xa1; 20]);
@@ -304,7 +304,7 @@ fn should_build_one_sweep_move_per_candidate_token() {
     deposits.record_scan(now, &acc, BlockNumber::new(400));
     deposits.record_scan(now, &acc, BlockNumber::new(500));
 
-    let moves = sweep_moves(
+    let moves = automatic_deposits_received(
         &deposits,
         now,
         &acc,
@@ -320,7 +320,7 @@ fn should_build_one_sweep_move_per_candidate_token() {
     assert_eq!(
         moves,
         vec![
-            SweepMove {
+            AutomaticDeposit {
                 owner: acc.owner,
                 subaccount: acc.subaccount,
                 token: TOKEN_A,
@@ -329,7 +329,7 @@ fn should_build_one_sweep_move_per_candidate_token() {
                 scan_count: 3,
                 scanned_balance: Erc20Value::from(10_u8),
             },
-            SweepMove {
+            AutomaticDeposit {
                 owner: acc.owner,
                 subaccount: acc.subaccount,
                 token: TOKEN_B,
@@ -343,7 +343,7 @@ fn should_build_one_sweep_move_per_candidate_token() {
 
     // No live watchlist entry -> nothing to move.
     assert!(
-        sweep_moves(
+        automatic_deposits_received(
             &deposits,
             now,
             &account(999),

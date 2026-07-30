@@ -433,7 +433,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                         .collect(),
                 },
             ),
-            EventPayload::MovedToSweepQueue {
+            EventPayload::AutomaticDepositReceived {
                 owner,
                 subaccount,
                 token,
@@ -441,7 +441,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 last_scanned_block,
                 scan_count,
                 scanned_balance,
-            } => ET::MovedToSweepQueue(ic_cketh_minter::state::event::SweepMove {
+            } => ET::AutomaticDepositReceived(ic_cketh_minter::state::event::AutomaticDeposit {
                 owner,
                 subaccount,
                 token: token.parse().unwrap(),

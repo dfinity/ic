@@ -564,7 +564,7 @@ pub mod events {
             capacity: u64,
             registrations: Vec<DepositAddressRegistration>,
         },
-        MovedToSweepQueue {
+        AutomaticDepositReceived {
             owner: Principal,
             subaccount: Option<[u8; 32]>,
             token: String,

@@ -663,7 +663,7 @@ type Event = record {
                 scan_count : nat64;
             };
         };
-        MovedToSweepQueue : record {
+        AutomaticDepositReceived : record {
             owner : principal;
             subaccount : opt Subaccount;
             token : text;

@@ -479,7 +479,7 @@ impl GetEventsFile {
                         })
                         .collect(),
                 }),
-                EventPayload::MovedToSweepQueue {
+                EventPayload::AutomaticDepositReceived {
                     owner,
                     subaccount,
                     token,
@@ -487,7 +487,7 @@ impl GetEventsFile {
                     last_scanned_block,
                     scan_count,
                     scanned_balance,
-                } => ET::MovedToSweepQueue(crate::state::event::SweepMove {
+                } => ET::AutomaticDepositReceived(crate::state::event::AutomaticDeposit {
                     owner,
                     subaccount,
                     token: token.parse().unwrap(),
