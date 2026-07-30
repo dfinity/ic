@@ -233,7 +233,7 @@ impl AutomaticDeposits {
             .iter()
             .filter(|(key, _)| key.account == *account)
             .map(|(key, entry)| DetectedSweep {
-                token: key.token,
+                token: key.erc20_token,
                 address: entry.address,
                 scanned_balance: entry.scanned_balance,
                 last_scanned_block: entry.last_scanned_block,
