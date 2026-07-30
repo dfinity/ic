@@ -258,7 +258,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         if let Some(response) = find_fully_replicated_response(
                             grouped_shares,
                             threshold,
-                            subnet_size,
+                            request,
                             &*pool_access,
                         ) {
                             let candidate_size = response.count_bytes();
@@ -292,7 +292,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         if let Some(response) = find_non_replicated_response(
                             grouped_shares,
                             designated_node_id,
-                            subnet_size,
+                            request,
                             &*pool_access,
                         ) {
                             let candidate_size = response.count_bytes();
@@ -500,7 +500,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
             // The collective initial spend must match the value recomputed from
             // the request context's subnet size and the signed per-replica
-            // receipts.
+            // receipts, and must stay within the signers' collective allowance.
             let expected = non_flexible_initial_spent(&response.proof, subnet_size);
             if response.initial_spent != expected {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
@@ -509,6 +509,13 @@ impl CanisterHttpPayloadBuilderImpl {
                     expected,
                 });
             }
+            utils::check_initial_spent_within_limit(
+                response.initial_spent,
+                response.proof.signatures.len(),
+                callback_id,
+                request_context,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             // Reconstruct the per-signer shares from the response proof.
             reconstructed_shares.extend(
@@ -1043,7 +1050,9 @@ impl
 
         // Divergences deliver no response body, so their consensus cost is zero:
         // the initial spend is just the per-replica cost each diverging signer
-        // incurred, summed on the fly from the shares.
+        // incurred, summed on the fly from the shares. Since every share is
+        // individually bounded by its signer's allowance and signers are
+        // distinct, the sum always stays within their collective allowance.
         for divergence_response in messages.divergence_responses {
             let nodes: BTreeSet<NodeId> = divergence_response
                 .shares
