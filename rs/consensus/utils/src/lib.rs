@@ -12,7 +12,10 @@ use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegist
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
-    consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold},
+    consensus::{
+        Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold,
+        dkg::SubnetSplittingStatus,
+    },
     crypto::{
         Signed,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
@@ -325,6 +328,14 @@ pub fn active_high_threshold_committee(
     })
 }
 
+/// Return the current high transcript for the given height if it was found.
+pub fn subnet_splitting_status_at_height(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<SubnetSplittingStatus> {
+    get_active_data_at(reader, height, get_subnet_splitting_status_at_given_summary)
+}
+
 /// Return the active DKGData active at the given height if it was found.
 fn get_active_data_at<T>(
     reader: &dyn ConsensusPoolCache,
@@ -396,6 +407,19 @@ fn get_transcript_data_at_given_summary<T>(
             .next_transcript(&tag)
             .or(dkg_summary.current_transcript(&tag));
         Some(getter(transcript))
+    } else {
+        None
+    }
+}
+
+fn get_subnet_splitting_status_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+) -> Option<SubnetSplittingStatus> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+
+    if dkg_summary.current_interval_includes(height) {
+        Some(dkg_summary.subnet_splitting_status())
     } else {
         None
     }
