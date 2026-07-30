@@ -1,6 +1,6 @@
 use super::{
     AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, DetectedSweep,
-    MAX_ACTIVE_DEPOSIT_ADDRESSES, SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry, SweepKey,
+    MAX_ACTIVE_DEPOSIT_ADDRESSES, SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry,
 };
 use crate::endpoints::DepositErc20Error;
 use crate::numeric::{BlockNumber, Erc20Value};
@@ -426,18 +426,11 @@ fn record_automatic_deposit_received_removes_the_watchlist_entry_and_queues_each
     // scan_count, and its own scanned balance.
     assert_eq!(deposits.sweep_len(), 2);
     assert_eq!(
-        deposits.sweep.get(&SweepKey {
-            account: account(0),
-            erc20_token: token(0xaa),
-        }),
-        Some(&sweep_entry(BlockNumber::new(900), 3, 10))
-    );
-    assert_eq!(
-        deposits.sweep.get(&SweepKey {
-            account: account(0),
-            erc20_token: token(0xbb),
-        }),
-        Some(&sweep_entry(BlockNumber::new(900), 3, 20))
+        deposits.sweep.get(&account(0)),
+        Some(&vec![
+            sweep_entry(token(0xaa), BlockNumber::new(900), 3, 10),
+            sweep_entry(token(0xbb), BlockNumber::new(900), 3, 20),
+        ])
     );
 }
 
@@ -458,11 +451,13 @@ fn record_automatic_deposit_received_inserts_unconditionally_without_a_watchlist
     assert_eq!(deposits.watchlist_len(), 0);
     assert_eq!(deposits.sweep_len(), 1);
     assert_eq!(
-        deposits.sweep.get(&SweepKey {
-            account: account(0),
-            erc20_token: token(0xaa),
-        }),
-        Some(&sweep_entry(BlockNumber::new(900), 3, 10))
+        deposits.sweep.get(&account(0)),
+        Some(&vec![sweep_entry(
+            token(0xaa),
+            BlockNumber::new(900),
+            3,
+            10
+        )])
     );
 }
 
@@ -545,11 +540,13 @@ fn automatic_deposit(
 }
 
 fn sweep_entry(
+    erc20_token: Address,
     last_scanned_block: BlockNumber,
     scan_count: u32,
     scanned_balance: u128,
 ) -> SweepEntry {
     SweepEntry {
+        erc20_token,
         address: deposit_address(&account(0)),
         last_scanned_block,
         scan_count,

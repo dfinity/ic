@@ -48,8 +48,8 @@ const MAX_ACTIVE_DEPOSIT_ADDRESSES: NonZeroUsize = NonZeroUsize::new(7_000).unwr
 pub struct AutomaticDeposits {
     watchlist: TimedSizedMap<Account, DepositRequest>,
     /// Funded deposit addresses moved out of the watchlist, awaiting sweeping,
-    /// keyed per account and ERC-20 token contract.
-    sweep: BTreeMap<SweepKey, SweepEntry>,
+    /// keyed per account; each account holds one entry per funded ERC-20 token.
+    sweep: BTreeMap<Account, Vec<SweepEntry>>,
 }
 
 impl AutomaticDeposits {
@@ -169,27 +169,30 @@ impl AutomaticDeposits {
 
     /// Record an [`AutomaticDeposit`]: drop the account's deposit address from the watchlist (if
     /// still present) and record the funded `(account, token)` in the sweep queue. Unconditional
-    /// and idempotent per key, so replaying the event log reconstructs the queue. Removing the
-    /// watchlist entry is a no-op on replay (the watchlist is only rebuilt by the final snapshot
-    /// event), which is intended.
+    /// and idempotent per `(account, token)`, so replaying the event log reconstructs the queue.
+    /// Removing the watchlist entry is a no-op on replay (the watchlist is only rebuilt by the final
+    /// snapshot event), which is intended.
     pub fn record_automatic_deposit_received(&mut self, deposit: &AutomaticDeposit) {
         let account = Account {
             owner: deposit.owner,
             subaccount: deposit.subaccount,
         };
         self.watchlist.remove(&account);
-        self.sweep.insert(
-            SweepKey {
-                account,
-                erc20_token: deposit.token,
-            },
-            SweepEntry {
-                address: deposit.address,
-                last_scanned_block: deposit.last_scanned_block,
-                scan_count: deposit.scan_count,
-                scanned_balance: deposit.scanned_balance,
-            },
-        );
+        let entry = SweepEntry {
+            erc20_token: deposit.token,
+            address: deposit.address,
+            last_scanned_block: deposit.last_scanned_block,
+            scan_count: deposit.scan_count,
+            scanned_balance: deposit.scanned_balance,
+        };
+        let entries = self.sweep.entry(account).or_default();
+        match entries
+            .iter_mut()
+            .find(|e| e.erc20_token == entry.erc20_token)
+        {
+            Some(existing) => *existing = entry,
+            None => entries.push(entry),
+        }
     }
 
     /// Snapshot of the watchlist, faithful enough to reconstruct it exactly via
@@ -222,18 +225,19 @@ impl AutomaticDeposits {
     }
 
     pub fn sweep_len(&self) -> usize {
-        self.sweep.len()
+        self.sweep.values().map(Vec::len).sum()
     }
 
     /// The sweep-queue entries for `account` (one per funded token), if any. Backs
     /// both the `deposit_erc20` response and the re-registration guard. Returns a
-    /// public projection so [`SweepEntry`]/`SweepKey` stay private to this module.
+    /// public projection so [`SweepEntry`] stays private to this module.
     pub fn sweep_entries_for_account(&self, account: &Account) -> Vec<DetectedSweep> {
         self.sweep
-            .iter()
-            .filter(|(key, _)| key.account == *account)
-            .map(|(key, entry)| DetectedSweep {
-                token: key.erc20_token,
+            .get(account)
+            .into_iter()
+            .flatten()
+            .map(|entry| DetectedSweep {
+                token: entry.erc20_token,
                 address: entry.address,
                 scanned_balance: entry.scanned_balance,
                 last_scanned_block: entry.last_scanned_block,
@@ -254,18 +258,9 @@ impl Default for AutomaticDeposits {
     }
 }
 
-/// Key into the sweep queue: the user account together with the ERC-20 token
-/// contract whose balance was found. Names the token address so it is not
-/// conflated with the user-derived deposit address in [`SweepEntry`].
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
-struct SweepKey {
-    account: Account,
-    erc20_token: Address,
-}
-
 /// A funded token awaiting sweeping for a deposit address, as surfaced by
 /// [`AutomaticDeposits::sweep_entries_for_account`]. Flattens the private
-/// `SweepKey`/[`SweepEntry`] into the values callers need.
+/// [`SweepEntry`] into the values callers need.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct DetectedSweep {
     /// The ERC-20 token contract whose balance was found.
@@ -282,6 +277,9 @@ pub struct DetectedSweep {
 /// one supported ERC-20 token.
 #[derive(Clone, PartialEq, Debug)]
 struct SweepEntry {
+    /// The ERC-20 token contract whose balance was found. Named so it is not
+    /// conflated with the user-derived deposit `address`.
+    erc20_token: Address,
     /// The deposit address (holder) the funds sit at.
     address: Address,
     /// The block whose scan found the funds.
