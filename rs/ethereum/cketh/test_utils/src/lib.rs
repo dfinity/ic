@@ -545,6 +545,7 @@ impl CkEthSetup {
 
     pub fn stop_minter(&self) {
         let stop_msg_id = self.submit_stop_minter();
+        self.env.tick();
         self.stop_ongoing_https_outcalls();
         let stop_res = self.env.await_call(stop_msg_id);
         assert_matches!(stop_res, Ok(_));
