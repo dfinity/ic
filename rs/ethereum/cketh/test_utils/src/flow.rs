@@ -481,7 +481,7 @@ impl WithdrawalFlow {
 
     fn minter_response(&self) -> Result<RetrieveEthRequest, WithdrawalError> {
         Decode!(
-            &assert_reply(crate::await_call(&self.setup.env, self.message_id.clone())),
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
             Result<RetrieveEthRequest, WithdrawalError>
         )
         .unwrap()

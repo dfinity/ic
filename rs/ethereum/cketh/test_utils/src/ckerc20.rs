@@ -937,7 +937,7 @@ pub struct Erc20WithdrawalFlow {
 
 impl Erc20WithdrawalFlow {
     pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
-        let result = crate::await_call(&self.setup.env, self.message_id.clone());
+        let result = self.setup.env.await_call(self.message_id.clone());
         assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
         self.setup
     }
@@ -966,7 +966,7 @@ impl Erc20WithdrawalFlow {
     #[allow(clippy::result_large_err)]
     fn minter_response(&self) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
         Decode!(
-            &assert_reply(crate::await_call(&self.setup.env, self.message_id.clone())),
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
             Result<RetrieveErc20Request, WithdrawErc20Error>
         )
         .unwrap()
@@ -980,7 +980,7 @@ pub struct DepositErc20Flow {
 
 impl DepositErc20Flow {
     pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
-        let result = crate::await_call(&self.setup.env, self.message_id.clone());
+        let result = self.setup.env.await_call(self.message_id.clone());
         assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
         self.setup
     }
@@ -1003,7 +1003,7 @@ impl DepositErc20Flow {
 
     fn minter_response(&self) -> Result<DepositErc20Response, DepositErc20Error> {
         Decode!(
-            &assert_reply(crate::await_call(&self.setup.env, self.message_id.clone())),
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
             Result<DepositErc20Response, DepositErc20Error>
         )
         .unwrap()
