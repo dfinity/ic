@@ -1198,7 +1198,7 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_at_start,
         MinterInfo {
-            minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            minter_address: None,
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
@@ -1231,6 +1231,7 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_after_deposit,
         MinterInfo {
+            minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
             last_observed_block_number: Some(Nat::from(new_eth_scraped_block_number)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
             last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
