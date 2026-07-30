@@ -375,6 +375,7 @@ mod tests {
             skip_stopping_before_installing: None,
             wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
             arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
+            canister_upgrade_options: None,
         };
 
         let is_invalid_proposal_with_keywords = |install_code: InstallCode, keywords: Vec<&str>| {
@@ -476,6 +477,7 @@ mod tests {
             skip_stopping_before_installing: None,
             wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
             arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
+            canister_upgrade_options: None,
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -513,6 +515,7 @@ mod tests {
             skip_stopping_before_installing: None,
             wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
             arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
+            canister_upgrade_options: None,
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -547,6 +550,7 @@ mod tests {
             skip_stopping_before_installing: Some(true),
             wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
             arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
+            canister_upgrade_options: None,
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -594,6 +598,7 @@ mod tests {
                 skip_stopping_before_installing: None,
                 wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
                 arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
+                canister_upgrade_options: None,
             };
 
             assert_eq!(install_code.validate(), Ok(()));
@@ -614,6 +619,7 @@ mod tests {
             skip_stopping_before_installing: Some(true),
             wasm_module_hash: Some(wasm_hash.clone()),
             arg_hash: Some(arg_hash.clone()),
+            canister_upgrade_options: None,
         };
 
         let value = SelfDescribingValue::from(SelfDescribingValuePb::from(install_code));
@@ -626,6 +632,7 @@ mod tests {
                 "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
                 "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
                 "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(true),
+                "canister_upgrade_options".to_string() => SelfDescribingValue::Null,
             })
         );
     }
@@ -640,6 +647,7 @@ mod tests {
             skip_stopping_before_installing: Some(false),
             wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
             arg_hash: Some(Sha256::hash(&[]).to_vec()),
+            canister_upgrade_options: None,
         };
 
         let value = SelfDescribingValue::from(SelfDescribingValuePb::from(install_code));
@@ -652,6 +660,7 @@ mod tests {
                 "wasm_module_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&[1, 2, 3]).to_vec()),
                 "arg_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&[]).to_vec()),
                 "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(false),
+                "canister_upgrade_options".to_string() => SelfDescribingValue::Null,
             })
         );
     }
