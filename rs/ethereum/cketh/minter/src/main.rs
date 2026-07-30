@@ -146,7 +146,7 @@ fn emit_preupgrade_events() {
         }
     });
 
-    let registry = read_state(|s| s.automatic_deposits.snapshot());
+    let registry = read_state(|s| s.automatic_deposits.watchlist_snapshot());
     if !registry.registrations.is_empty() {
         storage::record_event(EventType::RegisteredDepositAddresses(registry));
     }

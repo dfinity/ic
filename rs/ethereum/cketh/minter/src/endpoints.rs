@@ -266,8 +266,8 @@ pub enum DepositStatus {
 pub struct DetectedDeposit {
     /// The ERC-20 token contract whose balance was found.
     pub token: String,
-    /// The balance detected for `token`.
-    pub amount: Nat,
+    /// The balance scanned for `token`; may change before the sweep.
+    pub scanned_balance: Nat,
     /// The Ethereum block at which the balance was detected.
     pub detected_at_block: Nat,
 }

@@ -402,8 +402,7 @@ type DepositErc20Response = record {
     status : DepositStatus;
 };
 
-// The stage a ckERC20 deposit address is at. Extensible with Sweeping/Swept
-// once sweeping lands (DEFI-2924).
+// The stage a ckERC20 deposit address is at.
 type DepositStatus = variant {
     // Armed and being scanned; no deposit at or above the minimum detected yet.
     Scanning : record {
@@ -425,8 +424,8 @@ type DepositStatus = variant {
 type DetectedDeposit = record {
     // The ERC-20 token contract whose balance was found.
     token : text;
-    // The balance detected for `token`.
-    amount : nat;
+    // The balance scanned for `token`; may change before the sweep.
+    scanned_balance : nat;
     // The Ethereum block at which the balance was detected.
     detected_at_block : nat;
 };

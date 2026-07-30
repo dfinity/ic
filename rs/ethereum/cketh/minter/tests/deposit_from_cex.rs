@@ -22,7 +22,6 @@
 //! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
 
 use assert_matches::assert_matches;
-use candid::Nat;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
@@ -232,16 +231,16 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
         DepositStatus::AwaitingSweep(detected)
             if detected.len() == 1
                 && detected[0].token == SupportedToken::CkUsdt.contract().to_string()
-                && detected[0].amount == Nat::from(USDT_ABOVE_MINIMUM)
-                && detected[0].detected_at_block > Nat::from(0_u8)
+                && detected[0].scanned_balance == USDT_ABOVE_MINIMUM
+                && detected[0].detected_at_block > 0_u8
     );
     assert_matches!(
         setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, deadline).status,
         DepositStatus::AwaitingSweep(detected)
             if detected.len() == 1
                 && detected[0].token == SupportedToken::CkUsdc.contract().to_string()
-                && detected[0].amount == Nat::from(USDC_ABOVE_MINIMUM)
-                && detected[0].detected_at_block > Nat::from(0_u8)
+                && detected[0].scanned_balance == USDC_ABOVE_MINIMUM
+                && detected[0].detected_at_block > 0_u8
     );
     assert_matches!(
         setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, deadline).status,

@@ -86,7 +86,7 @@ impl AutomaticDeposits {
     }
 
     /// Rebuild the watchlist exactly from a registry previously produced by
-    /// [`Self::snapshot`], replacing any existing watchlist content.
+    /// [`Self::watchlist_snapshot`], replacing any existing watchlist content.
     ///
     /// The watchlist is restored verbatim under the limits recorded in the
     /// registry (`scan_window_nanos`, `capacity`), not the current code
@@ -99,7 +99,7 @@ impl AutomaticDeposits {
     /// The sweep queue is deliberately left untouched: it is reconstructed from
     /// the mid-stream `AutomaticDepositReceived` events that precede the final snapshot
     /// event in the log, so clearing it here would wipe them.
-    pub fn rebuild(&mut self, registry: &DepositAddressRegistry) {
+    pub fn rebuild_watchlist(&mut self, registry: &DepositAddressRegistry) {
         let ttl = Duration::from_nanos(registry.scan_window_nanos);
         let capacity = NonZeroUsize::new(usize::try_from(registry.capacity).unwrap_or(usize::MAX))
             .expect("BUG: deposit address registry capacity must be non-zero");
@@ -202,11 +202,11 @@ impl AutomaticDeposits {
     }
 
     /// Snapshot of the watchlist, faithful enough to reconstruct it exactly via
-    /// [`Self::rebuild`]: it records the current limits and lists every watchlist
-    /// entry (live and expired-but-unevicted) in time-index order. The sweep queue
-    /// is not part of the snapshot; it is event-sourced via `AutomaticDepositReceived`
+    /// [`Self::rebuild_watchlist`]: it records the current limits and lists every
+    /// watchlist entry (live and expired-but-unevicted) in time-index order. The sweep
+    /// queue is not part of the snapshot; it is event-sourced via `AutomaticDepositReceived`
     /// events.
-    pub fn snapshot(&self) -> DepositAddressRegistry {
+    pub fn watchlist_snapshot(&self) -> DepositAddressRegistry {
         let registrations = self
             .watchlist
             .iter_by_expiry()
@@ -252,7 +252,7 @@ impl AutomaticDeposits {
                         .iter()
                         .map(|entry| DetectedDeposit {
                             token: entry.erc20_token.to_string(),
-                            amount: entry.scanned_balance.into(),
+                            scanned_balance: entry.scanned_balance.into(),
                             detected_at_block: entry.last_scanned_block.into(),
                         })
                         .collect(),

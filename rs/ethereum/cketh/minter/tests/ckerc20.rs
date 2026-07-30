@@ -430,9 +430,9 @@ mod deposit_erc20 {
         );
         for d in &deposits {
             assert_eq!(
-                d.amount,
+                d.scanned_balance,
                 candid::Nat::from(1_000_000_000_u64),
-                "detected amount is the scanned balance"
+                "the scanned balance is reported"
             );
             assert_eq!(
                 d.detected_at_block,

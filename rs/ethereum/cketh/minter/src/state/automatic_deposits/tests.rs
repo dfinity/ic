@@ -59,7 +59,7 @@ fn should_watch_address_for_account() {
         }
 
         assert_eq!(
-            deposits.snapshot().registrations.len(),
+            deposits.watchlist_snapshot().registrations.len(),
             case.expected_len,
             "case: {}",
             case.name
@@ -90,7 +90,7 @@ fn should_reject_new_address_when_watchlist_is_full() {
     let rejected = deposits.watch_address_for_account(ts(0), account, deposit_address(&account));
 
     assert_eq!(rejected, Err(DepositErc20Error::TooManyActiveAddresses));
-    assert_eq!(deposits.snapshot().registrations.len(), capacity);
+    assert_eq!(deposits.watchlist_snapshot().registrations.len(), capacity);
 }
 
 #[test]
@@ -107,16 +107,16 @@ fn should_rebuild_watchlist_exactly_from_snapshot() {
     source
         .watch_address_for_account(ts(10), account(2), deposit_address(&account(2)))
         .unwrap();
-    let registry = source.snapshot();
+    let registry = source.watchlist_snapshot();
 
     let mut restored = AutomaticDeposits::default();
     restored
         .watch_address_for_account(ts(5), account(9), deposit_address(&account(9)))
         .unwrap();
-    restored.rebuild(&registry);
+    restored.rebuild_watchlist(&registry);
 
     assert_eq!(restored, source);
-    assert_eq!(restored.snapshot(), registry);
+    assert_eq!(restored.watchlist_snapshot(), registry);
 }
 
 #[test]
@@ -131,9 +131,9 @@ fn should_restore_the_limits_recorded_in_the_snapshot() {
     };
     let mut deposits = AutomaticDeposits::default();
 
-    deposits.rebuild(&registry);
+    deposits.rebuild_watchlist(&registry);
 
-    assert_eq!(deposits.snapshot(), registry);
+    assert_eq!(deposits.watchlist_snapshot(), registry);
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn should_snapshot_entries_in_time_index_order() {
         .watch_address_for_account(ts(0), account(2), deposit_address(&account(2)))
         .unwrap();
 
-    let snapshot = deposits.snapshot();
+    let snapshot = deposits.watchlist_snapshot();
 
     assert_eq!(
         snapshot.registrations,
@@ -287,14 +287,14 @@ fn should_reproduce_equal_watchlist_across_snapshot_round_trip() {
         .unwrap();
     deposits.record_scan(ts(30), &account(1), BlockNumber::new(500));
 
-    let registry = deposits.snapshot();
+    let registry = deposits.watchlist_snapshot();
     assert_eq!(registry.registrations.len(), 3);
 
     let mut restored = AutomaticDeposits::default();
-    restored.rebuild(&registry);
+    restored.rebuild_watchlist(&registry);
 
     assert_eq!(restored, deposits);
-    assert_eq!(restored.snapshot(), registry);
+    assert_eq!(restored.watchlist_snapshot(), registry);
 }
 
 #[test]
@@ -310,17 +310,17 @@ fn snapshot_does_not_carry_the_sweep_queue() {
     ));
     assert_eq!(deposits.sweep_len(), 1);
 
-    let registry = deposits.snapshot();
+    let registry = deposits.watchlist_snapshot();
     assert!(registry.registrations.is_empty());
 
     let mut restored = AutomaticDeposits::default();
-    restored.rebuild(&registry);
+    restored.rebuild_watchlist(&registry);
     assert_eq!(restored.sweep_len(), 0);
 }
 
 fn deposits_from(states: Vec<DepositAddressRegistration>) -> AutomaticDeposits {
     let mut deposits = AutomaticDeposits::default();
-    deposits.rebuild(&DepositAddressRegistry {
+    deposits.rebuild_watchlist(&DepositAddressRegistry {
         scan_window_nanos: window_nanos(),
         capacity: MAX_ACTIVE_DEPOSIT_ADDRESSES.get() as u64,
         registrations: states,
@@ -361,7 +361,7 @@ fn record_scan_advances_the_schedule() {
     deposits.record_scan(ts(0), &account(0), BlockNumber::new(1_000));
 
     // The scan bookkeeping is advanced, and survives into the snapshot.
-    let snapshot = deposits.snapshot();
+    let snapshot = deposits.watchlist_snapshot();
     assert_eq!(
         snapshot.registrations[0].last_scanned_block,
         Some(BlockNumber::new(1_000))
@@ -393,7 +393,7 @@ fn record_scan_is_a_noop_for_an_expired_account() {
     // Past the scan window the entry is no longer live; record_scan must not touch it.
     deposits.record_scan(ts(window_nanos() + 1), &account(0), BlockNumber::new(1_000));
 
-    let snapshot = deposits.snapshot();
+    let snapshot = deposits.watchlist_snapshot();
     assert_eq!(snapshot.registrations[0].last_scanned_block, None);
     assert_eq!(snapshot.registrations[0].scan_count, 0);
 }
@@ -503,12 +503,12 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
             status: DepositStatus::AwaitingSweep(vec![
                 DetectedDeposit {
                     token: token(0xaa).to_string(),
-                    amount: Nat::from(10_u8),
+                    scanned_balance: Nat::from(10_u8),
                     detected_at_block: Nat::from(900_u16),
                 },
                 DetectedDeposit {
                     token: token(0xbb).to_string(),
-                    amount: Nat::from(20_u8),
+                    scanned_balance: Nat::from(20_u8),
                     detected_at_block: Nat::from(900_u16),
                 },
             ]),
