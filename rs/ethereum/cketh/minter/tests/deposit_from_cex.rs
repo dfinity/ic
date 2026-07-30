@@ -26,7 +26,7 @@ use ic_cketh_minter::balance_scan::batcher::{
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
-use ic_cketh_test_utils::live_scan::CkErc20LiveScanSetup;
+use ic_cketh_test_utils::live_scan::{CkErc20LiveScanSetup, Holding, SupportedToken};
 use ic_ethereum_types::Address;
 use std::time::Duration;
 
@@ -181,32 +181,64 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
 /// RPC canister (configured to route every provider to the harness' anvil node), so the minter's
 /// periodic balance scan issues genuine HTTPS outcalls and reads real ERC-20 balances from anvil.
 ///
-/// The harness places the two supported tokens (ckUSDC, ckUSDT) at their real mainnet addresses and
-/// credits the minter's derived deposit address above the scan's candidate threshold. The scan must
-/// then flag that address as a deposit candidate for both tokens.
+/// Three independent depositors each fund a single token — 20 USDT, 15 USDC and 1 USDT — so the
+/// scan reads several addresses and tokens and must apply the per-token minimum to each. Only the
+/// two at-or-above-minimum deposits are flagged as candidates; the 1 USDT deposit is scanned but,
+/// being below the ~$10 minimum, is not.
 #[test]
-fn should_scan_real_erc20_balances_through_the_evm_rpc_canister() {
+fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
-    // 20 USDC/USDT (6 decimals), comfortably above each token's ~$10 candidate minimum.
-    const DEPOSIT_BALANCE: u128 = 20_000_000;
+    // 6-decimal amounts; ckUSDC and ckUSDT share a 10_000_000 (~$10) candidate minimum.
+    const USDT_ABOVE_MINIMUM: u128 = 20_000_000;
+    const USDC_ABOVE_MINIMUM: u128 = 15_000_000;
+    const USDT_BELOW_MINIMUM: u128 = 1_000_000;
 
     let setup = CkErc20LiveScanSetup::new_live();
-    let user = setup.caller();
-    let deposit = setup.register_deposit_address(user, DEPOSIT_SUBACCOUNT);
-    setup.credit_deposit(&deposit, DEPOSIT_BALANCE);
+    let deposits = [
+        (
+            setup.depositor(1),
+            SupportedToken::CkUsdt,
+            USDT_ABOVE_MINIMUM,
+        ),
+        (
+            setup.depositor(2),
+            SupportedToken::CkUsdc,
+            USDC_ABOVE_MINIMUM,
+        ),
+        (
+            setup.depositor(3),
+            SupportedToken::CkUsdt,
+            USDT_BELOW_MINIMUM,
+        ),
+    ];
 
-    // deposit_erc20 reports the address as scanned (a failed batch would never advance it), and the
-    // scan flags it as a candidate for both supported tokens whose real balances it read from anvil.
-    let progress = setup.await_scan(user, DEPOSIT_SUBACCOUNT, Duration::from_secs(180));
-    assert!(progress.scan_count >= 1, "the address should report a scan");
-    assert!(
-        progress.last_scanned_block.is_some(),
-        "a scanned address should report the block it was scanned at"
-    );
+    let holdings: Vec<Holding> = deposits
+        .iter()
+        .map(|&(depositor, token, amount)| Holding {
+            deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT),
+            token,
+            amount,
+        })
+        .collect();
+    setup.credit_deposits(&holdings);
+
+    // deposit_erc20 reports each address as scanned; a failed batch would never advance any of them.
+    for &(depositor, _, _) in &deposits {
+        let progress = setup.await_scan(depositor, DEPOSIT_SUBACCOUNT, Duration::from_secs(180));
+        assert!(
+            progress.scan_count >= 1,
+            "each address should report a scan"
+        );
+        assert!(
+            progress.last_scanned_block.is_some(),
+            "a scanned address should report the block it was scanned at"
+        );
+    }
+
     assert_eq!(
         setup.balance_scan_candidates(),
         2,
-        "the funded address should be a candidate for both supported tokens"
+        "only the 20 USDT and 15 USDC deposits clear the per-token minimum; the 1 USDT does not"
     );
 }
 

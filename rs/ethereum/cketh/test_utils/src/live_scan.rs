@@ -33,13 +33,40 @@ use crate::anvil::{
     Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20, erc20_balance_slot, u256_be,
 };
 use crate::{
-    CKETH_MINIMUM_WITHDRAWAL_AMOUNT, DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, USDC_ERC20_CONTRACT_ADDRESS, evm_rpc_wasm, minter_wasm,
+    CKETH_MINIMUM_WITHDRAWAL_AMOUNT, ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS,
+    USDC_ERC20_CONTRACT_ADDRESS, evm_rpc_wasm, minter_wasm,
 };
 
 /// USDT's mainnet address, the second token registered so the scan reads more than one token per
 /// address. Matches the ckUSDT contract the minter prices in `balance_scan::MIN_DEPOSITS`.
 pub const USDT_ERC20_CONTRACT_ADDRESS: &str = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+
+/// A supported ckERC20 token the live scan reads, sitting at its real mainnet contract address.
+#[derive(Clone, Copy)]
+pub enum SupportedToken {
+    CkUsdc,
+    CkUsdt,
+}
+
+impl SupportedToken {
+    const ALL: [SupportedToken; 2] = [SupportedToken::CkUsdc, SupportedToken::CkUsdt];
+
+    fn contract(self) -> Address {
+        let address = match self {
+            SupportedToken::CkUsdc => USDC_ERC20_CONTRACT_ADDRESS,
+            SupportedToken::CkUsdt => USDT_ERC20_CONTRACT_ADDRESS,
+        };
+        Address::from_str(address).expect("BUG: hard-coded token address is invalid")
+    }
+}
+
+/// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
+/// address, so the scan reads a real balance for that (address, token) pair.
+pub struct Holding {
+    pub deposit: Address,
+    pub token: SupportedToken,
+    pub amount: u128,
+}
 
 /// PocketIC's fiduciary subnet holds the secp256k1 test key named `key_1`, the key the minter
 /// derives deposit addresses from.
@@ -55,8 +82,6 @@ pub struct CkErc20LiveScanSetup {
     env: PocketIc,
     anvil: Anvil,
     minter_id: Principal,
-    /// The default depositing user, matching [`crate::ckerc20::CkErc20Setup`]'s caller.
-    caller: Principal,
 }
 
 impl CkErc20LiveScanSetup {
@@ -100,13 +125,13 @@ impl CkErc20LiveScanSetup {
             env,
             anvil,
             minter_id,
-            caller: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
         }
     }
 
-    /// The default depositing user, matching [`crate::ckerc20::CkErc20Setup`]'s caller.
-    pub fn caller(&self) -> Principal {
-        self.caller
+    /// A distinct non-anonymous depositing principal for `seed`, so a test can register several
+    /// independent deposit addresses.
+    pub fn depositor(&self, seed: u64) -> Principal {
+        PrincipalId::new_user_test_id(seed).into()
     }
 
     /// Registers a deposit address for `caller`'s `subaccount` and returns the Ethereum address the
@@ -138,32 +163,34 @@ impl CkErc20LiveScanSetup {
             .expect("BUG: deposit_erc20 returned an error")
     }
 
-    /// Places the supported ERC-20s (ckUSDC, ckUSDT) at their real mainnet addresses on the owned
-    /// anvil node and credits `deposit` with `amount` of each, so the scan reads real,
-    /// above-threshold balances. Both tokens get code, or the fail-loud batcher would revert the
-    /// whole scan.
-    pub fn credit_deposit(&self, deposit: &Address, amount: u128) {
+    /// Places both supported ERC-20s (ckUSDC, ckUSDT) at their real mainnet addresses on the owned
+    /// anvil node and credits each holding by writing its `balanceOf` mapping slot directly.
+    ///
+    /// Every balance is written *before* any token gets code. The fail-loud batcher only returns a
+    /// (scan-advancing) result once every token has code — by which point all balances are already
+    /// in place — so a concurrent scan can never observe a partially-credited state.
+    pub fn credit_deposits(&self, holdings: &[Holding]) {
         let dev = address_from_hex(DEV_ACCOUNT);
-        // Reuse MockUSDT's deployed bytecode to give each token a working `balanceOf`, and credit the
-        // deposit address by writing the `balanceOf` mapping slot directly.
+        // Reuse MockUSDT's deployed bytecode to give each token a working `balanceOf`.
         let runtime = self.anvil.code(&deploy_mock_erc20(&self.anvil, &dev));
-        let tokens = [USDC_ERC20_CONTRACT_ADDRESS, USDT_ERC20_CONTRACT_ADDRESS]
-            .map(|address| Address::from_str(address).unwrap());
 
-        // Write every balance *before* placing any code. The fail-loud batcher only returns a
-        // (scan-advancing) result once every token has code — by which point all balances are
-        // already in place — so a concurrent scan can never observe a partially-credited address.
-        for token in &tokens {
-            self.anvil
-                .set_storage_at(token, &erc20_balance_slot(deposit), &u256_be(amount));
+        for holding in holdings {
+            self.anvil.set_storage_at(
+                &holding.token.contract(),
+                &erc20_balance_slot(&holding.deposit),
+                &u256_be(holding.amount),
+            );
         }
-        for token in &tokens {
-            self.anvil.set_code(token, &runtime);
+        // Every registered address is scanned against both tokens, so a token without code would
+        // revert the whole scan even for addresses that do not hold it.
+        for token in SupportedToken::ALL {
+            self.anvil.set_code(&token.contract(), &runtime);
         }
-        for token in &tokens {
+        for holding in holdings {
             assert_eq!(
-                self.anvil.erc20_balance(token, deposit),
-                Erc20Value::from(amount),
+                self.anvil
+                    .erc20_balance(&holding.token.contract(), &holding.deposit),
+                Erc20Value::from(holding.amount),
                 "the deposit balance should be readable on anvil"
             );
         }
