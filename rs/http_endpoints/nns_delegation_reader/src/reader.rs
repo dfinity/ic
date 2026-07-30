@@ -82,39 +82,19 @@ impl NNSDelegationReader {
     /// Checks whether the most recent NNS delegation known to the replica is consistent
     /// with the given view of the subnet information recorded in a replicated state.
     ///
-    /// `state_view_for_subnet` should resolve the threshold public key and the canister
-    /// ranges which the state assigns to the delegated subnet, e.g.
-    /// ```ignore
-    /// |subnet_id| {
-    ///     network_topology
-    ///         .subnets_for_certification()
-    ///         .get(&subnet_id)
-    ///         .map(|topology| (
-    ///             topology.public_key.clone(),
-    ///             network_topology.routing_table_for_certification().ranges(subnet_id),
-    ///         ))
-    /// }
-    /// ```
-    /// Resolving to `None` maps to [`DelegationValidationError::UnknownSubnet`].
-    /// `ranges_check` specifies what to check the certified canister ranges against
-    /// (see [`CanisterRangesCheck`]).
-    ///
     /// Returns `Ok(true)` if no delegation is present (on the NNS subnet, or when the
-    /// delegation has not been fetched yet). Otherwise see
-    /// [`NNSDelegationBuilder::is_consistent_with`] for the exact semantics.
+    /// delegation has not been fetched yet). Otherwise defers to
+    /// [`NNSDelegationBuilder::is_consistent_with`]; see there for the meaning of the
+    /// arguments and the exact semantics.
     pub fn is_consistent_with(
         &self,
         state_view_for_subnet: impl FnOnce(SubnetId) -> Option<(Vec<u8>, CanisterIdRanges)>,
         ranges_check: CanisterRangesCheck,
     ) -> Result<bool, DelegationValidationError> {
         match self.receiver.borrow().as_ref() {
+            // No delegation is always consistent
             None => Ok(true),
-            Some(builder) => {
-                let subnet_id = builder.subnet_id();
-                let (public_key, subnet_ranges) = state_view_for_subnet(subnet_id)
-                    .ok_or(DelegationValidationError::UnknownSubnet(subnet_id))?;
-                builder.is_consistent_with(&public_key, &subnet_ranges, ranges_check)
-            }
+            Some(builder) => builder.is_consistent_with(state_view_for_subnet, ranges_check),
         }
     }
 

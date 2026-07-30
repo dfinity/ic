@@ -47,9 +47,7 @@ use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
 use crate::metrics::DelegationManagerMetrics;
-use ic_nns_delegation_reader::{
-    CanisterRangesCheck, DelegationValidationError, NNSDelegationBuilder, NNSDelegationReader,
-};
+use ic_nns_delegation_reader::{CanisterRangesCheck, NNSDelegationBuilder, NNSDelegationReader};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -149,21 +147,22 @@ impl DelegationManager {
         let state = self.state_reader.get_latest_certified_state()?;
         let network_topology = &state.get_ref().metadata.network_topology;
 
-        network_topology
-            .subnets_for_certification()
-            .get(&delegation.subnet_id())
-            .ok_or(DelegationValidationError::UnknownSubnet(
-                delegation.subnet_id(),
-            ))
-            .and_then(|subnet_topology| {
-                delegation.is_consistent_with(
-                    &subnet_topology.public_key,
-                    &network_topology
-                        .routing_table_for_certification()
-                        .ranges(delegation.subnet_id()),
-                    CanisterRangesCheck::AllSubnetRanges,
-                )
-            })
+        delegation
+            .is_consistent_with(
+                |subnet_id| {
+                    let subnet_topology = network_topology
+                        .subnets_for_certification()
+                        .get(&subnet_id)?;
+
+                    Some((
+                        subnet_topology.public_key.clone(),
+                        network_topology
+                            .routing_table_for_certification()
+                            .ranges(subnet_id),
+                    ))
+                },
+                CanisterRangesCheck::AllSubnetRanges,
+            )
             .inspect_err(|err| {
                 warn!(
                     self.log,

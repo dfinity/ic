@@ -90,32 +90,41 @@ impl NNSDelegationBuilder {
         }
     }
 
-    /// The id of the subnet to which the delegation was issued.
-    pub fn subnet_id(&self) -> SubnetId {
-        self.builder.subnet_id
-    }
-
     /// Checks whether the delegation is consistent with the given view of the subnet
-    /// information recorded in a replicated state: `expected_public_key` and
-    /// `subnet_ranges` should be the delegated subnet's threshold public key and the
-    /// canister ranges which the state assigns to it, as used for certification, i.e.
-    /// `network_topology.subnets_for_certification()[&subnet_id].public_key` and
-    /// `network_topology.routing_table_for_certification().ranges(subnet_id)`.
+    /// information recorded in a replicated state.
+    ///
+    /// `state_view_for_subnet` should resolve the threshold public key and the canister
+    /// ranges which the state assigns to the delegated subnet, e.g.
+    /// ```ignore
+    /// |subnet_id| {
+    ///     network_topology
+    ///         .subnets_for_certification()
+    ///         .get(&subnet_id)
+    ///         .map(|topology| (
+    ///             topology.public_key.clone(),
+    ///             network_topology.routing_table_for_certification().ranges(subnet_id),
+    ///         ))
+    /// }
+    /// ```
+    /// Resolving to `None` maps to [`DelegationValidationError::UnknownSubnet`].
     /// `ranges_check` specifies what to check the certified canister ranges against
     /// (see [`CanisterRangesCheck`]).
     ///
     /// See [`is_tree_consistent_with`] for the exact semantics.
     pub fn is_consistent_with(
         &self,
-        expected_public_key: &[u8],
-        subnet_ranges: &CanisterIdRanges,
+        state_view_for_subnet: impl FnOnce(SubnetId) -> Option<(Vec<u8>, CanisterIdRanges)>,
         ranges_check: CanisterRangesCheck,
     ) -> Result<bool, DelegationValidationError> {
+        let subnet_id = self.builder.subnet_id;
+        let (subnet_public_key, subnet_ranges) = state_view_for_subnet(subnet_id)
+            .ok_or(DelegationValidationError::UnknownSubnet(subnet_id))?;
+
         is_tree_consistent_with(
             &self.builder.full_labeled_tree,
             self.builder.subnet_id,
-            expected_public_key,
-            subnet_ranges,
+            &subnet_public_key,
+            &subnet_ranges,
             ranges_check,
         )
     }
