@@ -7,6 +7,8 @@ use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositA
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -284,11 +286,41 @@ impl Default for AutomaticDeposits {
 }
 
 /// A funded deposit account in the sweep queue: the user `account` together with
-/// the deposit `address` derived for it.
+/// the deposit `address` derived for it. The address is a pure function of the
+/// account, so the account alone is the identity; ordering and equality ignore
+/// the `address`, which is carried here once instead of being repeated on every
+/// [`SweepEntry`]. The [`Borrow<Account>`] impl lets the queue be looked up by
+/// account.
 #[derive(Clone, Debug)]
 struct DepositAccount {
     account: Account,
     address: Address,
+}
+
+impl PartialEq for DepositAccount {
+    fn eq(&self, other: &Self) -> bool {
+        self.account == other.account
+    }
+}
+
+impl Eq for DepositAccount {}
+
+impl PartialOrd for DepositAccount {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DepositAccount {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.account.cmp(&other.account)
+    }
+}
+
+impl Borrow<Account> for DepositAccount {
+    fn borrow(&self) -> &Account {
+        &self.account
+    }
 }
 
 /// A funded token awaiting sweeping at a [`DepositAccount`]'s deposit address.
