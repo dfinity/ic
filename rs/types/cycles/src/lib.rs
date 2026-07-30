@@ -15,4 +15,4 @@ pub use cycles_use_case::{
     IngressInduction, Instructions, Memory, RequestAndResponseTransmission, SchnorrOutcalls,
     Uninstall, VetKd,
 };
-pub use nominal_cycles::{NominalCycles, testing::NominalCyclesTesting};
+pub use nominal_cycles::NominalCycles;

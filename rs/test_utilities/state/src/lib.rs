@@ -42,9 +42,7 @@ use ic_types::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
 };
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
-};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
 use std::{

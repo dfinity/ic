@@ -99,7 +99,7 @@ mod tests {
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
     };
-    use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting};
+    use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::{BTreeMap, BTreeSet};

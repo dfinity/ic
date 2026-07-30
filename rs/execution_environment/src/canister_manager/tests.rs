@@ -94,7 +94,7 @@ use ic_types::{
 use ic_types_cycles::{
     BurnedCycles, CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
     CyclesUseCase, HTTPOutcalls, IngressInduction, Instructions, Memory, NominalCycles,
-    NominalCyclesTesting, RequestAndResponseTransmission, Uninstall,
+    RequestAndResponseTransmission, Uninstall,
 };
 use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;

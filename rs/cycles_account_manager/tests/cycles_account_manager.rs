@@ -29,7 +29,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, Memory, NominalCycles,
-    NominalCyclesTesting, Uninstall,
+    Uninstall,
 };
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
