@@ -168,21 +168,14 @@ impl CkEthSetup {
         let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
 
         let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
-        let cketh = Self {
+        Self {
             env,
             caller,
             ledger_id,
             minter_id,
             evm_rpc_id,
             support_subaccount: false,
-        };
-
-        assert_eq!(
-            Address::from_str(MINTER_ADDRESS).unwrap(),
-            Address::from_str(&cketh.minter_address()).unwrap()
-        );
-
-        cketh
+        }
     }
 
     pub fn add_support_for_subaccount(self) -> Self {

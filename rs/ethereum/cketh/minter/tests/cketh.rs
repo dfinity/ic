@@ -1175,6 +1175,16 @@ fn should_skip_single_block_containing_too_many_events() {
 
 #[allow(deprecated)]
 #[test]
+fn should_derive_minter_address() {
+    let cketh = CkEthSetup::default();
+
+    assert_eq!(
+        Address::from_str(&cketh.minter_address()).unwrap(),
+        Address::from_str(MINTER_ADDRESS).unwrap()
+    );
+}
+
+#[test]
 fn should_retrieve_minter_info() {
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.max_logs_block_range();
