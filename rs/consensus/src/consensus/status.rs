@@ -101,7 +101,7 @@ pub(crate) fn should_halt(
             .subnet_splitting_status()
         {
             SubnetSplittingStatus::NotScheduled => false,
-            SubnetSplittingStatus::Scheduled(..) => true,
+            SubnetSplittingStatus::Scheduled(..) => height >= summary_block.height,
             // After the split, don't produce any blocks until we are on the right subnet.
             SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) => {
                 subnet_id != new_subnet_id
@@ -273,7 +273,7 @@ mod tests {
         halt_at_cup_height: false,
         subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 })),
         subnet_id: SUBNET_0,
-        expected_status: Some(Status::Halted),
+        expected_status: Some(Status::Halting),
     })]
     #[case::post_subnet_splitting_old_subnet_id(TestCase{
         certified_height: CUP_HEIGHT.decrement(),
