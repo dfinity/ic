@@ -113,7 +113,6 @@
 //! }
 //! ```
 
-
 mod metrics;
 
 pub use metrics::MetricsRegistry as TimerTaskMetricsRegistry;
