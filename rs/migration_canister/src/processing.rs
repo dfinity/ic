@@ -100,6 +100,17 @@ pub async fn process_accepted(
     // canister so that its original controllers (and memory allocation) are only restored
     // if the migration canister actually changed them. This is unambiguous because a call
     // whose outcome is unknown results in no progress and is thus retried.
+    //
+    // Note that `Some(false)` is assigned if the call resulted in no progress, too, i.e., if the
+    // outcome of the call is in fact unknown. This is sound because such an assignment is
+    // discarded: the mutated request is only persisted as part of the `RequestState` returned in
+    // `ProcessingResult::Success` and `ProcessingResult::FatalFailure`, while the request keeps
+    // its previous state (and thus its previous field values) for `ProcessingResult::NoProgress`
+    // (see `ProcessingResult::transition`). The same holds for the assignment for the replaced
+    // canister below: if that call results in no progress, then the `Some(true)` assigned here
+    // is discarded as well. Because a request only ever leaves `RequestState::Accepted` in this
+    // function, the calls making the migration canister the exclusive controller are simply made
+    // again (they are idempotent) and their outcome is tracked afresh.
     request.migrated_canister_exclusive_controller = Some(res.is_success());
     let res = res
         .map_success(|_| RequestState::ControllersChanged {
