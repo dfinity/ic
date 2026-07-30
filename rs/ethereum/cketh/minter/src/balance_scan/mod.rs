@@ -114,7 +114,7 @@ async fn scan<R: Runtime>(
                             .or_default()
                             .push((candidate.token, candidate.balance));
                     }
-                    scanned.extend(batch.addresses.iter().map(|da| da.account));
+                    scanned.extend(batch.addresses.iter().map(|da| da.account()));
                 }
                 Err(e) => {
                     decode_errors += 1;
@@ -178,7 +178,7 @@ fn plan_batches<'a>(addresses: &'a [DepositAccount], tokens: &[Address]) -> Vec<
     addresses
         .chunks(addresses_per_chunk(tokens.len()))
         .map(|chunk| {
-            let holders: Vec<Address> = chunk.iter().map(|da| da.address).collect();
+            let holders: Vec<Address> = chunk.iter().map(|da| da.address()).collect();
             ScanBatch {
                 addresses: chunk,
                 calls: balance_of_calls(&holders, tokens),
@@ -230,7 +230,7 @@ fn collect_candidates(
         .enumerate()
         .filter(|(_, (call, balance))| **balance >= min_deposit(&call.token))
         .map(|(i, (call, balance))| Candidate {
-            account: batch.addresses[i / tokens.len()].account,
+            account: batch.addresses[i / tokens.len()].account(),
             token: call.token,
             balance: *balance,
         })

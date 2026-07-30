@@ -19,7 +19,7 @@ fn account(owner: u64) -> Account {
 }
 
 fn deposit_account(account: Account, address: Address) -> DepositAccount {
-    DepositAccount { account, address }
+    DepositAccount::new(account, address)
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn should_collect_candidates_at_and_above_the_per_token_minimum() {
         deposit_account(account(1), Address::new([0xa1; 20])),
         deposit_account(account(2), Address::new([0xa2; 20])),
     ];
-    let holders: Vec<Address> = addresses.iter().map(|da| da.address).collect();
+    let holders: Vec<Address> = addresses.iter().map(|da| da.address()).collect();
     let batch = ScanBatch {
         addresses: &addresses,
         calls: balance_of_calls(&holders, &tokens),
@@ -211,7 +211,8 @@ fn should_never_split_an_address_across_batches() {
 
         let mut seen: BTreeSet<Address> = BTreeSet::new();
         for batch in &batches {
-            let batch_holders: Vec<Address> = batch.addresses.iter().map(|da| da.address).collect();
+            let batch_holders: Vec<Address> =
+                batch.addresses.iter().map(|da| da.address()).collect();
             for holder in &batch_holders {
                 // Batches never intersect: an address belongs to exactly one batch.
                 assert!(

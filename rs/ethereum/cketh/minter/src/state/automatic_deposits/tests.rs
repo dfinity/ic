@@ -173,7 +173,7 @@ mod addresses_to_scan_iter {
 
         let due: Vec<_> = deposits
             .addresses_to_scan_iter(ts(0), BlockNumber::new(1_000))
-            .map(|da| (da.account, da.address))
+            .map(|da| (da.account(), da.address()))
             .collect();
 
         assert_eq!(due, vec![(account(0), deposit_address(&account(0)))]);
@@ -213,7 +213,7 @@ mod addresses_to_scan_iter {
             assert_eq!(
                 deposits
                     .addresses_to_scan_iter(ts(0), at_boundary)
-                    .map(|da| (da.account, da.address))
+                    .map(|da| (da.account(), da.address()))
                     .collect::<Vec<_>>(),
                 vec![(account(0), deposit_address(&account(0)))],
                 "scan_count {}: due exactly when the gap elapses",
@@ -428,7 +428,7 @@ fn record_automatic_deposit_received_removes_the_watchlist_entry_and_queues_each
     // scanned balance; the shared deposit address is carried once on the key.
     assert_eq!(deposits.sweep_len(), 2);
     let (deposit_account, entries) = deposits.sweep.get_key_value(&account(0)).unwrap();
-    assert_eq!(deposit_account.address, deposit_address(&account(0)));
+    assert_eq!(deposit_account.address(), deposit_address(&account(0)));
     assert_eq!(
         entries,
         &vec![

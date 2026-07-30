@@ -150,10 +150,7 @@ impl AutomaticDeposits {
                     }
                 }
             };
-            due.then_some(DepositAccount {
-                account: *account,
-                address: request.address,
-            })
+            due.then_some(DepositAccount::new(*account, request.address))
         })
     }
 
@@ -192,10 +189,7 @@ impl AutomaticDeposits {
         };
         let entries = self
             .sweep
-            .entry(DepositAccount {
-                account,
-                address: deposit.address,
-            })
+            .entry(DepositAccount::new(account, deposit.address))
             .or_default();
         match entries
             .iter_mut()
@@ -251,7 +245,7 @@ impl AutomaticDeposits {
     ) -> Option<DepositErc20Response> {
         if let Some((deposit_account, entries)) = self.sweep.get_key_value(account) {
             return Some(DepositErc20Response {
-                address: deposit_account.address.to_string(),
+                address: deposit_account.address().to_string(),
                 status: DepositStatus::AwaitingSweep(
                     entries
                         .iter()
@@ -296,8 +290,22 @@ impl Default for AutomaticDeposits {
 /// [`Borrow<Account>`] impl lets collections keyed by it be looked up by account.
 #[derive(Clone, Debug)]
 pub struct DepositAccount {
-    pub account: Account,
-    pub address: Address,
+    account: Account,
+    address: Address,
+}
+
+impl DepositAccount {
+    pub(crate) fn new(account: Account, address: Address) -> Self {
+        Self { account, address }
+    }
+
+    pub fn account(&self) -> Account {
+        self.account
+    }
+
+    pub fn address(&self) -> Address {
+        self.address
+    }
 }
 
 impl PartialEq for DepositAccount {
