@@ -22,7 +22,7 @@ where
     &'static str: From<<E as IntoIterator>::Item>,
 {
     enum_variants.into_iter().for_each(|variant| {
-        let display = format!("{}", &variant);
+        let display = format!("{}", variant);
         let value: &'static str = variant.into();
         let expected = value.to_case(Case::Snake).to_string();
         assert_eq!(display, expected);

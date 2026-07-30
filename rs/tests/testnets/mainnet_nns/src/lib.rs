@@ -877,9 +877,9 @@ async fn patch_env_local_store(env: &TestEnv) {
 
     // Atomically swap the local stores, see `man 2 renameat2` for details.
     nix::fcntl::renameat2(
-        None,
+        nix::fcntl::AT_FDCWD,
         &fs::canonicalize(env.get_path("tmp_new_local_store")).unwrap(),
-        None,
+        nix::fcntl::AT_FDCWD,
         &fs::canonicalize(
             env.prep_dir("")
                 .map(|v| v.registry_local_store_path())

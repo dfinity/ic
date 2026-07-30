@@ -138,6 +138,7 @@ fn canister_with_heartbeat_method_is_not_cold() {
     let mut canister = make_canister(1);
     Arc::make_mut(&mut canister).execution_state = Some(ExecutionState::new(
         WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        None,
         ExportedFunctions::new(btreeset![WasmMethod::System(
             SystemMethod::CanisterHeartbeat,
         )]),
@@ -676,6 +677,7 @@ fn memory_aggregators_combine_hot_and_cold_impl(
     // Also populate custom sections.
     Arc::make_mut(&mut c1).execution_state = Some(ExecutionState::new(
         WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        None,
         ExportedFunctions::new(btreeset![]),
         Memory::new_for_testing(),
         Memory::new_for_testing(),
@@ -852,6 +854,51 @@ fn callback_count_combines_hot_and_cold() {
     // Total = 1 (cold contribution, via cold_stats) + 2 (hot, via iteration).
     assert_eq!(states.cold_stats.callback_count, 1);
     assert_eq!(states.callback_count(), 3);
+}
+
+#[test]
+fn total_consumed_cycles_combines_hot_and_cold() {
+    use ic_types_cycles::{
+        CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles,
+        NominalCyclesTesting,
+    };
+
+    fn consume(canister: &mut Arc<CanisterState>, amount: u128) {
+        Arc::make_mut(canister)
+            .system_state
+            .consume_cycles(CompoundCycles::<Instructions>::new(
+                Cycles::new(amount),
+                CanisterCyclesCostSchedule::Normal,
+            ));
+    }
+
+    // Consuming cycles does not create any work, so the canister stays cold.
+    let mut cold = cold_canister(1);
+    consume(&mut cold, 100);
+    assert!(cold.is_cold());
+
+    let mut hot = hot_canister(2);
+    consume(&mut hot, 30);
+    assert!(!hot.is_cold());
+
+    let mut states = CanisterStates::default();
+    states.insert(cold);
+    states.insert(hot);
+
+    // The cold aggregate holds only the cold canister's contribution...
+    assert_eq!(states.cold_stats.consumed_cycles, NominalCycles::new(100));
+    // ...while the combined total also adds the hot canister's contribution.
+    assert_eq!(states.total_consumed_cycles(), NominalCycles::new(130));
+
+    // Charging a cold canister in place (as storage charging does) keeps the
+    // aggregate consistent thanks to the sub/add bracketing in `for_each_mut`.
+    states.for_each_mut(|_id, canister| {
+        if canister.is_cold() {
+            consume(canister, 5);
+        }
+    });
+    assert_eq!(states.cold_stats.consumed_cycles, NominalCycles::new(105));
+    assert_eq!(states.total_consumed_cycles(), NominalCycles::new(135));
 }
 
 #[test]

@@ -11,10 +11,17 @@ cc_import(
     visibility = ["//visibility:private"],
 )
 
-# Use an extra cc_library to hide the depth of the include folder
+# Use an extra cc_library to hide the depth of the include folder and to carry the linkopts below.
 cc_library(
     name = "libsystemd",
     includes = ["include"],
+    # The host libsystemd.so is built against the host glibc, which is newer
+    # than the glibc 2.31 the zig toolchains target. zig 0.15's lld checks the
+    # undefined *versioned* symbol references of every shared library against
+    # the target glibc stubs, so it rejects the ones added after 2.31 (e.g.
+    # `dlopen@GLIBC_2.34`). This library is system-provided: those symbols are
+    # resolved by the host glibc at runtime, so don't reject them at link time.
+    linkopts = ["-Wl,--allow-shlib-undefined"],
     visibility = ["//visibility:public"],
     deps = ["libsystemd-internal"],
 )

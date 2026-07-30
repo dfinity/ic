@@ -67,7 +67,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 ic-types-cycles = { path = "../types/cycles" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 rand = { workspace = true }
 rcgen = { workspace = true }
 serde = { workspace = true }

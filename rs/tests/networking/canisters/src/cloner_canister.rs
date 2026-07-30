@@ -1,12 +1,12 @@
-#![allow(deprecated)]
 use candid::CandidType;
 use futures::future::join_all;
-use ic_cdk::api::call::CallResult;
-use ic_cdk::api::management_canister::main::{
+use ic_cdk::call::CallResult;
+use ic_cdk::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CanisterStatusType,
-    CreateCanisterArgument, InstallCodeArgument, canister_status, create_canister, install_code,
+    CreateCanisterArgs, InstallCodeArgs, canister_status, create_canister_with_extra_cycles,
+    install_code,
 };
-use ic_cdk::update;
+use ic_cdk::{api::canister_self, update};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -29,17 +29,16 @@ thread_local! {
 
 async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     // Create canister.
-    let canister_id = create_canister(
-        CreateCanisterArgument {
+    let canister_id = create_canister_with_extra_cycles(
+        &CreateCanisterArgs {
             settings: Some(CanisterSettings {
-                controllers: Some(vec![ic_cdk::api::id()]),
+                controllers: Some(vec![canister_self()]),
                 ..CanisterSettings::default()
             }),
         },
         INITIAL_CYCLES_BALANCE,
     )
     .await?
-    .0
     .canister_id;
 
     // Store canister id.
@@ -48,7 +47,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     // Install code if provided.
     let is_wasm_module_empty = wasm_module.is_empty();
     if !is_wasm_module_empty {
-        install_code(InstallCodeArgument {
+        install_code(&InstallCodeArgs {
             mode: CanisterInstallMode::Install,
             canister_id,
             wasm_module,
@@ -59,7 +58,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
 
     // Check the canister is properly running.
     for _ in 0..CHECK_STATUS_ATTEMPTS {
-        let (response,) = canister_status(CanisterIdRecord { canister_id }).await?;
+        let response = canister_status(&CanisterIdRecord { canister_id }).await?;
         // Stop checking status if the canister is running and if the wasm module
         // was provided, then also check that the module hash is not empty.
         if response.status == CanisterStatusType::Running

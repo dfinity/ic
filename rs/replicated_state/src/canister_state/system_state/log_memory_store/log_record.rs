@@ -32,6 +32,21 @@ impl LogRecord {
             }
         }
     }
+
+    /// Returns `true` if this record's filter key is at or beyond the filter
+    /// range's (exclusive) end, i.e. the record lies past the requested range.
+    ///
+    /// Records are scanned in ascending key order (both `idx` and `timestamp`
+    /// are expected to be non-decreasing with insertion order), so once a scan reaches a
+    /// record for which this holds, no later record can match the filter and the
+    /// scan can stop — even if it has not matched anything yet (e.g. a range that
+    /// lies entirely below the live records).
+    pub fn is_past_range_end(&self, filter: &FetchCanisterLogsFilter) -> bool {
+        match filter {
+            FetchCanisterLogsFilter::ByIdx(r) => self.idx >= r.end,
+            FetchCanisterLogsFilter::ByTimestampNanos(r) => self.timestamp >= r.end,
+        }
+    }
 }
 
 impl From<CanisterLogRecord> for LogRecord {

@@ -287,6 +287,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         wasm_module,
         canister_id,
+        round.time,
         round_limits,
         original.compilation_cost_handling,
     );

@@ -2,129 +2,129 @@ benches:
   get_subnet_for_canister_100_times_100:
     total:
       calls: 1
-      instructions: 31052919
+      instructions: 29074351
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   get_subnet_for_canister_100_times_10k:
     total:
       calls: 1
-      instructions: 702793228
+      instructions: 681252530
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   get_subnet_for_canister_100_times_1k:
     total:
       calls: 1
-      instructions: 91803671
+      instructions: 87859085
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   measure_routing_table_invariant_checks_shards_and_unsharded:
     total:
       calls: 1
-      instructions: 267213620
-      heap_increase: 138
+      instructions: 234549424
+      heap_increase: 140
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_1000_individual_entries:
     total:
       calls: 1
-      instructions: 20682680
+      instructions: 20676121
       heap_increase: 2
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_100_000_individual_entries:
     total:
       calls: 1
-      instructions: 3581447939
+      instructions: 3580780340
       heap_increase: 177
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_100_segments_of_1000_entries:
     total:
       calls: 1
-      instructions: 6435424
+      instructions: 6435356
       heap_increase: 30
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_1_segment_of_1000_entries:
     total:
       calls: 1
-      instructions: 53952
+      instructions: 53945
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   migrate_canisters_10_times_100:
     total:
       calls: 1
-      instructions: 153239653
+      instructions: 136465769
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   migrate_canisters_10_times_10k:
     total:
       calls: 1
-      instructions: 10287033153
+      instructions: 8744932063
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   migrate_canisters_10_times_1k:
     total:
       calls: 1
-      instructions: 1022669560
-      heap_increase: 3
+      instructions: 887181882
+      heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   upgrade_with_routing_table_100:
     total:
       calls: 1
-      instructions: 190189040
+      instructions: 184252861
       heap_increase: 7
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 189307066
+        instructions: 183366849
         heap_increase: 4
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 671039
+        instructions: 669329
         heap_increase: 3
         stable_memory_increase: 0
   upgrade_with_routing_table_10k:
     total:
       calls: 1
-      instructions: 5624394843
-      heap_increase: 342
+      instructions: 5464195851
+      heap_increase: 348
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 5602274973
-        heap_increase: 217
+        instructions: 5442067820
+        heap_increase: 223
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 16604363
+        instructions: 16603867
         heap_increase: 125
         stable_memory_increase: 0
   upgrade_with_routing_table_1k:
     total:
       calls: 1
-      instructions: 690060016
-      heap_increase: 40
+      instructions: 669963522
+      heap_increase: 37
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 687183232
-        heap_increase: 25
+        instructions: 667091694
+        heap_increase: 22
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 2202916
+        instructions: 2202738
         heap_increase: 15
         stable_memory_increase: 0
-version: 0.4.1
+version: 0.6.0

@@ -37,7 +37,7 @@ use std::convert::TryFrom;
 // Must match the principal hard-coded in `engine_controller`.
 const AUTHORIZED_CALLER: &str = "bct5z-vccu4-6q4t2-3lb6l-wm43p-ulppt-o5sqq-w6het-rthdz-qp4yn-fqe";
 
-/// Replica version that the registry test fixtures have already blessed.
+/// Replica version that the registry test fixtures have already elected.
 fn test_replica_version() -> String {
     ReplicaVersion::default().to_string()
 }

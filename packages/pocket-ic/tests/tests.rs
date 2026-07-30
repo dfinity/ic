@@ -1613,7 +1613,7 @@ fn test_canister_http_with_diverging_responses() {
         decode_one(&reply).unwrap();
     let (reject_code, err) = http_response.unwrap_err();
     assert!(matches!(reject_code, RejectionCode::SysTransient));
-    let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, hashes: [e8203df12a1c1734aaae2aabbc5593c826f7c89101779b1d29660d651fc2e5a5: 2], [9f82d623c709937029b6f6856eda7aebbfa4c59365a0dc394b6f0cc74c27439a: 2], [8e042d4f8e00bea6c6a1c1d45e4914e9fb9a4d9202a811d22b36a86ebfed41d7: 2], [77fb14e10d9f5f6fe6ee0755cbf541e5dfcb111751a6b435728100346d79eaee: 2], [3c588a6ce2fb45101724c539ac37243c7a0ae0382f124e5d0fd2708419ba468b: 2], [11f192558ce351114ca480f0d1e379e584dd7409734ca1fff6ba0dfc3780ff57: 2], [e29abfc2204e35d2808ad5eb78d7ed82fb9fe2daf86842bbd47e28f47bef3997: 1]";
+    let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, hashes: [e6c8425c65f944486ba0d4964182af8ba0de048ef67f15b7278eb0b5b19ae053: 2], [c5a0122c14f908190aacc5a940c15f2fab1c031a31a45d3581a8a9618b1dd6f2: 2], [6986941fba0203a7a8af16dfa6d9761bdcb3a8c86030324c3e063f8e25fe98db: 2], [5e3b4e1724709fd740dcb1474cbdb7c1288d98776c445017a3bbf9e51c194492: 2], [5349b5986aeb58f94a92e4c709aa2de2cd9f5678aa010c57bdf033e0708ecae6: 2], [1b504c536aab4deb8a62bbd49d622dd414311db9cdb7f5f5b65b285565a63177: 2], [6ce86a526e15a51ab36a86e62cdf83d6959edc80434415af606fb4982a43c5a4: 1]";
     assert_eq!(err, expected);
 }
 
@@ -3956,8 +3956,12 @@ fn test_delete_subnet_state_dir() {
     let state_dir = TempDir::new().unwrap();
     let state_dir_path = state_dir.path().to_path_buf();
 
+    // Create two application subnets so that we can delete the one that does not
+    // host the default effective canister ID (the subnet hosting it cannot be
+    // deleted).
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path.clone())
+        .with_nns_subnet()
         .with_application_subnet()
         .with_application_subnet()
         .build();
@@ -3970,18 +3974,29 @@ fn test_delete_subnet_state_dir() {
             .count()
     };
 
-    let subnet_ids = pic.topology().get_app_subnets();
-    assert_eq!(subnet_ids.len(), 2);
+    let topology = pic.topology();
+    let default_effective_canister_id: Principal =
+        topology.default_effective_canister_id.clone().into();
+    let default_subnet_id = topology
+        .get_subnet(default_effective_canister_id)
+        .expect("default effective canister ID must belong to a subnet");
+    let other_subnet_id = topology
+        .get_app_subnets()
+        .into_iter()
+        .find(|&id| id != default_subnet_id)
+        .expect("there must be a second application subnet");
+
     // On Windows, the state_dir is only synced back from the WSL-native state directory on drop.
     #[cfg(not(windows))]
-    assert_eq!(subnet_dirs_count(), 2);
+    assert_eq!(subnet_dirs_count(), 3);
 
-    pic.delete_subnet(subnet_ids[1]);
-    assert_eq!(pic.topology().get_app_subnets(), vec![subnet_ids[0]]);
+    pic.delete_subnet(other_subnet_id);
+    assert_eq!(pic.topology().get_app_subnets(), vec![default_subnet_id]);
 
     // Drop to flush state to disk.
     drop(pic);
 
-    // After deletion, only the remaining subnet's state directory should exist.
-    assert_eq!(subnet_dirs_count(), 1);
+    // After deletion, only the NNS subnet's and the remaining application subnet's
+    // state directories should exist.
+    assert_eq!(subnet_dirs_count(), 2);
 }

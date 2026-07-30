@@ -18,11 +18,6 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
     config.protoc_arg("--experimental_allow_proto3_optional");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
 
-    // Frankly, I'm kind of surprised that Prost doesn't blanket everything with
-    // Eq. OTOH, I suppose in PB, it's not very clear whether None and Some(0)
-    // should be considered "equal".
-    config.type_attribute(".", "#[derive(Eq)]");
-
     // Candid-ify generated Rust types.
     config.type_attribute(".", "#[derive(candid::CandidType, candid::Deserialize)]");
     // Because users of the types we supply put these on their types, we must

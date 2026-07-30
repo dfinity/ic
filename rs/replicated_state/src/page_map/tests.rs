@@ -11,9 +11,17 @@ use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
-use nix::unistd::dup;
+use std::os::fd::{BorrowedFd, IntoRawFd, RawFd};
 use std::sync::Arc;
 use tempfile::{Builder, TempDir};
+
+/// Wrapper around `nix::unistd::dup` that keeps the raw-fd based signature these
+/// tests rely on (nix 0.31 takes an `AsFd` and returns an `OwnedFd`).
+fn dup(fd: RawFd) -> nix::Result<RawFd> {
+    // SAFETY: `fd` is a valid file descriptor for the duration of the call.
+    let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+    nix::unistd::dup(borrowed).map(IntoRawFd::into_raw_fd)
+}
 
 fn assert_equal_page_maps(page_map1: &PageMap, page_map2: &PageMap) {
     assert_eq!(page_map1.num_host_pages(), page_map2.num_host_pages());

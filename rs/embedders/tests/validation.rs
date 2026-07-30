@@ -7,7 +7,8 @@ use ic_embedders::{
     wasm_utils::{
         Complexity, WasmImportsDetails, WasmValidationDetails, validate_and_instrument_for_testing,
         validation::{
-            MAX_WASM_FUNCTION_NAME_LENGTH, RESERVED_SYMBOLS, extract_custom_section_name,
+            MAX_WASM_FUNCTION_NAME_LENGTH, MAX_WASM_FUNCTION_NUM_LOCALS, RESERVED_SYMBOLS,
+            extract_custom_section_name,
         },
     },
 };
@@ -1475,6 +1476,29 @@ fn wasm_with_long_func_name_is_invalid() {
             size: MAX_WASM_FUNCTION_NAME_LENGTH + 10,
             allowed: MAX_WASM_FUNCTION_NAME_LENGTH,
             name: format!("{}...", "A".repeat(100)),
+        })
+    );
+}
+
+#[test]
+fn wasm_with_many_locals_is_invalid() {
+    let wat = format!(
+        r#"
+          (module
+            (func $f (export "canister_update f") 
+              (local {})
+            )
+          )"#,
+        "i32 ".repeat(MAX_WASM_FUNCTION_NUM_LOCALS + 1)
+    );
+
+    let wasm = wat2wasm(&wat).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::TooManyLocals {
+            index: 0,
+            defined: MAX_WASM_FUNCTION_NUM_LOCALS + 1,
+            allowed: MAX_WASM_FUNCTION_NUM_LOCALS,
         })
     );
 }

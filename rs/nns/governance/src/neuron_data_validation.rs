@@ -594,11 +594,8 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
         neuron: &Neuron,
     ) -> Option<ValidationIssue> {
         let neuron_id = neuron.id();
-        let known_neuron_name = match neuron.known_neuron_data() {
-            // Most neurons aren't known neurons.
-            None => return None,
-            Some(known_neuron_data) => &known_neuron_data.name,
-        };
+        // Most neurons aren't known neurons.
+        let known_neuron_name = &neuron.known_neuron_data()?.name;
         let index_has_entry = with_stable_neuron_indexes(|indexes| {
             indexes
                 .known_neuron()

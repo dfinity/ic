@@ -59,7 +59,7 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rust_decimal = "1.36.0"
+rust_decimal = { workspace = true }
 slog ={ workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

@@ -302,10 +302,17 @@ fn test_get_blocks() {
     ic_ledger_suite_state_machine_tests::test_get_blocks(ledger_wasm(), encode_init_args);
 }
 
-// Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
+// Generate random blocks and check that their CBOR encoding complies with the
+// ledger block CBOR schema.
 #[test]
 fn block_encoding_agrees_with_the_schema() {
     ic_ledger_suite_state_machine_tests::block_encoding_agrees_with_the_schema::<Tokens>();
+}
+
+// Check that the ledger block CBOR schema validator rejects malformed blocks.
+#[test]
+fn block_encoding_schema_catches_malformed_blocks() {
+    ic_ledger_suite_state_machine_tests::block_encoding_schema_catches_malformed_blocks();
 }
 
 // Generate random blocks and check that their value encoding complies with the ICRC-3 spec.
@@ -1347,7 +1354,7 @@ fn test_icrc3_get_blocks() {
             expected_block_count,
             all_blocks.len(),
             expected_blocks_by_id.len(),
-            &ranges
+            ranges
         );
         for (pos, BlockWithId { id, block }) in all_blocks.into_iter().enumerate() {
             let expected_block = match expected_blocks_by_id.get(&id) {

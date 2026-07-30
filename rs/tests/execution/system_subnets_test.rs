@@ -3,7 +3,7 @@ use anyhow::Result;
 use candid::{Decode, Encode, Principal};
 use ic_agent::AgentError;
 use ic_agent::agent::RejectCode;
-use ic_cdk::api::management_canister::main::{CanisterIdRecord, CanisterStatusResponse};
+use ic_cdk::management_canister::{CanisterIdRecord, CanisterStatusResult};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
@@ -117,7 +117,7 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
             let res = agent_call(&Principal::management_canister(), &canister_id)
                 .await
                 .unwrap();
-            let _ = Decode!(&res, CanisterStatusResponse).unwrap();
+            let _ = Decode!(&res, CanisterStatusResult).unwrap();
         }
     });
 }

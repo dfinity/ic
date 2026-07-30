@@ -1,0 +1,6 @@
+[package]
+name = "ic-nervous-system-ids"
+version = "0.0.1"
+edition.workspace = true
+
+[dependencies]

@@ -112,7 +112,6 @@ exports_files(
 
 BUILDIFIER_EXCLUDES = [
     "./.git/*",
-    "./ci/src/git_changes/test_data/**",
 ]
 
 buildifier(

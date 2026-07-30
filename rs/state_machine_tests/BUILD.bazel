@@ -113,6 +113,7 @@ rust_ic_test(
         "tests/mod.rs",
         "tests/multi_subnet.rs",
         "tests/reject_remote_callbacks.rs",
+        "tests/subnet_delete.rs",
     ],
     crate_root = "tests/mod.rs",
     data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],

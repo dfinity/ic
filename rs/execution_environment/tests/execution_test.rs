@@ -2759,79 +2759,6 @@ fn get_canister_metadata() {
     );
 }
 
-fn canister_status_count(env: &StateMachine) -> u64 {
-    fetch_histogram_vec_stats(
-        env.metrics_registry(),
-        "execution_subnet_query_message_duration_seconds",
-    )
-    .get(&labels(&[
-        ("method_name", "query_ic00_canister_status"),
-        ("status", "success"),
-    ]))
-    .map_or(0, |stats| stats.count)
-}
-
-#[test]
-fn canister_status_via_query_call_by_controller_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .build();
-    let canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-
-    assert_eq!(canister_status_count(&env), 0);
-
-    let result = env.query(
-        CanisterId::ic_00(),
-        "canister_status",
-        CanisterIdRecord::from(canister_id).encode(),
-    );
-
-    assert!(result.is_ok());
-    assert_eq!(canister_status_count(&env), 1);
-}
-
-#[test]
-fn canister_status_via_query_call_by_subnet_admin_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let subnet_admin = user_test_id(100);
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .with_subnet_type(SubnetType::Application)
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        .with_subnet_admins(vec![subnet_admin.get()])
-        .build();
-    let canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-    // Get the first canister controller.
-    let controller = env.get_controllers(canister_id).unwrap()[0];
-
-    assert_eq!(canister_status_count(&env), 0);
-    assert_ne!(subnet_admin.get(), controller);
-
-    let result = env.query_as(
-        subnet_admin.get(),
-        CanisterId::ic_00(),
-        "canister_status",
-        CanisterIdRecord::from(canister_id).encode(),
-    );
-    assert!(result.is_ok());
-    assert_eq!(canister_status_count(&env), 1);
-}
-
 fn list_canisters_count(env: &StateMachine) -> u64 {
     fetch_histogram_vec_stats(
         env.metrics_registry(),
@@ -3031,50 +2958,6 @@ fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
     assert!(reject.contains("Only the subnet admins can perform certain actions"));
 
     assert_eq!(env.subnet_message_instructions(), instructions_baseline);
-}
-
-#[test]
-fn canister_status_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let subnet_admin = user_test_id(100);
-    let test_user = user_test_id(101);
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .with_subnet_type(SubnetType::Application)
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        .with_subnet_admins(vec![subnet_admin.get()])
-        .build();
-    let canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-    // Get the first canister controller.
-    let controller = env.get_controllers(canister_id).unwrap()[0];
-
-    assert_eq!(canister_status_count(&env), 0);
-    assert_ne!(subnet_admin.get(), controller);
-    assert_ne!(test_user.get(), controller);
-
-    let err = env
-        .query_as(
-            test_user.get(),
-            CanisterId::ic_00(),
-            "canister_status",
-            CanisterIdRecord::from(canister_id).encode(),
-        )
-        .unwrap_err();
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
-    );
-    assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
-    )));
-    assert_eq!(canister_status_count(&env), 0);
 }
 
 #[test]
@@ -3447,4 +3330,59 @@ fn canister_metrics_via_query_call_by_neither_controller_nor_subnet_admin_fails(
         "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
     )));
     assert_eq!(canister_metrics_count(&env), 0);
+}
+
+/// Build a gzip stream made of DEFLATE stored blocks that decompresses
+/// to the 8-byte empty WebAssembly module `\0asm\x01\x00\x00\x00`.
+///
+/// The first `blocks - 1` blocks are empty non-final stored blocks and the last
+/// is a final stored block carrying the wasm payload, wrapped in a gzip header/trailer.
+pub fn make_large_deflate_stream(blocks: usize) -> Vec<u8> {
+    /// The minimal valid WebAssembly module.
+    const WASM: [u8; 8] = [0x00, b'a', b's', b'm', 0x01, 0x00, 0x00, 0x00];
+    /// Gzip header. CM=deflate, OS=unknown.
+    const HEADER: [u8; 10] = [0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03];
+    /// A non-final DEFLATE stored block of length zero: BFINAL=0, LEN=0, NLEN=0xffff.
+    const EMPTY_NONFINAL_STORED_BLOCK: [u8; 5] = [0x00, 0x00, 0x00, 0xff, 0xff];
+    /// Compute the IEEE CRC-32 (as used by gzip) of `data`.
+    fn crc32(data: &[u8]) -> u32 {
+        let mut crc: u32 = 0xffff_ffff;
+        for &byte in data {
+            crc ^= byte as u32;
+            for _ in 0..8 {
+                let mask = (crc & 1).wrapping_neg();
+                crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+            }
+        }
+        !crc
+    }
+
+    let len = WASM.len() as u16;
+    let mut payload =
+        Vec::with_capacity(HEADER.len() + (blocks - 1) * EMPTY_NONFINAL_STORED_BLOCK.len() + 21);
+    payload.extend_from_slice(&HEADER);
+    for _ in 0..(blocks - 1) {
+        payload.extend_from_slice(&EMPTY_NONFINAL_STORED_BLOCK);
+    }
+    // Final stored block: BFINAL byte, then LEN and its ones-complement NLEN
+    // then the raw stored bytes.
+    payload.push(1);
+    payload.extend_from_slice(&len.to_le_bytes());
+    payload.extend_from_slice(&(!len).to_le_bytes());
+    payload.extend_from_slice(&WASM);
+    // gzip trailer: CRC32 of the uncompressed data, then ISIZE mod 2^32.
+    payload.extend_from_slice(&crc32(&WASM).to_le_bytes());
+    payload.extend_from_slice(&(WASM.len() as u32).to_le_bytes());
+    payload
+}
+
+#[test]
+fn large_zipped_wasm() {
+    let env = StateMachine::new();
+
+    let compressed_wasm = make_large_deflate_stream(250000);
+    let compressed_hash = ic_crypto_sha2::Sha256::hash(&compressed_wasm);
+
+    let canister_id = env.install_canister(compressed_wasm, vec![], None).unwrap();
+    assert_eq!(env.module_hash(canister_id), Some(compressed_hash));
 }

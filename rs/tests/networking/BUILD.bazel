@@ -65,6 +65,9 @@ system_test_nns(
 system_test_nns(
     name = "canister_http_flexible_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    tags = [
+        "long_test",  # since it exercises many outcall scenarios.
+    ],
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
