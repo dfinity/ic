@@ -664,4 +664,160 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn test_canister_upgrade_options_rejected_when_install_mode_is_not_upgrade() {
+        let install_code = InstallCode {
+            install_mode: Some(CanisterInstallMode::Install as i32),
+            // Since install_mode is Install, it makes no sense for
+            // canister_upgrade_options to be Some.
+            canister_upgrade_options: Some(CanisterUpgradeOptionsPb {
+                wasm_memory_persistence: Some(WasmMemoryPersistencePb::Keep as i32),
+                skip_pre_upgrade: None,
+            }),
+
+            // The rest of this object is not really interesting to this test.
+            // (It need to look right though to avoid triggering some other
+            // validation issue.)
+            canister_id: Some(REGISTRY_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            arg: Some(vec![4, 5, 6]),
+            skip_stopping_before_installing: None,
+
+            // These are moot during input validation, because these do not come
+            // from the API type. Rather, they get populated by the Governance
+            // canister itself, derived from wasm_module and arg.
+            wasm_module_hash: None,
+            arg_hash: None,
+        };
+
+        let error = install_code
+            .validate()
+            .expect_err("Expecting validation error, but got Ok(())");
+
+        // Inspect the error message.
+        let error_message = error.error_message.to_lowercase();
+        for keyword in ["canister_upgrade_options", "install_mode is upgrade"] {
+            assert!(
+                error_message.contains(keyword),
+                "{keyword} not found in {error_message:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_canister_upgrade_options_rejected_when_wasm_memory_persistence_unspecified() {
+        let install_code = InstallCode {
+            install_mode: Some(CanisterInstallMode::Upgrade as i32),
+            // This time, canister_upgrade_options is allowed to be Some(...),
+            // because install_mode is Upgrade.
+            canister_upgrade_options: Some(CanisterUpgradeOptionsPb {
+                // Nevertheless, you are still not allowed to pass 0 here.
+                wasm_memory_persistence: Some(WasmMemoryPersistencePb::Unspecified as i32),
+                skip_pre_upgrade: None,
+            }),
+
+            canister_id: Some(REGISTRY_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            arg: Some(vec![4, 5, 6]),
+            skip_stopping_before_installing: None,
+            wasm_module_hash: None,
+            arg_hash: None,
+        };
+
+        let error = install_code
+            .validate()
+            .expect_err("Expecting validation error, but got Ok(())");
+
+        // Inspect the error message.
+        let error_message = error.error_message.to_lowercase();
+        for keyword in ["unrecognized", "wasm_memory_persistence"] {
+            assert!(
+                error_message.contains(keyword),
+                "{keyword} not found in {error_message:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_canister_upgrade_options_accepted_when_install_mode_is_upgrade() {
+        let install_code = InstallCode {
+            install_mode: Some(CanisterInstallMode::Upgrade as i32),
+            canister_upgrade_options: Some(CanisterUpgradeOptionsPb {
+                wasm_memory_persistence: Some(WasmMemoryPersistencePb::Keep as i32),
+                skip_pre_upgrade: Some(true),
+            }),
+
+            canister_id: Some(REGISTRY_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            arg: Some(vec![4, 5, 6]),
+            skip_stopping_before_installing: None,
+            wasm_module_hash: None,
+            arg_hash: None,
+        };
+
+        assert_eq!(install_code.validate(), Ok(()));
+
+        // Can be converted into the request type for the `change_canister`
+        // method of the Root Canister, which is how InstallCode proposals get
+        // executed.
+        let request = Decode!(&install_code.payload().unwrap(), ChangeCanisterRequest).unwrap();
+        // Everything survived the round trip. In particular,
+        // wasm_memory_persistence: Keep, and skip_pre_upgrade: true.
+        assert_eq!(
+            request,
+            ChangeCanisterRequest {
+                stop_before_installing: true,
+                mode: CanisterInstallModeV2::Upgrade(Some(RootCanisterUpgradeOptions {
+                    skip_pre_upgrade: Some(true),
+                    wasm_memory_persistence: Some(RootWasmMemoryPersistence::Keep),
+                })),
+                canister_id: REGISTRY_CANISTER_ID,
+                wasm_module: vec![1, 2, 3],
+                arg: vec![4, 5, 6],
+                chunked_canister_wasm: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_canister_upgrade_options_accepted_when_wasm_memory_persistence_is_replace() {
+        let install_code = InstallCode {
+            install_mode: Some(CanisterInstallMode::Upgrade as i32),
+            canister_upgrade_options: Some(CanisterUpgradeOptionsPb {
+                wasm_memory_persistence: Some(WasmMemoryPersistencePb::Replace as i32),
+                skip_pre_upgrade: Some(true),
+            }),
+
+            canister_id: Some(REGISTRY_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            arg: Some(vec![4, 5, 6]),
+            skip_stopping_before_installing: None,
+            wasm_module_hash: None,
+            arg_hash: None,
+        };
+
+        assert_eq!(install_code.validate(), Ok(()));
+
+        // Can be converted into the request type for the `change_canister`
+        // method of the Root Canister, which is how InstallCode proposals get
+        // executed.
+        let request = Decode!(&install_code.payload().unwrap(), ChangeCanisterRequest).unwrap();
+        // Everything survived the round trip. In particular,
+        // wasm_memory_persistence: Replace, and skip_pre_upgrade: true.
+        assert_eq!(
+            request,
+            ChangeCanisterRequest {
+                stop_before_installing: true,
+                mode: CanisterInstallModeV2::Upgrade(Some(RootCanisterUpgradeOptions {
+                    skip_pre_upgrade: Some(true),
+                    wasm_memory_persistence: Some(RootWasmMemoryPersistence::Replace),
+                })),
+                canister_id: REGISTRY_CANISTER_ID,
+                wasm_module: vec![1, 2, 3],
+                arg: vec![4, 5, 6],
+                chunked_canister_wasm: None,
+            }
+        );
+    }
 }
