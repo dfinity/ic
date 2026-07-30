@@ -81,7 +81,13 @@ pub async fn process_accepted(
     };
 
     // Set controller and memory allocation of migrated canister:
-    // see the comment on the replaced canister below.
+    // every management canister call that the migration canister performs on the migrated
+    // canister (e.g., restoring its original controllers) records a canister history entry
+    // and thus increases the canister's memory usage. To make sure that such a call cannot
+    // fail because the subnet of the migrated canister cannot accommodate that increase,
+    // we bump the memory allocation of the migrated canister in the very same call that
+    // makes the migration canister the exclusive controller of the migrated canister.
+    // The original memory allocation is restored together with the original controllers.
     let res = set_exclusive_controller(
         request.migrated_canister,
         request
@@ -108,13 +114,8 @@ pub async fn process_accepted(
     }
 
     // Set controller and memory allocation of replaced canister:
-    // every management canister call that the migration canister performs on the replaced
-    // canister (e.g., renaming it) records a canister history entry and thus increases the
-    // canister's memory usage. To make sure that such a call cannot fail because the subnet
-    // of the replaced canister cannot accommodate that increase, we bump the memory allocation
-    // of the replaced canister in the very same call that makes the migration canister the
-    // exclusive controller of the replaced canister. The original memory allocation is
-    // restored together with the original controllers.
+    // see the comment on the migrated canister above (the calls that the migration canister
+    // performs on the replaced canister include renaming it).
     let res = set_exclusive_controller(
         request.replaced_canister,
         request
