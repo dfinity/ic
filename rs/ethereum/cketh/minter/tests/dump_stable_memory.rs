@@ -436,19 +436,23 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
             EventPayload::AutomaticDepositReceived {
                 owner,
                 subaccount,
-                token,
                 address,
                 last_scanned_block,
                 scan_count,
-                scanned_balance,
+                deposits,
             } => ET::AutomaticDepositReceived(ic_cketh_minter::state::event::AutomaticDeposit {
                 owner,
                 subaccount,
-                token: token.parse().unwrap(),
                 address: address.parse().unwrap(),
                 last_scanned_block: last_scanned_block.try_into().unwrap(),
                 scan_count: scan_count.try_into().unwrap(),
-                scanned_balance: scanned_balance.try_into().unwrap(),
+                deposits: deposits
+                    .into_iter()
+                    .map(|d| ic_cketh_minter::state::event::Erc20Balance {
+                        token: d.token.parse().unwrap(),
+                        scanned_balance: d.scanned_balance.try_into().unwrap(),
+                    })
+                    .collect(),
             }),
         },
     }

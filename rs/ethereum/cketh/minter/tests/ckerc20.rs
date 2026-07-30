@@ -366,9 +366,10 @@ mod deposit_erc20 {
         ckerc20.run_balance_scan(&vec![1_000_000_000_u128; tokens]);
 
         // The move is event-sourced (metrics are deferred to DEFI-2965, so get_events is the sole
-        // observable): one AutomaticDepositReceived event per funded (account, token), recorded the moment
-        // the funds were detected (durable even across an ungraceful trap).
-        let moves: Vec<(Principal, Option<[u8; 32]>, String, String)> = ckerc20
+        // observable): a single AutomaticDepositReceived event for the scanned account, listing every
+        // funded token, recorded the moment the funds were detected (durable even across an ungraceful
+        // trap).
+        let received: Vec<_> = ckerc20
             .cketh
             .get_all_events()
             .into_iter()
@@ -376,30 +377,28 @@ mod deposit_erc20 {
                 EventPayload::AutomaticDepositReceived {
                     owner,
                     subaccount,
-                    token,
                     address,
+                    deposits,
                     ..
-                } => Some((owner, subaccount, token, address)),
+                } => Some((owner, subaccount, address, deposits)),
                 _ => None,
             })
             .collect();
         assert_eq!(
-            moves.len(),
-            tokens,
-            "one AutomaticDepositReceived event per funded token"
+            received.len(),
+            1,
+            "one AutomaticDepositReceived event for the funded account"
         );
-        let distinct_tokens: BTreeSet<&String> =
-            moves.iter().map(|(_, _, token, _)| token).collect();
+        let (owner, subaccount, address, deposits) = &received[0];
+        assert_eq!(*owner, caller);
+        assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
+        assert_eq!(*address, before.address);
+        let distinct_tokens: BTreeSet<&String> = deposits.iter().map(|d| &d.token).collect();
         assert_eq!(
             distinct_tokens.len(),
             tokens,
-            "one event per distinct token"
+            "one deposit entry per funded token"
         );
-        for (owner, subaccount, _token, address) in &moves {
-            assert_eq!(*owner, caller);
-            assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
-            assert_eq!(*address, before.address);
-        }
 
         // deposit_erc20 now reports the detected funds (AwaitingSweep) at the same address, with one
         // DetectedDeposit per funded token — the scanned balance, at the scan block.
@@ -451,7 +450,7 @@ mod deposit_erc20 {
             .check_audit_logs_and_upgrade_as_ref(Default::default());
         assert_eq!(
             count_automatic_deposits_received(&ckerc20),
-            tokens,
+            1,
             "AutomaticDepositReceived events must survive the upgrade round-trip"
         );
 
