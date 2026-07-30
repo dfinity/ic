@@ -98,7 +98,7 @@ async fn scan<R: Runtime>(
     let mut scanned: Vec<Account> = Vec::new();
 
     for batch in plan_batches(&addresses_to_scan, &erc20_tokens) {
-        let input = batcher::encode_balance_batch(&batch.calls);
+        let input = batcher::encode_balance_batch(&batch.balance_of_calls());
         match client
             .call(call_args(input, latest_block))
             .with_cycles(MIN_ATTACHED_CYCLES)
@@ -108,13 +108,13 @@ async fn scan<R: Runtime>(
         {
             Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), batch.calls.len()) {
                 Ok(balances) => {
-                    for candidate in collect_candidates(&batch, &erc20_tokens, &balances) {
+                    for candidate in collect_candidates(&batch, &balances) {
                         candidates_by_account
                             .entry(candidate.account)
                             .or_default()
                             .push((candidate.token, candidate.balance));
                     }
-                    scanned.extend(batch.addresses.iter().map(|da| da.account()));
+                    scanned.extend(batch.scanned_accounts());
                 }
                 Err(e) => {
                     decode_errors += 1;
@@ -160,11 +160,44 @@ async fn scan<R: Runtime>(
     );
 }
 
-/// One balance-scan batch: the [`DepositAccount`]s whose balances are read together in a single
-/// `eth_call`, and the flat `(token, holder)` calls for exactly those addresses.
-struct ScanBatch<'a> {
-    addresses: &'a [DepositAccount],
-    calls: Vec<BalanceOfCall>,
+/// One `balanceOf` sub-call in a batch: the `token` balance to read for `deposit_account` (at its
+/// deposit address), tagged so a returned balance maps straight to its owner without any positional
+/// bookkeeping.
+struct ScanCall {
+    deposit_account: DepositAccount,
+    token: Address,
+}
+
+/// One balance-scan batch: the per-`(account, token)` calls whose balances are read together in a
+/// single `eth_call`, laid out holder-major/token-minor to match the decoded balances.
+struct ScanBatch {
+    calls: Vec<ScanCall>,
+}
+
+impl ScanBatch {
+    /// The `balanceOf` sub-calls to encode for the batcher, in call order (so the decoded balances
+    /// line up with [`Self::calls`]).
+    fn balance_of_calls(&self) -> Vec<BalanceOfCall> {
+        self.calls
+            .iter()
+            .map(|call| BalanceOfCall {
+                token: call.token,
+                holder: call.deposit_account.address(),
+            })
+            .collect()
+    }
+
+    /// The distinct accounts scanned by this batch, in scan order. Relies on the calls being
+    /// grouped by holder (see [`plan_batches`]), so each account's runs are contiguous.
+    fn scanned_accounts(&self) -> Vec<Account> {
+        let mut accounts: Vec<Account> = self
+            .calls
+            .iter()
+            .map(|call| call.deposit_account.account())
+            .collect();
+        accounts.dedup();
+        accounts
+    }
 }
 
 /// Split the due addresses into `eth_call`-sized batches, chunking *by address* so an address'
@@ -174,15 +207,19 @@ struct ScanBatch<'a> {
 /// `MAX_CALLS_PER_BATCH`), so a batch holds many addresses; if the set ever grew past the cap, a
 /// single address' calls would still be sent together (the batcher response is only 32 bytes per
 /// call, so an oversized batch stays cheap).
-fn plan_batches<'a>(addresses: &'a [DepositAccount], tokens: &[Address]) -> Vec<ScanBatch<'a>> {
+fn plan_batches(addresses: &[DepositAccount], tokens: &[Address]) -> Vec<ScanBatch> {
     addresses
         .chunks(addresses_per_chunk(tokens.len()))
-        .map(|chunk| {
-            let holders: Vec<Address> = chunk.iter().map(|da| da.address()).collect();
-            ScanBatch {
-                addresses: chunk,
-                calls: balance_of_calls(&holders, tokens),
-            }
+        .map(|chunk| ScanBatch {
+            calls: chunk
+                .iter()
+                .flat_map(|da| {
+                    tokens.iter().map(move |token| ScanCall {
+                        deposit_account: da.clone(),
+                        token: *token,
+                    })
+                })
+                .collect(),
         })
         .collect()
 }
@@ -194,19 +231,6 @@ fn addresses_per_chunk(num_tokens: usize) -> usize {
     (MAX_CALLS_PER_BATCH / num_tokens.max(1)).max(1)
 }
 
-fn balance_of_calls(holders: &[Address], tokens: &[Address]) -> Vec<BalanceOfCall> {
-    let mut calls = Vec::with_capacity(holders.len() * tokens.len());
-    for holder in holders {
-        for token in tokens {
-            calls.push(BalanceOfCall {
-                token: *token,
-                holder: *holder,
-            });
-        }
-    }
-    calls
-}
-
 /// A scanned `(account, token)` whose balance is at or above the token's minimum deposit.
 struct Candidate {
     account: Account,
@@ -214,23 +238,17 @@ struct Candidate {
     balance: Erc20Value,
 }
 
-/// Collect the candidates from one scanned batch. `balances` is aligned with `batch.calls`, which
-/// are laid out holder-major/token-minor by [`balance_of_calls`], so call index `i` maps to holder
-/// `i / tokens.len()` (its account) and `batch.calls[i].token` (its token). Keeps a candidate iff
-/// its balance is at or above the token's minimum deposit.
-fn collect_candidates(
-    batch: &ScanBatch,
-    tokens: &[Address],
-    balances: &[Erc20Value],
-) -> Vec<Candidate> {
+/// Collect the candidates from one scanned batch. `balances` is aligned with `batch.calls`, so each
+/// call carries its own account and token: keep a candidate iff its balance is at or above the
+/// token's minimum deposit.
+fn collect_candidates(batch: &ScanBatch, balances: &[Erc20Value]) -> Vec<Candidate> {
     batch
         .calls
         .iter()
         .zip(balances)
-        .enumerate()
-        .filter(|(_, (call, balance))| **balance >= min_deposit(&call.token))
-        .map(|(i, (call, balance))| Candidate {
-            account: batch.addresses[i / tokens.len()].account(),
+        .filter(|(call, balance)| **balance >= min_deposit(&call.token))
+        .map(|(call, balance)| Candidate {
+            account: call.deposit_account.account(),
             token: call.token,
             balance: *balance,
         })

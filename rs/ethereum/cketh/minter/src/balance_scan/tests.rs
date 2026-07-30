@@ -31,11 +31,9 @@ fn should_collect_candidates_at_and_above_the_per_token_minimum() {
         deposit_account(account(1), Address::new([0xa1; 20])),
         deposit_account(account(2), Address::new([0xa2; 20])),
     ];
-    let holders: Vec<Address> = addresses.iter().map(|da| da.address()).collect();
-    let batch = ScanBatch {
-        addresses: &addresses,
-        calls: balance_of_calls(&holders, &tokens),
-    };
+    let batches = plan_batches(&addresses, &tokens);
+    assert_eq!(batches.len(), 1, "4 calls fit in a single batch");
+    let batch = &batches[0];
 
     struct Case {
         desc: &'static str,
@@ -85,7 +83,7 @@ fn should_collect_candidates_at_and_above_the_per_token_minimum() {
 
     for case in cases {
         let collected: Vec<(Account, Address, Erc20Value)> =
-            collect_candidates(&batch, &tokens, &case.balances)
+            collect_candidates(batch, &case.balances)
                 .into_iter()
                 .map(|c| (c.account, c.token, c.balance))
                 .collect();
@@ -98,13 +96,10 @@ fn should_not_collect_candidates_for_an_unsupported_token() {
     // TOKEN_A is absent from MIN_DEPOSITS, so even a huge balance is never a candidate.
     let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
     let tokens = vec![TOKEN_A];
-    let batch = ScanBatch {
-        addresses: &addresses,
-        calls: balance_of_calls(&[DEPOSIT_ADDRESS], &tokens),
-    };
+    let batches = plan_batches(&addresses, &tokens);
     let balances = vec![Erc20Value::from(u128::MAX)];
 
-    assert!(collect_candidates(&batch, &tokens, &balances).is_empty());
+    assert!(collect_candidates(&batches[0], &balances).is_empty());
 }
 
 #[test]
@@ -154,13 +149,17 @@ fn should_have_a_min_deposit_for_every_deployed_supported_token() {
 
 #[test]
 fn should_build_one_call_per_address_and_token_in_order() {
-    let holders = vec![DEPOSIT_ADDRESS, Address::new([0x99; 20])];
+    let addresses = vec![
+        deposit_account(account(1), DEPOSIT_ADDRESS),
+        deposit_account(account(2), Address::new([0x99; 20])),
+    ];
     let tokens = vec![TOKEN_A, TOKEN_B];
 
-    let calls = balance_of_calls(&holders, &tokens);
+    let batches = plan_batches(&addresses, &tokens);
 
+    assert_eq!(batches.len(), 1);
     assert_eq!(
-        calls,
+        batches[0].balance_of_calls(),
         vec![
             BalanceOfCall {
                 token: TOKEN_A,
@@ -184,8 +183,15 @@ fn should_build_one_call_per_address_and_token_in_order() {
 
 #[test]
 fn should_build_no_calls_when_no_addresses_or_no_tokens() {
-    assert!(balance_of_calls(&[], &[TOKEN_A]).is_empty());
-    assert!(balance_of_calls(&[DEPOSIT_ADDRESS], &[]).is_empty());
+    // No due addresses -> no batches at all.
+    assert!(plan_batches(&[], &[TOKEN_A]).is_empty());
+    // Addresses but no tokens -> a batch with no sub-calls.
+    let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
+    assert!(
+        plan_batches(&addresses, &[])
+            .iter()
+            .all(|batch| batch.balance_of_calls().is_empty())
+    );
 }
 
 #[test]
@@ -211,8 +217,12 @@ fn should_never_split_an_address_across_batches() {
 
         let mut seen: BTreeSet<Address> = BTreeSet::new();
         for batch in &batches {
-            let batch_holders: Vec<Address> =
-                batch.addresses.iter().map(|da| da.address()).collect();
+            let mut batch_holders: Vec<Address> = batch
+                .calls
+                .iter()
+                .map(|call| call.deposit_account.address())
+                .collect();
+            batch_holders.dedup();
             for holder in &batch_holders {
                 // Batches never intersect: an address belongs to exactly one batch.
                 assert!(
@@ -223,7 +233,7 @@ fn should_never_split_an_address_across_batches() {
                 let queried: Vec<Address> = batch
                     .calls
                     .iter()
-                    .filter(|call| call.holder == *holder)
+                    .filter(|call| call.deposit_account.address() == *holder)
                     .map(|call| call.token)
                     .collect();
                 assert_eq!(
@@ -235,7 +245,7 @@ fn should_never_split_an_address_across_batches() {
                 batch
                     .calls
                     .iter()
-                    .all(|call| batch_holders.contains(&call.holder)),
+                    .all(|call| batch_holders.contains(&call.deposit_account.address())),
                 "num_tokens={num_tokens}: batch issues a call for an address outside it"
             );
             seen.extend(batch_holders);
