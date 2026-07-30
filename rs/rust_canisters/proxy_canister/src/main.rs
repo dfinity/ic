@@ -41,8 +41,8 @@ fn map_call_error(err: CallFailed) -> (RejectionCode, String) {
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
         ),
-        CallFailed::InsufficientLiquidCycleBalance(e) => (RejectionCode::Unknown, e.to_string()),
-        CallFailed::CallPerformFailed(e) => (RejectionCode::Unknown, e.to_string()),
+        // Nothing reached the callee, so there is no reject code to report.
+        other => (RejectionCode::Unknown, other.to_string()),
     }
 }
 
