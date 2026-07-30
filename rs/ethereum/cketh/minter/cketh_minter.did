@@ -666,11 +666,10 @@ type Event = record {
         AutomaticDepositReceived : record {
             owner : principal;
             subaccount : opt Subaccount;
-            token : text;
             address : text;
             last_scanned_block : nat;
             scan_count : nat64;
-            scanned_balance : nat;
+            deposits : vec record { token : text; scanned_balance : nat };
         };
     };
 };
@@ -722,7 +721,7 @@ type MintMemo = variant {
     ReimburseWithdrawal : record {
         // The id corresponding to the withdrawal request.
         withdrawal_id: nat64;
-    };    
+    };
 };
 
 type BurnMemo = variant {
@@ -747,7 +746,7 @@ type BurnMemo = variant {
         ckerc20_withdrawal_id: nat64;
         // The destination of the withdrawal request.
         to_address: text;
-    };    
+    };
 };
 
 type DecodedMemo = variant {

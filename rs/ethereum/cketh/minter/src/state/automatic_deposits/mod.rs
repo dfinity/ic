@@ -171,7 +171,7 @@ impl AutomaticDeposits {
     }
 
     /// Record an [`AutomaticDeposit`]: drop the account's deposit address from the watchlist (if
-    /// still present) and record the funded `(account, token)` in the sweep queue. Unconditional
+    /// still present) and queue each funded token for the account in the sweep queue. Unconditional
     /// and idempotent per `(account, token)`, so replaying the event log reconstructs the queue.
     /// Removing the watchlist entry is a no-op on replay (the watchlist is only rebuilt by the final
     /// snapshot event), which is intended.
@@ -181,22 +181,24 @@ impl AutomaticDeposits {
             subaccount: deposit.subaccount,
         };
         self.watchlist.remove(&account);
-        let entry = SweepEntry {
-            erc20_token: deposit.token,
-            last_scanned_block: deposit.last_scanned_block,
-            scan_count: deposit.scan_count,
-            scanned_balance: deposit.scanned_balance,
-        };
         let entries = self
             .sweep
             .entry(DepositAccount::new(account, deposit.address))
             .or_default();
-        match entries
-            .iter_mut()
-            .find(|e| e.erc20_token == entry.erc20_token)
-        {
-            Some(existing) => *existing = entry,
-            None => entries.push(entry),
+        for detected in &deposit.deposits {
+            let entry = SweepEntry {
+                erc20_token: detected.token,
+                last_scanned_block: deposit.last_scanned_block,
+                scan_count: deposit.scan_count,
+                scanned_balance: detected.scanned_balance,
+            };
+            match entries
+                .iter_mut()
+                .find(|e| e.erc20_token == entry.erc20_token)
+            {
+                Some(existing) => *existing = entry,
+                None => entries.push(entry),
+            }
         }
     }
 

@@ -9,7 +9,7 @@ use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::audit::process_event;
 use crate::state::automatic_deposits::{AutomaticDeposits, DepositAccount};
-use crate::state::event::{AutomaticDeposit, EventType};
+use crate::state::event::{AutomaticDeposit, Erc20Balance, EventType};
 use crate::state::{TaskType, mutate_state, read_state};
 use crate::timed_sized_map::Timestamp;
 use batcher::BalanceOfCall;
@@ -93,9 +93,9 @@ async fn scan<R: Runtime>(
         return;
     }
 
-    // Candidates per scanned account (empty vec = scanned but nothing at or above a minimum). Every
-    // account whose batch succeeded gets an entry, so a failed chunk is retried next tick rather
-    // than silently skipped until its next scheduled slot.
+    // Funded `(token, balance)` per scanned account (empty vec = scanned but nothing at or above a
+    // minimum). Every account whose batch succeeded gets an entry, so a failed chunk is retried
+    // next tick rather than silently skipped until its next scheduled slot.
     let mut scanned: BTreeMap<Account, Vec<(Address, Erc20Value)>> = BTreeMap::new();
     let mut decode_errors = 0_usize;
     let mut call_errors = 0_usize;
@@ -144,16 +144,14 @@ async fn scan<R: Runtime>(
         for (account, candidates) in &scanned {
             if candidates.is_empty() {
                 s.automatic_deposits.record_scan(now, account, latest_block);
-            } else {
-                for deposit in automatic_deposits_received(
-                    &s.automatic_deposits,
-                    now,
-                    account,
-                    latest_block,
-                    candidates,
-                ) {
-                    process_event(s, EventType::AutomaticDepositReceived(deposit));
-                }
+            } else if let Some(deposit) = automatic_deposit(
+                &s.automatic_deposits,
+                now,
+                account,
+                latest_block,
+                candidates,
+            ) {
+                process_event(s, EventType::AutomaticDepositReceived(deposit));
             }
         }
     });
@@ -164,35 +162,32 @@ async fn scan<R: Runtime>(
     );
 }
 
-/// Build one [`AutomaticDeposit`] per candidate `(token, balance)` for a scanned, funded `account`,
-/// reading the address and scan count from its watchlist entry (the recorded `scan_count` counts
-/// this finding scan). Empty if the account is no longer live as of `now`. All of the account's
-/// deposits are built here, before any is recorded, since recording the first removes the watchlist
-/// entry.
-fn automatic_deposits_received(
+/// Build the [`AutomaticDeposit`] event for a scanned, funded `account`: one event listing every
+/// funded `(token, balance)`, reading the address and scan count from its watchlist entry (the
+/// recorded `scan_count` counts this finding scan). `None` if the account is no longer live as of
+/// `now`.
+fn automatic_deposit(
     deposits: &AutomaticDeposits,
     now: Timestamp,
     account: &Account,
     block: BlockNumber,
     candidates: &[(Address, Erc20Value)],
-) -> Vec<AutomaticDeposit> {
-    let Some(entry) = deposits.get_entry(now, account) else {
-        return Vec::new();
-    };
-    let address = entry.value.address;
-    let scan_count = entry.value.scan_count.saturating_add(1);
-    candidates
-        .iter()
-        .map(|(token, balance)| AutomaticDeposit {
-            owner: account.owner,
-            subaccount: account.subaccount,
-            token: *token,
-            address,
-            last_scanned_block: block,
-            scan_count,
-            scanned_balance: *balance,
-        })
-        .collect()
+) -> Option<AutomaticDeposit> {
+    let entry = deposits.get_entry(now, account)?;
+    Some(AutomaticDeposit {
+        owner: account.owner,
+        subaccount: account.subaccount,
+        address: entry.value.address,
+        last_scanned_block: block,
+        scan_count: entry.value.scan_count.saturating_add(1),
+        deposits: candidates
+            .iter()
+            .map(|(token, scanned_balance)| Erc20Balance {
+                token: *token,
+                scanned_balance: *scanned_balance,
+            })
+            .collect(),
+    })
 }
 
 /// Minimum balance for `token` to count as a scan candidate; a token absent from

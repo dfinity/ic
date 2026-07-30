@@ -263,7 +263,7 @@ async fn should_skip_without_scanning() {
 }
 
 #[test]
-fn should_build_one_automatic_deposit_per_candidate_token() {
+fn should_build_one_automatic_deposit_listing_every_funded_token() {
     let now = ts();
     let block = BlockNumber::new(900);
     let address = Address::new([0xa1; 20]);
@@ -276,7 +276,7 @@ fn should_build_one_automatic_deposit_per_candidate_token() {
     deposits.record_scan(now, &acc, BlockNumber::new(400));
     deposits.record_scan(now, &acc, BlockNumber::new(500));
 
-    let moves = automatic_deposits_received(
+    let deposit = automatic_deposit(
         &deposits,
         now,
         &acc,
@@ -287,42 +287,39 @@ fn should_build_one_automatic_deposit_per_candidate_token() {
         ],
     );
 
-    // One move per token, each carrying the watchlist address, the finding block, scan_count = 3,
-    // and its own balance.
+    // A single event listing both funded tokens with their balances, carrying the watchlist
+    // address, the finding block, and scan_count = 3.
     assert_eq!(
-        moves,
-        vec![
-            AutomaticDeposit {
-                owner: acc.owner,
-                subaccount: acc.subaccount,
-                token: TOKEN_A,
-                address,
-                last_scanned_block: block,
-                scan_count: 3,
-                scanned_balance: Erc20Value::from(10_u8),
-            },
-            AutomaticDeposit {
-                owner: acc.owner,
-                subaccount: acc.subaccount,
-                token: TOKEN_B,
-                address,
-                last_scanned_block: block,
-                scan_count: 3,
-                scanned_balance: Erc20Value::from(20_u8),
-            },
-        ]
+        deposit,
+        Some(AutomaticDeposit {
+            owner: acc.owner,
+            subaccount: acc.subaccount,
+            address,
+            last_scanned_block: block,
+            scan_count: 3,
+            deposits: vec![
+                Erc20Balance {
+                    token: TOKEN_A,
+                    scanned_balance: Erc20Value::from(10_u8),
+                },
+                Erc20Balance {
+                    token: TOKEN_B,
+                    scanned_balance: Erc20Value::from(20_u8),
+                },
+            ],
+        })
     );
 
     // No live watchlist entry -> nothing to move.
-    assert!(
-        automatic_deposits_received(
+    assert_eq!(
+        automatic_deposit(
             &deposits,
             now,
             &account(999),
             block,
             &[(TOKEN_A, Erc20Value::from(1_u8))]
-        )
-        .is_empty()
+        ),
+        None
     );
 }
 

@@ -4,7 +4,9 @@ use super::{
 };
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
-use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
+use crate::state::event::{
+    AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry, Erc20Balance,
+};
 use crate::timed_sized_map::{Entry, Timestamp};
 use candid::{Nat, Principal};
 use ic_ethereum_types::Address;
@@ -302,10 +304,9 @@ fn snapshot_does_not_carry_the_sweep_queue() {
     let mut deposits = AutomaticDeposits::default();
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
-        token(0xaa),
+        vec![(token(0xaa), 10)],
         BlockNumber::new(900),
         3,
-        10,
     ));
     assert_eq!(deposits.sweep_len(), 1);
 
@@ -404,23 +405,15 @@ fn record_automatic_deposit_received_removes_the_watchlist_entry_and_queues_each
         .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
         .unwrap();
 
-    // One address found funded for two tokens => two AutomaticDeposit records (as balance_scan emits).
+    // One scan found the address funded for two tokens => a single AutomaticDeposit listing both.
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
-        token(0xaa),
+        vec![(token(0xaa), 10), (token(0xbb), 20)],
         BlockNumber::new(900),
         3,
-        10,
-    ));
-    deposits.record_automatic_deposit_received(&automatic_deposit(
-        account(0),
-        token(0xbb),
-        BlockNumber::new(900),
-        3,
-        20,
     ));
 
-    // The watchlist entry is gone (removed by the first move).
+    // The watchlist entry is gone (removed by the move).
     assert_eq!(deposits.get_entry(ts(0), &account(0)), None);
     assert_eq!(deposits.watchlist_len(), 0);
 
@@ -446,10 +439,9 @@ fn record_automatic_deposit_received_inserts_unconditionally_without_a_watchlist
 
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
-        token(0xaa),
+        vec![(token(0xaa), 10)],
         BlockNumber::new(900),
         3,
-        10,
     ));
 
     assert_eq!(deposits.watchlist_len(), 0);
@@ -490,25 +482,16 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
 
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
-        token(0xaa),
+        vec![(token(0xaa), 10), (token(0xbb), 20)],
         BlockNumber::new(900),
         3,
-        10,
-    ));
-    deposits.record_automatic_deposit_received(&automatic_deposit(
-        account(0),
-        token(0xbb),
-        BlockNumber::new(900),
-        3,
-        20,
     ));
     // A different account's move must not leak into account(0)'s status.
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(1),
-        token(0xaa),
+        vec![(token(0xaa), 30)],
         BlockNumber::new(901),
         4,
-        30,
     ));
 
     // Once funds are detected, AwaitingSweep takes precedence over Scanning: one entry per funded
@@ -544,19 +527,23 @@ fn token(byte: u8) -> Address {
 
 fn automatic_deposit(
     account: Account,
-    token: Address,
+    deposits: Vec<(Address, u128)>,
     last_scanned_block: BlockNumber,
     scan_count: u32,
-    scanned_balance: u128,
 ) -> AutomaticDeposit {
     AutomaticDeposit {
         owner: account.owner,
         subaccount: account.subaccount,
-        token,
         address: deposit_address(&account),
         last_scanned_block,
         scan_count,
-        scanned_balance: Erc20Value::new(scanned_balance),
+        deposits: deposits
+            .into_iter()
+            .map(|(token, balance)| Erc20Balance {
+                token,
+                scanned_balance: Erc20Value::new(balance),
+            })
+            .collect(),
     }
 }
 

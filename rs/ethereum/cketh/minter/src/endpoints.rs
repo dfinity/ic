@@ -567,12 +567,18 @@ pub mod events {
         AutomaticDepositReceived {
             owner: Principal,
             subaccount: Option<[u8; 32]>,
-            token: String,
             address: String,
             last_scanned_block: Nat,
             scan_count: u64,
-            scanned_balance: Nat,
+            deposits: Vec<Erc20Balance>,
         },
+    }
+
+    /// One funded token in an [`EventPayload::AutomaticDepositReceived`].
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct Erc20Balance {
+        pub token: String,
+        pub scanned_balance: Nat,
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]

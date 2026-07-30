@@ -177,9 +177,9 @@ pub enum EventType {
     #[n(25)]
     RegisteredDepositAddresses(#[n(0)] DepositAddressRegistry),
     /// A funded deposit address was found by a balance scan and moved out of the
-    /// watchlist into the balance-sweep queue for one `(account, token)`. Recorded
-    /// the moment the funds are detected, so the sweep queue is durable even across
-    /// an ungraceful trap (unlike the pre-upgrade snapshot).
+    /// watchlist into the balance-sweep queue, carrying every token the scan found
+    /// funded. Recorded the moment the funds are detected, so the sweep queue is
+    /// durable even across an ungraceful trap (unlike the pre-upgrade snapshot).
     #[n(26)]
     AutomaticDepositReceived(#[n(0)] AutomaticDeposit),
 }
@@ -202,7 +202,10 @@ pub struct DepositAddressRegistry {
 }
 
 /// Payload of [`EventType::AutomaticDepositReceived`]: a funded deposit address moved
-/// into the balance-sweep queue for one `(account, token)`.
+/// into the balance-sweep queue by a single balance scan, listing every ERC-20 token
+/// the scan found at or above its minimum together with the balance detected. One event
+/// per scanned account, so replaying it removes the watchlist entry once and queues all
+/// detected tokens.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct AutomaticDeposit {
     #[cbor(n(0), with = "icrc_cbor::principal")]
@@ -210,14 +213,23 @@ pub struct AutomaticDeposit {
     #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<[u8; 32]>,
     #[n(2)]
-    pub token: Address,
-    #[n(3)]
     pub address: Address,
-    #[n(4)]
+    #[n(3)]
     pub last_scanned_block: BlockNumber,
-    #[n(5)]
+    #[n(4)]
     pub scan_count: u32,
-    #[n(6)]
+    /// The tokens found funded at `address`, one entry per token.
+    #[n(5)]
+    pub deposits: Vec<Erc20Balance>,
+}
+
+/// One ERC-20 token found funded during a scan, part of an [`AutomaticDeposit`].
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct Erc20Balance {
+    #[n(0)]
+    pub token: Address,
+    /// The balance detected for `token` at the scan's block.
+    #[n(1)]
     pub scanned_balance: Erc20Value,
 }
 
