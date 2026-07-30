@@ -23,79 +23,45 @@ fn deposit_account(account: Account, address: Address) -> DepositAccount {
 }
 
 #[test]
-fn should_collect_candidates_at_and_above_the_per_token_minimum() {
-    let (usdc, usdc_min) = MIN_DEPOSITS[0]; // min 10_000_000
-    let (link, link_min) = MIN_DEPOSITS[1]; // min 1e18
-    let tokens = vec![usdc, link];
-    let addresses = vec![
+fn should_attribute_each_decoded_balance_to_its_account_and_token() {
+    let tokens = vec![TOKEN_A, TOKEN_B];
+    let accounts = vec![
         deposit_account(account(1), Address::new([0xa1; 20])),
         deposit_account(account(2), Address::new([0xa2; 20])),
     ];
-
-    struct Case {
-        desc: &'static str,
-        // One balance per call, holder-major/token-minor:
-        // [a1/usdc, a1/link, a2/usdc, a2/link].
-        balances: Vec<Erc20Value>,
-        expected: Vec<(Account, Address, Erc20Value)>,
-    }
-
-    let cases = vec![
-        Case {
-            desc: "at, above, and below/zero the minimum across two addresses and tokens",
-            balances: vec![
-                usdc_min,                                       // a1/usdc == min -> candidate
-                link_min.checked_add(Erc20Value::ONE).unwrap(), // a1/link > min -> candidate
-                usdc_min.checked_add(Erc20Value::ONE).unwrap(), // a2/usdc > min -> candidate
-                link_min,                                       // a2/link == min -> candidate
-            ],
-            expected: vec![
-                (account(1), usdc, usdc_min),
-                (
-                    account(1),
-                    link,
-                    link_min.checked_add(Erc20Value::ONE).unwrap(),
-                ),
-                (
-                    account(2),
-                    usdc,
-                    usdc_min.checked_add(Erc20Value::ONE).unwrap(),
-                ),
-                (account(2), link, link_min),
-            ],
-        },
-        Case {
-            // Only the second address' ckUSDC clears its minimum; a wrong holder index would
-            // wrongly attribute it to account(1).
-            desc: "single surviving candidate is attributed to the right address",
-            balances: vec![
-                usdc_min.checked_sub(Erc20Value::ONE).unwrap(), // a1/usdc < min -> excluded
-                Erc20Value::ZERO,                               // a1/link zero  -> excluded
-                usdc_min,                                       // a2/usdc == min -> candidate
-                link_min.checked_sub(Erc20Value::ONE).unwrap(), // a2/link < min -> excluded
-            ],
-            expected: vec![(account(2), usdc, usdc_min)],
-        },
+    let scan = BalanceScan::new(&accounts, &tokens);
+    // One balance per call, holder-major/token-minor: [a1/A, a1/B, a2/A, a2/B]. A wrong holder
+    // index would misattribute a balance to the wrong account or token.
+    let balances = vec![
+        Erc20Value::from(10_u8),
+        Erc20Value::from(20_u8),
+        Erc20Value::from(30_u8),
+        Erc20Value::from(40_u8),
     ];
 
-    for case in cases {
-        let collected: Vec<(Account, Address, Erc20Value)> =
-            collect_candidates(&addresses, &tokens, &case.balances)
-                .into_iter()
-                .map(|c| (c.account, c.token, c.balance))
-                .collect();
-        assert_eq!(collected, case.expected, "case: {}", case.desc);
-    }
+    let collected: Vec<(Account, Address, Erc20Value)> = scan
+        .collect_balances(balances)
+        .into_iter()
+        .map(|r| (r.account.account(), r.token, r.balance))
+        .collect();
+
+    assert_eq!(
+        collected,
+        vec![
+            (account(1), TOKEN_A, Erc20Value::from(10_u8)),
+            (account(1), TOKEN_B, Erc20Value::from(20_u8)),
+            (account(2), TOKEN_A, Erc20Value::from(30_u8)),
+            (account(2), TOKEN_B, Erc20Value::from(40_u8)),
+        ]
+    );
 }
 
 #[test]
-fn should_not_collect_candidates_for_an_unsupported_token() {
-    // TOKEN_A is absent from MIN_DEPOSITS, so even a huge balance is never a candidate.
-    let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
-    let tokens = vec![TOKEN_A];
-    let balances = vec![Erc20Value::from(u128::MAX)];
-
-    assert!(collect_candidates(&addresses, &tokens, &balances).is_empty());
+fn unsupported_token_has_an_unreachable_minimum_deposit() {
+    // A token absent from MIN_DEPOSITS gets Erc20Value::MAX as its threshold, so no real balance
+    // (below the u256 max) ever clears it and it is never a candidate.
+    assert_eq!(min_deposit(&TOKEN_A), Erc20Value::MAX);
+    assert!(Erc20Value::from(u128::MAX) < min_deposit(&TOKEN_A));
 }
 
 #[test]
@@ -152,7 +118,7 @@ fn should_build_one_call_per_address_and_token_in_order() {
     let tokens = vec![TOKEN_A, TOKEN_B];
 
     assert_eq!(
-        balance_of_calls(&addresses, &tokens),
+        BalanceScan::new(&addresses, &tokens).balance_calls(),
         vec![
             BalanceOfCall {
                 token: TOKEN_A,
@@ -176,9 +142,18 @@ fn should_build_one_call_per_address_and_token_in_order() {
 
 #[test]
 fn should_build_no_calls_when_no_addresses_or_no_tokens() {
-    assert!(balance_of_calls(&[], &[TOKEN_A]).is_empty());
+    assert!(BalanceScan::new(&[], &[TOKEN_A]).balance_calls().is_empty());
     let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
-    assert!(balance_of_calls(&addresses, &[]).is_empty());
+    assert!(BalanceScan::new(&addresses, &[]).balance_calls().is_empty());
+}
+
+#[test]
+#[should_panic(expected = "would split an address")]
+fn should_reject_a_batch_smaller_than_the_token_count() {
+    let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
+    let tokens = vec![TOKEN_A, TOKEN_B];
+    // A batch of 1 call cannot hold a single address' 2 token calls without splitting it.
+    let _ = BalanceScan::new(&addresses, &tokens).batch(1);
 }
 
 #[test]
@@ -194,18 +169,22 @@ fn should_never_split_an_address_across_batches() {
         Address::new(bytes)
     }
 
-    let addresses: Vec<DepositAccount> = (0..5)
+    let accounts: Vec<DepositAccount> = (0..5)
         .map(|i| deposit_account(account(i), address_at(1_000 + i)))
         .collect();
 
-    for num_tokens in [1, 2, 7, MAX_CALLS_PER_BATCH, MAX_CALLS_PER_BATCH + 1] {
+    for num_tokens in [1_usize, 2, 7] {
         let tokens: Vec<Address> = (0..num_tokens as u64).map(address_at).collect();
+        let scan = BalanceScan::new(&accounts, &tokens);
+        // A batch that holds ~2 addresses, so the 5 addresses span several batches.
+        let batch_size = 2 * num_tokens;
 
         let mut seen: BTreeSet<Address> = BTreeSet::new();
-        for chunk in addresses.chunks(addresses_per_chunk(num_tokens)) {
-            let calls = balance_of_calls(chunk, &tokens);
-            let chunk_holders: Vec<Address> = chunk.iter().map(|da| da.address()).collect();
-            for holder in &chunk_holders {
+        for batch in scan.batch(batch_size) {
+            let calls = batch.balance_calls();
+            let mut holders: Vec<Address> = calls.iter().map(|call| call.holder).collect();
+            holders.dedup();
+            for holder in &holders {
                 // Batches never intersect: an address belongs to exactly one batch.
                 assert!(
                     !seen.contains(holder),
@@ -223,16 +202,14 @@ fn should_never_split_an_address_across_batches() {
                 );
             }
             assert!(
-                calls
-                    .iter()
-                    .all(|call| chunk_holders.contains(&call.holder)),
+                calls.iter().all(|call| holders.contains(&call.holder)),
                 "num_tokens={num_tokens}: batch issues a call for an address outside it"
             );
-            seen.extend(chunk_holders);
+            seen.extend(holders);
         }
         assert_eq!(
             seen.len(),
-            addresses.len(),
+            accounts.len(),
             "num_tokens={num_tokens}: every address must be scanned in exactly one batch"
         );
     }
@@ -377,8 +354,8 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
     let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
-    // One token, so addresses_per_chunk == MAX_CALLS_PER_BATCH; this many holders spills into a
-    // second chunk.
+    // One token, so a batch holds up to MAX_CALLS_PER_BATCH addresses; this many holders spills
+    // into a second chunk.
     let extra = 50_usize;
     let holders: Vec<_> = (0..MAX_CALLS_PER_BATCH + extra)
         .map(|i| {

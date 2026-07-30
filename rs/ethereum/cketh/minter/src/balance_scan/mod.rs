@@ -93,16 +93,19 @@ async fn scan<R: Runtime>(
         return;
     }
 
-    let mut candidates_by_account: BTreeMap<Account, Vec<(Address, Erc20Value)>> = BTreeMap::new();
+    // Candidates per scanned account (empty vec = scanned but nothing at or above a minimum). Every
+    // account whose batch succeeded gets an entry, so a failed chunk is retried next tick rather
+    // than silently skipped until its next scheduled slot.
+    let mut scanned: BTreeMap<Account, Vec<(Address, Erc20Value)>> = BTreeMap::new();
     let mut decode_errors = 0_usize;
     let mut call_errors = 0_usize;
-    let mut scanned: Vec<Account> = Vec::new();
 
-    // Chunk *by address* so an address' per-token calls never straddle a batch boundary: the
-    // per-address scan-state advance is all-or-nothing per batch, and a split address could be
+    // `batch` chunks *by address* so an address' per-token calls never straddle a batch boundary:
+    // the per-address scan-state advance is all-or-nothing per batch, and a split address could be
     // advanced with only part of its balances read.
-    for chunk in addresses_to_scan.chunks(addresses_per_chunk(erc20_tokens.len())) {
-        let calls = balance_of_calls(chunk, &erc20_tokens);
+    let scan = BalanceScan::new(&addresses_to_scan, &erc20_tokens);
+    for batch in scan.batch(MAX_CALLS_PER_BATCH) {
+        let calls = batch.balance_calls();
         let input = batcher::encode_balance_batch(&calls);
         match client
             .call(call_args(input, latest_block))
@@ -113,13 +116,12 @@ async fn scan<R: Runtime>(
         {
             Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), calls.len()) {
                 Ok(balances) => {
-                    for candidate in collect_candidates(chunk, &erc20_tokens, &balances) {
-                        candidates_by_account
-                            .entry(candidate.account)
-                            .or_default()
-                            .push((candidate.token, candidate.balance));
+                    for result in batch.collect_balances(balances) {
+                        let candidates = scanned.entry(result.account.account()).or_default();
+                        if result.balance >= min_deposit(&result.token) {
+                            candidates.push((result.token, result.balance));
+                        }
                     }
-                    scanned.extend(chunk.iter().map(|da| da.account()));
                 }
                 Err(e) => {
                     decode_errors += 1;
@@ -133,28 +135,25 @@ async fn scan<R: Runtime>(
         }
     }
 
-    let candidates_found: usize = candidates_by_account.values().map(Vec::len).sum();
+    let candidates_found: usize = scanned.values().map(Vec::len).sum();
 
-    // Advance only the addresses actually scanned, so a failed chunk is retried next tick rather
-    // than silently skipped until its next scheduled slot. A funded address is event-sourced into
-    // the sweep queue (durable the moment funds are detected) instead of being advanced, so it is
-    // no longer re-scanned.
+    // A funded address is event-sourced into the sweep queue (durable the moment funds are
+    // detected) instead of being advanced, so it is no longer re-scanned.
     let addresses_scanned = scanned.len();
     mutate_state(|s| {
-        for account in &scanned {
-            match candidates_by_account.get(account) {
-                Some(cands) => {
-                    for deposit in automatic_deposits_received(
-                        &s.automatic_deposits,
-                        now,
-                        account,
-                        latest_block,
-                        cands,
-                    ) {
-                        process_event(s, EventType::AutomaticDepositReceived(deposit));
-                    }
+        for (account, candidates) in &scanned {
+            if candidates.is_empty() {
+                s.automatic_deposits.record_scan(now, account, latest_block);
+            } else {
+                for deposit in automatic_deposits_received(
+                    &s.automatic_deposits,
+                    now,
+                    account,
+                    latest_block,
+                    candidates,
+                ) {
+                    process_event(s, EventType::AutomaticDepositReceived(deposit));
                 }
-                None => s.automatic_deposits.record_scan(now, account, latest_block),
             }
         }
     });
@@ -163,58 +162,6 @@ async fn scan<R: Runtime>(
         INFO,
         "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates_found} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
     );
-}
-
-/// The `balanceOf` sub-calls to read every `token` balance for each deposit account in `addresses`,
-/// laid out holder-major/token-minor. The decoded balances come back in this same order, so
-/// [`collect_candidates`] pairs them back to their `(account, token)` by regenerating this layout.
-fn balance_of_calls(addresses: &[DepositAccount], tokens: &[Address]) -> Vec<BalanceOfCall> {
-    addresses
-        .iter()
-        .flat_map(|da| {
-            tokens.iter().map(move |token| BalanceOfCall {
-                token: *token,
-                holder: da.address(),
-            })
-        })
-        .collect()
-}
-
-/// How many deposit addresses fit in one `MAX_CALLS_PER_BATCH`-bounded batch, given the number of
-/// supported tokens (one `balanceOf` sub-call per address-token pair). At least one address per
-/// batch even if the token set alone exceeds the cap.
-fn addresses_per_chunk(num_tokens: usize) -> usize {
-    (MAX_CALLS_PER_BATCH / num_tokens.max(1)).max(1)
-}
-
-/// A scanned `(account, token)` whose balance is at or above the token's minimum deposit.
-struct Candidate {
-    account: Account,
-    token: Address,
-    balance: Erc20Value,
-}
-
-/// Collect the candidates from one scanned batch. `balances` is aligned with the calls
-/// [`balance_of_calls`] built for `addresses`/`tokens`, so regenerating that holder-major/token-minor
-/// `(account, token)` order and zipping it with `balances` attributes each balance to its owner.
-/// Keeps a candidate iff its balance is at or above the token's minimum deposit.
-fn collect_candidates(
-    addresses: &[DepositAccount],
-    tokens: &[Address],
-    balances: &[Erc20Value],
-) -> Vec<Candidate> {
-    addresses
-        .iter()
-        .flat_map(|da| tokens.iter().map(move |token| (da.account(), *token)))
-        .zip(balances)
-        .filter_map(|((account, token), balance)| {
-            (*balance >= min_deposit(&token)).then_some(Candidate {
-                account,
-                token,
-                balance: *balance,
-            })
-        })
-        .collect()
 }
 
 /// Build one [`AutomaticDeposit`] per candidate `(token, balance)` for a scanned, funded `account`,
@@ -383,13 +330,24 @@ fn call_args(input: Vec<u8>, block: BlockNumber) -> evm_rpc_types::CallArgs {
     }
 }
 
+/// A set of deposit accounts to read every supported ERC-20 `token` balance for. Splittable into
+/// `eth_call`-sized [`BalanceScanBatch`]es, and — per batch — turned into the `balanceOf` calls to
+/// send ([`Self::balance_calls`]) and, from the decoded balances, one [`BalanceScanResult`] per
+/// `(account, token)` ([`Self::collect_balances`]).
 struct BalanceScan<'a> {
     accounts: &'a [DepositAccount],
     tokens: &'a [Address],
 }
 
 impl<'a> BalanceScan<'a> {
-    pub fn batch(&self, size: usize) -> BalanceScanBatch<'_> {
+    fn new(accounts: &'a [DepositAccount], tokens: &'a [Address]) -> Self {
+        Self { accounts, tokens }
+    }
+
+    /// Split into batches of at most `size` `balanceOf` calls, chunking whole accounts so an
+    /// account's per-token calls are never spread across batches. Panics if `size` is smaller than
+    /// the token count, which would make a single account's calls exceed one batch.
+    fn batch(&self, size: usize) -> BalanceScanBatch<'a> {
         assert!(
             size >= self.tokens.len(),
             "BUG: batch of size {size} would split an address across multiple batches"
@@ -397,11 +355,11 @@ impl<'a> BalanceScan<'a> {
         let addresses_per_chunk = (size / self.tokens.len().max(1)).max(1);
         BalanceScanBatch {
             accounts: self.accounts.chunks(addresses_per_chunk),
-            tokens: &self.tokens,
+            tokens: self.tokens,
         }
     }
 
-    pub fn balance_calls(&self) -> Vec<BalanceOfCall> {
+    fn balance_calls(&self) -> Vec<BalanceOfCall> {
         self.iter()
             .map(|(account, token)| BalanceOfCall {
                 token: *token,
@@ -410,7 +368,7 @@ impl<'a> BalanceScan<'a> {
             .collect()
     }
 
-    pub fn collect_balances(self, balances: Vec<Erc20Value>) -> Vec<BalanceScanResult> {
+    fn collect_balances(self, balances: Vec<Erc20Value>) -> Vec<BalanceScanResult> {
         assert_eq!(
             self.accounts.len() * self.tokens.len(),
             balances.len(),
@@ -433,6 +391,8 @@ impl<'a> BalanceScan<'a> {
     }
 }
 
+/// Iterator over the [`BalanceScan`] batches of a larger scan, each a chunk of accounts small
+/// enough to read in a single `eth_call`.
 struct BalanceScanBatch<'a> {
     accounts: Chunks<'a, DepositAccount>,
     tokens: &'a [Address],
@@ -449,11 +409,7 @@ impl<'a> Iterator for BalanceScanBatch<'a> {
     }
 }
 
-struct BalanceScanQuery<'a> {
-    account: &'a DepositAccount,
-    token: &'a Address,
-}
-
+/// One decoded balance in a scan: the `balance` read for `token` at `account`'s deposit address.
 struct BalanceScanResult {
     account: DepositAccount,
     token: Address,
