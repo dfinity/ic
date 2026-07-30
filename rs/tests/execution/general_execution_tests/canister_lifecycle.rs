@@ -102,7 +102,7 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
 
 pub fn update_settings_of_frozen_canister(env: TestEnv) {
     use ic_base_types::NumBytes;
-    use ic_cdk::api::management_canister::main::{CanisterSettings, UpdateSettingsArgument};
+    use ic_cdk::management_canister::{CanisterSettings, UpdateSettingsArgs};
     use ic_config::subnet_config::{
         CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig,
     };
@@ -135,7 +135,7 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                 controllers.push(PrincipalId::new_derived(&controllers[0].into(), &[i]).into());
             }
             let low_freezing_threshold = 30_u32 * 24 * 3600; // 30 days default
-            let arg = UpdateSettingsArgument {
+            let arg = UpdateSettingsArgs {
                 canister_id: canister.canister_id(),
                 settings: CanisterSettings {
                     controllers: Some(controllers),

@@ -31,13 +31,13 @@ use ic_bn_lib::{
     tasks::TaskManager,
     tls::{acme::alpn as AcmeAlpn, resolver::StubResolver, verify::NoopServerCertVerifier},
 };
-use ic_bn_lib_common::{
-    traits::{http::Client, shed::TypeExtractor},
-    types::{
-        http::{ALPN_ACME, ClientOptions, Metrics as HttpServerMetrics, ServerOptions},
-        shed::{ShardedOptions, ShedResponse},
-        tls::TlsOptions,
+use ic_bn_lib::{
+    http::{
+        client::{Client, ClientOptions},
+        server::{ServerOptions, metrics::Metrics as HttpServerMetrics},
+        shed::{ShardedOptions, ShedResponse, TypeExtractor},
     },
+    tls::{ALPN_ACME, TlsOptions},
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
@@ -738,8 +738,10 @@ fn setup_tls_resolver_acme(
     let opts = AcmeAlpn::Opts::new(
         cli.tls_acme_url.clone(),
         vec![hostname],
-        "mailto:boundary-nodes@dfinity.org".into(),
+        // ic-bn-lib prepends the "mailto:" scheme to the contact itself.
+        "boundary-nodes@dfinity.org".into(),
         path,
+        None, // account_credentials
         tls_config,
     );
 

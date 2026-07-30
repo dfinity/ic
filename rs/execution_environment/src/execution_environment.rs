@@ -741,7 +741,7 @@ impl ExecutionEnvironment {
                                 "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, reply_callback_id {}, sender {}, process_id {}",
                                 response.payload_size_bytes().get(),
                                 max_response_size,
-                                registry_settings.subnet_size,
+                                context.subnet_size.get(),
                                 context.request.sender_reply_callback,
                                 context.request.sender,
                                 std::process::id(),
@@ -1899,17 +1899,14 @@ impl ExecutionEnvironment {
                                 },
                                 Ok(args) => {
                                     let canister_id = args.get_canister_id();
-                                    let subnet_cycles_config = state.get_own_subnet_cycles_config();
                                     self.execute_mgmt_operation_on_canister(
                                         canister_id,
-                                        |canister, msg, _round_limits, _consumed_cycles| {
+                                        |canister, _msg, round_limits, _consumed_cycles| {
                                             fetch_canister_logs(
                                                 sender,
                                                 canister,
                                                 args,
-                                                msg,
-                                                &self.cycles_account_manager,
-                                                subnet_cycles_config,
+                                                round_limits,
                                             )
                                         },
                                         &mut state,
@@ -2699,6 +2696,11 @@ impl ExecutionEnvironment {
         time: Time,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         self.execute_mgmt_operation_on_canister(
             canister_id,
             |canister, _msg, round_limits, _consumed_cycles| {
@@ -2708,6 +2710,8 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_admins,
                     time,
+                    subnet_cycles_config,
+                    &resource_saturation,
                 )
             },
             state,
@@ -3194,6 +3198,11 @@ impl ExecutionEnvironment {
         let to_total_num_changes = args.rename_to.total_num_changes;
         let requested_by = args.requested_by();
 
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
+
         // Take canister out.
         let mut canister = match state.take_canister_state(&old_id) {
             None => {
@@ -3218,6 +3227,7 @@ impl ExecutionEnvironment {
                 requested_by,
                 state,
                 round_limits,
+                &resource_saturation,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());

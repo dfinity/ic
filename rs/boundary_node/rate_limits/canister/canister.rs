@@ -16,7 +16,10 @@ use crate::state::{CanisterApi, init_version_and_config, with_canister_state};
 use candid::Principal;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::api::call::call;
-use ic_cdk::{init, inspect_message, post_upgrade, query, update};
+use ic_cdk::{
+    api::{accept_message, msg_caller, msg_method_name},
+    init, inspect_message, post_upgrade, query, update,
+};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use rate_limits_api::{
@@ -34,8 +37,8 @@ const REPLICATED_QUERY_METHOD: &str = "get_config";
 #[inspect_message]
 fn inspect_message() {
     // In order for this hook to succeed, accept_message() must be invoked.
-    let caller_id: Principal = ic_cdk::api::caller();
-    let called_method = ic_cdk::api::call::method_name();
+    let caller_id: Principal = msg_caller();
+    let called_method = msg_method_name();
 
     let (has_full_access, has_full_read_access) = with_canister_state(|state| {
         let authorized_principal = state.get_authorized_principal();
@@ -47,7 +50,7 @@ fn inspect_message() {
 
     if called_method == REPLICATED_QUERY_METHOD {
         if has_full_access || has_full_read_access {
-            ic_cdk::api::call::accept_message();
+            accept_message();
         } else {
             ic_cdk::api::trap(
                 "message_inspection_failed: method call is prohibited in the current context",
@@ -55,7 +58,7 @@ fn inspect_message() {
         }
     } else if UPDATE_METHODS.contains(&called_method.as_str()) {
         if has_full_access {
-            ic_cdk::api::call::accept_message();
+            accept_message();
         } else {
             ic_cdk::api::trap("message_inspection_failed: unauthorized caller");
         }
@@ -109,7 +112,7 @@ fn post_upgrade(init_arg: InitArg) {
 /// The response includes the config containing all rate-limit rules and the JSON schema version needed for decoding the rules.
 #[query]
 fn get_config(version: Option<Version>) -> GetConfigResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = msg_caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = ConfigConfidentialityFormatter;
@@ -122,7 +125,7 @@ fn get_config(version: Option<Version>) -> GetConfigResponse {
 /// Retrieves a specific rate-limit rule by its ID, applying confidentiality formatting, based on caller's access level and rule's confidentiality status
 #[query]
 fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = msg_caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = RuleConfidentialityFormatter;
@@ -135,7 +138,7 @@ fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
 /// Retrieves all rate-limit rules associated with a specific incident ID, applying confidentiality formatting, based on caller's access level and rule's confidentiality status
 #[query]
 fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = msg_caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = RuleConfidentialityFormatter;
@@ -151,7 +154,7 @@ fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResp
 /// This update method includes authorization check and metrics collection.
 #[update]
 fn add_config(config: InputConfig) -> AddConfigResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = msg_caller();
     let current_time = ic_cdk::api::time();
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
@@ -169,7 +172,7 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 /// making them viewable by the public. It includes authorization check and metrics collection.
 #[update]
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = msg_caller();
     let disclose_time = ic_cdk::api::time();
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());

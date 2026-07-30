@@ -177,8 +177,9 @@ fn fetch_canister_logs_intercanister(
     env: &StateMachine,
     universal_canister: CanisterId,
     canister_id: CanisterId,
-    cycles: Cycles,
 ) -> Result<WasmResult, UserError> {
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated),
+    // so no cycles are attached.
     env.execute_ingress(
         universal_canister,
         "update",
@@ -189,7 +190,7 @@ fn fetch_canister_logs_intercanister(
                 call_args()
                     .other_side(FetchCanisterLogsRequest::new(canister_id).encode())
                     .on_reject(wasm().reject_message().reject()),
-                cycles,
+                Cycles::new(0),
             )
             .build(),
     )
@@ -199,9 +200,8 @@ fn fetch_log_records_intercanister(
     env: &StateMachine,
     universal_canister: CanisterId,
     canister_id: CanisterId,
-    cycles: Cycles,
 ) -> Vec<CanisterLogRecord> {
-    let reply = fetch_canister_logs_intercanister(env, universal_canister, canister_id, cycles);
+    let reply = fetch_canister_logs_intercanister(env, universal_canister, canister_id);
     FetchCanisterLogsResponse::decode(&get_reply(reply))
         .unwrap()
         .canister_log_records
@@ -1945,12 +1945,7 @@ fn test_metric_fetch_canister_logs_via_update_call() {
     );
 
     assert_eq!(count(&env), 0);
-    let _ = fetch_canister_logs_intercanister(
-        &env,
-        canister_a,
-        canister_b,
-        Cycles::new(50_000_000_000),
-    );
+    let _ = fetch_canister_logs_intercanister(&env, canister_a, canister_b);
     assert_eq!(count(&env), 1);
 }
 
@@ -2309,8 +2304,6 @@ fn test_canister_resize_up_preserves_logs() {
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
-    let fetch_cycles = Cycles::new(100_000_000_000);
-
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
@@ -2330,8 +2323,7 @@ fn test_canister_resize_up_preserves_logs() {
     );
 
     let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
-    let logs_before =
-        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    let logs_before = fetch_log_records_intercanister(&env, universal_canister, canister_id);
 
     let _ = env.update_settings(
         &canister_id,
@@ -2340,8 +2332,7 @@ fn test_canister_resize_up_preserves_logs() {
             .build(),
     );
 
-    let logs_after =
-        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
@@ -2362,8 +2353,6 @@ fn test_canister_resize_down_preserves_logs() {
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
-    let fetch_cycles = Cycles::new(100_000_000_000);
-
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
@@ -2383,8 +2372,7 @@ fn test_canister_resize_down_preserves_logs() {
     );
 
     let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
-    let logs_before =
-        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    let logs_before = fetch_log_records_intercanister(&env, universal_canister, canister_id);
 
     let _ = env.update_settings(
         &canister_id,
@@ -2393,8 +2381,7 @@ fn test_canister_resize_down_preserves_logs() {
             .build(),
     );
 
-    let logs_after =
-        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
@@ -2609,7 +2596,9 @@ fn test_canister_log_resize_no_extra_charge_feature_disabled() {
 }
 
 #[test]
-fn test_fetch_canister_logs_update_call_rejected_insufficient_cycles() {
+fn test_fetch_canister_logs_update_call_succeeds_without_cycles() {
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated), so a
+    // call succeeds even when it attaches no cycles as payment.
     let user_controller = PrincipalId::new_user_test_id(42);
     let env = setup_env();
     let canister_a = create_and_install_canister(
@@ -2631,17 +2620,17 @@ fn test_fetch_canister_logs_update_call_rejected_insufficient_cycles() {
     );
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
-    // Send with 1 cycle — far below the required max fee.
-    let result = fetch_canister_logs_intercanister(&env, canister_a, canister_b, Cycles::new(1));
-    let reject_message = get_reject(result);
-    assert!(
-        reject_message.contains("cycles are required"),
-        "Expected insufficient cycles error, got: {reject_message}"
-    );
+    // The helper attaches no cycles as payment — no fetch fee is required.
+    let records = fetch_log_records_intercanister(&env, canister_a, canister_b);
+    assert_eq!(records.len(), 1);
 }
 
 #[test]
-fn test_fetch_canister_logs_update_call_deducts_cycles() {
+fn test_fetch_canister_logs_update_call_refunds_all_attached_cycles() {
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated),
+    // so every cycle the caller attaches to the call is refunded (the incidental
+    // transmission and execution fees are paid from the caller's balance, not from the
+    // attached payment).
     let user_controller = PrincipalId::new_user_test_id(42);
     let env = setup_env();
     let canister_a = create_and_install_canister(
@@ -2663,29 +2652,42 @@ fn test_fetch_canister_logs_update_call_deducts_cycles() {
     );
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
+    // Attach cycles and report back, from the reply callback, how many of them
+    // were refunded.
+    let attached = Cycles::new(5_000_000_000);
     let balance_before = env.cycle_balance(canister_a);
+    let result = env
+        .execute_ingress(
+            canister_a,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    CanisterId::ic_00(),
+                    "fetch_canister_logs",
+                    call_args()
+                        .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                        .on_reject(wasm().reject_message().reject())
+                        .on_reply(wasm().msg_cycles_refunded128().append_and_reply()),
+                    attached,
+                )
+                .build(),
+        )
+        .unwrap();
+    let refunded = match result {
+        WasmResult::Reply(bytes) => u128::from_le_bytes(bytes.try_into().unwrap()),
+        WasmResult::Reject(err) => unreachable!("unexpected reject: {err}"),
+    };
+    // The whole attached payment is refunded.
+    assert_eq!(refunded, attached.get());
 
-    // Provide more than enough cycles for the fetch.
-    let cycles_sent = Cycles::new(5_000_000_000);
-    let records = fetch_log_records_intercanister(&env, canister_a, canister_b, cycles_sent);
-    assert_eq!(records.len(), 1);
-
-    let balance_after = env.cycle_balance(canister_a);
-    let cycles_spent = balance_before - balance_after;
-
-    // Some cycles must have been deducted (fetch fee + execution overhead).
+    // The caller still pays incidental costs (message execution and transmission
+    // fees) from its balance, so the balance is not unchanged; but since the
+    // attached payment is fully refunded, the difference stays below it.
+    let spent = balance_before - env.cycle_balance(canister_a);
+    assert!(spent > 0, "expected some cycles spent on incidental costs");
     assert!(
-        cycles_spent > 0,
-        "Expected some cycles to be spent, but balance is unchanged"
-    );
-    // The refund should have returned most of the overpayment.
-    // cycles_sent was 5B, and the actual fetch fee for a small response
-    // plus execution overhead should be well under 2B.
-    assert_lt!(
-        cycles_spent,
-        2_000_000_000,
-        "Expected most cycles to be refunded, but {} were spent",
-        cycles_spent
+        spent < attached.get(),
+        "expected cycles spent ({spent}) to be less than the attached amount ({attached})"
     );
 }
 

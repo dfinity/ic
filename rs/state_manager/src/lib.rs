@@ -4493,11 +4493,8 @@ impl PageAllocatorFileDescriptorImpl {
             return self.create_backing_file_portable();
         }
 
-        match nix::sys::memfd::memfd_create(
-            &std::ffi::CString::default(),
-            nix::sys::memfd::MemFdCreateFlag::empty(),
-        ) {
-            Ok(fd) => fd,
+        match nix::sys::memfd::memfd_create(c"", nix::sys::memfd::MFdFlags::empty()) {
+            Ok(fd) => fd.into_raw_fd(),
             Err(err) => {
                 panic!("MmapPageAllocatorCore failed to create the memory backing file {err}")
             }

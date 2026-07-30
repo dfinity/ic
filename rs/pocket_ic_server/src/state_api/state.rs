@@ -27,21 +27,21 @@ use http::{
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
 };
-use ic_bn_lib_common::{
-    traits::http::Client,
-    types::http::{ClientOptions, ConnInfo},
+use ic_gateway::ic_bn_lib::http::{
+    client::{Client, ClientOptions},
+    server::conn::ConnInfo,
 };
 use ic_gateway::{
     Cli, ProvidesCustomDomains,
     ic_bn_lib::{
         custom_domains::LocalFileProvider,
+        dns::resolvers::Resolver,
+        health::HealthManager,
         http::{
-            dns::Resolver,
             headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
             proxy::proxy,
         },
         ic_agent::agent::route_provider::RoundRobinRouteProvider,
-        utils::health_manager::HealthManager,
     },
     routing::{
         domain::CustomDomainStorage,
@@ -829,7 +829,7 @@ impl ApiState {
                 let custom_domain_providers: Vec<Arc<dyn ProvidesCustomDomains>> =
                     domain_custom_provider_local_file
                         .map(|path| {
-                            Arc::new(LocalFileProvider::new(path.into()))
+                            Arc::new(LocalFileProvider::new(path.into(), 0, None))
                                 as Arc<dyn ProvidesCustomDomains>
                         })
                         .into_iter()
