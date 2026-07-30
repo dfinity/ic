@@ -28,10 +28,10 @@ pub(crate) enum Status {
 /// Note: If 'height' is smaller than the height of the last CUP, this will return [None].
 ///
 /// Returns
-/// * [Status::Halting] when there is a pending upgrade or the registry instructs the subnet to halt
-/// * [Status::Halted] when the subnet is splitting or when the validation context's certified
-///   height reached the CUP height and either an upgrade is in progress or the registry instructs
-///   the subnet to halt;
+/// * [Status::Halting] when there is a pending upgrade, subnet split or the registry instructs the
+///   subnet to halt
+/// * [Status::Halted] when  the validation context's certified height reached the CUP height and
+///   either an upgrade/subnet split is in progress or the registry instructs the subnet to halt;
 /// * [Status::Running] when there is no upgrade, no split, and the registry doesn't instruct the
 ///   subnet to halt.
 pub(crate) fn get_status(
