@@ -4,6 +4,8 @@
 //! information recorded in a replicated state.
 mod builder;
 mod reader;
+mod validation;
 
 pub use builder::NNSDelegationBuilder;
 pub use reader::{CanisterRangesFilter, NNSDelegationReader};
+pub use validation::{CanisterRangesCheck, DelegationValidationError};

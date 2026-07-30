@@ -28,8 +28,8 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
-        Blob, Certificate, CertificateDelegationFormat, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope,
+        Blob, Certificate, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
+        HttpRequestEnvelope,
     },
     time::expiry_time_from_now,
 };
@@ -48,7 +48,7 @@ use tower::BoxError;
 
 use crate::metrics::DelegationManagerMetrics;
 use ic_nns_delegation_reader::{
-    DelegationValidationError, NNSDelegationBuilder, NNSDelegationReader,
+    CanisterRangesCheck, DelegationValidationError, NNSDelegationBuilder, NNSDelegationReader,
 };
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
@@ -146,20 +146,32 @@ impl DelegationManager {
             return Some(true);
         };
 
-        ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state(
-            // Build the delegation in the flat format to capture all ranges
-            &delegation.build_or_original(CanisterRangesFilter::Flat, &self.log),
-            CertificateDelegationFormat::Flat,
-            self.state_reader.get_latest_certified_state()?.get_ref(),
-        )
-        .inspect_err(|err| {
-            warn!(
-                self.log,
-                "Failed to check if the delegation matches the certified state: {err}"
-            );
-            self.metrics.state_comparison_errors.inc();
-        })
-        .ok()
+        let state = self.state_reader.get_latest_certified_state()?;
+        let network_topology = &state.get_ref().metadata.network_topology;
+
+        network_topology
+            .subnets_for_certification()
+            .get(&delegation.subnet_id())
+            .ok_or(DelegationValidationError::UnknownSubnet(
+                delegation.subnet_id(),
+            ))
+            .and_then(|subnet_topology| {
+                delegation.is_consistent_with(
+                    &subnet_topology.public_key,
+                    &network_topology
+                        .routing_table_for_certification()
+                        .ranges(delegation.subnet_id()),
+                    CanisterRangesCheck::AllSubnetRanges,
+                )
+            })
+            .inspect_err(|err| {
+                warn!(
+                    self.log,
+                    "Failed to check if the delegation matches the certified state: {err}"
+                );
+                self.metrics.state_comparison_errors.inc();
+            })
+            .ok()
     }
 
     async fn fetch(&self) -> Option<NNSDelegationBuilder> {

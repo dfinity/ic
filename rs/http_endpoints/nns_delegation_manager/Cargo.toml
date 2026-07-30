@@ -13,7 +13,6 @@ hickory-resolver = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-ic-canonical-state = { path = "../../canonical_state" }
 ic-certification = { path = "../../certification" }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }

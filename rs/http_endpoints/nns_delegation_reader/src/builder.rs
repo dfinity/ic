@@ -3,7 +3,7 @@ use ic_crypto_tree_hash::{
     sparse_labeled_tree_from_paths,
 };
 use ic_logger::{ReplicaLogger, warn};
-use ic_registry_routing_table::RoutingTable;
+use ic_registry_routing_table::CanisterIdRanges;
 use ic_types::{
     SubnetId,
     messages::{Blob, Certificate, CertificateDelegation},
@@ -12,6 +12,7 @@ use serde::ser::Serialize;
 
 use crate::{
     reader::CanisterRangesFilter,
+    validation::{CanisterRangesCheck, DelegationValidationError, is_tree_consistent_with},
 };
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -87,6 +88,36 @@ impl NNSDelegationBuilder {
                 .builder
                 .build_or_original(canister_ranges_filter, logger),
         }
+    }
+
+    /// The id of the subnet to which the delegation was issued.
+    pub fn subnet_id(&self) -> SubnetId {
+        self.builder.subnet_id
+    }
+
+    /// Checks whether the delegation is consistent with the given view of the subnet
+    /// information recorded in a replicated state: `expected_public_key` and
+    /// `subnet_ranges` should be the delegated subnet's threshold public key and the
+    /// canister ranges which the state assigns to it, as used for certification, i.e.
+    /// `network_topology.subnets_for_certification()[&subnet_id].public_key` and
+    /// `network_topology.routing_table_for_certification().ranges(subnet_id)`.
+    /// `ranges_check` specifies what to check the certified canister ranges against
+    /// (see [`CanisterRangesCheck`]).
+    ///
+    /// See [`is_tree_consistent_with`] for the exact semantics.
+    pub fn is_consistent_with(
+        &self,
+        expected_public_key: &[u8],
+        subnet_ranges: &CanisterIdRanges,
+        ranges_check: CanisterRangesCheck,
+    ) -> Result<bool, DelegationValidationError> {
+        is_tree_consistent_with(
+            &self.builder.full_labeled_tree,
+            self.builder.subnet_id,
+            expected_public_key,
+            subnet_ranges,
+            ranges_check,
+        )
     }
 
     /// The size, in bytes, of the certificate as received from the NNS, which contains
