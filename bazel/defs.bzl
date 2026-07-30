@@ -45,6 +45,8 @@ def _zstd_compress(ctx):
 
     ctx.actions.run(
         executable = ctx.file._zstd,
+        # TODO: We need to increase compression to support SquashFS
+#         arguments = ["-q", "--threads=0", "-12", "--long=30", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],

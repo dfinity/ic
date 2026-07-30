@@ -845,8 +845,10 @@ mod cbor_serialization {
                 root_key: None,
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
+                guestos_version: None,
                 replica_health_status: Some(ReplicaHealthStatus::Starting),
                 certified_height: None,
+                replica_start_time: None,
             },
             Value::Map(btreemap! {
                 text("impl_version") => text("0.0"),
@@ -861,9 +863,11 @@ mod cbor_serialization {
             &HttpStatusResponse {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
+                guestos_version: None,
                 impl_hash: None,
                 replica_health_status: Some(ReplicaHealthStatus::Healthy),
                 certified_height: None,
+                replica_start_time: None,
             },
             Value::Map(btreemap! {
                 text("root_key") => bytes(&[1, 2, 3]),
@@ -879,9 +883,11 @@ mod cbor_serialization {
             &HttpStatusResponse {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
+                guestos_version: None,
                 impl_hash: None,
                 replica_health_status: None,
                 certified_height: None,
+                replica_start_time: None,
             },
             Value::Map(btreemap! {
                 text("root_key") => bytes(&[1, 2, 3]),
@@ -896,9 +902,11 @@ mod cbor_serialization {
             &HttpStatusResponse {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
+                guestos_version: None,
                 impl_hash: None,
                 replica_health_status: Some(ReplicaHealthStatus::Healthy),
                 certified_height: Some(AmountOf::new(1)),
+                replica_start_time: None,
             },
             Value::Map(btreemap! {
                 text("root_key") => bytes(&[1, 2, 3]),

@@ -43,6 +43,8 @@ rust_binary(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:futures",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_cbor",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
@@ -55,8 +57,8 @@ system_test_nns(
     },
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs * 6 vCPUs (1 System + 4 Application).
     env = MAINNET_ENV,
-    guestos = "mainnet_app",
-    guestos_update = True,
+    guestos = True,
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",

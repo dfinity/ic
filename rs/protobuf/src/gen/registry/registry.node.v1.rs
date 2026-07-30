@@ -70,7 +70,7 @@ pub struct NodeRecord {
     /// would be populated (generally with a single value), and then at the end,
     /// set back to empty.
     ///
-    /// See also ssh\_\*\_access fields in SubnetRecord. Of course, the difference is
+    /// See also ssh_*_access fields in SubnetRecord. Of course, the difference is
     /// that this applies only to one node, while the fields in SubnetRecord apply
     /// to nodes in all the subnet.
     #[prost(string, repeated, tag = "21")]

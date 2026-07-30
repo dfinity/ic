@@ -31,6 +31,7 @@ message ConsensusMessageHash {
     bytes catch_up_package = 10;
     bytes catch_up_package_share = 11;
     bytes equivocation_proof = 12;
+    bytes upgrade_status = 13;
   }
 }
 

@@ -1,0 +1,4 @@
+exports_files([
+    "fast-upgrader.sh",
+    "run-fast-upgrader.sh",
+])

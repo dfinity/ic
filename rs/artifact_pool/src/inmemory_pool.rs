@@ -268,6 +268,11 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
         self
     }
+    fn upgrade_status(
+        &self,
+    ) -> &dyn HeightIndexedPool<ic_types::consensus::upgrade::UpgradeStatus> {
+        self
+    }
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T>

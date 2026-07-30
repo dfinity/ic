@@ -235,6 +235,15 @@ case "${ACTION}" in
             tar -xaf "$1" -C "${TMPDIR}"
             BOOT_IMG="${TMPDIR}"/boot.img
             ROOT_IMG="${TMPDIR}"/root.img
+
+            # Extract overlay.raw (Phase 1 fast upgrade) if present.
+            OVERLAY_FILE="${TMPDIR}"/overlay.raw
+            if [ -f "${OVERLAY_FILE}" ]; then
+                OVERLAY_DEST="/var/upgrades/overlay.raw"
+                mkdir -p "$(dirname "${OVERLAY_DEST}")"
+                cp "${OVERLAY_FILE}" "${OVERLAY_DEST}"
+                write_log "Extracted overlay.raw to ${OVERLAY_DEST}"
+            fi
         else
             usage >&2
             exit 1

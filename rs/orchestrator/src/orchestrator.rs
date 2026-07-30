@@ -308,6 +308,7 @@ impl Orchestrator {
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
                 disk_encryption_key_exchange_agent,
+                Arc::clone(&crypto) as _,
             )
             .await,
         );

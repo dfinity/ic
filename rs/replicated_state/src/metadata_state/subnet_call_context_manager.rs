@@ -285,12 +285,12 @@ impl SubnetCallContextManager {
                 self.sign_with_threshold_contexts
                     .remove(&callback_id)
                     .map(|context| {
-                        info!(
-                            logger,
-                            "Received the response for SignWithThreshold request with id {:?} from {:?}",
-                            callback_id,
-                            context.request.sender
-                        );
+                        // info!(
+                        //     logger,
+                        //     "Received the response for SignWithThreshold request with id {:?} from {:?}",
+                        //     callback_id,
+                        //     context.request.sender
+                        // );
                         SubnetCallContext::SignWithThreshold(context)
                     })
             })

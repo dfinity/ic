@@ -1069,7 +1069,7 @@ impl SystemTestGroup {
         // Local backend) to the test log. Opt-in via `--stream-console-logs`,
         // which only the Local backend sets; on Farm this is an `EmptyTask`.
         let log_consoles_task_id = TaskId::Test(String::from(LOG_CONSOLES_TASK_NAME));
-        let log_consoles_task = if group_ctx.stream_console_logs {
+        let log_consoles_task = if false && group_ctx.stream_console_logs {
             Box::from(subproc(
                 log_consoles_task_id,
                 {

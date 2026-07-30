@@ -7,12 +7,17 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
+use http_body_util::{BodyExt, Full};
+use hyper::{Method, Request, StatusCode, body::Bytes};
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    ImageUpgrader, ManagebootRunner, Rebooting,
+    ImageUpgrader, ManagebootRunner, UpgradeOutcome,
     error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -24,7 +29,10 @@ use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
-    consensus::{CatchUpPackage, HasHeight},
+    consensus::{
+        CatchUpPackage, HasHeight,
+        upgrade::UpgradeStateResponse,
+    },
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
@@ -38,6 +46,16 @@ use std::{
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
+
+/// How long to poll the local replica's `/_/upgrade_state` for a Phase 2 permit.
+const UPGRADE_STATE_POLL_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The systemd-sysext extension installed by `fast-upgrader.sh` during Phase 1.
+/// Its presence on disk is the signal that Phase 1 completed (the overlay was
+/// merged over the root filesystem). It survives the orchestrator restart that
+/// Phase 1 triggers, so its presence — together with a prepared image — is how
+/// the restarted orchestrator derives that it is in Phase 2.
+const FAST_UPGRADE_OVERLAY_PATH: &str = "/var/lib/extensions/ic-upgrade.raw";
 
 #[cfg(not(test))]
 const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(1800); // 30 minutes
@@ -104,6 +122,9 @@ pub(crate) struct Upgrade {
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
     pub orchestrator_data_directory: PathBuf,
+    /// TLS config used to talk to the local replica over HTTPS (e.g. when
+    /// polling `/_/upgrade_state` for a Phase 2 permit).
+    crypto_tls_config: Arc<dyn TlsConfig>,
 }
 
 impl Upgrade {
@@ -123,10 +144,11 @@ impl Upgrade {
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
         disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
     ) -> Self {
         let init_time = Instant::now();
 
-        let value = Self {
+        let mut value = Self {
             registry,
             metrics,
             processes_manager,
@@ -143,6 +165,16 @@ impl Upgrade {
             prepared_upgrade_version: None,
             orchestrator_data_directory,
             disk_encryption_key_exchange_agent,
+            crypto_tls_config,
+        };
+        // Restore the prepared version from disk so it survives an orchestrator
+        // restart (Phase 1 of a fast upgrade restarts `ic-replica.service`).
+        value.prepared_upgrade_version = match value.read_persisted_prepared_version() {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(logger, "Couldn't read persisted prepared version: {e}");
+                None
+            }
         };
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
@@ -340,11 +372,21 @@ impl Upgrade {
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
         if new_replica_version != self.replica_version {
-            self.ensure_upgrade_should_be_executed(
-                subnet_id,
-                latest_registry_version,
-                &new_replica_version,
-            )?;
+            // Skip the upgrade pre-checks (recalled versions, replicator
+            // catch-up) when Phase 1 already ran: the overlay is present, meaning
+            // the upgrade was already approved and executed. These gates are for
+            // the *initial* upgrade decision, not for continuing an in-progress
+            // fast upgrade to Phase 2 (permit-gated reboot). Without this skip,
+            // the restarted orchestrator would block forever on the "registry
+            // data not recent enough" delay before reaching the Phase 2 logic.
+            let phase1_done = std::path::Path::new(FAST_UPGRADE_OVERLAY_PATH).exists();
+            if !phase1_done {
+                self.ensure_upgrade_should_be_executed(
+                    subnet_id,
+                    latest_registry_version,
+                    &new_replica_version,
+                )?;
+            }
 
             info!(
                 self.logger,
@@ -353,14 +395,39 @@ impl Upgrade {
                 self.replica_version,
                 new_replica_version
             );
-            // Only downloads the new image if it doesn't already exists locally, i.e. it
-            // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
-            // below.
-            return self
+
+            // execute_upgrade handles both phases: Phase 1 (prepare + fast
+            // upgrade / fallback) and Phase 2 (overlay present → permit-gated
+            // reboot). The outcome tells us how to drive the control loop.
+            match self
                 .execute_upgrade(&new_replica_version)
                 .await
-                .map_err(OrchestratorError::from)
-                .map(|Rebooting| OrchestratorControlFlow::Stop);
+                .map_err(OrchestratorError::from)?
+            {
+                UpgradeOutcome::Rebooting => return Ok(OrchestratorControlFlow::Stop),
+                UpgradeOutcome::FastUpgraded => {
+                    // Phase 1 fast upgrade succeeded. The fast upgrader (started
+                    // non-blocking) is restarting `ic-replica.service`, so SIGTERM
+                    // is already in flight. Record the new replica version and
+                    // return Assigned so the loop reaches its cancellation point
+                    // and the orchestrator exits cleanly. On restart, the overlay
+                    // presence drives Phase 2 inside execute_upgrade.
+                    self.replica_version = new_replica_version.clone();
+                    return Ok(OrchestratorControlFlow::Assigned(subnet_id));
+                }
+                UpgradeOutcome::WaitingForPermit => {
+                    // Phase 2 pending but no permit yet. We must still ensure the
+                    // replica child is running (it serves the /_/upgrade_state
+                    // endpoint we poll for permits), and it may not have been
+                    // started yet after the Phase 1 restart.
+                    self.ensure_children_are_running(
+                        self.replica_version.clone(),
+                        subnet_id,
+                        latest_registry_version,
+                    )?;
+                    return Ok(OrchestratorControlFlow::Assigned(subnet_id));
+                }
+            }
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -515,10 +582,33 @@ impl Upgrade {
             replica_version
         );
 
-        self.execute_upgrade(&replica_version)
+        // Unassigned nodes don't participate in subnet-coordinated Phase 2, so if
+        // Phase 1 already ran (overlay present), just commit the reboot directly
+        // instead of re-running the fast upgrade.
+        if std::path::Path::new(FAST_UPGRADE_OVERLAY_PATH).exists() {
+            info!(self.logger, "Phase 1 already done on unassigned node; committing reboot");
+            self.commit_upgrade_and_reboot().await?;
+            return Ok(OrchestratorControlFlow::Stop);
+        }
+
+        match self
+            .execute_upgrade(&replica_version)
             .await
-            .map_err(OrchestratorError::from)
-            .map(|Rebooting| OrchestratorControlFlow::Stop)
+            .map_err(OrchestratorError::from)?
+        {
+            UpgradeOutcome::Rebooting => Ok(OrchestratorControlFlow::Stop),
+            UpgradeOutcome::FastUpgraded => {
+                // The fast upgrader is restarting our service; record the new
+                // version and stay unassigned. SIGTERM will exit this process.
+                self.replica_version = replica_version;
+                Ok(OrchestratorControlFlow::Unassigned)
+            }
+            // Unreachable: the overlay pre-check above means Phase 2 (which is
+            // the only source of WaitingForPermit) can't be entered here. If it
+            // ever happens, reboot directly (unassigned nodes don't wait on
+            // subnet permits).
+            UpgradeOutcome::WaitingForPermit => Ok(OrchestratorControlFlow::Stop),
+        }
     }
 
     /// Ensure that an upgrade to the given `new_replica_version` should be executed.
@@ -617,6 +707,226 @@ impl Upgrade {
             registry_version,
         )
     }
+
+    // ── Phase 1: fast upgrade (bind-mount overlay + restart services) ──
+
+    /// Try Phase 1 fast upgrade. Returns `Ok(true)` on success, `Ok(false)` if
+    /// not eligible (no `overlay.raw` in the upgrade image).
+    ///
+    /// Preparation (download + `manageboot.sh upgrade-install`) MUST be done by
+    /// the caller ([`ImageUpgrader::execute_upgrade`]); this only checks for the
+    /// extracted overlay and invokes the fast upgrader.
+    ///
+    /// The fast upgrader is started with `systemd-run --no-block` so that it
+    /// returns immediately: `fast-upgrader.sh` ends by restarting
+    /// `ic-replica.service`, which sends SIGTERM to *this* orchestrator process.
+    /// If we blocked here (`--wait`) we would deadlock — the fast upgrader would
+    /// be waiting inside `systemctl try-restart` for us to exit, while we'd be
+    /// waiting for the fast upgrader to finish. With `--no-block` we return
+    /// `Ok(true)` promptly, the upgrade loop reaches its cancellation point and
+    /// the orchestrator exits cleanly; systemd then restarts it for Phase 2.
+    ///
+    /// TODO(phase1): add blocklist check (skip if target version previously failed).
+    /// TODO(phase1): add rollback on failure (unmount + restart on old binary).
+    async fn try_fast_upgrade(
+        &mut self,
+        version: &ReplicaVersion,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        // Check if overlay.raw was extracted by `manageboot.sh upgrade-install`.
+        let overlay_path = std::path::Path::new("/var/upgrades/overlay.raw");
+
+        if !overlay_path.exists() {
+            info!(
+                self.logger,
+                "No overlay.raw found at {}, skipping fast upgrade",
+                overlay_path.display()
+            );
+            return Ok(false);
+        }
+
+        info!(
+            self.logger,
+            "Attempting fast upgrade to {} using {}", version, overlay_path.display()
+        );
+
+        // TODO(phase1): check overlay_metadata.json for compatibility.
+
+        // Invoke the fast upgrader via the privileged wrapper (`sudo
+        // run-fast-upgrader.sh`). The wrapper runs `systemd-run --no-block` as
+        // root, which (a) bypasses polkit — the GuestOS has no polkit rules for
+        // the non-root ic-replica user — and (b) starts the script as an
+        // isolated transient unit so it survives the ic-replica.service cgroup
+        // teardown it itself triggers. We wait only for the wrapper, not the
+        // transient unit: `--no-block` makes the wrapper return immediately
+        // after queuing the unit.
+        let child = tokio::process::Command::new("sudo")
+            .args([
+                "--non-interactive",
+                "/opt/ic/bin/run-fast-upgrader.sh",
+                &version.to_string(),
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+
+        let output = child.wait_with_output().await?;
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.is_empty() {
+            info!(self.logger, "run-fast-upgrader.sh stderr: {}", stderr);
+        }
+
+        Ok(output.status.success())
+    }
+
+    /// Commit the already-prepared GuestOS image to the alternative boot
+    /// partition and trigger a reboot. Extracted from the trait default
+    /// `execute_upgrade` so both the fast-upgrade fallback path and Phase 2 can
+    /// reuse it without re-running preparation.
+    ///
+    /// Clears the prepared version (also deleting the persisted file), records
+    /// the reboot time, removes the downloaded image, then runs
+    /// `manageboot.sh guestos upgrade-commit`.
+    async fn commit_upgrade_and_reboot(&mut self) -> UpgradeResult<()> {
+        // If we ever retry this function, we re-do all steps.
+        self.set_prepared_version(None);
+
+        // Save the time of triggering the reboot if a path is provided.
+        if let Err(e) = self.persist_time_of_triggering_reboot() {
+            warn!(self.log(), "Cannot persist the time of reboot: {}", e);
+        }
+
+        // We could successfully unpack the file above, so we do not need the
+        // image anymore.
+        std::fs::remove_file(self.image_path())
+            .map_err(|e| UpgradeError::IoError("Couldn't delete the image".to_string(), e))?;
+
+        info!(self.log(), "Attempting to reboot");
+        let args = ["guestos".as_ref(), "upgrade-commit".as_ref()];
+        let out = self
+            .manageboot_runner()
+            .run(&args)
+            .await
+            .map_err(|e| {
+                UpgradeError::IoError(
+                    format!("Failed to execute manageboot command with args {args:?}"),
+                    e,
+                )
+            })?;
+
+        if !out.status.success() {
+            warn!(self.log(), "upgrade-commit has failed: {:?}", out.status);
+            return Err(UpgradeError::GenericError("upgrade-commit failed".to_string()));
+        }
+        info!(self.log(), "Rebooting {:?}", out);
+        Ok(())
+    }
+
+    // ── Phase 2: permit-gated reboot ──
+
+    /// Poll the local replica's `/_/upgrade_state` endpoint over HTTPS (HTTP/2
+    /// via ALPN, the same way the CUP endpoint is polled). During Phase 2, the
+    /// block maker issues reboot permits into the replicated state; this endpoint
+    /// exposes whether this node currently holds one. The endpoint returns CBOR,
+    /// decoded here with `serde_cbor`.
+    ///
+    /// Returns `Ok(None)` if the endpoint is unreachable (e.g. the replica child
+    /// isn't running yet) — the caller treats this as "no permit yet" and
+    /// retries. A transient connection failure must NOT propagate as an error,
+    /// because that would prevent `ensure_children_are_running` from being
+    /// reached (it lives in the `WaitingForPermit` arm of `check()`).
+    async fn poll_upgrade_state(&self) -> OrchestratorResult<Option<UpgradeStateResponse>> {
+        let err = |msg: String| OrchestratorError::UpgradeError(msg);
+
+        // Build the request URL from this node's registered HTTPS endpoint.
+        let http = self
+            .registry
+            .get_node_record(self.node_id, self.registry.get_latest_version())?
+            .and_then(|r| r.http)
+            .ok_or_else(|| err(format!("No HTTP endpoint for node {:?}", self.node_id)))?;
+        let mut uri = crate::utils::https_endpoint_to_url(&http).map_err(err)?;
+        uri.path_segments_mut()
+            .map_err(|()| err("URL cannot be a base".to_string()))?
+            .push("_")
+            .push("upgrade_state");
+        let url = uri.to_string();
+
+        // Build a one-shot hyper client with TLS (HTTP/2 negotiated via ALPN),
+        // mirroring the CUP fetch path.
+        let client_config = self
+            .crypto_tls_config
+            .client_config(self.node_id, self.registry.get_latest_version())
+            .map_err(|e| err(format!("TLS client config for upgrade_state: {e:?}")))?;
+        let https = HttpsConnectorBuilder::new()
+            .with_tls_config(client_config)
+            .https_only()
+            .enable_all_versions()
+            .build();
+        let client = Client::builder(TokioExecutor::new())
+            .pool_max_idle_per_host(1)
+            .build::<_, Full<Bytes>>(https);
+
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(&url)
+            .body(Full::new(Bytes::new()))
+            .map_err(|e| err(format!("upgrade_state request build: {e:?}")))?;
+
+        // Connection failures (refused, timeout) are expected while the replica
+        // child is still starting up. Treat them as "no permit yet" rather than
+        // propagating an error, so the upgrade loop reaches WaitingForPermit
+        // (which starts the replica child) instead of failing the check.
+        let response = match tokio::time::timeout(
+            UPGRADE_STATE_POLL_TIMEOUT,
+            client.request(request),
+        )
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(e)) => {
+                info!(
+                    self.logger,
+                    "Phase 2: upgrade_state poll failed (will retry): {e}"
+                );
+                return Ok(None);
+            }
+            Err(_) => {
+                info!(
+                    self.logger,
+                    "Phase 2: upgrade_state poll timed out (will retry)"
+                );
+                return Ok(None);
+            }
+        };
+
+        if response.status() != StatusCode::OK {
+            info!(
+                self.logger,
+                "Phase 2: upgrade_state returned HTTP {} (will retry)",
+                response.status()
+            );
+            return Ok(None);
+        }
+
+        let bytes = response
+            .into_body()
+            .collect()
+            .await
+            .map_err(|e| err(format!("upgrade_state read failed: {e}")))?
+            .to_bytes();
+
+        match serde_cbor::from_slice::<UpgradeStateResponse>(&bytes) {
+            Ok(decoded) => Ok(Some(decoded)),
+            Err(e) => {
+                info!(
+                    self.logger,
+                    "Phase 2: upgrade_state CBOR decode failed (will retry): {e}"
+                );
+                Ok(None)
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -628,6 +938,14 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     }
 
     fn set_prepared_version(&mut self, version: Option<ReplicaVersion>) {
+        match &version {
+            Some(v) => {
+                if let Err(e) = self.persist_prepared_version(v) {
+                    warn!(self.logger, "Couldn't persist prepared version {v:?}: {e}");
+                }
+            }
+            None => self.clear_persisted_prepared_version(),
+        }
         self.prepared_upgrade_version = version
     }
 
@@ -637,6 +955,82 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
 
     fn data_dir(&self) -> Option<&PathBuf> {
         Some(&self.orchestrator_data_directory)
+    }
+
+    /// The single entry point for a GuestOS upgrade, handling both phases.
+    ///
+    /// **Phase 2** (Phase 1 already ran — detected by the overlay being present):
+    /// poll for a reboot permit. If held, commit the prepared GuestOS image and
+    /// reboot. If not, return [`UpgradeOutcome::WaitingForPermit`] so the caller
+    /// keeps serving traffic and retries.
+    ///
+    /// **Phase 1** (overlay absent): prepare the image (download +
+    /// `manageboot.sh upgrade-install`, which also extracts `overlay.raw`), then
+    /// attempt the fast upgrade via `fast-upgrader.sh`. On success the replica
+    /// binaries are swapped in-place and IC services are restarted; the
+    /// orchestrator returns [`UpgradeOutcome::FastUpgraded`] and is then
+    /// SIGTERM'd and restarted by systemd. On `Ok(false)` (no overlay) or error,
+    /// fall back to a regular GuestOS reboot.
+    async fn execute_upgrade(
+        &mut self,
+        version: &ReplicaVersion,
+    ) -> UpgradeResult<UpgradeOutcome> {
+        // Phase 2: the overlay applied by Phase 1 is present (it survives the
+        // orchestrator restart that Phase 1 triggers). Wait for a permit before
+        // committing the reboot; the subnet limits concurrent reboots to ≤ f.
+        if std::path::Path::new(FAST_UPGRADE_OVERLAY_PATH).exists() {
+            info!(self.logger, "Phase 2: overlay present, checking for reboot permit");
+            let permit_state = self.poll_upgrade_state().await?;
+            return match permit_state {
+                Some(resp) if resp.has_permit => {
+                    info!(
+                        self.logger,
+                        "Phase 2: permit received for {:?}; committing GuestOS reboot",
+                        resp.permit
+                    );
+                    self.commit_upgrade_and_reboot().await?;
+                    Ok(UpgradeOutcome::Rebooting)
+                }
+                _ => {
+                    // No permit yet (or endpoint unavailable). Keep serving
+                    // traffic on the V2 replica binary / V1 GuestOS.
+                    info!(
+                        self.logger,
+                        "Phase 2: no permit yet (response: {:?}); keeping V2 replica on V1 GuestOS",
+                        permit_state
+                    );
+                    Ok(UpgradeOutcome::WaitingForPermit)
+                }
+            };
+        }
+
+        // Phase 1: prepare is idempotent (a no-op if already prepared, e.g. the
+        // image was pre-downloaded). Preparation is persisted so it survives the
+        // orchestrator restart that a successful fast upgrade triggers.
+        self.prepare_upgrade(version).await?;
+
+        match self.try_fast_upgrade(version).await {
+            Ok(true) => {
+                info!(self.logger, "Phase 1 fast upgrade to {version} succeeded");
+                Ok(UpgradeOutcome::FastUpgraded)
+            }
+            Ok(false) => {
+                info!(
+                    self.logger,
+                    "Fast upgrade to {version} not eligible; falling back to GuestOS reboot"
+                );
+                self.commit_upgrade_and_reboot().await?;
+                Ok(UpgradeOutcome::Rebooting)
+            }
+            Err(error) => {
+                warn!(
+                    self.logger,
+                    "Fast upgrade to {version} failed ({error:?}); falling back to GuestOS reboot"
+                );
+                self.commit_upgrade_and_reboot().await?;
+                Ok(UpgradeOutcome::Rebooting)
+            }
+        }
     }
 
     fn manageboot_runner(&self) -> &dyn ManagebootRunner {
@@ -1611,6 +2005,7 @@ mod tests {
             logger,
             orchestrator_data_dir,
             None,
+            Arc::new(mock_tls_config()),
         )
         .await;
 

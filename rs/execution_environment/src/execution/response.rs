@@ -1193,14 +1193,14 @@ fn process_response_result(
             let instructions_used =
                 original.message_instruction_limit - output.num_instructions_left;
             if instructions_used >= execution_parameters.instruction_limits.slice() {
-                info!(
-                    round.log,
-                    "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
-                    original.callback_id,
-                    clean_canister.canister_id(),
-                    slice.executed_instructions.display(),
-                    instructions_used.display(),
-                );
+                // info!(
+                //     round.log,
+                //     "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
+                //     original.callback_id,
+                //     clean_canister.canister_id(),
+                //     slice.executed_instructions.display(),
+                //     instructions_used.display(),
+                // );
             }
             update_round_limits(round_limits, &slice);
             let deallocation_sender = helper.deallocation_sender.clone();

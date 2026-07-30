@@ -36,6 +36,7 @@ ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
 ic-utils-thread = { path = "../utils/thread" }
 prometheus = { workspace = true }
+serde_cbor = { workspace = true }
 slog = { workspace = true }
 tracing = { workspace = true }
 

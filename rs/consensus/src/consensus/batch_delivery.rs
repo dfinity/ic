@@ -220,6 +220,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 batch_messages: BatchMessages::default(),
                 chain_key_data,
                 consensus_responses,
+                upgrade: vec![],
                 requires_full_state_hash,
             },
             BlockPayload::Data(data_payload) => {
@@ -236,6 +237,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                         .unwrap_or_default(),
                     chain_key_data,
                     consensus_responses,
+                    upgrade: data_payload.batch.upgrade.clone(),
                     requires_full_state_hash,
                 }
             }

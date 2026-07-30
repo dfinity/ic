@@ -15,6 +15,7 @@ pub mod query;
 pub mod read_state;
 mod status;
 mod tracing_flamegraph;
+mod upgrade_state;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
@@ -135,6 +136,7 @@ struct HttpHandler {
     query_v3_router: Router,
     subnet_query_v3_router: Router,
     catchup_router: Router,
+    upgrade_state_router: Router,
     dashboard_router: Router,
     status_router: Router,
     canister_read_state_v2_router: Router,
@@ -390,6 +392,9 @@ pub fn start_server(
         DashboardService::new_router(config.clone(), subnet_type, state_reader.clone());
     let catchup_router = CatchUpPackageService::new_router(consensus_pool_cache.clone());
 
+    let upgrade_state_router =
+        upgrade_state::UpgradeStateService::new_router(node_id, state_reader.clone());
+
     let pprof_home_router = PprofHomeService::new_router();
     let pprof_profile_router = PprofProfileService::new_router(pprof_collector.clone());
     let pprof_flamegraph_router = PprofFlamegraphService::new_router(pprof_collector);
@@ -423,6 +428,7 @@ pub fn start_server(
         subnet_query_v3_router,
         status_router,
         catchup_router,
+        upgrade_state_router,
         dashboard_router,
         canister_read_state_v2_router,
         canister_read_state_v3_router,
@@ -647,6 +653,7 @@ fn make_router(
             .merge(http_handler.catchup_router.layer(service_builder(
                 GlobalConcurrencyLimitLayer::new(config.max_catch_up_package_concurrent_requests),
             )))
+            .merge(http_handler.upgrade_state_router)
             .merge(http_handler.dashboard_router.layer(service_builder(
                 GlobalConcurrencyLimitLayer::new(config.max_dashboard_concurrent_requests),
             )))
@@ -830,6 +837,10 @@ pub(crate) mod tests {
             catchup_router: Router::new().route(
                 CatchUpPackageService::route(),
                 axum::routing::post(dummy_cbor),
+            ),
+            upgrade_state_router: Router::new().route(
+                upgrade_state::UpgradeStateService::route(),
+                axum::routing::get(dummy_cbor),
             ),
             dashboard_router: Router::new()
                 .route(DashboardService::route(), axum::routing::get(dummy)),

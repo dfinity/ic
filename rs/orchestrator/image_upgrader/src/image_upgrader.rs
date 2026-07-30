@@ -42,10 +42,27 @@ impl ManagebootRunner for ManagebootRunnerImpl {
     }
 }
 
-/// Used to signal that the system is rebooting.
-pub struct Rebooting;
+/// The outcome of [`ImageUpgrader::execute_upgrade`].
+#[derive(Debug, PartialEq, Eq)]
+pub enum UpgradeOutcome {
+    /// The GuestOS was rebooted into the new version.
+    Rebooting,
+    /// Phase 1 fast upgrade succeeded: the overlay was applied and IC services
+    /// are being restarted (which sends SIGTERM to the orchestrator). The
+    /// GuestOS was *not* rebooted; Phase 2 (a permit-gated reboot) is pending.
+    /// On the next startup the orchestrator derives Phase 2 from the presence of
+    /// the applied overlay plus the persisted prepared-version.
+    FastUpgraded,
+    /// Phase 2 is pending (Phase 1 already ran) but this node does not yet hold a
+    /// reboot permit. The caller should keep serving traffic and retry.
+    WaitingForPermit,
+}
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
+/// Persisted under the orchestrator data dir; records the version whose image is
+/// already unpacked onto the alternative boot partition. Survives the orchestrator
+/// restart that Phase 1 triggers, so Phase 2 skips re-preparation.
+const PREPARED_VERSION_FILENAME: &str = "prepared_upgrade_version.txt";
 
 /// Defines the image upgrader trait and default implementation. It receives a generic version identifier `V`
 /// and a return value `R` stemming from a periodically called `check_for_upgrade` function.
@@ -111,7 +128,11 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 /// ```
 ///
 #[async_trait]
-pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send + Sync {
+pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync + FromStr + std::fmt::Display>:
+    Send + Sync
+where
+    <V as FromStr>::Err: Debug,
+{
     type UpgradeType;
 
     /// Return the currently prepared version, if there is one. Default is None.
@@ -247,7 +268,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<Rebooting> {
+    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<UpgradeOutcome> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -286,7 +307,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             ))
         } else {
             info!(self.log(), "Rebooting {:?}", out);
-            Ok(Rebooting)
+            Ok(UpgradeOutcome::Rebooting)
         }
     }
 
@@ -327,6 +348,57 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             .map_err(UpgradeError::reboot_time_error)?;
         let elapsed_time = now - then;
         Ok(elapsed_time)
+    }
+
+    /// Return the path of the prepared-version file in the data directory.
+    fn get_prepared_version_file_path(&self) -> UpgradeResult<PathBuf> {
+        match self.data_dir() {
+            Some(dir) => Ok(dir.join(PREPARED_VERSION_FILENAME)),
+            None => Err(UpgradeError::GenericError(
+                "`orchestrator_data_directory` is not provided".to_string(),
+            )),
+        }
+    }
+
+    /// Persist `version` as the currently prepared version to the data directory,
+    /// so it survives an orchestrator restart (Phase 1 of a fast upgrade restarts
+    /// `ic-replica.service`, which kills this process). Mirrors
+    /// [`Self::persist_time_of_triggering_reboot`].
+    fn persist_prepared_version(&self, version: &V) -> UpgradeResult<()> {
+        let path = self.get_prepared_version_file_path()?;
+        let mut file = std::fs::File::create(path)
+            .map_err(|e| UpgradeError::IoError("Couldn't persist prepared version".to_string(), e))?;
+        // Use Display (not Debug) so it round-trips through FromStr when read back.
+        file.write_all(format!("{version}").as_bytes())
+            .map_err(|e| UpgradeError::IoError("Couldn't persist prepared version".to_string(), e))?;
+        Ok(())
+    }
+
+    /// Read the persisted prepared version back from the data directory.
+    /// Returns `Ok(None)` if the file does not exist (no upgrade prepared yet).
+    fn read_persisted_prepared_version(&self) -> UpgradeResult<Option<V>> {
+        let path = self.get_prepared_version_file_path()?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        let content = std::fs::read(&path)
+            .map_err(|e| UpgradeError::IoError("Couldn't read prepared version".to_string(), e))?;
+        let text = std::str::from_utf8(&content)
+            .map_err(|e| UpgradeError::GenericError(format!("Invalid UTF-8 in prepared version file: {e}")))?;
+        V::from_str(text.trim()).map(Some).map_err(|e| {
+            UpgradeError::GenericError(format!("Couldn't parse prepared version '{text}': {e:?}"))
+        })
+    }
+
+    /// Remove the persisted prepared-version file, if any.
+    fn clear_persisted_prepared_version(&self) {
+        if let Ok(path) = self.get_prepared_version_file_path()
+            && path.exists()
+        {
+            if let Err(e) = std::fs::remove_file(&path) {
+                warn!(self.log(), "Couldn't delete prepared version file {:?}: {}", path, e);
+            }
+        }
     }
 
     /// This function is called periodically by `upgrade_loop()`. An implementation should:

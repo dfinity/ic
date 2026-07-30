@@ -69,6 +69,7 @@ pub mod canister_http;
 pub mod canister_log;
 pub mod consensus;
 pub mod crypto;
+pub mod guestos_version;
 pub mod hostos_version;
 pub mod ingress;
 pub mod malicious_behavior;
@@ -92,6 +93,7 @@ pub use crate::canister_log::{
     MAX_DELTA_LOG_MEMORY_LIMIT,
 };
 pub use crate::replica_version::ReplicaVersion;
+pub use crate::guestos_version::GuestOsVersion;
 pub use crate::time::Time;
 pub use ic_base_types::{
     CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,

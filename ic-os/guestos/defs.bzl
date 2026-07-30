@@ -56,11 +56,38 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/release:custom_metrics": "/opt/ic/bin/custom_metrics:0755",  # Collects and reports custom metrics.
             "//rs/ic_os/remote_attestation/server": "/opt/ic/bin/remote_attestation_server:0755",  # Remote Attestation service
             "//rs/ic_os/guest_upgrade/client": "/opt/ic/bin/guest_upgrade_client:0755",  # Disk encryption key exchange client
+            "//ic-os/components/guestos/bin:fast-upgrader.sh": "/opt/ic/bin/fast-upgrader.sh:0755",  # Phase 1 fast upgrade script
+            "//ic-os/components/guestos/bin:run-fast-upgrader.sh": "/opt/ic/bin/run-fast-upgrader.sh:0755",  # Privileged wrapper: starts fast-upgrader.sh as an isolated transient unit via sudo
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
             "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
         },
+
+        # Binaries to include in the Phase 1 fast-upgrade overlay.
+        # These are a subset of rootfs entries; the path mapping is reused.
+        "overlay_binaries": [
+            "//publish/binaries:replica",
+            "//publish/binaries:orchestrator",
+            "//publish/binaries:ic-crypto-csp",
+            "//publish/binaries:ic-btc-adapter",
+            "//publish/binaries:ic-https-outcalls-adapter-https-only",
+            "//publish/binaries:canister_sandbox",
+            "//publish/binaries:compiler_sandbox",
+            "//publish/binaries:sandbox_launcher",
+        ],
+
+        # systemd services to restart after the overlay is applied.
+        # Written into opt/upgrade_metadata/restart.list in the SquashFS image.
+        "overlay_services": [
+            "ic-replica.service",
+            "ic-crypto-csp.service",
+            "ic-btc-mainnet-adapter.service",
+            "ic-btc-testnet-adapter.service",
+            "ic-doge-mainnet-adapter.service",
+            "ic-doge-testnet-adapter.service",
+            "ic-https-outcalls-adapter.service",
+        ],
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),

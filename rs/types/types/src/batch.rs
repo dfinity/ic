@@ -54,6 +54,8 @@ pub enum BatchContent {
         consensus_responses: Vec<ConsensusResponse>,
         /// Data required by the chain key service
         chain_key_data: ChainKeyData,
+        /// Phase-2 upgrade section (statuses delta + permits), CBOR-encoded.
+        upgrade: Vec<u8>,
         /// Whether the state obtained by executing this batch needs to be fully
         /// hashed to be eligible for StateSync.
         requires_full_state_hash: bool,
@@ -171,6 +173,9 @@ pub struct BatchPayload {
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
     pub chain_key: Vec<u8>,
+    /// Phase-2 upgrade section: CBOR-encoded [`UpgradePayload`] (statuses delta
+    /// + permits). Empty outside Phase 2.
+    pub upgrade: Vec<u8>,
 }
 
 /// Batch properties collected form the last DKG summary block.
@@ -231,6 +236,7 @@ impl BatchPayload {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = &self;
 
         ingress.is_empty()
@@ -239,6 +245,7 @@ impl BatchPayload {
             && canister_http.is_empty()
             && query_stats.is_empty()
             && chain_key.is_empty()
+            && upgrade.is_empty()
     }
 }
 
@@ -360,6 +367,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
+            upgrade: _,
         } = BatchPayload::default();
 
         assert_eq!(ingress.total_ids_size_estimate(), NumBytes::new(0));
@@ -384,6 +392,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = &payload;
 
         assert!(ingress.is_empty());

@@ -151,7 +151,7 @@ impl LoadTestMetrics {
 
     fn log_throttled(&mut self) {
         if self.last_time_emitted.elapsed() > Duration::from_secs(5) {
-            info!(&self.logger, "{self}");
+            // info!(&self.logger, "{self}");
             self.last_time_emitted = Instant::now();
         }
     }

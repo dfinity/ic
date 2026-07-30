@@ -184,6 +184,13 @@ pub struct SystemMetadata {
     /// Transient: reset to `None` on checkpoint load.
     #[validate_eq(Ignore)]
     pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
+
+    /// Phase-2 upgrade state accumulator: tracks per-node GuestOS statuses and
+    /// outstanding reboot permits. Not persisted in the checkpoint protobuf
+    /// (re-derived from finalized blocks on replay), so excluded from
+    /// checkpoint validation.
+    #[validate_eq(Ignore)]
+    pub upgrade_state: ic_types::consensus::upgrade::UpgradeState,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -752,6 +759,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: Default::default(),
         }
     }
 
@@ -1083,6 +1091,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
             subnet_ids_at_last_reject_generation: _,
+                upgrade_state: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -1185,6 +1194,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
             subnet_ids_at_last_reject_generation: _,
+                upgrade_state: _,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1294,6 +1304,7 @@ impl SystemMetadata {
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: Default::default(),
         })
     }
 
@@ -2419,6 +2430,7 @@ pub mod testing {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: Default::default(),
         };
     }
 }

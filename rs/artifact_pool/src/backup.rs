@@ -74,7 +74,8 @@ impl TryFrom<ConsensusMessage> for BackupArtifact {
             | FinalizationShare(_)
             | RandomTapeShare(_)
             | CatchUpPackageShare(_)
-            | EquivocationProof(_) => Err(()),
+            | EquivocationProof(_)
+            | UpgradeStatus(_) => Err(()),
         }
     }
 }

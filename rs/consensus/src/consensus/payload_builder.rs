@@ -50,6 +50,7 @@ impl PayloadBuilderImpl {
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -60,6 +61,7 @@ impl PayloadBuilderImpl {
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
             BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
             BatchPayloadSectionBuilder::ChainKey(chain_key_payload_builder),
+            BatchPayloadSectionBuilder::Upgrade(upgrade_payload_builder),
         ];
 
         Self {
@@ -547,6 +549,7 @@ pub(crate) mod test {
                         canister_http: settings.http_outcalls_payload_to_return,
                         query_stats: settings.query_stats_payload_to_return,
                         chain_key: settings.chain_key_payload_to_return,
+                        upgrade: vec![],
                     },
                     dkg: DkgDataPayload::new_empty(Height::from(0)),
                     idkg: None,

@@ -16,22 +16,22 @@ pub struct StandardEngineReplicaVersionRecord {
     ///
     /// Ranges from 0.0 to 1.0 (inclusive).
     ///
-    /// Engines with "upgrade priority" \<= this should take on
+    /// Engines with "upgrade priority" <= this should take on
     /// new_replica_version_id. An engine's upgrade priority is a hash whose inputs
     /// include its own subnet_id, and new_replica_version_id. More precisely, an
     /// engine's priority is determined as follows:
     ///
     /// 1. Compute SHA-256 of the concatenation of
-    ///    a. len("upgrade priority"): a single u8
-    ///    b. "upgrade priority": ASCII encoded
-    ///    c. new_replica_version_id: (not hex decoded)
-    ///    d. the engine's subnet_id: text/display representation (not raw bytes)
+    ///     a. len("upgrade priority"): a single u8
+    ///     b. "upgrade priority": ASCII encoded
+    ///     c. new_replica_version_id: (not hex decoded)
+    ///     d. the engine's subnet_id: text/display representation (not raw bytes)
     ///
-    /// 1. Take the first 8 bytes of that hash, and interpret them as a
-    ///    little-endian 64 bit unsigned integer.
+    /// 2. Take the first 8 bytes of that hash, and interpret them as a
+    ///     little-endian 64 bit unsigned integer.
     ///
-    /// 1. Divide that u64 by 2^64 - 1. The result is the engine's upgrade
-    ///    priority, a number in \[0.0, 1.0\].
+    /// 3. Divide that u64 by 2^64 - 1. The result is the engine's upgrade
+    ///     priority, a number in \[0.0, 1.0\].
     #[prost(double, tag = "3")]
     pub deployment_progress: f64,
 }

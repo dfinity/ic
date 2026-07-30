@@ -1286,6 +1286,8 @@ pub mod consensus_message_hash {
         CatchUpPackageShare(::prost::alloc::vec::Vec<u8>),
         #[prost(bytes, tag = "12")]
         EquivocationProof(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "13")]
+        UpgradeStatus(::prost::alloc::vec::Vec<u8>),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1416,6 +1418,8 @@ pub struct Block {
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "17")]
     pub chain_key_payload_bytes: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "18")]
+    pub upgrade_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1424,7 +1428,7 @@ pub struct Block {
 pub struct ConsensusMessage {
     #[prost(
         oneof = "consensus_message::Msg",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub msg: ::core::option::Option<consensus_message::Msg>,
 }
@@ -1457,6 +1461,8 @@ pub mod consensus_message {
         CupShare(super::CatchUpPackageShare),
         #[prost(message, tag = "12")]
         EquivocationProof(super::EquivocationProof),
+        #[prost(message, tag = "13")]
+        UpgradeStatus(super::UpgradeStatus),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1590,6 +1596,15 @@ pub struct EquivocationProof {
     pub hash2: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "8")]
     pub signature2: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeStatus {
+    #[prost(message, optional, tag = "1")]
+    pub node_id: ::core::option::Option<NodeId>,
+    #[prost(string, tag = "2")]
+    pub guestos_version: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "3")]
+    pub height: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetStreamSlice {

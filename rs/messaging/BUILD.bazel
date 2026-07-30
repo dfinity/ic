@@ -43,6 +43,7 @@ rust_library(
         "//rs/types/types",
         "//rs/utils/thread",
         "@crate_index//:prometheus",
+        "@crate_index//:serde_cbor",
         "@crate_index//:slog",
         "@crate_index//:tracing",
     ],

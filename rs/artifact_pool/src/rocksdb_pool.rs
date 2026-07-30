@@ -650,6 +650,12 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
         self
     }
 
+    fn upgrade_status(
+        &self,
+    ) -> &dyn HeightIndexedPool<ic_types::consensus::upgrade::UpgradeStatus> {
+        self
+    }
+
     fn highest_catch_up_package_proto(&self) -> pb::CatchUpPackage {
         let height_opt = self.max_height::<CatchUpPackage>().unwrap();
         let min_height_key = make_min_key(height_opt.get());

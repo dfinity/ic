@@ -164,6 +164,7 @@ pub(crate) enum TypeKey {
     CatchUpPackage,
     CatchUpPackageShare,
     EquivocationProof,
+    UpgradeStatus,
     // Certification messages
     Certification,
     CertificationShare,
@@ -223,6 +224,7 @@ impl From<&ConsensusMessageId> for TypeKey {
             ConsensusMessageHash::CatchUpPackage(_) => TypeKey::CatchUpPackage,
             ConsensusMessageHash::CatchUpPackageShare(_) => TypeKey::CatchUpPackageShare,
             ConsensusMessageHash::EquivocationProof(_) => TypeKey::EquivocationProof,
+            ConsensusMessageHash::UpgradeStatus(_) => TypeKey::UpgradeStatus,
         }
     }
 }
@@ -862,7 +864,7 @@ where
 }
 
 ///////////////////////////// Consensus Pool /////////////////////////////
-const CONSENSUS_KEYS: [TypeKey; 13] = [
+const CONSENSUS_KEYS: [TypeKey; 14] = [
     TypeKey::RandomBeacon,
     TypeKey::Finalization,
     TypeKey::Notarization,
@@ -876,6 +878,7 @@ const CONSENSUS_KEYS: [TypeKey; 13] = [
     TypeKey::CatchUpPackage,
     TypeKey::CatchUpPackageShare,
     TypeKey::EquivocationProof,
+    TypeKey::UpgradeStatus,
 ];
 
 impl HasTypeKey for RandomBeacon {
@@ -950,6 +953,12 @@ impl HasTypeKey for EquivocationProof {
     }
 }
 
+impl HasTypeKey for ic_types::consensus::upgrade::UpgradeStatus {
+    fn type_key() -> TypeKey {
+        TypeKey::UpgradeStatus
+    }
+}
+
 impl From<&ConsensusMessageId> for ArtifactKey {
     fn from(msg_id: &ConsensusMessageId) -> Self {
         Self {
@@ -977,6 +986,7 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
             TypeKey::CatchUpPackage => ConsensusMessageHash::CatchUpPackage(h.into()),
             TypeKey::CatchUpPackageShare => ConsensusMessageHash::CatchUpPackageShare(h.into()),
             TypeKey::EquivocationProof => ConsensusMessageHash::EquivocationProof(h.into()),
+            TypeKey::UpgradeStatus => ConsensusMessageHash::UpgradeStatus(h.into()),
             TypeKey::BlockPayload => {
                 return Err("Block payloads do not have a ConsensusMessageId".into());
             }
@@ -1331,6 +1341,12 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
     }
 
     fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
+        self
+    }
+
+    fn upgrade_status(
+        &self,
+    ) -> &dyn HeightIndexedPool<ic_types::consensus::upgrade::UpgradeStatus> {
         self
     }
 

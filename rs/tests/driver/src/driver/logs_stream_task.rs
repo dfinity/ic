@@ -43,6 +43,7 @@ const RETRY_DELAY_JOURNALD_STREAM: Duration = Duration::from_secs(5);
 const RETRY_DELAY_DISCOVER_TARGETS: Duration = Duration::from_secs(5);
 
 pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
+    std::thread::sleep(Duration::from_secs(60 * 60));
     let logger = group_ctx.logger().clone();
     debug!(logger, ">>> {LOGS_STREAM_TASK_NAME}");
     let rt: Runtime = tokio::runtime::Builder::new_multi_thread()

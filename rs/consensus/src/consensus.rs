@@ -19,6 +19,8 @@ mod random_beacon_maker;
 mod random_tape_maker;
 mod share_aggregator;
 mod status;
+pub mod upgrade_section;
+mod upgrade_status_manager;
 pub mod validator;
 
 #[cfg(all(test, feature = "proptest"))]
@@ -68,6 +70,8 @@ use std::{
     time::Duration,
 };
 use strum_macros::AsRefStr;
+use ic_types::consensus::upgrade::UpgradeState;
+use upgrade_status_manager::UpgradeStatusManager;
 
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the notarization/certification gap.
@@ -98,6 +102,7 @@ enum ConsensusSubcomponent {
     Validator,
     Aggregator,
     Purger,
+    UpgradeStatusManager,
 }
 
 /// Describe expected version and artifact version when there is a mismatch.
@@ -139,6 +144,7 @@ pub struct ConsensusImpl {
     validator: Validator,
     aggregator: ShareAggregator,
     purger: Purger,
+    upgrade_status_manager: UpgradeStatusManager,
     metrics: ConsensusMetrics,
     time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
@@ -187,6 +193,10 @@ impl ConsensusImpl {
 
         let stable_registry_version_age =
             POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
+        let upgrade_state: Arc<RwLock<UpgradeState>> =
+            Arc::new(RwLock::new(
+                UpgradeState::default(),
+            ));
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             replica_config.subnet_id,
             replica_config.node_id,
@@ -197,6 +207,13 @@ impl ConsensusImpl {
             canister_http_payload_builder,
             query_stats_payload_builder,
             chain_key_payload_builder,
+            Arc::new(upgrade_section::UpgradePayloadBuilder::new(
+                replica_config.node_id,
+                replica_config.subnet_id,
+                registry_client.clone(),
+                upgrade_state.clone(),
+                logger.clone(),
+            )),
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -212,6 +229,10 @@ impl ConsensusImpl {
         last_invoked.insert(ConsensusSubcomponent::Validator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Aggregator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Purger, current_time);
+        last_invoked.insert(
+            ConsensusSubcomponent::UpgradeStatusManager,
+            current_time,
+        );
 
         ConsensusImpl {
             dkg_key_manager,
@@ -296,6 +317,13 @@ impl ConsensusImpl {
                 registry_client.clone(),
                 logger.clone(),
                 metrics_registry.clone(),
+            ),
+            upgrade_status_manager: UpgradeStatusManager::new(
+                replica_config.node_id,
+                replica_config.subnet_id,
+                registry_client.clone(),
+                upgrade_state.clone(),
+                logger.clone(),
             ),
             metrics: ConsensusMetrics::new(metrics_registry),
             log: logger,
@@ -507,8 +535,19 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
                 self.purger.on_state_change(&pool_reader)
             })
         };
+        let manage_upgrade_status = || {
+            self.call_with_metrics(
+                ConsensusSubcomponent::UpgradeStatusManager,
+                || {
+                    add_to_validated(
+                        time_now,
+                        self.upgrade_status_manager.on_state_change(&pool_reader),
+                    )
+                },
+            )
+        };
 
-        let calls: [&'_ dyn Fn() -> Mutations; 10] = [
+        let calls: [&'_ dyn Fn() -> Mutations; 11] = [
             &finalize,
             &make_catch_up_package,
             &aggregate,
@@ -519,6 +558,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
             &make_block,
             &validate,
             &purge,
+            &manage_upgrade_status,
         ];
 
         let changeset = self.schedule.call_next(&calls);

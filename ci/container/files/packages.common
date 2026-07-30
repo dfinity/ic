@@ -43,3 +43,6 @@ iputils-ping # for ping6 required by the bazel-test-bare-metal
 
 # For ci/githubstats/query.py
 libpq-dev
+
+# For building SquashFS overlay images (Phase 1 fast upgrade)
+squashfs-tools

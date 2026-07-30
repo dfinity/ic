@@ -68,11 +68,32 @@ def icos_build(
         tags = ["manual"],
     )
 
+    # A separate copy of the version file installed as replica_version.txt in
+    # the rootfs. The overlay also ships a replica_version.txt (with the
+    # post-upgrade version); the sysext merge shadows this rootfs copy.
+    copy_file(
+        name = "copy_replica_version_txt",
+        src = ic_version,
+        out = "replica_version.txt",
+        allow_symlink = True,
+        visibility = ["//visibility:public"],
+        tags = ["manual"],
+    )
+
     if upgrades:
         native.genrule(
             name = "test_version_txt",
             srcs = [":copy_version_txt"],
             outs = ["version-test.txt"],
+            cmd = "sed -e 's/.*/&-test/' < $< > $@",
+            visibility = ["//visibility:public"],
+            tags = ["manual"],
+        )
+
+        native.genrule(
+            name = "test_replica_version_txt",
+            srcs = [":copy_replica_version_txt"],
+            outs = ["replica_version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
             visibility = ["//visibility:public"],
             tags = ["manual"],
@@ -181,6 +202,7 @@ def icos_build(
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
+        replica_version_txt = "replica_version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
         launch_measurements = "launch-measurements" + test_suffix + ".json"
 
@@ -193,7 +215,10 @@ def icos_build(
             strip_paths = PARTITION_ROOT_STRIP_PATHS,
             extra_files = {
                 k: v
-                for k, v in (image_deps["rootfs"].items() + [(version_txt, "/opt/ic/share/version.txt:0644")])
+                for k, v in (image_deps["rootfs"].items() + [
+                    (version_txt, "/opt/ic/share/version.txt:0644"),
+                    (replica_version_txt, "/opt/ic/share/replica_version.txt:0644"),
+                ])
             },
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual", "no-cache"],
@@ -367,20 +392,95 @@ def icos_build(
         tags = ["manual"],
     )
 
+    # -------------------- Build overlay SquashFS image --------------------
+
+    overlay_binaries = image_deps.get("overlay_binaries", [])
+    overlay_services = image_deps.get("overlay_services", [])
+    has_overlay = bool(overlay_binaries) and upgrades
+
+    # Pre-build the common staging commands (binary copies, restart.list, etc.)
+    # that are identical for every variant. The per-variant genrule appends the
+    # version file and mksquashfs step.
+    overlay_common_cmds = []
+    overlay_common_srcs = []
+    if has_overlay:
+        rootfs = image_deps["rootfs"]
+        overlay_common_cmds.append("STAGING=$$(mktemp -d)")
+        for binary_label in overlay_binaries:
+            install_spec = rootfs[binary_label]
+            install_path = install_spec.split(":")[0]
+            install_dir = install_path.rsplit("/", 1)[0]
+            overlay_common_srcs.append(binary_label)
+            overlay_common_cmds.append("mkdir -p $${STAGING}" + install_dir)
+            overlay_common_cmds.append(
+                "cp \"$(location %s)\" \"$${STAGING}%s\"" % (binary_label, install_path)
+            )
+        # Write restart.list into the SquashFS metadata dir. One service per
+        # line: fast-upgrader.sh reads it with `mapfile -t` (newline-delimited).
+        restart_list_content = "\n".join(overlay_services) + "\n"
+        overlay_common_cmds.append("mkdir -p $${STAGING}/opt/upgrade_metadata")
+        overlay_common_cmds.append("printf '%s' '" + restart_list_content + "' > $${STAGING}/opt/upgrade_metadata/restart.list")
+        # Write the systemd-sysext extension-release metadata. Without this file
+        # systemd-sysext refuses to merge the image ("Failed to read metadata ...
+        # No medium found"). ID=_any bypasses the ID/VERSION_ID match entirely
+        # (the overlay is built as part of this GuestOS image, so it is inherently
+        # compatible). The filename suffix must match the extension name
+        # ("ic-upgrade" from EXTENSION_NAME in fast-upgrader.sh).
+        overlay_common_cmds.append("mkdir -p $${STAGING}/usr/lib/extension-release.d")
+        overlay_common_cmds.append("printf 'ID=_any\\n' > $${STAGING}/usr/lib/extension-release.d/extension-release.ic-upgrade")
+        # TODO(selinux): Label the staging tree before mksquashfs so the squashfs
+        # carries security.selinux xattrs. Without labels, the merged /usr appears
+        # as unlabeled_t, and enforcing domains (e.g. iptables_t for nft) that
+        # traverse /usr/lib are denied. The fix is to run
+        #   setfiles -F -r $${STAGING} file_contexts $${STAGING}
+        # using the `:file_contexts` target (already used for ext4 labeling), but
+        # this requires (a) policycoreutils in the build container and (b)
+        # CAP_SYS_ADMIN to write security.* xattrs. Unlike ext4 (which uses
+        # e2fsdroid to write labels into image bytes without privileges), squashfs
+        # has no equivalent — mksquashfs reads xattrs from the real filesystem.
+        # Until resolved, SELinux must be disabled (enforcing=0) for fast upgrades.
+
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
         for test_suffix in ["", "-test"]:
             update_image_tar = "update-img" + test_suffix + ".tar"
 
-            upgrade_image(
-                name = update_image_tar,
-                boot_partition = ":partition-boot" + test_suffix + ".tzst",
-                root_partition = ":partition-root" + test_suffix + ".tzst",
-                tags = ["manual", "no-cache"],
-                target_compatible_with = ["@platforms//os:linux"],
-                version_file = ":version" + test_suffix + ".txt",
-            )
+            # Build a per-variant overlay with the correct replica_version.txt.
+            overlay_label = None
+            if has_overlay:
+                replica_version_src = "replica_version" + test_suffix + ".txt"
+                overlay_out = "overlay" + test_suffix + ".raw"
+                overlay_srcs = overlay_common_srcs + [":" + replica_version_src]
+                overlay_cmds = list(overlay_common_cmds) + [
+                    "mkdir -p $${STAGING}/opt/ic/share",
+                    "cp \"$(location :%s)\" \"$${STAGING}/opt/ic/share/replica_version.txt\"" % replica_version_src,
+                    # Build the SquashFS image. Skip compression because the final
+                    # tar will be compressed anyway (see zstd_compress below).
+                    "mksquashfs $${STAGING} $(@D)/" + overlay_out + " -noappend -no-compression -no-progress -no-fragments -b 1M",
+                    "rm -rf $${STAGING}",
+                ]
+                native.genrule(
+                    name = "overlay" + test_suffix,
+                    srcs = overlay_srcs,
+                    outs = [overlay_out],
+                    cmd = " && ".join(overlay_cmds),
+                    tags = ["manual"],
+                )
+                overlay_label = ":overlay" + test_suffix
+
+            upgrade_image_kwargs = {
+                "name": update_image_tar,
+                "boot_partition": ":partition-boot" + test_suffix + ".tzst",
+                "root_partition": ":partition-root" + test_suffix + ".tzst",
+                "tags": ["manual", "no-cache"],
+                "target_compatible_with": ["@platforms//os:linux"],
+                "version_file": ":version" + test_suffix + ".txt",
+            }
+            if overlay_label:
+                upgrade_image_kwargs["overlay"] = overlay_label
+
+            upgrade_image(**upgrade_image_kwargs)
 
             zstd_compress(
                 name = update_image_tar + ".zst",

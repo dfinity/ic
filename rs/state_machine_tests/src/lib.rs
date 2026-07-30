@@ -1830,6 +1830,9 @@ impl StateMachineBuilder {
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
             sm.chain_key_payload_builder.clone(),
+            std::sync::Arc::new(
+                ic_consensus::consensus::upgrade_section::UpgradePayloadBuilderStub::new(),
+            ),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -3108,6 +3111,8 @@ impl StateMachine {
                 nidkg_ids: self.ni_dkg_ids.clone(),
             },
             consensus_responses: payload.consensus_responses,
+            // TODO: add upgrade
+            upgrade: vec![],
             requires_full_state_hash,
         };
         let blockmaker_metrics = payload
@@ -5423,6 +5428,7 @@ pub struct PayloadBuilder {
     query_stats: Option<QueryStatsPayload>,
     self_validating: Option<SelfValidatingPayload>,
     blockmaker_metrics: Option<BlockmakerMetrics>,
+    // TODO: add upgrade
 }
 
 impl Default for PayloadBuilder {

@@ -11,7 +11,8 @@ use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_replicated_state::{NetworkTopology, OwnSubnetInfo, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
-use ic_types::{ExecutionRound, SubnetId};
+use ic_types::consensus::upgrade::UpgradePayload;
+use ic_types::{ExecutionRound, NodeId, SubnetId};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -121,18 +122,20 @@ impl StateMachine for StateMachineImpl {
                 .observe_no_canister_allocation_range(&self.log, message);
         }
 
-        let (batch_messages, mut consensus_responses, chain_key_data, requires_full_state_hash) =
+        let (batch_messages, mut consensus_responses, chain_key_data, upgrade_bytes, requires_full_state_hash) =
             match batch.content {
                 // Regular batch, proceed with round execution.
                 BatchContent::Data {
                     batch_messages,
                     consensus_responses,
                     chain_key_data,
+                    upgrade,
                     requires_full_state_hash,
                 } => (
                     batch_messages,
                     consensus_responses,
                     chain_key_data,
+                    upgrade,
                     requires_full_state_hash,
                 ),
 
@@ -144,6 +147,23 @@ impl StateMachine for StateMachineImpl {
                     return self.online_split(state, new_subnet_id, other_subnet_id);
                 }
             };
+
+        // Apply the Phase-2 upgrade section (statuses + permits) to the replicated
+        // state's SystemMetadata, so the /_/upgrade_state endpoint can expose
+        // reboot permits to the orchestrator.
+        if !upgrade_bytes.is_empty() {
+            if let Ok(upgrade_payload) = serde_cbor::from_slice::<UpgradePayload>(&upgrade_bytes) {
+                let members: Vec<NodeId> = state
+                    .metadata
+                    .network_topology
+                    .subnets()
+                    .values()
+                    .flat_map(|topology| topology.nodes.iter().copied())
+                    .collect();
+                let target = Some(batch.replica_version.clone());
+                state.metadata.upgrade_state.apply(&upgrade_payload, target, &members);
+            }
+        }
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch_messages.query_stats {

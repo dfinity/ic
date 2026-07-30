@@ -69,6 +69,7 @@ message Block {
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
   bytes chain_key_payload_bytes = 17;
+  bytes upgrade_payload_bytes = 18;
   bytes payload_hash = 11;
 }
 
@@ -86,6 +87,7 @@ message ConsensusMessage {
     CatchUpPackage cup = 10;
     CatchUpPackageShare cup_share = 11;
     EquivocationProof equivocation_proof = 12;
+    UpgradeStatus upgrade_status = 13;
   }
 }
 
@@ -171,6 +173,12 @@ message EquivocationProof {
   // Second equivocating block
   bytes hash2 = 7;
   bytes signature2 = 8;
+}
+
+message UpgradeStatus {
+  NodeId node_id = 1;
+  string guestos_version = 2;
+  uint64 height = 3;
 }
 
 message SubnetStreamSlice {

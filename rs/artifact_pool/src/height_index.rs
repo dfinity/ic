@@ -106,6 +106,7 @@ pub struct Indexes {
     pub catch_up_package: HeightIndex<CryptoHashOf<CatchUpPackage>>,
     pub catch_up_package_share: HeightIndex<CryptoHashOf<CatchUpPackageShare>>,
     pub equivocation_proof: HeightIndex<CryptoHashOf<EquivocationProof>>,
+    pub upgrade_status: HeightIndex<CryptoHashOf<ic_types::consensus::upgrade::UpgradeStatus>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -124,6 +125,7 @@ impl Indexes {
             catch_up_package: HeightIndex::new(),
             catch_up_package_share: HeightIndex::new(),
             equivocation_proof: HeightIndex::new(),
+            upgrade_status: HeightIndex::new(),
         }
     }
 
@@ -165,6 +167,9 @@ impl Indexes {
             ConsensusMessage::EquivocationProof(artifact) => self
                 .equivocation_proof
                 .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
+            ConsensusMessage::UpgradeStatus(artifact) => self
+                .upgrade_status
+                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
         };
     }
 
@@ -205,6 +210,9 @@ impl Indexes {
                 .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
             ConsensusMessage::EquivocationProof(artifact) => self
                 .equivocation_proof
+                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
+            ConsensusMessage::UpgradeStatus(artifact) => self
+                .upgrade_status
                 .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
         };
     }
@@ -283,6 +291,12 @@ impl SelectIndex for CryptoHashOf<CatchUpPackageShare> {
 impl SelectIndex for CryptoHashOf<EquivocationProof> {
     fn select_index(indexes: &Indexes) -> &HeightIndex<Self> {
         &indexes.equivocation_proof
+    }
+}
+
+impl SelectIndex for CryptoHashOf<ic_types::consensus::upgrade::UpgradeStatus> {
+    fn select_index(indexes: &Indexes) -> &HeightIndex<Self> {
+        &indexes.upgrade_status
     }
 }
 

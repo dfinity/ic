@@ -16,6 +16,7 @@ use crate::consensus::{
         EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare,
         VetKdKeyShare,
     },
+    upgrade::UpgradeStatus,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,
@@ -68,6 +69,7 @@ mod private {
     impl CryptoHashDomainSeal for Block {}
     impl CryptoHashDomainSeal for Signed<HashedBlock, BasicSignature<BlockMetadata>> {}
     impl CryptoHashDomainSeal for EquivocationProof {}
+    impl CryptoHashDomainSeal for UpgradeStatus {}
     impl CryptoHashDomainSeal for BlockPayload {}
 
     impl CryptoHashDomainSeal for RandomBeaconContent {}
@@ -219,6 +221,12 @@ impl CryptoHashDomain for Signed<HashedBlock, BasicSignature<BlockMetadata>> {
 impl CryptoHashDomain for EquivocationProof {
     fn domain(&self) -> String {
         DomainSeparator::EquivocationProof.to_string()
+    }
+}
+
+impl CryptoHashDomain for UpgradeStatus {
+    fn domain(&self) -> String {
+        "ic-consensus-upgrade-status".to_string()
     }
 }
 

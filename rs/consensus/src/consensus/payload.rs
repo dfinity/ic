@@ -44,6 +44,7 @@ pub(crate) enum BatchPayloadSectionBuilder {
     CanisterHttp(Arc<dyn BatchPayloadBuilder>),
     QueryStats(Arc<dyn BatchPayloadBuilder>),
     ChainKey(Arc<dyn BatchPayloadBuilder>),
+    Upgrade(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -94,6 +95,7 @@ impl BatchPayloadSectionBuilder {
             Self::CanisterHttp(_) => "canister_http",
             Self::QueryStats(_) => "query_stats",
             Self::ChainKey(_) => "chain_key",
+            Self::Upgrade(_) => "upgrade",
         }
     }
 
@@ -363,6 +365,24 @@ impl BatchPayloadSectionBuilder {
                     }
                 }
             }
+            Self::Upgrade(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.upgrade)
+                        }
+                    });
+                let upgrade = builder.build_payload(
+                    height,
+                    max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                );
+                payload.upgrade = upgrade;
+                NumBytes::new(payload.upgrade.len() as u64)
+            }
         }
     }
 
@@ -471,6 +491,23 @@ impl BatchPayloadSectionBuilder {
                 )?;
 
                 Ok(NumBytes::new(payload.chain_key.len() as u64))
+            }
+            Self::Upgrade(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.upgrade)
+                        }
+                    });
+                builder.validate_payload(
+                    height,
+                    proposal_context,
+                    &payload.upgrade,
+                    &past_payloads,
+                )?;
+                Ok(NumBytes::new(payload.upgrade.len() as u64))
             }
         }
     }

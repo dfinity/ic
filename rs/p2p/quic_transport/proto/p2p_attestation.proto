@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package p2p.v1;
+
+import "attestation.proto";
+
+// Message exchanged during P2P attestation handshake.
+// This wraps the SEV attestation package for transmission over QUIC streams.
+message AttestationMessage {
+  // The SEV attestation package, if this node has SEV enabled.
+  // If the node doesn't have SEV, this field will be None.
+  optional attestation.SevAttestationPackage sev_attestation_package = 1;
+}
+
