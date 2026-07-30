@@ -1875,42 +1875,6 @@ async fn memory_allocation_bumped_and_restored() {
     }
 }
 
-/// The migration canister restores the original memory allocation of the migrated and replaced
-/// canisters if the migration fails.
-#[tokio::test]
-async fn memory_allocation_restored_on_failure() {
-    let Setup {
-        pic,
-        migrated_canisters,
-        replaced_canisters,
-        migrated_canister_controllers,
-        ..
-    } = setup(Settings::default()).await;
-    let sender = migrated_canister_controllers[0];
-    let migrated_canister = migrated_canisters[0];
-    let replaced_canister = replaced_canisters[0];
-    let args = MigrateCanisterArgs {
-        migrated_canister_id: migrated_canister,
-        replaced_canister_id: replaced_canister,
-    };
-    migrate_canister(&pic, sender, &args).await.unwrap();
-    // Validation succeeded. Now we break migration by interfering.
-    pic.start_canister(migrated_canister, Some(sender))
-        .await
-        .unwrap();
-    for _ in 0..4 {
-        advance(&pic).await;
-    }
-    let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { .. } = status.unwrap() else {
-        panic!()
-    };
-    for canister in [migrated_canister, replaced_canister] {
-        let (_, memory_allocation) = memory_usage_and_allocation(&pic, canister, sender).await;
-        assert_eq!(memory_allocation, 0);
-    }
-}
-
 /// The migration completes even if the subnet of the replaced canister runs out of memory
 /// after the migration canister took exclusive control of the replaced canister: recording
 /// canister history entries for the replaced canister (e.g., when renaming it) is covered
@@ -1965,6 +1929,7 @@ async fn migration_succeeds_when_subnet_memory_exhausted() {
 /// memory after the migration canister took exclusive control of the migrated canister:
 /// restoring the original controllers records a canister history entry which is covered by
 /// the memory freed when restoring the original memory allocation in the very same call.
+/// The original memory allocation is restored for both the migrated and replaced canisters.
 #[tokio::test]
 async fn migration_failure_recovers_when_subnet_memory_exhausted() {
     let Setup {
@@ -1997,7 +1962,7 @@ async fn migration_failure_recovers_when_subnet_memory_exhausted() {
         advance(&pic).await;
     }
     // The request is recorded as failed, i.e., the recovery of the original controllers
-    // (and memory allocation) of the migrated canister completed.
+    // (and memory allocation) of the migrated and replaced canisters completed.
     let status = get_status(&pic, sender, &args).await;
     let MigrationStatus::Failed { ref reason, .. } = status.clone().unwrap() else {
         panic!("Unexpected status: {:?}", status.unwrap())
@@ -2010,8 +1975,10 @@ async fn migration_failure_recovers_when_subnet_memory_exhausted() {
         migrated_canister_controllers_after,
         migrated_canister_controllers
     );
-    let (_, memory_allocation) = memory_usage_and_allocation(&pic, migrated_canister, sender).await;
-    assert_eq!(memory_allocation, 0);
+    for canister in [migrated_canister, replaced_canister] {
+        let (_, memory_allocation) = memory_usage_and_allocation(&pic, canister, sender).await;
+        assert_eq!(memory_allocation, 0);
+    }
 }
 
 #[tokio::test]
