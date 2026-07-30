@@ -1,8 +1,7 @@
 use crate::ic_wasm::{ICWasmModule, get_system_api_type_for_wasm_method};
 use ic_config::{
-    embedders::Config as EmbeddersConfig,
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
 };
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
@@ -153,14 +152,12 @@ pub(crate) fn get_sandbox_safe_system_state(
     api_type: ApiType,
 ) -> SandboxSafeSystemState {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
     let network_topology = NetworkTopology::default();
 
     SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
         Arc::new(network_topology),
-        dirty_page_overhead,
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
         Default::default(),

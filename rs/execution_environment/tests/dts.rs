@@ -63,13 +63,30 @@ const DTS_WAT: &str = r#"
             )
             (import "ic0" "canister_version" (func $canister_version (result i64)))
             (func $work
-                (memory.fill (i32.const 0) (i32.const 12) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 23) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 34) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 56) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 67) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 78) (i32.const 10000))
+                ;; The bulk of the work is a sequence of `memory.fill`s. Their
+                ;; cost (~1 instruction/byte) is page-size independent, unlike the
+                ;; one-off deterministic-memory-tracker page-fault charge, which
+                ;; depends on the OS page size (16 OS pages per Wasm page on 4 KiB
+                ;; hosts such as Linux, 4 on 16 KiB hosts such as arm64-darwin).
+                ;; Doing enough fills keeps the number of DTS slices dominated by
+                ;; this page-size-independent work, so the tests observe the same
+                ;; DTS behavior on both platforms. All fills target Wasm page 0,
+                ;; so only that single page is dirtied. The last fill writes `78`
+                ;; over `heap[0..)`, which `canister_query read` relies on.
+                (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 23) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 45) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 56) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 67) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 23) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 45) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 56) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 67) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 78) (i32.const 50000))
             )
             (start $work)
 
@@ -572,7 +589,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
 fn dts_pending_upgrade_with_heartbeat() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(30_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -657,7 +674,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 fn dts_scheduling_of_install_code() {
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -807,7 +824,7 @@ fn dts_scheduling_of_install_code() {
 fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() {
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -931,7 +948,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
 fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1187,7 +1204,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
 fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1461,7 +1478,7 @@ fn dts_long_running_calls() {
 fn dts_unrelated_subnet_messages_make_progress() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1523,7 +1540,7 @@ fn dts_unrelated_subnet_messages_make_progress() {
 fn dts_ingress_status_of_update_is_correct() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(170_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1536,9 +1553,7 @@ fn dts_ingress_status_of_update_is_correct() {
 
     // advance time so that time does not grow implicitly when executing a round
     env.advance_time(Duration::from_secs(1));
-    let original_time = env.time();
     let update = env.send_ingress(user_id, canister, "update", vec![]);
-
     env.tick();
 
     assert_eq!(
@@ -1546,10 +1561,13 @@ fn dts_ingress_status_of_update_is_correct() {
         Some(IngressState::Processing)
     );
 
-    assert_eq!(
-        ingress_time(env.ingress_status(&update)),
-        Some(original_time)
-    );
+    // The ingress time is pinned to the batch time of the round in which the
+    // message first started executing. Depending on the OS page size that may be
+    // the round triggered by `send_ingress` or the subsequent `tick`, so capture
+    // the pinned time from the ingress status rather than assuming it equals the
+    // current time. The rest of the test verifies that this pinned time does not
+    // change while the DTS execution is in progress.
+    let original_time = ingress_time(env.ingress_status(&update)).unwrap();
 
     env.advance_time(Duration::from_secs(60));
 
@@ -1590,7 +1608,7 @@ fn dts_ingress_status_of_update_is_correct() {
 fn dts_ingress_status_of_install_is_correct() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(170_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1609,8 +1627,6 @@ fn dts_ingress_status_of_install_is_correct() {
         let args = InstallCodeArgs::new(CanisterInstallMode::Reinstall, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
-
-    env.tick();
 
     assert_eq!(
         ingress_state(env.ingress_status(&install)),
@@ -1661,7 +1677,7 @@ fn dts_ingress_status_of_install_is_correct() {
 fn dts_ingress_status_of_upgrade_is_correct() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1730,10 +1746,11 @@ fn dts_ingress_status_of_upgrade_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_update_with_call_is_correct() {
-    let env = dts_env(
-        NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
-    );
+    // start with a large slice limit so installations just work.
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_checkpoints_enabled(true)
+        .build();
 
     let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
@@ -1747,18 +1764,26 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
+    // reduce slice limit to provoke test conditions
+    let env = env.restart_node_with_config(dts_state_machine_config(dts_subnet_config(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(250_000),
+    )));
+
     let b = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .stable64_grow(1) // cost: 1 wasm page = 16 os pages -> 5k * 16 = 80k instructions
+        .stable64_fill(0, 0, 24_000) // 24_000 cost: 6 stable pages dirtied (6*5k) + 6 heap pages (6*5k) (because vec is allocated there) + 24k for the bytes = 84k instructions
+        .stable64_fill(0, 0, 24_000) // 84k * 3 = 252k -> this message needs at least two slices.
+        .stable64_fill(0, 0, 24_000)
         .message_payload()
         .append_and_reply()
         .build();
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 24_000)
+        .stable64_fill(0, 0, 24_000)
+        .stable64_fill(0, 0, 24_000)
         .inter_update(b_id, call_args().other_side(b))
         .build();
 
@@ -1829,7 +1854,7 @@ fn impl_dts_canister_with_upgrade_is_uninstalled_due_to_resource_charges(
 ) -> Result<WasmResult, UserError> {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(170000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1845,7 +1870,6 @@ fn impl_dts_canister_with_upgrade_is_uninstalled_due_to_resource_charges(
     let canister = env
         .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)
         .unwrap();
-
     // Checkpointing will abort the upgrade after each round.
     env.set_checkpoints_enabled(aborted);
 
@@ -1863,7 +1887,7 @@ fn impl_dts_canister_with_upgrade_is_uninstalled_due_to_resource_charges(
     // Enable normal message execution.
     env.set_checkpoints_enabled(false);
 
-    env.await_ingress(upgrade, 30)
+    env.await_ingress(upgrade, 60)
 }
 
 #[test]
@@ -1888,9 +1912,18 @@ fn dts_canister_with_paused_upgrade_is_not_uninstalled_due_to_resource_charges()
 fn impl_dts_canister_with_update_is_uninstalled_due_to_resource_charges(
     aborted: bool,
 ) -> Result<WasmResult, UserError> {
+    // The first write to a Wasm page in `$work` is charged the full
+    // deterministic-memory-tracker page-fault overhead, which is OS-page-size
+    // dependent (2 x 16 OS pages x 5_000 = 160_000 on 4 KiB hosts such as Linux,
+    // 2 x 4 OS pages x 5_000 = 40_000 on 16 KiB hosts such as arm64-darwin). The
+    // slice limit must exceed that (un-splittable) charge on either platform so
+    // execution can make progress, while staying well below the total `$work`
+    // cost so execution still spans multiple rounds and can be aborted. `$work`
+    // does enough page-size-independent `memory.fill` work (~1 instruction/byte)
+    // that it spans multiple rounds on both platforms.
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(200_000),
     );
     let binary = wat2wasm(DTS_WAT);
     let user_id = PrincipalId::new_anonymous();
@@ -1945,7 +1978,7 @@ fn dts_serialized_and_runtime_states_are_equal() {
     fn run(restart_node: bool) -> CryptoHashOfState {
         let subnet_config = dts_subnet_config(
             NumInstructions::from(1_000_000_000),
-            NumInstructions::from(10_000),
+            NumInstructions::from(250_000),
         );
         let num_canisters = subnet_config.scheduler_config.scheduler_cores * 2;
         let state_machine_config = dts_state_machine_config(subnet_config);
@@ -2016,7 +2049,7 @@ fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
 fn dts_heartbeat_works() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2029,7 +2062,7 @@ fn dts_heartbeat_works() {
     assert_eq!(2, get_canister_version(&env, canister_id));
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
@@ -2064,7 +2097,7 @@ fn dts_heartbeat_works() {
 fn dts_heartbeat_resume_after_abort() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2077,7 +2110,7 @@ fn dts_heartbeat_resume_after_abort() {
     assert_eq!(2, get_canister_version(&env, canister_id));
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
@@ -2125,7 +2158,7 @@ fn dts_heartbeat_resume_after_abort() {
 fn dts_heartbeat_with_trap() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2138,7 +2171,7 @@ fn dts_heartbeat_with_trap() {
     assert_eq!(2, get_canister_version(&env, canister_id));
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .trap()
         .build();
@@ -2173,7 +2206,7 @@ fn dts_heartbeat_with_trap() {
 fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2183,7 +2216,7 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
         .unwrap();
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
@@ -2217,7 +2250,7 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
 fn dts_heartbeat_does_not_prevent_upgrade() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2227,7 +2260,7 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
         .unwrap();
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
@@ -2260,7 +2293,7 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
 fn dts_global_timer_one_shot_works() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
@@ -2275,11 +2308,11 @@ fn dts_global_timer_one_shot_works() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
-    let set_heartbeat_and_global_timer = wasm()
+    let set_global_timer = wasm()
         .set_global_timer_method(timer)
         .api_global_timer_set(now_nanos)
         .get_global_counter()
@@ -2287,7 +2320,7 @@ fn dts_global_timer_one_shot_works() {
         .build();
 
     let result = env
-        .execute_ingress(canister_id, "update", set_heartbeat_and_global_timer)
+        .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
 
     assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
@@ -2321,7 +2354,7 @@ fn dts_global_timer_one_shot_works() {
 fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(75_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2335,10 +2368,10 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
 
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
-    let heartbeat = wasm().instruction_counter_is_at_least(150_000).build();
+    let heartbeat = wasm().instruction_counter_is_at_least(1_100_000).build();
 
     let timer = wasm()
-        .instruction_counter_is_at_least(150_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2404,7 +2437,7 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
 fn dts_global_timer_resume_after_abort() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(60_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
@@ -2416,7 +2449,7 @@ fn dts_global_timer_resume_after_abort() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(150_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2454,7 +2487,7 @@ fn dts_global_timer_resume_after_abort() {
 fn dts_global_timer_does_not_prevent_canister_from_stopping() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(60_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
@@ -2466,7 +2499,7 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(150_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2502,7 +2535,7 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
 fn dts_global_timer_with_trap() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
@@ -2517,7 +2550,7 @@ fn dts_global_timer_with_trap() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .trap()
@@ -2554,7 +2587,7 @@ fn dts_global_timer_with_trap() {
 fn dts_global_timer_does_not_prevent_upgrade() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(60_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
@@ -2566,7 +2599,7 @@ fn dts_global_timer_does_not_prevent_upgrade() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(150_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2583,7 +2616,6 @@ fn dts_global_timer_does_not_prevent_upgrade() {
         .unwrap();
 
     assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
-
     for i in 1..10 {
         env.tick();
         // Each timer takes three rounds to execute.
@@ -2599,9 +2631,15 @@ fn dts_global_timer_does_not_prevent_upgrade() {
 
 #[test]
 fn dts_abort_paused_execution_on_state_switch() {
+    // Installing the universal canister copies its data segment into memory in a
+    // single (un-splittable) bulk memory operation that now costs ~240K
+    // instructions: the first write to each touched Wasm page is charged the full
+    // deterministic-memory-tracker page overhead (2 * OS pages * 5_000). The slice
+    // limit must therefore exceed that op, hence 300K (round = slice + slice / 2 =
+    // 450K).
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(300_000),
     );
 
     let user_id = PrincipalId::new_anonymous();
@@ -2649,7 +2687,7 @@ fn dts_abort_paused_execution_on_state_switch() {
 fn dts_abort_after_dropping_memory_on_state_switch() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(100_000_000),
+        NumInstructions::from(250_000_000),
     );
 
     let user_id = PrincipalId::new_anonymous();
@@ -2664,6 +2702,10 @@ fn dts_abort_after_dropping_memory_on_state_switch() {
                 (call $msg_reply)
             )
             (func (export "canister_update long_update")
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
                 (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
                 (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
                 (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
@@ -2765,8 +2807,9 @@ fn yield_for_dirty_pages_copy_works() {
     );
 
     env.tick();
+    env.tick();
 
-    // Only the first message must be completed after two rounds.
+    // Only the first message must be completed after three rounds.
     assert_matches!(
         ingress_state(env.ingress_status(&message_ids[0])),
         Some(IngressState::Completed(_))
@@ -2816,6 +2859,7 @@ fn yield_for_dirty_pages_copy_works_for_many_canisters() {
     // Neither of messages should be completed after the first round.
     assert_eq!(num_completed(), 0);
 
+    env.tick();
     env.tick();
 
     // Only the first message per scheduler core must be completed after two rounds.
@@ -2930,8 +2974,9 @@ fn yield_for_dirty_pages_copy_works_for_install_code() {
     );
 
     env.tick();
+    env.tick();
 
-    // Only the first message must be completed after two rounds.
+    // Only the first message must be completed after three rounds.
     assert_matches!(
         ingress_state(env.ingress_status(&message_ids[0])),
         Some(IngressState::Completed(_))
@@ -2992,10 +3037,6 @@ fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
     assert_eq!(num_completed(), 0);
 
     env.tick();
-
-    // Only the first message must be completed after two rounds.
-    assert_eq!(num_completed(), 1);
-
     env.tick();
 
     // Only the first message must be completed after three rounds.
@@ -3003,6 +3044,12 @@ fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
 
     env.tick();
 
-    // Two heavy install code messages must be completed in four rounds.
+    // Only the first message must be completed after four rounds.
+    assert_eq!(num_completed(), 1);
+
+    env.tick();
+    env.tick();
+
+    // Two heavy install code messages must be completed in five rounds.
     assert_eq!(num_completed(), 2);
 }
