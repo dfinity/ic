@@ -1695,7 +1695,7 @@ async fn after_validation_insufficient_cycles() {
 }
 
 /// The amount of memory that the migration canister reserves for the canister history
-/// entries it records for the replaced canister
+/// entries it records for the migrated and replaced canisters
 /// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY` in the migration canister).
 const MEMORY_RESERVED_FOR_CANISTER_HISTORY: u64 = 4 * 1024;
 
