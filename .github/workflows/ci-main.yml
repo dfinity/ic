@@ -718,6 +718,21 @@ jobs:
             command: "--image ic-build bash"
     steps:
       - *checkout
+      - name: Workaround for actions/runner-images#14473 (crun pinning)
+        run: |
+          # Workaround for actions/runner-images#14473:
+          # Podman 5.x on ubuntu-24.04/22.04 picks /usr/bin/crun (1.14.1) over
+          # /usr/local/bin/crun (1.28). Pin it explicitly.
+          if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
+            mkdir -p ~/.config/containers/containers.conf.d
+            cat > ~/.config/containers/containers.conf.d/crun-path.conf <<'EOF'
+          [engine]
+          runtime = "crun"
+
+          [engine.runtimes]
+          crun = ["/usr/local/bin/crun"]
+          EOF
+          fi
       - name: Filter Relevant Files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
