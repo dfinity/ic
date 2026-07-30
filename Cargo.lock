@@ -11014,6 +11014,7 @@ dependencies = [
  "ic-nervous-system-common-test-utils",
  "ic-nns-constants",
  "ic-nns-test-utils",
+ "ic-replicated-state",
  "ic-stable-structures 0.7.2",
  "ic-transport-types",
  "ic-universal-canister",

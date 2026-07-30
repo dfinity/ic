@@ -1,14 +1,49 @@
 //! Unit tests
 use crate::migration_canister::MigrationCanisterInitArgs;
 use crate::privileged::MigrationCanisterError;
-use crate::{MigrateCanisterArgs, MigrationStatus, ValidationError};
+use crate::{
+    MEMORY_RESERVED_FOR_CANISTER_HISTORY, MigrateCanisterArgs, MigrationStatus, ValidationError,
+};
 use candid::Principal;
 use candid_parser::utils::{CandidSource, service_equal};
+use ic_base_types::PrincipalId;
+use ic_config::execution_environment::MAX_ALLOWED_CONTROLLERS_COUNT;
+use ic_management_canister_types_private::CanisterChange;
+use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 
 use crate::{
     Request, RequestState,
     canister_state::requests::{find_request, insert_request},
 };
+
+/// The migration canister checks that the memory usage of the migrated and replaced canisters
+/// excluding their canister history does not change while it is their exclusive controller
+/// (see `memory_usage_unchanged`). Hence, the memory that the migration canister reserves on
+/// top of that memory usage only needs to cover the canister history of those canisters, whose
+/// size is bounded because the system only retains the most recent `MAX_CANISTER_HISTORY_CHANGES`
+/// canister changes and a single canister change is bounded by the number of controllers
+/// it may contain.
+#[test]
+fn memory_reserved_for_canister_history_covers_maximum_canister_history_size() {
+    // The memory usage of a canister change is `size_of::<CanisterChange>()` plus
+    // `size_of::<PrincipalId>()` for every controller stored in it (the controllers are stored
+    // on heap and thus not accounted for in `size_of::<CanisterChange>()`); the only canister
+    // changes containing controllers are canister creation, controllers change, and settings
+    // change, all of which are subject to the limit on the number of controllers.
+    let max_canister_change_size =
+        size_of::<CanisterChange>() + MAX_ALLOWED_CONTROLLERS_COUNT * size_of::<PrincipalId>();
+    let max_canister_history_size =
+        MAX_CANISTER_HISTORY_CHANGES as usize * max_canister_change_size;
+    assert!(
+        MEMORY_RESERVED_FOR_CANISTER_HISTORY as usize >= max_canister_history_size,
+        "MEMORY_RESERVED_FOR_CANISTER_HISTORY ({}) must cover the maximum canister history size \
+         ({} = {} * {})",
+        MEMORY_RESERVED_FOR_CANISTER_HISTORY,
+        max_canister_history_size,
+        MAX_CANISTER_HISTORY_CHANGES,
+        max_canister_change_size,
+    );
+}
 
 #[test]
 fn test() {

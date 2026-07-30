@@ -1755,7 +1755,7 @@ async fn after_validation_memory_usage_changed() {
 /// The amount of memory that the migration canister reserves for the canister history
 /// entries it records for the migrated and replaced canisters
 /// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY` in the migration canister).
-const MEMORY_RESERVED_FOR_CANISTER_HISTORY: u64 = 4 * 1024;
+const MEMORY_RESERVED_FOR_CANISTER_HISTORY: u64 = 16 * 1024;
 
 /// Number of canisters used to fill up the memory of a subnet.
 const NUM_FILLER_CANISTERS: usize = 8;

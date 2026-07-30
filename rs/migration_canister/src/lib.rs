@@ -54,10 +54,16 @@ const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 /// controllers: the memory freed by lowering the memory allocation covers the canister history
 /// entry recorded by that very call).
 ///
-/// A canister history entry (of a canister with at most 10 controllers) takes way less than
-/// 1KiB and hence this amount is a safe bound on the memory usage increase caused by the few
-/// canister history entries recorded by the migration canister.
-const MEMORY_RESERVED_FOR_CANISTER_HISTORY: u64 = 4 * 1024;
+/// This amount covers the maximum possible size of a canister's canister history: the system
+/// only retains a bounded number of the most recent canister changes and the size of a single
+/// canister change is bounded, too (this is checked in the unit test
+/// `memory_reserved_for_canister_history_covers_maximum_canister_history_size`). Together with
+/// the migration canister checking that the memory usage of the migrated and replaced canisters
+/// excluding their canister history does not change while it is their exclusive controller
+/// (see `memory_usage_unchanged`), this guarantees that the memory allocation always covers
+/// the canister history entries recorded by the migration canister no matter how many of them
+/// are recorded and how large the canister history already was at validation time.
+const MEMORY_RESERVED_FOR_CANISTER_HISTORY: u64 = 16 * 1024;
 
 #[derive(Clone, Display, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
