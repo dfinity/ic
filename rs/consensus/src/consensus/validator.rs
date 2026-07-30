@@ -109,7 +109,7 @@ enum InvalidArtifactReason {
     InvalidIDkgPayload(InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
-    NonEmptyPayloadPastUpgradePoint,
+    NonEmptyPayloadWhileHalting,
     NonStrictlyIncreasingValidationContext,
     MismatchedBlockInCatchUpPackageShare,
     DataPayloadBlockInCatchUpPackageShare,
@@ -1280,7 +1280,7 @@ impl Validator {
                 return if payload.is_empty() {
                     Ok(())
                 } else {
-                    Err(InvalidArtifactReason::NonEmptyPayloadPastUpgradePoint.into())
+                    Err(InvalidArtifactReason::NonEmptyPayloadWhileHalting.into())
                 };
             }
         }
