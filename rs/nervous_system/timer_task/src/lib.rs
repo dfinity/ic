@@ -113,7 +113,6 @@
 //! }
 //! ```
 
-#![allow(deprecated)]
 
 mod metrics;
 
@@ -123,7 +122,7 @@ use async_trait::async_trait;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
+use ic_cdk::futures::spawn_017_compat;
 use ic_nervous_system_time_helpers::now_seconds;
 pub use ic_nervous_system_timers::{TimerId, set_timer, set_timer_interval};
 use metrics::{MetricsRegistryRef, with_async_metrics, with_sync_metrics};
@@ -137,7 +136,7 @@ use std::time::Duration;
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
-        spawn(future);
+        spawn_017_compat(future);
     }
     // This is needed for tests
     #[cfg(not(target_arch = "wasm32"))]
