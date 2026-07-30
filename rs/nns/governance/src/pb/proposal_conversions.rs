@@ -93,6 +93,7 @@ fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
         skip_stopping_before_installing,
         wasm_module_hash,
         arg_hash,
+        canister_upgrade_options,
     } = item;
 
     let canister_id = *canister_id;
@@ -100,6 +101,8 @@ fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
     let skip_stopping_before_installing = *skip_stopping_before_installing;
     let wasm_module_hash = wasm_module_hash.clone();
     let arg_hash = arg_hash.clone();
+    let canister_upgrade_options =
+        (*canister_upgrade_options).map(api::install_code::CanisterUpgradeOptions::from);
 
     api::InstallCode {
         canister_id,
@@ -107,6 +110,7 @@ fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
         skip_stopping_before_installing,
         wasm_module_hash,
         arg_hash,
+        canister_upgrade_options,
     }
 }
 

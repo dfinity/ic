@@ -1,6 +1,7 @@
 use crate::{
     pb::v1::{
-        GovernanceError, InstallCode, SelfDescribingValue, Topic, install_code::CanisterInstallMode,
+        GovernanceError, InstallCode, SelfDescribingValue, Topic,
+        install_code::{CanisterInstallMode, CanisterUpgradeOptions as CanisterUpgradeOptionsPb},
     },
     proposals::{
         call_canister::CallCanister,
@@ -14,9 +15,12 @@ use candid::{CandidType, Deserialize, Encode};
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{
     CanisterInstallMode as RootCanisterInstallMode, CanisterInstallModeV2,
+    CanisterUpgradeOptions as RootCanisterUpgradeOptions,
+    WasmMemoryPersistence as RootWasmMemoryPersistence,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistencePb;
 use serde::Serialize;
 
 // When calling lifeline's upgrade_root method, this is the request. Keep this in sync with
@@ -34,6 +38,7 @@ impl InstallCode {
         let _ = self.valid_install_mode()?;
         let _ = self.valid_wasm_module()?;
         let _ = self.valid_arg()?;
+        let _ = self.valid_canister_upgrade_options()?;
         let _ = self.valid_topic()?;
         let _ = self.canister_and_function()?;
 
@@ -69,6 +74,49 @@ impl InstallCode {
         }
     }
 
+    /// Converts canister_upgrade_options.
+    ///
+    /// (The resulting type is required by the Root canister.)
+    ///
+    /// Returns Err in the following cases:
+    ///
+    /// 1. mode is not Upgrade.
+    /// 2. wasm_memory_persistence is not one of the allowed values:
+    ///    a. Keep
+    ///    b. Replace
+    ///    c. None
+    fn valid_canister_upgrade_options(
+        &self,
+    ) -> Result<Option<RootCanisterUpgradeOptions>, GovernanceError> {
+        let Some(canister_upgrade_options) = &self.canister_upgrade_options else {
+            return Ok(None);
+        };
+
+        if self.valid_install_mode()? != RootCanisterInstallMode::Upgrade {
+            return Err(invalid_proposal_error(
+                "canister_upgrade_options can only be set when install_mode is upgrade",
+            ));
+        }
+
+        let CanisterUpgradeOptionsPb {
+            skip_pre_upgrade,
+            wasm_memory_persistence,
+        } = *canister_upgrade_options;
+
+        let wasm_memory_persistence = match wasm_memory_persistence {
+            None => None,
+            Some(option) => {
+                let option = convert_i32_to_root_wasm_memory_persistence(option)?;
+                Some(option)
+            }
+        };
+
+        Ok(Some(RootCanisterUpgradeOptions {
+            skip_pre_upgrade,
+            wasm_memory_persistence,
+        }))
+    }
+
     fn valid_wasm_module(&self) -> Result<&Vec<u8>, GovernanceError> {
         // We do not want to copy the (potentially large) wasm module when validating, so we return
         // a reference and let the caller clone it if needed.
@@ -92,8 +140,10 @@ impl InstallCode {
             wasm_module_hash,
             arg_hash,
             skip_stopping_before_installing,
+            canister_upgrade_options,
 
-            // Elided.
+            // Elided. The whole point here is to clear these fields (but
+            // preserve the others).
             wasm_module: _,
             arg: _,
         } = self;
@@ -101,11 +151,13 @@ impl InstallCode {
         Self {
             canister_id: *canister_id,
             install_mode: *install_mode,
-            wasm_module: None,
             wasm_module_hash: wasm_module_hash.clone(),
-            arg: None,
             arg_hash: arg_hash.clone(),
             skip_stopping_before_installing: *skip_stopping_before_installing,
+            canister_upgrade_options: *canister_upgrade_options,
+
+            wasm_module: None,
+            arg: None,
         }
     }
 
@@ -128,15 +180,19 @@ impl InstallCode {
     }
 
     fn payload_to_upgrade_non_root(&self) -> Result<Vec<u8>, GovernanceError> {
-        let stop_before_installing = !self.skip_stopping_before_installing.unwrap_or(false);
-        let mode = self.valid_install_mode()?;
         let canister_id = self.valid_canister_id()?;
         let wasm_module = self.valid_wasm_module()?.clone();
         let arg = self.valid_arg()?.clone();
 
+        let mode = self.valid_install_mode()?;
+        let canister_upgrade_options = self.valid_canister_upgrade_options()?;
+        let mode = assemble_mode(mode, canister_upgrade_options);
+
+        let stop_before_installing = !self.skip_stopping_before_installing.unwrap_or(false);
+
         Encode!(&ChangeCanisterRequest {
             stop_before_installing,
-            mode: CanisterInstallModeV2::from(mode),
+            mode,
             canister_id,
             wasm_module,
             arg,
@@ -150,6 +206,48 @@ impl InstallCode {
             return false;
         };
         topic_to_manage_canister(&canister_id) == Topic::ProtocolCanisterManagement
+    }
+}
+
+/// Converts from integer code to the enum type required by the Root canister
+/// (and the Management canister).
+///
+/// Ok values are Keep and Replace.
+fn convert_i32_to_root_wasm_memory_persistence(
+    code: i32,
+) -> Result<RootWasmMemoryPersistence, GovernanceError> {
+    let new_governance_error = || {
+        invalid_proposal_error(&format!(
+            "Unrecognized wasm_memory_persistence code: {code}"
+        ))
+    };
+
+    let result = WasmMemoryPersistencePb::try_from(code);
+    let result = result.map_err(|_| new_governance_error())?;
+
+    let result = RootWasmMemoryPersistence::try_from(result);
+    let result = result.map_err(|_| new_governance_error())?;
+
+    Ok(result)
+}
+
+/// Combines the arguments into the Mode type required by Root (and the
+/// Management canister).
+///
+/// If mode is not Upgrade, then canister_upgrade_options does not affect the
+/// return value (but in non-release builds, this panics via debug_assert).
+fn assemble_mode(
+    mode: RootCanisterInstallMode,
+    canister_upgrade_options: Option<RootCanisterUpgradeOptions>,
+) -> CanisterInstallModeV2 {
+    match mode {
+        RootCanisterInstallMode::Upgrade => {
+            CanisterInstallModeV2::Upgrade(canister_upgrade_options)
+        }
+        mode => {
+            debug_assert_eq!(canister_upgrade_options, None);
+            CanisterInstallModeV2::from(mode)
+        }
     }
 }
 
@@ -210,11 +308,13 @@ impl From<InstallCode> for SelfDescribingValue {
             wasm_module_hash,
             arg_hash,
             skip_stopping_before_installing,
+            canister_upgrade_options,
             wasm_module: _,
             arg: _,
         } = value;
 
         let install_mode = install_mode.map(SelfDescribingProstEnum::<CanisterInstallMode>::new);
+        let canister_upgrade_options = canister_upgrade_options.map(SelfDescribingValue::from);
 
         ValueBuilder::new()
             .add_field("canister_id", canister_id)
@@ -224,6 +324,27 @@ impl From<InstallCode> for SelfDescribingValue {
             .add_field(
                 "skip_stopping_before_installing",
                 skip_stopping_before_installing.unwrap_or_default(),
+            )
+            .add_field("canister_upgrade_options", canister_upgrade_options)
+            .build()
+    }
+}
+
+impl From<CanisterUpgradeOptionsPb> for SelfDescribingValue {
+    fn from(value: CanisterUpgradeOptionsPb) -> Self {
+        let CanisterUpgradeOptionsPb {
+            skip_pre_upgrade,
+            wasm_memory_persistence,
+        } = value;
+
+        ValueBuilder::new()
+            .add_field("skip_pre_upgrade", skip_pre_upgrade.unwrap_or_default())
+            .add_field(
+                "wasm_memory_persistence",
+                wasm_memory_persistence.map(
+                    // Basically, this converts `Keep as i32` to "Keep" and so on.
+                    SelfDescribingProstEnum::<WasmMemoryPersistencePb>::new,
+                ),
             )
             .build()
     }
