@@ -35,6 +35,9 @@ fn rpc_client() -> reqwest::blocking::Client {
 pub struct Anvil {
     child: Child,
     url: String,
+    /// Built once and reused across RPCs, so calls share a connection pool instead of paying for a
+    /// fresh client (and TCP connection) each time.
+    client: reqwest::blocking::Client,
 }
 
 impl Anvil {
@@ -54,8 +57,9 @@ impl Anvil {
             .spawn()
             .unwrap_or_else(|e| panic!("failed to spawn anvil at {bin}: {e}"));
         let url = format!("http://127.0.0.1:{port}");
-        wait_until_ready(&mut child, &bin, &url);
-        Self { child, url }
+        let client = rpc_client();
+        wait_until_ready(&mut child, &bin, &url, &client);
+        Self { child, url, client }
     }
 
     pub(crate) fn url(&self) -> &str {
@@ -63,17 +67,21 @@ impl Anvil {
     }
 
     /// Sends a JSON-RPC request, returning the raw `result`/`error` body so the caller can decide
-    /// whether an error is a failure.
+    /// whether an error is a failure. Transport and decode failures — including a `RPC_TIMEOUT`
+    /// timeout — are returned as `Err` (tagged with the method) rather than panicking, so callers
+    /// can distinguish them.
     fn rpc_result(&self, method: &str, params: Value) -> Result<Value, String> {
-        let body: Value = rpc_client()
+        let response = self
+            .client
             .post(&self.url)
             .json(
                 &serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
             )
             .send()
-            .unwrap()
+            .map_err(|e| format!("RPC {method} request failed: {e}"))?;
+        let body: Value = response
             .json()
-            .unwrap();
+            .map_err(|e| format!("RPC {method} returned an undecodable body: {e}"))?;
         match body.get("error") {
             Some(error) if !error.is_null() => Err(error.to_string()),
             _ => Ok(body["result"].clone()),
@@ -192,13 +200,13 @@ impl Drop for Anvil {
     }
 }
 
-fn wait_until_ready(child: &mut Child, bin: &str, url: &str) {
+fn wait_until_ready(child: &mut Child, bin: &str, url: &str, client: &reqwest::blocking::Client) {
     let deadline = Instant::now() + Duration::from_secs(30);
     while Instant::now() < deadline {
         if let Some(status) = child.try_wait().expect("failed to poll anvil") {
             panic!("anvil ({bin}) exited early with {status} before serving {url}");
         }
-        let ready = rpc_client()
+        let ready = client
             .post(url)
             .json(&serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}))
             .send()
