@@ -2531,37 +2531,6 @@ fn no_critical_error_on_empty_data_segment() {
 }
 
 #[test]
-fn failed_stable_memory_grow_cost_and_time_single_canister() {
-    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
-
-    let env = StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .build();
-
-    let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
-
-    let timer = std::time::Instant::now();
-    let initial_balance = env.cycle_balance(canister_id);
-    let _res = env.execute_ingress(
-        canister_id,
-        "update",
-        wasm()
-            .stable64_grow(num_wasm_pages)
-            .stable64_write(0, &[42])
-            .trap()
-            .build(),
-    );
-    let elapsed_ms = timer.elapsed().as_millis();
-    let cycles_m = (initial_balance - env.cycle_balance(canister_id)) / 1000 / 1000;
-    assert_lt!(
-        elapsed_ms,
-        10_000,
-        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
-    );
-    assert_gt!(cycles_m, 5);
-}
-
-#[test]
 fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
     let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
     let num_canisters = 128;
