@@ -2,7 +2,8 @@ use std::rc::Rc;
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
+    embedders::Config as EmbeddersConfig,
+    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
 };
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
@@ -229,6 +230,7 @@ pub fn get_system_api(
         system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
