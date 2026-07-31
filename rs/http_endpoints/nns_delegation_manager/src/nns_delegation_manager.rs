@@ -723,6 +723,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::RwLock;
 
+    use crate::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -1250,7 +1251,7 @@ mod tests {
             let builder = reader
                 .builder()
                 .expect("Should return some delegation on non NNS subnet");
-            let delegation = builder.original_delegation();
+            let delegation = builder.build_unverified(CanisterRangesFilter::Flat, &no_op_logger());
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
                 .expect("Should return a certificate which can be deserialized");
             let tree = LabeledTree::try_from(parsed_delegation.tree)
@@ -1446,9 +1447,12 @@ mod tests {
             .await;
 
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
-            let parsed_delegation: Certificate =
-                serde_cbor::from_slice(&builder.original_delegation().certificate)
-                    .expect("Should return a certificate which can be deserialized");
+            let parsed_delegation: Certificate = serde_cbor::from_slice(
+                &builder
+                    .build_unverified(CanisterRangesFilter::Flat, &no_op_logger())
+                    .certificate,
+            )
+            .expect("Should return a certificate which can be deserialized");
             let tree = LabeledTree::try_from(parsed_delegation.tree)
                 .expect("The deserialized delegation should contain a correct tree");
             // Verify that the state tree has the a subtree corresponding to the requested subnet

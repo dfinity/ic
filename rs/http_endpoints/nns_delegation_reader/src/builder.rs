@@ -129,7 +129,7 @@ impl NNSDelegationBuilder {
     {
         match self.is_consistent_with(state_view_for_subnet, ranges_check) {
             Ok(true) => Ok((
-                self.build_or_original(canister_ranges_filter, logger),
+                self.build_unverified(canister_ranges_filter, logger),
                 canister_ranges_filter.into(),
             )),
             Ok(false) => Err(DelegationVerificationError::Inconsistent),
@@ -175,17 +175,6 @@ impl NNSDelegationBuilder {
         )
     }
 
-    /// The id of the subnet to which the delegation was issued.
-    pub fn subnet_id(&self) -> SubnetId {
-        self.subnet_id
-    }
-
-    /// The delegation exactly as received from the NNS, which contains the canister
-    /// ranges in both locations.
-    pub fn original_delegation(&self) -> &CertificateDelegation {
-        &self.original_delegation
-    }
-
     /// The size, in bytes, of the certificate as received from the NNS, which contains
     /// the canister ranges in both locations.
     pub fn original_certificate_size_bytes(&self) -> usize {
@@ -207,11 +196,16 @@ impl NNSDelegationBuilder {
             .len()
     }
 
-    /// Builds an NNS delegation with the given canister ranges filter.
+    /// Builds an NNS delegation with the given canister ranges filter, WITHOUT checking
+    /// that the delegation is consistent with any replicated state. When serving the
+    /// delegation alongside a certificate, prefer [`Self::build_verified`], which only
+    /// returns the delegation after verifying it against the certified state which the
+    /// certificate is built from.
+    ///
     /// If for some reasons the delegation cannot be built, it returns the full delegation
     /// as received from the NNS. This means the returned delegation might contain
     /// both formats of the canister ranges.
-    fn build_or_original(
+    pub fn build_unverified(
         &self,
         canister_ranges_filter: CanisterRangesFilter,
         logger: &ReplicaLogger,
@@ -229,7 +223,7 @@ impl NNSDelegationBuilder {
         }
     }
 
-    /// Like [`Self::build_or_original`], but always builds the delegation from scratch
+    /// Like [`Self::build_unverified`], but always builds the delegation from scratch
     /// instead of consulting the precomputed delegations.
     fn build_uncached_or_original(
         &self,
@@ -388,7 +382,7 @@ mod tests {
         );
         let builder = create_builder(full_delegation);
 
-        let delegation = builder.build_or_original(CanisterRangesFilter::None, &no_op_logger());
+        let delegation = builder.build_unverified(CanisterRangesFilter::None, &no_op_logger());
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -422,7 +416,7 @@ mod tests {
         );
         let builder = create_builder(full_delegation);
 
-        let delegation = builder.build_or_original(CanisterRangesFilter::Flat, &no_op_logger());
+        let delegation = builder.build_unverified(CanisterRangesFilter::Flat, &no_op_logger());
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -460,7 +454,7 @@ mod tests {
         );
         let builder = create_builder(full_delegation);
 
-        let delegation = builder.build_or_original(
+        let delegation = builder.build_unverified(
             CanisterRangesFilter::Tree(CanisterId::from(150)),
             &no_op_logger(),
         );
@@ -512,7 +506,7 @@ mod tests {
         );
         let builder = create_builder(full_delegation);
 
-        let delegation = builder.build_or_original(
+        let delegation = builder.build_unverified(
             CanisterRangesFilter::Tree(CanisterId::from(0)),
             &no_op_logger(),
         );
