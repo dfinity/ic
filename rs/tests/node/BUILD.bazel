@@ -53,6 +53,7 @@ system_test_nns(
 system_test(
     name = "root_tests",
     cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 UniversalVm * 6 vCPUs.
+    enable_uvm = True,
     guestos = False,
     proc_macro_deps = [
         "@crate_index//:indoc",
