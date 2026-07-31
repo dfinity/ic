@@ -106,8 +106,8 @@ enum ConsensusCostAllowance {
 /// The per-replica allowance that will be used to cover the consensus cost of
 /// delivering a response.
 ///
-/// Returns `None` for legacy and free requests, for which the consensus cost does not
-/// need to be covered by the replicas' allowances.
+/// The consensus cost of legacy and free requests does not need to be covered
+/// by the replicas' allowances.
 fn per_replica_consensus_allowance(context: &CanisterHttpRequestContext) -> ConsensusCostAllowance {
     let allowance = context.refund_status.per_replica_allowance;
     match context.cost_schedule {
