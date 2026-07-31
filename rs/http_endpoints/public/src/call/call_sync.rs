@@ -244,31 +244,38 @@ async fn call_sync(
     // Check if the message is already known.
     // If it is known, we can return the certificate without re-submitting the message
     // to the ingress pool.
-    if let Some((tree, certification, delegation)) = tree_and_certificate_for_message(
+    match tree_cert_deleg_for_message(
         state_reader.clone(),
         message_id.clone(),
         &nns_delegation_reader,
         delegation_filter,
         delegation_check,
         &metrics,
-        &log,
     )
     .await
-        && let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id)
     {
-        let signature = certification.signed.signature.signature.get().0;
+        Ok(Some((tree, certification, delegation)))
+            if matches!(
+                parsed_message_status(&tree, &message_id),
+                ParsedMessageStatus::Known(_)
+            ) =>
+        {
+            let signature = certification.signed.signature.signature.get().0;
 
-        metrics
-            .sync_call_early_response_trigger_total
-            .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
-            .inc();
+            metrics
+                .sync_call_early_response_trigger_total
+                .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
+                .inc();
 
-        return SyncCallResponse::Certificate(Certificate {
-            tree,
-            signature: Blob(signature),
-            delegation,
-        });
-    };
+            return SyncCallResponse::Certificate(Certificate {
+                tree,
+                signature: Blob(signature),
+                delegation,
+            });
+        }
+        Ok(None) | Ok(Some(_)) => (),
+        Err(err) => return SyncCallResponse::HttpError(err),
+    }
 
     let certification_subscriber = match ingress_watcher_handle
         .subscribe_for_certification(message_id.clone())
@@ -341,20 +348,23 @@ async fn call_sync(
         }
     }
 
-    let Some((tree, certification, delegation)) = tree_and_certificate_for_message(
+    let (tree, certification, delegation) = match tree_cert_deleg_for_message(
         state_reader,
         message_id.clone(),
         &nns_delegation_reader,
         delegation_filter,
         delegation_check,
         &metrics,
-        &log,
     )
     .await
-    else {
-        return SyncCallResponse::Accepted(
-            "Certified state is not available. Please try /read_state.",
-        );
+    {
+        Ok(Some((tree, certification, delegation))) => (tree, certification, delegation),
+        Ok(None) => {
+            return SyncCallResponse::Accepted(
+                "Certified state is not available. Please try /read_state.",
+            );
+        }
+        Err(err) => return SyncCallResponse::HttpError(err),
     };
 
     let message_status = parsed_message_status(&tree, &message_id);
@@ -419,23 +429,22 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
 /// Returns `None` if the certified state is not available, or if the NNS delegation could
 /// not be verified to be consistent (according to `delegation_check`) with the certified
 /// state which the certificate is built from.
-async fn tree_and_certificate_for_message(
+async fn tree_cert_deleg_for_message(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: MessageId,
     nns_delegation_reader: &NNSDelegationReader,
     delegation_filter: CanisterRangesFilter,
     delegation_check: CanisterRangesCheck,
     metrics: &HttpHandlerMetrics,
-    log: &ReplicaLogger,
-) -> Option<(MixedHashTree, Certification, Option<CertificateDelegation>)> {
+) -> Result<Option<(MixedHashTree, Certification, Option<CertificateDelegation>)>, HttpError> {
     let certified_state_reader = match tokio::task::spawn_blocking(move || {
         state_reader.get_certified_state_snapshot()
     })
     .await
     {
-        Ok(Some(certified_state_reader)) => Some(certified_state_reader),
-        Ok(None) | Err(_) => None,
-    }?;
+        Ok(Some(certified_state_reader)) => certified_state_reader,
+        Ok(None) | Err(_) => return Ok(None),
+    };
 
     // Only serve a delegation which is consistent with the certified state which the
     // response certificate will be built from.
@@ -450,17 +459,16 @@ async fn tree_and_certificate_for_message(
             }) {
                 Ok((delegation, _metadata)) => Some(delegation),
                 Err(err) => {
-                    warn!(
-                        every_n_seconds => LOG_EVERY_N_SECONDS,
-                        log,
-                        "Refusing to serve a call response with an NNS delegation which could not \
-                        be verified against the certified state: {err}"
-                    );
                     metrics
                         .delegation_verification_failures_total
                         .with_label_values(&["call", delegation_verification_failure_reason(&err)])
                         .inc();
-                    return None;
+                    return Err(HttpError {
+                        status: StatusCode::SERVICE_UNAVAILABLE,
+                        message: format!(
+                            "This replica has an outdated NNS delegation. Please try again."
+                        ),
+                    });
                 }
             }
         }
@@ -477,7 +485,7 @@ async fn tree_and_certificate_for_message(
         sparse_labeled_tree_from_paths(&[time_path, request_status_path])
             .expect("Path is within length bound.");
 
-    certified_state_reader
+    Ok(certified_state_reader
         .read_certified_state(&tree)
-        .map(|(tree, certification)| (tree, certification, delegation_from_nns))
+        .map(|(tree, certification)| (tree, certification, delegation_from_nns)))
 }
