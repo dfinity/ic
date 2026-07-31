@@ -5,15 +5,45 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
-#![allow(deprecated)]
 use std::time::Duration;
 
 use candid::{CandidType, Deserialize};
-use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod, Payload,
     TransformContext,
 };
+
+/// The reject code that this canister reports back to its callers.
+///
+/// The variants and their ordering define the `variant` this canister exposes
+/// over Candid, so the numbering must stay in sync with the reject codes of the
+/// [IC interface specification](https://internetcomputer.org/docs/references/ic-interface-spec#reject-codes).
+#[derive(Copy, Clone, Debug, CandidType, Deserialize)]
+pub enum RejectionCode {
+    NoError,
+    SysFatal,
+    SysTransient,
+    DestinationInvalid,
+    CanisterReject,
+    CanisterError,
+    Unknown,
+}
+
+impl RejectionCode {
+    /// Translates a raw reject code, as reported by the system, into the variant
+    /// this canister exposes over Candid.
+    pub fn from_raw(raw: u32) -> Self {
+        match raw {
+            0 => Self::NoError,
+            1 => Self::SysFatal,
+            2 => Self::SysTransient,
+            3 => Self::DestinationInvalid,
+            4 => Self::CanisterReject,
+            5 => Self::CanisterError,
+            _ => Self::Unknown,
+        }
+    }
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpRequest {
