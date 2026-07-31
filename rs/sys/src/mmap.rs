@@ -4,8 +4,10 @@ mod tests;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap, munmap};
 use std::convert::AsRef;
 use std::io;
-use std::os::unix::io::AsRawFd;
+use std::num::NonZeroUsize;
+use std::os::unix::io::{AsRawFd, BorrowedFd};
 use std::path::Path;
+use std::ptr::NonNull;
 
 /// `ScopedMmap` contains a memory region that is automatically
 /// unmapped when the value is dropped.
@@ -35,18 +37,21 @@ impl ScopedMmap {
             });
         }
 
+        // `len == 0` is handled above, so the `unwrap` cannot panic.
+        let non_zero_len = NonZeroUsize::new(len).unwrap();
         // It's not clear why mmap-ing a file is considered unsafe.  Using the
         // address is indeed unsafe, but mmap itself doesn't do anything bad.
         let addr = unsafe {
             mmap(
-                std::ptr::null_mut(),
-                len,
+                None,
+                non_zero_len,
                 ProtFlags::PROT_READ,
                 MapFlags::MAP_SHARED,
-                fd.as_raw_fd(),
+                BorrowedFd::borrow_raw(fd.as_raw_fd()),
                 offset,
             )
-        }?;
+        }?
+        .as_ptr();
         Ok(Self { addr, len })
     }
 
@@ -96,7 +101,9 @@ impl ScopedMmap {
 impl Drop for ScopedMmap {
     fn drop(&mut self) {
         if self.len > 0 {
-            unsafe { munmap(self.addr, self.len) }.expect("Failed to unmap");
+            // `len > 0` guarantees `addr` is a non-null mapping created by `mmap`.
+            let addr = NonNull::new(self.addr).expect("mapping with non-zero length has null addr");
+            unsafe { munmap(addr, self.len) }.expect("Failed to unmap");
         }
     }
 }

@@ -1,5 +1,7 @@
 use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
+use ic_config::{
+    embedders::Config as EmbeddersConfig, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
+};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, DefaultOutOfInstructionsHandler, MAX_ENV_VAR_NAME_SIZE, SystemApiImpl,
@@ -1440,6 +1442,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .xnet_call_performed_fee(CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ))
         .real()
         - Cycles::from(10_u128);
@@ -1566,8 +1569,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
@@ -1576,6 +1578,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
     );
     let mut api = SystemApiImpl::new(
@@ -1632,8 +1635,7 @@ fn push_output_request_respects_memory_limits() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
@@ -1642,6 +1644,7 @@ fn push_output_request_respects_memory_limits() {
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
     );
     let own_canister_id = system_state.canister_id();
@@ -1728,8 +1731,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
@@ -1738,6 +1740,7 @@ fn push_output_request_oversized_request_memory_limits() {
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
     );
     let own_canister_id = system_state.canister_id();
@@ -2143,8 +2146,7 @@ fn get_system_api_for_best_effort_response(
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
@@ -2153,6 +2155,7 @@ fn get_system_api_for_best_effort_response(
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
     );
 

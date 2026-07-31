@@ -6,7 +6,7 @@ use crate::flow::{
 use crate::mock::{
     JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
 };
-use crate::response::{block_response, empty_logs, fee_history};
+use crate::response::{balance_scan_response, block_response, empty_logs, fee_history};
 use crate::{
     CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
@@ -19,13 +19,17 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::Hex32;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cketh_minter::SCRAPING_ETH_LOGS_INTERVAL;
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
-use ic_cketh_minter::endpoints::{CkErc20Token, MinterInfo};
+use ic_cketh_minter::endpoints::{
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, MinterInfo,
+};
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
+use ic_cketh_minter::{
+    BALANCE_SCAN_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL,
+};
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
@@ -132,6 +136,37 @@ impl CkErc20Setup {
     pub fn add_support_for_subaccount(mut self) -> Self {
         self.cketh = self.cketh.add_support_for_subaccount();
         self
+    }
+
+    /// Advance the refresh timer and answer the resulting `eth_getBlockByNumber("latest")` with
+    /// `block`, so the minter's latest block height becomes `block`, then settle the reply. The
+    /// mock matches the full `["latest", false]` request, so concurrent `eth_getBlockByNumber`
+    /// calls (e.g. the finalized scraper) are left untouched.
+    pub fn refresh_latest_block(&self, block: u64) {
+        self.env.advance_time(REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL);
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .with_request_params(json!(["latest", false]))
+            .respond_for_all_with(block_response(block))
+            .build()
+            .expect_rpc_calls(self);
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+        }
+    }
+
+    /// Advance the balance-scan timer and answer the resulting deployless-batcher `eth_call` with
+    /// `balances` — one entry per scanned `(deposit address, supported token)` pair, in scan order
+    /// (i.e. `live-due addresses × supported tokens`). Settles the reply so the per-address scan
+    /// schedule is advanced before returning.
+    pub fn run_balance_scan(&self, balances: &[u128]) {
+        self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
+            .respond_for_all_with(balance_scan_response(balances))
+            .build()
+            .expect_rpc_calls(self);
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+        }
     }
 
     pub fn check_events(self) -> MinterEventAssert<Self> {
@@ -342,6 +377,34 @@ impl CkErc20Setup {
             Encode!(&withdraw_erc20_arg).expect("failed to encode withdraw args"),
         );
         RefreshGasFeeEstimate {
+            setup: self,
+            message_id,
+        }
+    }
+
+    pub fn call_minter_deposit_erc20(
+        self,
+        from: Principal,
+        subaccount: Option<[u8; 32]>,
+    ) -> DepositErc20Flow {
+        let arg = DepositErc20Arg {
+            mode: DepositMode::Unsponsored { subaccount },
+        };
+        self.call_minter_deposit_erc20_with(from, arg)
+    }
+
+    pub fn call_minter_deposit_erc20_with(
+        self,
+        from: Principal,
+        deposit_erc20_arg: DepositErc20Arg,
+    ) -> DepositErc20Flow {
+        let message_id = self.env.send_ingress(
+            PrincipalId::from(from),
+            self.cketh.minter_id,
+            "deposit_erc20",
+            Encode!(&deposit_erc20_arg).expect("failed to encode deposit_erc20 args"),
+        );
+        DepositErc20Flow {
             setup: self,
             message_id,
         }
@@ -957,6 +1020,51 @@ impl Erc20WithdrawalFlow {
             .await_ingress(self.message_id.clone(), MAX_TICKS)
             .expect("failed to resolve message with id: {message_id}"),
     ), Result<RetrieveErc20Request, WithdrawErc20Error>)
+        .unwrap()
+    }
+}
+
+pub struct DepositErc20Flow {
+    pub setup: CkErc20Setup,
+    pub message_id: MessageId,
+}
+
+impl DepositErc20Flow {
+    pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
+        let result = self
+            .setup
+            .env
+            .await_ingress(self.message_id.clone(), MAX_TICKS);
+        assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains(error_substring));
+        self.setup
+    }
+
+    pub fn expect_error(self, error: DepositErc20Error) -> CkErc20Setup {
+        assert_eq!(
+            self.minter_response(),
+            Err(error),
+            "BUG: unexpected result during deposit_erc20"
+        );
+        self.setup
+    }
+
+    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositErc20Response) {
+        let response = self
+            .minter_response()
+            .expect("BUG: unexpected error from minter during deposit_erc20");
+        (self.setup, response)
+    }
+
+    fn minter_response(&self) -> Result<DepositErc20Response, DepositErc20Error> {
+        Decode!(
+            &assert_reply(
+                self.setup
+                    .env
+                    .await_ingress(self.message_id.clone(), MAX_TICKS)
+                    .expect("failed to resolve message with id: {message_id}")
+            ),
+            Result<DepositErc20Response, DepositErc20Error>
+        )
         .unwrap()
     }
 }

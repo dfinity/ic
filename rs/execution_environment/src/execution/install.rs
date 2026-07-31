@@ -117,6 +117,7 @@ pub(crate) fn execute_install(
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         wasm_module,
         canister_id,
+        round.time,
         round_limits,
         original.compilation_cost_handling,
     );
@@ -172,7 +173,7 @@ pub(crate) fn execute_install(
             FuncRef::Method(method),
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
-            round.network_topology,
+            round.network_topology.clone(),
             original.subnet_cycles_config,
         );
 
@@ -294,7 +295,7 @@ fn install_stage_2b_continue_install_after_start(
         FuncRef::Method(method),
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
-        round.network_topology,
+        round.network_topology.clone(),
         original.subnet_cycles_config,
     );
     match wasm_execution_result {

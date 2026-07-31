@@ -61,6 +61,13 @@ impl VerificationError {
         })
         .into()
     }
+
+    pub fn invalid_policy(err: impl Display) -> Self {
+        VerificationErrorDetail::InvalidPolicy(VerificationErrorDescription {
+            message: err.to_string(),
+        })
+        .into()
+    }
 }
 
 impl Display for VerificationError {

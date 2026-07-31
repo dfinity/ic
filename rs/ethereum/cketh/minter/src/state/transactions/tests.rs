@@ -11,8 +11,8 @@ use crate::state::transactions::{
     create_transaction,
 };
 use crate::tx::{
-    AccessList, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
-    SignedEip1559TransactionRequest,
+    AccessList, Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest,
+    TransactionSignature,
 };
 use crate::withdraw::estimate_gas_limit;
 use ic_ethereum_types::Address;
@@ -2498,8 +2498,8 @@ pub mod arbitrary {
     };
     use crate::test_fixtures::arb::arb_ledger_subaccount;
     use crate::tx::{
-        AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
-        SignedEip1559TransactionRequest, StorageKey, TransactionPrice,
+        AccessList, AccessListItem, Eip1559TransactionRequest, GasFeeEstimate,
+        SignedEip1559TransactionRequest, StorageKey, TransactionPrice, TransactionSignature,
     };
     use candid::Principal;
     use ic_ethereum_types::Address;
@@ -2673,9 +2673,9 @@ pub mod arbitrary {
             )
     }
 
-    fn arb_eip_1559_signature() -> impl Strategy<Value = Eip1559Signature> {
+    fn arb_eip_1559_signature() -> impl Strategy<Value = TransactionSignature> {
         (any::<bool>(), arb_u256(), arb_u256()).prop_map(|(signature_y_parity, r, s)| {
-            Eip1559Signature {
+            TransactionSignature {
                 signature_y_parity,
                 r,
                 s,
@@ -2879,6 +2879,7 @@ fn resubmit_transaction_with_bumped_price(
     transactions: &mut EthTransactions,
     created_tx: Eip1559TransactionRequest,
 ) -> SignedEip1559TransactionRequest {
+    use crate::tx::SignableTransaction;
     let initial_price = created_tx.transaction_price();
     let new_tx = Eip1559TransactionRequest {
         max_fee_per_gas: increase_by_10_percent(initial_price.max_fee_per_gas),
@@ -2914,8 +2915,8 @@ fn sign_transaction(transaction: Eip1559TransactionRequest) -> SignedEip1559Tran
     SignedEip1559TransactionRequest::from((transaction, dummy_signature()))
 }
 
-fn dummy_signature() -> Eip1559Signature {
-    Eip1559Signature {
+fn dummy_signature() -> TransactionSignature {
+    TransactionSignature {
         signature_y_parity: false,
         r: Default::default(),
         s: Default::default(),

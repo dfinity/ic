@@ -68,8 +68,6 @@ struct TestConfig {
     /// Allows testing invalid client attestation data.
     client_custom_data_override: Option<[u8; 64]>,
     can_open_disk: bool,
-    server_returns_luks_header: bool,
-    client_recovered_luks_header: Option<Vec<u8>>,
 }
 
 impl Default for TestConfig {
@@ -84,8 +82,6 @@ impl Default for TestConfig {
             client_chip_id: DEFAULT_CHIP_ID,
             server_chip_id: DEFAULT_CHIP_ID,
             can_open_disk: false,
-            server_returns_luks_header: true,
-            client_recovered_luks_header: None,
         }
     }
 }
@@ -114,13 +110,11 @@ struct DiskEncryptionKeyExchangeTestFixture {
     server_port: u16,
     /// True to assume that the disk can already be opened without key exchange
     can_open_disk: bool,
-    server_returns_luks_header: bool,
-    client_recovered_luks_header: Option<Vec<u8>>,
 }
 
 impl DiskEncryptionKeyExchangeTestFixture {
     fn new(config: TestConfig) -> Self {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
@@ -206,8 +200,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
             client_store_luks_header,
             server_port,
             can_open_disk: config.can_open_disk,
-            server_returns_luks_header: config.server_returns_luks_header,
-            client_recovered_luks_header: config.client_recovered_luks_header,
         }
     }
 
@@ -264,7 +256,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
             self.registry_client.clone(),
             self.server_store.path().to_path_buf(),
             self.server_store_luks_header.path().to_path_buf(),
-            self.server_returns_luks_header,
             self.server_port,
             Duration::from_secs(2),
         )
@@ -280,22 +271,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
         crypto_ops
             .expect_can_open_store()
             .returning(move |_, _, _, _| Ok(can_open_disk));
-
-        if let Some(recovered_luks_header) = self.client_recovered_luks_header.clone() {
-            let expected_store_device_path = store_device_path.clone();
-            crypto_ops
-                .expect_backup_luks_header()
-                .times(1)
-                .withf(move |store_device_path, _| {
-                    store_device_path == expected_store_device_path.as_path()
-                })
-                .returning(move |_, store_luks_header_path| {
-                    std::fs::write(store_luks_header_path, &recovered_luks_header)?;
-                    Ok(())
-                });
-        } else {
-            crypto_ops.expect_backup_luks_header().times(0);
-        }
 
         DiskEncryptionKeyExchangeClientAgent::new(
             self.client_guestos_config.clone(),
@@ -336,15 +311,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
             luks_header,
             std::fs::read(self.server_store_luks_header.path()).unwrap(),
             "Store LUKS header file content does not match the exchanged header"
-        );
-    }
-
-    fn verify_client_luks_header_matches(&self, expected: &[u8]) {
-        let luks_header = std::fs::read(self.client_store_luks_header.path())
-            .expect("Failed to read client Store LUKS header");
-        assert_eq!(
-            luks_header, expected,
-            "Store LUKS header file content does not match expected content"
         );
     }
 
@@ -415,23 +381,6 @@ async fn test_exchange_keys_successfully() {
 
     fixture.verify_previous_key_populated();
     fixture.verify_luks_header_populated();
-}
-
-#[tokio::test]
-async fn test_exchange_keys_recovers_luks_header_when_server_omits_it() {
-    let recovered_luks_header = sample_luks_header_bytes();
-    let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig {
-        server_returns_luks_header: false,
-        client_recovered_luks_header: Some(recovered_luks_header.clone()),
-        ..Default::default()
-    });
-    let (server_result, client_result) = fixture.run_key_exchange_test().await;
-
-    server_result.expect("Key exchange should succeed");
-    client_result.expect("Key exchange should succeed");
-
-    fixture.verify_previous_key_populated();
-    fixture.verify_client_luks_header_matches(&recovered_luks_header);
 }
 
 #[tokio::test]

@@ -89,7 +89,9 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         .verify_chip_id(chip_ids)
         .context("This node's chip ID is not included in the expected chip IDs")?
         .verify_measurement(&guest_launch_measurements)
-        .context("This node is not running a GuestOS with one of the base launch measurements")?;
+        .context("This node is not running a GuestOS with one of the base launch measurements")?
+        .verify_guest_policy()
+        .context("Guest policy verification failed")?;
 
     proposal.rootfs_hash.context("Proposal missing rootfs_hash")
 }

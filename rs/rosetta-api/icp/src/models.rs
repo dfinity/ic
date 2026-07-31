@@ -200,7 +200,7 @@ impl TryFrom<ConstructionParseRequest> for ParsedTransaction {
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ConstructionPayloadsRequestMetadata {
     /// The memo to use for a ledger transfer.
-    /// A random number is used by default.
+    /// Defaults to 0 if not specified.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<u64>,
 

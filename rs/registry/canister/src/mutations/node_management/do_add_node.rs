@@ -299,6 +299,7 @@ impl Registry {
             ParsedSevAttestationPackage::parse(attestation_package.clone(), root_cert_verification)
                 .verify_custom_data(&expected_custom_data)
                 .verify_measurement(&self.get_all_elected_guest_launch_measurements())
+                .verify_guest_policy()
                 .map_err(|e| {
                     format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}")
                 })?;

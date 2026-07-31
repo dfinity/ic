@@ -21,6 +21,7 @@ def system_test(
         test_driver_target = None,
         runtime_deps = {},
         tags = [],
+        backend = None,
         test_timeout = "long",
         enable_metrics = False,
         prometheus_vm_required_host_features = [],
@@ -42,6 +43,8 @@ def system_test(
         additional_colocate_tags = [],
         logs = True,
         vm_allocation_mode = None,
+        cpus = None,
+        cpus_oversubscription_factor = 2,
         **kwargs):
     """Declares a system-test.
 
@@ -51,6 +54,10 @@ def system_test(
       test_driver_target: optional string to identify the target of the test driver binary. Defaults to None which means declare a rust_binary from <name>.rs.
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
+      backend: None | "farm" | "local".
+        If "farm" the `_local` variant will be tagged as "manual".
+        If "local" the non `_local` variants will be tagged as "manual".
+        If None, both the `_local` and the non `_local` variants won't be tagged as "manual" and will run by default.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
@@ -92,6 +99,15 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
+      cpus: Optional number of CPU cores the test actually needs.
+        Heuristic: MIN_LOCAL_CPUS + the number of vCPUs required for the whole testnet
+          (DEFAULT_VCPUS_PER_VM is the per-VM default).
+        Must be an int >= 1. Note that the `_local` variant doesn't reserve `cpus` but only
+        ceil(cpus / cpus_oversubscription_factor) via exec_properties.
+      cpus_oversubscription_factor: positive integer by which `cpus` is divided to
+        determine how many CPUs to reserve. Reserving less than the test uses lets
+        more system-tests be packed onto a single worker, at the cost of
+        deliberately overloading it. A factor of 1 disables oversubscription.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -128,6 +144,15 @@ def system_test(
     _runtime_deps = dict(runtime_deps)
 
     _runtime_deps["TEST_BIN"] = test_driver_target
+
+    # Bazel-built FAT tools the driver uses to assemble config images for
+    # universal VMs / SetupOS / GuestOS, instead of system dosfstools/mtools.
+    # These are set on the test process and read (by name) from the driver and
+    # the config-image scripts it spawns; see run_systest.sh (symlink handling)
+    # and colocate_test.rs.
+    _runtime_deps["MKFS_FAT"] = "@dosfstools//:mkfs.fat"
+    _runtime_deps["MCOPY"] = "@mtools//:mcopy"
+    _runtime_deps["MLABEL"] = "@mtools//:mlabel"
 
     env_var_files = {}
     icos_images = dict()
@@ -226,27 +251,119 @@ def system_test(
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
     env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
-    tags = tags + ["requires-network", "system_test"]
-
-    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
-    data.append("//bazel:volatile-status.txt")
-
     # Make the test driver allocate the Farm testnet to the same DC as the
     # machine running the test (the DC volatile status variable derived from
     # NODE_NAME). This avoids slow cross-DC transfers of large images.
     # No-op when the DC is unknown, e.g. when running locally.
-    env["ALLOCATE_TESTNET_TO_LOCAL_DC"] = "1"
+    farm_only_env = {
+        "ALLOCATE_TESTNET_TO_LOCAL_DC": "1",
+    }
+
+    valid_backends = [None, "farm", "local"]
+    if backend not in valid_backends:
+        fail("Invalid backend {}: must be one of {}".format(
+            repr(backend),
+            valid_backends,
+        ))
+
+    tags = tags + ["system_test"]
+
+    # The Farm backend needs sandbox network access, so it gets `requires-network`.
+    # The local backend is the opposite: it creates its bridge/TAPs and boots VMs
+    # inside the test's own network namespace, which (with
+    # `--nosandbox_default_allow_network`) only works when the test runs in a fresh
+    # network namespace owned by the sandbox's user namespace -- i.e. when
+    # `requires-network` is *absent*. With the tag present the test runs in the host
+    # network namespace, where the user-namespaced sandbox process lacks effective
+    # CAP_NET_ADMIN and bridge creation fails with
+    #`RTNETLINK answers: Operation not permitted`.
+    farm_tags = tags + ["requires-network", "farm_system_test"]
+
+    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
+    data.append("//bazel:volatile-status.txt")
+
+    # Runtime deps that are only needed when running on the local (QEMU-based) backend.
+    _local_only_deps = {
+        image_name + "_PATH": image_path
+        for image_name, image_path in icos_images.items()
+    }
+
+    # Images that are only served by the Local backend's file server (and never
+    # uploaded to Farm): e.g. the mainnet GuestOS update images. These get a
+    # `_PATH` runtime dep for the local backend; their `_HASH` is already set in
+    # the environment by `configure_icos`, so the file server can advertise them
+    # under the correct content hash. They are intentionally *not* added to
+    # `icos_images` so the Farm variant keeps downloading them from the CDN.
+    for image_name, image_path in icos_config.local_only_icos_images.items():
+        _local_only_deps[image_name + "_PATH"] = image_path
+
+    _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+    _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
+    _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_X86_64_PATH"] = "@qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu//:qemu-system-x86_64"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_DATA_PATH"] = "@qemu_system_data_prebuilt_linux_amd64//:qemu-system-data"
+
+    # Split OVMF (UEFI) firmware for the QEMU VMs (see local_backend.rs). The
+    # code image is mounted read-only and shared; the vars image is a per-VM
+    # writable varstore template.
+    _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
+    _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
+
+    local_dep_env = {
+        name: "$(rootpath {})".format(dep)
+        for name, dep in _local_only_deps.items()
+    }
+
+    # The local backend runs in a sandbox without external network access, so it
+    # has no Vector VM to ship logs to ElasticSearch (--no-logs). Instead, stream
+    # the journald logs of all IC nodes directly to the test log
+    # (--stream-ic-node-logs) and tail each VM's serial console
+    # (--stream-console-logs).
+    local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
+
+    if type(cpus_oversubscription_factor) != "int" or cpus_oversubscription_factor < 1:
+        fail("Invalid cpus_oversubscription_factor {}: must be an int >= 1".format(
+            repr(cpus_oversubscription_factor),
+        ))
+
+    reserved_cpus = None
+    if cpus != None:
+        if type(cpus) != "int" or cpus < 1:
+            fail("Invalid cpus {}: must be an int >= 1".format(repr(cpus)))
+
+        # Starlark has no math.ceil() so we round up using integer division.
+        reserved_cpus = (cpus + cpus_oversubscription_factor - 1) // cpus_oversubscription_factor
+
+    sh_test(
+        name = test_name + "_local",
+        srcs = ["//rs/tests:run_systest.sh"],
+        data = data + [dep for dep in _local_only_deps.values() if dep not in data],
+        env = env | local_dep_env | {
+            "SYSTEM_TEST_BACKEND": "local",
+            "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple + local_args),
+            "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
+            "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
+        },
+        env_inherit = env_inherit,
+        tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
+        exec_properties = {"cpu": str(reserved_cpus)} if reserved_cpus != None else {},
+        target_compatible_with = ["@platforms//os:linux"],
+        timeout = test_timeout,
+        visibility = visibility,
+    )
 
     sh_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
         data = data,
-        env = env | {
+        env = env | farm_only_env | {
             "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple),
             "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
         },
         env_inherit = env_inherit,
-        tags = tags + (["manual"] if "colocate" in tags else []),
+        tags = farm_tags + (["manual"] if "colocate" in tags or backend == "local" else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
@@ -261,7 +378,7 @@ def system_test(
             "//rs/tests/idx:colocate_test_bin",
         ],
         env_inherit = env_inherit,
-        env = env | {
+        env = env | farm_only_env | {
                   "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
                   "COLOCATED_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
@@ -270,7 +387,7 @@ def system_test(
                   "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
               } | ({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"} if colocated_test_driver_vm_enable_ipv4 else {}) |
               ({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"} if colocated_test_driver_vm_forward_ssh_agent else {}),
-        tags = tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
+        tags = farm_tags + (["manual"] if not "colocate" in tags or backend == "local" else []) + additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
@@ -360,7 +477,10 @@ def uvm_config_image(name, tags = None, visibility = None, srcmap = None, teston
         name = name + "_size",
         srcs = srcmap.keys(),
         outs = [name + "_size.txt"],
-        cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
+        # Round the size up to a multiple of 4096 so the raw image is
+        # block-aligned: QEMU opened with cache='none' (O_DIRECT) refuses a
+        # writable raw image whose size is not a multiple of the host block size.
+        cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" { s = 2 * $$1 + 1048576; print int((s + 4095) / 4096) * 4096 }' > $@",
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
@@ -371,16 +491,10 @@ def uvm_config_image(name, tags = None, visibility = None, srcmap = None, teston
         name = name + "_vfat",
         srcs = [":" + name + "_size"],
         outs = [name + "_vfat.img"],
-        tools = ["//:mkfs.fat"],
-        # //:mkfs.fat resolves to the dosfstools bundle (mkfs.fat + fatlabel),
-        # so pick out the mkfs.fat binary by name.
+        tools = ["@dosfstools//:mkfs.fat"],
         cmd = """
-        mkfs_fat=
-        for f in $(locations //:mkfs.fat); do
-            case "$$f" in */mkfs.fat) mkfs_fat="$$f" ;; esac
-        done
         truncate -s $$(cat $<) $@
-        "$$mkfs_fat" -i "0" -n CONFIG $@
+        $(location @dosfstools//:mkfs.fat) -i 0 -n CONFIG $@
         """,
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],

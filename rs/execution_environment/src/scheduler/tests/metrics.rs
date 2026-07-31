@@ -19,7 +19,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
+use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_metrics::{
@@ -498,18 +498,18 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(1)));
     state.put_canister_state(get_running_canister(canister_test_id(2)));
 
-    state
-        .metadata
-        .network_topology
-        .routing_table_mut()
-        .insert(
-            CanisterIdRange {
-                start: canister_test_id(0),
-                end: canister_test_id(3),
-            },
-            subnet_test_id(1),
-        )
-        .unwrap();
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology
+            .routing_table_mut()
+            .insert(
+                CanisterIdRange {
+                    start: canister_test_id(0),
+                    end: canister_test_id(3),
+                },
+                subnet_test_id(1),
+            )
+            .unwrap();
+    });
 
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
@@ -558,18 +558,18 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(2)));
     state.put_canister_state(get_running_canister(canister_test_id(100)));
 
-    state
-        .metadata
-        .network_topology
-        .routing_table_mut()
-        .insert(
-            CanisterIdRange {
-                start: canister_test_id(0),
-                end: canister_test_id(5),
-            },
-            subnet_test_id(1),
-        )
-        .unwrap();
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology
+            .routing_table_mut()
+            .insert(
+                CanisterIdRange {
+                    start: canister_test_id(0),
+                    end: canister_test_id(5),
+                },
+                subnet_test_id(1),
+            )
+            .unwrap();
+    });
 
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
@@ -935,7 +935,9 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             .build();
         let caller_canister = test.create_canister();
 
-        test.state_mut().metadata.own_subnet_features.http_requests = true;
+        std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+            .subnet_features
+            .http_requests = true;
 
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
@@ -1047,7 +1049,9 @@ fn http_outcalls_free() {
         .build();
     let caller_canister = test.create_canister();
 
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     let cycles_before = test.canister_state(caller_canister).system_state.balance();
 

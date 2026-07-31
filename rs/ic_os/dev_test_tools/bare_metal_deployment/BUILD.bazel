@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -20,6 +20,7 @@ rust_library(
     ],
     deps = [
         ":build_script",
+        "//rs/ic_os/boot/grub",
         "//rs/ic_os/networking/deterministic_ips",
         "@crate_index//:anyhow",
         "@crate_index//:http",
@@ -48,10 +49,35 @@ rust_binary(
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         ":bare_metal_deployment",
+        "//rs/ic_os/boot/grub",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
         "@crate_index//:slog",
         "@crate_index//:slog-async",
         "@crate_index//:slog-term",
     ],
+)
+
+rust_test(
+    name = "bare_metal_deployment_test",
+    crate = ":bare_metal_deployment",
+    deps = [
+        ":build_script",
+        "//rs/ic_os/boot/grub",
+        "//rs/ic_os/networking/deterministic_ips",
+        "@crate_index//:anyhow",
+        "@crate_index//:http",
+        "@crate_index//:macaddr",
+        "@crate_index//:rand",
+        "@crate_index//:rexpect",
+        "@crate_index//:rust_ini",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+        "@crate_index//:thiserror",
+    ],
+)
+
+rust_test(
+    name = "deploy_test",
+    crate = ":deploy",
 )

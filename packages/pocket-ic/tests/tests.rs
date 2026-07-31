@@ -1,14 +1,15 @@
 use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
 use ic_agent::Agent;
+use ic_agent::agent::EffectiveId;
 use ic_certification::Label;
 use ic_management_canister_types::{
     Bip341, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
     HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
-use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
+use ic_transport_types::{CallResponse, Envelope};
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::SubnetMetrics;
 use pocket_ic::{
@@ -1612,7 +1613,7 @@ fn test_canister_http_with_diverging_responses() {
         decode_one(&reply).unwrap();
     let (reject_code, err) = http_response.unwrap_err();
     assert!(matches!(reject_code, RejectionCode::SysTransient));
-    let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, hashes: [ec0118708cdb890175109b257aece4779a6453f1e2f0dc9cfd46978ee7b283ad: 2], [b0fa9e9985163dc782fd1a946e1582e1c51d2825f4fc1b0b65bb000cfe9a99af: 2], [7c8ce9fe660424bcb0deff10465eae77bd56ffacb0c13818ed04794ccb016f9a: 2], [705d1d39d67ee696c5ffae7f4b2f942c31339c8b794cb1eeda1d225ece27e96f: 2], [0fee579fc0e9ff601e95608fc45be95e4e8c359dc54797bba539d064356798ef: 2], [015213f728bffa8fdd27447b7656e110d3bbc32abe3109bcb56d508ca0140a0e: 2], [77aa54142121a597b7596d91a74b83c2ea51633ca3956b403a78815590db54bb: 1]";
+    let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, hashes: [e6c8425c65f944486ba0d4964182af8ba0de048ef67f15b7278eb0b5b19ae053: 2], [c5a0122c14f908190aacc5a940c15f2fab1c031a31a45d3581a8a9618b1dd6f2: 2], [6986941fba0203a7a8af16dfa6d9761bdcb3a8c86030324c3e063f8e25fe98db: 2], [5e3b4e1724709fd740dcb1474cbdb7c1288d98776c445017a3bbf9e51c194492: 2], [5349b5986aeb58f94a92e4c709aa2de2cd9f5678aa010c57bdf033e0708ecae6: 2], [1b504c536aab4deb8a62bbd49d622dd414311db9cdb7f5f5b65b285565a63177: 2], [6ce86a526e15a51ab36a86e62cdf83d6959edc80434415af606fb4982a43c5a4: 1]";
     assert_eq!(err, expected);
 }
 
@@ -2422,6 +2423,7 @@ fn call_request(
         canister_id,
         method_name: "whoami".to_string(),
         arg: Encode!(&()).unwrap(),
+        sender_info: None,
     };
     let envelope = Envelope {
         content: std::borrow::Cow::Borrowed(&content),
@@ -3533,6 +3535,155 @@ async fn cloud_engine_with_subnet_admins() {
     test_subnet_admins(FreeSubnet::CloudEngine).await;
 }
 
+/// Make an update call with an effective subnet ID (instead of an effective canister ID)
+/// using `ic-agent`: the request is routed to the subnet-scoped `/api/v4/subnet/<id>/call`
+/// endpoint. Per the IC interface spec, subnet-scoped update calls are only valid for
+/// canister creation calls to the management canister.
+#[tokio::test]
+async fn update_call_with_effective_subnet_id() {
+    // Create a PocketIC instance with an NNS subnet (providing an NNS delegation)
+    // and an application subnet to be targeted by the effective subnet ID.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+    let app_subnet = pic.topology().await.get_app_subnets()[0];
+
+    // Create an IC agent to interact with the (live) PocketIC instance.
+    let url = pic.make_live(None).await;
+    let agent = Agent::builder().with_url(url).build().unwrap();
+    agent.fetch_root_key().await.unwrap();
+
+    // Sign an update call to the management canister's `provisional_create_canister_with_cycles`
+    // method and submit it routed via the effective subnet ID of the application subnet.
+    let arg = Encode!(&ProvisionalCreateCanisterWithCyclesArgs {
+        amount: Some(INIT_CYCLES.into()),
+        settings: None,
+        specified_id: None,
+        sender_canister_version: None,
+    })
+    .unwrap();
+    let signed_update = agent
+        .update(
+            &Principal::management_canister(),
+            "provisional_create_canister_with_cycles",
+        )
+        .with_arg(arg)
+        .sign()
+        .unwrap();
+    let reply = match agent
+        .update_signed(EffectiveId::Subnet(app_subnet), signed_update.signed_update)
+        .await
+        .unwrap()
+    {
+        CallResponse::Response(reply) => reply,
+        CallResponse::Poll(request_id) => {
+            agent
+                .wait(&request_id, EffectiveId::Subnet(app_subnet))
+                .await
+                .unwrap()
+                .0
+        }
+    };
+    let canister_id = Decode!(&reply, CanisterIdRecord).unwrap().canister_id;
+
+    // The canister has been created on the targeted application subnet.
+    assert_eq!(pic.get_subnet(canister_id).await.unwrap(), app_subnet);
+}
+
+/// Response type for the management canister's `list_canisters` query method.
+#[derive(CandidType, Deserialize)]
+struct ListCanistersResult {
+    canisters: Vec<ListCanistersRange>,
+}
+
+/// A closed range of canister IDs returned by `list_canisters`.
+#[derive(CandidType, Deserialize)]
+struct ListCanistersRange {
+    start: Principal,
+    end: Principal,
+}
+
+/// Make a query call with an effective subnet ID (instead of an effective canister ID)
+/// using `ic-agent`: the request is routed to the subnet-scoped `/api/v3/subnet/<id>/query`
+/// endpoint. Per the IC interface spec, subnet-scoped queries are only valid for the
+/// `list_canisters` method of the management canister, which in turn is only available on
+/// subnets with subnet admins.
+#[tokio::test]
+async fn query_call_with_effective_subnet_id() {
+    // Create a PocketIC instance with a single application subnet on the "free" cost schedule
+    // and the anonymous principal (the agent's default identity) as a subnet admin.
+    let admin = Principal::anonymous();
+    let config = ExtendedSubnetConfigSet {
+        application: vec![
+            SubnetSpec::default()
+                .with_subnet_admins(vec![admin])
+                .with_cost_schedule(CanisterCyclesCostSchedule::Free),
+        ],
+        ..Default::default()
+    };
+    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
+    let app_subnet = pic.topology().await.get_app_subnets()[0];
+
+    // Create a canister on the application subnet so that `list_canisters` returns a non-empty range.
+    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet).await;
+
+    // Create an IC agent to interact with the (live) PocketIC instance.
+    let url = pic.make_live(None).await;
+    let agent = Agent::builder().with_url(url).build().unwrap();
+    agent.fetch_root_key().await.unwrap();
+
+    // Sign a query call to the management canister's `list_canisters` method and submit it
+    // routed via the effective subnet ID of the application subnet.
+    let signed_query = agent
+        .query(&Principal::management_canister(), "list_canisters")
+        .with_arg(Encode!(&()).unwrap())
+        .sign()
+        .unwrap();
+    let reply = agent
+        .query_signed(EffectiveId::Subnet(app_subnet), signed_query.signed_query)
+        .await
+        .unwrap();
+    let ranges = Decode!(&reply, ListCanistersResult).unwrap().canisters;
+
+    // The created canister is contained in one of the returned canister ID ranges.
+    assert!(
+        ranges
+            .iter()
+            .any(|range| range.start <= canister_id && canister_id <= range.end)
+    );
+}
+
+/// Make a `read_state` request with an effective subnet ID (instead of an effective canister ID)
+/// using `ic-agent`: the request is routed to the subnet-scoped `/api/v3/subnet/<id>/read_state`
+/// endpoint. Here we exercise `Agent::fetch_subnet_by_id`, which reads the subnet state tree.
+#[tokio::test]
+async fn read_state_with_effective_subnet_id() {
+    // Create a PocketIC instance with an NNS subnet (providing an NNS delegation)
+    // and an application subnet to be targeted by the effective subnet ID.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+    let app_subnet = pic.topology().await.get_app_subnets()[0];
+
+    // Create a canister on the application subnet.
+    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet).await;
+
+    // Create an IC agent to interact with the (live) PocketIC instance.
+    let url = pic.make_live(None).await;
+    let agent = Agent::builder().with_url(url).build().unwrap();
+    agent.fetch_root_key().await.unwrap();
+
+    // Fetch the subnet information via a `read_state` request routed to the subnet-scoped endpoint.
+    let subnet = agent.fetch_subnet_by_id(&app_subnet).await.unwrap();
+
+    // The subnet's certified canister ID ranges contain the created canister.
+    assert!(subnet.contains_canister(&canister_id));
+}
+
 #[test]
 #[should_panic(
     expected = "Subnet admins can only be specified for subnet of kind `Application` or `CloudEngine`"
@@ -3634,14 +3785,35 @@ fn cloud_engine_default_effective_canister_id() {
 
 #[test]
 fn test_delete_subnet() {
-    // Create a PocketIC instance with two application subnets.
+    // Create a PocketIC instance with an NNS subnet, two application subnets,
+    // and the `registry` ICP feature enabled. The `registry` ICP feature is
+    // important here: after every operation the server syncs its local registry
+    // from the registry canister, and deleting a subnet writes registry records
+    // directly to the local registry. Without keeping the registry canister in
+    // sync, this sync would loop forever (regression test).
     let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_icp_features(IcpFeatures {
+            registry: Some(IcpFeaturesConfig::DefaultConfig),
+            ..Default::default()
+        })
         .with_application_subnet()
         .with_application_subnet()
         .build();
 
-    let subnet_id_1 = pic.topology().get_app_subnets()[0];
-    let subnet_id_2 = pic.topology().get_app_subnets()[1];
+    // The subnet hosting the default effective canister ID cannot be deleted, so
+    // we keep it (as `subnet_id_1`) and delete the other application subnet.
+    let topology = pic.topology();
+    let default_effective_canister_id: Principal =
+        topology.default_effective_canister_id.clone().into();
+    let subnet_id_1 = topology
+        .get_subnet(default_effective_canister_id)
+        .expect("default effective canister ID must belong to a subnet");
+    let subnet_id_2 = topology
+        .get_app_subnets()
+        .into_iter()
+        .find(|subnet_id| *subnet_id != subnet_id_1)
+        .expect("there must be a second application subnet");
     assert_ne!(subnet_id_1, subnet_id_2);
 
     // Deploy test canisters on both subnets.
@@ -3784,8 +3956,12 @@ fn test_delete_subnet_state_dir() {
     let state_dir = TempDir::new().unwrap();
     let state_dir_path = state_dir.path().to_path_buf();
 
+    // Create two application subnets so that we can delete the one that does not
+    // host the default effective canister ID (the subnet hosting it cannot be
+    // deleted).
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path.clone())
+        .with_nns_subnet()
         .with_application_subnet()
         .with_application_subnet()
         .build();
@@ -3798,18 +3974,29 @@ fn test_delete_subnet_state_dir() {
             .count()
     };
 
-    let subnet_ids = pic.topology().get_app_subnets();
-    assert_eq!(subnet_ids.len(), 2);
+    let topology = pic.topology();
+    let default_effective_canister_id: Principal =
+        topology.default_effective_canister_id.clone().into();
+    let default_subnet_id = topology
+        .get_subnet(default_effective_canister_id)
+        .expect("default effective canister ID must belong to a subnet");
+    let other_subnet_id = topology
+        .get_app_subnets()
+        .into_iter()
+        .find(|&id| id != default_subnet_id)
+        .expect("there must be a second application subnet");
+
     // On Windows, the state_dir is only synced back from the WSL-native state directory on drop.
     #[cfg(not(windows))]
-    assert_eq!(subnet_dirs_count(), 2);
+    assert_eq!(subnet_dirs_count(), 3);
 
-    pic.delete_subnet(subnet_ids[1]);
-    assert_eq!(pic.topology().get_app_subnets(), vec![subnet_ids[0]]);
+    pic.delete_subnet(other_subnet_id);
+    assert_eq!(pic.topology().get_app_subnets(), vec![default_subnet_id]);
 
     // Drop to flush state to disk.
     drop(pic);
 
-    // After deletion, only the remaining subnet's state directory should exist.
-    assert_eq!(subnet_dirs_count(), 1);
+    // After deletion, only the NNS subnet's and the remaining application subnet's
+    // state directories should exist.
+    assert_eq!(subnet_dirs_count(), 2);
 }

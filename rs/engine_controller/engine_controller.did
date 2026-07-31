@@ -107,9 +107,20 @@ type DeployGuestosToAllSubnetNodesPayload = record {
   replica_version_id : text;
 };
 
+// Mirror of `registry_canister::mutations::do_change_subnet_membership::
+// ChangeSubnetMembershipPayload`. Forwarded unchanged to the registry; the
+// registry enforces that the target subnet is of type `CloudEngine` when the
+// caller is the engine controller canister.
+type ChangeSubnetMembershipPayload = record {
+  subnet_id : principal;
+  node_ids_add : vec principal;
+  node_ids_remove : vec principal;
+};
+
 service : (opt EngineControllerInitArgs) -> {
   create_engine : (CreateEngineArgs) -> (CreateEngineResult);
   delete_engine : (DeleteEngineArgs) -> (Result);
   update_subnet : (UpdateSubnetPayload) -> (Result);
+  change_subnet_membership : (ChangeSubnetMembershipPayload) -> (Result);
   deploy_guestos_to_all_subnet_nodes : (DeployGuestosToAllSubnetNodesPayload) -> (Result);
 }

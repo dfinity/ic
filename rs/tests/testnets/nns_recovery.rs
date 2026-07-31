@@ -6,6 +6,8 @@
 // `USE_MAINNET_STATE` environment variable to true, which makes the testnet use mainnet state.
 //
 // You can pass `--set-required-host-features=dmz` to make the testnet open to the Internet.
+// If you do, also pass: `--test_env=DC=zh1-dmz` to force the testnet to be deployed to that DC.
+// Otherwise the testnet will try to deploy to the DC of your local cluster.
 //
 // Then SUBNET_SIZE VMs are deployed and started booting SetupOS which will install HostOS to their virtual disks
 // and eventually boot the GuestOS in a VM nested inside the host VM.
@@ -15,7 +17,7 @@
 // The driver will print how to reboot the host-1 VM and how to get to its console such that you can interact with its grub:
 //
 // ```
-// $ ict testnet create (mainnet_)nns_recovery --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
+// $ bazel run //rs/tests/testnets:(mainnet_)nns_recovery --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet -- --keepalive
 // ...
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:16:0] To reboot the host VM run the following command:
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:17:0] curl -X PUT 'https://farm.dfinity.systems/group/nested--1756837630333/vm/host-1/reboot'
@@ -26,7 +28,7 @@
 //     }
 // ```
 //
-// To get access to P8s and Grafana look for the following lines in the ict console output:
+// To get access to P8s and Grafana look for the following lines in the output:
 //
 //     prometheus: Prometheus Web UI at http://prometheus.nns-recovery--1758812276301.testnet.farm.dfinity.systems,
 //     grafana: Grafana at http://grafana.nns-recovery--1758812276301.testnet.farm.dfinity.systems,

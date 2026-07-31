@@ -16,6 +16,7 @@ rust_canister(
     name = "universal_canister",
     srcs = glob(["src/*.rs"]),
     crate_features = ["heartbeat"],
+    opt = "z",
     service_file = ":interface.did",
     deps = [
         # Keep sorted.
@@ -52,6 +53,7 @@ genrule(
 rust_canister(
     name = "universal_canister_no_heartbeat",
     srcs = glob(["src/*.rs"]),
+    opt = "z",
     service_file = ":interface.did",
     deps = [
         # Keep sorted.

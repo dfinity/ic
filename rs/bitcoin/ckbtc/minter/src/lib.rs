@@ -130,7 +130,7 @@ impl From<bitcoin_canister::GetUtxosResponse> for GetUtxosResponse {
 }
 
 // Note that both [ic_btc_interface::Network] and
-// [ic_cdk::api::management_canister::bitcoin::BitcoinNetwork] from ic_cdk
+// [ic_cdk::bitcoin_canister::Network] from ic_cdk
 // would serialize to lowercase names, but here we keep uppercase names for
 // backward compatibility with the state of already deployed minter canister.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
@@ -305,7 +305,7 @@ fn reimburse_canceled_requests<R: CanisterRuntime>(
         requests.len(),
         state.retrieve_btc_min_amount
     );
-    for (request, fee) in requests.into_iter().zip(fees.into_iter()) {
+    for (request, fee) in requests.into_iter().zip(fees) {
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
             if amount > 0 {

@@ -152,14 +152,14 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             ),
             (
                 retire_version_payload(vec![version_to_elect_and_unelect1, default_version]),
-                Some("currently deployed to a subnet"),
+                Some("Using a version that isn't elected"),
             ),
             (
                 update_versions_payload(
                     Some(version_to_elect.into()),
                     vec![version_to_elect_and_unelect1, unassigned_nodes_version],
                 ),
-                Some("currently deployed to unassigned nodes"),
+                Some("Using a version that isn't elected"),
             ),
             (
                 ReviseElectedGuestosVersionsPayload {

@@ -725,7 +725,7 @@ mod tests {
         height: Height,
     ) -> (Witness, CryptoHashOfPartialState) {
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+        let hash_tree = hash_lazy_tree(&lazy_tree, None).unwrap();
         let paths = vec![vec![].into()];
         let labeled_tree = sparse_labeled_tree_from_paths(&paths).unwrap();
         let partial_tree = materialize_partial(&lazy_tree, &labeled_tree, None);
@@ -1044,7 +1044,7 @@ mod tests {
                     .collect();
 
                 // sort by heights
-                certs.sort_by(|s1, s2| s1.height.cmp(&s2.height));
+                certs.sort_by_key(|s| s.height);
 
                 assert_eq!(certs[0].height, Height::from(3));
                 assert_eq!(certs[1].height, Height::from(4));

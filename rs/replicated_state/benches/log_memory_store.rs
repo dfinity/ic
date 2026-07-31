@@ -1,5 +1,4 @@
 use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
-use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{FetchCanisterLogsFilter, FetchCanisterLogsRange};
 use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_types::CanisterLog;
@@ -8,7 +7,6 @@ use more_asserts::assert_gt;
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
 
-const TEST_LOG_MEMORY_STORE_FEATURE: FlagStatus = FlagStatus::Enabled;
 const TEST_DELTA_LOG_CAPACITY: usize = 2 * MIB as usize;
 const MAX_LOG_MESSAGE_LEN: u64 = 32 * KIB;
 const AVG_LOG_MESSAGE_LEN: u64 = 100;
@@ -16,7 +14,7 @@ const AVG_LOG_MESSAGE_LEN: u64 = 100;
 /// Creates a `LogMemoryStore` resized to `capacity` and filled
 /// with log records of `message_len` bytes each.
 fn create_populated_store(capacity: u64, message_len: u64) -> LogMemoryStore {
-    let mut store = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    let mut store = LogMemoryStore::new();
     store.resize_for_testing(capacity as usize);
     let len = message_len.min(MAX_LOG_MESSAGE_LEN) as usize;
     let log_message = vec![b'a'; len];

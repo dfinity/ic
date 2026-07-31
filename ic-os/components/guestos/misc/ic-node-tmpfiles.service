@@ -1,0 +1,12 @@
+[Unit]
+Description=Create IC node volatile directories and files
+DefaultDependencies=no
+RequiresMountsFor=/run
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/bin/systemd-tmpfiles --create /etc/tmpfiles.d/ic-node.conf
+
+[Install]
+WantedBy=local-fs.target

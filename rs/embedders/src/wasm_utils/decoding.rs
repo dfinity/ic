@@ -60,6 +60,9 @@ pub fn decoded_wasm_size(module_bytes: &[u8]) -> Result<usize, WasmValidationErr
 }
 
 /// Decodes a WebAssembly module, uncompressing it if required.
+///
+/// # Warning
+/// Do not call this function outside of the sandbox.
 pub fn decode_wasm(
     max_size: NumBytes,
     module: Arc<Vec<u8>>,

@@ -12,20 +12,21 @@
 // If the testnet is created with `--set-required-host-features=dmz`, the testnet will be made
 // public. External nodes can register themselves through the URL of the HTTP gateway. Note that
 // their node operator principals must be added to the registry through a proposal (with enough node
-// allowance).
+// allowance). If you do this also make sure to pass: `--test_env=DC=zh1-dmz` to force the testnet
+// to be deployed to that DC. Otherwise the testnet will try to deploy to the DC of your local cluster.
 //
 // Note that the NNS backup is over 15GB so it will require around 3 minutes to download, 15 minutes
 // to unpack and 59G of disk space.
 //
 // ```
-// $ ict testnet create mainnet_nns_state --verbose -- --test_tmpdir=./mainnet_nns_state
+// $ bazel run //rs/tests/testnets:mainnet_nns_state --test_tmpdir=./mainnet_nns_state -- --keepalive
 // ```
 //
 // Additional configuration:
 //  - --test_env=DKG_INTERVAL=<dkg_interval>
 //  - --test_env=NNS_STATE_ON_BACKUP_POD=<path_on_remote_backup_pod> (default: dev@zh1-pyr07.zh1.dfinity.network:/home/dev/nns_state.tar.zst)
 //
-// To get access to P8s and Grafana look for the following lines in the ict console output:
+// To get access to P8s and Grafana look for the following lines in the output:
 //
 //     prometheus: Prometheus Web UI at http://prometheus.mainnet-nns--1758812276301.testnet.farm.dfinity.systems,
 //     grafana: Grafana at http://grafana.mainnet-nns--1758812276301.testnet.farm.dfinity.systems,

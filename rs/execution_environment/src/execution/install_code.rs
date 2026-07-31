@@ -10,8 +10,8 @@ use ic_embedders::{
     wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
-    SubnetAvailableMemoryError, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, MessageMemoryUsage, SubnetAvailableMemoryError,
+    WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
@@ -180,16 +180,16 @@ impl InstallCodeHelper {
             module_hash: module_hash.clone(),
         });
         let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
-        let available_execution_memory_change =
-            self.canister
-                .add_canister_change(timestamp_nanos, origin, details);
-        match available_execution_memory_change {
-            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
-                self.allocated_bytes += allocated_bytes;
-            }
-            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
-                self.deallocated_bytes += deallocated_bytes;
-            }
+        // Recording the canister history entry changes the canister's allocated
+        // memory; accumulate that change so it is accounted for across the steps.
+        let old_allocated_bytes = self.canister.memory_allocated_bytes();
+        self.canister
+            .add_canister_change(timestamp_nanos, origin, details);
+        let new_allocated_bytes = self.canister.memory_allocated_bytes();
+        if new_allocated_bytes >= old_allocated_bytes {
+            self.allocated_bytes += new_allocated_bytes - old_allocated_bytes;
+        } else {
+            self.deallocated_bytes += old_allocated_bytes - new_allocated_bytes;
         }
     }
 
@@ -324,6 +324,7 @@ impl InstallCodeHelper {
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.cost_schedule,
+                true, // strict
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -673,7 +674,7 @@ impl InstallCodeHelper {
             .apply_changes(
                 original.time,
                 &mut self.canister.system_state,
-                round.network_topology,
+                &round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
                 round.hypervisor.metrics(),
@@ -869,6 +870,7 @@ pub(crate) fn finish_err(
         .apply_ingress_induction_cycles_debit(
             new_canister.canister_id(),
             round.cost_schedule,
+            true, // strict
             round.log,
             round.counters.charging_from_balance_error,
         );

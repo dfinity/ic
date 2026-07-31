@@ -498,34 +498,49 @@ impl SandboxManager {
         // and later or concurrent uses of the same cache entry would fail. But
         // we can mmap the data without mutating the fd.
         let initial_state_data: InitialStateData = {
-            use nix::sys::mman::{MapFlags, ProtFlags, mmap};
-            use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
+            use nix::sys::mman::{MapFlags, ProtFlags, mmap, munmap};
+            use std::num::NonZeroUsize;
+            use std::os::unix::fs::MetadataExt;
+            use std::ptr::NonNull;
 
             let mmap_size = initial_state_data.metadata().unwrap().size() as usize;
-            let data = if mmap_size == 0 {
-                &[]
+            if mmap_size == 0 {
+                let data: &[u8] = &[];
+                bincode::deserialize(data).unwrap()
             } else {
                 // SAFETY: The address is valid because it is null, we have checked
                 // the size is positive and the fd is valid since it comes from a
                 // `File`. We're mapping privately so the data won't be mutated.
                 let mmap_ptr = unsafe {
                     mmap(
-                        std::ptr::null_mut(),
-                        mmap_size,
+                        None,
+                        NonZeroUsize::new(mmap_size)
+                            .expect("`mmap_size` is checked above and is non-zero"),
                         ProtFlags::PROT_READ,
                         MapFlags::MAP_PRIVATE,
-                        initial_state_data.as_raw_fd(),
+                        &initial_state_data,
                         0,
                     )
                 }
                 .unwrap_or_else(|err| panic!("Reading InitialStateData failed: {err:?}"))
-                    as *mut u8;
+                .as_ptr() as *mut u8;
                 // SAFETY: We've mmapped `mmap_size` and gotten a succesful
                 // reply at address `mmap_ptr` and the mapping is readonly
                 // private.
-                unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }
-            };
-            bincode::deserialize(data).unwrap()
+                let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
+                let initial_state_data = bincode::deserialize(data).unwrap();
+                // SAFETY: `mmap_ptr`/`mmap_size` are exactly what `mmap` returned;
+                // `data` is not used past this point.
+                unsafe {
+                    munmap(
+                        NonNull::new(mmap_ptr as *mut std::ffi::c_void)
+                            .expect("mmap pointer is null"),
+                        mmap_size,
+                    )
+                    .expect("Unable to unmap initial state data file");
+                }
+                initial_state_data
+            }
         };
 
         let (wasm_memory_modifications, exported_globals) = self

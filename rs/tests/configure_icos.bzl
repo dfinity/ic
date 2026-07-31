@@ -24,6 +24,13 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     env = {}
     env_var_files = {}
     icos_images = {}
+
+    # Images that must be served only by the Local backend's file server (and
+    # never uploaded to Farm), keyed by their `ENV_DEPS__...` env var name. The
+    # Farm backend downloads these from the CDN using the `..._URL` env vars set
+    # below; the Local backend instead serves them from a local file under the
+    # `..._HASH` already set below. See `system_test` in system_tests.bzl.
+    local_only_icos_images = {}
     runtime_deps = {}
 
     # Normalize guestos to a dictionary format
@@ -56,6 +63,9 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         icos_images["ENV_DEPS__GUESTOS" + suffix + "_DISK_IMG"] = repo + "//:guest-img"
         env["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG_URL"] = url_fn(version_dict["version"], "guest-os", True)
         env["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG_HASH"] = version_dict["dev_hash" if dev else "hash"]
+
+        # Serve the initial (mainnet) update image from the Local backend's file server.
+        local_only_icos_images["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG"] = repo + "//:guest-update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS" + suffix + "_LAUNCH_MEASUREMENTS_FILE"] = repo + "//:launch-measurements-guest.json"
 
     def guestos_update_local(guestos_env, test = False):
@@ -72,6 +82,9 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = version_dict["version"]
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = url_fn(version_dict["version"], "guest-os", True)
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = version_dict["dev_hash" if dev else "hash"]
+
+        # Serve the (mainnet) update image from the Local backend's file server.
+        local_only_icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = repo + "//:guest-update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE"] = repo + "//:launch-measurements-guest.json"
 
     def setupos_dependencies():
@@ -203,4 +216,4 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     elif hostos_update:
         fail("unknown hostos_update: " + str(hostos_update))
 
-    return struct(env = env, env_var_files = env_var_files, runtime_deps = runtime_deps, icos_images = icos_images)
+    return struct(env = env, env_var_files = env_var_files, runtime_deps = runtime_deps, icos_images = icos_images, local_only_icos_images = local_only_icos_images)

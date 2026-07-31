@@ -30,6 +30,7 @@ Coverage::
 
 end::catalog[] */
 
+use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
@@ -226,34 +227,53 @@ pub fn test(env: TestEnv) {
             .build()
             .expect("Failed to build HTTP client");
 
-        let response = client
-            .get(format!("{p8s_url}/api/v1/targets"))
-            .send()
-            .await
-            .expect("Failed to query Prometheus targets");
+        let targets_url = format!("{p8s_url}/api/v1/targets");
 
-        let json: serde_json::Value = response
-            .json()
-            .await
-            .expect("Failed to parse Prometheus response");
+        // Prometheus discovers the IC node scraping targets through file-based service discovery,
+        // whose target files are (re)synced every 10s by the metrics_sync task. A target is only
+        // reported as healthy ("up") once Prometheus has successfully scraped it at least once, and
+        // the scrape interval is also 10s. It can therefore take a while after the topology is ready
+        // before the target with the given ic_node shows up as healthy, so we retry the check
+        // instead of asserting on a single observation.
+        ic_system_test_driver::retry_with_msg_async!(
+            format!("check if Prometheus is scraping a healthy target with ic_node={node_id}"),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let response = client
+                    .get(&targets_url)
+                    .send()
+                    .await
+                    .context("Failed to query Prometheus targets")?;
 
-        let is_healthy = json["data"]["activeTargets"]
-            .as_array()
-            .unwrap_or(&vec![])
-            .iter()
-            .any(|target| {
-                target["discoveredLabels"]["ic_node"]
-                    .as_str()
-                    .map(|id| id == node_id)
-                    .unwrap_or(false)
-                    && target["health"].as_str() == Some("up")
-            });
+                let json: serde_json::Value = response
+                    .json()
+                    .await
+                    .context("Failed to parse Prometheus response")?;
 
-        assert!(
-            is_healthy,
-            "Prometheus is not scraping target with ic_node={} or target is not healthy",
-            node_id
-        );
+                let is_healthy = json["data"]["activeTargets"]
+                    .as_array()
+                    .unwrap_or(&vec![])
+                    .iter()
+                    .any(|target| {
+                        target["discoveredLabels"]["ic_node"]
+                            .as_str()
+                            .map(|id| id == node_id)
+                            .unwrap_or(false)
+                            && target["health"].as_str() == Some("up")
+                    });
+
+                if !is_healthy {
+                    bail!(
+                        "Prometheus is not scraping target with ic_node={node_id} or target is not healthy"
+                    );
+                }
+                Ok(())
+            }
+        )
+        .await
+        .expect("Prometheus is not scraping the IC node target or target is not healthy");
 
         info!(
             log,

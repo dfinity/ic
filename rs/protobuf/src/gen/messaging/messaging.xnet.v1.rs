@@ -24,13 +24,17 @@ pub mod witness {
         pub sub_witness: ::core::option::Option<::prost::alloc::boxed::Box<super::Witness>>,
     }
     /// Pruned leaf or subtree.
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message,
+    )]
     pub struct Pruned {
         #[prost(bytes = "vec", tag = "5")]
         pub digest: ::prost::alloc::vec::Vec<u8>,
     }
     /// Marker for provided data (leaf or subtree).
-    #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, ::prost::Message)]
+    #[derive(
+        serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq, Hash, ::prost::Message,
+    )]
     pub struct Known {}
     #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
     pub enum WitnessEnum {
@@ -45,7 +49,7 @@ pub mod witness {
     }
 }
 /// State tree root hash.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CertificationContent {
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,

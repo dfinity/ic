@@ -197,7 +197,7 @@ pub fn execute_call_or_task(
         FuncRef::Method(original.method.clone()),
         original.request_metadata.clone(),
         round_limits,
-        round.network_topology,
+        round.network_topology.clone(),
         original.subnet_cycles_config,
     );
     match result {
@@ -267,6 +267,7 @@ fn finish_err(
     canister.system_state.apply_ingress_induction_cycles_debit(
         canister.canister_id(),
         round.cost_schedule,
+        true, // strict
         round.log,
         round.counters.charging_from_balance_error,
     );
@@ -485,6 +486,7 @@ impl CallOrTaskHelper {
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.cost_schedule,
+                true, // strict
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -550,7 +552,7 @@ impl CallOrTaskHelper {
                     &mut output,
                     round_limits,
                     round.time,
-                    round.network_topology,
+                    &round.network_topology,
                     round.hypervisor.subnet_id(),
                     round.hypervisor.metrics(),
                     round.log,
@@ -574,7 +576,7 @@ impl CallOrTaskHelper {
                     .apply_changes(
                         round.time,
                         &mut self.canister.system_state,
-                        round.network_topology,
+                        &round.network_topology,
                         round.hypervisor.subnet_id(),
                         is_composite_query,
                         round.hypervisor.metrics(),

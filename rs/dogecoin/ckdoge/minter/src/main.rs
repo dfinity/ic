@@ -214,12 +214,15 @@ fn get_minter_info() -> MinterInfo {
 }
 
 #[update]
-async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
-    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
-        canister_id: ic_cdk::api::canister_self(),
-    })
-    .await
-    .expect("failed to fetch canister status")
+async fn get_canister_status() -> ic_management_canister_types::CanisterStatusResult {
+    ic_cdk::call::Call::bounded_wait(candid::Principal::management_canister(), "canister_status")
+        .with_arg(ic_management_canister_types::CanisterIdRecord {
+            canister_id: ic_cdk::api::canister_self(),
+        })
+        .await
+        .expect("failed to call management canister for canister_status")
+        .candid::<ic_management_canister_types::CanisterStatusResult>()
+        .expect("failed to decode canister_status response")
 }
 
 #[query]

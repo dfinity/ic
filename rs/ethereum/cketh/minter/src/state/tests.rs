@@ -10,6 +10,7 @@ use crate::numeric::{
     TransactionNonce, Wei, WeiPerGas,
 };
 use crate::state::audit::apply_state_transition;
+use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
@@ -19,8 +20,8 @@ use crate::test_fixtures::{
     initial_state,
 };
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
-    ResubmissionStrategy, SignedEip1559TransactionRequest, StorageKey,
+    AccessList, AccessListItem, Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy,
+    SignedEip1559TransactionRequest, StorageKey, TransactionSignature,
 };
 use candid::{Nat, Principal};
 use ethnum::u256;
@@ -699,7 +700,7 @@ prop_compose! {
     ) -> SignedEip1559TransactionRequest {
         SignedEip1559TransactionRequest::from((
             unsigned_tx,
-            Eip1559Signature {
+            TransactionSignature {
                 r,
                 s,
                 signature_y_parity,
@@ -803,10 +804,13 @@ fn state_equivalence() {
         EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
     };
     use crate::state::{InvalidEventReason, MintedEvent};
+    use crate::timed_sized_map::Timestamp;
     use crate::tx::{
-        Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+        Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+        TransactionSignature,
     };
     use ic_cdk::management_canister::EcdsaPublicKeyResult;
+    use icrc_ledger_types::icrc1::account::Account;
     use maplit::{btreemap, btreeset};
 
     fn source(txhash: &str, index: u64) -> EventSource {
@@ -905,7 +909,7 @@ fn state_equivalence() {
                         data: vec![],
                         access_list: Default::default(),
                     },
-                    Eip1559Signature {
+                    TransactionSignature {
                         signature_y_parity: true,
                         r: Default::default(),
                         s: Default::default(),
@@ -933,7 +937,7 @@ fn state_equivalence() {
                     data: vec![],
                     access_list: Default::default(),
                 },
-                Eip1559Signature {
+                TransactionSignature {
                     signature_y_parity: true,
                     r: Default::default(),
                     s: Default::default(),
@@ -988,6 +992,34 @@ fn state_equivalence() {
         .unwrap();
 
     let log_scrapings = LogScrapings::new(BlockNumber::new(1_000_000));
+    let automatic_deposits = {
+        let mut deposits = AutomaticDeposits::default();
+        deposits
+            .watch_address_for_account(
+                Timestamp::from_nanos(1),
+                Account {
+                    owner: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
+                    subaccount: Some([0_u8; 32]),
+                },
+                "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0"
+                    .parse()
+                    .unwrap(),
+            )
+            .unwrap();
+        deposits
+            .watch_address_for_account(
+                Timestamp::from_nanos(2),
+                Account {
+                    owner: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
+                    subaccount: Some([1_u8; 32]),
+                },
+                "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25"
+                    .parse()
+                    .unwrap(),
+            )
+            .unwrap();
+        deposits
+    };
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
@@ -1001,6 +1033,7 @@ fn state_equivalence() {
         ethereum_block_height: CandidBlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
+        latest_block_height: Some(BlockNumber::new(2_000_010)),
         events_to_mint: btreemap! {
             source("0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467", 100) => ReceivedEthEvent {
                 transaction_hash: "0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467".parse().unwrap(),
@@ -1042,6 +1075,7 @@ fn state_equivalence() {
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
         evm_rpc_id: EVM_RPC_ID_PRODUCTION,
         ckerc20_tokens,
+        automatic_deposits,
     };
 
     assert_eq!(
@@ -1049,6 +1083,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             ecdsa_public_key: None,
             last_observed_block_number: None,
+            latest_block_height: None,
             http_request_counter: 0,
             ..state.clone()
         }),
@@ -1279,6 +1314,15 @@ fn state_equivalence() {
         }),
         "changing essential fields should break equivalence",
     );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            automatic_deposits: Default::default(),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
 }
 
 mod eth_balance {
@@ -1293,7 +1337,7 @@ mod eth_balance {
     use crate::state::tests::{initial_state, received_eth_event};
     use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
     use crate::state::{EthBalance, State};
-    use crate::tx::{Eip1559Signature, SignedEip1559TransactionRequest};
+    use crate::tx::{SignedEip1559TransactionRequest, TransactionSignature};
     use maplit::btreemap;
 
     #[test]
@@ -1602,7 +1646,7 @@ mod eth_balance {
                 },
             );
 
-            let dummy_signature = Eip1559Signature {
+            let dummy_signature = TransactionSignature {
                 signature_y_parity: false,
                 r: Default::default(),
                 s: Default::default(),

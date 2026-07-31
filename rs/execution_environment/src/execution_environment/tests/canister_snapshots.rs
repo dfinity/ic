@@ -2,7 +2,7 @@ use crate::units::MIB;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
@@ -1649,6 +1649,36 @@ fn helper_load_snapshot(
 }
 
 #[test]
+fn load_canister_snapshot_sets_last_install_timestamp() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let last_install_timestamp = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .execution_state
+            .as_ref()
+            .and_then(|es| es.last_install_timestamp)
+    };
+
+    // Take a snapshot of the installed canister.
+    let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
+    let install_time = last_install_timestamp(&test);
+    assert!(install_time.is_some());
+
+    // Advance the round time so the restore time differs from the install time.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let restore_time = test.state().time();
+
+    // Loading the snapshot records the restore time as the install time.
+    helper_load_snapshot(&mut test, canister_id, snapshot_id);
+    assert_eq!(last_install_timestamp(&test), Some(restore_time));
+    assert_ne!(Some(restore_time), install_time);
+}
+
+#[test]
 fn load_canister_snapshot_updates_hook_condition() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);
@@ -1778,7 +1808,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let caller_canister = canister_test_id(1);
 
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
 
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
@@ -1839,7 +1869,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let caller_canister = canister_test_id(1);
 
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
 
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
@@ -3039,6 +3069,7 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
     //
     let ExecutionState {
         wasm_binary,
+        last_install_timestamp: _,
         wasm_memory: _,
         stable_memory: _,
         exported_globals: _,

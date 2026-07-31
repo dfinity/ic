@@ -1810,9 +1810,7 @@ pub fn list_all_neurons_and_combine_responses(
         new_request.page_number = Some(page);
         let mut new_response = list_neurons(state_machine, sender, new_request);
         response.full_neurons.append(&mut new_response.full_neurons);
-        response
-            .neuron_infos
-            .extend(new_response.neuron_infos.into_iter());
+        response.neuron_infos.extend(new_response.neuron_infos);
     }
 
     response

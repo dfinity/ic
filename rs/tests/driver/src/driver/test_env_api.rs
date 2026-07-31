@@ -135,7 +135,7 @@ use super::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
     farm::{DemoCertificate, DnsRecord, HostFeature, PlaynetCertificate},
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use crate::{
     driver::{
@@ -168,6 +168,7 @@ use ic_nns_test_utils::{
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node, replica_version::v1::ReplicaVersionRecord, subnet::v1 as pb_subnet,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
@@ -175,6 +176,7 @@ use ic_registry_client_helpers::{
     replica_version::ReplicaVersionRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
+    unassigned_nodes::UnassignedNodeRegistry,
 };
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
@@ -399,15 +401,14 @@ impl TopologySnapshot {
     }
 
     pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
         Box::new(
             self.local_registry
-                .get_subnet_ids(registry_version)
-                .unwrap_result(registry_version, "subnet_ids")
+                .get_subnet_ids(self.registry_version)
+                .unwrap_result(self.registry_version, "subnet_ids")
                 .into_iter()
                 .map(|subnet_id| SubnetSnapshot {
                     subnet_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -418,25 +419,23 @@ impl TopologySnapshot {
     }
 
     pub fn subnet_canister_ranges(&self, sub: SubnetId) -> Vec<CanisterIdRange> {
-        let registry_version = self.local_registry.get_latest_version();
         self.local_registry
-            .get_subnet_canister_ranges(registry_version, sub)
+            .get_subnet_canister_ranges(self.registry_version, sub)
             .expect("Could not deserialize optional routing table from local registry.")
             .expect("Optional routing table is None in local registry.")
     }
 
     pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
         let assigned_nodes: HashSet<_> = self
             .local_registry
-            .get_subnet_ids(registry_version)
-            .unwrap_result(registry_version, "subnet_ids")
+            .get_subnet_ids(self.registry_version)
+            .unwrap_result(self.registry_version, "subnet_ids")
             .into_iter()
             .flat_map(|subnet_id| {
                 self.local_registry
-                    .get_node_ids_on_subnet(subnet_id, registry_version)
+                    .get_node_ids_on_subnet(subnet_id, self.registry_version)
                     .unwrap_result(
-                        registry_version,
+                        self.registry_version,
                         &format!("node_ids_on_subnet(subnet_id={subnet_id})"),
                     )
             })
@@ -444,12 +443,12 @@ impl TopologySnapshot {
 
         let api_boundary_nodes = self
             .local_registry
-            .get_api_boundary_node_ids(registry_version)
+            .get_api_boundary_node_ids(self.registry_version)
             .unwrap();
 
         Box::new(
             self.local_registry
-                .get_node_ids(registry_version)
+                .get_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .filter(|node_id| {
@@ -457,7 +456,7 @@ impl TopologySnapshot {
                 })
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -468,16 +467,14 @@ impl TopologySnapshot {
     }
 
     pub fn api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_api_boundary_node_ids(registry_version)
+                .get_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -488,16 +485,14 @@ impl TopologySnapshot {
     }
 
     pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_system_api_boundary_node_ids(registry_version)
+                .get_system_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -508,16 +503,14 @@ impl TopologySnapshot {
     }
 
     pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_app_api_boundary_node_ids(registry_version)
+                .get_app_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -528,10 +521,8 @@ impl TopologySnapshot {
     }
 
     pub fn replica_version_records(&self) -> Result<Vec<(String, ReplicaVersionRecord)>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         self.local_registry
-            .get_all_replica_version_records(registry_version)?
+            .get_all_replica_version_records(self.registry_version)?
             .context("get_all_replica_version_records always returns Some (and it did not)")
     }
 
@@ -555,6 +546,13 @@ impl TopologySnapshot {
             env: self.env.clone(),
             ic_name: self.ic_name.clone(),
         }
+    }
+
+    /// The unassigned nodes config record, if it exists.
+    pub fn unassigned_nodes_config(&self) -> Option<UnassignedNodesConfigRecord> {
+        self.local_registry
+            .get_unassigned_nodes_config(self.registry_version)
+            .expect("Could not deserialize unassigned nodes config from local registry.")
     }
 
     /// This method blocks and repeatedly fetches updates from the registry
@@ -878,16 +876,15 @@ impl IcNodeSnapshot {
     }
 
     pub fn subnet_id(&self) -> Option<SubnetId> {
-        let registry_version = self.registry_version;
         self.local_registry
-            .get_subnet_ids(registry_version)
-            .unwrap_result(registry_version, "subnet_ids")
+            .get_subnet_ids(self.registry_version)
+            .unwrap_result(self.registry_version, "subnet_ids")
             .into_iter()
             .find(|subnet_id| {
                 self.local_registry
-                    .get_node_ids_on_subnet(*subnet_id, registry_version)
+                    .get_node_ids_on_subnet(*subnet_id, self.registry_version)
                     .unwrap_result(
-                        registry_version,
+                        self.registry_version,
                         &format!("node_ids_on_subnet(subnet_id={subnet_id})"),
                     )
                     .contains(&self.node_id)
@@ -895,9 +892,8 @@ impl IcNodeSnapshot {
     }
 
     pub fn is_api_boundary_node(&self) -> bool {
-        let registry_version = self.registry_version;
         self.local_registry
-            .get_api_boundary_node_ids(registry_version)
+            .get_api_boundary_node_ids(self.registry_version)
             .unwrap()
             .contains(&self.node_id)
     }
@@ -1138,10 +1134,21 @@ impl IcNodeSnapshot {
                 self.node_id
             );
             for (name, value) in metrics {
-                let max_value = metrics_to_check
-                    .get(name.split('(').next().unwrap())
-                    .copied()
-                    .unwrap_or_default();
+                // Assert the metrics to check are prefix-free. This allows to specify a metric name
+                // prefix to check all metrics with that prefix.
+                let mut metrics_to_check = metrics_to_check
+                    .iter()
+                    .filter(|(metric_name, _)| name.starts_with(**metric_name))
+                    .map(|(_, max_value)| *max_value);
+                let max_value = metrics_to_check.next().unwrap_or_default();
+                // Assert that the iterator only had one element, i.e. the metrics to check are
+                // prefix-free.
+                assert!(
+                    metrics_to_check.count() == 0,
+                    "The metric `{name}` is not prefix-free with respect to the other metrics to check. \
+                    This is not allowed. Please specify a prefix-free set of metrics to check."
+                );
+
                 assert!(
                     value[0] <= max_value,
                     "The metric `{name}` on node {} exceeded the maximum allowed value: \
@@ -1482,12 +1489,12 @@ impl HasGroupSetup for TestEnv {
                 "Group {} already set up.", group_setup.infra_group_name
             );
         } else {
-            // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
+            // GROUP_TTL should be enough for the setup task to allocate the group on SystemTestBackend::Farm
             // Afterwards, the group's TTL should be bumped via a keepalive task
             let timeout = if no_group_ttl { None } else { Some(GROUP_TTL) };
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
-            match InfraProvider::read_attribute(self) {
-                InfraProvider::Farm => {
+            match SystemTestBackend::read_attribute(self) {
+                SystemTestBackend::Farm => {
                     let required_host_features = allocate_testnet_to_local_dc_from_env()
                         .then(|| std::env::var("DC").ok())
                         .flatten()
@@ -1516,6 +1523,17 @@ impl HasGroupSetup for TestEnv {
                         group_spec,
                     )
                     .unwrap();
+                }
+                SystemTestBackend::Local => {
+                    info!(
+                        log,
+                        "Creating local group {} ...", group_setup.infra_group_name,
+                    );
+                    let backend = crate::driver::local_backend::LocalBackend::from_test_env(self)
+                        .expect("LocalBackend::from_test_env failed");
+                    backend
+                        .create_group(&group_setup.infra_group_name)
+                        .expect("LocalBackend::create_group failed");
                 }
             };
             group_setup.write_attribute(self);
@@ -2246,12 +2264,11 @@ pub trait IcNodeContainer {
 
 impl IcNodeContainer for SubnetSnapshot {
     fn nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.registry_version;
         let node_ids = self
             .local_registry
-            .get_node_ids_on_subnet(self.subnet_id, registry_version)
+            .get_node_ids_on_subnet(self.subnet_id, self.registry_version)
             .unwrap_result(
-                registry_version,
+                self.registry_version,
                 &format!("node_ids_on_subnet(subnet_id={})", self.subnet_id),
             );
 
@@ -2261,7 +2278,7 @@ impl IcNodeContainer for SubnetSnapshot {
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
                     ic_name: self.ic_name.clone(),
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                 })
@@ -2289,10 +2306,17 @@ pub trait VmControl {
     fn start(&self);
 }
 
-pub struct HostedVm {
-    farm: Farm,
-    group_name: String,
-    vm_name: String,
+pub enum HostedVm {
+    Farm {
+        farm: Farm,
+        group_name: String,
+        vm_name: String,
+    },
+    Local {
+        backend: Arc<crate::driver::local_backend::LocalBackend>,
+        group_name: String,
+        vm_name: String,
+    },
 }
 
 /// VmControl enables a user to interact with VMs, i.e. change their state.
@@ -2300,21 +2324,60 @@ pub struct HostedVm {
 /// unsuccessful.
 impl VmControl for HostedVm {
     fn kill(&self) {
-        self.farm
-            .destroy_vm(&self.group_name, &self.vm_name)
-            .expect("could not kill VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .destroy_vm(group_name, vm_name)
+                .expect("could not kill VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .destroy_vm(group_name, vm_name)
+                .expect("could not kill VM"),
+        }
     }
 
     fn reboot(&self) {
-        self.farm
-            .reboot_vm(&self.group_name, &self.vm_name)
-            .expect("could not reboot VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .reboot_vm(group_name, vm_name)
+                .expect("could not reboot VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .reboot_vm(group_name, vm_name)
+                .expect("could not reboot VM"),
+        }
     }
 
     fn start(&self) {
-        self.farm
-            .start_vm(&self.group_name, &self.vm_name)
-            .expect("could not start VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .start_vm(group_name, vm_name)
+                .expect("could not start VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .start_vm(group_name, vm_name)
+                .expect("could not start VM"),
+        }
     }
 }
 
@@ -2331,15 +2394,29 @@ where
     fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
         let pot_setup = GroupSetup::read_attribute(&env);
-        let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, env.logger());
-
         let vm_name = self.vm_name();
-        Box::new(HostedVm {
-            farm,
-            group_name: pot_setup.infra_group_name,
-            vm_name,
-        })
+        let group_name = pot_setup.infra_group_name;
+
+        match SystemTestBackend::read_attribute(&env) {
+            SystemTestBackend::Farm => {
+                let farm_base_url = self.get_farm_url().unwrap();
+                let farm = Farm::new(farm_base_url, env.logger());
+                Box::new(HostedVm::Farm {
+                    farm,
+                    group_name,
+                    vm_name,
+                })
+            }
+            SystemTestBackend::Local => {
+                let backend = crate::driver::local_backend::LocalBackend::from_test_env(&env)
+                    .expect("LocalBackend::from_test_env failed");
+                Box::new(HostedVm::Local {
+                    backend,
+                    group_name,
+                    vm_name,
+                })
+            }
+        }
     }
 }
 
@@ -2775,6 +2852,14 @@ where
     fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_dns_records is a no-op ({} records ignored)",
+                dns_records.len()
+            );
+            return "local.invalid".to_string();
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
@@ -2786,6 +2871,13 @@ where
     fn create_demo_dns_records(&self, domain: &str, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_demo_dns_records is a no-op for domain {domain}"
+            );
+            return "local.invalid".to_string();
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
@@ -2811,6 +2903,14 @@ where
     fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_playnet_dns_records is a no-op ({} records ignored)",
+                dns_records.len()
+            );
+            return "local.invalid".to_string();
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
@@ -2833,6 +2933,11 @@ where
     fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
         let env = self.test_env();
         let log = env.logger();
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+            panic!(
+                "LocalBackend: acquire_playnet_certificate is not supported (no TLS playnet); guard the caller with SystemTestBackend::Farm"
+            );
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);

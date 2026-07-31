@@ -11,7 +11,7 @@ use crate::{
     messages::CallbackId,
     signature::BasicSignature,
 };
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
+use ic_base_types::{NodeId, PrincipalId};
 use ic_error_types::RejectCode;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -19,6 +19,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 
@@ -54,6 +55,8 @@ pub enum FlexibleCanisterHttpError {
     TooManyRejects {
         callback_id: CallbackId,
         reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
+        /// The total amount of cycles spent by the subnet to produce this response.
+        initial_spent: Cycles,
     },
 }
 
@@ -77,6 +80,17 @@ impl FlexibleCanisterHttpError {
 pub struct FlexibleCanisterHttpResponses {
     pub callback_id: CallbackId,
     pub responses: Vec<FlexibleCanisterHttpResponseWithProof>,
+    /// The total amount of cycles spent by the subnet to produce this response.
+    pub initial_spent: Cycles,
+}
+
+impl FlexibleCanisterHttpResponses {
+    /// The serialized byte size of a response group carrying no responses: just
+    /// the `callback_id` and `initial_spent` fields. Per-response sizes are added
+    /// on top via [`FlexibleCanisterHttpResponseWithProof::count_bytes`].
+    pub fn base_count_bytes() -> usize {
+        std::mem::size_of::<CallbackId>() + std::mem::size_of::<Cycles>()
+    }
 }
 
 /// A single flexible HTTP outcall response paired with its single-signer proof.
@@ -134,12 +148,14 @@ impl CountBytes for FlexibleCanisterHttpError {
             Self::TooManyRejects {
                 callback_id,
                 reject_responses,
+                initial_spent,
             } => {
                 callback_id.count_bytes()
                     + reject_responses
                         .iter()
                         .map(|r| r.count_bytes())
                         .sum::<usize>()
+                    + std::mem::size_of_val(initial_spent)
             }
         }
     }
@@ -174,7 +190,10 @@ impl CanisterHttpPayload {
         responses.len()
             + divergence_responses.len()
             + flexible_responses.len()
-            + flexible_errors.len()
+            + flexible_errors
+                .iter()
+                .filter(|error| !matches!(error, FlexibleCanisterHttpError::Timeout { .. }))
+                .count()
     }
 
     /// Returns true, if this is an empty payload
@@ -186,7 +205,7 @@ impl CanisterHttpPayload {
 impl From<CanisterHttpPaymentReceipt> for pb::CanisterHttpPaymentReceipt {
     fn from(receipt: CanisterHttpPaymentReceipt) -> Self {
         pb::CanisterHttpPaymentReceipt {
-            refund: Some(receipt.refund.into()),
+            spent: Some(receipt.spent.into()),
         }
     }
 }
@@ -195,7 +214,7 @@ impl TryFrom<pb::CanisterHttpPaymentReceipt> for CanisterHttpPaymentReceipt {
     type Error = ProxyDecodeError;
     fn try_from(receipt: pb::CanisterHttpPaymentReceipt) -> Result<Self, Self::Error> {
         Ok(CanisterHttpPaymentReceipt {
-            refund: try_from_option_field(receipt.refund, "CanisterHttpPaymentReceipt::refund")?,
+            spent: try_from_option_field(receipt.spent, "CanisterHttpPaymentReceipt::spent")?,
         })
     }
 }
@@ -215,7 +234,6 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 canister_id: Some(pb::CanisterId::from(payload.content.canister_id)),
             }),
             hash: metadata.content_hash.get().0,
-            registry_version: metadata.registry_version.get(),
             replica_version: metadata.replica_version.into(),
             signatures: signatures
                 .into_iter()
@@ -227,6 +245,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 .collect(),
             content_size: metadata.content_size,
             is_reject: metadata.is_reject,
+            initial_spent: Some(payload.initial_spent.into()),
         }
     }
 }
@@ -285,12 +304,15 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                     )),
                     content_size: payload.content_size,
                     is_reject: payload.is_reject,
-                    registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
                 },
                 signatures,
             },
+            initial_spent: try_from_option_field(
+                payload.initial_spent,
+                "CanisterHttpResponseWithConsensus::initial_spent",
+            )?,
         })
     }
 }
@@ -370,7 +392,6 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
             metadata: Some(pb::CanisterHttpResponseMetadata {
                 id: metadata.id.get(),
                 content_hash: metadata.content_hash.get().0,
-                registry_version: metadata.registry_version.get(),
                 replica_version: metadata.replica_version.into(),
                 content_size: metadata.content_size,
                 is_reject: metadata.is_reject,
@@ -392,7 +413,6 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
             .ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
         let id = CanisterHttpRequestId::new(metadata.id);
         let content_hash = CryptoHashOf::new(CryptoHash(metadata.content_hash));
-        let registry_version = RegistryVersion::new(metadata.registry_version);
         let replica_version = ReplicaVersion::try_from(metadata.replica_version)
             .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?;
         let signature = share
@@ -409,7 +429,6 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                     content_hash,
                     content_size: metadata.content_size,
                     is_reject: metadata.is_reject,
-                    registry_version,
                     replica_version,
                 },
                 payment_receipt,
@@ -453,6 +472,7 @@ impl From<FlexibleCanisterHttpResponses> for pb::FlexibleCanisterHttpResponses {
         pb::FlexibleCanisterHttpResponses {
             callback_id: responses.callback_id.get(),
             responses: responses.responses.into_iter().map(Into::into).collect(),
+            initial_spent: Some(responses.initial_spent.into()),
         }
     }
 }
@@ -468,6 +488,10 @@ impl TryFrom<pb::FlexibleCanisterHttpResponses> for FlexibleCanisterHttpResponse
                 .into_iter()
                 .map(TryFrom::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
+            initial_spent: try_from_option_field(
+                responses.initial_spent,
+                "FlexibleCanisterHttpResponses::initial_spent",
+            )?,
         })
     }
 }
@@ -494,12 +518,15 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                 min_responses,
             }),
             FlexibleCanisterHttpError::TooManyRejects {
-                reject_responses, ..
+                reject_responses,
+                initial_spent,
+                ..
             } => ErrorDetails::TooManyRejects(pb::FlexibleCanisterHttpTooManyRejects {
                 reject_responses: reject_responses
                     .into_iter()
                     .map(pb::FlexibleCanisterHttpResponseWithProof::from)
                     .collect(),
+                initial_spent: Some(initial_spent.into()),
             }),
         };
         pb::FlexibleCanisterHttpError {
@@ -541,6 +568,10 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                 Ok(FlexibleCanisterHttpError::TooManyRejects {
                     callback_id,
                     reject_responses,
+                    initial_spent: try_from_option_field(
+                        details.initial_spent,
+                        "FlexibleCanisterHttpTooManyRejects::initial_spent",
+                    )?,
                 })
             }
             None => Err(ProxyDecodeError::MissingField(
@@ -642,11 +673,10 @@ mod tests {
                     ])),
                     content_size: 42,
                     is_reject: false,
-                    registry_version: RegistryVersion::new(2),
                     replica_version: ReplicaVersion::default(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt {
-                    refund: Cycles::new(42),
+                    spent: Cycles::new(42),
                 },
             },
             signature: BasicSignature {

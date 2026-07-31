@@ -8,7 +8,7 @@ use ic_btc_interface::{Address, Utxo};
 use ic_cdk::bitcoin_canister;
 use ic_cdk::bitcoin_canister::GetCurrentFeePercentilesRequest;
 use ic_cdk::management_canister::SignCallError;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_cdk::management_canister::{EcdsaCurve, EcdsaKeyId};
 use ic_management_canister_types_private::DerivationPath;
 use std::fmt;
 

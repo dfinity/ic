@@ -8,7 +8,7 @@ import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
 message IDkgPayload {
-  reserved 1, 2, 3, 4, 9, 11, 12, 16;
+  reserved 1, 2, 3, 4, 9, 11, 12, 16, 17;
   registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
   repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
@@ -17,7 +17,6 @@ message IDkgPayload {
   repeated MasterKeyTranscript key_transcripts = 13;
   repeated AvailablePreSignature available_pre_signatures = 14;
   repeated PreSignatureInProgress pre_signatures_in_creation = 15;
-  bool empty_signature_agreements_flag = 17;
 }
 
 message ConsensusResponse {

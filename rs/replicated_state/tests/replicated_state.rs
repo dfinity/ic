@@ -23,7 +23,7 @@ use ic_replicated_state::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
             StopCanisterCall, SubnetCallContext,
         },
-        testing::NetworkTopologyTesting,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     replicated_state::{
         MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
@@ -1279,8 +1279,9 @@ fn online_split() {
     fixture
         .state
         .metadata
-        .network_topology
-        .set_routing_table(routing_table.clone());
+        .modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table.clone());
+        });
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.

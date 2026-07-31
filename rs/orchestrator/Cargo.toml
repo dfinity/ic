@@ -10,7 +10,7 @@ documentation.workspace = true
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 attestation = { path = "../ic_os/sev/attestation" }
-backoff = { workspace = true }
+backon = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 config_tool = { path = "../ic_os/config/tool" }
@@ -43,6 +43,7 @@ ic-http-utils = { path = "../http_utils" }
 ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -56,7 +57,7 @@ ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 idna = { workspace = true }
-indoc = "1.0.9"
+indoc = { workspace = true }
 mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
@@ -80,6 +81,7 @@ qrcode = { workspace = true }
 async-stream = { workspace = true }
 assert_matches = { workspace = true }
 hyper-util = { workspace = true }
+lazy_static = { workspace = true }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }

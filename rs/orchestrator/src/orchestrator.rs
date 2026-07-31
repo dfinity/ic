@@ -7,14 +7,17 @@ use crate::{
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
-    process_manager::ProcessManagerImpl,
+    processes::{
+        IcBoundaryManager, IcBoundaryProcessConfig, IcGatewayProcessConfig,
+        MultipleProcessesManager, ReplicaProcessConfig,
+    },
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
     upgrade::{OrchestratorControlFlow, Upgrade},
 };
 use anyhow::Context;
-use backoff::ExponentialBackoffBuilder;
+use backon::ExponentialBuilder;
 use config_tool::guestos::network::{get_best_interface_name, get_interface_addresses};
 use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
 use ic_config::{
@@ -35,8 +38,8 @@ use std::{
     convert::TryFrom,
     future::Future,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    path::Path,
+    sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
@@ -240,14 +243,8 @@ impl Orchestrator {
             Arc::clone(&crypto) as _,
         );
 
-        let replica_process = Arc::new(Mutex::new(ProcessManagerImpl::new(logger.clone())));
-        let ic_binary_directory = args
-            .ic_binary_directory
-            .as_ref()
-            .unwrap_or(&PathBuf::from("/tmp"))
-            .clone();
         let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
-            ic_binary_directory.join("manageboot.sh"),
+            args.ic_binary_directory.join("manageboot.sh"),
         ));
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
@@ -263,6 +260,24 @@ impl Orchestrator {
             logger.clone(),
             node_id,
         );
+
+        let replica_process_config = ReplicaProcessConfig {
+            ic_binary_dir: args.ic_binary_directory.clone(),
+            cup_path: local_cup_reader.get_cup_path(),
+            replica_config_file: args.replica_config_file.clone(),
+        };
+        let ic_gateway_process_config = IcGatewayProcessConfig {
+            ic_binary_dir: args.ic_binary_directory.clone(),
+            ic_gateway_env_file: args.ic_gateway_env_file.clone(),
+        };
+
+        let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new(
+            replica_process_config,
+            ic_gateway_process_config,
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            logger.clone(),
+        )));
 
         if args.enable_provisional_registration {
             // will not return until the node is registered
@@ -281,14 +296,13 @@ impl Orchestrator {
             Upgrade::new(
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
-                Arc::clone(&replica_process) as _,
+                Arc::clone(&processes_manager),
                 manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),
                 args.replica_config_file.clone(),
                 node_id,
-                ic_binary_directory.clone(),
                 Arc::clone(&registry_replicator) as _,
                 args.replica_binary_dir.clone(),
                 logger.clone(),
@@ -324,13 +338,22 @@ impl Orchestrator {
             ),
         };
 
-        let boundary_node = BoundaryNodeManager::new(
+        let ic_boundary_process_config = IcBoundaryProcessConfig {
+            ic_binary_dir: args.ic_binary_directory.clone(),
+            ic_boundary_env_file: args.ic_boundary_env_file.clone(),
+            crypto_config: config.crypto.clone(),
+        };
+        let ic_boundary_manager = IcBoundaryManager::new(
+            ic_boundary_process_config,
             Arc::clone(&registry),
             Arc::clone(&metrics),
+            logger.clone(),
+        );
+        let boundary_node = BoundaryNodeManager::new(
+            Arc::clone(&registry),
+            ic_boundary_manager,
             replica_version.clone(),
             node_id,
-            ic_binary_directory.clone(),
-            config.crypto.clone(),
             logger.clone(),
         );
 
@@ -339,6 +362,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
+            config.cloud_engine_firewall.clone(),
             config.boundary_node_firewall.clone(),
             local_cup_reader.clone(),
             logger.clone(),
@@ -347,7 +371,7 @@ impl Orchestrator {
         let ipv4_configurator = Ipv4Configurator::new(
             Arc::clone(&registry),
             Arc::clone(&metrics),
-            ic_binary_directory,
+            args.ic_binary_directory,
             logger.clone(),
         );
 
@@ -365,7 +389,7 @@ impl Orchestrator {
             firewall.get_last_applied_version(),
             ipv4_configurator.get_last_applied_version(),
             registry_replicator.get_latest_certified_time(),
-            replica_process,
+            processes_manager,
             Arc::clone(&subnet_assignment),
             replica_version,
             hostos_version.ok(),
@@ -483,10 +507,11 @@ impl Orchestrator {
             }
 
             info!(log, "Shut down the upgrade loop");
-            if let Err(e) = upgrade.stop_replica() {
-                warn!(log, "Failed to stop the replica process: {e}");
+            if let Err(e) = upgrade.stop_children() {
+                warn!(log, "Failed to stop child processes: {e}");
+            } else {
+                info!(log, "Shut down the child processes");
             }
-            info!(log, "Shut down the replica process");
         }
 
         async fn hostos_upgrade_checks(
@@ -508,18 +533,23 @@ impl Orchestrator {
             // increases by a factor of 1.75, maxing out at two hours.
             // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 88, 120, 120
             //
-            // Additionally, there's a random +=50% range added to each delay, for jitter.
-            let backoff = ExponentialBackoffBuilder::new()
-                .with_initial_interval(Duration::from_secs(60))
-                .with_randomization_factor(0.5)
-                .with_multiplier(1.75)
-                .with_max_interval(Duration::from_secs(2 * 60 * 60))
-                .with_max_elapsed_time(None)
-                .build();
+            // Additionally, some (random) jitter is added.
+            let max_interval = Duration::from_secs(2 * 60 * 60);
+            let backoff_builder = ExponentialBuilder::new()
+                .with_min_delay(Duration::from_secs(60))
+                .with_jitter()
+                .with_factor(1.75)
+                .with_max_delay(max_interval)
+                .without_max_times();
             let liveness_timeout = Duration::from_secs(15 * 60);
 
             upgrade
-                .upgrade_loop(cancellation_token, backoff, liveness_timeout)
+                .upgrade_loop(
+                    cancellation_token,
+                    backoff_builder,
+                    max_interval,
+                    liveness_timeout,
+                )
                 .await;
         }
 

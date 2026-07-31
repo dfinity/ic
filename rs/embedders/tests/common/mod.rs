@@ -1,7 +1,9 @@
 use std::rc::Rc;
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
+use ic_config::{
+    embedders::Config as EmbeddersConfig, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
+};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
 };
@@ -226,8 +228,7 @@ pub fn get_system_api(
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
@@ -236,6 +237,7 @@ pub fn get_system_api(
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
     );
     SystemApiImpl::new(

@@ -140,6 +140,12 @@ pub enum WasmValidationError {
         allowed: usize,
         name: String,
     },
+    /// A function contains too many locals.
+    TooManyLocals {
+        index: usize,
+        defined: usize,
+        allowed: usize,
+    },
     /// The code section is too large.
     CodeSectionTooLarge {
         size: u32,
@@ -263,6 +269,15 @@ impl std::fmt::Display for WasmValidationError {
                 "Wasm module contains a function at index {index} \
                     with name '{name}' of size {size} bytes that exceeds the maximum allowed size of {allowed} bytes.",
             ),
+            Self::TooManyLocals {
+                index,
+                defined,
+                allowed,
+            } => write!(
+                f,
+                "Wasm module contains a function at index {index} \
+                    with {defined} locals that exceeds the maximum allowed number of locals {allowed}"
+            ),
             Self::CodeSectionTooLarge { size, allowed } => write!(
                 f,
                 "Wasm module code section size of {size} \
@@ -339,6 +354,10 @@ impl AsErrorHelp for WasmValidationError {
             WasmValidationError::FunctionNameTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "Try using shorter function names.".to_string(),
                 doc_link: doc_ref("wasm-module-function-name-too-large"),
+            },
+            WasmValidationError::TooManyLocals { .. } => ErrorHelp::UserError {
+                suggestion: "Try different optimizer settings.".to_string(),
+                doc_link: doc_ref("wasm-module-too-many-locals"),
             },
             WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "Try shrinking the module code section using tools like \

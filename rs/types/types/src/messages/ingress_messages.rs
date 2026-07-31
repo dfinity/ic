@@ -20,8 +20,8 @@ use ic_management_canister_types_private::{
     ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs,
     InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
-    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -588,9 +588,12 @@ pub fn extract_effective_canister_id(
         Ok(Method::StartCanister)
         | Ok(Method::CanisterStatus)
         | Ok(Method::DeleteCanister)
-        | Ok(Method::UninstallCode)
         | Ok(Method::StopCanister) => match CanisterIdRecord::decode(ingress.arg()) {
             Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
+        Ok(Method::UninstallCode) => match UninstallCodeArgs::decode(ingress.arg()) {
+            Ok(args) => Ok(Some(args.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
         Ok(Method::CanisterInfo) => match CanisterInfoRequest::decode(ingress.arg()) {
@@ -678,7 +681,8 @@ pub fn extract_effective_canister_id(
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
 
-        Ok(Method::SetupInitialDKG)
+        Ok(Method::ListCanisters)
+        | Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)
         | Ok(Method::HttpRequest)
         | Ok(Method::FlexibleHttpRequest)

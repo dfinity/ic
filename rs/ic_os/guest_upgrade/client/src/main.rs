@@ -34,7 +34,7 @@ pub async fn main() -> Result<()> {
 }
 
 async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let nns_registry_client = create_nns_registry_client(&guestos_config)?;
 
     let sev_firmware = Firmware::open().context("Failed to open SEV firmware")?;

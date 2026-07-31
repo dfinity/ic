@@ -44,8 +44,9 @@ fn setup(env: TestEnv) {
     let bare_metal = nested::create_bare_metal_session(&env);
     let mut nodes = NestedNodes {
         nodes: vec![
-            create_bare_metal_tee_node(&bare_metal)
-                .with_boot_image(BootImage::Image(get_tagged_guestos_disk_image("recovery"))),
+            create_bare_metal_tee_node(&bare_metal).with_boot_image(BootImage::Image(
+                get_tagged_guestos_disk_image(&env, "recovery"),
+            )),
         ],
     };
     nodes.setup_and_start(&env).unwrap();

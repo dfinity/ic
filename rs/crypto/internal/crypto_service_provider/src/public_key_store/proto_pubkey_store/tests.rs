@@ -281,8 +281,12 @@ fn should_panic_on_opening_corrupt_pubkey_store() {
     public_key_store(&temp_dir);
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
 #[should_panic(expected = "Failed to read public key store data: Permission denied")]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_read_without_read_permissions() {
     let temp_dir = mk_temp_dir_with_permissions(0o700);
     copy_file_to_dir(pubkey_store_in_test_resources().as_path(), temp_dir.path());
@@ -295,7 +299,11 @@ fn should_fail_to_read_without_read_permissions() {
     public_key_store(&temp_dir);
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_write_without_write_permissions() {
     let temp_dir = mk_temp_dir_with_permissions(0o700);
     copy_file_to_dir(pubkey_store_in_test_resources().as_path(), temp_dir.path());

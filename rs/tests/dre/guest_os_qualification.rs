@@ -104,7 +104,7 @@ pub fn main() -> anyhow::Result<()> {
                         // always be the case.
                         Box::new(EnsureElectedVersion {
                             version: initial_version.clone(),
-                            url: get_guestos_initial_update_img_url(),
+                            url: get_guestos_initial_update_img_url(&env),
                             sha256: get_guestos_initial_update_img_sha256(),
                             guest_launch_measurements: Some(get_guestos_launch_measurements()),
                         }),
@@ -138,7 +138,7 @@ pub fn main() -> anyhow::Result<()> {
                         // Ensure that the new version is elected
                         Box::new(EnsureElectedVersion {
                             version: target_version.clone(),
-                            url: get_guestos_update_img_url(),
+                            url: get_guestos_update_img_url(&env),
                             sha256: get_guestos_update_img_sha256(),
                             guest_launch_measurements: Some(
                                 get_guestos_update_launch_measurements(),
@@ -194,7 +194,7 @@ pub fn main() -> anyhow::Result<()> {
                         // if it was retired previously
                         Box::new(EnsureElectedVersion {
                             version: initial_version.clone(),
-                            url: get_guestos_initial_update_img_url(),
+                            url: get_guestos_initial_update_img_url(&env),
                             sha256: get_guestos_initial_update_img_sha256(),
                             guest_launch_measurements: Some(get_guestos_launch_measurements()),
                         }),

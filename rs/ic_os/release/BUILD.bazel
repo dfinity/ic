@@ -18,6 +18,7 @@ OBJECTS = {
     "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
     "nss_icos": "//rs/ic_os/networking/nss_icos",
     "custom_metrics": "//rs/ic_os/metrics/custom_metrics:custom_metrics_bin",
+    "ic-gateway": "@crate_index//:ic-gateway__ic-gateway",
 }
 
 [release_strip_binary(

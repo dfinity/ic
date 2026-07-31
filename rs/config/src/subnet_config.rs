@@ -10,22 +10,6 @@ use ic_types::{ExecutionRound, NumInstructions};
 use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 
-/// Security model under which a subnet runs. Currently distinguishes subnets
-/// that use AMD SEV-SNP confidential VMs from those that don't.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum SubnetSecurity {
-    /// Subnet uses SEV-SNP confidential VMs.
-    Sev,
-    /// Subnet does not use SEV-SNP.
-    None,
-}
-
-impl SubnetSecurity {
-    pub fn from_sev_enabled(sev_enabled: bool) -> Self {
-        if sev_enabled { Self::Sev } else { Self::None }
-    }
-}
-
 const GIB: u64 = 1024 * 1024 * 1024;
 const M: u64 = 1_000_000;
 const B: u64 = 1_000_000_000;
@@ -145,16 +129,6 @@ pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// cover the cost of the subnet.
 pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 
-/// Pay-as-you-go base-fee pricing constants for HTTP outcalls, charged upfront
-/// for every request by `CyclesAccountManager::http_request_base_fee`.
-pub const HTTP_REQUEST_BASE_FEE: u128 = 1_000_000;
-pub const HTTP_REQUEST_PER_BYTE_FEE: u128 = 50;
-pub const HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE: u128 = 140_000;
-pub const HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE: u128 = 800;
-pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE: u128 = 90_000;
-pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE: u128 = 2_000;
-pub const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: u128 = 100_000;
-
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
@@ -165,7 +139,7 @@ pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 pub const SEV_REFERENCE_SUBNET_SIZE: usize = 7;
 
 /// Costs for each newly created dirty page in stable memory.
-const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
+pub const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(5_000);
 
 /// Accumulated priority reset interval, rounds.
 ///
@@ -404,10 +378,6 @@ impl SchedulerConfig {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CyclesAccountManagerConfig {
-    /// Reference value of a subnet size that all the fees below are calculated for.
-    /// Fees for a real subnet are calculated proportionally to this reference value.
-    pub reference_subnet_size: usize,
-
     /// Fee for creating canisters on a subnet
     pub canister_creation_fee: Cycles,
 
@@ -480,22 +450,12 @@ pub struct CyclesAccountManagerConfig {
     /// The default value of the reserved balance limit for the case when the
     /// canister doesn't have it set in the settings.
     pub default_reserved_balance_limit: Cycles,
-
-    /// Base fee for fetching canister logs.
-    pub fetch_canister_logs_base_fee: Cycles,
-
-    /// Fee per byte for fetching canister logs.
-    pub fetch_canister_logs_per_byte_fee: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
-    pub fn application_subnet(subnet_security: SubnetSecurity) -> Self {
+    pub fn application_subnet() -> Self {
         let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
-            reference_subnet_size: match subnet_security {
-                SubnetSecurity::Sev => SEV_REFERENCE_SUBNET_SIZE,
-                SubnetSecurity::None => DEFAULT_REFERENCE_SUBNET_SIZE,
-            },
             canister_creation_fee: CANISTER_CREATION_FEE,
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
@@ -526,19 +486,16 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::new(800),
             max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
-            fetch_canister_logs_base_fee: Cycles::new(5_000_000),
-            fetch_canister_logs_per_byte_fee: Cycles::new(80),
         }
     }
 
-    pub fn verified_application_subnet(subnet_security: SubnetSecurity) -> Self {
-        Self::application_subnet(subnet_security)
+    pub fn verified_application_subnet() -> Self {
+        Self::application_subnet()
     }
 
     /// All processing is free on system subnets
     pub fn system_subnet() -> Self {
         Self {
-            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(0),
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
@@ -569,14 +526,11 @@ impl CyclesAccountManagerConfig {
             // This effectively disables the storage reservation mechanism on system subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
-            fetch_canister_logs_base_fee: Cycles::new(0),
-            fetch_canister_logs_per_byte_fee: Cycles::new(0),
         }
     }
 
-    pub fn zero_cost(subnet_size: usize) -> Self {
+    pub fn zero_cost() -> Self {
         Self {
-            reference_subnet_size: subnet_size,
             canister_creation_fee: Cycles::zero(),
             update_message_execution_fee: Cycles::zero(),
             ten_update_instructions_execution_fee: Cycles::zero(),
@@ -598,13 +552,11 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::zero(),
             max_storage_reservation_period: Duration::from_secs(u64::MAX),
             default_reserved_balance_limit: Cycles::zero(),
-            fetch_canister_logs_base_fee: Cycles::zero(),
-            fetch_canister_logs_per_byte_fee: Cycles::zero(),
         }
     }
 
     pub fn cloud_engine() -> Self {
-        Self::application_subnet(SubnetSecurity::None)
+        Self::application_subnet()
     }
 }
 
@@ -617,28 +569,20 @@ pub struct SubnetConfig {
 }
 
 impl SubnetConfig {
-    /// `subnet_security` only affects the cycles cost scaling for `Application`
-    /// and `VerifiedApplication` subnets. For `System` and `CloudEngine`
-    /// subnets it is ignored, because those subnets either don't charge cycles
-    /// or use a separate cost model.
-    pub fn new(own_subnet_type: SubnetType, subnet_security: SubnetSecurity) -> Self {
+    pub fn new(own_subnet_type: SubnetType) -> Self {
         match own_subnet_type {
-            SubnetType::Application => Self::default_application_subnet(subnet_security),
+            SubnetType::Application => Self::default_application_subnet(),
             SubnetType::System => Self::default_system_subnet(),
-            SubnetType::VerifiedApplication => {
-                Self::default_verified_application_subnet(subnet_security)
-            }
+            SubnetType::VerifiedApplication => Self::default_verified_application_subnet(),
             SubnetType::CloudEngine => Self::default_cloud_engine(),
         }
     }
 
     /// Returns the subnet configuration for the application subnet type.
-    fn default_application_subnet(subnet_security: SubnetSecurity) -> Self {
+    fn default_application_subnet() -> Self {
         Self {
             scheduler_config: SchedulerConfig::application_subnet(),
-            cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(
-                subnet_security,
-            ),
+            cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
         }
     }
 
@@ -652,11 +596,10 @@ impl SubnetConfig {
 
     /// Returns the subnet configuration for the verified application subnet
     /// type.
-    fn default_verified_application_subnet(subnet_security: SubnetSecurity) -> Self {
+    fn default_verified_application_subnet() -> Self {
         Self {
             scheduler_config: SchedulerConfig::verified_application_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::verified_application_subnet(
-                subnet_security,
             ),
         }
     }
@@ -673,11 +616,9 @@ impl SubnetConfig {
 #[cfg(test)]
 mod tests {
     use super::{
-        B, DEFAULT_REFERENCE_SUBNET_SIZE, MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
-        MAX_INSTRUCTIONS_PER_ROUND, MAX_INSTRUCTIONS_PER_SLICE, SEV_REFERENCE_SUBNET_SIZE,
+        B, MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE, MAX_INSTRUCTIONS_PER_ROUND,
+        MAX_INSTRUCTIONS_PER_SLICE,
     };
-    use crate::subnet_config::{SubnetConfig, SubnetSecurity};
-    use ic_registry_subnet_type::SubnetType;
     use ic_types::NumInstructions;
 
     #[test]
@@ -686,47 +627,6 @@ mod tests {
             MAX_INSTRUCTIONS_PER_ROUND,
             MAX_INSTRUCTIONS_PER_SLICE.max(MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE)
                 + NumInstructions::from(2 * B)
-        );
-    }
-
-    #[test]
-    fn subnet_config_application_sev_disabled_uses_default_reference_subnet_size() {
-        let config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
-        assert_eq!(
-            config.cycles_account_manager_config.reference_subnet_size,
-            DEFAULT_REFERENCE_SUBNET_SIZE
-        );
-    }
-
-    #[test]
-    fn subnet_config_application_sev_enabled_uses_sev_reference_subnet_size() {
-        let config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::Sev);
-        assert_eq!(
-            config.cycles_account_manager_config.reference_subnet_size,
-            SEV_REFERENCE_SUBNET_SIZE
-        );
-    }
-
-    #[test]
-    fn subnet_config_verified_application_sev_enabled_uses_sev_reference_subnet_size() {
-        let config = SubnetConfig::new(SubnetType::VerifiedApplication, SubnetSecurity::Sev);
-        assert_eq!(
-            config.cycles_account_manager_config.reference_subnet_size,
-            SEV_REFERENCE_SUBNET_SIZE
-        );
-    }
-
-    #[test]
-    fn subnet_config_system_ignores_sev_flag() {
-        let config_sev = SubnetConfig::new(SubnetType::System, SubnetSecurity::Sev);
-        let config_no_sev = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
-        assert_eq!(
-            config_sev
-                .cycles_account_manager_config
-                .reference_subnet_size,
-            config_no_sev
-                .cycles_account_manager_config
-                .reference_subnet_size
         );
     }
 }

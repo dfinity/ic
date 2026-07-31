@@ -313,6 +313,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 wait_for_confirmation(&self.logger);
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
                     // We could pick a node with highest finalization and CUP height automatically,
@@ -354,6 +355,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::ICReplay => {
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
@@ -361,18 +363,20 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::ElectVersion => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
-                        read_optional(&self.logger, "Version to bless (and upgrade to): ");
+                        read_optional(&self.logger, "Version to elect (and upgrade to): ");
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UpgradeVersion => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version = read_optional(
                         &self.logger,
-                        "Version to upgrade to (WARN: it should already be blessed): ",
+                        "Version to upgrade to (WARN: it should already be elected): ",
                     );
                 }
             }
@@ -398,6 +402,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UploadState => {
                 if self.params.upload_method.is_none() {
                     self.params.upload_method = Some(read_data_location(
@@ -407,6 +412,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::WaitForCUP => {
                 if self.params.wait_for_cup_node.is_none() {
                     if let Some(DataLocation::Remote(ip)) = self.params.upload_method {

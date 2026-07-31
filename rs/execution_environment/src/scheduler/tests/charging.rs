@@ -5,9 +5,7 @@ use super::super::test_utilities::{
 };
 use super::super::*;
 use super::zero_instruction_overhead_config;
-use ic_config::subnet_config::{
-    CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig, SubnetSecurity,
-};
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::{
     Method, Payload as _, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
@@ -33,7 +31,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     // Just enough memory to cost us one cycle per second.
     let bytes_per_cycle = (1_u128 << 30)
         .checked_div(
-            CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None)
+            CyclesAccountManagerConfig::application_subnet()
                 .gib_storage_per_second_fee
                 .get(),
         )
@@ -281,6 +279,66 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
     );
 }
 
+// Uninstalling a canister because it ran out of cycles succeeds even when the
+// subnet has no available execution memory: the out-of-cycles path drops the
+// canister history (it does not record a `CanisterCodeUninstall` change), so it
+// never needs to decrement the subnet available execution memory. This is in
+// contrast to `uninstall_code`, which records a canister history change and fails
+// if the subnet cannot account for it.
+#[test]
+fn out_of_cycles_uninstall_succeeds_without_subnet_available_memory() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    // The subnet has no available execution memory. The scheduler test builder
+    // also fixes the subnet memory reservation to zero, so the subnet available
+    // execution memory is exactly zero.
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_memory_capacity(0)
+        .build();
+    // A canister with an execution state installed and barely any cycles.
+    let canister = test.create_canister_with(
+        Cycles::new(100),
+        ComputeAllocation::zero(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+    );
+    assert!(test.canister_state(canister).execution_state.is_some());
+    // The out-of-cycles path drops the canister history without recording a
+    // `CanisterCodeUninstall` change, so the total number of changes must not
+    // increase across the uninstall.
+    let total_num_changes_before = test
+        .canister_state(canister)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    test.set_time(initial_time + test.duration_between_allocation_charges());
+    // Checkpoint round, to force charging for storage, which the canister cannot
+    // pay for and thus gets uninstalled.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
+    // The canister was uninstalled out of cycles despite the subnet having no
+    // available execution memory, and no `CanisterCodeUninstall` change was
+    // recorded (so no subnet available execution memory was needed): the total
+    // number of changes is unchanged.
+    assert!(test.canister_state(canister).execution_state.is_none());
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        total_num_changes_before
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        1
+    );
+}
+
 #[test]
 fn open_call_contexts_produce_reject_responses_when_out_of_cycles() {
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
@@ -434,7 +492,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
@@ -547,7 +605,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());

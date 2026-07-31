@@ -38,6 +38,18 @@ pub struct BootstrapOptions {
     pub accounts_ssh_authorized_keys: Option<PathBuf>,
 }
 
+fn mkfs_fat_bin() -> String {
+    std::env::var("MKFS_FAT").unwrap_or(
+        "/usr/sbin/mkfs.fat".to_string(), /* default to system binary */
+    )
+}
+
+fn mcopy_bin() -> String {
+    std::env::var("MCOPY").unwrap_or(
+        "/usr/bin/mcopy".to_string(), /* default to system binary */
+    )
+}
+
 impl BootstrapOptions {
     /// Create a FAT-formatted disk image containing bootstrap configuration.
     ///
@@ -53,20 +65,24 @@ impl BootstrapOptions {
         self.populate_bootstrap_dir(&bootstrap_dir)?;
 
         let dir_size = fs_extra::dir::get_size(&bootstrap_dir)?;
-        // image size = 2 * directory size + 1 MB
-        let image_size = dir_size * 2 + 1024 * 1024;
+        // image size = 2 * directory size + 1 MB, rounded up to a 4 KiB multiple
+        // so the raw image is block-aligned: QEMU opened with cache='none'
+        // (O_DIRECT) refuses a writable raw image whose size is not a multiple of
+        // the host block size. This keeps the image usable in environments that
+        // require block alignment.
+        let image_size = (dir_size * 2 + 1024 * 1024).next_multiple_of(4096);
 
         let file = File::create(out_file).context("Failed to create output file")?;
         file.set_len(image_size)
             .context("Failed to set output file size")?;
 
         // Format the disk image as FAT
-        if !Command::new("/usr/sbin/mkfs.vfat")
+        if !Command::new(mkfs_fat_bin())
             .arg("-n")
             .arg("CONFIG")
             .arg(out_file)
             .status()
-            .context("Failed to execute mkfs.vfat command")?
+            .context("Failed to execute mkfs.fat command")?
             .success()
         {
             bail!("Failed to format disk image");
@@ -124,7 +140,7 @@ impl BootstrapOptions {
             .collect::<Result<Vec<_>>>()
             .context("Failed to collect config directory entries")?;
 
-        let output = Command::new("/usr/bin/mcopy")
+        let output = Command::new(mcopy_bin())
             .arg("-i")
             .arg(vfat_image)
             .arg("-s")

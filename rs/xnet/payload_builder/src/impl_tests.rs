@@ -88,7 +88,7 @@ async fn expected_stream_indices() {
 /// `expected_stream_indices` should not include `SUBNET_6`
 /// (registered as `CloudEngine` in `get_simple_registry_for_test`).
 #[tokio::test]
-async fn expected_stream_indices_excludes_engine_subnets() {
+async fn expected_stream_indices_includes_engine_subnets() {
     with_test_replica_logger(|log| {
         let state_manager = FakeStateManager::new();
         let (payloads, _expected_indices) = get_xnet_state_for_testing(&state_manager);
@@ -126,13 +126,13 @@ async fn expected_stream_indices_excludes_engine_subnets() {
             )
             .unwrap();
 
-        // SUBNET_6 is a CloudEngine and must be excluded.
+        // SUBNET_6 is a CloudEngine and must now be included.
         assert!(
-            !computed_indices.contains_key(&SUBNET_6),
-            "CloudEngine subnet SUBNET_6 should be excluded from expected stream indices"
+            computed_indices.contains_key(&SUBNET_6),
+            "CloudEngine subnet SUBNET_6 should be included in expected stream indices"
         );
 
-        // Application subnets should still be present.
+        // Application subnets should also be present.
         for subnet in &[SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4] {
             assert!(
                 computed_indices.contains_key(subnet),
@@ -140,6 +140,67 @@ async fn expected_stream_indices_excludes_engine_subnets() {
                 subnet
             );
         }
+    });
+}
+
+/// `expected_stream_indices` must not include a subnet absent from the registry
+/// (i.e., a deleted subnet), even if the local state has an outgoing stream to it.
+#[tokio::test]
+async fn expected_stream_indices_excludes_deleted_subnet() {
+    with_test_replica_logger(|log| {
+        let state_manager = FakeStateManager::new();
+
+        // State with outgoing streams to SUBNET_1 (registered) and SUBNET_5 (deleted).
+        put_replicated_state_for_testing(
+            &state_manager,
+            btreemap![
+                SUBNET_1 => generate_stream(&StreamConfig {
+                    message_begin: 0,
+                    message_end: 5,
+                    signal_end: 3,
+                }),
+                SUBNET_5 => generate_stream(&StreamConfig {
+                    message_begin: 0,
+                    message_end: 3,
+                    signal_end: 2,
+                }),
+            ],
+        );
+
+        // Registry with only SUBNET_1 through SUBNET_4; SUBNET_5 is absent (deleted).
+        let (registry, _urls) = get_registry_and_urls_for_test(4, btreemap![]);
+        let tls_handshake = Arc::new(ic_crypto_tls_interfaces_mocks::MockTlsConfig::new());
+        let state_manager = Arc::new(state_manager);
+        let xnet_payload_builder = XNetPayloadBuilderImpl::new(
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
+            tls_handshake as Arc<_>,
+            registry,
+            tokio::runtime::Handle::current(),
+            LOCAL_NODE,
+            LOCAL_SUBNET,
+            &MetricsRegistry::new(),
+            log,
+        );
+
+        let validation_context = get_validation_context_for_test();
+        let state = state_manager
+            .get_state_at(validation_context.certified_height)
+            .unwrap()
+            .take();
+
+        let computed_indices = xnet_payload_builder
+            .expected_stream_indices(&validation_context, state.as_ref(), &[])
+            .unwrap();
+
+        assert!(
+            !computed_indices.contains_key(&SUBNET_5),
+            "Deleted SUBNET_5 should be excluded from expected stream indices"
+        );
+        assert!(
+            computed_indices.contains_key(&SUBNET_1),
+            "Registered SUBNET_1 should be present in expected stream indices"
+        );
     });
 }
 

@@ -11,7 +11,7 @@ filegroup(
 )
 
 configure_make(
-    name = "mke2fs",
+    name = "e2fsprogs",
     args = ["-j"],
     configure_in_place = True,
     configure_options = [
@@ -19,13 +19,14 @@ configure_make(
         # stays self-contained.
         "--enable-libuuid",
         "--enable-libblkid",
+        "--enable-fuse2fs",
         # Trim optional features that would pull in extra deps or shared libs.
-        "--disable-fuse2fs",
         "--disable-uuidd",
         "--disable-nls",
         "--disable-tls",
         "--disable-fsck",
-        # Per the upstream INSTALL doc, static binaries need ELF shared libs off.
+        # Link e2fsprogs' own libraries (libext2fs, libcom_err, ...) into the
+        # binaries statically, so they don't need a shared lib alongside them.
         "--disable-elf-shlibs",
         # The e2scrub install rules write to absolute host paths (/usr/lib/udev,
         # /etc/cron.d, /usr/lib/systemd) which fails under the build sandbox.
@@ -35,13 +36,16 @@ configure_make(
         "--with-systemd-unit-dir=no",
     ],
     env = {
-        "CFLAGS": "-g -O2 -static",
-        "LDFLAGS": "-static",
+        "CFLAGS": "-O2 -I$$EXT_BUILD_DEPS/include",
+        "LDFLAGS": "-L$$EXT_BUILD_DEPS/lib",
     },
     lib_source = ":all_srcs",
-    out_binaries = ["mke2fs"],
+    out_binaries = [
+        "fuse2fs",
+        "mke2fs",
+    ],
     # We don't ship any libs out of this build; everything is folded into the
-    # mke2fs binary.
+    # exported binaries.
     out_shared_libs = [],
     out_static_libs = [],
     # mke2fs is installed under sbin/ by autotools (it's a sysadmin tool);
@@ -54,13 +58,29 @@ configure_make(
         "mkdir -p $$INSTALLDIR/bin" +
         " && cp $$INSTALLDIR/sbin/mke2fs $$INSTALLDIR/bin/mke2fs" +
         " && find $$INSTALLDIR -mindepth 1 -maxdepth 1 ! -name bin ! -name include -exec rm -rf {} +" +
-        " && find $$INSTALLDIR/bin -mindepth 1 ! -name mke2fs -delete"
+        " && find $$INSTALLDIR/bin -mindepth 1 ! -name fuse2fs ! -name mke2fs -delete"
     ),
-    # Static glibc linking is a Linux/glibc thing; this isn't expected to work
-    # elsewhere.
+    # The zig toolchains we register only cover linux; and the tools are only
+    # ever used to build Linux filesystem images anyway.
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
+    deps = [
+        "@libfuse",
+    ],
+)
+
+filegroup(
+    name = "fuse2fs",
+    srcs = [":e2fsprogs"],
+    output_group = "fuse2fs",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mke2fs",
+    srcs = [":e2fsprogs"],
+    output_group = "mke2fs",
     visibility = ["//visibility:public"],
 )

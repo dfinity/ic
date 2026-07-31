@@ -352,7 +352,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         // Make a request without socks proxy.
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &unreachable_url),
+            url: format!("http://{}/get", unreachable_url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -366,7 +366,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         // Make a request with socks proxy/
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &unreachable_url),
+            url: format!("http://{}/get", unreachable_url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -456,7 +456,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &url),
+            url: format!("http://{}/get", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -485,7 +485,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &url),
+            url: format!("http://{}/get", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -509,7 +509,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/post", &url),
+            url: format!("https://{}/post", url),
             headers: Vec::new(),
             method: HttpMethod::Post as i32,
             body: "420".to_string().as_bytes().to_vec(),
@@ -535,7 +535,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/head", &url),
+            url: format!("https://{}/head", url),
             headers: Vec::new(),
             method: HttpMethod::Head as i32,
             body: "".to_string().as_bytes().to_vec(),
@@ -642,7 +642,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/size", &url),
+            url: format!("https://{}/size", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: format!("{}", response_limit + 1).as_bytes().to_vec(),
@@ -673,7 +673,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/size", &url),
+            url: format!("https://{}/size", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: format!("{response_size}").as_bytes().to_vec(),
@@ -700,7 +700,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/delay", &url),
+            url: format!("https://{}/delay", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: format!("{delay}").as_bytes().to_vec(),
@@ -723,7 +723,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[tokio::test]
     async fn test_connect_timeout() {
-        // Test that adapter hits connect timeout when connecting to unreachable host.
+        // Test that adapter hits connect timeout when connecting to a host that
+        // accepts no new connections (simulates an unreachable host).
         let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
             http_connect_timeout_secs: 1,
@@ -733,12 +734,19 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         };
 
-        let _url = start_server(CERT_INIT.get_or_init(generate_certs));
+        // Connect to a loopback listener whose accept queue is saturated, so
+        // the connect hangs until the adapter's timeout fires. This exercises
+        // the connect-timeout path using only loopback, so the test does not
+        // require network egress. `_saturated` must stay alive for the duration
+        // of the test to keep the address unconnectable.
+        let _saturated = ic_test_utilities_net::saturated_loopback_listener().await;
+        let addr = _saturated.addr();
+
         let mut client = spawn_grpc_server(server_config);
 
-        // Non routable address that causes a connect timeout.
+        // Connecting to the saturated listener hangs and triggers the connect timeout.
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: "https://10.255.255.1".to_string(),
+            url: format!("https://{addr}"),
             headers: Vec::new(),
             method: HttpMethod::Head as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -751,11 +759,16 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
 
         let actual_error_message = error.message;
-        let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Custom { kind: TimedOut, error: Elapsed(()) }))";
+        // Newer `hyper_util` versions embed the target socket address in the
+        // `ConnectError`, so we only check the stable prefix and suffix.
+        let expected_error_message_prefix = "Error(Connect, ConnectError(\"tcp connect error\", ";
+        let expected_error_message_suffix = "Custom { kind: TimedOut, error: Elapsed(()) }))";
 
         assert!(
-            actual_error_message.contains(expected_error_message),
-            "Expected error message to contain, {expected_error_message}, got: {actual_error_message}"
+            actual_error_message.contains(expected_error_message_prefix)
+                && actual_error_message.contains(expected_error_message_suffix),
+            "Expected error message to contain {expected_error_message_prefix} and \
+             {expected_error_message_suffix}, got: {actual_error_message}"
         );
     }
 
@@ -772,7 +785,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/invalid", &url),
+            url: format!("https://{}/invalid", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".as_bytes().to_vec(),

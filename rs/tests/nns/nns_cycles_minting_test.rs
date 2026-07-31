@@ -5,7 +5,7 @@ use cycles_minting::{TestAgent, UserHandle, make_user_ed25519};
 use cycles_minting_canister::{CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR, TokensToCycles};
 use dfn_candid::candid_one;
 use ic_canister_client::{HttpClient, Sender};
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_limits::{MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
@@ -310,7 +310,7 @@ pub fn test(env: TestEnv) {
                 .await
                 .unwrap();
         assert_eq!(new_canister_status.controller(), controller_pid);
-        let config = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None);
+        let config = CyclesAccountManagerConfig::application_subnet();
         let max_fees = scale_cycles(
             config.canister_creation_fee
                 + config.ingress_message_reception_fee

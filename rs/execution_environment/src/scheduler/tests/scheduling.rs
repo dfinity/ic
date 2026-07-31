@@ -725,11 +725,9 @@ fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
         available_messages,
         instructions_per_round / instructions_per_message,
     );
-    let required_rounds = if minimum_executed_messages != 0 {
-        available_messages / minimum_executed_messages + 1
-    } else {
-        1
-    };
+    let required_rounds = available_messages
+        .checked_div(minimum_executed_messages)
+        .map_or(1, |v| v + 1);
     for _ in 0..required_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }

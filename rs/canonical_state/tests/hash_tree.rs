@@ -16,7 +16,8 @@ use ic_types::time::UNIX_EPOCH;
 fn simple_state_old_vs_new_hashing() {
     let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0))).unwrap();
+    let hash_tree =
+        hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)), None).unwrap();
     let crypto_hash_tree =
         crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)));
 
@@ -30,7 +31,8 @@ fn many_canister_state_old_vs_new_hashing() {
         insert_dummy_canister(&mut state, canister_test_id(i), user_test_id(24).get());
     }
 
-    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0))).unwrap();
+    let hash_tree =
+        hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)), None).unwrap();
     let crypto_hash_tree =
         crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)));
 
@@ -54,7 +56,8 @@ fn large_history_state_old_vs_new_hashing() {
         );
     }
 
-    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0))).unwrap();
+    let hash_tree =
+        hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)), None).unwrap();
     let crypto_hash_tree =
         crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)));
 
@@ -80,7 +83,8 @@ fn large_history_and_canisters_state_old_vs_new_hashing() {
         );
     }
 
-    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0))).unwrap();
+    let hash_tree =
+        hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)), None).unwrap();
     let crypto_hash_tree =
         crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)));
 
@@ -204,8 +208,8 @@ fn error_code_change_guard() {
     //    the name.
     assert_eq!(
         [
-            252, 204, 185, 141, 145, 243, 70, 19, 233, 148, 60, 55, 116, 136, 68, 22, 127, 255, 85,
-            15, 252, 219, 68, 239, 166, 87, 109, 22, 28, 238, 47, 129
+            58, 36, 133, 223, 16, 218, 168, 51, 248, 11, 191, 177, 232, 246, 109, 148, 95, 219, 30,
+            17, 111, 165, 156, 98, 245, 151, 12, 34, 140, 243, 215, 7
         ],
         hasher.finish()
     );

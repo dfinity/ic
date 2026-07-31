@@ -4,7 +4,7 @@ Title:: Basic HTTP requests from canisters
 Goal:: Ensure simple HTTP requests can be made from canisters.
 
 Run with:
-ict test //rs/tests/networking:canister_http_non_replicated_test -- --test_tmpdir=./canister_http_non_replicated_test
+bazel test //rs/tests/networking:canister_http_non_replicated_test --test_tmpdir=./canister_http_non_replicated_test
 
 Runbook::
 0. Instantiate a universal VM with a webserver
@@ -24,7 +24,6 @@ use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
@@ -34,7 +33,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{RejectionCode, RemoteHttpRequest, RemoteHttpResponse};
 use slog::{Logger, info};
 
 fn main() -> Result<()> {

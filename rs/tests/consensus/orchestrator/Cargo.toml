@@ -27,6 +27,8 @@ ic_consensus_system_test_node_registration_test_common = { path = "../node_regis
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 registry-canister = { path = "../../../registry/canister" }
+reqwest = { workspace = true }
+serde_cbor = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
@@ -35,6 +37,10 @@ url = { workspace = true }
 [[bin]]
 name = "ic-systest-cup-compatibility"
 path = "cup_compatibility_test.rs"
+
+[[bin]]
+name = "ic-systest-cloud-engine-ic-gateway-test"
+path = "cloud_engine_ic_gateway_test.rs"
 
 [[bin]]
 name = "ic-systest-node-reassignment-test"

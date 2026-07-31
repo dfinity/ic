@@ -4,7 +4,7 @@
 //! in parallel.
 //!
 //! To run the benchmark, run the following command in the dev container:
-//! ict test //rs/tests/networking:cloner_canister -k -- --test_timeout=600000 --test_tmpdir=test_tmpdir
+//! bazel test //rs/tests/networking:cloner_canister --test_arg=--keepalive --test_timeout=600000 --test_tmpdir=test_tmpdir
 //!
 //! Wait for output to show the console links to the VMs.
 //! Use "Ctrl + F" to search for "/console"
@@ -30,7 +30,6 @@ use ic_system_test_driver::{
             AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
             VmResourceOverrides,
         },
-        prometheus_vm::HasPrometheus,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, load_wasm},
     },
@@ -40,9 +39,6 @@ use slog::info;
 use std::time::Duration;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
-
-/// Time to keep the testnet alive once all canisters are installed
-const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
@@ -180,13 +176,5 @@ pub fn install_cloner_canisters(env: TestEnv) {
         });
     }
 
-    // keep the workload running for a while
     info!(&logger, "Step 5: Finished spinning up canisters.");
-    info!(
-        &logger,
-        "Waiting {:?} before downloading prometheus data.", TESTNET_LIFETIME_AFTER_SETUP
-    );
-    std::thread::sleep(TESTNET_LIFETIME_AFTER_SETUP);
-    info!(&logger, "Step 6: Downloading prometheus data");
-    env.download_prometheus_data_dir_if_exists();
 }

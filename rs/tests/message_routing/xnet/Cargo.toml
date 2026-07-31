@@ -8,14 +8,20 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
+futures = { workspace = true }
 ic-agent = { workspace = true }
+ic-config = { path = "../../../config" }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
+ic-nns-constants = { path = "../../../nns/constants" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
+registry-canister = { path = "../../../registry/canister" }
 slog = { workspace = true }
 systest-message-routing-common = { path = "../common" }
 tokio = { workspace = true }
@@ -48,3 +54,7 @@ path = "xnet_slo_120_subnets_staging_test.rs"
 [[bin]]
 name = "xnet_cloud_engine_isolation_test"
 path = "xnet_cloud_engine_isolation_test.rs"
+
+[[bin]]
+name = "subnet_delete_test"
+path = "subnet_delete_test.rs"

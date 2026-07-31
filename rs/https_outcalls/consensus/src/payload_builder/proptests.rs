@@ -370,7 +370,6 @@ fn make_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadat
         content_hash: crypto_hash(response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
     }
 }
@@ -517,7 +516,6 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             content_size,
             is_reject,
-            registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
         }
     })

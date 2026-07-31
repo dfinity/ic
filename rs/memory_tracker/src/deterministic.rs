@@ -263,7 +263,7 @@ impl DeterministicState {
         // SAFETY: We just checked that the Wasm page was accessed (mapped), so it must be valid.
         unsafe {
             mprotect(
-                page_start_addr,
+                std::ptr::NonNull::new(page_start_addr).expect("mprotect address is null"),
                 range_size_in_bytes(&page_range),
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
             )
@@ -352,7 +352,7 @@ impl DeterministicMemoryTracker {
             accessed_pages.push(PageIndex::new(os_page_idx));
         }
 
-        // Charge instructions per OS page accessed.
+        // Charge instructions.
         (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
     }
 
@@ -363,6 +363,8 @@ impl DeterministicMemoryTracker {
 
         let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
         let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
+
+        // Charge instructions.
         (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
     }
 

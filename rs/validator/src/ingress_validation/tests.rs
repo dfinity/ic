@@ -5,7 +5,7 @@ use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, node_test_id};
 use ic_types::{
-    messages::{Delegation, SignedDelegation, UserSignature},
+    messages::{Delegation, DelegationPermissions, SignedDelegation, UserSignature},
     time::UNIX_EPOCH,
 };
 use std::time::Duration;
@@ -131,7 +131,7 @@ fn plain_authentication_with_one_delegation() {
         sender_delegation: Some(vec![signed_delegation]),
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -139,7 +139,7 @@ fn plain_authentication_with_one_delegation() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 
     // Try verifying the signature in the future. It should fail because the
@@ -179,7 +179,7 @@ fn plain_authentication_with_one_scoped_delegation() {
         base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap(),
     )
     .unwrap();
-    let delegation = Delegation::new_with_targets(pk2, UNIX_EPOCH, vec![canister_test_id(1)]);
+    let delegation = Delegation::new(pk2, UNIX_EPOCH).with_targets(vec![canister_test_id(1)]);
 
     // Signature of sk1 for the delegation above.
     let delegation_signature = base64::decode(
@@ -207,8 +207,82 @@ fn plain_authentication_with_one_scoped_delegation() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap() && !restrictions.queries_only
     );
+}
+
+mod delegation_permissions {
+    use super::*;
+    use ic_types::crypto::Signable;
+
+    /// Signs `delegation` with `signer` and the message id with `sender_sk`,
+    /// then validates the single-delegation chain `signer -> sender_sk`.
+    /// Uses ECDSA secp256r1 identities (supported by the validator and
+    /// signable in-process, unlike the hard-coded ed25519 signatures used by
+    /// the surrounding tests).
+    fn validate_single_delegation(
+        permissions: Option<DelegationPermissions>,
+    ) -> Result<DelegationRestrictions, RequestValidationError> {
+        let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+        let message_id = message_test_id(1);
+        let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
+
+        let signer_sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+        let session_sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+        let signer_pk = signer_sk.public_key().serialize_der();
+        let session_pk = session_sk.public_key().serialize_der();
+
+        let delegation = match permissions {
+            Some(permissions) => {
+                Delegation::new(session_pk, UNIX_EPOCH).with_permissions(permissions)
+            }
+            None => Delegation::new(session_pk, UNIX_EPOCH),
+        };
+        let delegation_sig = signer_sk
+            .sign_message(&delegation.as_signed_bytes())
+            .to_vec();
+        let signed_delegation = SignedDelegation::new(delegation, delegation_sig);
+
+        let user_signature = UserSignature {
+            signature: session_sk
+                .sign_message(&message_id.as_signed_bytes())
+                .to_vec(),
+            signer_pubkey: signer_pk,
+            sender_delegation: Some(vec![signed_delegation]),
+        };
+
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new(),
+        )
+    }
+
+    #[test]
+    fn queries_permission_sets_queries_only() {
+        assert_matches!(
+            validate_single_delegation(Some(DelegationPermissions::Queries)),
+            Ok(restrictions) if restrictions.queries_only
+        );
+    }
+
+    #[test]
+    fn all_permission_does_not_set_queries_only() {
+        assert_matches!(
+            validate_single_delegation(Some(DelegationPermissions::All)),
+            Ok(restrictions) if !restrictions.queries_only
+        );
+    }
+
+    #[test]
+    fn absent_permission_does_not_set_queries_only() {
+        assert_matches!(
+            validate_single_delegation(None),
+            Ok(restrictions) if !restrictions.queries_only
+        );
+    }
 }
 
 #[test]
@@ -249,11 +323,8 @@ fn plain_authentication_with_multiple_delegations() {
     .unwrap();
 
     // KP1 delegating to KP2.
-    let delegation = Delegation::new_with_targets(
-        pk2,
-        UNIX_EPOCH + Duration::new(4, 0),
-        vec![canister_test_id(1), canister_test_id(2)],
-    );
+    let delegation = Delegation::new(pk2, UNIX_EPOCH + Duration::new(4, 0))
+        .with_targets(vec![canister_test_id(1), canister_test_id(2)]);
 
     // Signature of SK1 for `delegation` above.
     let delegation_signature = base64::decode(
@@ -270,11 +341,8 @@ fn plain_authentication_with_multiple_delegations() {
     .unwrap();
 
     // KP3 delegating to KP4.
-    let delegation_3 = Delegation::new_with_targets(
-        pk4,
-        UNIX_EPOCH + Duration::new(3, 0),
-        vec![canister_test_id(1)],
-    );
+    let delegation_3 = Delegation::new(pk4, UNIX_EPOCH + Duration::new(3, 0))
+        .with_targets(vec![canister_test_id(1)]);
     // Signature of SK3 for delegation_3
     let delegation_3_signature = base64::decode(
         "a/hTCL8yOijzFIcHdcE0uvt2dj3WQdTiMLPX+xI8mWC0wRt+CYlMoFTc6JlfBopEJDrDwdEBz1n6/S8R2A/CCQ==",
@@ -308,7 +376,7 @@ fn plain_authentication_with_multiple_delegations() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap() && !restrictions.queries_only
     );
     assert_matches!(
         validate_signature(
@@ -434,7 +502,7 @@ fn validate_signature_webauthn() {
         sender_delegation: None,
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -442,7 +510,7 @@ fn validate_signature_webauthn() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 }
 
@@ -467,7 +535,7 @@ fn validate_signature_webauthn_ed25519() {
         sender_delegation: None,
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -475,7 +543,7 @@ fn validate_signature_webauthn_ed25519() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 }
 
@@ -504,7 +572,7 @@ fn validate_signature_webauthn_with_delegations() {
         sender_delegation: Some(vec![SignedDelegation::new(delegation, delegation_sig)]),
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -512,7 +580,7 @@ fn validate_signature_webauthn_with_delegations() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 }
 

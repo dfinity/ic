@@ -88,16 +88,17 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
-    chain_keys::ChainKeysRegistry, crypto::CryptoRegistry, deserialize_registry_value,
-    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry,
+    api_boundary_node::ApiBoundaryNodeRegistry, chain_keys::ChainKeysRegistry,
+    crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
+    hostos_version::HostosRegistry, node_operator::NodeOperatorRegistry,
     replica_version::ReplicaVersionRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
-    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
-    is_node_record_key, make_api_boundary_node_record_key, make_canister_migrations_record_key,
-    make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY, get_node_operator_id_from_record_key,
+    get_node_record_node_id, is_node_operator_record_key, is_node_record_key,
+    make_api_boundary_node_record_key, make_canister_migrations_record_key, make_crypto_node_key,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -417,6 +418,9 @@ enum SubCommand {
 
     /// Submits a proposal to bless an alternative GuestOS version for disaster recovery.
     ProposeToBlessAlternativeGuestOsVersion(ProposeToBlessAlternativeGuestOsVersionCmd),
+
+    /// Submits a proposal to change what replica version(s) are run by Cloud Engines.
+    ProposeToUpdateStandardEngineReplicaVersion(ProposeToUpdateStandardEngineReplicaVersionCmd),
 
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
@@ -1469,7 +1473,7 @@ impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
             Some(title) => title.clone(),
             None => format!(
                 "Upgrade NNS Canister: {} to wasm with hash: {}",
-                self.canister_id, &self.wasm_module_sha256
+                self.canister_id, self.wasm_module_sha256
             ),
         }
     }
@@ -1554,7 +1558,7 @@ impl ProposalTitle for ProposeToHardResetNnsRootToVersionCmd {
             Some(title) => title.clone(),
             None => format!(
                 "Hard reset NNS root to wasm with hash: {}",
-                &self.wasm_module_sha256
+                self.wasm_module_sha256
             ),
         }
     }
@@ -2177,6 +2181,60 @@ impl ProposalAction for ProposeToBlessAlternativeGuestOsVersionCmd {
                 chip_ids: Some(chip_ids),
                 rootfs_hash: Some(self.rootfs_hash.clone()),
                 base_guest_launch_measurements: Some(measurements),
+            },
+        )
+    }
+}
+
+/// Sub-command to submit a proposal to change what replica version(s) are run
+/// by Cloud Engines.
+#[derive_common_proposal_fields]
+#[derive(Clone, Parser, ProposalMetadata)]
+struct ProposeToUpdateStandardEngineReplicaVersionCmd {
+    /// The replica version that Cloud Engines should eventually upgrade to.
+    #[clap(long, required = true)]
+    new_replica_version_id: String,
+
+    /// The replica version that Cloud Engines should upgrade from.
+    #[clap(long, required = true)]
+    old_replica_version_id: String,
+
+    /// The (approximate) fraction of Cloud Engines that should be on new
+    /// replica version (the rest stay on the old one). Must be in the closed
+    /// interval [0.0, 1.0].
+    #[clap(long, required = true)]
+    deployment_progress: f64,
+}
+
+impl ProposalTitle for ProposeToUpdateStandardEngineReplicaVersionCmd {
+    fn title(&self) -> String {
+        if let Some(title) = &self.proposal_title {
+            return title.clone();
+        }
+
+        format!(
+            "Update {:.1}% of Cloud Engines to {}",
+            self.deployment_progress * 100.0,
+            shortened_hash_string(&self.new_replica_version_id),
+        )
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToUpdateStandardEngineReplicaVersionCmd {
+    async fn action(&self, _: &Agent) -> ProposalActionRequest {
+        let Self {
+            new_replica_version_id,
+            old_replica_version_id,
+            deployment_progress,
+            ..
+        } = self.clone();
+
+        ProposalActionRequest::UpdateStandardEngineReplicaVersion(
+            ic_nns_governance_api::UpdateStandardEngineReplicaVersion {
+                new_replica_version_id: Some(new_replica_version_id),
+                old_replica_version_id: Some(old_replica_version_id),
+                deployment_progress: Some(deployment_progress),
             },
         )
     }
@@ -3082,7 +3140,7 @@ impl ProposalPayload<AddOrRemoveDataCentersProposalPayload> for ProposeToAddOrRe
         let payload = self.get_payload();
 
         if !self.skip_confirmation {
-            println!("\n{}", &payload);
+            println!("\n{}", payload);
             println!("Is the above payload correct? [Y/n]");
 
             let mut buffer = String::new();
@@ -3205,7 +3263,7 @@ impl ProposalPayload<SetFirewallConfigPayload> for ProposeToSetFirewallConfigCmd
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToAddFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "cloud_engines", "api_boundary_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
     /// File with the rules in JSON format
     pub rules_file: PathBuf,
@@ -3256,7 +3314,7 @@ impl ProposalPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "cloud_engines", "api_boundary_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
     /// Comma separated list of indices to remove from the ruleset
     pub positions: String,
@@ -3301,7 +3359,7 @@ impl ProposalPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRule
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "cloud_engines", "api_boundary_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
     /// File with the updated rules in JSON format
     pub rules_file: PathBuf,
@@ -3351,7 +3409,7 @@ impl ProposalPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRule
 /// Sub-command to get all firewall rules for a given scope.
 #[derive(Parser)]
 struct GetFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "api_boundary_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "cloud_engines", "api_boundary_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
 }
 
@@ -4606,6 +4664,7 @@ async fn main() {
             SubCommand::ProposeToAddOrRemoveDataCenters(_) => (),
             SubCommand::ProposeToAddOrRemoveNodeProvider(_) => (),
             SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
+            SubCommand::ProposeToBlessAlternativeGuestOsVersion(_) => (),
             SubCommand::ProposeToChangeNnsCanister(_) => (),
             SubCommand::ProposeToChangeSubnetMembership(_) => (),
             SubCommand::ProposeToChangeSubnetTypeAssignment(_) => (),
@@ -4648,6 +4707,7 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
             SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(_) => (),
+            SubCommand::ProposeToUpdateStandardEngineReplicaVersion(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToUpdateSubnetType(_) => (),
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
@@ -4775,7 +4835,12 @@ async fn main() {
             }
             eprintln!("INFO: Fetching API Boundary nodes...");
             // list all API Boundary Nodes
-            let api_bn_node_ids = get_api_boundary_node_ids(reachable_nns_urls.clone())
+            let registry_client = make_registry_client(
+                reachable_nns_urls.clone(),
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+            let api_bn_node_ids = get_api_boundary_node_ids(registry_client)
                 .iter()
                 .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap()))
                 .collect();
@@ -5329,12 +5394,10 @@ async fn main() {
                 .await;
         }
         SubCommand::GetNodeOperatorList => {
-            let registry_client = RegistryClientImpl::new(
-                Arc::new(NnsDataProvider::new(
-                    tokio::runtime::Handle::current(),
-                    reachable_nns_urls.clone(),
-                )),
-                None,
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
             );
 
             // maximum number of retries, let the user ctrl+c if necessary
@@ -5342,20 +5405,14 @@ async fn main() {
                 .try_polling_latest_version(usize::MAX)
                 .unwrap();
 
-            let keys = registry_client
-                .get_key_family(
-                    NODE_OPERATOR_RECORD_KEY_PREFIX,
-                    registry_client.get_latest_version(),
-                )
-                .unwrap();
+            let node_operators = registry_client
+                .get_node_operators(registry_client.get_latest_version())
+                .unwrap()
+                .unwrap_or_default();
 
-            let records = keys
-                .iter()
-                .map(|k| k.strip_prefix(NODE_OPERATOR_RECORD_KEY_PREFIX).unwrap())
-                .collect::<Vec<_>>();
             println!(
                 "{}",
-                serde_json::to_string_pretty(&records)
+                serde_json::to_string_pretty(&node_operators)
                     .expect("Failed to serialize the records to JSON")
             );
         }
@@ -5853,12 +5910,10 @@ async fn main() {
             .await;
         }
         SubCommand::GetElectedHostosVersions => {
-            let registry_client = RegistryClientImpl::new(
-                Arc::new(NnsDataProvider::new(
-                    tokio::runtime::Handle::current(),
-                    reachable_nns_urls.clone(),
-                )),
-                None,
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
             );
 
             // maximum number of retries, let the user ctrl+c if necessary
@@ -5939,7 +5994,12 @@ async fn main() {
             .await;
         }
         SubCommand::GetApiBoundaryNodes => {
-            let records = get_api_boundary_node_ids(reachable_nns_urls.clone());
+            let registry_client = make_registry_client(
+                reachable_nns_urls.clone(),
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+            let records = get_api_boundary_node_ids(registry_client);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&records)
@@ -6036,6 +6096,16 @@ async fn main() {
             );
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
+        SubCommand::ProposeToUpdateStandardEngineReplicaVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
     }
 }
 
@@ -6072,7 +6142,7 @@ fn print_value<T: Debug + serde::Serialize>(key: &String, version: u64, value: T
 }
 
 /// Fetches the last value stored under `key` in the registry and prints it.
-async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
+async fn print_and_get_last_value<T: Message + Default + serde::Serialize + Debug>(
     key: Vec<u8>,
     registry: &RegistryCanister,
     as_json: bool,
@@ -6750,32 +6820,17 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
     }
 }
 
-fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
-    let registry_client = RegistryClientImpl::new(
-        Arc::new(NnsDataProvider::new(
-            tokio::runtime::Handle::current(),
-            nns_url,
-        )),
-        None,
-    );
+fn get_api_boundary_node_ids(registry_client: RegistryClientImpl) -> Vec<String> {
     // maximum number of retries, let the user ctrl+c if necessary
     registry_client
         .try_polling_latest_version(usize::MAX)
         .unwrap();
-    let keys = registry_client
-        .get_key_family(
-            API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
-            registry_client.get_latest_version(),
-        )
+
+    let bns = registry_client
+        .get_api_boundary_node_ids(registry_client.get_latest_version())
         .unwrap();
 
-    keys.iter()
-        .map(|k| {
-            k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
-                .unwrap()
-                .to_string()
-        })
-        .collect::<Vec<_>>()
+    bns.iter().map(|v| v.to_string()).collect::<Vec<_>>()
 }
 
 fn print_routing_table(routing_table: &Vec<(CanisterIdRange, SubnetId)>, version: RegistryVersion) {

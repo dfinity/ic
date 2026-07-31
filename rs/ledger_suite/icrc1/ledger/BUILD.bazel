@@ -262,7 +262,6 @@ package(default_visibility = ["//visibility:public"])
         srcs = ["tests/tests.rs"],
         crate_features = features,
         data = [
-            ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm.gz",
             ":ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
@@ -307,7 +306,6 @@ package(default_visibility = ["//visibility:public"])
             "//rs/types/base_types",
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
-            "@crate_index//:cddl",
             "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-agent",

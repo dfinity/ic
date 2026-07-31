@@ -1,38 +1,65 @@
 // Set up a testnet containing:
 //   one 1-node System/NNS subnet, by default 20 unassigned nodes distributed
-//   round-robin across 30 datacenters (so each of the first 20 DCs gets 1 node),
+//   round-robin across 20 datacenters spread across 4 cloud providers (5 DCs
+//   each in AWS, Azure, GCP, and Hetzner), so by default each DC gets 1 node,
 //   one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
+// Placement: this testnet runs on Farm's DMZ hosts, because they are the only
+// ones that can attach the publicly routed IPv4 address the testnet is reached
+// at (see IC_GW_IPV4 below). Two consequences, both of which the deployment has
+// to respect:
+//
+//   * Those hosts form their own datacenter, so deploy with
+//     --test_env=DC=dm1-dmz. `system_test` sets ALLOCATE_TESTNET_TO_LOCAL_DC=1
+//     and derives DC from the deploying machine's NODE_NAME, so without the
+//     override the group is confined to the local DC and no VM can be placed.
+//   * Farm marks the "dmz" feature *mandatory* on those hosts, i.e. a VM lands
+//     there only if it asks for the feature. Every VM here therefore asks: the
+//     subnets, the unassigned nodes, the API boundary node, the ic-gateway and
+//     the Prometheus VM (via prometheus_vm_required_host_features in
+//     rs/tests/testnets/BUILD.bazel). The one VM that cannot ask is the vector
+//     log-shipping VM, which the driver creates without host features and with
+//     no way to pass any, so this testnet sets `logs = False`. Restore logs once
+//     the driver can pass host features to that VM, the way it already can for
+//     the Prometheus VM.
+//
+// The nodes run the GuestOS version that mainnet's NNS subnet runs, and the NNS
+// canisters are the ones currently installed on mainnet (`guestos =
+// "mainnet_nns_dev"` plus the mainnet-NNS variant declared by `system_test_nns`
+// in rs/tests/testnets/BUILD.bazel). Deploy the `cloud_engine` target, NOT
+// `cloud_engine_head_nns`: the latter installs NNS canisters built from the tip
+// of this branch.
+//
 // The number of unassigned nodes can be overridden via the NUM_UNASSIGNED_NODES
 // env var (e.g. NUM_UNASSIGNED_NODES=60 will spin up 60 unassigned nodes,
-// distributed round-robin across the 30 DCs, yielding 2 nodes per DC).
+// distributed round-robin across the 20 DCs, yielding 3 nodes per DC). When
+// the count is not a multiple of the number of DCs, the leading DCs receive
+// one extra node each.
 //
-// You can setup this testnet by executing the following commands:
+// You can setup this testnet by executing the following commands (preferably from a devenv in dm1-idx1):
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create cloud_engine --output-dir=./cloud_engine -- --test_tmpdir=./cloud_engine
+//   $ bazel run //rs/tests/testnets:cloud_engine --test_tmpdir=./cloud_engine \
+//       --test_env=ALLOCATE_TESTNET_TO_LOCAL_DC=0 \
+//       --test_env=IC_GW_IPV4=<free-address-of-the-dm1-dmz-network> \
+//       --test_env=DEMO_DOMAIN=<subdomain> -- --keepalive
 //
-// The --output-dir=./cloud_engine will store the debug output of the test driver in the specified directory.
+// IC_GW_IPV4 must be a free address of the dm1-dmz network defined below;
+// leaving it out yields a testnet that is reachable over IPv6 only, since the
+// farm host's IPv4 address is private. DEMO_DOMAIN keeps the testnet's URL
+// stable across redeployments: farm serves a Let's Encrypt certificate for
+// <DEMO_DOMAIN>.demo.farm.dfinity.systems (plus its wildcards) and repoints
+// the DNS records at the new ic-gateway VM.
+//
 // The --test_tmpdir=./cloud_engine will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
 //   $ ssh -i cloud_engine/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
 //
-// Note that you can get the  address of the IC node from the ict console output:
+// Note that you can get the address of the IC node from the bazel output by looking for farm_vm_created_event.
 //
-//   {
-//     "nodes": [
-//       {
-//         "id": "...",
-//         "ipv6": "..."
-//       }
-//     ],
-//     "subnet_id": "...",
-//     "subnet_type": "cloud_engine"
-//   }
-//
-// To get access to P8s and Grafana look for the following lines in the ict console output:
+// To get access to P8s and Grafana look for the following lines in the output:
 //
 //     prometheus: Prometheus Web UI at http://prometheus.cloud_engine--1692597750709.testnet.farm.dfinity.systems,
 //     grafana: Grafana at http://grafana.cloud_engine--1692597750709.testnet.farm.dfinity.systems,
@@ -40,9 +67,11 @@
 //
 // Happy testing!
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
+use candid::Principal;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_protobuf::registry::{
     dc::v1::{DataCenterRecord, Gps},
     node::v1::NodeRewardType,
@@ -54,21 +83,42 @@ use ic_system_test_driver::driver::{
     ic::{InternetComputer, Node, NodeOperatorConfig, Subnet},
     ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
     test_env::TestEnv,
-    test_env_api::HasTopologySnapshot,
+    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
 };
+use ic_system_test_driver::util::block_on;
 use ic_types::{Height, PrincipalId};
+use ic_utils::interfaces::ManagementCanister;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental_with_dummy_auth, nns_dapp_customizations,
     set_authorized_subnets,
 };
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
+use std::time::Duration;
 
-/// dm1-dmz datacenter and network constants
-const DM1_DMZ_DC: &str = "dm1-dmz";
+/// dm1-dmz network constants, used to validate and configure IC_GW_IPV4.
 const DM1_DMZ_NETWORK: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 224);
 const DM1_DMZ_PREFIX: u8 = 28;
 const DM1_DMZ_GATEWAY: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 238);
+
+/// Cycles to fund the demo application canister with. 300T cycles.
+const DEMO_CANISTER_CYCLES: u128 = 300_000_000_000_000;
+
+/// Cycles to fund the whale application canister with. 100_000T (100 quadrillion) cycles.
+const WHALE_CANISTER_CYCLES: u128 = 100_000_000_000_000_000;
+
+/// Cycles to fund the proxy application canister with. 300T cycles.
+const PROXY_CANISTER_CYCLES: u128 = 300_000_000_000_000;
+
+/// Unclaimed ids reserved after the three above, so that a consumer can pin a new
+/// canister id without changing this testnet and redeploying it first. Raising this
+/// is safe — the new ids come after the existing ones; lowering it retires ids from
+/// the end, which is only safe if nothing pins them.
+const SPARE_CANISTERS: u8 = 5;
+
+/// Cycles to fund each spare application canister with. 300T cycles, as for the
+/// demo canister: enough to install into and exercise, and free to mint here.
+const SPARE_CANISTER_CYCLES: u128 = 300_000_000_000_000;
 
 /// Node providers used in this testnet. Each data center is owned by exactly
 /// one node provider (1 node provider per DC). Providers can own multiple DCs
@@ -78,9 +128,6 @@ enum NodeProvider {
     // Required because of DFINITY-capitalization-check pre-commit
     #[allow(clippy::upper_case_acronyms)]
     DFINITY,
-    Alusion,
-    OneSixtyTwoDigitalCapital,
-    DecentralizedEntitiesFoundation,
 }
 
 impl NodeProvider {
@@ -91,9 +138,6 @@ impl NodeProvider {
         // the principals don't overlap.
         match self {
             NodeProvider::DFINITY => PrincipalId::new_user_test_id(3000),
-            NodeProvider::Alusion => PrincipalId::new_user_test_id(3001),
-            NodeProvider::OneSixtyTwoDigitalCapital => PrincipalId::new_user_test_id(3002),
-            NodeProvider::DecentralizedEntitiesFoundation => PrincipalId::new_user_test_id(3003),
         }
     }
 }
@@ -109,275 +153,227 @@ struct DcConfig {
     node_provider: NodeProvider,
 }
 
+/// 20 datacenter regions distributed across 4 cloud providers (AWS, Azure,
+/// GCP, Hetzner) with 5 regions each, spread across the globe. The `id` is
+/// the cloud provider's region code, and lat/long are taken from the public
+/// location of the region (or the city the region is named after).
 const DATA_CENTERS: &[DcConfig] = &[
+    // -------- AWS (5) --------
     DcConfig {
-        id: "Fremont",
-        region: "North America,US,California",
-        owner: "Hurricane Electric",
-        latitude: 37.549,
-        longitude: -121.989,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Brussels",
-        region: "Europe,BE,Brussels Capital",
-        owner: "Digital Realty",
-        latitude: 50.839,
-        longitude: 4.348,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "HongKong 1",
-        region: "Asia,HK,HongKong",
-        owner: "Unicom",
-        latitude: 22.284,
-        longitude: 114.269,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Sterling",
+        id: "aws-us-east-1",
         region: "North America,US,Virginia",
-        owner: "CyrusOne",
-        latitude: 39.004,
-        longitude: -77.408,
+        owner: "Amazon Web Services",
+        latitude: 38.945,
+        longitude: -77.448,
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Tokyo",
-        region: "Asia,JP,Tokyo",
-        owner: "Equinix",
-        latitude: 35.682,
-        longitude: 139.692,
+        id: "aws-us-west-2",
+        region: "North America,US,Oregon",
+        owner: "Amazon Web Services",
+        latitude: 45.871,
+        longitude: -119.688,
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "London",
-        region: "Europe,GB,London",
-        owner: "Telehouse",
-        latitude: 51.508,
-        longitude: -0.076,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Frankfurt",
-        region: "Europe,DE,Hessen",
-        owner: "Interxion",
-        latitude: 50.110,
-        longitude: 8.682,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Singapore",
-        region: "Asia,SG,Singapore",
-        owner: "Equinix",
-        latitude: 1.290,
-        longitude: 103.851,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Sao Paulo",
+        id: "aws-sa-east-1",
         region: "South America,BR,Sao Paulo",
-        owner: "Ascenty",
+        owner: "Amazon Web Services",
         latitude: -23.550,
         longitude: -46.633,
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Sydney",
-        region: "Oceania,AU,New South Wales",
-        owner: "Equinix",
-        latitude: -33.868,
-        longitude: 151.207,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Toronto",
-        region: "North America,CA,Ontario",
-        owner: "eStruxture",
-        latitude: 43.651,
-        longitude: -79.347,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Mumbai",
-        region: "Asia,IN,Maharashtra",
-        owner: "Nxtra",
-        latitude: 19.076,
-        longitude: 72.878,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Seoul",
-        region: "Asia,KR,Seoul",
-        owner: "KINX",
-        latitude: 37.566,
-        longitude: 126.978,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Amsterdam",
-        region: "Europe,NL,North Holland",
-        owner: "Equinix",
-        latitude: 52.370,
-        longitude: 4.895,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Paris",
-        region: "Europe,FR,Ile-de-France",
-        owner: "Interxion",
-        latitude: 48.864,
-        longitude: 2.349,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Stockholm",
-        region: "Europe,SE,Stockholm",
-        owner: "Interxion",
-        latitude: 59.330,
-        longitude: 18.069,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Zurich",
-        region: "Europe,CH,Zurich",
-        owner: "Green",
-        latitude: 47.376,
-        longitude: 8.540,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Dublin",
+        id: "aws-eu-west-1",
         region: "Europe,IE,Dublin",
-        owner: "Equinix",
+        owner: "Amazon Web Services",
         latitude: 53.350,
         longitude: -6.260,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Chicago",
-        region: "North America,US,Illinois",
-        owner: "Equinix",
-        latitude: 41.878,
-        longitude: -87.630,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        id: "aws-ap-northeast-1",
+        region: "Asia,JP,Tokyo",
+        owner: "Amazon Web Services",
+        latitude: 35.682,
+        longitude: 139.692,
+        node_provider: NodeProvider::DFINITY,
+    },
+    // -------- Azure (5) --------
+    DcConfig {
+        id: "azure-eastus",
+        region: "North America,US,Virginia",
+        owner: "Microsoft Azure",
+        latitude: 37.371,
+        longitude: -79.819,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Dallas",
-        region: "North America,US,Texas",
-        owner: "DataBank",
-        latitude: 32.777,
-        longitude: -96.797,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        id: "azure-westus2",
+        region: "North America,US,Washington",
+        owner: "Microsoft Azure",
+        latitude: 47.233,
+        longitude: -119.852,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Los Angeles",
-        region: "North America,US,California",
-        owner: "CoreSite",
-        latitude: 34.052,
-        longitude: -118.244,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        id: "azure-westeurope",
+        region: "Europe,NL,Noord-Holland",
+        owner: "Microsoft Azure",
+        latitude: 52.374,
+        longitude: 4.890,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Miami",
-        region: "North America,US,Florida",
-        owner: "Equinix",
-        latitude: 25.762,
-        longitude: -80.192,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        id: "azure-southeastasia",
+        region: "Asia,SG,Singapore",
+        owner: "Microsoft Azure",
+        latitude: 1.352,
+        longitude: 103.820,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Bogota",
-        region: "South America,CO,Bogota",
-        owner: "Equinix",
-        latitude: 4.711,
-        longitude: -74.072,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        id: "azure-australiaeast",
+        region: "Oceania,AU,New South Wales",
+        owner: "Microsoft Azure",
+        latitude: -33.868,
+        longitude: 151.207,
+        node_provider: NodeProvider::DFINITY,
+    },
+    // -------- GCP (5) --------
+    DcConfig {
+        id: "gcp-us-central1",
+        region: "North America,US,Iowa",
+        owner: "Google Cloud Platform",
+        latitude: 41.260,
+        longitude: -95.860,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Cape Town",
-        region: "Africa,ZA,Western Cape",
-        owner: "Teraco",
-        latitude: -33.925,
-        longitude: 18.424,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        id: "gcp-us-east4",
+        region: "North America,US,Virginia",
+        owner: "Google Cloud Platform",
+        latitude: 39.029,
+        longitude: -77.490,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Nairobi",
-        region: "Africa,KE,Nairobi",
-        owner: "PAIX",
-        latitude: -1.286,
-        longitude: 36.817,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "gcp-europe-west3",
+        region: "Europe,DE,Hessen",
+        owner: "Google Cloud Platform",
+        latitude: 50.110,
+        longitude: 8.682,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Warsaw",
-        region: "Europe,PL,Masovia",
-        owner: "Equinix",
-        latitude: 52.230,
-        longitude: 21.012,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "gcp-asia-southeast1",
+        region: "Asia,SG,Singapore",
+        owner: "Google Cloud Platform",
+        latitude: 1.352,
+        longitude: 103.820,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Madrid",
-        region: "Europe,ES,Madrid",
-        owner: "Interxion",
-        latitude: 40.417,
-        longitude: -3.704,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "gcp-southamerica-east1",
+        region: "South America,BR,Sao Paulo",
+        owner: "Google Cloud Platform",
+        latitude: -23.550,
+        longitude: -46.633,
+        node_provider: NodeProvider::DFINITY,
+    },
+    // -------- Hetzner (5) --------
+    DcConfig {
+        id: "hetzner-fsn1",
+        region: "Europe,DE,Hessen",
+        owner: "Hetzner Online",
+        latitude: 50.554,
+        longitude: 9.681,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Milan",
-        region: "Europe,IT,Lombardy",
-        owner: "Equinix",
-        latitude: 45.464,
-        longitude: 9.190,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "hetzner-nbg1",
+        region: "Europe,DE,Bayern",
+        owner: "Hetzner Online",
+        latitude: 49.452,
+        longitude: 11.077,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Osaka",
-        region: "Asia,JP,Osaka",
-        owner: "Equinix",
-        latitude: 34.694,
-        longitude: 135.502,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "hetzner-hel1",
+        region: "Europe,FI,Uusimaa",
+        owner: "Hetzner Online",
+        latitude: 60.169,
+        longitude: 24.938,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Jakarta",
-        region: "Asia,ID,Jakarta",
-        owner: "DCI",
-        latitude: -6.175,
-        longitude: 106.845,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "hetzner-ash",
+        region: "North America,US,Virginia",
+        owner: "Hetzner Online",
+        latitude: 39.044,
+        longitude: -77.487,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "hetzner-hil",
+        region: "North America,US,Oregon",
+        owner: "Hetzner Online",
+        latitude: 45.523,
+        longitude: -122.989,
+        node_provider: NodeProvider::DFINITY,
     },
 ];
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        // Booting 23 VMs from a mainnet GuestOS image and installing the mainnet
+        // NNS does not fit the driver's default 10 minute budget, which
+        // --keepalive does not lift: it is the per-test timeout around setup.
+        // Transferring the images to another datacenter makes it slower still.
+        .with_timeout_per_test(Duration::from_secs(90 * 60))
         .execute_from_args()?;
     Ok(())
 }
 
 pub fn setup(env: TestEnv) {
-    let dm1_dmz_features = vec![HostFeature::DC(DM1_DMZ_DC.to_string()), HostFeature::DMZ];
+    // Every VM of this testnet asks for a DMZ host, because Farm marks the "dmz"
+    // feature mandatory on those hosts: a VM without it never lands there. That
+    // feature alone does not buy a publicly routed IPv4 though — of the DMZ
+    // datacenters only dm1-dmz has a public IPv4 network, so what actually makes
+    // IC_GW_IPV4 attachable is pinning the group to that DC (see the DC note at
+    // the top of this file). `InternetComputer::with_required_host_features`
+    // covers the API boundary nodes but is not inherited by `add_subnet` or
+    // `with_unassigned_node`, so the subnets and the unassigned nodes ask
+    // individually.
+    let dmz = vec![HostFeature::DMZ];
 
     let mut ic = InternetComputer::new()
-        .with_required_host_features(dm1_dmz_features.clone())
+        .with_required_host_features(dmz.clone())
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_required_host_features(dmz.clone())
                 .add_nodes(1)
                 // To speed up subnet creation
                 .with_dkg_interval_length(Height::from(10)),
+        )
+        // A small 1-node Application subnet, used to host a demo canister.
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_required_host_features(dmz.clone())
+                .add_nodes(1)
+                .with_dkg_interval_length(Height::from(10)),
         );
 
-    // Build unassigned nodes distributed across the 30 datacenters.
-    // Each datacenter gets its own node operator. The total number of unassigned
-    // nodes defaults to 20 and can be overridden via the NUM_UNASSIGNED_NODES
-    // env var. Nodes are distributed round-robin across DATA_CENTERS in order:
-    // node index i is placed in DC (i % NUM_DCS). This means with the default
-    // of 20 nodes the first 20 DCs each get 1 node, and with 60 nodes each DC
-    // gets 2 nodes.
+    // Build unassigned nodes distributed across the 20 datacenters (5 each in
+    // AWS, Azure, GCP and Hetzner). Each datacenter gets its own node operator.
+    // The total number of unassigned nodes defaults to 20 and can be overridden
+    // via the NUM_UNASSIGNED_NODES env var. Nodes are distributed round-robin
+    // across DATA_CENTERS in order: node index i is placed in DC
+    // (i % NUM_DCS). With the default of 20 nodes each of the 20 DCs gets
+    // exactly one node; with 60 nodes each DC would get 3 nodes; if the
+    // count is not a multiple of NUM_DCS the leading DCs receive one extra
+    // node each.
     //
     // Reward types are assigned in a circular rotation across all nodes globally:
     // node index 0 -> type4.1, 1 -> type4.2, 2 -> type4.3, 3 -> type4.1, ...
@@ -448,7 +444,8 @@ pub fn setup(env: TestEnv) {
             ic = ic.with_unassigned_node(
                 Node::new()
                     .with_node_operator_principal_id(operator_principal)
-                    .with_node_reward_type(*reward_type),
+                    .with_node_reward_type(*reward_type)
+                    .with_required_host_features(dmz.clone()),
             );
         }
     }
@@ -463,9 +460,11 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         nns_dapp_customizations(),
     );
-    // deploy ic-gateway on dm1-dmz with static IPv4
-    let mut ic_gateway_vm =
-        IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(dm1_dmz_features);
+    // Given IC_GW_IPV4 the ic-gateway gets a static, publicly routed IPv4
+    // address out of the dm1-dmz network, which Farm publishes as the testnet's
+    // A record. Without it the testnet still runs on DMZ hosts but is reachable
+    // over IPv6 only, which in practice excludes CI runners and most laptops.
+    let mut ic_gateway_vm = IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(dmz);
     if let Ok(ic_gw_ipv4) = std::env::var("IC_GW_IPV4") {
         let ip: Ipv4Addr = ic_gw_ipv4
             .parse()
@@ -490,4 +489,80 @@ pub fn setup(env: TestEnv) {
 
     // install II, NNS dapp, and Subnet Rental Canister
     install_ii_nns_dapp_and_subnet_rental_with_dummy_auth(&env, &ic_gateway_url, None);
+
+    // Empty, funded canisters created up front so that consumers of this testnet
+    // can pin their canister ids. Application-subnet ids are handed out in
+    // allocation order from the subnet's range, so creating them here, before
+    // anything else can allocate, is what makes those ids survive a
+    // redeployment of the testnet. Consumers install into them, as one of the two
+    // controllers they are created with (see `create_empty_canister_on_app_subnet`).
+    //
+    // ORDER IS PART OF THE CONTRACT: each entry claims the next id, so
+    // inserting, removing or reordering one shifts every id after it. Append
+    // only, and expect whoever pins the ids to have to update them otherwise.
+    //
+    // The ids are the Application subnet range from index 1048576 up, so they are
+    // the same after every redeployment:
+    //
+    //   demo   -> 5v3p4-iyaaa-aaaaa-qaaaa-cai  control-panel's frontend
+    //   whale  -> 5s2ji-faaaa-aaaaa-qaaaq-cai  control-panel's engine canister
+    //   proxy  -> 53zcu-tiaaa-aaaaa-qaaba-cai  control-panel's canister_info proxy
+    //   spare1 -> 54yea-6qaaa-aaaaa-qaabq-cai  unclaimed
+    //   spare2 -> 5j7vn-7yaaa-aaaaa-qaaca-cai  unclaimed
+    //   spare3 -> 5o6tz-saaaa-aaaaa-qaacq-cai  unclaimed
+    //   spare4 -> 5h5yf-eiaaa-aaaaa-qaada-cai  unclaimed
+    //   spare5 -> 5a46r-jqaaa-aaaaa-qaadq-cai  unclaimed
+    //
+    // The spares exist so a consumer can pin a new id without a change here and a
+    // testnet redeployment first. Claiming one means renaming it above, not moving
+    // it. Being empty they cost only their cycles, which the provisional API mints.
+    create_empty_canister_on_app_subnet(&env, DEMO_CANISTER_CYCLES, "demo");
+    create_empty_canister_on_app_subnet(&env, WHALE_CANISTER_CYCLES, "whale");
+    create_empty_canister_on_app_subnet(&env, PROXY_CANISTER_CYCLES, "proxy");
+    for i in 1..=SPARE_CANISTERS {
+        create_empty_canister_on_app_subnet(&env, SPARE_CANISTER_CYCLES, &format!("spare{i}"));
+    }
+}
+
+/// Creates an empty canister (no wasm installed) on the (single) Application
+/// subnet, funds it with `cycles` via the provisional API, and sets its
+/// controllers to `TEST_NEURON_1_OWNER_PRINCIPAL` and the anonymous principal.
+fn create_empty_canister_on_app_subnet(env: &TestEnv, cycles: u128, label: &str) {
+    let topology = env.topology_snapshot();
+    let app_subnet = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .expect("no Application subnet found in topology");
+    let app_node = app_subnet
+        .nodes()
+        .next()
+        .expect("Application subnet has no nodes");
+    let effective_canister_id = app_node.effective_canister_id();
+
+    let test_neuron_principal = Principal::from(*TEST_NEURON_1_OWNER_PRINCIPAL);
+    let anonymous_principal = Principal::anonymous();
+
+    let canister_id = block_on(async {
+        let agent = app_node.build_default_agent_async().await;
+        let mgr = ManagementCanister::create(&agent);
+        let (canister_id,) = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(Some(cycles))
+            .with_effective_canister_id(effective_canister_id)
+            .with_controller(test_neuron_principal)
+            .with_controller(anonymous_principal)
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("failed to create {label} canister: {err}"))
+            .unwrap();
+        canister_id
+    });
+
+    let log = env.logger();
+    slog::info!(
+        log,
+        "Created empty {label} canister {canister_id} on Application subnet with {cycles} cycles; \
+         controllers: TEST_NEURON_1_OWNER_PRINCIPAL ({}) and anonymous",
+        *TEST_NEURON_1_OWNER_PRINCIPAL
+    );
 }

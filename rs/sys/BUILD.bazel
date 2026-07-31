@@ -37,6 +37,7 @@ rust_test(
     crate = ":sys",
     deps = [
         # Keep sorted.
+        "//rs/test_utilities/privileges",
         "@crate_index//:assert_matches",
         "@crate_index//:tempfile",
     ],

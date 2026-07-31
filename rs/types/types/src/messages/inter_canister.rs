@@ -12,8 +12,8 @@ use ic_management_canister_types_private::{
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -155,10 +155,13 @@ impl Request {
             Ok(Method::StartCanister)
             | Ok(Method::CanisterStatus)
             | Ok(Method::DeleteCanister)
-            | Ok(Method::UninstallCode)
             | Ok(Method::DepositCycles)
             | Ok(Method::StopCanister) => match CanisterIdRecord::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::UninstallCode) => match UninstallCodeArgs::decode(&self.method_payload) {
+                Ok(args) => Some(args.get_canister_id()),
                 Err(_) => None,
             },
             Ok(Method::CanisterInfo) => match CanisterInfoRequest::decode(&self.method_payload) {
@@ -263,7 +266,8 @@ impl Request {
                     Err(_) => None,
                 }
             }
-            Ok(Method::CreateCanister)
+            Ok(Method::ListCanisters)
+            | Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
             | Ok(Method::FlexibleHttpRequest)

@@ -1,10 +1,10 @@
 # Strip debug_info off every target for determinism
 # (https://github.com/ziglang/zig/issues/23821, https://github.com/ziglang/zig/issues/23823).
 diff --git a/MODULE.bazel b/MODULE.bazel
-index cfca164..9f258cc 100644
+index 143035b..d0bbc08 100644
 --- a/MODULE.bazel
 +++ b/MODULE.bazel
-@@ -60,3 +60,21 @@ register_toolchains(
+@@ -61,3 +61,21 @@ register_toolchains(
      "@zig_sdk//toolchain:zig",
      dev_dependency = True,
  )
@@ -27,18 +27,18 @@ index cfca164..9f258cc 100644
 +    path = "/usr/bin",
 +)
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
-index b90b93b..88978ee 100644
+index 602a42d..6e58bd4 100644
 --- a/toolchain/defs.bzl
 +++ b/toolchain/defs.bzl
-@@ -320,6 +320,7 @@ def declare_files(os):
+@@ -331,6 +331,7 @@ def declare_files(os):
                  ":zig",
                  ":{}_includes".format(target_config.zigtarget),
                  cxx_tool_label,
 +                "@strip//:strip_bin",
              ],
          )
-
-@@ -329,6 +330,7 @@ def declare_files(os):
+ 
+@@ -340,6 +341,7 @@ def declare_files(os):
                  ":zig",
                  ":{}_includes".format(target_config.zigtarget),
                  cxx_tool_label,
@@ -47,7 +47,7 @@ index b90b93b..88978ee 100644
              ] + native.glob([
                  "lib/libc/{}/**".format(target_config.libc),
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index 5584f44..42f84d5 100644
+index 172b518..486cbda 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
 @@ -132,7 +132,7 @@ pub fn main() u8 {
@@ -59,10 +59,10 @@ index 5584f44..42f84d5 100644
          },
      }
  }
-@@ -152,13 +152,53 @@ fn spawnWindows(arena: mem.Allocator, params: ExecParams) u8 {
+@@ -152,13 +152,59 @@ fn spawnWindows(arena: mem.Allocator, params: ExecParams) u8 {
      }
  }
-
+ 
 -fn execUnix(arena: mem.Allocator, params: ExecParams) u8 {
 -    const err = process.execve(arena, params.args.items, &params.env);
 -    std.debug.print(
@@ -71,10 +71,16 @@ index 5584f44..42f84d5 100644
 -    );
 -    return 1;
 +fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
-+    // Build a strip command
++    // Build a strip command. Use an absolute path: this wrapper also runs at
++    // rustdoc doc-test time where the environment is cleared (no PATH), so a
++    // bare "strip" would fail to resolve with error.FileNotFound.
++    const strip_bin = for ([_][]const u8{ "/usr/bin/strip", "/bin/strip" }) |p| {
++        std.fs.accessAbsolute(p, .{}) catch continue;
++        break p;
++    } else return fatal("strip binary not found (checked /usr/bin/strip and /bin/strip)\n", .{});
 +    const strip_cmd = blk: {
 +        var list = ArrayListUnmanaged([]const u8){};
-+        list.appendSlice(arena, &[_][]const u8{ "strip", "-S" }) catch |err| {
++        list.appendSlice(arena, &[_][]const u8{ strip_bin, "-S" }) catch |err| {
 +            return fatal("error building strip cmd: {s}\n", .{@errorName(err)});
 +        };
 +
@@ -118,5 +124,5 @@ index 5584f44..42f84d5 100644
 +
 +    return code;
  }
-
+ 
  // argv_it is an object that has such method:

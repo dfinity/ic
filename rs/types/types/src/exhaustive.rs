@@ -1,6 +1,7 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::artifact::IngressMessageId;
+use crate::backwards_compatibility::BackwardsCompatible;
 use crate::batch::ChainKeyAgreement;
 use crate::canister_http::CanisterHttpResponseSignature;
 use crate::consensus::dkg::RemoteDkgAttempts;
@@ -232,6 +233,18 @@ impl ExhaustiveSet for bool {
 impl ExhaustiveSet for String {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
         vec!["0123abcd!@#$.,;()[]<>".to_string(), "".to_string()]
+    }
+}
+
+impl<T: Clone + Default> ExhaustiveSet for BackwardsCompatible<T, false> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
+        vec![Self::empty()]
+    }
+}
+
+impl<T: Clone + ExhaustiveSet> ExhaustiveSet for BackwardsCompatible<T, true> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        T::exhaustive_set(rng).into_iter().map(Self::new).collect()
     }
 }
 
@@ -919,7 +932,6 @@ impl ExhaustiveSet for IDkgPayload {
         DerivedIDkgPayload::exhaustive_set(rng)
             .into_iter()
             .map(|payload| IDkgPayload {
-                empty_signature_agreements_flag: true,
                 available_pre_signatures: payload.available_pre_signatures,
                 pre_signatures_in_creation: payload.pre_signatures_in_creation,
                 uid_generator: payload.uid_generator,
@@ -1032,6 +1044,7 @@ impl HasId<NiDkgTargetId> for RemoteDkgAttempts {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
 impl HasId<NodeId> for CanisterHttpResponseSignature {}
+impl HasId<NodeId> for Cycles {}
 
 #[cfg(test)]
 mod tests {

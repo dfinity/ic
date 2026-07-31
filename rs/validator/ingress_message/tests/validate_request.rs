@@ -2175,6 +2175,166 @@ mod sender_info {
     }
 }
 
+mod delegation_permissions {
+    use super::*;
+    use ic_types::messages::DelegationPermissions;
+    use ic_validator_http_request_test_utils::DelegationChain;
+
+    #[test]
+    fn should_reject_update_call_when_delegation_restricts_to_queries() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
+            .build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::UpdateCallNotPermittedByDelegation)
+        );
+    }
+
+    #[test]
+    fn should_accept_query_and_read_state_when_delegation_restricts_to_queries() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
+            .build();
+
+        let query = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_eq!(verifier.validate_request(&query), Ok(()));
+
+        let read_state = HttpRequestBuilder::new_read_state()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+        assert_eq!(verifier.validate_request(&read_state), Ok(()));
+    }
+
+    #[test]
+    fn should_accept_update_call_when_delegation_permissions_are_all() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::All,
+            )
+            .build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_reject_update_call_when_any_delegation_in_chain_restricts_to_queries() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        // The restriction sits in the middle of the chain; subsequent
+        // unrestricted delegations must not lift it.
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
+            .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
+            .build();
+
+        let update = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_matches!(
+            verifier.validate_request(&update),
+            Err(RequestValidationError::UpdateCallNotPermittedByDelegation)
+        );
+
+        let query = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+        assert_eq!(verifier.validate_request(&query), Ok(()));
+    }
+
+    #[test]
+    fn should_apply_both_targets_and_permissions_restrictions_in_a_chain() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let requested_canister_id = CanisterId::from(42);
+        // A chain that restricts the targets in one delegation and the
+        // permissions in another: both restrictions must apply.
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_targets(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                vec![requested_canister_id, CanisterId::from(43)],
+            )
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
+            .build();
+
+        // Update call to an in-target canister: rejected by the queries-only
+        // restriction (the target is satisfied, so it is the permissions
+        // restriction firing, not the target one).
+        let update = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_matches!(
+            verifier.validate_request(&update),
+            Err(RequestValidationError::UpdateCallNotPermittedByDelegation)
+        );
+
+        // Query to an in-target canister: permitted (queries are allowed and
+        // the target matches).
+        let query_in_targets = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_eq!(verifier.validate_request(&query_in_targets), Ok(()));
+
+        // Query to an out-of-target canister: rejected by the targets
+        // restriction, which applies alongside the permissions restriction.
+        let query_out_of_targets = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(CanisterId::from(44).get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+        assert_matches!(
+            verifier.validate_request(&query_out_of_targets),
+            Err(RequestValidationError::CanisterNotInDelegationTargets(_))
+        );
+    }
+}
+
 fn default_verifier() -> IngressMessageVerifierBuilder {
     IngressMessageVerifier::builder().with_time_provider(TimeProvider::Constant(CURRENT_TIME))
 }

@@ -21,6 +21,12 @@ def _mainnet_icos_images_impl(repository_ctx):
 
     The setup-os image is downloaded as disk-img.tar.zst. Additionally, launch-measurements
     are written (as launch-measurements-guest.json) and a target `:guest-img` is generated.
+
+    For GuestOS repositories the GuestOS update image is additionally downloaded
+    (as guest-update-img.tar.zst) and exported. The local system-test backend
+    serves this update image from its own file server to the IC nodes, since
+    (unlike the Farm backend) it has no external network access to download it
+    from the CDN.
     """
 
     parts = list(repository_ctx.attr.parts)
@@ -36,12 +42,21 @@ def _mainnet_icos_images_impl(repository_ctx):
 
     git_commit_id = info["version"]
 
-    if repository_ctx.attr.dev:
-        url = icos_dev_image_download_url(git_commit_id, "setup-os", False)
-    else:
-        url = icos_image_download_url(git_commit_id, "setup-os", False)
+    url_fn = icos_dev_image_download_url if repository_ctx.attr.dev else icos_image_download_url
 
-    repository_ctx.download(url, "disk-img.tar.zst")  # download the disk image
+    # Pass the sha256 of each image so the download can be served from the local
+    # repository cache / Remote Asset API CAS instead of re-fetched from the CDN.
+    setupos_disk_img_hash = info["setupos_disk_img_hash_dev"] if repository_ctx.attr.dev else info["setupos_disk_img_hash"]
+
+    # download the disk image
+    repository_ctx.download(url_fn(git_commit_id, "setup-os", False), "disk-img.tar.zst", sha256 = setupos_disk_img_hash)
+
+    # For GuestOS repositories also download the GuestOS update image so the
+    # local system-test file server can serve it to the IC nodes.
+    is_guestos = parts[0] == "guestos"
+    if is_guestos:
+        update_img_hash = info["update_img_hash_dev"] if repository_ctx.attr.dev else info["update_img_hash"]
+        repository_ctx.download(url_fn(git_commit_id, "guest-os", True), "guest-update-img.tar.zst", sha256 = update_img_hash)
 
     if repository_ctx.attr.dev:
         json_measurements = json.encode(info["launch_measurements_dev"])
@@ -51,23 +66,38 @@ def _mainnet_icos_images_impl(repository_ctx):
     # write the measurements
     repository_ctx.file("launch-measurements-guest.json", content = json_measurements)
 
+    exported_files = ["disk-img.tar.zst", "launch-measurements-guest.json"]
+    if is_guestos:
+        exported_files.append("guest-update-img.tar.zst")
+
     BUILD = """\
 package(default_visibility = ["//visibility:public"])
-exports_files(["disk-img.tar.zst", "launch-measurements-guest.json"])
+exports_files({EXPORTED_FILES})
 
 genrule(
     name = "guest-img",
     srcs = ["disk-img.tar.zst"],
     outs = ["guest-img.tar.zst"],
-    tags = [ "manual" ],
+    # no-remote-exec because the setupOS image input is a multi gigabyte file
+    # which would then have to be copied to the remote worker.
+    tags = [ "manual", "no-remote-exec" ],
     cmd = \"""#!/bin/bash
         $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
     \""",
     target_compatible_with = ["@platforms//os:linux"],
     tools = ["@@//rs/ic_os/build_tools/partition_tools:extract-guestos"],
 )
-    """
+    """.format(EXPORTED_FILES = str(exported_files))
     repository_ctx.file("BUILD.bazel", content = BUILD)
+
+    # This repo is reproducible: the multi-GB image downloads are pinned by
+    # sha256 and everything else is derived from the watched revisions JSON and
+    # the rule attributes. Declaring this makes the repo eligible for Bazel 9's
+    # repo contents cache ({repository_cache}/contents), so the images are
+    # shared across output bases/workspaces (e.g. persisted CI runner caches)
+    # instead of being re-downloaded on every fetch. Without this return value
+    # the repo is never contents-cached.
+    return repository_ctx.repo_metadata(reproducible = True)
 
 mainnet_icos_images = repository_rule(
     implementation = _mainnet_icos_images_impl,

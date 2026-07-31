@@ -379,7 +379,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     // identifies the version of the replica after the recovery
     let upgrade_version = get_guestos_update_img_version();
-    let upgrade_image_url = get_guestos_update_img_url();
+    let upgrade_image_url = get_guestos_update_img_url(&env);
     let upgrade_image_hash = get_guestos_update_img_sha256();
     let guest_launch_measurements = get_guestos_update_launch_measurements();
     std::fs::write(

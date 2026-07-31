@@ -10,11 +10,7 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
-use ic_config::{
-    Config,
-    artifact_pool::ArtifactPoolConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus::consensus::batch_delivery::deliver_batches;
 use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
@@ -47,7 +43,6 @@ use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
     GetChunk, dechunkify_delta, dechunkify_get_value_response_content,
@@ -280,24 +275,15 @@ impl Player {
         }
 
         let registry_version = registry.get_latest_version();
-        let (subnet_type, subnet_security) = match registry
-            .get_subnet_record(subnet_id, registry_version)
-        {
+        let subnet_type = match registry.get_subnet_record(subnet_id, registry_version) {
             Ok(Some(record)) => {
-                let subnet_type =
-                    SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type");
-                let sev_enabled = record
-                    .features
-                    .map(SubnetFeatures::from)
-                    .unwrap_or_default()
-                    .sev_enabled;
-                (subnet_type, SubnetSecurity::from_sev_enabled(sev_enabled))
+                SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
             }
             err => panic!("Failed to read subnet record for {subnet_id:?} from registry: {err:?}"),
         };
 
         let metrics_registry = MetricsRegistry::new();
-        let subnet_config = SubnetConfig::new(subnet_type, subnet_security);
+        let subnet_config = SubnetConfig::new(subnet_type);
 
         let crypto = ic_crypto_for_verification_only::new(registry.clone());
         let crypto = Arc::new(crypto);
@@ -456,7 +442,7 @@ impl Player {
                         Some(printer) => printer(bytes),
                         _ => println!(
                             "Ingress id={} response={}",
-                            &msg.ingress.id(),
+                            msg.ingress.id(),
                             hex::encode(bytes)
                         ),
                     },
@@ -696,7 +682,7 @@ impl Player {
     /// Fetch registry records from the given `nns_url`, and update the local
     /// registry store with the new records.
     pub fn update_registry_local_store(&self) {
-        println!("RegistryLocalStore path: {:?}", &self.local_store_path);
+        println!("RegistryLocalStore path: {:?}", self.local_store_path);
         let latest_version = self.registry.get_latest_version();
         println!("RegistryLocalStore latest version: {latest_version}");
         let records = self
@@ -799,6 +785,7 @@ impl Player {
                 },
                 chain_key_data: Default::default(),
                 consensus_responses: Vec::new(),
+                canister_http_spent: Default::default(),
                 requires_full_state_hash: false,
             },
             // Use a fake randomness here since we don't have random tape for extra messages
@@ -839,6 +826,7 @@ impl Player {
                         batch_messages: BatchMessages::default(),
                         chain_key_data: Default::default(),
                         consensus_responses: Vec::new(),
+                        canister_http_spent: Default::default(),
                         requires_full_state_hash: !have_incomplete_msgs,
                     };
                     extra_batch.batch_number = message_routing.expected_batch_height();

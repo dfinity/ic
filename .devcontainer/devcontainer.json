@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:5a736731cd2b1495c90acc33f89ca13ddb48b1d5da59b31fc6235e2f6891ff2c",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:82bb8cbc8ba0788687ca2c4654bf381e4d6bda839ad2583c2e25dfae1bacb120",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -15,6 +15,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.cache/zig-cache ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
+  "postStartCommand": "/ic/ci/container/init.sh",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "USER": "${localEnv:USER}"
@@ -59,11 +60,6 @@
       "source": "${localEnv:HOME}/.local/share/fish",
       "target": "/home/ubuntu/.local/share/fish",
       "type": "bind"
-    },
-    {
-      "source": "/tmp/ict_testnets",
-      "target": "/tmp/ict_testnets",
-      "type": "bind"
     }
   ],
   "customizations": {
@@ -82,6 +78,18 @@
           "bazel-ic/": true,
           "bazel-out/": true,
           "targets/": true
+        },
+        // rust-analyzer runs `cargo` with RUSTUP_AUTO_INSTALL=0, so a freshly
+        // (re)built dev container that lacks the toolchain pinned in
+        // rust-toolchain.toml fails to load the workspace until it's installed
+        // by hand. Overriding it back to 1 lets rust-analyzer's own cargo
+        // invocation install the pinned toolchain on demand. extraEnv is
+        // applied after rust-analyzer sets the =0 default, so this wins.
+        "rust-analyzer.cargo.extraEnv": {
+          "RUSTUP_AUTO_INSTALL": "1"
+        },
+        "rust-analyzer.check.extraEnv": {
+          "RUSTUP_AUTO_INSTALL": "1"
         }
       }
     }

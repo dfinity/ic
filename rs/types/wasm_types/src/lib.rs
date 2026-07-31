@@ -136,6 +136,11 @@ impl CanisterModule {
         self.module_hash
     }
 
+    /// Returns the Sha256 hash of this Wasm module.
+    pub fn module_hash_ref(&self) -> &[u8; WASM_HASH_LENGTH] {
+        &self.module_hash
+    }
+
     /// Returns the loading status of the module storage.
     pub fn module_loading_status(&self) -> ModuleLoadingStatus {
         match &self.module {

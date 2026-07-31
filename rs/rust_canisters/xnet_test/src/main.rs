@@ -7,6 +7,7 @@
 //! ```
 use candid::{CandidType, Deserialize, Principal};
 use futures::future::select_all;
+use futures::poll;
 use ic_cdk::api::{canister_cycle_balance, canister_self, msg_caller, time};
 use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::{heartbeat, query, update};
@@ -16,6 +17,7 @@ use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::future::IntoFuture;
+use std::task::Poll;
 use std::time::Duration;
 use xnet_test::{Metrics, NetworkTopology, StartArgs};
 
@@ -228,10 +230,8 @@ async fn fanout() {
         }
     }
 
-    while !futures.is_empty() {
-        let (result, _, remaining_futures) = select_all(futures).await;
-        futures = remaining_futures;
-
+    // Records the outcome of a single call into the metrics.
+    fn record_result(result: Result<ic_cdk::call::Response, CallFailed>) {
         match result {
             Ok(response) => match response.candid::<Reply>() {
                 Ok(reply) => {
@@ -262,6 +262,33 @@ async fn fanout() {
                 METRICS.with(|m| m.borrow_mut().reject_responses += 1);
             }
         }
+    }
+
+    // Phase 1: issue every call (`ic0.call_perform`) in order.
+    //
+    // A `CallFuture` only performs the call when first polled. `poll!` polls
+    // exactly once without yielding, ensuring that the calls are enqueued in order.
+    // This must not be left to `select_all` below: `select_all` stops at the first
+    // ready future (e.g. a synchronous queue full failure) and `swap_remove`s it,
+    // reordering the not-yet-performed futures / calls.
+    let mut pending = Vec::with_capacity(futures.len());
+    for mut future in futures {
+        match poll!(&mut future) {
+            // Call was enqueued; await its response in phase 2.
+            Poll::Pending => pending.push(future),
+            // `call_perform` failed synchronously. Nothing was enqueued, record the
+            // outcome.
+            Poll::Ready(result) => record_result(result),
+        }
+    }
+
+    // Phase 2: await responses as they complete, recording per-call latencies.
+    // Calls were already issued, so any `swap_remove` reordering by `select_all` no
+    // longer has any effect on correctness.
+    while !pending.is_empty() {
+        let (result, _, remaining) = select_all(pending).await;
+        pending = remaining;
+        record_result(result);
     }
 }
 

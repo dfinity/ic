@@ -390,6 +390,7 @@ impl ResponseHelper {
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.cost_schedule,
+                true, // strict
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -434,7 +435,7 @@ impl ResponseHelper {
             &mut output,
             round_limits,
             round.time,
-            round.network_topology,
+            &round.network_topology,
             round.hypervisor.subnet_id(),
             round.hypervisor.metrics(),
             round.log,
@@ -472,37 +473,17 @@ impl ResponseHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        // The ingress induction debit can interfere with cycles changes that happened concurrently
-        // during the cleanup callback execution. If the balance of the canister is not enough to
-        // cover the debit + the amount of removed cycles during execution, the canister might end
-        // up with an incorrect balance. To avoid this, we check if the balance is enough to cover
-        // the debit + the removed cycles to ensure that the cycles change can be performed.
+        // Apply the state changes of the cleanup callback first, and only then
+        // charge the ingress induction cycles debit.
         //
-        // This allows the cleanup callback to always succeed at the expense of some ingress
-        // messages being inducted for free in this edge case. This is acceptable because the cleanup
-        // callback is expected to always run and allow the canister to perform important cleanup tasks,
-        // like releasing locks or undoing other state changes.
-        let ingress_induction_cycles_debit =
-            self.canister.system_state.ingress_induction_cycles_debit();
-        let removed_cycles = canister_state_changes
-            .system_state_modifications
-            .removed_cycles();
-        if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
-            self.canister
-                .system_state
-                .remove_charge_from_ingress_induction_cycles_debit(
-                    ingress_induction_cycles_debit - removed_cycles,
-                );
-        }
-        self.canister
-            .system_state
-            .apply_ingress_induction_cycles_debit(
-                self.canister.canister_id(),
-                round.cost_schedule,
-                round.log,
-                round.counters.charging_from_balance_error,
-            );
-
+        // The debit is charged using the saturating arithmetic of
+        // `apply_ingress_induction_cycles_debit`: if the remaining balance is
+        // smaller than the debit, only the available cycles are charged and the
+        // rest of the debit is dropped (some ingress messages end up inducted for
+        // free in this edge case). This allows the cleanup callback to always
+        // succeed, which is important because it is expected to always run and
+        // allow the canister to perform important cleanup tasks, like releasing
+        // locks or undoing other state changes.
         apply_canister_state_changes(
             canister_state_changes,
             self.canister.execution_state.as_mut().unwrap(),
@@ -510,7 +491,7 @@ impl ResponseHelper {
             &mut output,
             round_limits,
             round.time,
-            round.network_topology,
+            &round.network_topology,
             round.hypervisor.subnet_id(),
             round.hypervisor.metrics(),
             round.log,
@@ -520,6 +501,16 @@ impl ResponseHelper {
             is_composite_query(&original.call_origin),
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
+
+        self.canister
+            .system_state
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.cost_schedule,
+                false, // lenient: a cleanup callback may burn the balance below the debit
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         match output.wasm_result {
             Ok(_) => {
@@ -1065,7 +1056,7 @@ pub fn execute_response(
         func_ref,
         original.request_metadata.clone(),
         round_limits,
-        round.network_topology,
+        round.network_topology.clone(),
         original.subnet_cycles_config,
     );
 
@@ -1143,7 +1134,7 @@ fn execute_response_cleanup(
         func_ref,
         original.request_metadata.clone(),
         round_limits,
-        round.network_topology,
+        round.network_topology.clone(),
         original.subnet_cycles_config,
     );
     process_cleanup_result(

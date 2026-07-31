@@ -12,6 +12,6 @@ version.workspace = true
 bitcoin = { workspace = true }
 
 [dev-dependencies]
-csv = "1.1"
+csv = { workspace = true }
 rstest = { workspace = true }
 hex = { workspace = true }

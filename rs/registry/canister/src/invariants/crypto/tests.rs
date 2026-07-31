@@ -678,7 +678,7 @@ mod chain_key_enabled_subnet_lists {
 
     #[test]
     #[should_panic(
-        expected = "Missing required struct field: KeyConfig::pre_signatures_to_create_in_advance"
+        expected = "KeyConfig::pre_signatures_to_create_in_advance for key schnorr:Bip340Secp256k1:schnorr_key should be non-zero"
     )]
     fn should_fail_if_missing_pre_signatures_for_key_that_requires_pre_signatures() {
         let mut config = invariant_compliant_chain_key_config();
@@ -688,7 +688,7 @@ mod chain_key_enabled_subnet_lists {
 
     #[test]
     #[should_panic(
-        expected = "pre_signatures_to_create_in_advance for key ecdsa:Secp256k1:ecdsa_key of subnet ya35z-hhham-aaaaa-aaaap-yai must be non-zero"
+        expected = "KeyConfig::pre_signatures_to_create_in_advance for key ecdsa:Secp256k1:ecdsa_key should be non-zero"
     )]
     fn should_fail_if_pre_signatures_is_zero_for_key_that_requires_pre_signatures() {
         let mut config = invariant_compliant_chain_key_config();
@@ -709,14 +709,17 @@ mod chain_key_enabled_subnet_lists {
     }
 
     #[test]
-    fn should_succeed_if_pre_signatures_is_zero_for_key_that_does_not_require_pre_signatures() {
+    #[should_panic(
+        expected = "KeyConfig::pre_signatures_to_create_in_advance for key vetkd:Bls12_381_G2:vetkd_key should be None, but got Some(1)."
+    )]
+    fn should_fail_if_pre_signatures_is_set_for_key_that_does_not_require_pre_signatures() {
         let mut config = invariant_compliant_chain_key_config();
         let key_config = &mut config.key_configs[2];
         assert!(matches!(
             key_config.key_id.as_ref().unwrap().key_id,
             Some(master_public_key_id::KeyId::Vetkd(_))
         ),);
-        key_config.pre_signatures_to_create_in_advance = Some(0);
+        key_config.pre_signatures_to_create_in_advance = Some(1);
         check_chain_key_config_invariant(config);
     }
 

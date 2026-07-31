@@ -35,12 +35,13 @@ use crate::{
     registry_helper::RegistryHelper,
     utils::https_endpoint_to_url,
 };
-use http_body_util::{BodyExt, Full};
+use http_body_util::{BodyExt, Full, Limited};
 use hyper::{Method, Request, StatusCode, body::Bytes};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
+use ic_limits::MAX_MESSAGE_SIZE_BYTES;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
 use ic_sys::fs::write_protobuf_using_tmp_file;
@@ -113,6 +114,7 @@ pub(crate) struct CatchUpPackageProvider {
     node_id: NodeId,
     backoff: Duration,
     initial_backoff: Duration,
+    max_response_size_bytes: usize,
     local_cup_reader: LocalCUPReader,
 }
 
@@ -154,6 +156,7 @@ impl CatchUpPackageProvider {
             logger,
             backoff: initial_backoff,
             initial_backoff,
+            max_response_size_bytes: MAX_MESSAGE_SIZE_BYTES,
             local_cup_reader,
         }
     }
@@ -346,7 +349,10 @@ impl CatchUpPackageProvider {
             .map_err(|e| format!("Failed to query CUP endpoint at {url}: {e:?}"))?;
 
         let status = res.status();
-        let body_req = timeout(self.backoff, res.into_body().collect());
+        let body_req = timeout(
+            self.backoff,
+            Limited::new(res.into_body(), self.max_response_size_bytes).collect(),
+        );
 
         let bytes = match body_req.await {
             Ok(result) => {
@@ -419,7 +425,7 @@ impl CatchUpPackageProvider {
         );
         write_protobuf_using_tmp_file(&cup_file_path, cup_proto).map_err(|e| {
             OrchestratorError::IoError(
-                format!("Failed to serialize protobuf to disk: {:?}", &cup_file_path),
+                format!("Failed to serialize protobuf to disk: {:?}", cup_file_path),
                 e,
             )
         })?;
@@ -745,7 +751,7 @@ pub(crate) mod tests {
                 Ok(HandshakeSignatureValid::assertion())
             }
             fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-                rustls::crypto::ring::default_provider()
+                rustls::crypto::aws_lc_rs::default_provider()
                     .signature_verification_algorithms
                     .supported_schemes()
             }
@@ -829,6 +835,32 @@ pub(crate) mod tests {
 
         // Verify that the backoff was reset after a successful request
         assert_eq!(cup_provider.backoff, initial_backoff);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_catch_up_package_body_exceeds_size_limit() {
+        // The server responds with a full CUP body.
+        let server_addr =
+            start_server(TestService::SendBodyOrStall(Arc::new(Mutex::new(true)))).await;
+        let url = format!("https://{server_addr}");
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+
+        let mut cup_provider = make_cup_provider(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+        );
+        // Set a size limit far below the size of the CUP body the server sends, so that reading
+        // the body is aborted rather than buffered in full.
+        cup_provider.max_response_size_bytes = 4;
+
+        let err = cup_provider
+            .fetch_catch_up_package(&node_id, url, None)
+            .await
+            .expect_err("Expected an error when the CUP body exceeds the size limit");
+
+        assert!(err.contains("LengthLimitError"), "Unexpected error: {err}");
     }
 
     #[tokio::test]

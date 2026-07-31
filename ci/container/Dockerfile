@@ -44,8 +44,8 @@ RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 # Add motoko compiler
 # This is only used by Cargo; Bazel pulls its own via rules_motoko
 # NOTE: keep version in line with rules_motoko
-ARG motoko_version=0.16.3
-RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+ARG motoko_version=1.11.0
+RUN curl -fsSL https://github.com/caffeinelabs/motoko/releases/download/${motoko_version}/motoko-Linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 # Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
@@ -68,6 +68,9 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     && rm -rf /opt/rustup
 
 WORKDIR /
+# Bake the entrypoint into the image so it works without the repo bind-mounted.
+COPY ./ci/container/init.sh /ci/container/init.sh
+ENTRYPOINT ["/ci/container/init.sh"]
 CMD ["/bin/bash"]
 
 FROM base as build

@@ -175,7 +175,7 @@ pub struct InternetIdentityInit {
     pub related_origins: Option<Vec<String>>,
     pub new_flow_origins: Option<Vec<String>>,
     pub openid_configs: Option<Vec<OpenIdConfig>>,
-    pub sso_discoverable_domains: Option<Vec<String>>,
+    pub sso_allow_insecure_discovery: Option<bool>,
     pub sso_credential_migration: Option<Vec<SsoCredentialMigrationEntry>>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub enable_dapps_explorer: Option<bool>,

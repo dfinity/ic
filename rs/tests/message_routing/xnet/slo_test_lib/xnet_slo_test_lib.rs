@@ -135,6 +135,11 @@ impl Config {
         config
     }
 
+    pub fn with_send_rate_threshold(mut self, send_rate_threshold: f64) -> Self {
+        self.send_rate_threshold = send_rate_threshold;
+        self
+    }
+
     pub fn with_payload_bytes(self, payload_size_bytes: u64) -> Self {
         let mut config = self.clone();
         config.request_payload_size_bytes = payload_size_bytes;
@@ -439,8 +444,11 @@ pub fn check_success(
             &actual,
         );
 
-        if responses_received != 0 {
-            let avg_latency_millis = m.latency_distribution.sum_millis() / responses_received;
+        if let Some(avg_latency_millis) = m
+            .latency_distribution
+            .sum_millis()
+            .checked_div(responses_received)
+        {
             expect(
                 avg_latency_millis <= config.targeted_latency_seconds as usize * 1000,
                 i,

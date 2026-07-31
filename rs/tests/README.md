@@ -38,16 +38,6 @@ To launch a test target (`my_test_target` in this case) within the docker run:
 devenv-container$ bazel test --test_output=streamed //rs/tests:my_test_target
 ```
 
-In the docker container, you can also use `ict` to start tests.
-
-```
-ict test //rs/tests:my_test_target
-```
-
-At some point in the future, ict should be the only thing a user needs to know.
-I.e., she can explore all options by interacting with ict and there is no need
-for a README here no more. ;-)
-
 # How to write a system test
 
 Before progressing, it is worth understanding how system tests work

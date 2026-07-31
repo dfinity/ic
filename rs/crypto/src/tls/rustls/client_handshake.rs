@@ -11,7 +11,7 @@ use ic_types::{NodeId, RegistryVersion};
 use rustls::{
     ClientConfig, SignatureScheme,
     client::ResolvesClientCert,
-    crypto::ring::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
+    crypto::aws_lc_rs::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
     sign::CertifiedKey,
     version::TLS13,
 };
@@ -34,11 +34,11 @@ pub fn client_config(
         registry_client,
         registry_version,
     );
-    let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
-    ring_crypto_provider.cipher_suites = vec![TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256];
+    let mut crypto_provider = rustls::crypto::aws_lc_rs::default_provider();
+    crypto_provider.cipher_suites = vec![TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256];
 
     Ok(
-        ClientConfig::builder_with_provider(Arc::new(ring_crypto_provider))
+        ClientConfig::builder_with_provider(Arc::new(crypto_provider))
             .with_protocol_versions(&[&TLS13])
             .expect("Valid rustls client config.")
             .dangerous()

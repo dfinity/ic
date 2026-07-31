@@ -663,7 +663,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let subnet_args = AppSubnetRecoveryArgs {
         subnet_id: app_subnet_id,
         upgrade_version: maybe_upgrade_version.clone(),
-        upgrade_image_url: Some(get_guestos_update_img_url()),
+        upgrade_image_url: Some(get_guestos_update_img_url(&env)),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),

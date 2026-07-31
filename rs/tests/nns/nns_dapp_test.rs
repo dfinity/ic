@@ -65,6 +65,16 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     let dapp_url = format!("https://{canister_id}.{ic_gateway_domain}");
     let log = env.logger();
+
+    // On the Local backend the gateway domain (and its per-canister subdomains)
+    // is not resolvable via DNS and is served with a self-signed certificate, so
+    // resolve the requested host directly to the gateway VM and accept the
+    // self-signed cert.
+    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    let parsed_dapp_url = Url::parse(&dapp_url).unwrap();
+    let resolve_override = ic_gateway.resolve_override_for_url(&parsed_dapp_url);
+    let accept_invalid_certs = ic_gateway.uses_self_signed_cert();
+
     block_on(async {
         ic_system_test_driver::retry_with_msg_async!(
             format!("get html from {}", dapp_url),
@@ -72,10 +82,15 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
             secs(600),
             secs(30),
             async || {
-                let client = reqwest::Client::builder()
+                let mut builder = reqwest::Client::builder()
                     .use_rustls_tls()
                     .https_only(true)
-                    .http1_only()
+                    .http1_only();
+                if let Some((domain, addr)) = &resolve_override {
+                    builder = builder.resolve(domain, *addr);
+                }
+                let client = builder
+                    .danger_accept_invalid_certs(accept_invalid_certs)
                     .build()?;
 
                 let resp = client

@@ -312,6 +312,24 @@ pub const SAMPLE_CONFIG: &str = r#"
         max_simultaneous_connections_per_ip_address: 0,
     },
 
+    cloud_engine_firewall: {
+        config_file: "/path/to/nftables/config",
+        file_template: "",
+        ipv4_tcp_rule_template: "",
+        ipv4_udp_rule_template: "",
+        ipv6_tcp_rule_template: "",
+        ipv6_udp_rule_template: "",
+        ipv4_user_output_rule_template: "",
+        ipv6_user_output_rule_template: "",
+        default_rules: [],
+        whitelisted_nodes_tcp_ports_whitelist: [],
+        whitelisted_nodes_udp_ports_whitelist: [],
+        all_nodes_tcp_ports_whitelist: [],
+        all_nodes_udp_ports_whitelist: [],
+        ports_for_http_adapter_blacklist: [],
+        max_simultaneous_connections_per_ip_address: 0,
+    },
+
     boundary_node_firewall: {
         config_file: "/path/to/nftables/config",
         file_template: "",

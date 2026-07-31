@@ -290,10 +290,19 @@ fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantC
         for key_config in chain_key_config.key_configs {
             let key_id = key_config.key_id.clone();
             let pre_sigs = key_config.pre_signatures_to_create_in_advance;
-            if key_id.requires_pre_signatures() && (pre_sigs.is_none() || pre_sigs == Some(0)) {
+            let requires_pre_signatures = key_id.requires_pre_signatures();
+            if requires_pre_signatures && (pre_sigs.is_none() || pre_sigs == Some(0)) {
                 return Err(InvariantCheckError {
                     msg: format!(
                         "pre_signatures_to_create_in_advance for key {key_id} of subnet {subnet_id:} must be non-zero",
+                    ),
+                    source: None,
+                });
+            }
+            if !requires_pre_signatures && pre_sigs.is_some() {
+                return Err(InvariantCheckError {
+                    msg: format!(
+                        "pre_signatures_to_create_in_advance for key {key_id} of subnet {subnet_id:} must be None",
                     ),
                     source: None,
                 });

@@ -1,6 +1,6 @@
 use candid::{Decode, Encode};
 use canister_test::Project;
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, ingress::WasmResult};
@@ -8,7 +8,7 @@ use ic_types::{CanisterId, ingress::WasmResult};
 fn state_machine_for_test() -> StateMachine {
     // Setting up the state machine with a lower instruction limit to make the tests run faster.
     let mut hypervisor_config = ic_config::execution_environment::Config::default();
-    let mut subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(SubnetType::System);
     let instruction_divisor = 10;
     subnet_config.scheduler_config.max_instructions_per_round /= instruction_divisor;
     subnet_config.scheduler_config.max_instructions_per_message /= instruction_divisor;

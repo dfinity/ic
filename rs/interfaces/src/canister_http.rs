@@ -1,6 +1,5 @@
 //! Canister Http related public interfaces.
 use crate::validation::ValidationError;
-use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     NodeId,
@@ -50,18 +49,24 @@ pub enum InvalidCanisterHttpPayloadReason {
     UnknownCallbackId(CallbackId),
     /// A CallbackId was included as a timeout, however the Request has not timed out at all
     NotTimedOut(CallbackId),
-    /// The registry version of a response does not match the validation context
-    RegistryVersionMismatch {
-        expected: RegistryVersion,
-        received: RegistryVersion,
-    },
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
-    /// A payment receipt claims a refund larger than the per-replica allowance
-    /// derived from the request's payment.
-    RefundExceedsAllowance {
-        refund: Cycles,
-        per_replica_allowance: Cycles,
+    /// A payment receipt claims the replica spent more than it was allowed to:
+    /// the per-replica allowance derived from the request's payment on a
+    /// charging subnet, or the free-subnet maximum on a free subnet.
+    SpentExceedsLimit {
+        spent: Cycles,
+        limit: Cycles,
+    },
+    /// The collective initial spent cycles included in the payload do not match
+    /// the value recomputed from the request context's subnet size and the
+    /// signed per-replica receipts.
+    InitialSpentMismatch {
+        callback_id: CallbackId,
+        /// The initial spend received in the payload.
+        received: Cycles,
+        /// The initial spend the validator recomputed and expected.
+        expected: Cycles,
     },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
@@ -80,6 +85,11 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
+    /// A divergence proof contains more than one share from the same signer.
+    DivergenceDuplicateSigner {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
     /// The callback_id in a flexible response group does not match a response or proof within it.
     FlexibleCallbackIdMismatch {
         callback_id: CallbackId,
@@ -142,8 +152,6 @@ pub enum InvalidCanisterHttpPayloadReason {
 pub enum CanisterHttpPayloadValidationFailure {
     /// The state was not available at the time of validation
     StateUnavailable,
-    /// The consensus registry version could not be retrieved from the summary
-    ConsensusRegistryVersionUnavailable,
     /// The feature is not enabled
     Disabled,
     /// Membership Issue

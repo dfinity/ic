@@ -44,6 +44,7 @@ pub struct HypervisorMetrics {
     compilation_cache_size: IntGaugeVec,
     code_section_size: Histogram,
     canister_log_delta_memory_usage: Histogram,
+    max_num_locals: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -86,6 +87,16 @@ impl HypervisorMetrics {
                 // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
                 binary_buckets_with_zero(10, 23),
             ),
+            max_num_locals: metrics_registry.histogram(
+                "hypervisor_max_num_locals",
+                "The maximum number of Wasm function locals.",
+                vec![
+                    0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 200.0, 300.0,
+                    400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0, 2000.0, 3000.0, 4000.0,
+                    5000.0, 6000.0, 7000.0, 8000.0, 9000.0, 10000.0, 20000.0, 30000.0, 40000.0,
+                    50000.0,
+                ],
+            ),
         }
     }
 
@@ -100,6 +111,7 @@ impl HypervisorMetrics {
             compilation_time,
             max_complexity,
             code_section_size,
+            max_num_locals,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
@@ -113,6 +125,7 @@ impl HypervisorMetrics {
         self.compilation_cache_size
             .with_label_values(&["disk"])
             .set(cache_disk_size as i64);
+        self.max_num_locals.observe(*max_num_locals as f64);
     }
 }
 
@@ -132,7 +145,6 @@ pub struct Hypervisor {
     compilation_cache: Arc<CompilationCache>,
     create_execution_state_base_cost: NumInstructions,
     cost_to_compile_wasm_instruction: NumInstructions,
-    dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
 }
 
@@ -145,6 +157,7 @@ impl Hypervisor {
         &self,
         canister_module: CanisterModule,
         canister_id: CanisterId,
+        last_install_timestamp: Time,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
     ) -> (NumInstructions, HypervisorResult<ExecutionState>) {
@@ -172,7 +185,7 @@ impl Hypervisor {
             Arc::clone(&self.compilation_cache),
         );
         match creation_result {
-            Ok((execution_state, compilation_cost, compilation_result)) => {
+            Ok((mut execution_state, compilation_cost, compilation_result)) => {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
@@ -180,6 +193,11 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
+                // Stamp the deployment-round install time onto the freshly
+                // created execution state. This is the single choke point for
+                // creating execution states, so every install/upgrade/snapshot
+                // restore is forced to provide it.
+                execution_state.last_install_timestamp = Some(last_install_timestamp);
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
                 round_limits.instructions -= as_round_instructions(total_cost);
@@ -248,7 +266,6 @@ impl Hypervisor {
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
-            dirty_page_overhead,
             canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
@@ -261,7 +278,6 @@ impl Hypervisor {
         wasm_executor: Arc<dyn WasmExecutor>,
         create_execution_state_base_cost: NumInstructions,
         cost_to_compile_wasm_instruction: NumInstructions,
-        dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
@@ -278,7 +294,6 @@ impl Hypervisor {
             ),
             create_execution_state_base_cost,
             cost_to_compile_wasm_instruction,
-            dirty_page_overhead,
             canister_guaranteed_callback_quota,
         }
     }
@@ -301,7 +316,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         mut execution_state: ExecutionState,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
         state_changes_error: &IntCounter,
         call_tree_metrics: &dyn CallTreeMetrics,
@@ -323,7 +338,7 @@ impl Hypervisor {
             func_ref,
             RequestMetadata::for_new_call_tree(time),
             round_limits,
-            network_topology,
+            network_topology.clone(),
             subnet_cycles_config,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
@@ -342,7 +357,7 @@ impl Hypervisor {
             &mut output,
             round_limits,
             time,
-            network_topology,
+            &network_topology,
             self.own_subnet_id,
             &self.metrics,
             &self.log,
@@ -368,7 +383,7 @@ impl Hypervisor {
         func_ref: FuncRef,
         request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> WasmExecutionResult {
         assert_ge!(
@@ -392,7 +407,6 @@ impl Hypervisor {
             system_state,
             *self.cycles_account_manager,
             network_topology,
-            self.dirty_page_overhead,
             execution_parameters.compute_allocation,
             available_callbacks,
             request_metadata,
