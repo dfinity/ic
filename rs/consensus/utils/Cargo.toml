@@ -19,6 +19,7 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -31,3 +32,4 @@ ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-cycles = { path = "../../types/cycles" }
+rstest = { workspace = true }

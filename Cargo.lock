@@ -7867,7 +7867,9 @@ dependencies = [
  "ic-types-cycles",
  "prometheus",
  "rand 0.8.6",
+ "rstest",
  "slog",
+ "thiserror 2.0.19",
 ]
 
 [[package]]

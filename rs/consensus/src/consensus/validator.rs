@@ -15,6 +15,7 @@ use ic_consensus_utils::{
     get_oldest_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::{PoolReader, UnexpectedChainLength},
+    subnet_splitting,
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
@@ -90,6 +91,7 @@ enum ValidationFailure {
     ValidationContextNotReached(ValidationContext, ValidationContext),
     CatchUpHeightNegligible,
     MissingPastPayloads,
+    SubnetSplittingStatusError(subnet_splitting::StatusError),
 }
 
 /// Possible reasons for invalid artifacts.
@@ -119,6 +121,9 @@ enum InvalidArtifactReason {
     RepeatedSigner,
     ReplicaVersionMismatch,
     NotABlockmaker,
+    RegistryVersionNotFrozenDuringSubnetSplitting {
+        context_registry_version: RegistryVersion,
+    },
 }
 
 impl From<CryptoError> for ValidationFailure {
@@ -1269,6 +1274,29 @@ impl Validator {
                 local_context,
             )
             .into());
+        }
+
+        // If it's not a summary block, make sure that the registry version is 'frozen' during
+        // subnet splitting
+        if !proposal.payload.is_summary() {
+            match subnet_splitting::get_status(
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                last_summary_block.context.registry_version,
+                proposal.context.registry_version,
+            )
+            .map_err(ValidationFailure::SubnetSplittingStatusError)?
+            {
+                subnet_splitting::Status::NotScheduled => {}
+                subnet_splitting::Status::Scheduled { .. } => {
+                    return Err(
+                        InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
+                            context_registry_version: proposal.context.registry_version,
+                        }
+                        .into(),
+                    );
+                }
+            }
         }
 
         // While halting or halted, data blocks must have an empty payload: skip the rest of the
