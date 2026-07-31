@@ -42,6 +42,11 @@ fn file_size(path: &Path) -> Option<u64> {
         .then(|| std::fs::metadata(path).unwrap().len())
 }
 
+/// Returns whether the snapshot directory `dir` contains the WASM chunk store directory.
+fn has_chunk_store_dir(dir: &Path) -> bool {
+    dir.join("wasm_chunk_store").try_exists().unwrap()
+}
+
 /// Asserts that the contents of the file `path` are equal to the expected contents.
 fn assert_contents_eq(path: &str, contents: &[u8], expected_contents: &[u8]) {
     // We do not use `assert_eq!` on the contents
@@ -121,6 +126,12 @@ fn test_canister_snapshot_download_upload(
         list_files(&downloaded_snapshot_dir),
         expected_files.keys().cloned().collect::<Vec<_>>()
     );
+    // The WASM chunk store directory is missing if and only if the WASM chunk store is empty.
+    // We check this explicitly because `list_files` does not detect an empty directory.
+    assert_eq!(
+        has_chunk_store_dir(&downloaded_snapshot_dir),
+        !expected_chunk_hashes(&expected_files).is_empty()
+    );
 
     // Check the contents of the downloaded files
     // (the files mapped to `None` are checked separately).
@@ -154,6 +165,10 @@ fn test_canister_snapshot_download_upload(
     // We compare snapshot metadata separately because it is expected that some fields differ.
     let uploaded_files = list_files(&uploaded_snapshot_dir);
     assert_eq!(uploaded_files, list_files(&downloaded_snapshot_dir));
+    assert_eq!(
+        has_chunk_store_dir(&uploaded_snapshot_dir),
+        has_chunk_store_dir(&downloaded_snapshot_dir)
+    );
     for path in &uploaded_files {
         if path == "metadata.json" {
             continue;
