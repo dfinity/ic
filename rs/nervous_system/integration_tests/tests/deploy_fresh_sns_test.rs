@@ -50,7 +50,10 @@ async fn test_deploy_fresh_sns() {
         .await;
     }
 
-    eprintln!("Step 1. Upgrade NNS Governance and SNS-W to the latest version ...");
+    // Two chunks of code prior, the production WASMs were installed into the
+    // NNS canisters. But what we want in this test is to exercise the latest
+    // NNS code. To achieve that end, we upgrade NNS here.
+    eprintln!("Step 1. Upgrade NNS to the latest version ...");
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, ROOT_CANISTER_ID).await;
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID).await;
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
