@@ -1,7 +1,7 @@
 use candid::{Principal, Reserved};
 use ic_management_canister_types_private::{
-    Global, GlobalTimer, OnLowWasmMemoryHookStatus, ReadCanisterSnapshotMetadataResponse,
-    SnapshotSource,
+    ChunkHash, Global, GlobalTimer, OnLowWasmMemoryHookStatus,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource,
 };
 use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
 use std::collections::BTreeMap;
@@ -41,6 +41,28 @@ fn file_size(path: &Path) -> Option<u64> {
     path.try_exists()
         .unwrap()
         .then(|| std::fs::metadata(path).unwrap().len())
+}
+
+/// Returns the size of the expected contents of the file `path`
+/// or `None` if the file is not expected to be present.
+fn expected_file_size(
+    expected_files: &BTreeMap<String, Option<Vec<u8>>>,
+    path: &str,
+) -> Option<u64> {
+    let expected_contents = expected_files.get(path)?;
+    Some(expected_contents.as_ref().unwrap().len() as u64)
+}
+
+/// Returns the hashes of the WASM chunks expected in the WASM chunk store
+/// derived from the names of the expected WASM chunk store files.
+fn expected_chunk_hashes(expected_files: &BTreeMap<String, Option<Vec<u8>>>) -> Vec<ChunkHash> {
+    expected_files
+        .keys()
+        .filter_map(|path| path.strip_prefix("wasm_chunk_store/"))
+        .map(|file_name| ChunkHash {
+            hash: hex::decode(file_name.strip_suffix(".bin").unwrap()).unwrap(),
+        })
+        .collect()
 }
 
 /// Downloads a snapshot of the canister `canister_id` using PocketIC and checks that
@@ -169,54 +191,57 @@ fn test_canister_snapshot_download_upload(
     uploaded_metadata.taken_at_timestamp = downloaded_metadata.taken_at_timestamp;
     assert_eq!(downloaded_metadata, uploaded_metadata);
 
-    // Check the contents of the metadata of the originally downloaded snapshot.
+    // The snapshot must have been taken at the current time of the IC.
     assert!(downloaded_metadata.taken_at_timestamp >= time_before_snapshot);
     assert!(downloaded_metadata.taken_at_timestamp <= time_after_snapshot);
-    assert_eq!(
-        downloaded_metadata.wasm_module_size,
-        test_canister_wasm().len() as u64
-    );
+
     // The values of the globals depend on how the test canister WASM is compiled
     // and thus we only check that there is a single global of type `i32`.
     assert_eq!(downloaded_metadata.globals.len(), 1);
     assert!(matches!(downloaded_metadata.globals[0], Global::I32(_)));
-    // The contents of the WASM memory are hard to reproduce and thus we only check
-    // the WASM memory size against the size of the downloaded WASM memory file.
+
+    // Check the contents of the metadata file of the originally downloaded snapshot
+    // by comparing them against the pretty-printed expected metadata
+    // (the timestamp and globals checked above are copied over).
+    let expected_metadata = ReadCanisterSnapshotMetadataResponse {
+        source: SnapshotSource::TakenFromCanister(Reserved),
+        taken_at_timestamp: downloaded_metadata.taken_at_timestamp,
+        wasm_module_size: test_canister_wasm().len() as u64,
+        globals: downloaded_metadata.globals.clone(),
+        // The contents of the WASM memory are hard to reproduce and thus we only check
+        // the WASM memory size against the size of the downloaded WASM memory file.
+        wasm_memory_size: file_size(&downloaded_snapshot_dir.join("wasm_memory.bin")).unwrap(),
+        // The stable memory file is missing if and only if the stable memory is empty.
+        stable_memory_size: expected_file_size(&expected_files, "stable_memory.bin").unwrap_or(0),
+        // Every WASM chunk is stored in a file named after its hash
+        // in the WASM chunk store directory (which is missing
+        // if and only if the WASM chunk store is empty).
+        wasm_chunk_store: expected_chunk_hashes(&expected_files),
+        // The canister version after creating, installing, and stopping the canister.
+        canister_version: 4,
+        certified_data: vec![],
+        global_timer: Some(GlobalTimer::Inactive),
+        on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
+    };
+    let downloaded_metadata_json = String::from_utf8(downloaded_metadata_bytes).unwrap();
+    let expected_metadata_json = serde_json::to_string_pretty(&expected_metadata).unwrap();
+    // We compare the JSON line by line to get a readable error message
+    // (`assert_eq!` on the whole JSON would escape all newlines).
+    for (line, (json_line, expected_json_line)) in downloaded_metadata_json
+        .lines()
+        .zip(expected_metadata_json.lines())
+        .enumerate()
+    {
+        assert_eq!(
+            json_line,
+            expected_json_line,
+            "Unexpected metadata in line {}",
+            line + 1
+        );
+    }
     assert_eq!(
-        Some(downloaded_metadata.wasm_memory_size),
-        file_size(&downloaded_snapshot_dir.join("wasm_memory.bin"))
-    );
-    // The stable memory file is missing if and only if the stable memory is empty.
-    assert_eq!(
-        downloaded_metadata.stable_memory_size,
-        file_size(&downloaded_snapshot_dir.join("stable_memory.bin")).unwrap_or(0)
-    );
-    // Every WASM chunk is stored in a file named after its hash
-    // in the WASM chunk store directory (which is missing
-    // if and only if the WASM chunk store is empty).
-    let chunk_store_files: Vec<String> = downloaded_metadata
-        .wasm_chunk_store
-        .iter()
-        .map(|chunk_hash| format!("wasm_chunk_store/{}.bin", hex::encode(&chunk_hash.hash)))
-        .collect();
-    assert_eq!(
-        chunk_store_files,
-        expected_files
-            .keys()
-            .filter(|path| path.starts_with("wasm_chunk_store/"))
-            .cloned()
-            .collect::<Vec<_>>()
-    );
-    // The canister version after creating, installing, and stopping the canister.
-    assert_eq!(downloaded_metadata.canister_version, 4);
-    assert!(downloaded_metadata.certified_data.is_empty());
-    assert_eq!(
-        downloaded_metadata.global_timer,
-        Some(GlobalTimer::Inactive)
-    );
-    assert_eq!(
-        downloaded_metadata.on_low_wasm_memory_hook_status,
-        Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
+        downloaded_metadata_json.lines().count(),
+        expected_metadata_json.lines().count()
     );
 }
 
