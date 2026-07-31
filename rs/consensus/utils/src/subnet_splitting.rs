@@ -64,36 +64,43 @@ pub fn get_status(
 
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;
-    use std::sync::Arc;
-
-    use ic_interfaces_registry::RegistryClientVersionedResult;
     use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
     use ic_protobuf::registry::subnet::v1::{GenesisArgs, RecoveryArgs};
-    use ic_test_utilities_consensus::fake::Fake;
-    use ic_test_utilities_registry::{
-        SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
-        setup_registry_non_final,
-    };
-    use ic_test_utilities_types::ids::{
-        NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2, SUBNET_3,
-    };
+    use ic_registry_keys::make_catch_up_package_contents_key;
+    use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry_non_final};
+    use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, SUBNET_2};
     use ic_types::subnet_id_into_protobuf;
-    use ic_types::{
-        Height, ReplicaVersion, Time,
-        backwards_compatibility::BackwardsCompatible,
-        batch::ValidationContext,
-        consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::PostSplitArgs},
-        crypto::{CryptoHash, CryptoHashOf},
-        time::UNIX_EPOCH,
-    };
     use rstest::rstest;
+    use std::sync::Arc;
 
     const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
     const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
     const REGISTRY_CUP_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
 
     use super::*;
+
+    fn set_up_registry(cup_type: Option<CupType>) -> Arc<dyn RegistryClient> {
+        let (registry_data_provider, registry) = setup_registry_non_final(
+            SOURCE_SUBNET_ID,
+            vec![(
+                1,
+                SubnetRecordBuilder::new().with_committee(&[NODE_1]).build(),
+            )],
+        );
+        registry_data_provider
+            .add(
+                &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
+                REGISTRY_CUP_REGISTRY_VERSION,
+                Some(CatchUpPackageContents {
+                    cup_type,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        registry.update_to_latest_version();
+
+        registry
+    }
 
     #[rstest]
     fn get_status_should_return_not_scheduled_when_latest_cup_is_not_subnet_splitting_test(
