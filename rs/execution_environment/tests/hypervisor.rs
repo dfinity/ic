@@ -9585,7 +9585,6 @@ fn cost_sign_with_ecdsa_with_huge_key_name() {
         ErrorCode::CanisterContractViolation,
         "key name is too large",
     );
-    println!("{:?}", err);
 }
 
 #[test]

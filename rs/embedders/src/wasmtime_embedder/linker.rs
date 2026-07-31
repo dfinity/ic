@@ -1300,7 +1300,6 @@ pub fn syscalls<
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, usize::min(size, MAX_KEY_NAME_LENGTH))?;
                 if size > MAX_KEY_NAME_LENGTH {
-                    charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, MAX_KEY_NAME_LENGTH)?;
                     return Err(process_err(
                         &mut caller,
                         HypervisorError::UserContractViolation {
@@ -1361,7 +1360,6 @@ pub fn syscalls<
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, usize::min(size, MAX_KEY_NAME_LENGTH))?;
                 if size > MAX_KEY_NAME_LENGTH {
-                    charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, MAX_KEY_NAME_LENGTH)?;
                     return Err(process_err(
                         &mut caller,
                         HypervisorError::UserContractViolation {
