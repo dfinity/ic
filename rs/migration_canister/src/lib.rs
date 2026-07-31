@@ -45,8 +45,8 @@ const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 /// Changing the controllers of a canister (and renaming it) records a canister history entry and
 /// thus increases the canister's memory usage. If the subnet of that canister cannot accommodate
 /// that increase, then the corresponding management canister call fails: the call to
-/// `rename_canister` in `RequestState::StoppedAndReady` and the call restoring the original
-/// controllers of a failed request would keep failing forever.
+/// `rename_canister` in `RequestState::StoppedAndReady` and the calls restoring the original
+/// controllers of a successful or failed request would keep failing forever.
 ///
 /// To prevent this, the migration canister bumps the memory allocation of the migrated and
 /// replaced canisters to their memory usage plus this amount when making itself their exclusive
@@ -165,9 +165,8 @@ pub struct Request {
     replaced_canister_subnet: Principal,
     replaced_canister_original_controllers: Vec<Principal>,
     /// The memory allocation of the replaced canister at validation time and the one to be set
-    /// while the migration canister is the exclusive controller of the replaced canister.
-    ///
-    /// This is `None` under the same condition as `migrated_canister_memory_allocation`.
+    /// while the migration canister is the exclusive controller of the replaced canister
+    /// (see `migrated_canister_memory_allocation`).
     #[serde(default)]
     replaced_canister_memory_allocation: Option<ManagedMemoryAllocation>,
     /// Whether the migration canister successfully made itself the exclusive controller
@@ -326,6 +325,10 @@ pub enum RequestState {
     ///     * Replaced canister has no snapshots.
     ///     * Replaced canister has sufficient cycles above the freezing threshold.
     ///     * Migrated canister version is not absurdly high.
+    ///     * The memory usage of the migrated and replaced canisters excluding their canister
+    ///       history did not change since validation so that their memory allocation still
+    ///       covers the canister history entries recorded by the migration canister
+    ///       (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
     /// * Called mgmt `canister_info` to determine the history length of migrated canister.
     ///
     /// Record the canister version and history length of migrated canister and the current time.

@@ -1885,8 +1885,6 @@ async fn memory_allocation_bumped_and_restored() {
         let sender = migrated_canister_controllers[0];
         let migrated_canister = migrated_canisters[0];
         let replaced_canister = replaced_canisters[0];
-        // The migration canister is a controller of both canisters and thus it can
-        // retrieve their status even after taking exclusive control of them.
         let mc: Principal = MIGRATION_CANISTER_ID.into();
         let mut memory_before = vec![];
         for (canister, initial_memory_allocation) in [
