@@ -368,7 +368,7 @@ rust_ic_test(
     data = DEV_DATA,
     env = DEV_ENV,
     # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
-    # so we need this Namespace-specific execution property to open up the network on RBE:
+    # so we need this Namespace.so-specific execution property to open up the network on RBE:
     exec_properties = {"namespace_requires_network": "true"},
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
