@@ -21,18 +21,21 @@ bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.3.0")
 
-# can be replaced with `single_version_override` once 4.3.0
-# is released to BCR
+# Use the (not yet merged) zig 0.16.0 upgrade of hermetic_cc_toolchain:
+# https://github.com/uber/hermetic_cc_toolchain/pull/260
+# Can be replaced with `single_version_override` once that lands in a release
+# that is published to BCR.
 archive_override(
     module_name = "hermetic_cc_toolchain",
     patch_strip = 1,
     patches = [
         "//bazel:hermetic_cc_toolchain_strip.patch",
-        "//bazel:hermetic_cc_toolchain_cache_dir.patch",
         "//bazel:hermetic_cc_toolchain_lto.patch",
     ],
-    sha256 = "79338d8c5c4499c7402aea1fe78dcd20267f300e9f8f5886be7017d57ccf0fbc",
-    urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v4.3.0/hermetic_cc_toolchain-v4.3.0.tar.gz"],
+    sha256 = "fbe1a1fe805978279fc9a4d1f9ed808263a387dee8358688bc3b0a9ea786cc2a",
+    strip_prefix = "hermetic_cc_toolchain-cc7746d4c00ec15736c6c5a3a58de9cc36a333df",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/uber/hermetic_cc_toolchain/tar.gz/cc7746d4c00ec15736c6c5a3a58de9cc36a333df"],
 )
 
 # configure/make dependencies

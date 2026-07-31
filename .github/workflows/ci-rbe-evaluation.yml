@@ -277,6 +277,15 @@ jobs:
 
             --remote_download_minimal
 
+            # Note: do NOT raise --experimental_ui_max_stdouterr_bytes here. An
+            # action's stdout/stderr is echoed for successful actions too, and
+            # every cold action that links C++ makes zig build libc++, which
+            # emits multiple MB of warnings: one run had 1358 such logs totalling
+            # 6.25 GB. Above the (default, 1 MiB) cap Bazel writes each log to
+            # bazel-out/_tmp/actions/std{out,err}-<n> and prints just that path,
+            # which the "Stage failed action logs" step below uses to surface the
+            # logs of the actions that actually failed.
+
             # Capture the Build Event Protocol and the execution profile so this
             # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
             # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
@@ -288,7 +297,11 @@ jobs:
             --target_pattern_file=$build_targets
           )
 
-          bazel "${bazel_args[@]}"
+          # Tee the output so the "Stage failed action logs" step below can find
+          # the std{out,err} files Bazel wrote for the actions that failed.
+          # pipefail preserves Bazel's exit code so the step still fails.
+          mkdir -p /tmp/build-logs
+          bazel "${bazel_args[@]}" 2>&1 | tee /tmp/build-logs/build-bazel-output.log
 
       - name: Bazel Test with RBE
         timeout-minutes: 90
@@ -362,6 +375,92 @@ jobs:
           # Bazel's exit code so the step still fails when a test fails.
           mkdir -p /tmp/test-logs
           bazel "${bazel_args[@]}" 2>&1 | tee /tmp/test-logs/tests-bazel-output.log
+
+      - name: Stage failed action logs
+        # Surface the std{out,err} of the actions that FAILED. Bazel prints those
+        # inline, but only up to --experimental_ui_max_stdouterr_bytes (1 MiB);
+        # beyond that it writes the log to bazel-out/_tmp/actions/std{out,err}-<n>
+        # and prints only that path, which is useless by the time the job ends.
+        # Note this is unrelated to Build-without-the-Bytes: an action's
+        # stdout/stderr is not a declared output, so --remote_download_regex has
+        # no say over it -- Bazel always brings it back and writes it to the local
+        # file named above. So all that is needed is to collect those files before
+        # they are gone: the next Bazel invocation clears _tmp/actions, hence this
+        # step runs before any other step that might invoke Bazel again.
+        # Runs even when the build or test step failed, but not when cancelled.
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          dest=/tmp/build-logs/failed-action-logs
+          mkdir -p "$dest"
+
+          # Bazel reports an action failure as:
+          #   ERROR: <pkg>/BUILD.bazel:41:12: Compiling Rust bin foo (1 file) failed: (Exit 1): ...
+          #   stderr (<...>/bazel-out/_tmp/actions/stderr-28180) 4738716 exceeds maximum size of ...
+          # The std{out,err} line is emitted directly after the ERROR line, and
+          # only when the log was too large to print inline (when it fits, it is
+          # already in this console log). Pair the two up.
+          n=0
+          for out in /tmp/build-logs/build-bazel-output.log /tmp/test-logs/tests-bazel-output.log; do
+            [ -f "$out" ] || continue
+
+            while IFS=$'\t' read -r label path; do
+              n=$((n + 1))
+              d="$dest/$(printf '%03d' "$n")"
+              mkdir -p "$d"
+              printf '%s\n' "$label" > "$d/error.txt"
+
+              base="$(basename "$path")"
+              if [ ! -f "$path" ]; then
+                echo "WARNING: $path no longer exists" | tee "$d/$base.missing"
+                continue
+              fi
+              cp "$path" "$d/$base"
+
+              # The interesting part -- the actual error -- is at the end, after
+              # the warnings that made the log oversized in the first place. Echo
+              # the tail so triage does not require downloading the artifact.
+              # Cap the number of echoed tails so a mass failure cannot flood the
+              # console again; the full logs are uploaded either way.
+              if [ "$n" -le 20 ]; then
+                echo "::group::$base (last 200 lines) -- $label"
+                tail -n 200 "$path"
+                echo "::endgroup::"
+              fi
+            done < <(awk '
+              /^ERROR: .* failed: / { err = $0; next }
+              err != "" && /^(stderr|stdout) \(/ {
+                  s = index($0, "(")
+                  e = index($0, ")")
+                  printf "%s\t%s\n", err, substr($0, s + 1, e - s - 1)
+                  next
+              }
+              { err = "" }
+            ' "$out")
+          done
+
+          if [ "$n" -eq 0 ]; then
+            echo "No oversized logs of failed actions found."
+          else
+            echo "Staged $n oversized log(s) of failed actions in $dest."
+          fi
+
+      - name: Upload failed action logs to Namespace Artifact Storage
+        # Push the full std{out,err} of every failed action staged above to
+        # Namespace Artifact Storage, together with the build step's console
+        # output. Retrieve with namespace-actions/download-artifact or
+        # `nsc artifact`.
+        if: ${{ !cancelled() }}
+        uses: namespace-actions/upload-artifact@v1
+        with:
+          name: failed-action-logs
+          path: |
+            /tmp/build-logs/failed-action-logs/**
+            /tmp/build-logs/build-bazel-output.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Stage failed and flaky test logs
         # Collect the Bazel test logs of the tests that FAILED or were
