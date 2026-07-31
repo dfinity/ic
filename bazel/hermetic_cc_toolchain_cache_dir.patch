@@ -1,12 +1,63 @@
-# work around race condition in zig: https://github.com/ziglang/zig/issues/23993
-# hermetic_cc_toolchain ticket: https://github.com/uber/hermetic_cc_toolchain/issues/224
+# work around cache races in zig: https://github.com/uber/hermetic_cc_toolchain/issues/224
+# (upstream's report of a zig cache entry reused across configurations, producing
+# corrupt output; https://github.com/ziglang/zig/issues/23993 is the cached-args
+# variant of the same family)
 #
-# The cache is sharded by Bazel configuration (inferred from the working directory)
-# and, under remote execution (e.g. Namespace RBE, where every action runs in its own
-# ".../execroots/action-<id>" directory on a long-lived worker), by action: all
-# concurrently executing actions on a worker would otherwise share one cache
-# directory and trip the race above, crashing zig's linker child with SIGABRT
-# ("abnormal exit: child_process.ChildProcess.Term{ .Signal = 6 }").
+# The *local* zig cache -- which only holds an invocation's own intermediates -- is
+# sharded by Bazel configuration (inferred from the working directory) and, under
+# remote execution (e.g. Namespace RBE, where actions run on long-lived workers
+# under ".../execroots/<worker>-<slot>/action-<id>"), by executor slot.
+#
+# The *global* cache is deliberately not sharded. It holds the shared
+# sub-compilations of a link -- compiler_rt, ubsan_rt, glibc's crt files and .so
+# stubs, libc++, libunwind: ~116 cache entries costing ~60s of CPU for a C++ link --
+# and they are identical for every action using the same tool, flags and target.
+# Sharding them meant every shard paid that cost (up to 240 shards per RBE
+# invocation, one per worker slot), and cold builds are also where zig races with
+# itself: the sub-compilations run concurrently on zig's thread pool and register
+# LLVM targets in a registry LLVM does not guard, so one in a few hundred cold links
+# failed with
+#
+#   error: sub-compilation of compiler_rt failed
+#     note: LLVM failed to parse '<triple>': No available targets are compatible
+#           with triple "<triple>"
+#     note: failed to link with LLD: UnableToWriteArchive
+#
+# which is what made the RBE build flaky.
+#
+# Sharing the global cache on its own would just move the problem: many actions
+# starting cold at once are concurrent writers in one directory, which is the
+# corruption the ticket above describes (and what crashed zig's linker child with
+# SIGABRT). So the first *link* for a given tool/flags/target/toolchain takes an
+# exclusive lock on the cache, builds the sub-compilations, and leaves a marker
+# behind. Every later invocation finds the marker and runs concurrently against a
+# warm cache, which needs no writes beyond touching "h/timestamp". Compilations take
+# no part in this: they build nothing in the global cache, so they neither wait nor
+# record a marker (recording one would leave the first links to run cold together,
+# defeating the whole thing).
+#
+# That leaves the LLVM registry race itself, which is internal to one zig process and
+# so is not fixed by keeping the processes apart. Serializing the sub-compilations
+# would fix it -- zig's thread pool follows the CPU affinity mask, so pinning the
+# warm-up to one CPU builds them one at a time -- but that costs too much: a cold C++
+# link takes ~67s pinned versus ~8s unpinned, because the libc++ build parallelizes
+# about 7x, and every action arriving during the warm-up waits that out. Instead the
+# wrapper captures zig's stderr and, when a failure carries the race's message, runs
+# the same command once more. Whatever the failed attempt built is cached, so the
+# retry is cheap, and two hits in a row are vanishingly unlikely at a rate of about
+# one in a few hundred cold links.
+#
+# Only the last attempt's stderr is passed on. A link that failed and then succeeded
+# has to stay quiet, because rustc's linker_messages lint reports anything the linker
+# printed and would turn the survived flake back into a build failure with
+# -D warnings (the lto patch works around that same lint).
+#
+# Net effect: the shared sub-compilations are built once per machine instead of once
+# per shard, never by two processes at once, and the residual in-process race is
+# absorbed by the retry -- with no prewarming or image plumbing involved. The
+# remaining rough edge is a tool/flag/target combination whose marker has not been
+# written yet: several actions can still start cold together, as every action did
+# before this patch, and the retry covers them.
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
 index 6e58bd4..0161945 100644
 --- a/toolchain/defs.bzl
@@ -22,36 +73,149 @@ index 6e58bd4..0161945 100644
              home = repository_ctx.os.environ.get("HOME", "")
              if home:
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index 486cbda..cc37b1f 100644
+index 486cbda..e63bac2 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
-@@ -207,6 +207,36 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
+@@ -181,18 +181,38 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
+         break :blk list;
+     };
+ 
+-    // Run the intended zig process
+-    var proc = ChildProcess.init(params.args.items, arena);
+-    proc.env_map = &params.env;
++    // If the shared sub-compilations still have to be built, do it here and
++    // nowhere else at the same time (see warmUpBegin).
++    const warm_up = warmUpBegin(arena, params);
++    var zig_succeeded = false;
++    defer warmUpEnd(warm_up, zig_succeeded);
+ 
+-    const ret = proc.spawnAndWait() catch |err| {
++    // Run the intended zig process
++    var run = runZig(arena, params) catch |err| {
+         return fatal("error spawning {s}: {s}\n", .{ params.args.items[0], @errorName(err) });
+     };
+ 
+-    const code = switch (ret) {
++    // A cold link occasionally dies of a race inside zig, see
++    // isTransientZigFailure. Running it again is enough: whatever the failed
++    // attempt did build is in the cache, so the retry is cheap.
++    if (isTransientZigFailure(run)) {
++        run = runZig(arena, params) catch |err| {
++            return fatal("error spawning {s}: {s}\n", .{ params.args.items[0], @errorName(err) });
++        };
++    }
++
++    // Forward the diagnostics of the last attempt only. A link that succeeded
++    // on the retry has to stay quiet: rustc's linker_messages lint reports
++    // anything the linker printed, and with -D warnings that turns a survived
++    // flake back into a build failure (the lto patch works around the same
++    // lint for a deprecation warning).
++    writeToStderr(run.stderr);
++
++    const code = switch (run.term) {
+         .Exited => |code| code,
+         else => |other| return fatal("abnormal exit: {any}\n", .{other}),
+     };
++    zig_succeeded = code == 0;
+ 
+     // Run strip command, ignore output
+     var strip_proc = ChildProcess.init(strip_cmd.items, arena);
+@@ -207,6 +227,254 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
      return code;
  }
  
++// zig's message when the sub-compilations of a cold link race on LLVM's target
++// registry. They run concurrently on zig's thread pool and each registers LLVM
++// targets, which LLVM does not guard against concurrent registration, so a
++// lookup can miss the target that was just registered:
++//
++//   error: sub-compilation of compiler_rt failed
++//     note: LLVM failed to parse '<triple>': No available targets are
++//           compatible with triple "<triple>"
++//     note: failed to link with LLD: UnableToWriteArchive
++//
++// It is transient -- the same command run again succeeds -- and rare, roughly
++// one in a few hundred cold links, which was often enough to make the RBE build
++// flaky when every action started out cold.
++const llvm_target_registry_race = "No available targets are compatible with triple";
++
++// Enough to hold any real compiler output; a cold link's diagnostics are a few
++// hundred bytes.
++const max_captured_stderr = 16 * 1024 * 1024;
++
++const ZigRun = struct {
++    term: ChildProcess.Term,
++    stderr: []const u8,
++};
++
++// Runs zig with its stderr captured so it can be inspected before being passed
++// on. stdout stays wired to ours: it carries preprocessor output (zig cc -E)
++// and there is nothing to inspect in it.
++fn runZig(arena: mem.Allocator, params: ExecParams) !ZigRun {
++    var proc = ChildProcess.init(params.args.items, arena);
++    proc.env_map = &params.env;
++    proc.stderr_behavior = .Pipe;
++
++    try proc.spawn();
++
++    // Drain the pipe before waiting, or a chatty zig would block on a full
++    // pipe while we wait for it to exit.
++    var captured = ArrayListUnmanaged(u8){};
++    var buf: [4096]u8 = undefined;
++    while (true) {
++        const n = try proc.stderr.?.read(&buf);
++        if (n == 0) break;
++        if (captured.items.len + n <= max_captured_stderr)
++            try captured.appendSlice(arena, buf[0..n]);
++    }
++
++    return .{ .term = try proc.wait(), .stderr = captured.items };
++}
++
++fn isTransientZigFailure(run: ZigRun) bool {
++    const failed = switch (run.term) {
++        .Exited => |code| code != 0,
++        else => false,
++    };
++    return failed and mem.indexOf(u8, run.stderr, llvm_target_registry_race) != null;
++}
++
++fn writeToStderr(bytes: []const u8) void {
++    if (bytes.len == 0) return;
++    fs.File.stderr().writeAll(bytes) catch {};
++}
++
++fn hashedSuffix(
++    allocator: std.mem.Allocator,
++    comptime prefix: []const u8,
++    segment: []const u8,
++) ![]const u8 {
++    var hasher = std.hash.Wyhash.init(0);
++    hasher.update(segment);
++    return std.fmt.allocPrint(allocator, prefix ++ "-{x}", .{hasher.final()});
++}
++
 +fn makeSuffix(allocator: std.mem.Allocator, pwd: []const u8) ![]const u8 {
 +    var it = std.mem.tokenizeScalar(u8, pwd, '/');
 +
 +    while (it.next()) |segment| {
-+        // Remote execution (e.g. Namespace RBE) runs every action in its own
-+        // execroot (".../execroots/action-<id>/...") on a long-lived worker
-+        // whose zig cache would otherwise be shared by all concurrently
-+        // executing actions, tripping the race above when many cold links
-+        // start at once (zig's linker child dies with SIGABRT). Shard the
-+        // cache per action instead; invocations from subdirectories of one
-+        // action (e.g. foreign_cc configure scripts) still share its cache.
++        // Remote execution (e.g. Namespace RBE) runs actions on long-lived
++        // workers under ".../execroots/<worker>-<slot>/action-<id>/...": one
++        // directory per concurrent executor slot, holding a fresh
++        // "action-<id>" subdirectory per action. The worker's zig cache would
++        // otherwise be shared by all concurrently executing actions, tripping
++        // the race above when many cold links start at once (zig's linker
++        // child dies with SIGABRT). Shard per slot instead: a slot runs one
++        // action at a time, so a shard never has more than one writer, while
++        // successive actions on that slot still reuse the expensive
++        // sub-compilations (compiler_rt et al.) already in it. Invocations
++        // from subdirectories of one action (e.g. foreign_cc configure
++        // scripts) share that slot's shard too.
 +        if (std.mem.eql(u8, segment, "execroots")) {
-+            const action = it.next() orelse "unknown";
-+            var hasher = std.hash.Wyhash.init(0);
-+            hasher.update(action);
-+            const hash_value = hasher.final();
-+            return std.fmt.allocPrint(allocator, "action-{x}", .{hash_value});
++            return hashedSuffix(allocator, "slot", it.next() orelse "unknown");
 +        }
 +        if (std.mem.startsWith(u8, segment, "k8-opt-")) {
-+            var hasher = std.hash.Wyhash.init(0);
-+            hasher.update(segment);
-+            const hash_value = hasher.final();
-+            return std.fmt.allocPrint(allocator, "config-{x}", .{hash_value});
++            return hashedSuffix(allocator, "config", segment);
 +        }
 +    }
 +
@@ -59,10 +223,159 @@ index 486cbda..cc37b1f 100644
 +    return std.fmt.allocPrint(allocator, "config-catchall", .{});
 +}
 +
++// Flags that change the sub-compilations zig has to build for an invocation:
++// compiler_rt, ubsan_rt, libssp, glibc's crt files and .so stubs, libc++ and
++// libunwind. Zig derives those from the target, the optimization mode,
++// position independence, link mode, sanitizers, LTO and cpu features; ordinary
++// preprocessor, include and warning flags leave them alone.
++fn affectsSharedSubCompilations(arg: []const u8) bool {
++    const prefixes = [_][]const u8{
++        "-O",
++        "-m",
++        "-fsanitize",
++        "-fno-sanitize",
++        "-flto",
++        "-fno-lto",
++        "-fstack-protector",
++        "-fno-stack-protector",
++        "-fPIC",
++        "-fno-PIC",
++        "-fpic",
++        "-fno-pic",
++        "-fPIE",
++        "-fno-PIE",
++        "-fpie",
++        "-fno-pie",
++    };
++    for (prefixes) |prefix|
++        if (mem.startsWith(u8, arg, prefix)) return true;
++
++    const exact = [_][]const u8{ "-pie", "-no-pie", "-static", "-static-pie", "-shared" };
++    for (exact) |flag|
++        if (mem.eql(u8, arg, flag)) return true;
++
++    return false;
++}
++
++// Whether an invocation needs the shared sub-compilations at all. Only links
++// do: a compile leaves the global cache empty (verified by compiling with a
++// cold one), and "ar", "ld.lld" and "lld-link" build nothing either. This
++// matters because a compile must neither wait behind a warm-up nor -- much
++// worse -- record one, which would leave the first links to run cold
++// concurrently, exactly what the warm-up is there to prevent.
++fn buildsSharedSubCompilations(args: []const []const u8) bool {
++    if (args.len < 2) return false;
++    if (!mem.eql(u8, args[1], "cc") and !mem.eql(u8, args[1], "c++")) return false;
++
++    for (args) |arg| {
++        const compile_only = [_][]const u8{ "-c", "-S", "-E", "-M", "-MM" };
++        for (compile_only) |flag|
++            if (mem.eql(u8, arg, flag)) return false;
++    }
++
++    return true;
++}
++
++// Name of the marker file recording that the shared global cache already holds
++// the sub-compilations this invocation needs. See warmUpBegin.
++fn warmMarkerName(allocator: mem.Allocator, args: []const []const u8) ![]const u8 {
++    var hasher = std.hash.Wyhash.init(0);
++
++    // The zig sub-command ("cc", "c++", ...): a c++ link additionally needs
++    // libc++ and libunwind.
++    if (args.len > 1) hasher.update(args[1]);
++
++    for (args, 0..) |arg, i| {
++        if (affectsSharedSubCompilations(arg)) hasher.update(arg);
++        if (mem.eql(u8, arg, "-target") and i + 1 < args.len) hasher.update(args[i + 1]);
++    }
++
++    // The toolchain itself. A zig upgrade leaves the cache cold again and
++    // invalidates every action at once, so a marker left behind by the
++    // previous zig would be the worst possible timing. The zig binary's size
++    // and mtime identify it well enough and cost one stat.
++    if (args.len > 0) {
++        if (fs.cwd().statFile(args[0])) |stat| {
++            hasher.update(mem.asBytes(&stat.size));
++            hasher.update(mem.asBytes(&stat.mtime));
++        } else |_| {}
++    }
++
++    return std.fmt.allocPrint(allocator, ".warm-{x}", .{hasher.final()});
++}
++
++// A held warm-up lock: whoever owns it is the only zig writing to the shared
++// global cache on this machine.
++const WarmUp = struct {
++    lock: fs.File,
++    marker_path: []const u8,
++};
++
++// Zig keeps everything expensive and shareable in the *global* cache:
++// compiler_rt, ubsan_rt, glibc's crt files and .so stubs, libc++, libunwind --
++// 116 cache entries and ~60s of CPU for a cold C++ link. The local cache only
++// holds the invocation's own intermediates, which nothing else reuses. So the
++// global cache is shared by every action on the machine (under remote
++// execution: by every executor slot on the worker) and only the local one is
++// sharded, which is what keeps that ~60s from being spent once per slot.
++//
++// What must not happen is many actions building those sub-compilations *at the
++// same time* in that one directory. Concurrent cold writers are what corrupts
++// the cache (https://github.com/uber/hermetic_cc_toolchain/issues/224) and
++// what crashed zig's linker child with SIGABRT on the RBE workers.
++//
++// So the first invocation for a given tool/flags/target/toolchain takes an
++// exclusive lock on the cache, warms it, and leaves a marker behind; everyone
++// else finds the marker and runs concurrently against a warm cache, which
++// needs no writes at all beyond touching "h/timestamp". Slots that arrive
++// during a warm-up block for at most the length of one cold link, once.
++//
++// Returns null when there is nothing to warm -- the marker is already there,
++// or the cache is unusable -- in which case nothing is serialized and zig
++// behaves exactly as it did before.
++fn warmUpBegin(arena: mem.Allocator, params: ExecParams) ?WarmUp {
++    if (!buildsSharedSubCompilations(params.args.items)) return null;
++
++    const cache_dir = params.env.get("ZIG_GLOBAL_CACHE_DIR") orelse return null;
++    const marker = warmMarkerName(arena, params.args.items) catch return null;
++    const marker_path = fs.path.join(arena, &[_][]const u8{ cache_dir, marker }) catch return null;
++    if (exists(marker_path)) return null;
++
++    fs.cwd().makePath(cache_dir) catch return null;
++    const lock_path = fs.path.join(arena, &[_][]const u8{ cache_dir, ".warmup.lock" }) catch return null;
++    // Blocks until whoever is warming the cache is done. The kernel drops the
++    // lock if that process dies, so a killed action cannot wedge the machine.
++    const lock = fs.cwd().createFile(lock_path, .{ .lock = .exclusive, .truncate = false }) catch return null;
++
++    // It may have been warmed while we waited for the lock.
++    if (exists(marker_path)) {
++        lock.close();
++        return null;
++    }
++
++    return .{ .lock = lock, .marker_path = marker_path };
++}
++
++// Records that the cache is warm and releases the lock. Only a successful
++// invocation may mark it: a failed one has possibly left sub-compilations
++// unbuilt.
++fn warmUpEnd(warm_up: ?WarmUp, zig_succeeded: bool) void {
++    const held = warm_up orelse return;
++    if (zig_succeeded) {
++        if (fs.cwd().createFile(held.marker_path, .{})) |marker| marker.close() else |_| {}
++    }
++    held.lock.close();
++}
++
++fn exists(path: []const u8) bool {
++    fs.cwd().access(path, .{}) catch return false;
++    return true;
++}
++
  // argv_it is an object that has such method:
  //     fn next(self: *Self) ?[]const u8
  // in non-testing code it is *process.ArgIterator.
-@@ -279,9 +309,18 @@ fn parseArgs(
+@@ -279,8 +547,20 @@ fn parseArgs(
          break :blk @as([]const u8, if (builtin.os.tag == .macos) "/var/tmp/zig-cache" else "/tmp/zig-cache");
      };
  
@@ -73,25 +386,168 @@ index 486cbda..cc37b1f 100644
 +    const pwd = cwd.realpathAlloc(arena, ".") catch |err|
 +        return parseFatal(arena, "error getting cwd: {s}", .{@errorName(err)});
 +    const suffix = try makeSuffix(arena, pwd);
-+    const cache_dir_with_suffix = try std.fmt.allocPrint(arena, "{s}/{s}", .{ cache_dir, suffix });
++    const local_cache_dir = try std.fmt.allocPrint(arena, "{s}/{s}", .{ cache_dir, suffix });
 +
      try env.put("ZIG_LIB_DIR", zig_lib_dir);
 -    try env.put("ZIG_LOCAL_CACHE_DIR", cache_dir);
--    try env.put("ZIG_GLOBAL_CACHE_DIR", cache_dir);
-+    try env.put("ZIG_LOCAL_CACHE_DIR", cache_dir_with_suffix);
-+    try env.put("ZIG_GLOBAL_CACHE_DIR", cache_dir_with_suffix);
++    try env.put("ZIG_LOCAL_CACHE_DIR", local_cache_dir);
++    // The global cache stays shared, so the sub-compilations in it are built
++    // once per machine rather than once per shard. warmUpBegin makes sure they
++    // are not built by several actions at the same time.
+     try env.put("ZIG_GLOBAL_CACHE_DIR", cache_dir);
  
      // Zig 0.14.0 locates the macOS SDK by running `xcrun --show-sdk-path`.
-     // Bazel clears PATH via `exec env -`, making xcrun unfindable. Restore
-@@ -606,7 +645,10 @@ test "zig-wrapper:cache dir override" {
+@@ -605,8 +885,151 @@ test "zig-wrapper:cache dir override" {
+     const cache_dir = res.exec.env.get("ZIG_LOCAL_CACHE_DIR").?;
      const global_cache_dir = res.exec.env.get("ZIG_GLOBAL_CACHE_DIR").?;
  
-     try testing.expectEqualStrings(cache_dir, global_cache_dir);
+-    try testing.expectEqualStrings(cache_dir, global_cache_dir);
 -    try testing.expectEqualStrings(CACHE_DIR, cache_dir);
-+    // The cache dir carries a per-bazel-config suffix (see makeSuffix). The
++    // The local cache carries a per-bazel-config suffix (see makeSuffix). The
 +    // test runs from a temporary directory, i.e. outside a bazel output tree,
-+    // so it gets the catchall.
++    // so it gets the catchall. The global cache is shared, i.e. the cache
++    // prefix itself, see warmUpBegin.
 +    try testing.expectEqualStrings(CACHE_DIR ++ "/config-catchall", cache_dir);
++    try testing.expectEqualStrings(CACHE_DIR, global_cache_dir);
++}
++
++test "zig-wrapper:cache dir sharding" {
++    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
++    const allocator = gpa.allocator();
++
++    // Under remote execution all invocations of one executor slot share a
++    // shard, whether they run in the action's execroot or in a subdirectory of
++    // it, while a second slot on the same worker gets its own.
++    const slot_a1 = try makeSuffix(allocator, "/var/lib/namespace-bazel/execroots/o85alotntknks-7/action-1467526567");
++    const slot_a2 = try makeSuffix(allocator, "/var/lib/namespace-bazel/execroots/o85alotntknks-7/action-2250679650/bazel-out/k8-opt/bin/some/pkg");
++    const slot_b = try makeSuffix(allocator, "/var/lib/namespace-bazel/execroots/o85alotntknks-8/action-1467526567");
++
++    try testing.expect(std.mem.startsWith(u8, slot_a1, "slot-"));
++    try testing.expectEqualStrings(slot_a1, slot_a2);
++    try testing.expect(!std.mem.eql(u8, slot_a1, slot_b));
++
++    // Locally the cwd is the workspace root for every action, so everything
++    // lands in the catchall; only invocations that run inside an output tree
++    // (e.g. foreign_cc configure scripts) get a per-configuration shard.
++    try testing.expectEqualStrings("config-catchall", try makeSuffix(allocator, "/home/user/ic"));
++    const config = try makeSuffix(allocator, "/home/user/ic/bazel-out/k8-opt-exec-ST-1234/bin/pkg");
++    try testing.expect(std.mem.startsWith(u8, config, "config-"));
++    try testing.expect(!std.mem.eql(u8, config, "config-catchall"));
++}
++
++test "zig-wrapper:captures stderr and retries a transient failure" {
++    if (builtin.os.tag == .windows) return error.SkipZigTest;
++
++    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
++    const allocator = gpa.allocator();
++
++    var tmp = testing.tmpDir(.{});
++    defer tmp.cleanup();
++    const dir = try tmp.dir.realpathAlloc(allocator, ".");
++
++    // Stands in for a zig that hits the race on its first run and succeeds on
++    // the second, like the real one does: what the failed attempt built is
++    // cached, so the retry gets further.
++    const script = try std.fmt.allocPrint(allocator,
++        \\if [ -f {s}/attempted ]; then exit 0; fi
++        \\touch {s}/attempted
++        \\echo 'error: sub-compilation of compiler_rt failed' >&2
++        \\echo '    note: LLVM failed to parse: No available targets are compatible with triple "x"' >&2
++        \\exit 1
++    , .{ dir, dir });
++
++    var env = process.EnvMap.init(allocator);
++    defer env.deinit();
++
++    var args = ArrayListUnmanaged([]const u8){};
++    try args.appendSlice(allocator, &[_][]const u8{ "/bin/sh", "-c", script });
++    const params = ExecParams{ .args = args, .env = env };
++
++    const first = try runZig(allocator, params);
++    try testing.expectEqual(@as(u8, 1), first.term.Exited);
++    try testing.expect(isTransientZigFailure(first));
++
++    const second = try runZig(allocator, params);
++    try testing.expectEqual(@as(u8, 0), second.term.Exited);
++    try testing.expect(!isTransientZigFailure(second));
++    try testing.expectEqualStrings("", second.stderr);
++
++    // Output larger than a pipe buffer has to be drained while the child runs,
++    // or waiting for it to exit would deadlock.
++    var chatty = ArrayListUnmanaged([]const u8){};
++    try chatty.appendSlice(allocator, &[_][]const u8{ "/bin/sh", "-c", "i=0; while [ $i -lt 4000 ]; do echo 'warning: chatty compiler output' >&2; i=$((i+1)); done" });
++    const loud = try runZig(allocator, .{ .args = chatty, .env = env });
++    try testing.expectEqual(@as(u8, 0), loud.term.Exited);
++    try testing.expectEqual(@as(usize, 4000 * "warning: chatty compiler output\n".len), loud.stderr.len);
++}
++
++test "zig-wrapper:retries the transient zig failure only" {
++    const race_output =
++        \\error: sub-compilation of compiler_rt failed
++        \\    note: LLVM failed to parse 'x86_64-unknown-linux5.10.0-gnu2.31.0': No available targets are compatible with triple "x86_64-unknown-linux5.10.0-gnu2.31.0"
++        \\    note: failed to link with LLD: UnableToWriteArchive
++        \\
++    ;
++
++    try testing.expect(isTransientZigFailure(.{ .term = .{ .Exited = 1 }, .stderr = race_output }));
++
++    // A real error must not be retried, and neither must success -- least of
++    // all a *successful* invocation that happened to mention the message.
++    try testing.expect(!isTransientZigFailure(.{ .term = .{ .Exited = 1 }, .stderr = "ld.lld: error: undefined symbol: foo\n" }));
++    try testing.expect(!isTransientZigFailure(.{ .term = .{ .Exited = 0 }, .stderr = "" }));
++    try testing.expect(!isTransientZigFailure(.{ .term = .{ .Exited = 0 }, .stderr = race_output }));
++    try testing.expect(!isTransientZigFailure(.{ .term = .{ .Signal = 6 }, .stderr = race_output }));
++}
++
++test "zig-wrapper:warm-up applies to links only" {
++    // A link needs the shared sub-compilations, so it takes part in the
++    // warm-up.
++    try testing.expect(buildsSharedSubCompilations(&[_][]const u8{ "zig", "c++", "main.o", "-o", "main", "-target", "x86_64-linux-gnu.2.31" }));
++
++    // A compile does not, and must not record a warm-up: the first links would
++    // then run cold concurrently.
++    try testing.expect(!buildsSharedSubCompilations(&[_][]const u8{ "zig", "cc", "-c", "main.c", "-o", "main.o" }));
++    try testing.expect(!buildsSharedSubCompilations(&[_][]const u8{ "zig", "c++", "-E", "main.cc" }));
++
++    // Neither do the other sub-commands.
++    try testing.expect(!buildsSharedSubCompilations(&[_][]const u8{ "zig", "ar", "rcs", "lib.a", "main.o" }));
++    try testing.expect(!buildsSharedSubCompilations(&[_][]const u8{"zig"}));
++}
++
++test "zig-wrapper:warm-up marker name" {
++    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
++    const allocator = gpa.allocator();
++
++    const base = [_][]const u8{ "zig", "c++", "-O2", "-fPIC", "main.c", "-o", "main", "-target", "x86_64-linux-gnu.2.31" };
++
++    const name = try warmMarkerName(allocator, &base);
++    try testing.expect(std.mem.startsWith(u8, name, ".warm-"));
++
++    // Anything that changes which sub-compilations zig has to build needs its
++    // own warm-up: the tool, the target, and the flags zig derives them from.
++    for ([_][]const u8{ "cc", "-O0", "-fno-PIC", "x86_64-linux-gnu.2.34", "-static" }) |change| {
++        var args = base;
++        if (std.mem.eql(u8, change, "cc")) {
++            args[1] = change;
++        } else if (std.mem.startsWith(u8, change, "x86_64")) {
++            args[8] = change;
++        } else if (std.mem.eql(u8, change, "-static")) {
++            args[4] = change;
++        } else if (std.mem.startsWith(u8, change, "-O")) {
++            args[2] = change;
++        } else {
++            args[3] = change;
++        }
++        const other = try warmMarkerName(allocator, &args);
++        try testing.expect(!std.mem.eql(u8, name, other));
++    }
++
++    // Flags that leave them alone must not: otherwise nearly every invocation
++    // would claim a warm-up of its own and serialize the build.
++    var unrelated = base;
++    unrelated[4] = "-Wall";
++    unrelated[6] = "other";
++    try testing.expectEqualStrings(name, try warmMarkerName(allocator, &unrelated));
  }
  
  fn noExe(b: []const u8) []const u8 {
