@@ -538,8 +538,7 @@ impl HttpEndpointBuilder {
         });
         let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) =
             watch::channel(builder.map(Arc::new));
-        let nns_delegation_reader =
-            NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
+        let nns_delegation_reader = NNSDelegationReader::new(nns_delegation_watcher_rx);
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
