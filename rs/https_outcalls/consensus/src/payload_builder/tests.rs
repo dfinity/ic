@@ -5264,6 +5264,8 @@ fn with_payg_allowance(
 ) -> CanisterHttpRequestContext {
     context.pricing_version = ic_types::canister_http::PricingVersion::PayAsYouGo;
     context.refund_status.per_replica_allowance = per_replica_allowance;
+    context.refund_status.refundable_cycles =
+        per_replica_allowance * context.replication.node_count(context.subnet_size);
     context
 }
 
@@ -5336,8 +5338,8 @@ fn assert_responses_from_threshold_shares(
     let cb_id = 0;
     let threshold = num_nodes - get_faults_tolerated(num_nodes);
     let (response, metadata) = test_response_and_metadata(cb_id);
-    // The consensus cost is nonzero, so a zero collective allowance can only be
-    // covered if the request is not subject to the limit at all.
+    // The consensus cost is nonzero, so a zero collective allowance can only
+    // cover it if the request is not subject to the limit at all.
     assert!(!non_flexible_consensus_cost(num_nodes, metadata.content_size).is_zero());
 
     setup_test_with_contexts(
@@ -5488,6 +5490,64 @@ fn validate_payload_fails_for_initial_spent_exceeding_allowance() {
                     && num_replicas == threshold
             );
         },
+    );
+}
+
+#[test]
+fn validate_payload_accepts_initial_spent_within_the_collective_allowance() {
+    let num_nodes = 4;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let cb_id = 0;
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for signer in 0..threshold as u64 {
+        add_signer_to_proof(&mut proof, node_test_id(signer));
+    }
+    proof.initial_spent =
+        non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(num_nodes as u32));
+
+    // The smallest per-replica allowance whose `threshold` many copies cover the
+    // spend...
+    let allowance = Cycles::new(proof.initial_spent.get().div_ceil(threshold as u128));
+    assert!(allowance * threshold >= proof.initial_spent);
+    // ...one cycle less per replica no longer does.
+    assert!((allowance - Cycles::new(1)) * threshold < proof.initial_spent);
+
+    let validate = |per_replica_allowance| {
+        let mut result = None;
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(
+                CallbackId::new(cb_id),
+                with_payg_allowance(
+                    request_context(Replication::FullyReplicated),
+                    per_replica_allowance,
+                ),
+            )],
+            |payload_builder, _pool| {
+                let payload = CanisterHttpPayload {
+                    responses: vec![proof.clone()],
+                    ..Default::default()
+                };
+                result = Some(payload_builder.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&default_validation_context()),
+                    &payload_to_bytes_max_4mb(payload),
+                    &[],
+                ));
+            },
+        );
+        result.expect("validation did not run")
+    };
+
+    assert_matches!(validate(allowance), Ok(()));
+    assert_matches!(
+        validate(allowance - Cycles::new(1)),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit { .. },
+            ),
+        ))
     );
 }
 

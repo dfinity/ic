@@ -156,11 +156,12 @@ pub(crate) fn check_initial_spent_within_limit(
                 metrics.initial_spent_exceeds_limit.inc();
                 warn!(
                     log,
-                    "Initial HTTP spent {} of {} replicas exceeds collective allowance {} 
-                    for request {} of canister {}",
+                    "Initial HTTP spent {} of {} replicas exceeds collective allowance {} \
+                     for {} request {} of canister {}",
                     initial_spent,
                     num_replicas,
                     allowance * num_replicas,
+                    context.replication.kind().as_str(),
                     callback_id,
                     context.request.sender,
                 );
