@@ -12,7 +12,7 @@ use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use pocket_ic::{
-    CreateCanisterParams, CreateCanisterPlacement, PocketIcBuilder,
+    CreateCanisterParams, CreateCanisterPlacement, PocketIcBuilder, Time,
     common::rest::{
         CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
         SubnetSpec,
@@ -826,7 +826,7 @@ async fn metrics() {
 
 const OLDEST_REQUEST_AGE_METRIC: &str = "migration_canister_oldest_request_in_flight_age_seconds";
 
-/// Reads the age (in seconds) of the oldest request in flight from a metrics scrape.
+/// Reads the age (in seconds) of the oldest request in flight.
 /// Returns `None` if the metric is not set, i.e., if no request is in flight.
 fn oldest_request_age(metrics: &Scrape) -> Option<f64> {
     let is_metric_set = metrics
@@ -862,6 +862,14 @@ async fn oldest_request_in_flight_metric() {
         replaced_canister_id: replaced_canisters[1],
     };
 
+    // Bump the time to 2022-01-01T00:00:00Z so that the requests are not
+    // accepted at the UNIX epoch and thus their age is not equal to the
+    // current IC time (which would make the assertions below vacuous).
+    pic.set_time(Time::from_nanos_since_unix_epoch(
+        1_640_995_200 * 1_000_000_000,
+    ))
+    .await;
+
     // Without any request in flight, the metric is not set.
     assert_eq!(oldest_request_age(&fetch_metrics(&pic).await), None);
 
@@ -876,7 +884,7 @@ async fn oldest_request_in_flight_metric() {
         1.0
     );
     let age = oldest_request_age(&metrics).unwrap();
-    assert!(age >= 10.0, "unexpected age {age}");
+    assert!((10.0..100.0).contains(&age), "unexpected age {age}");
 
     // A second, younger request does not affect the metric:
     // it keeps reporting the age of the first request.
@@ -887,7 +895,7 @@ async fn oldest_request_in_flight_metric() {
         2.0
     );
     let age = oldest_request_age(&metrics).unwrap();
-    assert!(age >= 10.0, "unexpected age {age}");
+    assert!((10.0..100.0).contains(&age), "unexpected age {age}");
 
     // Drive both migrations to completion. We advance time by a lot so that
     // the task waiting for 6 minutes can succeed quickly.
@@ -928,6 +936,15 @@ async fn oldest_request_in_flight_metric_reset_on_failure() {
     };
 
     migrate_canister(&pic, sender, &args).await.unwrap();
+
+    // The request has been accepted and thus its age is reported by the metric.
+    let metrics = fetch_metrics(&pic).await;
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_requests_in_flight"),
+        1.0
+    );
+    assert!(oldest_request_age(&metrics).is_some());
+
     // Validation succeeded. Now we break migration by interfering.
     pic.start_canister(migrated_canister, Some(sender))
         .await
