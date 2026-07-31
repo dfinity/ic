@@ -780,8 +780,15 @@ impl CkErc20DepositFlow {
         let max_eth_logs_block_range = self.as_ref().max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .with_request_params(json!(["finalized", false]))
+            .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL))
+            .build()
+            .expect_rpc_calls(self);
+
         self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .with_request_params(json!(["finalized", false]))
             .respond_for_all_with(block_response(latest_finalized_block))
             .build()
             .expect_rpc_calls(self);
