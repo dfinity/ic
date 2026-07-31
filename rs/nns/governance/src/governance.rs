@@ -90,9 +90,9 @@ use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
+use ic_cdk::futures::spawn_017_compat;
+use ic_cdk::println;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
@@ -1250,7 +1250,7 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
-        spawn(future);
+        spawn_017_compat(future);
     }
     // This is needed for tests
     #[cfg(not(target_arch = "wasm32"))]

@@ -18,8 +18,7 @@ use dfn_core::api::CanisterId;
 use dfn_core::println;
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
-    CanisterInstallMode, CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs,
-    InstallCodeArgs,
+    CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
 };
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_runtime::Runtime;
@@ -63,7 +62,7 @@ pub struct ChangeCanisterRequest {
     /// Using mode `Reinstall` on a stateful canister is very dangerous;
     /// however, this field is provided so that repairing a nervous system
     /// (e.g. NNS) is possible even under extreme circumstances.
-    pub mode: CanisterInstallMode,
+    pub mode: CanisterInstallModeV2,
 
     /// The id of the canister to change.
     pub canister_id: CanisterId,
@@ -116,7 +115,7 @@ impl std::fmt::Display for ChangeCanisterRequest {
 impl ChangeCanisterRequest {
     pub fn new(
         stop_before_installing: bool,
-        mode: CanisterInstallMode,
+        mode: CanisterInstallModeV2,
         canister_id: CanisterId,
     ) -> Self {
         Self {
@@ -153,7 +152,7 @@ impl ChangeCanisterRequest {
         self
     }
 
-    pub fn with_mode(mut self, mode: CanisterInstallMode) -> Self {
+    pub fn with_mode(mut self, mode: CanisterInstallModeV2) -> Self {
         self.mode = mode;
         self
     }
@@ -300,7 +299,6 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
             .into_iter()
             .map(|hash| ChunkHash { hash })
             .collect();
-        let mode = CanisterInstallModeV2::from(mode);
         let argument = InstallChunkedCodeArgs {
             mode,
             target_canister,
@@ -317,7 +315,7 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
         )
         .await
     } else {
-        let argument = InstallCodeArgs {
+        let argument = InstallCodeArgsV2 {
             mode,
             canister_id,
             wasm_module,
@@ -401,7 +399,7 @@ mod tests {
         let conflicting_request = ChangeCanisterRequest {
             stop_before_installing: false,
             canister_id,
-            mode: CanisterInstallMode::Install,
+            mode: CanisterInstallModeV2::Install,
             wasm_module: vec![1, 2, 3],
             chunked_canister_wasm: None,
             arg: vec![7, 8, 9],
@@ -419,7 +417,7 @@ mod tests {
         let new_request = ChangeCanisterRequest {
             stop_before_installing: true,
             canister_id,
-            mode: CanisterInstallMode::Upgrade,
+            mode: CanisterInstallModeV2::Upgrade(None),
             wasm_module: vec![10, 11, 12],
             chunked_canister_wasm: None,
             arg: vec![16, 17, 18],

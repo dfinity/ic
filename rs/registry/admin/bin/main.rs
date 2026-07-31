@@ -22,7 +22,7 @@ use ic_crypto_utils_threshold_sig_der::{
 };
 use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterInstallModeV2};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -1491,7 +1491,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
         let arg = read_arg(&self.arg, &self.arg_sha256);
         ChangeCanisterRequest {
             stop_before_installing: !self.skip_stopping_before_installing,
-            mode: self.mode,
+            mode: CanisterInstallModeV2::from(self.mode),
             canister_id: self.canister_id,
             wasm_module,
             arg,
@@ -7394,9 +7394,12 @@ impl RootCanisterClient {
             &cmd.wasm_module_sha256,
         )
         .await;
-        let change_canister_request =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_wasm(wasm_module);
+        let change_canister_request = ChangeCanisterRequest::new(
+            true, // Stop before installing.
+            CanisterInstallModeV2::Upgrade(None),
+            GOVERNANCE_CANISTER_ID,
+        )
+        .with_wasm(wasm_module);
 
         let serialized = Encode!(&CanisterIdRecord::from(GOVERNANCE_CANISTER_ID)).unwrap();
         let response = self
