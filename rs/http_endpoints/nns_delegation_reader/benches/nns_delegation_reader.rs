@@ -2,7 +2,6 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
-use ic_logger::no_op_logger;
 use ic_nns_delegation_reader::{
     CanisterRangesCheck, CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader,
 };
@@ -64,13 +63,8 @@ fn build_delegation_bench(
             Some(LabeledTree::Leaf(public_key)) => public_key.clone(),
             _ => panic!("The fake delegation should certify a public key"),
         };
-        let builder = NNSDelegationBuilder::new(
-            certificate.clone(),
-            labeled_tree,
-            Blob(vec![]),
-            SUBNET_0,
-            &no_op_logger(),
-        );
+        let builder =
+            NNSDelegationBuilder::new(certificate.clone(), labeled_tree, Blob(vec![]), SUBNET_0);
 
         let build_verified = || {
             builder
@@ -83,7 +77,6 @@ fn build_delegation_bench(
                             CanisterIdRanges::try_from(vec![]).unwrap(),
                         ))
                     },
-                    &no_op_logger(),
                 )
                 .expect("The delegation should pass the NoCheck verification")
         };

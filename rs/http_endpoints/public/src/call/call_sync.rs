@@ -441,32 +441,29 @@ async fn tree_and_certificate_for_message(
     // response certificate will be built from.
     let delegation_from_nns = match nns_delegation_reader.builder() {
         None => None,
-        Some(builder) => match builder.build_verified(
-            delegation_filter,
-            delegation_check,
-            |subnet_id| {
+        Some(builder) => {
+            match builder.build_verified(delegation_filter, delegation_check, |subnet_id| {
                 subnet_state_view(
                     &certified_state_reader.get_state().metadata.network_topology,
                     subnet_id,
                 )
-            },
-            log,
-        ) {
-            Ok((delegation, _metadata)) => Some(delegation),
-            Err(err) => {
-                warn!(
-                    every_n_seconds => LOG_EVERY_N_SECONDS,
-                    log,
-                    "Refusing to serve a call response with an NNS delegation which could not \
-                    be verified against the certified state: {err}"
-                );
-                metrics
-                    .delegation_verification_failures_total
-                    .with_label_values(&["call", delegation_verification_failure_reason(&err)])
-                    .inc();
-                return None;
+            }) {
+                Ok((delegation, _metadata)) => Some(delegation),
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => LOG_EVERY_N_SECONDS,
+                        log,
+                        "Refusing to serve a call response with an NNS delegation which could not \
+                        be verified against the certified state: {err}"
+                    );
+                    metrics
+                        .delegation_verification_failures_total
+                        .with_label_values(&["call", delegation_verification_failure_reason(&err)])
+                        .inc();
+                    return None;
+                }
             }
-        },
+        }
     };
 
     // We always add time path to comply with the IC spec.

@@ -315,7 +315,6 @@ pub(crate) async fn read_state(
                         subnet_id,
                     )
                 },
-                &log,
             ) {
                 Ok((delegation, _metadata)) => Some(delegation),
                 Err(err) => {

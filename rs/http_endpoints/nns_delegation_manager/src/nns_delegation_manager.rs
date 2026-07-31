@@ -515,7 +515,6 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
-        log,
     );
 
     observe_delegation_sizes(&nns_delegation_builder, metrics);
@@ -1251,7 +1250,7 @@ mod tests {
             let builder = reader
                 .builder()
                 .expect("Should return some delegation on non NNS subnet");
-            let delegation = builder.build_unverified(CanisterRangesFilter::Flat, &no_op_logger());
+            let delegation = builder.build_unverified(CanisterRangesFilter::Flat);
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
                 .expect("Should return a certificate which can be deserialized");
             let tree = LabeledTree::try_from(parsed_delegation.tree)
@@ -1449,7 +1448,7 @@ mod tests {
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(
                 &builder
-                    .build_unverified(CanisterRangesFilter::Flat, &no_op_logger())
+                    .build_unverified(CanisterRangesFilter::Flat)
                     .certificate,
             )
             .expect("Should return a certificate which can be deserialized");

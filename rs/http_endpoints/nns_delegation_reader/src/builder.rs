@@ -2,7 +2,6 @@ use ic_crypto_tree_hash::{
     FilterBuilder, LabeledTree, LookupLowerBoundStatus, Path, lookup_lower_bound,
     sparse_labeled_tree_from_paths,
 };
-use ic_logger::{ReplicaLogger, warn};
 use ic_registry_routing_table::CanisterIdRanges;
 use ic_types::{
     CanisterId, SubnetId,
@@ -59,11 +58,7 @@ pub struct NNSDelegationBuilder {
 }
 
 impl NNSDelegationBuilder {
-    pub fn try_new(
-        raw_certificate: Blob,
-        subnet_id: SubnetId,
-        logger: &ReplicaLogger,
-    ) -> Result<Self, String> {
+    pub fn try_new(raw_certificate: Blob, subnet_id: SubnetId) -> Result<Self, String> {
         let full_certificate: Certificate = serde_cbor::from_slice(&raw_certificate)
             .map_err(|err| format!("Failed to parse delegation certificate: {err}"))?;
 
@@ -75,7 +70,6 @@ impl NNSDelegationBuilder {
             full_labeled_tree,
             raw_certificate,
             subnet_id,
-            logger,
         ))
     }
 
@@ -84,7 +78,6 @@ impl NNSDelegationBuilder {
         full_labeled_tree: LabeledTree<Vec<u8>>,
         raw_certificate: Blob,
         subnet_id: SubnetId,
-        logger: &ReplicaLogger,
     ) -> Self {
         let original_delegation = CertificateDelegation {
             subnet_id: Blob(subnet_id.get().to_vec()),
@@ -102,9 +95,9 @@ impl NNSDelegationBuilder {
             original_delegation,
         };
         builder.precomputed_delegation_without_canister_ranges =
-            builder.build_uncached_or_original(CanisterRangesFilter::None, logger);
+            builder.build_uncached_or_original(CanisterRangesFilter::None);
         builder.precomputed_delegation_with_flat_canister_ranges =
-            builder.build_uncached_or_original(CanisterRangesFilter::Flat, logger);
+            builder.build_uncached_or_original(CanisterRangesFilter::Flat);
 
         builder
     }
@@ -124,12 +117,11 @@ impl NNSDelegationBuilder {
         canister_ranges_filter: CanisterRangesFilter,
         ranges_check: CanisterRangesCheck,
         state_view_for_subnet: impl FnOnce(SubnetId) -> Option<(Vec<u8>, CanisterIdRanges)>,
-        logger: &ReplicaLogger,
     ) -> Result<(CertificateDelegation, CertificateDelegationMetadata), DelegationVerificationError>
     {
         match self.is_consistent_with(state_view_for_subnet, ranges_check) {
             Ok(true) => Ok((
-                self.build_unverified(canister_ranges_filter, logger),
+                self.build_unverified(canister_ranges_filter),
                 canister_ranges_filter.into(),
             )),
             Ok(false) => Err(DelegationVerificationError::Inconsistent),
@@ -208,7 +200,6 @@ impl NNSDelegationBuilder {
     pub fn build_unverified(
         &self,
         canister_ranges_filter: CanisterRangesFilter,
-        logger: &ReplicaLogger,
     ) -> CertificateDelegation {
         match canister_ranges_filter {
             CanisterRangesFilter::Flat => self
@@ -218,27 +209,17 @@ impl NNSDelegationBuilder {
                 self.precomputed_delegation_without_canister_ranges.clone()
             }
             CanisterRangesFilter::Tree(_canister_id) => {
-                self.build_uncached_or_original(canister_ranges_filter, logger)
+                self.build_uncached_or_original(canister_ranges_filter)
             }
         }
     }
 
     /// Like [`Self::build_unverified`], but always builds the delegation from scratch
     /// instead of consulting the precomputed delegations.
-    fn build_uncached_or_original(
-        &self,
-        filter: CanisterRangesFilter,
-        logger: &ReplicaLogger,
-    ) -> CertificateDelegation {
+    fn build_uncached_or_original(&self, filter: CanisterRangesFilter) -> CertificateDelegation {
         match self.try_build(filter) {
             Ok(delegation) => delegation,
             Err(err) => {
-                warn!(
-                    every_n_seconds => 30,
-                    logger,
-                    "Failed to build an NNS delegation with filter {filter:?}: {err}. \
-                    Returning the original delegation."
-                );
                 if cfg!(debug_assertions) {
                     panic!("Failed to build an NNS delegation with filter {filter:?}: {err}");
                 }
@@ -353,14 +334,13 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_certification::verify_delegation_certificate;
     use ic_crypto_tree_hash::lookup_path;
-    use ic_logger::no_op_logger;
     use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
     use ic_registry_routing_table::CanisterIdRange;
     use ic_test_utilities_types::ids::SUBNET_0;
 
     /// Creates a builder over the given delegation for `SUBNET_0`.
     fn create_builder(delegation: CertificateDelegation) -> NNSDelegationBuilder {
-        NNSDelegationBuilder::try_new(delegation.certificate, SUBNET_0, &no_op_logger()).unwrap()
+        NNSDelegationBuilder::try_new(delegation.certificate, SUBNET_0).unwrap()
     }
 
     /// Returns whether the given path exists in the delegation's certificate tree.
@@ -382,7 +362,7 @@ mod tests {
         );
         let builder = create_builder(full_delegation);
 
-        let delegation = builder.build_unverified(CanisterRangesFilter::None, &no_op_logger());
+        let delegation = builder.build_unverified(CanisterRangesFilter::None);
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -416,7 +396,7 @@ mod tests {
         );
         let builder = create_builder(full_delegation);
 
-        let delegation = builder.build_unverified(CanisterRangesFilter::Flat, &no_op_logger());
+        let delegation = builder.build_unverified(CanisterRangesFilter::Flat);
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -454,10 +434,8 @@ mod tests {
         );
         let builder = create_builder(full_delegation);
 
-        let delegation = builder.build_unverified(
-            CanisterRangesFilter::Tree(CanisterId::from(150)),
-            &no_op_logger(),
-        );
+        let delegation =
+            builder.build_unverified(CanisterRangesFilter::Tree(CanisterId::from(150)));
 
         assert!(
             path_exists(&delegation, &[b"canister_ranges"]),
@@ -506,10 +484,7 @@ mod tests {
         );
         let builder = create_builder(full_delegation);
 
-        let delegation = builder.build_unverified(
-            CanisterRangesFilter::Tree(CanisterId::from(0)),
-            &no_op_logger(),
-        );
+        let delegation = builder.build_unverified(CanisterRangesFilter::Tree(CanisterId::from(0)));
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -637,7 +612,6 @@ mod tests {
                 CanisterRangesFilter::Flat,
                 CanisterRangesCheck::AllSubnetRanges,
                 |_subnet_id| Some((public_key.clone(), subnet_ranges(RANGES))),
-                &no_op_logger(),
             )
             .expect("the delegation should be consistent with the state view");
 
@@ -671,7 +645,6 @@ mod tests {
                 CanisterRangesCheck::AllSubnetRanges,
                 // A public key which does not match the certified one.
                 |_subnet_id| Some((vec![9, 9, 9], subnet_ranges(RANGES))),
-                &no_op_logger(),
             ),
             Err(DelegationVerificationError::Inconsistent)
         );
@@ -686,7 +659,6 @@ mod tests {
                 CanisterRangesFilter::Flat,
                 CanisterRangesCheck::AllSubnetRanges,
                 |_subnet_id| None,
-                &no_op_logger(),
             ),
             Err(DelegationVerificationError::Validation(
                 DelegationValidationError::UnknownSubnet(subnet_id)

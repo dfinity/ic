@@ -96,7 +96,6 @@ fn get_latest_certified_state_and_data_certificate(
     canister_ranges_filter: CanisterRangesFilter,
     canister_ranges_check: CanisterRangesCheck,
     canister_id: CanisterId,
-    logger: &ReplicaLogger,
 ) -> Result<CertifiedStateWithDataCertificate, QueryExecutionError> {
     // The path to fetch the data certificate for the canister.
     let path = SubTree(flatmap! {
@@ -121,24 +120,19 @@ fn get_latest_certified_state_and_data_certificate(
         Some(builder) => {
             let network_topology = &state.metadata.network_topology;
             let (delegation, metadata) = builder
-                .build_verified(
-                    canister_ranges_filter,
-                    canister_ranges_check,
-                    |subnet_id| {
-                        network_topology
-                            .subnets_for_certification()
-                            .get(&subnet_id)
-                            .map(|subnet_topology| {
-                                (
-                                    subnet_topology.public_key.clone(),
-                                    network_topology
-                                        .routing_table_for_certification()
-                                        .ranges(subnet_id),
-                                )
-                            })
-                    },
-                    logger,
-                )
+                .build_verified(canister_ranges_filter, canister_ranges_check, |subnet_id| {
+                    network_topology
+                        .subnets_for_certification()
+                        .get(&subnet_id)
+                        .map(|subnet_topology| {
+                            (
+                                subnet_topology.public_key.clone(),
+                                network_topology
+                                    .routing_table_for_certification()
+                                    .ranges(subnet_id),
+                            )
+                        })
+                })
                 .map_err(|_err| QueryExecutionError::DelegationInconsistentWithState)?;
             (Some(delegation), Some(metadata))
         }
@@ -552,7 +546,6 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                     canister_ranges_filter,
                     canister_ranges_check,
                     query.receiver,
-                    &internal.log,
                 ) {
                     Ok(CertifiedStateWithDataCertificate {
                         state,
