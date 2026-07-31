@@ -927,7 +927,7 @@ pub fn get_post_split_dkg_summary(
         .value
         .ok_or_else(|| format!("Empty cup contents at registry version {registry_version}"))?;
 
-    // Skip one dkg interval
+    // During subnet splitting we skip one DKG interval
     cup_contents.height = last_summary.get_next_start_height().get();
 
     get_dkg_summary_from_cup_contents_with_subnet_splitting(

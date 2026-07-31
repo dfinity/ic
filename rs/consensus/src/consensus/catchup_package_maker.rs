@@ -275,14 +275,6 @@ impl CatchUpPackageMaker {
         let oldest_registry_version_in_use_by_replicated_state =
             get_oldest_state_registry_version(state.get_ref());
 
-        // Skip if this node has already made a share
-        if pool
-            .get_catch_up_package_shares(self.get_cup_height(&start_block, cup_type))
-            .any(|share| share.signature.signer == self.replica_config.node_id)
-        {
-            return None;
-        }
-
         let cup_block = self
             .get_cup_block(start_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't get a block for a CUP: {err}"))
@@ -302,6 +294,14 @@ impl CatchUpPackageMaker {
             .node_belongs_to_threshold_committee(&cup_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't check if node belongs to committee: {err}"))
             .unwrap_or_default()
+        {
+            return None;
+        }
+
+        // Skip if this node has already made a share
+        if pool
+            .get_catch_up_package_shares(cup_block.height())
+            .any(|share| share.signature.signer == self.replica_config.node_id)
         {
             return None;
         }
@@ -336,19 +336,6 @@ impl CatchUpPackageMaker {
                 );
                 None
             }
-        }
-    }
-
-    fn get_cup_height(&self, summary_block: &Block, cup_type: CatchUpPackageType) -> Height {
-        match cup_type {
-            CatchUpPackageType::Normal => summary_block.height,
-            // During subnet splitting we skip one dkg interval
-            CatchUpPackageType::PostSplit { .. } => summary_block
-                .payload
-                .as_ref()
-                .as_summary()
-                .dkg
-                .get_next_start_height(),
         }
     }
 
@@ -477,7 +464,6 @@ pub(crate) fn get_catch_up_package_type(
     }
 }
 
-/// Note: this panics if the given block is not a summary block.
 fn get_current_transcript_from_summary_block<'a>(
     summary_block: &'a Block,
     tag: &NiDkgTag,
@@ -531,23 +517,25 @@ pub(crate) fn create_post_split_summary_block(
 // During subnet splitting we create a dummy, unsigned random beacon, because at the
 // height at which we are building a CUP, we won't have a random beacon.
 pub(crate) fn create_post_split_random_beacon(cup_block: &Block) -> Result<RandomBeacon, String> {
-    match get_current_transcript_from_summary_block(cup_block, &NiDkgTag::LowThreshold) {
-        Some(transcript) => Ok(Signed {
-            content: RandomBeaconContent {
-                version: cup_block.version.clone(),
-                height: cup_block.height(),
-                parent: CryptoHashOf::from(CryptoHash(Vec::new())),
-            },
-            signature: ThresholdSignature {
-                signer: transcript.dkg_id.clone(),
-                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-            },
-        }),
-        None => Err(format!(
-            "Couldn't find post-split transcript at height {}",
-            cup_block.height(),
-        )),
-    }
+    let transcript = get_current_transcript_from_summary_block(cup_block, &NiDkgTag::LowThreshold)
+        .ok_or_else(|| {
+            format!(
+                "Couldn't find post-split transcript at height {}",
+                cup_block.height(),
+            )
+        })?;
+
+    Ok(Signed {
+        content: RandomBeaconContent {
+            version: cup_block.version.clone(),
+            height: cup_block.height(),
+            parent: CryptoHashOf::from(CryptoHash(Vec::new())),
+        },
+        signature: ThresholdSignature {
+            signer: transcript.dkg_id.clone(),
+            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+        },
+    })
 }
 
 fn get_new_subnet_id(
