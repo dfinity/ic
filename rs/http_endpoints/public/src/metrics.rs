@@ -77,6 +77,9 @@ pub struct HttpHandlerMetrics {
 
     // read_state metrics
     pub read_state_path_type_total: IntCounterVec,
+
+    // NNS delegation verification metrics
+    pub delegation_verification_failures_total: IntCounterVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -219,6 +222,12 @@ impl HttpHandlerMetrics {
                 "replica_http_read_state_path_type_total",
                 "Count of read_state paths requested, by endpoint type and path type.",
                 &["endpoint", "path_type"],
+            ),
+            delegation_verification_failures_total: metrics_registry.int_counter_vec(
+                "replica_http_delegation_verification_failures_total",
+                "Count of NNS delegation verifications against the certified state which \
+                prevented serving a response, by endpoint and reason.",
+                &["endpoint", "reason"],
             ),
         }
     }

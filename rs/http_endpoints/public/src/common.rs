@@ -13,10 +13,12 @@ use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info, warn};
+use ic_nns_delegation_manager::DelegationVerificationError;
 use ic_registry_client_helpers::crypto::{
     CryptoRegistry, root_of_trust::RegistryRootOfTrustProvider,
 };
-use ic_replicated_state::ReplicatedState;
+use ic_registry_routing_table::CanisterIdRanges;
+use ic_replicated_state::{ReplicatedState, metadata_state::NetworkTopology};
 use ic_types::{
     RegistryVersion, SubnetId, Time,
     crypto::threshold_sig::ThresholdSigPublicKey,
@@ -272,6 +274,37 @@ pub(crate) fn certified_state_unavailable_error() -> HttpError {
     let status = StatusCode::SERVICE_UNAVAILABLE;
     let message = "Certified state unavailable. Please try again.".to_string();
     HttpError { status, message }
+}
+
+/// The `reason` label value for the delegation verification failures metric.
+pub(crate) fn delegation_verification_failure_reason(
+    err: &DelegationVerificationError,
+) -> &'static str {
+    match err {
+        DelegationVerificationError::Inconsistent => "inconsistent",
+        DelegationVerificationError::Validation(_) => "validation_error",
+    }
+}
+
+/// Resolves the threshold public key and the canister ranges which the state assigns to
+/// a subnet, in the form expected by [`NNSDelegationBuilder::build_verified`].
+///
+/// [`NNSDelegationBuilder::build_verified`]: ic_nns_delegation_manager::NNSDelegationBuilder::build_verified
+pub(crate) fn subnet_state_view(
+    network_topology: &NetworkTopology,
+    subnet_id: SubnetId,
+) -> Option<(Vec<u8>, CanisterIdRanges)> {
+    network_topology
+        .subnets_for_certification()
+        .get(&subnet_id)
+        .map(|subnet_topology| {
+            (
+                subnet_topology.public_key.clone(),
+                network_topology
+                    .routing_table_for_certification()
+                    .ranges(subnet_id),
+            )
+        })
 }
 
 pub(crate) async fn get_latest_certified_state(

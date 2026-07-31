@@ -1,11 +1,12 @@
 use ic_logger::ReplicaLogger;
 use ic_types::{
     CanisterId,
-    messages::{CertificateDelegation, CertificateDelegationFormat, CertificateDelegationMetadata},
+    messages::{CertificateDelegation, CertificateDelegationMetadata},
 };
+use std::sync::Arc;
 use tokio::sync::watch;
 
-use crate::builder::NNSDelegationBuilder;
+use crate::builder::{NNSDelegationBuilder, metadata_for};
 
 #[derive(Clone, Copy, Debug)]
 /// Filter for the canister ranges in the NNS delegation.
@@ -27,16 +28,28 @@ pub enum CanisterRangesFilter {
 /// Wrapper around [`tokio::sync::watch::Receiver`] with some utility methods.
 // TODO(CON-1487): Consider caching the delegations per canister range.
 pub struct NNSDelegationReader {
-    receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
+    receiver: watch::Receiver<Option<Arc<NNSDelegationBuilder>>>,
     logger: ReplicaLogger,
 }
 
 impl NNSDelegationReader {
     pub fn new(
-        receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
+        receiver: watch::Receiver<Option<Arc<NNSDelegationBuilder>>>,
         logger: ReplicaLogger,
     ) -> Self {
         Self { receiver, logger }
+    }
+
+    /// Returns a snapshot of the most recent NNS delegation known to the replica.
+    /// Consecutive calls might return different delegations.
+    /// Note: on the NNS subnet this always returns `None`.
+    ///
+    /// The snapshot is immutable, so it can be used to verify the delegation against a
+    /// certified state and to build exactly the verified delegation (see
+    /// [`NNSDelegationBuilder::build_verified`]), without having to worry about the
+    /// delegation being concurrently replaced.
+    pub fn builder(&self) -> Option<Arc<NNSDelegationBuilder>> {
+        self.receiver.borrow().clone()
     }
 
     /// Returns the most recent NNS delegation known to the replica.
@@ -46,9 +59,7 @@ impl NNSDelegationReader {
         &self,
         canister_ranges_filter: CanisterRangesFilter,
     ) -> Option<CertificateDelegation> {
-        self.receiver
-            .borrow()
-            .as_ref()
+        self.builder()
             .map(|builder| builder.build_or_original(canister_ranges_filter, &self.logger))
     }
 
@@ -59,18 +70,10 @@ impl NNSDelegationReader {
         &self,
         canister_ranges_filter: CanisterRangesFilter,
     ) -> Option<(CertificateDelegation, CertificateDelegationMetadata)> {
-        let metadata = CertificateDelegationMetadata {
-            format: match canister_ranges_filter {
-                CanisterRangesFilter::Flat => CertificateDelegationFormat::Flat,
-                CanisterRangesFilter::Tree(_canister_id) => CertificateDelegationFormat::Tree,
-                CanisterRangesFilter::None => CertificateDelegationFormat::Pruned,
-            },
-        };
-
-        self.receiver.borrow().as_ref().map(|builder| {
+        self.builder().map(|builder| {
             (
                 builder.build_or_original(canister_ranges_filter, &self.logger),
-                metadata,
+                metadata_for(canister_ranges_filter),
             )
         })
     }
@@ -102,20 +105,19 @@ mod tests {
         lookup_path(&parse_labeled_tree(delegation), path).is_some()
     }
 
-    pub fn create_reader(
+    fn create_reader(
         delegation: Option<CertificateDelegation>,
         subnet_id: SubnetId,
     ) -> NNSDelegationReader {
         let builder = delegation.map(|delegation| {
-            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &no_op_logger())
-                .unwrap()
+            Arc::new(
+                NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &no_op_logger())
+                    .unwrap(),
+            )
         });
         let (_sender, receiver) = watch::channel(builder);
 
-        NNSDelegationReader {
-            receiver,
-            logger: no_op_logger(),
-        }
+        NNSDelegationReader::new(receiver, no_op_logger())
     }
 
     #[test]

@@ -10,6 +10,7 @@ use ic_types::{
     CanisterId,
     messages::{Blob, Certificate},
 };
+use std::sync::Arc;
 use tokio::sync::watch;
 
 fn get_delegation_with_flat_canister_ranges(criterion: &mut Criterion) {
@@ -57,7 +58,7 @@ fn get_delegation_bench(
             SUBNET_0,
             &no_op_logger(),
         );
-        let (_sender, receiver) = watch::channel(Some(builder));
+        let (_sender, receiver) = watch::channel(Some(Arc::new(builder)));
 
         let reader = NNSDelegationReader::new(receiver, no_op_logger());
 

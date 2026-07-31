@@ -6,7 +6,9 @@ use super::{
 };
 use crate::{
     HttpError,
-    common::{Cbor, WithTimeout, into_cbor},
+    common::{
+        Cbor, WithTimeout, delegation_verification_failure_reason, into_cbor, subnet_state_view,
+    },
     metrics::{
         CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, HttpHandlerMetrics,
         SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
@@ -30,13 +32,15 @@ use ic_crypto_tree_hash::{
 };
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn};
-use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
+use ic_logger::{ReplicaLogger, error, warn};
+use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CanisterId, PrincipalId, SubnetId,
     consensus::certification::Certification,
-    messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
+    messages::{
+        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
+    },
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
@@ -202,12 +206,13 @@ async fn call_sync(
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> SyncCallResponse {
-    let (effective_destination, delegation_filter) = match version {
+    let (effective_destination, delegation_filter, delegation_check) = match version {
         Version::V3 => {
             let canister_id = CanisterId::unchecked_from_principal(id);
             (
                 EffectiveDestination::Canister(canister_id),
                 CanisterRangesFilter::Flat,
+                CanisterRangesCheck::CanisterInFlat(canister_id),
             )
         }
         Version::V4 => {
@@ -215,11 +220,13 @@ async fn call_sync(
             (
                 EffectiveDestination::Canister(canister_id),
                 CanisterRangesFilter::Tree(canister_id),
+                CanisterRangesCheck::CanisterInTree(canister_id),
             )
         }
         Version::SubnetV4 => (
             EffectiveDestination::Subnet(SubnetId::from(id)),
             CanisterRangesFilter::None,
+            CanisterRangesCheck::NoCheck,
         ),
     };
     let log = call_handler.log.clone();
@@ -237,8 +244,16 @@ async fn call_sync(
     // Check if the message is already known.
     // If it is known, we can return the certificate without re-submitting the message
     // to the ingress pool.
-    if let Some((tree, certification)) =
-        tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
+    if let Some((tree, certification, delegation)) = tree_and_certificate_for_message(
+        state_reader.clone(),
+        message_id.clone(),
+        &nns_delegation_reader,
+        delegation_filter,
+        delegation_check,
+        &metrics,
+        &log,
+    )
+    .await
         && let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id)
     {
         let signature = certification.signed.signature.signature.get().0;
@@ -251,7 +266,7 @@ async fn call_sync(
         return SyncCallResponse::Certificate(Certificate {
             tree,
             signature: Blob(signature),
-            delegation: nns_delegation_reader.get_delegation(delegation_filter),
+            delegation,
         });
     };
 
@@ -326,8 +341,16 @@ async fn call_sync(
         }
     }
 
-    let Some((tree, certification)) =
-        tree_and_certificate_for_message(state_reader, message_id.clone()).await
+    let Some((tree, certification, delegation)) = tree_and_certificate_for_message(
+        state_reader,
+        message_id.clone(),
+        &nns_delegation_reader,
+        delegation_filter,
+        delegation_check,
+        &metrics,
+        &log,
+    )
+    .await
     else {
         return SyncCallResponse::Accepted(
             "Certified state is not available. Please try /read_state.",
@@ -366,7 +389,7 @@ async fn call_sync(
     SyncCallResponse::Certificate(Certificate {
         tree,
         signature: Blob(signature),
-        delegation: nns_delegation_reader.get_delegation(delegation_filter),
+        delegation,
     })
 }
 
@@ -390,10 +413,21 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
     }
 }
 
+/// Reads the certificate for the given message from the latest certified state, together
+/// with the NNS delegation (built with `delegation_filter`) to attach to it.
+///
+/// Returns `None` if the certified state is not available, or if the NNS delegation could
+/// not be verified to be consistent (according to `delegation_check`) with the certified
+/// state which the certificate is built from.
 async fn tree_and_certificate_for_message(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: MessageId,
-) -> Option<(MixedHashTree, Certification)> {
+    nns_delegation_reader: &NNSDelegationReader,
+    delegation_filter: CanisterRangesFilter,
+    delegation_check: CanisterRangesCheck,
+    metrics: &HttpHandlerMetrics,
+    log: &ReplicaLogger,
+) -> Option<(MixedHashTree, Certification, Option<CertificateDelegation>)> {
     let certified_state_reader = match tokio::task::spawn_blocking(move || {
         state_reader.get_certified_state_snapshot()
     })
@@ -402,6 +436,38 @@ async fn tree_and_certificate_for_message(
         Ok(Some(certified_state_reader)) => Some(certified_state_reader),
         Ok(None) | Err(_) => None,
     }?;
+
+    // Only serve a delegation which is consistent with the certified state which the
+    // response certificate will be built from.
+    let delegation_from_nns = match nns_delegation_reader.builder() {
+        None => None,
+        Some(builder) => match builder.build_verified(
+            delegation_filter,
+            delegation_check,
+            |subnet_id| {
+                subnet_state_view(
+                    &certified_state_reader.get_state().metadata.network_topology,
+                    subnet_id,
+                )
+            },
+            log,
+        ) {
+            Ok((delegation, _metadata)) => Some(delegation),
+            Err(err) => {
+                warn!(
+                    every_n_seconds => LOG_EVERY_N_SECONDS,
+                    log,
+                    "Refusing to serve a call response with an NNS delegation which could not \
+                    be verified against the certified state: {err}"
+                );
+                metrics
+                    .delegation_verification_failures_total
+                    .with_label_values(&["call", delegation_verification_failure_reason(&err)])
+                    .inc();
+                return None;
+            }
+        },
+    };
 
     // We always add time path to comply with the IC spec.
     let time_path = Path::from(Label::from("time"));
@@ -414,5 +480,7 @@ async fn tree_and_certificate_for_message(
         sparse_labeled_tree_from_paths(&[time_path, request_status_path])
             .expect("Path is within length bound.");
 
-    certified_state_reader.read_certified_state(&tree)
+    certified_state_reader
+        .read_certified_state(&tree)
+        .map(|(tree, certification)| (tree, certification, delegation_from_nns))
 }

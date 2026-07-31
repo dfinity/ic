@@ -10776,6 +10776,7 @@ dependencies = [
  "ic-error-types 0.2.0",
  "ic-heap-bytes",
  "ic-management-canister-types-private",
+ "ic-nns-delegation-reader",
  "ic-protobuf",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",

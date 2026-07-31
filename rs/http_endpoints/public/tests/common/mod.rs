@@ -536,7 +536,8 @@ impl HttpEndpointBuilder {
         let builder = self.delegation_from_nns.map(|delegation| {
             NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &log).unwrap()
         });
-        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(builder);
+        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) =
+            watch::channel(builder.map(Arc::new));
         let nns_delegation_reader =
             NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
 

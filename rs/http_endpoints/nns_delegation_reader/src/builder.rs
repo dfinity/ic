@@ -6,13 +6,19 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_registry_routing_table::CanisterIdRanges;
 use ic_types::{
     SubnetId,
-    messages::{Blob, Certificate, CertificateDelegation},
+    messages::{
+        Blob, Certificate, CertificateDelegation, CertificateDelegationFormat,
+        CertificateDelegationMetadata,
+    },
 };
 use serde::ser::Serialize;
 
 use crate::{
     reader::CanisterRangesFilter,
-    validation::{CanisterRangesCheck, DelegationValidationError, is_tree_consistent_with},
+    validation::{
+        CanisterRangesCheck, DelegationValidationError, DelegationVerificationError,
+        is_tree_consistent_with,
+    },
 };
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -127,6 +133,39 @@ impl NNSDelegationBuilder {
             &subnet_ranges,
             ranges_check,
         )
+    }
+
+    /// Verifies that the delegation is consistent with the given view of the subnet
+    /// information recorded in a replicated state and, only if it is, builds it with
+    /// `canister_ranges_filter` and returns it together with some metadata. The builder
+    /// is an immutable snapshot of the delegation, so the returned delegation is
+    /// guaranteed to be exactly the one which was verified.
+    ///
+    /// `ranges_check` specifies what to check the certified canister ranges against
+    /// (see [`CanisterRangesCheck`]); it should correspond to what the delegation built
+    /// with `canister_ranges_filter` will carry. For the meaning of
+    /// `state_view_for_subnet`, see [`Self::is_consistent_with`].
+    pub fn build_verified(
+        &self,
+        canister_ranges_filter: CanisterRangesFilter,
+        ranges_check: CanisterRangesCheck,
+        state_view_for_subnet: impl FnOnce(SubnetId) -> Option<(Vec<u8>, CanisterIdRanges)>,
+        logger: &ReplicaLogger,
+    ) -> Result<(CertificateDelegation, CertificateDelegationMetadata), DelegationVerificationError>
+    {
+        match self.is_consistent_with(state_view_for_subnet, ranges_check) {
+            Ok(true) => Ok((
+                self.build_or_original(canister_ranges_filter, logger),
+                metadata_for(canister_ranges_filter),
+            )),
+            Ok(false) => Err(DelegationVerificationError::Inconsistent),
+            Err(err) => Err(DelegationVerificationError::Validation(err)),
+        }
+    }
+
+    /// The id of the subnet to which the delegation was issued.
+    pub fn subnet_id(&self) -> SubnetId {
+        self.builder.subnet_id
     }
 
     /// The size, in bytes, of the certificate as received from the NNS, which contains
@@ -300,6 +339,19 @@ fn into_cbor(certificate: &Certificate) -> Result<Vec<u8>, String> {
     Ok(serializer.into_inner())
 }
 
+/// The metadata describing a delegation built with the given filter.
+pub(crate) fn metadata_for(
+    canister_ranges_filter: CanisterRangesFilter,
+) -> CertificateDelegationMetadata {
+    CertificateDelegationMetadata {
+        format: match canister_ranges_filter {
+            CanisterRangesFilter::Flat => CertificateDelegationFormat::Flat,
+            CanisterRangesFilter::Tree(_canister_id) => CertificateDelegationFormat::Tree,
+            CanisterRangesFilter::None => CertificateDelegationFormat::Pruned,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,6 +458,80 @@ mod tests {
         assert_matches!(
             builder.is_consistent_with(|_subnet_id| None, CanisterRangesCheck::AllSubnetRanges),
             Err(DelegationValidationError::UnknownSubnet(subnet_id)) if subnet_id == SUBNET_0
+        );
+    }
+
+    /// Returns whether the given path exists in the delegation's certificate tree.
+    fn path_exists(delegation: &CertificateDelegation, path: &[&[u8]]) -> bool {
+        let parsed_delegation: Certificate =
+            serde_cbor::from_slice(&delegation.certificate).unwrap();
+        let tree = LabeledTree::try_from(parsed_delegation.tree.clone()).unwrap();
+        lookup_path(&tree, path).is_some()
+    }
+
+    #[test]
+    fn build_verified_returns_a_consistent_delegation() {
+        let (builder, public_key) = create_consistency_check_fixture();
+
+        let (delegation, metadata) = builder
+            .build_verified(
+                CanisterRangesFilter::Flat,
+                CanisterRangesCheck::AllSubnetRanges,
+                |_subnet_id| Some((public_key.clone(), subnet_ranges(RANGES))),
+                &no_op_logger(),
+            )
+            .expect("the delegation should be consistent with the state view");
+
+        assert_eq!(
+            metadata,
+            CertificateDelegationMetadata {
+                format: CertificateDelegationFormat::Flat
+            }
+        );
+        // The returned delegation should be built with the requested filter.
+        assert!(
+            path_exists(
+                &delegation,
+                &[b"subnet", SUBNET_0.get().as_ref(), b"canister_ranges"],
+            ),
+            "The delegation should carry the flat canister ranges"
+        );
+        assert!(
+            !path_exists(&delegation, &[b"canister_ranges"]),
+            "The tree canister ranges should have been purged"
+        );
+    }
+
+    #[test]
+    fn build_verified_on_an_inconsistent_delegation_is_an_error() {
+        let (builder, _public_key) = create_consistency_check_fixture();
+
+        assert_matches!(
+            builder.build_verified(
+                CanisterRangesFilter::Flat,
+                CanisterRangesCheck::AllSubnetRanges,
+                // A public key which does not match the certified one.
+                |_subnet_id| Some((vec![9, 9, 9], subnet_ranges(RANGES))),
+                &no_op_logger(),
+            ),
+            Err(DelegationVerificationError::Inconsistent)
+        );
+    }
+
+    #[test]
+    fn build_verified_with_an_unknown_subnet_is_an_error() {
+        let (builder, _public_key) = create_consistency_check_fixture();
+
+        assert_matches!(
+            builder.build_verified(
+                CanisterRangesFilter::Flat,
+                CanisterRangesCheck::AllSubnetRanges,
+                |_subnet_id| None,
+                &no_op_logger(),
+            ),
+            Err(DelegationVerificationError::Validation(
+                DelegationValidationError::UnknownSubnet(subnet_id)
+            )) if subnet_id == SUBNET_0
         );
     }
 }

@@ -8,4 +8,4 @@ mod validation;
 
 pub use builder::NNSDelegationBuilder;
 pub use reader::{CanisterRangesFilter, NNSDelegationReader};
-pub use validation::{CanisterRangesCheck, DelegationValidationError};
+pub use validation::{CanisterRangesCheck, DelegationValidationError, DelegationVerificationError};

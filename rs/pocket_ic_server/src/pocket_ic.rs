@@ -113,9 +113,7 @@ use ic_state_machine_tests::{
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::{
-    CertificateDelegationFormat, CertificateDelegationMetadata, SignedSenderInfo,
-};
+use ic_types::messages::SignedSenderInfo;
 use ic_types::{
     CanisterId, Height, NumInstructions, NumberOfNodes, PrincipalId, RegistryVersion, SnapshotId,
     SubnetId,
@@ -4697,16 +4695,7 @@ impl Operation for Query {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                let delegation = pic
-                    .get_nns_delegation_for_subnet(subnet.get_subnet_id())
-                    .map(|delegation| {
-                        (
-                            delegation,
-                            CertificateDelegationMetadata {
-                                format: CertificateDelegationFormat::Flat,
-                            },
-                        )
-                    });
+                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                 match subnet.query_as_with_delegation_and_sender_info(
                     self.0.sender,
                     self.0.canister_id,
@@ -4946,7 +4935,7 @@ impl Operation for CallRequest {
                             )
                             .unwrap()
                         });
-                        let (_, delegation_rx) = watch::channel(builder);
+                        let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
@@ -5072,7 +5061,7 @@ impl Operation for QueryRequest {
                     )
                     .unwrap()
                 });
-                let (_, delegation_rx) = watch::channel(builder);
+                let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
@@ -5080,6 +5069,7 @@ impl Operation for QueryRequest {
                     IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let svc = QueryServiceBuilder::builder(
                     subnet.replica_logger.clone(),
+                    HttpHandlerMetrics::new(&MetricsRegistry::new()),
                     node.node_id,
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
@@ -5167,7 +5157,7 @@ impl Operation for CanisterReadStateRequest {
                     )
                     .unwrap()
                 });
-                let (_, delegation_rx) = watch::channel(builder);
+                let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
@@ -5253,7 +5243,7 @@ impl Operation for SubnetReadStateRequest {
                     )
                     .unwrap()
                 });
-                let (_, delegation_rx) = watch::channel(builder);
+                let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
