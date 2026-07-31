@@ -176,6 +176,8 @@ rust_ic_test_suite(
         "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:archive.wasm.gz)",
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
     },
+    # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
+    # so we need this Namespace-specific execution property to open up the network on RBE:
     exec_properties = {"namespace_requires_network": "true"},
     tags = [
         "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.
