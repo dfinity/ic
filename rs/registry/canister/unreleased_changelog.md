@@ -9,11 +9,13 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added a `maximum_query_instructions` field to the subnet record's `ResourceLimits`,
-  allowing the query instruction limit to be configured per subnet via `create_subnet`
-  and `update_subnet`. It applies both to a single (non-composite) query method execution
-  and to the total across a composite query call graph. A value of `0` (or unset) means
-  the replica's default is used.
+* Added `maximum_query_instructions` and `maximum_query_call_walltime_seconds` fields to the
+  subnet record's `ResourceLimits`, allowing the query instruction limit and the maximum query
+  wall-clock time to be configured per subnet via `create_subnet` and `update_subnet`.
+  `maximum_query_instructions` applies both to a single (non-composite) query method execution
+  and to the total across a composite query call graph; `maximum_query_call_walltime_seconds`
+  bounds the wall-clock time a query (including a composite query call graph) may run. For each,
+  a value of `0` (or unset) means the replica's default is used.
 
 ## Changed
 

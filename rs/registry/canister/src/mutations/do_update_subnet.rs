@@ -673,7 +673,7 @@ mod tests {
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{NumBytes, PrincipalId, ReplicaVersion, SubnetId};
+    use ic_types::{NumBytes, NumInstructions, PrincipalId, ReplicaVersion, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -788,7 +788,8 @@ mod tests {
                 ResourceLimits {
                     maximum_state_size: Some(NumBytes::new(42)),
                     maximum_state_delta: Some(NumBytes::new(64)),
-                    ..Default::default()
+                    maximum_query_instructions: Some(NumInstructions::new(128)),
+                    maximum_query_call_walltime_seconds: Some(30),
                 }
                 .into(),
             ),
@@ -848,7 +849,8 @@ mod tests {
                     ResourceLimits {
                         maximum_state_size: Some(NumBytes::new(42)),
                         maximum_state_delta: Some(NumBytes::new(64)),
-                        ..Default::default()
+                        maximum_query_instructions: Some(NumInstructions::new(128)),
+                        maximum_query_call_walltime_seconds: Some(30),
                     }
                     .into()
                 ),

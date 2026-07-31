@@ -376,6 +376,7 @@ fn system_metadata_roundtrip_encoding() {
             maximum_state_size: Some(NumBytes::new(1 << 30)),
             maximum_state_delta: Some(NumBytes::new(1 << 20)),
             maximum_query_instructions: Some(ic_types::NumInstructions::new(7_000_000_000)),
+            maximum_query_call_walltime_seconds: Some(15),
         };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
