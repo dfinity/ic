@@ -260,6 +260,8 @@ impl CanisterHttpPayloadBuilderImpl {
                             threshold,
                             request,
                             &*pool_access,
+                            &self.log,
+                            &self.metrics,
                         ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
@@ -294,6 +296,8 @@ impl CanisterHttpPayloadBuilderImpl {
                             designated_node_id,
                             request,
                             &*pool_access,
+                            &self.log,
+                            &self.metrics,
                         ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
@@ -514,6 +518,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 response.proof.signatures.len(),
                 callback_id,
                 request_context,
+                None,
             )
             .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -721,6 +726,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 group.responses.len() + group.extra_shares.len(),
                 callback_id,
                 context,
+                None,
             )
             .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -841,6 +847,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         reject_responses.len() + extra_shares.len(),
                         callback_id,
                         context,
+                        None,
                     )
                     .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -1101,9 +1108,7 @@ impl
 
         // Divergences deliver no response body, so their consensus cost is zero:
         // the initial spend is just the per-replica cost each diverging signer
-        // incurred, summed on the fly from the shares. Since every share is
-        // individually bounded by its signer's allowance and signers are
-        // distinct, the sum always stays within their collective allowance.
+        // incurred, summed on the fly from the shares.
         for divergence_response in messages.divergence_responses {
             let nodes: BTreeSet<NodeId> = divergence_response
                 .shares
