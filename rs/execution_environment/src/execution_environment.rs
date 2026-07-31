@@ -66,7 +66,6 @@ use ic_replicated_state::{
 use ic_types::batch::ChainKeyData;
 use ic_types::canister_http::{
     CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus,
-    Replication,
 };
 use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
 use ic_types::crypto::{
@@ -2261,11 +2260,9 @@ impl ExecutionEnvironment {
         } else {
             canister_http_request_context.request.payment - base_fee.real()
         };
-        let node_count = match &canister_http_request_context.replication {
-            Replication::Flexible { committee, .. } => committee.len().max(1),
-            Replication::NonReplicated(_) => 1,
-            Replication::FullyReplicated => cycles_config.subnet_size.max(1),
-        };
+        let node_count = canister_http_request_context
+            .replication
+            .node_count(canister_http_request_context.subnet_size);
         canister_http_request_context.refund_status = RefundStatus {
             refundable_cycles,
             per_replica_allowance: refundable_cycles / node_count,
