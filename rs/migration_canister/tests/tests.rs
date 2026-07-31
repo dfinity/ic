@@ -13,7 +13,7 @@ use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use pocket_ic::{
-    CreateCanisterParams, CreateCanisterPlacement, PocketIcBuilder,
+    CreateCanisterParams, CreateCanisterPlacement, ErrorCode, PocketIcBuilder,
     common::rest::{
         CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
         SubnetSpec,
@@ -1854,8 +1854,13 @@ async fn fill_subnet_memory(pic: &PocketIc, subnet_id: Principal, sender: Princi
         .set_controllers(probe_canister, Some(sender), vec![sender])
         .await
         .unwrap_err();
+    // The error must be about the subnet's memory capacity (and not, e.g., about the capacity
+    // for Wasm custom sections which produces a different message with the same suffix).
     assert!(
-        err.reject_message.contains("available in the subnet"),
+        err.error_code == ErrorCode::SubnetOversubscribed
+            && err
+                .reject_message
+                .contains("of memory but only 0 B are available in the subnet"),
         "subnet memory has not been exhausted: {err:?}"
     );
 }
