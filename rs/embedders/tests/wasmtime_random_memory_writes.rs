@@ -1,7 +1,7 @@
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
+    subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
@@ -59,7 +59,7 @@ fn dsm_charge_per_wasm_page() -> u64 {
         .deterministic_memory_tracker
         == FlagStatus::Enabled
     {
-        OS_PAGES_PER_WASM_PAGE as u64
+        OS_PAGES_PER_WASM_PAGE as u64 * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
     } else {
         0
     }
@@ -104,13 +104,6 @@ fn test_api_for_update(
         &system_state,
         *cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        match subnet_type {
-            SubnetType::Application => SchedulerConfig::application_subnet(),
-            SubnetType::System => SchedulerConfig::system_subnet(),
-            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
-            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
-        }
-        .dirty_page_overhead,
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
         Default::default(),
@@ -765,7 +758,7 @@ mod tests {
 
             // Set maximum number of instructions to some low value to trap
             // Note: system API calls get charged per call, see system_api::charges
-            let max_num_instructions = NumInstructions::new(10_000);
+            let max_num_instructions = NumInstructions::new(200_000);
 
             // Consumes less than max_num_instructions.
             let instructions_consumed_without_data = get_num_instructions_consumed(
@@ -800,7 +793,6 @@ mod tests {
         //! or write, in addition to 7 instructions required for setup.
 
         use super::*;
-        use ic_config::subnet_config::SchedulerConfig;
         use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
         use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
         use ic_logger::replica_logger::no_op_logger;
@@ -926,9 +918,7 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + SchedulerConfig::application_subnet()
-                        .dirty_page_overhead
-                        .get()
+                    + dsm_charge_per_wasm_page()
                     + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
             );
         }
@@ -951,7 +941,7 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                    + dsm_charge_per_wasm_page()
                     + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
             );
         }
@@ -975,9 +965,7 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + SchedulerConfig::application_subnet()
-                        .dirty_page_overhead
-                        .get()
+                    + dsm_charge_per_wasm_page()
                     + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
             );
         }
@@ -1000,7 +988,7 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                    + dsm_charge_per_wasm_page()
                     + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
             );
         }
@@ -1015,26 +1003,6 @@ mod tests {
         ] {
             with_test_replica_logger(|log| {
                 let dst: u32 = 0;
-
-                let dirty_heap_cost = match EmbeddersConfig::default().metering_type {
-                    ic_config::embedders::MeteringType::New => match subnet_type {
-                        SubnetType::System => {
-                            SchedulerConfig::system_subnet().dirty_page_overhead.get()
-                        }
-                        SubnetType::Application => SchedulerConfig::application_subnet()
-                            .dirty_page_overhead
-                            .get(),
-                        SubnetType::VerifiedApplication => {
-                            SchedulerConfig::verified_application_subnet()
-                                .dirty_page_overhead
-                                .get()
-                        }
-                        SubnetType::CloudEngine => {
-                            SchedulerConfig::cloud_engine().dirty_page_overhead.get()
-                        }
-                    },
-                    _ => 0,
-                };
 
                 let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
                 payload.extend(random_payload());
@@ -1052,7 +1020,7 @@ mod tests {
                             + stats.wasm_dirty_wasm_pages_count as u64 * dsm_charge_per_wasm_page()
                     };
 
-                let (instructions_consumed_without_data, dry_run_stats, dry_run_instance_stats) =
+                let (instructions_consumed_without_data, _dry_run_stats, dry_run_instance_stats) =
                     run_and_get_stats(
                         log.clone(),
                         "write_bytes",
@@ -1061,12 +1029,11 @@ mod tests {
                         subnet_type,
                     )
                     .unwrap();
-                let dry_run_dirty_heap = dry_run_stats.wasm_dirty_pages.len() as u64;
                 let dry_run_tracker = tracker_charge(&dry_run_instance_stats);
 
                 {
                     // Number of instructions consumed only for copying the payload.
-                    let (consumed_instructions, run_stats, instance_stats) = run_and_get_stats(
+                    let (consumed_instructions, _run_stats, _instance_stats) = run_and_get_stats(
                         log.clone(),
                         "write_bytes",
                         payload,
@@ -1074,38 +1041,33 @@ mod tests {
                         subnet_type,
                     )
                     .unwrap();
-                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
                     let consumed_instructions =
                         consumed_instructions - instructions_consumed_without_data;
                     assert_eq!(
-                        (consumed_instructions.get()
-                            - dirty_heap * dirty_heap_cost
-                            - tracker_charge(&instance_stats)) as usize,
-                        (payload_size / BYTES_PER_INSTRUCTION)
-                            - (dry_run_dirty_heap * dirty_heap_cost + dry_run_tracker) as usize,
+                        (consumed_instructions.get()) as usize,
+                        (payload_size / BYTES_PER_INSTRUCTION),
                     );
                 }
 
                 {
                     // Number of instructions consumed increased with the size of the data.
-                    let (consumed_instructions, run_stats, instance_stats) = run_and_get_stats(
-                        log,
-                        "write_bytes",
-                        double_size_payload,
-                        MAX_NUM_INSTRUCTIONS,
-                        subnet_type,
-                    )
-                    .unwrap();
-                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
+                    let (consumed_instructions, _run_stats, double_run_instance_stats) =
+                        run_and_get_stats(
+                            log,
+                            "write_bytes",
+                            double_size_payload,
+                            MAX_NUM_INSTRUCTIONS,
+                            subnet_type,
+                        )
+                        .unwrap();
                     let consumed_instructions =
                         consumed_instructions - instructions_consumed_without_data;
 
+                    let double_run_tracker = tracker_charge(&double_run_instance_stats);
                     assert_eq!(
-                        (consumed_instructions.get()
-                            - dirty_heap * dirty_heap_cost
-                            - tracker_charge(&instance_stats)) as usize,
+                        (consumed_instructions.get() as usize),
                         (2 * payload_size / BYTES_PER_INSTRUCTION)
-                            - (dry_run_dirty_heap * dirty_heap_cost + dry_run_tracker) as usize
+                            + (double_run_tracker - dry_run_tracker) as usize
                     );
                 }
             })

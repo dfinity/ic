@@ -102,7 +102,8 @@ pub(crate) fn deliver_canister_http_spent(
             .subnet_call_context_manager
             .delivered_canister_http_request_contexts;
 
-        // Initial spending
+        // Initial spending must be handled before asynchronous spending, in case
+        // a payload contains both an initial and an asynchronous report for the same request.
         for report in &spent.initial {
             let Some(context) = contexts.get_mut(&report.callback) else {
                 continue;
@@ -120,24 +121,16 @@ pub(crate) fn deliver_canister_http_spent(
                 );
                 continue;
             }
-            // What the reporting nodes collectively spent. The `real()` part is what
-            // the caller is actually charged, i.e. zero where HTTP outcalls are free;
-            // the `nominal()` part is what the outcall cost, charged or not.
-            let spent = CompoundCycles::<HTTPOutcalls>::new(report.amount, context.cost_schedule);
+            // The reporting nodes are collectively covered by their per-replica
+            // allowances.
             let allowance = context.refund_status.per_replica_allowance * report.nodes.len();
-            observe_spent_exceeding_allowance(
-                spent.real(),
+            let entry = accounting.entry(context.request.sender).or_default();
+            apply_spend(
+                report.amount,
                 allowance,
-                report.callback,
-                log,
-                metrics,
-            );
-            // The caller's refund for these nodes is their collective allowance minus
-            // what they collectively spent.
-            let refund = allowance - spent.real();
-            let applied = apply_capped(
+                context.cost_schedule,
                 &mut context.refund_status,
-                refund,
+                entry,
                 report.callback,
                 log,
                 metrics,
@@ -148,9 +141,6 @@ pub(crate) fn deliver_canister_http_spent(
                 .refund_status
                 .refunding_nodes
                 .extend(report.nodes.iter());
-            let entry = accounting.entry(context.request.sender).or_default();
-            entry.refund += applied;
-            entry.consumed += spent.nominal();
         }
 
         // Asynchronous spending
@@ -158,28 +148,20 @@ pub(crate) fn deliver_canister_http_spent(
             let Some(context) = contexts.get_mut(&report.callback) else {
                 continue;
             };
-            let allowance = context.refund_status.per_replica_allowance;
-            let cost_schedule = context.cost_schedule;
             let entry = accounting.entry(context.request.sender).or_default();
             for (node_id, node_spent) in &report.shares {
                 if context.refund_status.refunding_nodes.insert(*node_id) {
-                    let spent = CompoundCycles::<HTTPOutcalls>::new(*node_spent, cost_schedule);
-                    observe_spent_exceeding_allowance(
-                        spent.real(),
-                        allowance,
-                        report.callback,
-                        log,
-                        metrics,
-                    );
-                    let refund = allowance - spent.real();
-                    entry.refund += apply_capped(
+                    // Each reporting node is covered by its own per-replica allowance.
+                    apply_spend(
+                        *node_spent,
+                        context.refund_status.per_replica_allowance,
+                        context.cost_schedule,
                         &mut context.refund_status,
-                        refund,
+                        entry,
                         report.callback,
                         log,
                         metrics,
                     );
-                    entry.consumed += spent.nominal();
                 } else {
                     metrics.observe_accounting_error(ERROR_DUPLICATE_NODE_REPORT);
                     error!(
@@ -233,27 +215,44 @@ pub(crate) fn refund_timed_out_canister_http_contexts(
     apply_accounting(state, accounting, log);
 }
 
-/// Observes an error if the reported `spent` cycles exceed the `allowance`
-/// i.e. if the caller ends up paying less than the outcall cost.
-/// The refund saturates at zero either way; this only flags that it did.
-fn observe_spent_exceeding_allowance(
-    spent: Cycles,
+/// Applies a reported spend of `amount`, covered by `allowance`, against the
+/// request's `refund_status` and the calling canister's `accounting`:
+///  * the unspent part of the allowance is recorded as refunded and accumulated as a
+///    refund for the caller (capped at the request's refundable amount);
+///  * the spend is accumulated as consumed by the caller;
+///  * a spend exceeding the allowance is observed as an error.
+#[allow(clippy::too_many_arguments)]
+fn apply_spend(
+    amount: Cycles,
     allowance: Cycles,
+    cost_schedule: CanisterCyclesCostSchedule,
+    refund_status: &mut RefundStatus,
+    accounting: &mut CanisterAccounting,
     callback: CallbackId,
     log: &ReplicaLogger,
     metrics: &CanisterHttpSpentMetrics,
 ) {
-    if spent > allowance {
+    // The `real()` part of the spend is what the caller is actually charged, i.e. zero
+    // where HTTP outcalls are free; the `nominal()` part is what the outcall cost,
+    // charged or not.
+    let spent = CompoundCycles::<HTTPOutcalls>::new(amount, cost_schedule);
+    // A spend beyond the allowance is unexpected. The refund below saturates at zero
+    // either way, so this only flags that it did.
+    if spent.real() > allowance {
         metrics.observe_accounting_error(ERROR_SPENT_EXCEEDS_ALLOWANCE);
         error!(
             log,
             "HTTP outcall spend report for callback {} exceeds the allowance it is covered by: \
              spent {}, allowance {}.",
             callback,
-            spent,
+            spent.real(),
             allowance
         );
     }
+    // The caller is refunded whatever part of the allowance was not spent.
+    let refund = allowance - spent.real();
+    accounting.refund += apply_capped(refund_status, refund, callback, log, metrics);
+    accounting.consumed += spent.nominal();
 }
 
 /// Records `amount` as refunded against `refund_status`, capped so that
@@ -595,15 +594,18 @@ mod tests {
         gauge.get()
     }
 
-    fn get_refund_status(state: &ReplicatedState) -> RefundStatus {
-        state
+    fn get_refund_status(state: &ReplicatedState, refundable: Cycles) -> RefundStatus {
+        let status = state
             .metadata
             .subnet_call_context_manager
             .delivered_canister_http_request_contexts
             .get(&CALLBACK)
             .unwrap()
             .refund_status
-            .clone()
+            .clone();
+        assert_eq!(refundable, status.refundable_cycles);
+        assert!(status.refunded_cycles <= status.refundable_cycles);
+        status
     }
 
     fn metrics() -> (MetricsRegistry, CanisterHttpSpentMetrics) {
@@ -663,7 +665,7 @@ mod tests {
             subnet_consumed(&state),
             SUBNET_CONSUMED_BEFORE + spent.get()
         );
-        let status = get_refund_status(&state);
+        let status = get_refund_status(&state, refundable);
         assert_eq!(status.refunded_cycles, Cycles::new(3_500));
         assert_eq!(status.refunding_nodes, all_nodes());
         assert_errors(&[], &metrics_registry);
@@ -700,7 +702,7 @@ mod tests {
         );
         assert_eq!(consumed(&state, caller), 1_550);
         assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE + 1_550);
-        let status = get_refund_status(&state);
+        let status = get_refund_status(&state, refundable);
         assert_eq!(status.refunded_cycles, Cycles::new(1_450));
         assert_eq!(status.refunding_nodes, node_set(&[1, 2, 3]));
         assert_errors(&[], &metrics_registry);
@@ -732,7 +734,10 @@ mod tests {
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), spent.get());
-        assert_eq!(get_refund_status(&state).refunded_cycles, Cycles::zero());
+        assert_eq!(
+            get_refund_status(&state, allowance * SUBNET_SIZE).refunded_cycles,
+            Cycles::zero()
+        );
         assert_errors(&[(ERROR_SPENT_EXCEEDS_ALLOWANCE, 1)], &metrics_registry);
     }
 
@@ -793,7 +798,7 @@ mod tests {
             subnet_consumed(&state),
             SUBNET_CONSUMED_BEFORE + spent.get()
         );
-        let status = get_refund_status(&state);
+        let status = get_refund_status(&state, Cycles::zero());
         assert_eq!(status.refunded_cycles, Cycles::zero());
         assert_eq!(status.refunding_nodes, node_set(&[1, 2, 3]));
         assert_errors(&[], &metrics_registry);
@@ -822,7 +827,7 @@ mod tests {
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), 1_000);
         assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE + 1_000);
-        let status = get_refund_status(&state);
+        let status = get_refund_status(&state, Cycles::zero());
         assert_eq!(status.refunded_cycles, Cycles::zero());
         assert_eq!(status.refunding_nodes, node_set(&[1, 2]));
         assert_errors(&[], &metrics_registry);
@@ -884,7 +889,10 @@ mod tests {
         // refund = (1_000 − 400) + (1_000 − 750) = 850; consumed = 1_150.
         assert_eq!(balance(&state, caller), INITIAL_BALANCE + Cycles::new(850));
         assert_eq!(consumed(&state, caller), 1_150);
-        assert_eq!(get_refund_status(&state).refunding_nodes, node_set(&[1, 2]));
+        assert_eq!(
+            get_refund_status(&state, allowance * 3_usize).refunding_nodes,
+            node_set(&[1, 2])
+        );
         assert_errors(&[], &metrics_registry);
 
         // Second report repeats node 1 (must be ignored) and adds node 3.
@@ -906,7 +914,7 @@ mod tests {
         );
         assert_eq!(consumed(&state, caller), 1_850);
         assert_eq!(
-            get_refund_status(&state).refunding_nodes,
+            get_refund_status(&state, allowance * 3_usize).refunding_nodes,
             node_set(&[1, 2, 3])
         );
         // Node 1's repeated report was observed as an error.
@@ -950,7 +958,10 @@ mod tests {
         assert_eq!(balance(&state, caller), balance_after_async);
         assert_eq!(consumed(&state, caller), consumed_after_async);
         // Only the node accounted by the asynchronous report is recorded.
-        assert_eq!(get_refund_status(&state).refunding_nodes, node_set(&[1]));
+        assert_eq!(
+            get_refund_status(&state, allowance * SUBNET_SIZE).refunding_nodes,
+            node_set(&[1])
+        );
         assert_errors(&[(ERROR_INITIAL_AFTER_NODE_REPORT, 1)], &metrics_registry);
     }
 
@@ -1061,11 +1072,12 @@ mod tests {
         );
         let (metrics_registry, metrics) = metrics();
 
-        // amount = 0 → uncapped refund would be 13 * 1_000 = 13_000.
+        // The uncapped refund would be 13 * 1_000 − 500 = 12_500.
+        let spent = Cycles::new(500);
         let report = CanisterHttpSpent {
             initial: vec![CanisterHttpInitialSpent {
                 callback: CALLBACK,
-                amount: Cycles::zero(),
+                amount: spent,
                 nodes: all_nodes(),
             }],
             asynchronous: vec![],
@@ -1073,7 +1085,16 @@ mod tests {
         deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE + refundable);
-        assert_eq!(get_refund_status(&state).refunded_cycles, refundable);
+        // Capping the refund does not affect the reported spend.
+        assert_eq!(consumed(&state, caller), spent.get());
+        assert_eq!(
+            subnet_consumed(&state),
+            SUBNET_CONSUMED_BEFORE + spent.get()
+        );
+        assert_eq!(
+            get_refund_status(&state, refundable).refunded_cycles,
+            refundable
+        );
         assert_errors(&[(ERROR_REFUND_CAPPED, 1)], &metrics_registry);
     }
 
@@ -1290,7 +1311,10 @@ mod tests {
         refund_timed_out_canister_http_contexts(&mut state, before_timeout, &log, &metrics);
 
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
-        assert_eq!(get_refund_status(&state).refunded_cycles, Cycles::zero());
+        assert_eq!(
+            get_refund_status(&state, refundable).refunded_cycles,
+            Cycles::zero()
+        );
 
         // Exactly at the timeout, the context is timed out and refunded.
         let at_timeout = UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;

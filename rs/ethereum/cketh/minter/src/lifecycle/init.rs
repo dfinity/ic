@@ -94,6 +94,7 @@ impl TryFrom<InitArg> for State {
             ethereum_block_height,
             first_scraped_block_number,
             last_observed_block_number: None,
+            latest_block_height: None,
             events_to_mint: Default::default(),
             minted_events: Default::default(),
             ecdsa_public_key: None,

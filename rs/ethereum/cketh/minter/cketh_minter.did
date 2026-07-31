@@ -401,6 +401,11 @@ type DepositErc20Response = record {
     // Timestamp in nanoseconds since the Unix epoch until which a deposit sent
     // to `address` is guaranteed to be noticed by the minter.
     valid_until : nat64;
+    // The latest Ethereum block at which this address' balance was scanned, or
+    // null if it has not been scanned yet. Surfaces the balance-scan progress.
+    last_scanned_block : opt nat;
+    // How many times this address' balance has been scanned so far.
+    scan_count : nat64;
 };
 
 type DepositErc20Error = variant {
@@ -626,11 +631,13 @@ type Event = record {
         RegisteredDepositAddresses : record {
             scan_window_nanos : nat64;
             capacity : nat64;
-            addresses : vec record {
+            registrations : vec record {
                 owner : principal;
                 subaccount : opt Subaccount;
                 address : text;
                 expires_at_nanos : nat64;
+                last_scanned_block : opt nat;
+                scan_count : nat64;
             };
         };
     };
