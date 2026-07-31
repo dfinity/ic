@@ -260,6 +260,8 @@ impl CanisterHttpPayloadBuilderImpl {
                             threshold,
                             request,
                             &*pool_access,
+                            &self.log,
+                            &self.metrics,
                         ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
@@ -294,6 +296,8 @@ impl CanisterHttpPayloadBuilderImpl {
                             designated_node_id,
                             request,
                             &*pool_access,
+                            &self.log,
+                            &self.metrics,
                         ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
@@ -514,6 +518,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 response.proof.signatures.len(),
                 callback_id,
                 request_context,
+                None,
             )
             .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
