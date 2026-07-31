@@ -5338,8 +5338,8 @@ fn assert_responses_from_threshold_shares(
     let cb_id = 0;
     let threshold = num_nodes - get_faults_tolerated(num_nodes);
     let (response, metadata) = test_response_and_metadata(cb_id);
-    // The consensus cost is nonzero, so a zero collective allowance can only
-    // cover it if the request is not subject to the limit at all.
+    // Ensure that the consensus cost is nonzero, so that the test only passes if the unspent
+    // allowance is sufficient, or if the consensus cost isn't enforced (free and legacy requests).
     assert!(!non_flexible_consensus_cost(num_nodes, metadata.content_size).is_zero());
 
     setup_test_with_contexts(
