@@ -16,6 +16,7 @@ rust_library(
         "//packages/ic-error-types",
         "//packages/ic-heap-bytes",
         "//rs/crypto/interfaces/sig_verification",
+        "//rs/http_endpoints/nns_delegation_reader",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/provisional_whitelist",

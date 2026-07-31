@@ -25,6 +25,7 @@ use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tree_hash::{
     Digest, Label, LabeledTree, MatchPatternPath, MixedHashTree, Path, Witness, flatmap,
+    lookup_path,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
@@ -43,7 +44,11 @@ use ic_protobuf::registry::crypto::v1::{
 };
 use ic_read_state_response_parser::parse_subnet_read_state_response;
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
-use ic_replicated_state::ReplicatedState;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_replicated_state::{
+    ReplicatedState, SubnetTopology,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
@@ -782,10 +787,53 @@ fn can_retrieve_subnet_metrics(
         .with_delegation(delegation_from_nns)
         .build();
 
-    let mock_certified_state = |certificate: TestCertificate| {
+    // The delegation certifies the subnet's threshold public key and canister ranges;
+    // the mocked certified state must be consistent with them for the endpoint to agree
+    // to serve the delegation.
+    let subnet_public_key = {
+        let delegation = certificate
+            .delegation()
+            .expect("Delegation should be present.");
+        let delegation_certificate: Certificate =
+            serde_cbor::from_slice(&delegation.certificate).unwrap();
+        let delegation_tree = LabeledTree::try_from(delegation_certificate.tree).unwrap();
+        match lookup_path(
+            &delegation_tree,
+            &[b"subnet", subnet_id.get_ref().as_slice(), b"public_key"],
+        ) {
+            Some(LabeledTree::Leaf(public_key)) => public_key.clone(),
+            _ => panic!("The delegation should certify a public key"),
+        }
+    };
+    let snapshot_state: Arc<ReplicatedState> = Arc::new({
+        let mut state = ReplicatedStateBuilder::new().build();
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.subnets_mut().insert(
+                subnet_id,
+                SubnetTopology {
+                    public_key: subnet_public_key,
+                    ..SubnetTopology::default()
+                },
+            );
+            let mut routing_table = RoutingTable::default();
+            routing_table
+                .insert(
+                    CanisterIdRange {
+                        start: canister_test_id(0),
+                        end: canister_test_id(10),
+                    },
+                    subnet_id,
+                )
+                .unwrap();
+            network_topology.set_routing_table(routing_table);
+        });
+        state
+    });
+
+    let mock_certified_state = move |certificate: TestCertificate| {
         let hash_tree = certificate.clone().tree();
 
-        let state: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
+        let state = snapshot_state.clone();
         let certification = Certification {
             height: Height::from(1),
             height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
@@ -820,9 +868,10 @@ fn can_retrieve_subnet_metrics(
         .returning(move || (*state_clone).clone());
 
     let cloned_certificate = certificate.clone();
+    let mock_certified_state_clone = mock_certified_state.clone();
     mock_state_manager
         .expect_read_certified_state()
-        .returning(move |_| Some(mock_certified_state(cloned_certificate.clone())));
+        .returning(move |_| Some(mock_certified_state_clone(cloned_certificate.clone())));
 
     let state_clone = state.clone();
     mock_state_manager
