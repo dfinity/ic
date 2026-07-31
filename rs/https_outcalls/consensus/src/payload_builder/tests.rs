@@ -5378,8 +5378,8 @@ fn initial_spent_is_not_limited_on_a_free_subnet() {
     assert_responses_from_threshold_shares(4, context, 1);
 }
 
-/// The counterpart of the two tests above: on a charging subnet with
-/// pay-as-you-go pricing, a zero collective allowance holds the response back.
+/// On a charging subnet with pay-as-you-go pricing, a zero collective
+/// allowance holds the response back.
 #[test]
 fn initial_spent_is_limited_under_pay_as_you_go_pricing() {
     assert_responses_from_threshold_shares(
@@ -5389,6 +5389,25 @@ fn initial_spent_is_limited_under_pay_as_you_go_pricing() {
             Cycles::zero(),
         ),
         0,
+    );
+}
+
+/// On a charging subnet with pay-as-you-go pricing, the pay-as-you-go response
+/// is delivered as soon as the collective allowance covers the consensus cost.
+#[test]
+fn initial_spent_is_covered_under_pay_as_you_go_pricing() {
+    let num_nodes = 4;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let (_, metadata) = test_response_and_metadata(0);
+    let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
+    let allowance = Cycles::new(consensus_cost.get().div_ceil(threshold as u128));
+    assert!(allowance * threshold >= consensus_cost);
+    assert!((allowance - Cycles::new(1)) * threshold < consensus_cost);
+
+    assert_responses_from_threshold_shares(
+        num_nodes,
+        with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
+        1,
     );
 }
 
