@@ -80,7 +80,8 @@ impl From<ResourceLimits> for pb::ResourceLimits {
             maximum_state_size: resource_limits.maximum_state_size.map(|x| x.get()),
             maximum_state_delta: resource_limits.maximum_state_delta.map(|x| x.get()),
             maximum_query_instructions: resource_limits.maximum_query_instructions.map(|x| x.get()),
-            maximum_query_call_walltime_seconds: resource_limits.maximum_query_call_walltime_seconds,
+            maximum_query_call_walltime_seconds: resource_limits
+                .maximum_query_call_walltime_seconds,
         }
     }
 }
@@ -93,7 +94,8 @@ impl From<pb::ResourceLimits> for ResourceLimits {
             maximum_query_instructions: resource_limits
                 .maximum_query_instructions
                 .map(NumInstructions::from),
-            maximum_query_call_walltime_seconds: resource_limits.maximum_query_call_walltime_seconds,
+            maximum_query_call_walltime_seconds: resource_limits
+                .maximum_query_call_walltime_seconds,
         }
     }
 }
