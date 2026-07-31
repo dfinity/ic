@@ -11,8 +11,9 @@ use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_timer_task::set_timer;
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::future::Future;
+use std::rc::Rc;
 use std::thread::LocalKey;
 use std::time::Duration;
 
@@ -23,6 +24,47 @@ const SECS_PER_HOUR: u64 = 3600;
 const SYNC_OFFSET: u64 = 5 * 60; // 5 minutes in seconds
 
 const RETRY_FAILED_SYNC_SECS: u64 = 5 * 60; // 5 minutes in seconds
+
+/// How long after starting an execution the recovery timer presumes it trapped.
+///
+/// Should stay well above the longest a legitimate execution can take,
+/// including the timeouts of every call it awaits — the sync awaits calls that
+/// give up after the CDK's default 300s, so this is comfortably above that.
+/// Kept separate from [`RETRY_FAILED_SYNC_SECS`]: sharing one number left the
+/// deadline exactly equal to those call timeouts, so a single unresponsive
+/// callee was guaranteed to trip it.
+///
+/// Tripping it is no longer harmful — see [`RescheduleOnce`] — so this value
+/// only decides how eagerly a trapped execution is replaced, not whether the
+/// task can fork. That matters, because the registry-sync phase is a loop of
+/// sequential calls whose length is not bounded in code: no constant here can
+/// be *proven* to exceed the worst case.
+const RECOVERY_DELAY_SECS: u64 = 30 * 60; // 30 minutes in seconds
+
+/// Guards the two paths that can reschedule a task — normal completion and the
+/// recovery timer — so that an execution always has exactly one successor.
+/// Whichever path claims it first wins; the other stands down.
+///
+/// This is what keeps a slow execution from forking the chain. The recovery
+/// timer cannot distinguish "trapped" from "still awaiting responses", and with
+/// this it does not need to: it takes over the chain, and the execution it gave
+/// up on quietly declines to reschedule when it eventually finishes. Without
+/// it, an execution that outlived its recovery delay produced *two*
+/// successors, each of which forked again — enough forks and every call the
+/// canister makes fails to be enqueued.
+#[derive(Clone)]
+struct RescheduleOnce(Rc<Cell<bool>>);
+
+impl RescheduleOnce {
+    fn new() -> Self {
+        Self(Rc::new(Cell::new(false)))
+    }
+
+    /// Returns `true` for the first caller only.
+    fn claim(&self) -> bool {
+        !self.0.replace(true)
+    }
+}
 
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
@@ -46,24 +88,40 @@ pub trait RecurringAsyncTaskNonSend: Clone + Sized + 'static {
 
     fn schedule_with_delay(self, delay: Duration) {
         set_timer(delay, async move {
+            // Exactly one successor per execution, whichever path gets there
+            // first. See [`RescheduleOnce`].
+            let reschedule = RescheduleOnce::new();
+
             // Set a recovery timer before spawning the task. The timer callback
             // and the spawned future run in different IC messages, so if the
             // spawned future traps, the recovery timer survives and will reschedule the task.
             let recovery = self.clone();
             let recovery_delay = recovery.recovery_delay();
+            let recovery_reschedule = reschedule.clone();
             let recovery_timer_id = set_timer(recovery_delay, async move {
-                ic_cdk::println!(
-                    "Task {} recovery timer fired — rescheduling after suspected trap.",
-                    Self::NAME,
-                );
-                recovery.schedule_with_delay(recovery_delay);
+                if recovery_reschedule.claim() {
+                    ic_cdk::println!(
+                        "Task {} recovery timer fired — rescheduling after suspected trap.",
+                        Self::NAME,
+                    );
+                    recovery.schedule_with_delay(recovery_delay);
+                }
             });
 
             spawn_in_canister_env(async move {
                 let (new_delay, new_task) = self.execute().await;
 
                 clear_timer(recovery_timer_id);
-                new_task.schedule_with_delay(new_delay);
+                if reschedule.claim() {
+                    new_task.schedule_with_delay(new_delay);
+                } else {
+                    // The recovery timer already took over the chain; forking a
+                    // second one here is what multiplied concurrent syncs.
+                    ic_cdk::println!(
+                        "Task {} finished after its recovery timer rescheduled it; not scheduling a second successor.",
+                        Self::NAME,
+                    );
+                }
             });
         });
     }
@@ -139,7 +197,7 @@ impl RecurringAsyncTaskNonSend for HourlySyncTask {
     }
 
     fn recovery_delay(&self) -> Duration {
-        Duration::from_secs(RETRY_FAILED_SYNC_SECS)
+        Duration::from_secs(RECOVERY_DELAY_SECS)
     }
 
     const NAME: &'static str = "hourly_sync";
@@ -198,7 +256,7 @@ impl RecurringAsyncTaskNonSend for GetNodeProvidersRewardsInstructionsExporter {
         Duration::from_secs(0)
     }
     fn recovery_delay(&self) -> Duration {
-        Duration::from_secs(RETRY_FAILED_SYNC_SECS)
+        Duration::from_secs(RECOVERY_DELAY_SECS)
     }
     const NAME: &'static str = "get_node_providers_rewards_metrics";
 }
@@ -215,7 +273,7 @@ pub mod test_tasks {
     use super::*;
     use std::cell::Cell;
 
-    const RECOVERY_DELAY_SECS: u64 = 10;
+    const TEST_RECOVERY_DELAY_SECS: u64 = 10;
     const SUCCESS_TASK_DELAY_SECS: u64 = 5;
 
     thread_local! {
@@ -251,7 +309,7 @@ pub mod test_tasks {
         }
 
         fn recovery_delay(&self) -> Duration {
-            Duration::from_secs(RECOVERY_DELAY_SECS)
+            Duration::from_secs(TEST_RECOVERY_DELAY_SECS)
         }
 
         const NAME: &'static str = "panicking_recovery_task";
@@ -277,9 +335,44 @@ pub mod test_tasks {
         }
 
         fn recovery_delay(&self) -> Duration {
-            Duration::from_secs(RECOVERY_DELAY_SECS)
+            Duration::from_secs(TEST_RECOVERY_DELAY_SECS)
         }
 
         const NAME: &'static str = "success_recovery_task";
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An execution and its recovery timer share one token, so exactly one of
+    /// them schedules the successor. Both scheduling means the chain forks, and
+    /// forks multiply until the canister runs out of call capacity.
+    #[test]
+    fn only_the_first_claimant_reschedules() {
+        let reschedule = RescheduleOnce::new();
+        let recovery = reschedule.clone();
+
+        assert!(
+            recovery.claim(),
+            "the recovery timer claims an unclaimed token"
+        );
+        assert!(
+            !reschedule.claim(),
+            "the execution must stand down once the recovery timer has taken over"
+        );
+        assert!(!recovery.claim(), "a token cannot be claimed twice");
+    }
+
+    /// The common case: the execution finishes first, so it reschedules and the
+    /// recovery timer does not, even if it somehow fires afterwards.
+    #[test]
+    fn execution_claims_before_recovery() {
+        let reschedule = RescheduleOnce::new();
+        let recovery = reschedule.clone();
+
+        assert!(reschedule.claim());
+        assert!(!recovery.claim());
     }
 }

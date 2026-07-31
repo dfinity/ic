@@ -7506,6 +7506,8 @@ dependencies = [
  "ic-types-cycles",
  "icrc-ledger-types",
  "num-traits",
+ "pocket-ic",
+ "reqwest",
  "serde",
  "serde_bytes",
  "serde_json",

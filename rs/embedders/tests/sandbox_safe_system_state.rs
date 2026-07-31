@@ -1,6 +1,6 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
 use ic_config::execution_environment::SUBNET_CALLBACK_SOFT_LIMIT;
-use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig};
+use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::wasmtime_embedder::system_api::SystemApiImpl;
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
@@ -72,7 +72,6 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         &system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -124,7 +123,6 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         &system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -167,7 +165,6 @@ fn push_output_request_succeeds_with_enough_cycles() {
         &system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -226,7 +223,6 @@ fn correct_charging_source_canister_for_a_request() {
         &system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -442,7 +438,6 @@ fn is_controller_test() {
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -536,7 +531,6 @@ fn test_inter_canister_call(
         &system_state,
         cycles_account_manager,
         std::sync::Arc::new(topo.clone()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
