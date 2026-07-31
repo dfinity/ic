@@ -387,7 +387,7 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
-        is_composite_query: bool,
+        is_non_replicated_composite_query: bool,
         metrics: &Metrics,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
@@ -467,7 +467,7 @@ impl SystemStateModifications {
                             msg.method_payload.as_slice(),
                             own_subnet_id,
                             system_state.canister_id(),
-                            is_composite_query,
+                            is_non_replicated_composite_query,
                             logger,
                         )
                         .map(CanisterId::unchecked_from_principal)

@@ -3,10 +3,12 @@ use crate::{
     InternalHttpQueryHandler, metrics,
     query_handler::query_cache::{EntryEnv, EntryKey, EntryValue},
 };
+use assert_matches::assert_matches;
 use ic_base_types::CanisterId;
 use ic_error_types::ErrorCode;
 use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
+use ic_management_canister_types_private::{CanisterIdRecord, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::universal_canister::wasm;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
@@ -243,6 +245,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
         test.state(),
         &SystemApiCallCounters::default(),
         &evaluated_stats,
+        0,
         0,
     );
     assert_eq!(0, m.hits.get());
@@ -1548,6 +1551,39 @@ fn composite_query_cache_never_caches_calls_to_management_canister() {
     let res_2 = test.non_replicated_query(a_id, "composite_query", q.clone());
     assert_eq!(query_cache_metrics(&test).hits.get(), 0);
     assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn composite_query_cache_never_caches_successful_calls_to_management_canister() {
+    let mut test = builder_with_query_cache_expiry_times()
+        .with_composite_query_ic00_calls()
+        .build();
+    let a_id = test.universal_canister().unwrap();
+    // A canister is always allowed to request its own status.
+    let q = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "canister_status",
+            call_args()
+                .other_side(CanisterIdRecord::from(a_id).encode())
+                .on_reject(wasm().reject_message().append_and_reply()),
+        )
+        .build();
+
+    let res_1 = test.non_replicated_query(a_id, "composite_query", q.clone());
+    assert_matches!(res_1, Ok(WasmResult::Reply(_)));
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 1);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 1);
+
+    // Do not change balance or time: the result must still not be cached.
+    let res_2 = test.non_replicated_query(a_id, "composite_query", q.clone());
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 2);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 2);
     assert_eq!(res_1, res_2);
 }
 

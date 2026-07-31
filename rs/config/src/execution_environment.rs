@@ -15,6 +15,8 @@ const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Enab
 
 const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Disabled;
 
+const COMPOSITE_QUERY_IC00_CALLS_FEATURE: FlagStatus = FlagStatus::Disabled;
+
 // TODO(DSM-105): remove after the feature is enabled by default.
 pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = true;
 pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
@@ -360,6 +362,11 @@ pub struct Config {
 
     /// Enables the flexible HTTP outcalls API (`flexible_http_request`).
     pub flexible_http_requests: FlagStatus,
+
+    /// Enables calls to the management canister query methods
+    /// (see `ic_management_canister_types_private::QueryMethod`)
+    /// from composite queries.
+    pub composite_query_ic00_calls: FlagStatus,
 }
 
 impl Default for Config {
@@ -443,6 +450,7 @@ impl Default for Config {
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
             replicated_inter_canister_log_fetch: REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE,
             flexible_http_requests: FLEXIBLE_HTTP_REQUESTS_FEATURE,
+            composite_query_ic00_calls: COMPOSITE_QUERY_IC00_CALLS_FEATURE,
         }
     }
 }

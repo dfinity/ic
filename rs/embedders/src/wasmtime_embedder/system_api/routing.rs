@@ -59,9 +59,16 @@ pub(super) fn resolve_destination(
     payload: &[u8],
     own_subnet: SubnetId,
     caller: CanisterId,
-    is_composite_query: bool,
+    is_non_replicated_composite_query: bool,
     logger: &ReplicaLogger,
 ) -> Result<PrincipalId, ResolveDestinationError> {
+    // Requests to ic:00 made by a composite query executed in the non-replicated
+    // mode are not routed to any other subnet: they are executed by the query
+    // handler against the state of the own subnet (or rejected by it if the
+    // method cannot be executed in the non-replicated mode).
+    if is_non_replicated_composite_query {
+        return Ok(own_subnet.get());
+    }
     // Figure out the destination subnet based on the method and the payload.
     let method = Ic00Method::from_str(method_name);
     match method {
@@ -204,18 +211,8 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
-            if is_composite_query {
-                Err(ResolveDestinationError::UserError(UserError::new(
-                    ic_error_types::ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} API cannot be called from a composite query",
-                        Ic00Method::FetchCanisterLogs
-                    ),
-                )))
-            } else {
-                let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
-                route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
-            }
+            let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
+            route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;

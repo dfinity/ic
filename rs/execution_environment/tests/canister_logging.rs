@@ -89,6 +89,13 @@ fn readable_logs_without_backtraces(
 }
 
 fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
+    setup_env_with_flags(replicated_inter_canister_log_fetch, FlagStatus::Disabled)
+}
+
+fn setup_env_with_flags(
+    replicated_inter_canister_log_fetch: FlagStatus,
+    composite_query_ic00_calls: FlagStatus,
+) -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
@@ -98,6 +105,7 @@ fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachi
         subnet_config,
         ExecutionConfig {
             replicated_inter_canister_log_fetch,
+            composite_query_ic00_calls,
             ..Default::default()
         },
     );
@@ -418,14 +426,14 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
 }
 
 #[test]
-fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_disabled() {
-    // Test that fetch_canister_logs API is not accessible via composite query call.
+fn test_fetch_canister_logs_via_composite_query_call_disabled() {
+    // Test that fetch_canister_logs API is not accessible via composite query call
+    // if the corresponding feature is disabled.
     // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
     // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
-    let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
     let user_controller = PrincipalId::new_user_test_id(42);
     let log_visibility = LogVisibilityV2::Controllers;
-    let env = setup_env_with(replicated_inter_canister_log_fetch);
+    let env = setup_env_with_flags(FlagStatus::Enabled, FlagStatus::Disabled);
     let canister_a = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
@@ -463,37 +471,32 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_disabl
             .build(),
     );
 
-    // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
-    let error = actual_result.unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterDidNotReply);
-    // TODO(EXC-1655): fix reject response propagation.
-    let expected_error_message = "did not produce a response";
+    // This is expected to fail, because there is no route
+    // to the management canister in a composite query.
+    let reject_message = get_reject(actual_result);
     assert!(
-        error.description().contains(expected_error_message),
-        "Expected: {}\nActual: {}",
-        expected_error_message,
-        error.description()
+        reject_message.contains("not found"),
+        "Unexpected reject message: {reject_message}"
     );
 }
 
 #[test]
-fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled() {
-    // Test that fetch_canister_logs API is not accessible via composite query call.
+fn test_fetch_canister_logs_via_composite_query_call_enabled() {
+    // Test that fetch_canister_logs API is accessible via composite query call
+    // if the corresponding feature is enabled.
     // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
-    // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
-    let replicated_inter_canister_log_fetch = FlagStatus::Enabled;
-    let user = PrincipalId::new_user_test_id(42);
+    // The user uses composite_query to canister_a to fetch logs of canister_b.
+    let user_controller = PrincipalId::new_user_test_id(42);
     let log_visibility = LogVisibilityV2::Controllers;
-    let env = setup_env_with(replicated_inter_canister_log_fetch);
+    let env = setup_env_with_flags(FlagStatus::Enabled, FlagStatus::Enabled);
     let canister_a = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(log_visibility.clone())
-            .with_controllers(vec![user])
+            .with_controllers(vec![user_controller])
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
-
     // Create canister_b controlled by canister_a.
     let canister_b = create_and_install_canister(
         &env,
@@ -506,11 +509,14 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
             .build_wasm(),
     );
     // Record some logs in canister_b.
+    // Advance time so that time does not grow implicitly when executing a round.
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
-    // User attempts to fetch logs of canister_b via canister_a.
+    // User fetches logs of canister_b via canister_a.
     let actual_result = env.query_as(
-        user,
+        user_controller,
         canister_a,
         "composite_query",
         wasm()
@@ -524,16 +530,10 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
             .build(),
     );
 
-    // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
-    let error = actual_result.unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterDidNotReply);
-    // TODO(EXC-1655): fix reject response propagation.
-    let expected_error_message = "did not produce a response";
-    assert!(
-        error.description().contains(expected_error_message),
-        "Expected: {}\nActual: {}",
-        expected_error_message,
-        error.description()
+    // Canister A is a controller of canister B and hence allowed to fetch its logs.
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(actual_result)).unwrap(),
+        canister_log_response(vec![(0, timestamp, b"message".to_vec())])
     );
 }
 
