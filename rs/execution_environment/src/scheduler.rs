@@ -871,7 +871,6 @@ impl SchedulerImpl {
                 all_rejects.push(uninstall_canister(
                     &self.log,
                     canister,
-                    None, /* we're at the end of a round so no need to update round limits */
                     state_time,
                     Arc::clone(&self.fd_factory),
                 ));

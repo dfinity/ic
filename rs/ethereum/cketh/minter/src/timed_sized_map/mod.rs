@@ -164,6 +164,18 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         }
     }
 
+    /// A mutable reference to the live value under `key`, or `None` if absent or expired as of
+    /// `now`. Only the value is exposed (not its `expires_at`), so mutating it cannot desync the
+    /// time index.
+    pub fn get_value_mut(&mut self, now: Timestamp, key: &K) -> Option<&mut V> {
+        let entry = self.entries.get_mut(key)?;
+        if is_expired(entry.expires_at, now) {
+            None
+        } else {
+            Some(&mut entry.value)
+        }
+    }
+
     /// Evict and return every entry that has outlived its `ttl` as of `now`.
     pub fn evict_expired(&mut self, now: Timestamp) -> Vec<(K, V)> {
         let mut evicted = Vec::new();

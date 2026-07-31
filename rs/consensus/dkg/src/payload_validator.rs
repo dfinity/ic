@@ -76,8 +76,8 @@ pub fn validate_payload(
             )?;
             if summary_payload.dkg != expected_summary {
                 return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
-                    expected_summary,
-                    summary_payload.dkg.clone(),
+                    Box::new(expected_summary),
+                    Box::new(summary_payload.dkg.clone()),
                 )
                 .into());
             }
