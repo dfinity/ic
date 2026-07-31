@@ -35,7 +35,7 @@ archive_override(
     sha256 = "fbe1a1fe805978279fc9a4d1f9ed808263a387dee8358688bc3b0a9ea786cc2a",
     strip_prefix = "hermetic_cc_toolchain-cc7746d4c00ec15736c6c5a3a58de9cc36a333df",
     type = "tar.gz",
-    urls = ["https://codeload.github.com/DhashS/hermetic_cc_toolchain/tar.gz/cc7746d4c00ec15736c6c5a3a58de9cc36a333df"],
+    urls = ["https://codeload.github.com/uber/hermetic_cc_toolchain/tar.gz/cc7746d4c00ec15736c6c5a3a58de9cc36a333df"],
 )
 
 # configure/make dependencies

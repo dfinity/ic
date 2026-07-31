@@ -3,10 +3,10 @@
 # has deprecated that ELF "linker optimization" setting and ignores it, but
 # prints a warning on every link (surfaced by rustc 1.97's linker_messages lint).
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index edd09af..55e33b7 100644
+index 2085659..be46712 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
-@@ -335,6 +335,15 @@ fn parseArgs(
+@@ -334,6 +334,15 @@ fn parseArgs(
      // bare `-u` flag (it tries to open the symbol name as a file instead of
      // passing it to the linker).
      while (argv_it.next()) |arg| {
@@ -22,7 +22,7 @@ index edd09af..55e33b7 100644
          if (strip_mthreads and mem.eql(u8, arg, "-mthreads")) continue;
          if (mem.eql(u8, arg, "-u")) {
              if (argv_it.next()) |symbol| {
-@@ -420,6 +429,21 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) u8 {
+@@ -419,6 +428,21 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) u8 {
      return 1;
  }
  
