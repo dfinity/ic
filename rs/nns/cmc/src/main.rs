@@ -6,9 +6,8 @@ use environment::Environment;
 use exchange_rate_canister::{UpdateExchangeRateError, UpdateExchangeRateState};
 use ic_cdk::{
     api::{
-        call::{CallResult, ManualReply},
-        canister_cycle_balance, canister_self, certified_data_set, msg_cycles_accept,
-        msg_cycles_available,
+        call::CallResult, canister_cycle_balance, canister_self, certified_data_set,
+        msg_cycles_accept, msg_cycles_available, msg_reject, msg_reply,
     },
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
@@ -543,9 +542,11 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
 #[update(manual_reply = true)]
 fn update_subnet_type(args: UpdateSubnetTypeArgs) {
     match do_update_subnet_type(args) {
-        Ok(response) => ManualReply::<()>::one(response),
-        Err(err) => ManualReply::reject(err.to_string()),
-    };
+        Ok(response) => {
+            msg_reply(candid::encode_one(response).expect("Failed to encode the reply."))
+        }
+        Err(err) => msg_reject(err.to_string()),
+    }
 }
 
 /// Updates the set of available subnet types.
@@ -614,9 +615,11 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
 #[update(manual_reply = true)]
 fn change_subnet_type_assignment(args: ChangeSubnetTypeAssignmentArgs) {
     match do_change_subnet_type_assignment(args) {
-        Ok(response) => ManualReply::<()>::one(response),
-        Err(err) => ManualReply::reject(err.to_string()),
-    };
+        Ok(response) => {
+            msg_reply(candid::encode_one(response).expect("Failed to encode the reply."))
+        }
+        Err(err) => msg_reject(err.to_string()),
+    }
 }
 
 /// Changes the assignment of provided subnets to subnet types.

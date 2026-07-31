@@ -5,7 +5,6 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
-#![allow(deprecated)]
 use candid::Principal;
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -13,7 +12,7 @@ use ic_cdk::api::{
     data_certificate, in_replicated_execution, msg_caller, msg_cycles_refunded, time,
 };
 use ic_cdk::call::{Call, CallFailed};
-use ic_cdk::spawn;
+use ic_cdk::futures::spawn_017_compat;
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
@@ -108,7 +107,7 @@ pub async fn start_continuous_requests(
     // This request establishes the session to the target server.
     let _ = send_request(request.clone()).await;
 
-    spawn(async move {
+    spawn_017_compat(async move {
         run_continuous_request_loop(request).await;
     });
 
