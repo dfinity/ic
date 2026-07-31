@@ -6,7 +6,6 @@ use ic_management_canister_types_private::{
 use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::process::Command;
 
 const T: u128 = 1_000_000_000_000;
 
@@ -41,6 +40,28 @@ fn file_size(path: &Path) -> Option<u64> {
     path.try_exists()
         .unwrap()
         .then(|| std::fs::metadata(path).unwrap().len())
+}
+
+/// Asserts that the contents of the file `path` are equal to the expected contents.
+fn assert_contents_eq(path: &str, contents: &[u8], expected_contents: &[u8]) {
+    // We do not use `assert_eq!` on the contents
+    // to avoid dumping the (potentially large) contents.
+    assert_eq!(
+        contents.len(),
+        expected_contents.len(),
+        "Unexpected size of {}",
+        path
+    );
+    if let Some(offset) = contents
+        .iter()
+        .zip(expected_contents)
+        .position(|(byte, expected_byte)| byte != expected_byte)
+    {
+        panic!(
+            "Unexpected contents of {} at offset {}: {} instead of the expected {}",
+            path, offset, contents[offset], expected_contents[offset]
+        );
+    }
 }
 
 /// Returns the size of the expected contents of the file `path`
@@ -108,24 +129,7 @@ fn test_canister_snapshot_download_upload(
             continue;
         };
         let contents = std::fs::read(downloaded_snapshot_dir.join(path)).unwrap();
-        // We do not use `assert_eq!` on the contents
-        // to avoid dumping the (potentially large) contents.
-        assert_eq!(
-            contents.len(),
-            expected_contents.len(),
-            "Unexpected size of {}",
-            path
-        );
-        if let Some(offset) = contents
-            .iter()
-            .zip(expected_contents)
-            .position(|(byte, expected_byte)| byte != expected_byte)
-        {
-            panic!(
-                "Unexpected contents of {} at offset {}: {} instead of the expected {}",
-                path, offset, contents[offset], expected_contents[offset]
-            );
-        }
+        assert_contents_eq(path, &contents, expected_contents);
     }
 
     // Upload the canister snapshot downloaded before.
@@ -148,22 +152,20 @@ fn test_canister_snapshot_download_upload(
 
     // Check that the uploaded snapshot is equal to the originally downloaded snapshot.
     // We compare snapshot metadata separately because it is expected that some fields differ.
-    let diff = Command::new("diff")
-        .arg("-r")
-        .arg("--exclude")
-        .arg("metadata.json")
-        .arg(downloaded_snapshot_dir.clone())
-        .arg(uploaded_snapshot_dir.clone())
-        .output()
-        .expect("Failed to execute diff");
-    match diff.status.code() {
-        Some(0) => (),
-        _ => panic!(
-            "Snapshots differ (uploaded snapshot: {}): {}",
-            uploaded_snapshot_dir.display(),
-            String::from_utf8(diff.stdout).unwrap()
-        ),
-    };
+    let uploaded_files = list_files(&uploaded_snapshot_dir);
+    assert_eq!(uploaded_files, list_files(&downloaded_snapshot_dir));
+    for path in &uploaded_files {
+        if path == "metadata.json" {
+            continue;
+        }
+        let contents = std::fs::read(uploaded_snapshot_dir.join(path)).unwrap();
+        let expected_contents = std::fs::read(downloaded_snapshot_dir.join(path)).unwrap();
+        assert_contents_eq(
+            &format!("{path} of the uploaded snapshot"),
+            &contents,
+            &expected_contents,
+        );
+    }
 
     // Compare snapshot metadata.
     // The source and timestamps are expected to differ and
