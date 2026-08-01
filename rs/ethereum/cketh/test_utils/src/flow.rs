@@ -331,6 +331,14 @@ impl DepositFlow {
         let max_eth_logs_block_range = self.setup.max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
+        if has_pending_finalized_block_query(&self.setup.env) {
+            MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+                .with_request_params(json!(["finalized", false]))
+                .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL))
+                .build()
+                .expect_rpc_calls(&self.setup);
+        }
+
         self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
@@ -1115,4 +1123,10 @@ pub fn double_and_increment_base_fee_per_gas(fee_history: &mut ethers_core::type
             .and_then(|f| f.checked_add(1_u64.into()))
             .unwrap();
     }
+}
+
+fn has_pending_finalized_block_query(env: &PocketIc) -> bool {
+    env.get_canister_http()
+        .iter()
+        .any(|request| String::from_utf8_lossy(&request.body).contains("\"finalized\""))
 }
