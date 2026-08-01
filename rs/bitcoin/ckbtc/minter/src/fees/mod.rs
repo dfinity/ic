@@ -134,12 +134,13 @@ impl FeeEstimator for BitcoinFeeEstimator {
                 const PER_REQUEST_VSIZE_BOUND: u64 = 221;
                 const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
 
+                let increment = (self.retrieve_btc_min_amount / 2).max(1);
                 ((PER_REQUEST_RBF_BOUND
                     + median_fee_rate.fee_ceil(PER_REQUEST_VSIZE_BOUND)
                     + PER_REQUEST_MINTER_FEE_BOUND
                     + self.check_fee)
-                    / 50_000) //TODO DEFI-2187: adjust increment of minimum withdrawal amount to be a multiple of retrieve_btc_min_amount/2
-                    * 50_000
+                    / increment)
+                    * increment
                     + self.retrieve_btc_min_amount
             }
             Network::Regtest => self.retrieve_btc_min_amount,
