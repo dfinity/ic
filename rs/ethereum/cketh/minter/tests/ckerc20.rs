@@ -1950,8 +1950,15 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // Set latest_finalized_block so that we scraped twice each time.
     let latest_finalized_block =
         LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range * 2;
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
+        .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL))
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
     ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
         .expect_rpc_calls(&ckerc20);
@@ -2029,6 +2036,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
         u64::try_from(second_to_block.into_inner()).unwrap() + max_eth_logs_block_range;
     ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
         .expect_rpc_calls(&ckerc20);
