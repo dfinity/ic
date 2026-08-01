@@ -1950,6 +1950,10 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // Set latest_finalized_block so that we scraped twice each time.
     let latest_finalized_block =
         LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range * 2;
+    // This test drives the scraping cycles itself rather than going through the
+    // deposit flow, so it settles the cycle the ckERC20 fixture left in flight before
+    // advancing time. Its stubs are constrained so the block height refresh timer's
+    // query for the latest block cannot consume them.
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL))

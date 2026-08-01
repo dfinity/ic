@@ -331,6 +331,13 @@ impl DepositFlow {
         let max_eth_logs_block_range = self.setup.max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
+        // A fixture that registered ERC-20 tokens drove the minter through several
+        // rounds and hands over a scraping cycle still in flight. That cycle holds the
+        // scraping TimerGuard, so the firing due after the advance below would be
+        // dropped as AlreadyProcessing. Answering the query it waits for lets it finish.
+        // Responding with the block already scraped keeps this from scraping logs
+        // nobody mocked. The ckETH fixture executes no round, so nothing is in flight
+        // and the flow still triggers the first cycle itself.
         if has_pending_finalized_block_query(&self.setup.env) {
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
                 .with_request_params(json!(["finalized", false]))
@@ -343,6 +350,8 @@ impl DepositFlow {
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+                // Constrained so the block height refresh timer's query for the latest
+                // block cannot consume this stub.
                 .with_request_params(json!(["finalized", false]))
                 .respond_for_all_with(block_response(latest_finalized_block));
         (self.override_rpc_eth_get_block_by_number)(default_get_block_by_number)

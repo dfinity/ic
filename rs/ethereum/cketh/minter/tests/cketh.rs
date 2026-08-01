@@ -754,6 +754,8 @@ fn should_retry_from_same_block_when_scrapping_fails() {
     let prev_events_len = cketh.get_all_events().len();
 
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    // Constrained so the block height refresh timer's query for the latest block
+    // cannot consume this stub and leave the finalized one unanswered.
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
@@ -938,6 +940,8 @@ fn should_panic_when_last_finalized_block_in_the_past() {
     let prev_events_len = cketh.get_all_events().len();
 
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    // Constrained so the block height refresh timer's query for the latest block
+    // cannot consume this stub and leave the finalized one unanswered.
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL - 1))
@@ -1200,6 +1204,8 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_at_start,
         MinterInfo {
+            // The minter derives its address from a timer scheduled at install, so a
+            // fixture that has executed no round has not derived it yet.
             minter_address: None,
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS

@@ -523,6 +523,10 @@ impl CkEthSetup {
     /// call is still processing (i.e. blocked on the open call contexts for those outcalls).
     pub fn try_stop_minter_without_stopping_ongoing_https_outcalls(&self) {
         let stop_msg_id = self.submit_stop_minter();
+        // The stop request only takes effect in the next round, and the outcalls the
+        // minter's timers issue in that last running round become visible only after
+        // it, so a drain placed before this tick would run too early and leave them
+        // pending forever.
         self.env.tick();
         assert!(
             self.env.ingress_status(stop_msg_id).is_none(),
