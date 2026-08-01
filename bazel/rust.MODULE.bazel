@@ -17,17 +17,6 @@ rust.toolchain(
     versions = ["1.97.1"],
 )
 
-# Strip debug_info, but preserve symbols, to fix traces. zig cc can only strip
-# everything, or nothing at all. We disable the default stripping, then patch
-# hermetic_cc_toolchain to strip only debug_info, outside of the main call to
-# zig cc.
-rust.strip_level_select(
-    dbg = "none",
-    fastbuild = "none",
-    opt = "none",
-    triples = ["x86_64-unknown-linux-gnu"],
-)
-
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
@@ -2085,7 +2074,9 @@ DEFAULT_RUSTC_FLAGS = [
 # NOTE: make sure this stays in sync with bazel/fuzz_testing.bzl
 DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
-    # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
+    # Link rustc's ASan runtime explicitly instead of letting rustc push it
+    # (kept from the zig-toolchain era; candidate for simplification now that
+    # the C toolchain is clang).
     "-Zexternal-clangrt",
     "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
 ]
@@ -2125,11 +2116,6 @@ crate.annotation(
     crate = "askama_derive",
     patch_args = ["-p2"],
     patches = ["@@//bazel:askama.patch"],
-)
-crate.annotation(
-    crate = "cc",
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:cc_rs.patch"],
 )
 crate.annotation(
     build_script_data = [

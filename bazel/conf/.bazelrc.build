@@ -15,16 +15,21 @@ common --experimental_remote_downloader_propagate_credentials
 common --incompatible_enable_proto_toolchain_resolution
 
 # protobuf 33's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
-# __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used by
-# the hermetic zig toolchain on Linux) garbage-collects these under its default
-# --start-stop-gc together with our opt-mode --gc-sections, breaking the link
-# with "undefined symbol: __start_linkarr_upb_AllExts". The lld-suggested
-# `-z nostart-stop-gc` is rejected by zig's wrapper, so we disable section GC
-# instead. Scoped to the exec config (these are build-time `[for tool]` targets,
+# __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used
+# by the hermetic toolchain on Linux) garbage-collects these under its default
+# --start-stop-gc together with opt-mode --gc-sections, breaking the link
+# with "undefined symbol: __start_linkarr_upb_AllExts", so we disable section
+# GC. Scoped to the exec config (these are build-time `[for tool]` targets,
 # so target binaries/canisters keep --gc-sections) and to Linux via
-# --enable_platform_specific_config (the macOS system linker rejects this flag).
+# --enable_platform_specific_config (the macOS linker rejects this flag).
+# TODO: the narrower `-Wl,-z,nostart-stop-gc` is accepted by clang/lld and
+# could replace this.
 common --enable_platform_specific_config
 build:linux --host_linkopt=-Wl,--no-gc-sections
+
+# cc-rs does not honor $AR/$ARFLAGS the way llvm-libtool-darwin needs, so use
+# llvm-ar on macOS too (documented hermetic-llvm Rust interop requirement).
+build --@rules_cc//cc/toolchains/args/archiver_flags:use_libtool_on_macos=False
 
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
@@ -39,6 +44,16 @@ build --compilation_mode=opt
 build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
+
+# The hermetic toolchain passes driver flags (e.g. --unwindlib=none) that the
+# clang++ driver reports as unused on some rustc link invocations; rustc 1.97's
+# linker_messages lint then surfaces that as a warning on every link. Allow the
+# lint to keep build logs clean (linker errors still fail the build; this only
+# hides linker chatter, matching rustc's pre-1.97 behavior). A driver-level
+# -Wno-unused-command-line-argument is not an option because wasm targets link
+# through rust-lld directly, which rejects that clang driver flag.
+build --@rules_rust//:extra_rustc_flag=-Alinker_messages
+build --@rules_rust//:extra_exec_rustc_flag=-Alinker_messages
 
 # Build everything ic-os without sandbox
 build --strategy_regexp=ic-os[:/].*=local
@@ -128,14 +143,3 @@ common --test_env=RUST_BACKTRACE=full
 
 # Give canceled actions some more time to cleanup
 common --local_termination_grace_seconds=90
-
-# Speed up compilation with zig cc
-# zig cc compiles the standard library on demand, so a shared cache makes a big
-# difference by cutting out duplicated work.
-
-# Set the cache path for all environments
-build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
-# Share /tmp/zig-cache across targets
-build --sandbox_add_mount_pair=/tmp/zig-cache
-# Allow writes to the shared cache
-build --sandbox_writable_path=/tmp/zig-cache

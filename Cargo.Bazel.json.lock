@@ -1,5 +1,5 @@
 {
-  "checksum": "4eb6d15fe0a50be732d31728d688bf3379b4bf80fa3a63f6e0f4ec8d81ed4d3d",
+  "checksum": "5ba95e88e177d66c865dd08ab5bef7cd2929c8988aff35377a6cedaabc83a8bf",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -4964,14 +4964,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "aws-lc-rs 1.17.1": {
+    "aws-lc-rs 1.17.3": {
       "name": "aws-lc-rs",
-      "version": "1.17.1",
+      "version": "1.17.3",
       "package_url": "https://github.com/aws/aws-lc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/aws-lc-rs/1.17.1/download",
-          "sha256": "4342d8937fc7e5dd9b1c60292261c0670c882a2cd1719cfc11b1af41731e32ad"
+          "url": "https://static.crates.io/crates/aws-lc-rs/1.17.3/download",
+          "sha256": "00bdb5da18dac48ca2cc7cd4a98e533e8635a58e2361d13a1a4ee3888e0d72f1"
         }
       },
       "targets": [
@@ -5019,11 +5019,11 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "build_script_build"
             },
             {
-              "id": "aws-lc-sys 0.42.0",
+              "id": "aws-lc-sys 0.43.0",
               "target": "aws_lc_sys"
             },
             {
@@ -5038,7 +5038,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.17.1"
+        "version": "1.17.3"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -5053,13 +5053,13 @@
         "link_deps": {
           "common": [
             {
-              "id": "aws-lc-sys 0.42.0",
+              "id": "aws-lc-sys 0.43.0",
               "target": "aws_lc_sys"
             }
           ],
           "selects": {}
         },
-        "links": "aws_lc_rs_1_17_1_sys"
+        "links": "aws_lc_rs_1_17_3_sys"
       },
       "license": "ISC AND (Apache-2.0 OR ISC)",
       "license_ids": [
@@ -5068,14 +5068,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "aws-lc-sys 0.42.0": {
+    "aws-lc-sys 0.43.0": {
       "name": "aws-lc-sys",
-      "version": "0.42.0",
+      "version": "0.43.0",
       "package_url": "https://github.com/aws/aws-lc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/aws-lc-sys/0.42.0/download",
-          "sha256": "6d9ceb1da931507a12f4fccea479dccd00da1943e1b4ae72d8e502d707361444"
+          "url": "https://static.crates.io/crates/aws-lc-sys/0.43.0/download",
+          "sha256": "43103168cc76fe62678a375e722fc9cb3a0146159ac5828bc4f0dfd755c2224c"
         }
       },
       "targets": [
@@ -5118,14 +5118,14 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-sys 0.42.0",
+              "id": "aws-lc-sys 0.43.0",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.42.0"
+        "version": "0.43.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -5165,7 +5165,7 @@
             ]
           }
         },
-        "links": "aws_lc_0_42_0"
+        "links": "aws_lc_0_43_0"
       },
       "license": "ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)",
       "license_ids": [
@@ -12184,13 +12184,7 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.2.48/download",
-          "sha256": "c481bdbf0ed3b892f6f806287d72acd515b352a4ec27a208489b8c1bc839633a",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:cc_rs.patch"
-          ]
+          "sha256": "c481bdbf0ed3b892f6f806287d72acd515b352a4ec27a208489b8c1bc839633a"
         }
       },
       "targets": [
@@ -30997,7 +30991,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {
@@ -31171,7 +31165,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {
@@ -39395,7 +39389,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {
@@ -60528,7 +60522,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {
@@ -62022,7 +62016,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {
@@ -62103,7 +62097,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {
@@ -66663,7 +66657,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {
@@ -66722,7 +66716,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             }
           ],
@@ -66785,7 +66779,7 @@
               "target": "async_web_client"
             },
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {
@@ -67613,7 +67607,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.1",
+              "id": "aws-lc-rs 1.17.3",
               "target": "aws_lc_rs"
             },
             {

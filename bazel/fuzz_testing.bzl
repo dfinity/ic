@@ -30,7 +30,9 @@ DEFAULT_RUSTC_FLAGS = [
 # NOTE: make sure this stays in sync with bazel/rust.MODULE.bazel
 DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
-    # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
+    # Link rustc's ASan runtime explicitly instead of letting rustc push it
+    # (kept from the zig-toolchain era; candidate for simplification now that
+    # the C toolchain is clang).
     "-Zexternal-clangrt",
     "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
 ]

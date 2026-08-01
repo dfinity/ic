@@ -335,8 +335,6 @@ jobs:
       - uses: ./.github/actions/netrc
       - name: Build and Test
         run: |
-          mkdir -p /tmp/zig-cache
-
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \

@@ -37,8 +37,8 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/
 
 # Use lld as the default linker instead of GNU bfd ld (which is ~6x slower).
 # For our large Rust debug binaries lld links roughly as fast as eg mold and
-# with comparable memory use. Bazel uses its own hermetic (zig/lld) toolchain and
-# is unaffected; this only changes the system linker used by cargo builds.
+# with comparable memory use. Bazel uses its own hermetic (clang/lld) toolchain
+# and is unaffected; this only changes the system linker used by cargo builds.
 RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 
 # Add motoko compiler
