@@ -27,9 +27,11 @@ common --incompatible_enable_proto_toolchain_resolution
 common --enable_platform_specific_config
 build:linux --host_linkopt=-Wl,--no-gc-sections
 
-# cc-rs does not honor $AR/$ARFLAGS the way llvm-libtool-darwin needs, so use
-# llvm-ar on macOS too (documented hermetic-llvm Rust interop requirement).
-build --@rules_cc//cc/toolchains/args/archiver_flags:use_libtool_on_macos=False
+# Pin the glibc version the hermetic toolchain targets to 2.31 (see
+# //:linux-glibc-2.31). Both the target and the exec platform are pinned so
+# host tools and target binaries agree on the glibc floor.
+build:linux --host_platform=//:linux-glibc-2.31
+build:linux --platforms=//:linux-glibc-2.31
 
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing

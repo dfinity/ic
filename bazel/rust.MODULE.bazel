@@ -2127,6 +2127,12 @@ crate.annotation(
     patches = ["@@//bazel:libssh2-sys.patch"],
 )
 crate.annotation(
+    # The build script probes libcryptsetup via pkg-config (for version cfg
+    # flags only); the PKG_CONFIG wrapper keeps the probe's host -L dir out
+    # of the link line (see the pcre2-sys annotation below). Linking is
+    # handled by the libcryptsetup-rs-sys annotation.
+    build_script_data = ["@@//bazel:pkg_config_no_link_metadata.sh"],
+    build_script_env = {"PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"},
     crate = "libcryptsetup-rs",
     patch_args = ["-p1"],
     patches = ["@@//bazel:libcryptsetup-rs.patch"],
@@ -2175,6 +2181,69 @@ crate.annotation(
     # to the built static archive
     patch_args = ["-p1"],
     patches = ["@@//bazel:lmdb_rkv_sys.patch"],
+)
+crate.annotation(
+    # Build the bundled pcre2 from source instead of probing the system one
+    # via pkg-config. The probe injects the host library dir (e.g.
+    # /usr/lib/x86_64-linux-gnu) into the link line ahead of the hermetic
+    # toolchain's library search paths, which makes `-lc` resolve to the HOST
+    # glibc while the crt objects come from the hermetic glibc — an
+    # incompatible mix (undefined __libc_csu_init/__libc_csu_fini, wrong
+    # GLIBC_ symbol versions).
+    build_script_env = {"PCRE2_SYS_STATIC": "1"},
+    crate = "pcre2-sys",
+)
+crate.annotation(
+    # Build the bundled libusb from source instead of probing the system one
+    # via pkg-config (host -L dir leak, see the pcre2-sys annotation above).
+    # Disabling the libudev probe makes the vendored libusb fall back to its
+    # netlink hotplug backend, dropping the libudev dependency entirely.
+    build_script_env = {"LIBUDEV_NO_PKG_CONFIG": "1"},
+    crate = "libusb1-sys",
+    crate_features = ["vendored"],
+)
+crate.annotation(
+    # devicemapper genuinely links the host libdevmapper (there is no
+    # vendored build), so it gets the @libsystemd/@libvirt treatment: link it
+    # by explicit path via a cc_import dep. The PKG_CONFIG wrapper strips the
+    # probe's -L/-l link metadata — the host -L dir would otherwise poison
+    # `-lc` resolution (see the pcre2-sys annotation above) — while keeping
+    # the version check and the -I include paths that bindgen needs.
+    build_script_data = ["@@//bazel:pkg_config_no_link_metadata.sh"],
+    # Build scripts run with the exec root as working directory, so the
+    # exec-root-relative $(execpath ...) resolves.
+    build_script_env = {"PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"},
+    crate = "devicemapper-sys",
+    deps = ["@@//third_party:devmapper"],
+)
+crate.annotation(
+    # Same treatment as devicemapper-sys above: libcryptsetup is a host
+    # library, linked by explicit path via a cc_import dep; the PKG_CONFIG
+    # wrapper keeps the probe's host -L dir out of the link line. The crate's
+    # own explicit `cargo:rustc-link-lib=cryptsetup` resolves against the
+    # cc_import's library directory.
+    build_script_data = ["@@//bazel:pkg_config_no_link_metadata.sh"],
+    build_script_env = {"PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"},
+    crate = "libcryptsetup-rs-sys",
+    deps = ["@@//third_party:cryptsetup"],
+)
+crate.annotation(
+    # Probes host libvirt/libvirt-qemu; keep the host -L dir out of the link
+    # line. Linking is provided by the explicit @libvirt dependency of the
+    # consuming binaries (see rs/ic_os/os_tools/guest_vm_runner).
+    build_script_data = ["@@//bazel:pkg_config_no_link_metadata.sh"],
+    build_script_env = {"PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"},
+    crate = "virt-sys",
+)
+crate.annotation(
+    # Same treatment as devicemapper-sys above: libsystemd is a host library,
+    # linked by explicit path via a cc_import dep (the same @libsystemd repo
+    # that //cpp:infogetty uses); the PKG_CONFIG wrapper keeps the probe's
+    # host -L dir out of the link line.
+    build_script_data = ["@@//bazel:pkg_config_no_link_metadata.sh"],
+    build_script_env = {"PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"},
+    crate = "libsystemd-sys",
+    deps = ["@@//third_party:systemd"],
 )
 crate.annotation(
     crate = "p256",

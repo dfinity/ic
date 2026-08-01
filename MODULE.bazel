@@ -1302,8 +1302,10 @@ os_info(name = "os_info")
 # does not provide.
 llvm_toolchain = use_extension("@llvm//extensions:toolchain.bzl", "toolchain")
 
-# Executors. macOS is hermetic too: hermetic-llvm downloads the macOS SDK
-# from Apple's CDN, so no system-library wrapping is needed.
+# Executors. macOS executors are declared only so that wasm32 (canister)
+# builds keep working on macs; native macOS targets stay on the system Xcode
+# toolchain until hermetic-llvm's macOS support matures (see the registration
+# below).
 llvm_toolchain.exec(
     arch = "x86_64",
     os = "linux",
@@ -1321,7 +1323,7 @@ llvm_toolchain.exec(
     os = "macos",
 )
 
-# Targets: native Linux and macOS, plus wasm32 for canisters.
+# Targets: native Linux, plus wasm32 for canisters.
 llvm_toolchain.target(
     arch = "x86_64",
     os = "linux",
@@ -1329,14 +1331,6 @@ llvm_toolchain.target(
 llvm_toolchain.target(
     arch = "aarch64",
     os = "linux",
-)
-llvm_toolchain.target(
-    arch = "x86_64",
-    os = "macos",
-)
-llvm_toolchain.target(
-    arch = "aarch64",
-    os = "macos",
 )
 llvm_toolchain.target(
     arch = "wasm32",
@@ -1358,15 +1352,14 @@ register_toolchains(
     "//bazel:hermetic_cc_linux_aarch64_to_linux_x86_64",
     "//bazel:hermetic_cc_linux_aarch64_to_none_wasm32",
 
-    # macOS executors: native + intel-cross (//:macos-intel) + wasm.
-    # linux<->macos cross pairs are deliberately not registered: they are
-    # unused in CI, and the Apple SDK license restricts SDK use to Apple
-    # hardware (no linux->macos).
-    "//bazel:hermetic_cc_macos_x86_64_to_macos_x86_64",
-    "//bazel:hermetic_cc_macos_x86_64_to_macos_aarch64",
+    # macOS executors: wasm only. The zig toolchain's none_wasm had no exec
+    # constraints, so canister (wasm) builds on macs relied on it; these keep
+    # that working. Native macOS targets deliberately stay on the system
+    # Xcode toolchain: hermetic-llvm's macOS support (trimmed Apple SDK
+    # sysroot, resource-dir handling) is not yet mature enough for the full
+    # darwin build (e.g. configure-based cargo build scripts fail to find
+    # SDK headers).
     "//bazel:hermetic_cc_macos_x86_64_to_none_wasm32",
-    "//bazel:hermetic_cc_macos_aarch64_to_macos_aarch64",
-    "//bazel:hermetic_cc_macos_aarch64_to_macos_x86_64",
     "//bazel:hermetic_cc_macos_aarch64_to_none_wasm32",
 
     # These toolchains are only registered locally.
@@ -1387,6 +1380,18 @@ new_local_repository(
 
 # Use libvirt from the host environment
 # Used for managing virtual machines programmatically.
+new_local_repository(
+    name = "cryptsetup",
+    build_file = "@//third_party:BUILD.cryptsetup.bazel",
+    path = "/usr",
+)
+
+new_local_repository(
+    name = "devmapper",
+    build_file = "@//third_party:BUILD.devmapper.bazel",
+    path = "/usr",
+)
+
 new_local_repository(
     name = "libvirt",
     build_file = "@//third_party:BUILD.libvirt.bazel",

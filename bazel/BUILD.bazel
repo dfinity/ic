@@ -102,12 +102,9 @@ cc_headers_dir(
         ("linux", "aarch64", "linux", "aarch64"),
         ("linux", "aarch64", "linux", "x86_64"),
         ("linux", "aarch64", "none", "wasm32"),
-        # macOS executors: native + intel-cross (//:macos-intel) + wasm.
-        ("macos", "x86_64", "macos", "x86_64"),
-        ("macos", "x86_64", "macos", "aarch64"),
+        # macOS executors: wasm only; native macOS targets use the system
+        # Xcode toolchain (see MODULE.bazel).
         ("macos", "x86_64", "none", "wasm32"),
-        ("macos", "aarch64", "macos", "aarch64"),
-        ("macos", "aarch64", "macos", "x86_64"),
         ("macos", "aarch64", "none", "wasm32"),
     ]
 ]
@@ -164,6 +161,7 @@ exports_files(
         "canbench.sh",
         "check_endpoints_test.sh",
         "file_size_test.sh",
+        "pkg_config_no_link_metadata.sh",
     ],
     visibility = ["//visibility:public"],
 )

@@ -1,5 +1,5 @@
 {
-  "checksum": "5ba95e88e177d66c865dd08ab5bef7cd2929c8988aff35377a6cedaabc83a8bf",
+  "checksum": "78a4d5c727fe69666c351062f9689b779acb2557739856813bf09c1b6ac80cce",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20026,6 +20026,12 @@
           ],
           "selects": {}
         },
+        "extra_deps": {
+          "common": [
+            "@@//third_party:devmapper"
+          ],
+          "selects": {}
+        },
         "edition": "2021",
         "version": "0.3.1"
       },
@@ -20036,6 +20042,12 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
+        "data": {
+          "common": [
+            "@@//bazel:pkg_config_no_link_metadata.sh"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -20050,6 +20062,12 @@
               "target": "pkg_config"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
+          },
           "selects": {}
         }
       },
@@ -42584,6 +42602,12 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
+        "data": {
+          "common": [
+            "@@//bazel:pkg_config_no_link_metadata.sh"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -42598,6 +42622,12 @@
               "target": "semver"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
+          },
           "selects": {}
         }
       },
@@ -42657,6 +42687,12 @@
           ],
           "selects": {}
         },
+        "extra_deps": {
+          "common": [
+            "@@//third_party:cryptsetup"
+          ],
+          "selects": {}
+        },
         "edition": "2021",
         "version": "0.6.0"
       },
@@ -42667,6 +42703,12 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
+        "data": {
+          "common": [
+            "@@//bazel:pkg_config_no_link_metadata.sh"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -42689,6 +42731,12 @@
               "target": "semver"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
+          },
           "selects": {}
         }
       },
@@ -43745,6 +43793,12 @@
           ],
           "selects": {}
         },
+        "extra_deps": {
+          "common": [
+            "@@//third_party:systemd"
+          ],
+          "selects": {}
+        },
         "edition": "2018",
         "version": "0.9.3"
       },
@@ -43755,6 +43809,12 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
+        "data": {
+          "common": [
+            "@@//bazel:pkg_config_no_link_metadata.sh"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -43769,6 +43829,12 @@
               "target": "pkg_config"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
+          },
           "selects": {}
         }
       },
@@ -43819,6 +43885,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "vendored"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -43864,6 +43936,12 @@
               }
             ]
           }
+        },
+        "build_script_env": {
+          "common": {
+            "LIBUDEV_NO_PKG_CONFIG": "1"
+          },
+          "selects": {}
         },
         "links": "usb-1.0"
       },
@@ -54315,6 +54393,12 @@
               "target": "pkg_config"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "PCRE2_SYS_STATIC": "1"
+          },
           "selects": {}
         }
       },
@@ -85548,6 +85632,12 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
+        "data": {
+          "common": [
+            "@@//bazel:pkg_config_no_link_metadata.sh"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -85558,6 +85648,12 @@
               "target": "pkg_config"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
+          },
           "selects": {}
         },
         "links": "virt"
