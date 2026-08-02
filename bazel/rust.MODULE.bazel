@@ -1418,6 +1418,10 @@ crate.spec(
     version = "^0.19.0",
 )
 crate.spec(
+    # vendored: build the bundled libusb instead of linking the system one
+    # (mirrors vsock_lib's Cargo.toml), so the build needs no
+    # libusb-1.0-0-dev. See also the libusb1-sys annotation below.
+    features = ["vendored"],
     package = "rusb",
     version = "0.9",
 )
@@ -2207,13 +2211,13 @@ crate.annotation(
     crate = "pcre2-sys",
 )
 crate.annotation(
-    # Build the bundled libusb from source instead of probing the system one
-    # via pkg-config (host -L dir leak, see the pcre2-sys annotation above).
+    # The bundled libusb is built from source instead of probing the system
+    # one via pkg-config (host -L dir leak, see the pcre2-sys annotation
+    # above); the `vendored` feature comes from the rusb crate.spec above.
     # Disabling the libudev probe makes the vendored libusb fall back to its
     # netlink hotplug backend, dropping the libudev dependency entirely.
     build_script_env = {"LIBUDEV_NO_PKG_CONFIG": "1"},
     crate = "libusb1-sys",
-    crate_features = ["vendored"],
 )
 crate.annotation(
     # devicemapper genuinely links the host libdevmapper (there is no
