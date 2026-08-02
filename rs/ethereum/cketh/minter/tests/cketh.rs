@@ -1181,7 +1181,6 @@ fn should_skip_single_block_containing_too_many_events() {
         ]);
 }
 
-#[allow(deprecated)]
 #[test]
 fn should_derive_minter_address() {
     let cketh = CkEthSetup::default();
@@ -1192,6 +1191,7 @@ fn should_derive_minter_address() {
     );
 }
 
+#[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
     let cketh = CkEthSetup::default();
