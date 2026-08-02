@@ -6,6 +6,19 @@ bazel_dep(name = "rules_rust", version = "0.71.3")
 archive_override(
     module_name = "rules_rust",
     integrity = "sha256-5GXwZtp5VlNxMI+dolYYxhyhG5f5ReZ5qz30gAbPsrg=",
+    # rules_rust drops the cc_toolchain's static C++ runtime
+    # (`static_runtime_lib`: hermetic-llvm's libc++/libc++abi/libunwind, the
+    # sole provider of the `_Unwind_*` symbols rust std needs since the
+    # toolchain links with `--unwindlib=none`) in two places this patch fixes:
+    # `rust_doc_test` links (every doc test fails to link with undefined
+    # `_Unwind_*`) and dylib/cdylib links (rules_rust links the — here empty —
+    # dynamic runtime instead, and since shared-library links don't fail on
+    # undefined symbols the breakage only surfaces at runtime: dlopen of e.g.
+    # libnss_icos.so fails, leaving GuestOS unable to resolve "hostos" and
+    # nft unable to load the orchestrator's firewall rules). TODO: upstream to
+    # the dfinity rules_rust fork and drop the patch on the next fork bump.
+    patch_strip = 1,
+    patches = ["//bazel:rules_rust_static_runtime.patch"],
     strip_prefix = "rules_rust-f8f382c7e351a797242ce4a92262342f8994e265",
     type = "tar.gz",
     urls = ["https://codeload.github.com/dfinity/rules_rust/tar.gz/f8f382c7e351a797242ce4a92262342f8994e265"],
