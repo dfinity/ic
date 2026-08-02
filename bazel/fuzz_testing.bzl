@@ -29,11 +29,6 @@ DEFAULT_RUSTC_FLAGS = [
 
 # NOTE: make sure this stays in sync with bazel/rust.MODULE.bazel
 DEFAULT_SANITIZERS = [
-    # rustc automatically links its bundled ASan runtime
-    # (librustc-stable_rt.asan.a) into the final binary. The zig toolchain
-    # mishandled that mechanism and needed -Zexternal-clangrt plus an
-    # explicit -Clink-arg with a hardcoded path to the same archive; with a
-    # plain clang/lld driver the default just works.
     "-Zsanitizer=address",
 ]
 
