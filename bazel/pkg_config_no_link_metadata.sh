@@ -15,10 +15,8 @@
 # cc_import dependency instead (see e.g. the devicemapper-sys annotation in
 # bazel/rust.MODULE.bazel and third_party/BUILD.devmapper.bazel).
 
+# `pipefail` is load-bearing: without it a pkg-config failure would be masked
+# by sed's exit 0.
 set -euo pipefail
 
-if out="$(pkg-config "$@")"; then
-    printf '%s\n' "$out" | sed -E 's/(^| )-[Ll][^ ]*//g'
-else
-    exit "$?"
-fi
+pkg-config "$@" | sed -E 's/(^| )-[Ll][^ ]*//g'
