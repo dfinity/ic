@@ -1791,12 +1791,11 @@ impl Default for IngressHistoryState {
 /// The number of ingress history entries in each `IngressState`.
 ///
 /// `IngressStatus::Unknown` does not describe an entry at all: it is the stand-in
-/// for a message with no ingress history entry, which is why
-/// `IngressStatus::is_valid_state_transition()` never allows a transition to it.
-/// Nothing prevents one from being inserted, though, so it is given a count of
-/// its own instead of being ignored: this way the counts always add up to
-/// `IngressHistoryState::len()` and a non-zero `unknown` count reveals that
-/// something did insert one.
+/// for a message with no ingress history entry, so recording one is
+/// `debug_assert`ed against in `IngressHistoryState::insert()`. It is still given
+/// a count of its own rather than being ignored, as a release build backstop: this
+/// way the counts always add up to `IngressHistoryState::len()` and a non-zero
+/// `unknown` count reveals that something did record one.
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct IngressStateCounts {
     pub received: usize,
@@ -1865,6 +1864,16 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
+        // `IngressStatus::Unknown` stands for the absence of an entry, so it must
+        // never be recorded as the status of a message. Note that
+        // `IngressStatus::is_valid_state_transition()` (checked by the callers) can
+        // only catch this if there already is an entry, as it allows any transition
+        // away from `Unknown`, i.e. from "no entry".
+        debug_assert!(
+            !matches!(status, IngressStatus::Unknown),
+            "Attempted to record `IngressStatus::Unknown` for message {message_id}"
+        );
+
         // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.

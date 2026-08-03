@@ -591,13 +591,6 @@ fn replicated_state_metrics_ingress_history_by_state() {
     );
     set_ingress_status(&mut state, 6, IngressState::Done);
     set_ingress_status(&mut state, 7, IngressState::Done);
-    // `Unknown` is not a valid ingress history state, but it is counted regardless.
-    state.set_ingress_status(
-        message_test_id(8),
-        IngressStatus::Unknown,
-        NumBytes::new(u64::MAX),
-        |_| {},
-    );
 
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
@@ -606,7 +599,7 @@ fn replicated_state_metrics_ingress_history_by_state() {
 
     assert_eq!(
         fetch_int_gauge(&registry, "replicated_state_ingress_history_length"),
-        Some(8)
+        Some(7)
     );
     assert_eq!(
         fetch_int_gauge_vec(
@@ -619,7 +612,9 @@ fn replicated_state_metrics_ingress_history_by_state() {
             (&[("state", "completed")], 1),
             (&[("state", "failed")], 1),
             (&[("state", "done")], 2),
-            (&[("state", "unknown")], 1),
+            // Recording an `IngressStatus::Unknown` is `debug_assert`ed against in
+            // `IngressHistoryState::insert()`, so this is always zero.
+            (&[("state", "unknown")], 0),
         ]),
     );
 }

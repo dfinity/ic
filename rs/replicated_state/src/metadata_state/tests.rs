@@ -1745,7 +1745,6 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
             state: IngressState::Received,
         },
         test_status_done(4),
-        IngressStatus::Unknown,
     ];
     statuses.into_iter().enumerate().for_each(|(i, status)| {
         ingress_history_limit.insert(
@@ -2208,23 +2207,9 @@ fn ingress_history_state_counts() {
         ingress_history.state_counts()
     );
 
-    // `IngressStatus::Unknown` is counted separately.
-    ingress_history.insert(
-        message_test_id(7),
-        IngressStatus::Unknown,
-        Time::from_nanos_since_unix_epoch(7),
-        NumBytes::from(u64::MAX),
-        |_| {},
-    );
-    assert_eq!(
-        IngressStateCounts {
-            received: 1,
-            processing: 2,
-            unknown: 1,
-            ..Default::default()
-        },
-        ingress_history.state_counts()
-    );
+    // The counts always add up to the number of entries. (Recording an
+    // `IngressStatus::Unknown`, which would land in the `unknown` count, is
+    // `debug_assert`ed against in `IngressHistoryState::insert()`.)
     assert_eq!(
         ingress_history.len(),
         ingress_history
@@ -2232,6 +2217,21 @@ fn ingress_history_state_counts() {
             .iter()
             .map(|(_, count)| count)
             .sum::<usize>()
+    );
+}
+
+#[test]
+#[should_panic(expected = "Attempted to record `IngressStatus::Unknown`")]
+fn ingress_history_insert_unknown_status_panics() {
+    let mut ingress_history = IngressHistoryState::new();
+    // `IngressStatus::Unknown` stands for the absence of an entry, so recording one
+    // is a bug.
+    ingress_history.insert(
+        message_test_id(1),
+        IngressStatus::Unknown,
+        UNIX_EPOCH,
+        NumBytes::from(u64::MAX),
+        |_| {},
     );
 }
 
