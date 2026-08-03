@@ -575,9 +575,15 @@ impl BlockMaker {
                         and height {next_summary_block_height}. Freezing registry version."
                     );
 
+                    // Bump the registry version to the scheduled version of the split right when
+                    // we reach the height of the next summary block.
                     if parents_height.increment() == next_summary_block_height {
                         return Some(scheduled_at);
                     }
+                    // Until then, we continue iterating back until finding a registry version that
+                    // *does not* contain the scheduled split. I.e., we "freeze" the registry
+                    // version at the last version that does not contain the split, until we reach
+                    // the next summary block.
                 }
             }
         }
