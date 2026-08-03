@@ -1355,7 +1355,6 @@ use_repo(llvm_project, "llvm-project")
 register_toolchains(
     # Linux executors: native + cross + wasm.
     "//bazel:hermetic_cc_linux_x86_64_to_linux_x86_64",
-    "//bazel:hermetic_cc_linux_x86_64_to_linux_aarch64",
     "//bazel:hermetic_cc_linux_x86_64_to_none_wasm32",
     "//bazel:hermetic_cc_linux_aarch64_to_linux_aarch64",
 

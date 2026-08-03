@@ -95,7 +95,6 @@ cc_headers_dir(
     for (exec_os, exec_cpu, target_os, target_cpu) in [
         # Linux executors: native + cross + wasm.
         ("linux", "x86_64", "linux", "x86_64"),
-        ("linux", "x86_64", "linux", "aarch64"),
         ("linux", "x86_64", "none", "wasm32"),
         ("linux", "aarch64", "linux", "aarch64"),
         # macOS executors: wasm only; native macOS targets use the system
