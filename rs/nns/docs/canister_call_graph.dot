@@ -163,7 +163,7 @@ digraph NNSBackendCanisterCalls {
   // See: rs/migration_canister/src/external_interfaces/registry.rs:33-45
   // (get_subnet_for_canister), :88-100 (get_subnet), :135-149 (migrate_canister ->
   // "migrate_canisters")
-  Migration -> Registry     [label="looks up subnet info\nfor migration"];
+  Migration -> Registry     [label="changes which subnet\ncanisters are hosted on"];
 
   // ---- Registry outbound ----
   // Registry -> IcManagement: setup_initial_dkg, reshare_chain_key

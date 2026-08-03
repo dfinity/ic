@@ -167,27 +167,27 @@
 <!-- Ledger -->
 <g id="node10" class="node">
 <title>Ledger</title>
-<path fill="#dfe9ff" stroke="#3b4b8c" d="M1060,-232.98C1060,-232.98 1009,-232.98 1009,-232.98 1003,-232.98 997,-226.98 997,-220.98 997,-220.98 997,-208.98 997,-208.98 997,-202.98 1003,-196.98 1009,-196.98 1009,-196.98 1060,-196.98 1060,-196.98 1066,-196.98 1072,-202.98 1072,-208.98 1072,-208.98 1072,-220.98 1072,-220.98 1072,-226.98 1066,-232.98 1060,-232.98"/>
-<text text-anchor="middle" x="1034.5" y="-212.18" font-family="Helvetica,sans-Serif" font-size="11.00">ICP Ledger</text>
+<path fill="#dfe9ff" stroke="#3b4b8c" d="M1067,-232.98C1067,-232.98 1016,-232.98 1016,-232.98 1010,-232.98 1004,-226.98 1004,-220.98 1004,-220.98 1004,-208.98 1004,-208.98 1004,-202.98 1010,-196.98 1016,-196.98 1016,-196.98 1067,-196.98 1067,-196.98 1073,-196.98 1079,-202.98 1079,-208.98 1079,-208.98 1079,-220.98 1079,-220.98 1079,-226.98 1073,-232.98 1067,-232.98"/>
+<text text-anchor="middle" x="1041.5" y="-212.18" font-family="Helvetica,sans-Serif" font-size="11.00">ICP Ledger</text>
 </g>
 <!-- Governance&#45;&gt;Ledger -->
 <g id="edge5" class="edge">
 <title>Governance&#45;&gt;Ledger</title>
-<path fill="none" stroke="#555555" d="M804.06,-400.23C873.96,-375.4 1007.5,-327.98 1007.5,-327.98 1007.5,-327.98 1019.74,-276.77 1027.74,-243.3"/>
-<polygon fill="#555555" stroke="#555555" points="1031.24,-243.68 1030.16,-233.14 1024.43,-242.05 1031.24,-243.68"/>
+<path fill="none" stroke="#555555" d="M804.06,-400.23C873.96,-375.4 1007.5,-327.98 1007.5,-327.98 1007.5,-327.98 1023.04,-276.32 1033.11,-242.86"/>
+<polygon fill="#555555" stroke="#555555" points="1036.51,-243.72 1036.04,-233.14 1029.8,-241.71 1036.51,-243.72"/>
 <text text-anchor="middle" x="1081.5" y="-320.78" font-family="Helvetica,sans-Serif" font-size="9.00">moves ICP for neuron operations</text>
 </g>
 <!-- Migration -->
 <g id="node11" class="node">
 <title>Migration</title>
-<path fill="#dfe9ff" stroke="#3b4b8c" d="M954,-232.98C954,-232.98 851,-232.98 851,-232.98 845,-232.98 839,-226.98 839,-220.98 839,-220.98 839,-208.98 839,-208.98 839,-202.98 845,-196.98 851,-196.98 851,-196.98 954,-196.98 954,-196.98 960,-196.98 966,-202.98 966,-208.98 966,-208.98 966,-220.98 966,-220.98 966,-226.98 960,-232.98 954,-232.98"/>
-<text text-anchor="middle" x="902.5" y="-212.18" font-family="Helvetica,sans-Serif" font-size="11.00">(Canister) Migration</text>
+<path fill="#dfe9ff" stroke="#3b4b8c" d="M968,-232.98C968,-232.98 865,-232.98 865,-232.98 859,-232.98 853,-226.98 853,-220.98 853,-220.98 853,-208.98 853,-208.98 853,-202.98 859,-196.98 865,-196.98 865,-196.98 968,-196.98 968,-196.98 974,-196.98 980,-202.98 980,-208.98 980,-208.98 980,-220.98 980,-220.98 980,-226.98 974,-232.98 968,-232.98"/>
+<text text-anchor="middle" x="916.5" y="-212.18" font-family="Helvetica,sans-Serif" font-size="11.00">(Canister) Migration</text>
 </g>
 <!-- Governance&#45;&gt;Migration -->
 <g id="edge7" class="edge">
 <title>Governance&#45;&gt;Migration</title>
-<path fill="none" stroke="#555555" d="M772.03,-396.96C785.5,-371.47 808.5,-327.98 808.5,-327.98 808.5,-327.98 852.97,-274.53 880.74,-241.15"/>
-<polygon fill="#555555" stroke="#555555" points="883.69,-243.07 887.4,-233.14 878.31,-238.59 883.69,-243.07"/>
+<path fill="none" stroke="#555555" d="M772.03,-396.96C785.5,-371.47 808.5,-327.98 808.5,-327.98 808.5,-327.98 860.03,-274.07 891.9,-240.72"/>
+<polygon fill="#555555" stroke="#555555" points="894.77,-242.79 899.15,-233.14 889.71,-237.95 894.77,-242.79"/>
 <text text-anchor="middle" x="890" y="-320.78" font-family="Helvetica,sans-Serif" font-size="9.00">pauses/resumes canister migrations</text>
 </g>
 <!-- Lifeline -->
@@ -222,24 +222,24 @@
 <!-- Cmc&#45;&gt;Ledger -->
 <g id="edge18" class="edge">
 <title>Cmc&#45;&gt;Ledger</title>
-<path fill="none" stroke="#555555" d="M1216.64,-304.95C1179.18,-286.66 1119.55,-257.53 1078.8,-237.62"/>
-<polygon fill="#555555" stroke="#555555" points="1080.16,-234.39 1069.64,-233.15 1077.09,-240.68 1080.16,-234.39"/>
+<path fill="none" stroke="#555555" d="M1217.76,-304.95C1181.59,-286.69 1124.05,-257.65 1084.62,-237.75"/>
+<polygon fill="#555555" stroke="#555555" points="1086.01,-234.53 1075.5,-233.15 1082.85,-240.78 1086.01,-234.53"/>
 <text text-anchor="middle" x="1114.5" y="-266.78" font-family="Helvetica,sans-Serif" font-size="9.00">burns ICP for cycle minting</text>
 </g>
 <!-- Migration&#45;&gt;Registry -->
 <g id="edge20" class="edge">
 <title>Migration&#45;&gt;Registry</title>
-<path fill="none" stroke="#555555" d="M875.84,-196.84C853.65,-182.58 821.89,-162.16 797.63,-146.57"/>
-<polygon fill="#555555" stroke="#555555" points="799.37,-143.52 789.06,-141.06 795.58,-149.41 799.37,-143.52"/>
-<text text-anchor="middle" x="842.5" y="-171.78" font-family="Helvetica,sans-Serif" font-size="9.00">looks up subnet info</text>
-<text text-anchor="middle" x="842.5" y="-161.78" font-family="Helvetica,sans-Serif" font-size="9.00">for migration</text>
+<path fill="none" stroke="#555555" d="M887.17,-196.84C862.55,-182.46 827.21,-161.8 800.44,-146.16"/>
+<polygon fill="#555555" stroke="#555555" points="802.12,-143.08 791.72,-141.06 798.59,-149.13 802.12,-143.08"/>
+<text text-anchor="middle" x="849.5" y="-171.78" font-family="Helvetica,sans-Serif" font-size="9.00">changes which subnet</text>
+<text text-anchor="middle" x="849.5" y="-161.78" font-family="Helvetica,sans-Serif" font-size="9.00">canisters are hosted on</text>
 </g>
 <!-- Migration&#45;&gt;IcManagement -->
 <g id="edge19" class="edge">
 <title>Migration&#45;&gt;IcManagement</title>
-<path fill="none" stroke="#555555" d="M902.5,-196.96C902.5,-171.47 902.5,-127.98 902.5,-127.98 902.5,-127.98 845.24,-85.65 803.96,-55.14"/>
-<polygon fill="#555555" stroke="#555555" points="805.8,-52.15 795.68,-49.02 801.64,-57.78 805.8,-52.15"/>
-<text text-anchor="middle" x="978" y="-120.78" font-family="Helvetica,sans-Serif" font-size="9.00">adjusts settings during migration</text>
+<path fill="none" stroke="#555555" d="M916.5,-196.96C916.5,-171.47 916.5,-127.98 916.5,-127.98 916.5,-127.98 852.99,-85.3 807.54,-54.76"/>
+<polygon fill="#555555" stroke="#555555" points="809.25,-51.69 799,-49.02 805.34,-57.5 809.25,-51.69"/>
+<text text-anchor="middle" x="992" y="-120.78" font-family="Helvetica,sans-Serif" font-size="9.00">adjusts settings during migration</text>
 </g>
 <!-- Lifeline&#45;&gt;IcManagement -->
 <g id="edge13" class="edge">
