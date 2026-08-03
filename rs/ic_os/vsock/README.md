@@ -1,34 +1,46 @@
 # Vsock
 
-The vsock is the GuestOS’s primary command channel for communicating with the HostOS. The vsock exists to perform certain functions unavailable to the GuestOS.
+The vsock channel is the main GuestOS → HostOS command path for the small set of
+actions that GuestOS cannot perform on its own.
 
-The `vsock_guest` binary runs in the GuestOS and sends messages over the vsock channel to the `vsock_host` binary running in the HostOS.
+This directory contains three Rust crates:
 
-`vsock_guest` is used solely by the orchestrator.
+- `vsock_guest`: GuestOS-side CLI/client.
+- `vsock_host`: HostOS-side server binary.
+- `vsock_lib`: Shared transport, protocol, and host/guest helpers.
 
-The `protocol` module defines the communication protocol and offers utility functions for communication.
+To maintain the isolation boundary between the two operating systems, the
+protocol intentionally exposes only a narrow, allowlisted command set.
 
-To maintain the highest level of isolation and security between the two operating systems, the GuestOS is restricted to strictly defined commands.
+All commands are initiated from GuestOS. This is a constrained escape hatch for
+the small number of host-level actions that GuestOS cannot perform by itself,
+not a general-purpose HostOS/GuestOS RPC interface.
 
 ## Commands
 
 The following commands are supported:
 
-| Command               | Parameters | Description |
-| --------------------  | --------- | --------------- |
-| attach-hsm            |           | Request that the HostOS attach the HSM to the GuestOS virtual machine.  |
-| detach-hsm            |           | Request that the HostOS detach the HSM from the GuestOS virtual machine. Note that the attach and detach-hsm commands are being phased out in favor of the virtual-hsm onboarding, which does not use the vsock. |
-| get-hostos-version    |           | Request that the HostOS return its version.  |
-| upgrade               | URL, hash | Request that the HostOS download and apply a given HostOS upgrade, then trigger a reboot of HostOS. Upgrades are triggered by NNS proposals. Unlike guestOS upgrades, which are triggered at a subnet level, the HostOS upgrades occur by datacenter or by individual nodes to avoid subnet downtime, as rebooting the HostOS typically takes several minutes. |
-| notify                | message   | Request that the HostOS output a given message a certain number of times to the host terminal. The command is used to log info on the HostOS (e.g., "orchestrator started," "replica starting up").  |
+| Command                | Parameters     | Description                                                                               |
+|------------------------|----------------|-------------------------------------------------------------------------------------------|
+| attach-hsm             |                | Request that HostOS attach the HSM to the GuestOS VM.                                     |
+| detach-hsm             |                | Request that HostOS detach the HSM from the GuestOS VM.                                   |
+| get-hostos-version     |                | Return the HostOS software version.                                                       |
+| upgrade                | URL, hash      | Ask HostOS to stage and apply a HostOS upgrade.                                           |
+| notify                 | message, count | Ask HostOS to print a message to the host console.                                        |
+| start-upgrade-guest-vm |                | Internal command used by the GuestOS upgrade flow to ask HostOS to launch the Upgrade VM. |
 
 ## Compatibility
-The current versions of the guest and host vsock are:
-* guest: 1.0.0
-* host: 1.0.0
+The version handshake is implemented in the shared protocol types. The HostOS
+server can return its protocol version so GuestOS-side callers can detect major
+compatibility problems.
 
-Note that both the guest and host vsock are backward compatible with each other's older versions.
+## Trust boundary notes
+The vsock transport is local to the HostOS/GuestOS pair, but it is still treated
+as a narrow control boundary rather than a trust boundary. Sensitive decisions
+such as release identity or disk-key release are enforced elsewhere via
+attestation/measurement checks, not merely by the existence of a vsock request.
 
 ## Response
 
-The guest vsock will output a Payload enum (see Payload definition in /protocol) to stdout for successful commands and output a string error to stderr for errors.
+`vsock_guest` prints successful payloads to stdout and reports protocol or
+execution errors on stderr.

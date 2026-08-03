@@ -3,6 +3,24 @@
 Bootloader is built somewhat similarly to the Ubuntu system, but is
 kept separately (the bootloader is never changed during system upgrades).
 
+The mutable A/B boot decision lives in +grubenv+, which records the active
+slot (+boot_alternative+) and its trust phase (+boot_cycle+: +stable+,
++install+, +first_boot+, +failsafe_check+). This split is intentional:
+upgrades rewrite inactive boot/root partitions and then update only +grubenv+
+to point at the candidate slot. The bootloader code itself remains unchanged
+across normal upgrades.
+
+The full +boot_cycle+ state machine, its semantics, and the +manageboot.sh
+confirm+ promotion flow are documented in the
+link:../../rs/ic_os/boot/grub/README.md[`grub` crate README].
+
+For GuestOS specifically, +guestos_grub.cfg+ is primarily for standalone or
+custom-host boots (for example cloud deployments). When GuestOS is run by
+HostOS, the normal path is direct kernel boot instead: HostOS reads the GuestOS
+boot metadata and launches the kernel/initrd directly, bypassing the GuestOS
+bootloader while still honoring the same +grubenv+ state machine. That normal
+HostOS path is implemented in +guest_vm_runner+.
+
 The +grub-mkimage+ utility is used to build both the EFI first stage loader
 (built as +/boot/efi/EFI/Boot/bootx64.efi+, to be placed as +/EFI/Boot/bootx64.efi+
 on the +efi+ partition) as well as grub loadable modules

@@ -1,26 +1,49 @@
 # guest_disk
 
-The tool contains all logic to handle the formatting and activation of encrypted disk partitions in the GuestOS. The
-tool's functionality is exposed through a command-line interface with two main commands: `crypt-format` for initializing
-partitions and `crypt-open` for activating them.
+Handles formatting and opening the encrypted GuestOS `var` and `store`
+partitions.
 
-We distinguish between two types of partitions:
+## Data model
+- `var` is per-GuestOS-slot mutable state.
+- `store` is shared persistent state that must survive upgrades.
+- In TEE mode, `store` is the partition that needs explicit key migration during
+  upgrade because its key continuity matters across GuestOS versions.
+- `store` uses a **detached LUKS2 header** (persisted at
+  `DEFAULT_STORE_LUKS_HEADER_PATH`, `/var/store_luks_header.bin`) so the 
+  non-encrypted *store* header is itself stored on the encrypted var partition. 
+  This provides some protection against tampering with the header.
 
-* **Var Partition**: A private, encrypted partition for the current GuestOS boot alternative and version (gets wiped
-  during upgrades).
-* **Store Partition**: An encrypted partition that is shared across different GuestOS releases and is kept during
-  upgrades.
+Outside TEE mode the crate falls back to a persisted random key instead of a
+measurement-derived one.
 
-We employ one of two encryption strategies based on the GuestOS config:
+Only the sensitive data partitions are encrypted. The `var` partitions contain
+mutable GuestOS state and the shared `store` partition contains persistent node
+data, so both need confidentiality protection. The boot/root/config partitions
+are not treated as confidential in the same way, and the root partition's
+integrity is enforced separately via the measured `root_hash` + dm-verity flow
+(see `open_rootfs`).
 
-1. **SEV-based Encryption**: When Trusted Execution Environment (TEE) is enabled, the tool derives the disk encryption
-   key using AMD SEV which ensures that the disk encryption key is tied to the SEV guest launch measurement. For the
-   `store` partition, it includes a mechanism to handle GuestOS upgrades by migrating keys. During an upgrade, it can
-   unlock the partition with a previous key, add the new SEV-derived key, and then clean up old keys (implemented in
-   `sev.rs`).
+## SEV key derivation invariant
+When SEV-based encryption is used, the effective disk passphrase comes from a
+hardware-derived sealing key plus per-device derivation. In practice this means
+the key material is tied to the node's CPU identity, the GuestOS launch
+measurement, and the target device path. This ensures that:
+- `var` and `store` never derive the same key,
+- the two A/B `var` partitions never derive the same key,
+- the same GuestOS release on two different machines still derives different
+  keys,
+- each encrypted device has its own separate passphrase even when the VM
+  measurement is otherwise the same.
 
-2. **Generated Key-based Encryption**: In environments without TEE, the tool falls back to using a generated key. This
-   key is stored in `/boot/config/store.keyfile`. If the file doesn't exist, a new 128-bit random key is generated.
+## Rollback and key migration
+During an upgrade, the new GuestOS eventually adds its own derived passphrase to
+the shared `store` partition's detached LUKS header without removing the
+previous one. Keeping both passphrases is intentional: if the node rolls back to
+the previous GuestOS slot, the old GuestOS can still derive its original
+passphrase and regain access to the shared data.
 
-Once a partition is successfully opened, it is mapped to a specific path in the `/dev/mapper/` directory. The `var`
-partition is mapped to `/dev/mapper/var_crypt`, and the `store` partition to `/dev/mapper/store-crypt`.
+The intended steady state is exactly two retained passphrases:
+one for the current GuestOS and one for the previous version.
+
+This is enforced actively: after a successful migration, the crate prunes other
+store keyslots and leaves only the current and previous passphrases.

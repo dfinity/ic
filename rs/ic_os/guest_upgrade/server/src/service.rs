@@ -134,6 +134,10 @@ impl DiskEncryptionKeyExchangeServiceImpl {
 
         let my_attestation_report = *my_attestation_package.attestation_report();
 
+        // The server does not trust HostOS or the transport layer to tell it
+        // which VM connected. It releases the store key only after verifying
+        // the peer VM directly: blessed measurement, expected TLS binding, and
+        // same physical CPU.
         ParsedSevAttestationPackage::parse(
             client_attestation_package,
             self.sev_root_certificate_verification,

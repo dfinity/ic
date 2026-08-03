@@ -93,7 +93,7 @@ and systemd has no other way of stashing it away otherwise.
 
 == Set up key for block device encryption
 
-Service: +setup-data-encryption.service+, script: +/opt/ic/bin/setup-encryption.sh+,
+Service: +setup-data-encryption.service+, script: +/opt/ic/bin/setup-data-encryption.sh+,
 depends on +/boot/config+ mount. cryptsetup for +/dev/vda10+ depends on this.
 
 The initially deployed image has only 9 partitions set up. The 10th partition
@@ -101,8 +101,12 @@ of the running system is to take up the entire "remainder" of the disk and
 be used as encrypted payload storage.
 
 At first boot after deployment, the missing 10th partition will be created,
-an encryption key will be generated, and the partition will be set up as
-encrypted storage.
+initialized as encrypted storage, and opened using node-local key material.
+This lets the node use the remaining capacity of the actual machine instead of
+shipping a needlessly large base image.
+
+On SEV nodes, this also matches the trust model: the usable +store+ key
+material only exists once GuestOS is running inside the intended TEE.
 
 == Set up and mount +/var+ filesystem
 
@@ -258,3 +262,17 @@ Service: generate-ic-config.service creates a config file from ic.json.template,
 == Start IC replica
 
 Starts the nodemaneger which in turn monitors and starts the IC replica service.
+
+== GuestOS boot success/failure markers
+
+GuestOS also exposes a small boot-status protocol to HostOS through serial
+output:
+
+- +log-boot-success.service+ emits +GUESTOS BOOT SUCCESS+ after
+  +multi-user.target+
+- +log-boot-failure.service+ emits +GUESTOS BOOT FAILURE+ when boot ends up in
+  +emergency.target+ or +rescue.target+
+
+These markers are for HostOS observability and management only. They do not by
+themselves mark the slot as stable; that happens later when GuestOS explicitly
+confirms the boot via +manageboot.sh confirm+.

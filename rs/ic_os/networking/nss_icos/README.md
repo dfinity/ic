@@ -47,6 +47,10 @@ and GuestOS IP addresses.  This lookup happens the first time that the
 running program invokes any of the `gethostby*` functions that the C library
 processes.
 
+This is an intentional optimization: a node's IP address is not expected to
+change after boot, so caching the value once per process avoids repeated network
+interface lookups without sacrificing correctness in the supported model.
+
 On the basis of that IP address, and the IP addressing conventions established
 by the Internet Computer, programs can determine the HostOS and GuestOS
 addresses that correspond to the computer where this software is installed

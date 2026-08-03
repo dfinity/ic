@@ -98,8 +98,19 @@ pub fn swap_guestos_alternative(target: Option<grub::BootAlternative>) -> Result
     )
 }
 
-/// Mounts the GRUB partition, updates `boot_alternative` and `boot_cycle` in grubenv, then
-/// unmounts. Returns the resolved boot alternative that was written.
+/// Mounts the GRUB partition, updates `boot_alternative` and `boot_cycle` in
+/// `grubenv`, then unmounts.
+///
+/// This is the manual HostOS override for GuestOS slot selection.
+/// `target_boot_alternative` selects which slot should be tried next.
+/// If it is empty, the function uses the opposite of the currently recorded
+/// `grubenv.boot_alternative` instead.
+///
+/// The chosen slot is written with `boot_cycle=first_boot`, so it is still not
+/// yet confirmed. If that boot is not later confirmed because of a failure, the
+/// system will fall back to the opposite boot alternative.
+///
+/// Returns the resolved boot alternative that was written.
 fn update_grubenv(
     partition_provider: &dyn ic_device::mount::PartitionProvider,
     target_boot_alternative: Option<grub::BootAlternative>,

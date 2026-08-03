@@ -156,6 +156,9 @@ impl Upgrade {
                 "Cannot report master public key changed metric: {}", e
             );
         }
+        // On startup, orchestrator is responsible for confirming that the
+        // currently booted GuestOS slot should become `stable`. This closes the
+        // upgrade probation window opened by `boot_cycle=first_boot`.
         value.confirm_boot().await;
         value
     }

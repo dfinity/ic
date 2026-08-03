@@ -42,9 +42,12 @@ pub enum BootCycle {
     /// always try booting it.
     #[strum(serialize = "stable")]
     Stable,
-    /// This indicates that we are booting for the very first time after an upgrade into the
-    /// system given by "boot_alternative" we will boot this system and then go into
-    /// "failsafe_check" state.
+    /// This indicates that we are booting the selected GuestOS slot for the
+    /// first time after an upgrade. If this boot is not later acknowledged as
+    /// healthy, the next refresh moves into `failsafe_check` so the system can
+    /// fall back. The later acknowledgement happens when GuestOS runs the
+    /// equivalent of `manageboot.sh confirm`, which promotes the slot to
+    /// `stable` in `grubenv`.
     #[strum(serialize = "first_boot")]
     FirstBoot,
     /// We have tried booting the currently active system, but the target system did not
@@ -53,7 +56,9 @@ pub enum BootCycle {
     /// stable.
     #[strum(serialize = "failsafe_check")]
     FailsafeCheck,
-    /// This state exists only once, after initial install of the system.
+    /// This state exists only once, on the very first boot in the machine's
+    /// lifetime after the initial installation. Unlike `first_boot`, it does
+    /// not enter the upgrade rollback flow; it simply transitions to `stable`.
     #[strum(serialize = "install")]
     Install,
 }

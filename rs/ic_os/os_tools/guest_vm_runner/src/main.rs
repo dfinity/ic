@@ -70,6 +70,13 @@ const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 /// The GuestOS will log one of these marker texts on the serial output.
+///
+/// Today the success marker corresponds to GuestOS reaching
+/// `multi-user.target`, but this is an operational contract between GuestOS and
+/// HostOS rather than a fundamental boot-state invariant, so the exact meaning
+/// may evolve over time. It is emitted by GuestOS for HostOS observability; the
+/// actual promotion of a newly upgraded slot to `stable` happens later when
+/// GuestOS explicitly confirms the boot by updating `grubenv`.
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
 const GUESTOS_BOOT_FAILURE_MARKER: &str = "GUESTOS BOOT FAILURE";
 
