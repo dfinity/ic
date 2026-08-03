@@ -363,6 +363,10 @@ impl CkErc20Setup {
         }
     }
 
+    pub fn advance_time(&self, duration: Duration) {
+        self.cketh.advance_time(duration);
+    }
+
     pub fn caller(&self) -> Principal {
         self.cketh.caller.into()
     }
@@ -780,17 +784,7 @@ impl CkErc20DepositFlow {
         let max_eth_logs_block_range = self.as_ref().max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
-        // Registering the ERC-20 tokens drove the minter through several rounds, so a
-        // scraping cycle is still in flight and holds the scraping TimerGuard. Let it
-        // finish before advancing time, otherwise the firing due at the new time is
-        // dropped as AlreadyProcessing and no block number query is ever issued.
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
-            .with_request_params(json!(["finalized", false]))
-            .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL))
-            .build()
-            .expect_rpc_calls(self);
-
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
             .with_request_params(json!(["finalized", false]))
             .respond_for_all_with(block_response(latest_finalized_block))

@@ -28,8 +28,8 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
 use pocket_ic::common::rest::{
-    CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, IcpConfig, IcpConfigFlag,
-    MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+    CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, IcpConfig,
+    IcpConfigFlag, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
 };
 use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
 use std::path::PathBuf;
@@ -55,6 +55,10 @@ pub const MAX_TICKS: usize = 10;
 
 // `ic_error_types::RejectCode` value relevant to canister-http mocking.
 pub(crate) const REJECT_CODE_SYS_FATAL: u64 = 1;
+pub(crate) const REJECT_CODE_SYS_TRANSIENT: u64 = 2;
+// ic_types::canister_http::CANISTER_HTTP_TIMEOUT_INTERVAL, past which PocketIC fails
+// canister http requests still in flight.
+const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 pub const DEFAULT_PRINCIPAL_ID: u64 = 10352385;
 pub const DEFAULT_USER_SUBACCOUNT: [u8; 32] = [42; 32];
 pub const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
@@ -567,6 +571,32 @@ impl CkEthSetup {
         assert_matches!(start_res, Ok(()));
     }
 
+    /// Advancing past the canister http timeout fails every outcall in flight, but the
+    /// requests stay listed until a round processes the failures, and the cycle awaiting
+    /// them keeps holding its TimerGuard until it learns of them. A stub could then bind
+    /// to a request that is already dead, and the firing due at the new time would be
+    /// dropped as AlreadyProcessing. Do to those outcalls up front, and deterministically,
+    /// what the advance would have done to them anyway.
+    pub fn advance_time(&self, duration: Duration) {
+        if duration > CANISTER_HTTP_TIMEOUT_INTERVAL {
+            self.fail_pending_https_outcalls();
+        }
+        self.env.advance_time(duration);
+    }
+
+    fn fail_pending_https_outcalls(&self) {
+        let pending = self.env.get_canister_http();
+        // Ticking with nothing in flight would let the timers of a fixture that has
+        // executed no round fire early, which the flows rely on doing themselves.
+        if pending.is_empty() {
+            return;
+        }
+        for request in &pending {
+            fail_as_timed_out(&self.env, request);
+        }
+        self.env.tick();
+    }
+
     pub fn minter_status(&self) -> CanisterStatusType {
         self.env
             .canister_status(self.minter_id, None)
@@ -789,6 +819,18 @@ fn install_minter(
 fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal) {
     let args = evm_rpc_types::InstallArgs::default();
     env.install_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap(), None);
+}
+
+fn fail_as_timed_out(env: &PocketIc, request: &CanisterHttpRequest) {
+    env.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: request.subnet_id,
+        request_id: request.request_id,
+        response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
+            reject_code: REJECT_CODE_SYS_TRANSIENT,
+            message: "Canister http request timed out".to_string(),
+        }),
+        additional_responses: vec![],
+    });
 }
 
 fn reply_500(env: &PocketIc, request: &CanisterHttpRequest) {

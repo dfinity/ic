@@ -309,7 +309,7 @@ impl DepositFlow {
     fn updated_balance(&self, balance_before: &Nat) -> Nat {
         let mut current_balance = balance_before.clone();
         for _ in 0..10 {
-            self.setup.env.advance_time(Duration::from_secs(1));
+            self.setup.advance_time(Duration::from_secs(1));
             self.setup.env.tick();
             current_balance = self.setup.balance_of(self.params.recipient());
             if &current_balance != balance_before {
@@ -331,22 +331,7 @@ impl DepositFlow {
         let max_eth_logs_block_range = self.setup.max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
-        // A fixture that registered ERC-20 tokens drove the minter through several
-        // rounds and hands over a scraping cycle still in flight. That cycle holds the
-        // scraping TimerGuard, so the firing due after the advance below would be
-        // dropped as AlreadyProcessing. Answering the query it waits for lets it finish.
-        // Responding with the block already scraped keeps this from scraping logs
-        // nobody mocked. The ckETH fixture executes no round, so nothing is in flight
-        // and the flow still triggers the first cycle itself.
-        if has_pending_finalized_block_query(&self.setup.env) {
-            MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
-                .with_request_params(json!(["finalized", false]))
-                .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL))
-                .build()
-                .expect_rpc_calls(&self.setup);
-        }
-
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -358,7 +343,7 @@ impl DepositFlow {
             .build()
             .expect_rpc_calls(&self.setup);
 
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         match &self.params {
             DepositParams::CkEth(_) => {
@@ -1132,10 +1117,4 @@ pub fn double_and_increment_base_fee_per_gas(fee_history: &mut ethers_core::type
             .and_then(|f| f.checked_add(1_u64.into()))
             .unwrap();
     }
-}
-
-fn has_pending_finalized_block_query(env: &PocketIc) -> bool {
-    env.get_canister_http()
-        .iter()
-        .any(|request| String::from_utf8_lossy(&request.body).contains("\"finalized\""))
 }
