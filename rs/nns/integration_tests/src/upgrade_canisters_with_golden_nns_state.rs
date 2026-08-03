@@ -219,7 +219,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         "root",
         "sns-wasm",
         // Governance is upgraded last, because in general, it is the one that
-        // calls other NNS canisters (e.g. Root, Registry, SNS-WASM).
+        // calls other NNS canisters (e.g. Root, Registry, SNS-WASM) as part
+        // of proposal execution.
         "governance",
         "genesis-token",
     ]
