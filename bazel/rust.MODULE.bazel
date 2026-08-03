@@ -428,7 +428,7 @@ crate.spec(
 )
 crate.spec(
     package = "educe",
-    version = "^0.4",
+    version = "^0.5",
 )
 crate.spec(
     package = "env-file-reader",
@@ -1487,7 +1487,7 @@ crate.spec(
 )
 crate.spec(
     package = "scraper",
-    version = "^0.17.1",
+    version = "^0.24.0",
 )
 crate.spec(
     default_features = False,
@@ -1708,8 +1708,9 @@ crate.spec(
     features = [
         "full",
     ],
+    git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
-    version = "^0.34",
+    rev = "cddf1c64011d00f36016146e8447bef99531030c",
 )
 crate.spec(
     package = "tempfile",
@@ -1783,7 +1784,7 @@ crate.spec(
         "json",
     ],
     package = "tokio-serde",
-    version = "^0.8",
+    version = "^0.9",
 )
 crate.spec(
     package = "tokio-socks",
