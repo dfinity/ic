@@ -5409,6 +5409,12 @@ fn initial_spent_is_covered_under_pay_as_you_go_pricing() {
         with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
         1,
     );
+
+    assert_responses_from_threshold_shares(
+        num_nodes,
+        with_payg_allowance(request_context(Replication::FullyReplicated), allowance - 1),
+        0,
+    );
 }
 
 /// A non-replicated response is held back while the designated replica's own
