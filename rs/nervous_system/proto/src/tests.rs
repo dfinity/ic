@@ -14,8 +14,7 @@ fn test_global_time_of_day_from_hh_mm_accepts_all_valid_hours_and_minutes() {
 fn test_global_time_of_day_from_hh_mm_rejects_invalid_hours_and_minutes() {
     for hh in [0, 24, 25, u64::MAX] {
         for mm in [0, 60, 61, u64::MAX] {
-            let is_valid = hh < 24 && mm < 60;
-            if is_valid {
+            if hh == 0 && mm == 0 {
                 continue;
             }
 
