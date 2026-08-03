@@ -716,7 +716,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         let own_maximum_state_size = NumBytes::new(1 << 30);
         let own_maximum_state_delta = NumBytes::new(1 << 20);
         let own_maximum_query_instructions = NumInstructions::new(7_000_000_000);
-        let own_maximum_query_call_walltime_seconds = 15;
+        let own_maximum_query_walltime_seconds = 15;
         let own_subnet_record = SubnetRecord {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,
@@ -753,7 +753,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 maximum_state_size: Some(own_maximum_state_size),
                 maximum_state_delta: Some(own_maximum_state_delta),
                 maximum_query_instructions: Some(own_maximum_query_instructions),
-                maximum_query_call_walltime_seconds: Some(own_maximum_query_call_walltime_seconds),
+                maximum_query_walltime_seconds: Some(own_maximum_query_walltime_seconds),
             },
 
             ..Default::default()
@@ -1069,8 +1069,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(
             latest_state
                 .resource_limits()
-                .maximum_query_call_walltime_seconds,
-            Some(own_maximum_query_call_walltime_seconds)
+                .maximum_query_walltime_seconds,
+            Some(own_maximum_query_walltime_seconds)
         );
         assert_eq!(
             *registry_settings.lock().unwrap(),

@@ -789,7 +789,7 @@ mod tests {
                     maximum_state_size: Some(NumBytes::new(42)),
                     maximum_state_delta: Some(NumBytes::new(64)),
                     maximum_query_instructions: Some(NumInstructions::new(128)),
-                    maximum_query_call_walltime_seconds: Some(30),
+                    maximum_query_walltime_seconds: Some(30),
                 }
                 .into(),
             ),
@@ -850,7 +850,7 @@ mod tests {
                         maximum_state_size: Some(NumBytes::new(42)),
                         maximum_state_delta: Some(NumBytes::new(64)),
                         maximum_query_instructions: Some(NumInstructions::new(128)),
-                        maximum_query_call_walltime_seconds: Some(30),
+                        maximum_query_walltime_seconds: Some(30),
                     }
                     .into()
                 ),

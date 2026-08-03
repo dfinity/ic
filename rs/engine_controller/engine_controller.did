@@ -38,7 +38,7 @@ type ResourceLimits = record {
   maximum_state_size : opt nat64;
   maximum_state_delta : opt nat64;
   maximum_query_instructions : opt nat64;
-  maximum_query_call_walltime_seconds : opt nat64;
+  maximum_query_walltime_seconds : opt nat64;
 };
 
 // Mirror of the subset of registry types referenced by UpdateSubnetPayload.

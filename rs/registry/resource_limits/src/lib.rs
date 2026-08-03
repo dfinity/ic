@@ -34,7 +34,7 @@ pub struct ResourceLimits {
     /// graph) is allowed to run.
     /// The protocol uses a default value if the limit of `0` is specified.
     #[arg(long)]
-    pub maximum_query_call_walltime_seconds: Option<u64>,
+    pub maximum_query_walltime_seconds: Option<u64>,
 }
 
 impl ResourceLimits {
@@ -49,9 +49,9 @@ impl ResourceLimits {
             maximum_query_instructions: self
                 .maximum_query_instructions
                 .or(base.maximum_query_instructions),
-            maximum_query_call_walltime_seconds: self
-                .maximum_query_call_walltime_seconds
-                .or(base.maximum_query_call_walltime_seconds),
+            maximum_query_walltime_seconds: self
+                .maximum_query_walltime_seconds
+                .or(base.maximum_query_walltime_seconds),
         }
     }
 
@@ -80,8 +80,7 @@ impl From<ResourceLimits> for pb::ResourceLimits {
             maximum_state_size: resource_limits.maximum_state_size.map(|x| x.get()),
             maximum_state_delta: resource_limits.maximum_state_delta.map(|x| x.get()),
             maximum_query_instructions: resource_limits.maximum_query_instructions.map(|x| x.get()),
-            maximum_query_call_walltime_seconds: resource_limits
-                .maximum_query_call_walltime_seconds,
+            maximum_query_walltime_seconds: resource_limits.maximum_query_walltime_seconds,
         }
     }
 }
@@ -94,8 +93,7 @@ impl From<pb::ResourceLimits> for ResourceLimits {
             maximum_query_instructions: resource_limits
                 .maximum_query_instructions
                 .map(NumInstructions::from),
-            maximum_query_call_walltime_seconds: resource_limits
-                .maximum_query_call_walltime_seconds,
+            maximum_query_walltime_seconds: resource_limits.maximum_query_walltime_seconds,
         }
     }
 }

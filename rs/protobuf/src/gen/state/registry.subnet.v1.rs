@@ -425,7 +425,7 @@ pub struct ResourceLimits {
     /// graph) is allowed to run.
     /// The protocol uses a default value if the limit of `0` is specified.
     #[prost(uint64, optional, tag = "4")]
-    pub maximum_query_call_walltime_seconds: ::core::option::Option<u64>,
+    pub maximum_query_walltime_seconds: ::core::option::Option<u64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
