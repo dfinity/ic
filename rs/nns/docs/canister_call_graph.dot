@@ -1,0 +1,66 @@
+digraph NNSBackendCanisterCalls {
+  rankdir=LR;
+  graph [fontname="Helvetica", fontsize=11, labelloc=t, label="NNS backend canisters: inter-canister call graph\n(solid = real Candid calls; dotted orange = proposal-specified arbitrary-target relay)"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, fillcolor="#eef2ff", color="#3b4b8c"];
+  edge [fontname="Helvetica", fontsize=9, color="#555555"];
+
+  Governance   [fillcolor="#dfe9ff"];
+  Root         [fillcolor="#dfe9ff"];
+  Registry     [fillcolor="#dfe9ff"];
+  SnsWasm      [label="SNS-WASM", fillcolor="#dfe9ff"];
+  Cmc          [label="CMC\n(Cycles Minting Canister)", fillcolor="#dfe9ff"];
+  Gtc          [label="GTC\n(Genesis Token Canister)", fillcolor="#dfe9ff"];
+  Lifeline     [fillcolor="#dfe9ff"];
+  Ledger       [label="ICP Ledger", fillcolor="#dfe9ff"];
+  Migration    [label="Migration canister", fillcolor="#dfe9ff"];
+  NodeRewards  [label="Node Rewards canister", fillcolor="#dfe9ff"];
+  IcManagement [label="IC Management Canister\n(ic00 / aaaaa-aa)", shape=octagon, fillcolor="#ffe9cc", color="#b06a00"];
+
+  // ---- Governance outbound ----
+  Governance -> Root     [label="change_nns_canister / call_canister /\nstop_or_start_nns_canister / create_canister_and_install_code /\ntake_canister_snapshot / load_canister_snapshot /\nupdate_canister_settings / add_nns_canister"];
+  Governance -> Registry [label="create_subnet / add_node_operator / recover_subnet /\nupdate_node_rewards_table / reroute_canister_ranges / ...\n(ExecuteNnsFunction dispatch)"];
+  Governance -> SnsWasm  [label="deploy_new_sns / list_deployed_snses /\nadd_wasm / update_sns_subnet_list /\ninsert_upgrade_path_entries / update_canister_settings target"];
+  Governance -> Cmc      [label="get_average_icp_xdr_conversion_rate /\nset_authorized_subnetwork_list / update_subnet_type /\nchange_subnet_type_assignment"];
+  Governance -> Ledger   [label="transfer_funds / account_balance / total_supply\n(disburse, spawn, refunds, metrics)"];
+  Governance -> Lifeline [label="upgrade_root / hard_reset_root_to_version"];
+  Governance -> Migration [label="disable_api / enable_api\n(PauseCanisterMigrations / Unpause)"];
+  Governance -> NodeRewards [label="get_node_providers_rewards /\nget_node_providers_monthly_xdr_rewards"];
+  Governance -> IcManagement [label="raw_rand (RNG seeding) /\ncanister_metadata (proposal validation)"];
+
+  // ---- Root outbound ----
+  Root -> IcManagement [label="create_canister / install_code /\ncanister_status / update_settings /\nstop/start_canister"];
+  Root -> Registry     [label="get_subnet_for_canister"];
+  Root -> IcManagement [label="call_canister(*)\n(arbitrary proposal-specified target,\nrouted as an ic00-style raw call)", style=dotted, color="#b06a00", fontcolor="#b06a00"];
+
+  // ---- Root -> Governance: NOT a real Candid call ----
+  // (No confirmed rs/nns/handlers/root call into Governance's own API.)
+  // Root's Governance -> Root change_nns_canister edge above can result in
+  // Root calling ic00.install_code with canister_id=Governance -- but that's
+  // already covered by the generic "Root -> IcManagement" lifecycle edge.
+  // NOTE: Governance's #[post_upgrade] (rs/nns/governance/canister/canister.rs:150-151)
+  // takes NO argument and restores state purely from stable memory, so there is
+  // no "upgrade arg passed from Root to Governance" to depict -- omitted.
+
+  // ---- Lifeline outbound ----
+  Lifeline -> IcManagement [label="install_code / start_canister /\nstop_canister / uninstall_code /\nupdate_settings (target: Root)"];
+
+  // ---- SNS-WASM outbound ----
+  SnsWasm -> IcManagement [label="create_canister / install_code /\nset_controllers (candidate SNS canisters)"];
+  SnsWasm -> Root         [label="canister_status / change_canister_controllers"];
+
+  // ---- GTC outbound ----
+  Gtc -> Governance [label="claim_gtc_neurons / transfer_gtc_neuron"];
+
+  // ---- CMC outbound ----
+  Cmc -> IcManagement [label="raw_rand / deposit_cycles /\ncreate_canister (on target subnet)"];
+  Cmc -> Ledger       [label="send_pb (burn ICP on mint / refund)"];
+
+  // ---- Migration canister outbound ----
+  Migration -> IcManagement [label="update_settings / canister_status"];
+  Migration -> Registry     [label="get_subnet_for_canister / get_subnet /\nmigrate_canisters"];
+
+  // ---- Registry outbound ----
+  Registry -> IcManagement [label="setup_initial_dkg / reshare_chain_key\n(create_subnet, split_subnet, recover_subnet)"];
+
+  // Node Rewards canister: no confirmed outbound calls found (read-only via caller checks).
+}

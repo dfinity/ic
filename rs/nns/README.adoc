@@ -2,6 +2,14 @@
 
 This directory is intended to contain the various canisters, and possibly command-line tools, used for decentralized control of the Internet Computer.
 
+## Canister call graph
+
+The diagram below shows the inter-canister call relationships between the NNS
+backend canisters (solid edges are real Candid calls; the dotted orange edge
+is a proposal-specified arbitrary-target relay). Source: `docs/canister_call_graph.dot`.
+
+image::docs/canister_call_graph.svg[NNS backend canisters: inter-canister call graph,width=900]
+
 ## Deploying the NNS canisters
 
 Before using the NNS a range of canisters must be deployed into the
