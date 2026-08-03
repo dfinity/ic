@@ -1,6 +1,7 @@
 use CanisterHttpResponseContent::Reject;
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
+use ic_logger::{ReplicaLogger, warn};
 use ic_types::{
     CountBytes, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
     batch::{
@@ -11,13 +12,16 @@ use ic_types::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse,
         CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
         CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus,
+        CanisterHttpResponseWithConsensus, PricingVersion,
     },
     crypto::{Signed, crypto_hash},
     messages::CallbackId,
     signature::{BasicSigBatchEntry, BasicSignature},
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+
+use crate::metrics::CanisterHttpPayloadBuilderMetrics;
 
 /// Checks whether the response is consistent
 ///
@@ -91,6 +95,81 @@ pub(crate) fn check_spent_within_limit(
         });
     }
     Ok(())
+}
+
+enum ConsensusCostAllowance {
+    Legacy(Cycles),
+    PayAsYouGo(Cycles),
+    Free,
+}
+
+/// The per-replica allowance that will be used to cover the consensus cost of
+/// delivering a response.
+///
+/// The consensus cost of legacy and free requests does not need to be covered
+/// by the replicas' allowances.
+fn per_replica_consensus_allowance(context: &CanisterHttpRequestContext) -> ConsensusCostAllowance {
+    let allowance = context.refund_status.per_replica_allowance;
+    match context.cost_schedule {
+        CanisterCyclesCostSchedule::Free => ConsensusCostAllowance::Free,
+        CanisterCyclesCostSchedule::Normal => match context.pricing_version {
+            PricingVersion::Legacy => ConsensusCostAllowance::Legacy(allowance),
+            PricingVersion::PayAsYouGo => ConsensusCostAllowance::PayAsYouGo(allowance),
+        },
+    }
+}
+
+/// Enforces that `initial_spent`, the collective spend of the `num_replicas`
+/// replicas contributing to a response, stays within their collective allowance,
+/// i.e. the sum of their [per-replica allowances](per_replica_consensus_allowance).
+///
+/// Unlike the per-replica spends, which are bounded individually by
+/// [`check_spent_within_limit`], the collective spend also contains the consensus
+/// cost of putting the response into a block. That cost is only covered if the
+/// contributing replicas left enough of their allowances unspent, which is what
+/// this check ensures.
+pub(crate) fn check_initial_spent_within_limit(
+    initial_spent: Cycles,
+    num_replicas: usize,
+    callback_id: CallbackId,
+    context: &CanisterHttpRequestContext,
+    obs: Option<(&ReplicaLogger, &CanisterHttpPayloadBuilderMetrics)>,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    match per_replica_consensus_allowance(context) {
+        // Pay-as-you-go enforces that the collective spend must be covered
+        // by the collective allowance of contributing replicas.
+        ConsensusCostAllowance::PayAsYouGo(allowance)
+            if initial_spent > allowance * num_replicas =>
+        {
+            Err(InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit {
+                callback_id,
+                initial_spent,
+                per_replica_allowance: allowance,
+                num_replicas,
+            })
+        }
+        // Legacy requests do not enforce the collective spend limit, but we
+        // log a warning if it is exceeded, to observe canister compatibility
+        // with the new pricing.
+        ConsensusCostAllowance::Legacy(allowance) if initial_spent > allowance * num_replicas => {
+            if let Some((log, metrics)) = obs {
+                metrics.initial_spent_exceeds_limit.inc();
+                warn!(
+                    log,
+                    "Initial HTTP spent {} of {} replicas exceeds collective allowance {} \
+                     for {} request {} of canister {}",
+                    initial_spent,
+                    num_replicas,
+                    allowance * num_replicas,
+                    context.replication.kind().as_str(),
+                    callback_id,
+                    context.request.sender,
+                );
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Reconstructs, for every signer of an aggregated proof, the
@@ -339,29 +418,27 @@ pub(crate) fn group_shares_by_callback_id<
 /// where at least `threshold` distinct replicas produced the same
 /// response hash. If found, returns the assembled
 /// [`CanisterHttpResponseWithConsensus`].
+///
+/// A response is only returned once the signing replicas left enough of their
+/// allowances unspent to cover the consensus cost of putting it into a block
+/// (see [`check_initial_spent_within_limit`]); otherwise it is held back until
+/// further shares have arrived, each of which contributes another allowance.
 pub(crate) fn find_fully_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
-    subnet_size: NumberOfNodes,
+    context: &CanisterHttpRequestContext,
     pool_access: &dyn CanisterHttpPool,
+    log: &ReplicaLogger,
+    metrics: &CanisterHttpPayloadBuilderMetrics,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
         let signers: BTreeSet<_> = shares.iter().map(|share| share.signature.signer).collect();
-        if signers.len() >= threshold {
-            pool_access
-                .get_response_content_by_hash(&metadata.content_hash)
-                .map(|content| {
-                    let proof = aggregate_shares(metadata.clone(), shares);
-                    let initial_spent = non_flexible_initial_spent(&proof, subnet_size);
-                    CanisterHttpResponseWithConsensus {
-                        content,
-                        proof,
-                        initial_spent,
-                    }
-                })
-        } else {
-            None
+        if signers.len() < threshold {
+            return None;
         }
+        let content = pool_access.get_response_content_by_hash(&metadata.content_hash)?;
+        let proof = aggregate_shares(metadata.clone(), shares);
+        assemble_non_flexible_response(content, proof, context, log, metrics)
     })
 }
 
@@ -369,29 +446,53 @@ pub(crate) fn find_fully_replicated_response(
 ///
 /// Looks through the grouped shares for one signed by `designated_node_id`.
 /// If found, returns the assembled [`CanisterHttpResponseWithConsensus`].
+///
+/// As for fully-replicated responses, the response is held back while its
+/// collective spend exceeds the designated replica's allowance. Since no other
+/// replica contributes an allowance to a non-replicated outcall, such a request
+/// can only ever time out.
 pub(crate) fn find_non_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
-    subnet_size: NumberOfNodes,
+    context: &CanisterHttpRequestContext,
     pool_access: &dyn CanisterHttpPool,
+    log: &ReplicaLogger,
+    metrics: &CanisterHttpPayloadBuilderMetrics,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
-        shares
+        let correct_share = shares
             .iter()
-            .find(|share| share.signature.signer == *designated_node_id)
-            .and_then(|correct_share| {
-                pool_access
-                    .get_response_content_by_hash(&metadata.content_hash)
-                    .map(|content| {
-                        let proof = aggregate_shares(metadata.clone(), &[correct_share]);
-                        let initial_spent = non_flexible_initial_spent(&proof, subnet_size);
-                        CanisterHttpResponseWithConsensus {
-                            content,
-                            proof,
-                            initial_spent,
-                        }
-                    })
-            })
+            .find(|share| share.signature.signer == *designated_node_id)?;
+        let content = pool_access.get_response_content_by_hash(&metadata.content_hash)?;
+        let proof = aggregate_shares(metadata.clone(), &[correct_share]);
+        assemble_non_flexible_response(content, proof, context, log, metrics)
+    })
+}
+
+/// Assembles a [`CanisterHttpResponseWithConsensus`] from `content` and `proof`,
+/// computing the collective initial spend of the proof's signers. Returns `None`
+/// if that spend exceeds their collective allowance, in which case the response
+/// must not be delivered yet.
+fn assemble_non_flexible_response(
+    content: CanisterHttpResponse,
+    proof: CanisterHttpResponseProof,
+    context: &CanisterHttpRequestContext,
+    log: &ReplicaLogger,
+    metrics: &CanisterHttpPayloadBuilderMetrics,
+) -> Option<CanisterHttpResponseWithConsensus> {
+    let initial_spent = non_flexible_initial_spent(&proof, context.subnet_size);
+    check_initial_spent_within_limit(
+        initial_spent,
+        proof.signatures.len(),
+        proof.metadata.id,
+        context,
+        Some((log, metrics)),
+    )
+    .ok()?;
+    Some(CanisterHttpResponseWithConsensus {
+        content,
+        proof,
+        initial_spent,
     })
 }
 

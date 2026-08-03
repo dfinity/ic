@@ -13,7 +13,9 @@ use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
-use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
+use ic_https_outcalls_pricing::fees::{
+    consensus_cost_coefficient, flexible_initial_spent, non_flexible_initial_spent,
+};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
@@ -5247,6 +5249,333 @@ fn flexible_error_too_many_rejects_invalid_signature() {
                 ))
             );
         },
+    );
+}
+
+// ===================================================================
+// Keeping the collective initial spend within the collective allowance
+// ===================================================================
+
+/// Prices `context` with pay-as-you-go, granting each of its replicas
+/// `per_replica_allowance`.
+fn with_payg_allowance(
+    mut context: CanisterHttpRequestContext,
+    per_replica_allowance: Cycles,
+) -> CanisterHttpRequestContext {
+    context.pricing_version = ic_types::canister_http::PricingVersion::PayAsYouGo;
+    context.refund_status.per_replica_allowance = per_replica_allowance;
+    context.refund_status.refundable_cycles =
+        per_replica_allowance * context.replication.node_count(context.subnet_size);
+    context
+}
+
+/// The consensus cost of a fully-replicated response of `content_size` bytes on
+/// a subnet of `num_nodes` nodes, i.e. the part of the collective initial spend
+/// that the signing replicas' unspent allowances have to cover.
+fn non_flexible_consensus_cost(num_nodes: usize, content_size: u32) -> Cycles {
+    Cycles::from(
+        consensus_cost_coefficient(NumberOfNodes::from(num_nodes as u32)) * content_size as u128,
+    )
+}
+
+/// A fully-replicated response is only delivered once the signing replicas have
+/// left enough of their allowances unspent to cover its consensus cost: with
+/// `threshold` many shares their collective allowance falls short, so the
+/// response is held back until the remaining shares have arrived.
+#[test]
+fn fully_replicated_response_waits_for_shares_covering_consensus_cost() {
+    let num_nodes = 4;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let cb_id = 0;
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
+    // An allowance that all `num_nodes` replicas together just cover, while the
+    // `threshold` many that suffice to reach consensus do not.
+    let allowance = Cycles::new(consensus_cost.get() / num_nodes as u128 + 1);
+    assert!(allowance * threshold < consensus_cost);
+    assert!(consensus_cost <= allowance * num_nodes);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            CallbackId::new(cb_id),
+            with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
+        )],
+        |payload_builder, canister_http_pool| {
+            let shares = metadata_to_shares(num_nodes, &metadata);
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[1..threshold].to_vec());
+            }
+
+            // Consensus is reached, but the signers' collective allowance does
+            // not cover the consensus cost yet.
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.num_responses(), 0);
+
+            // The remaining shares tip the collective allowance over the cost.
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[threshold..].to_vec());
+            }
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.num_responses(), 1);
+            assert_eq!(payload.responses[0].content, response);
+            assert_eq!(payload.responses[0].initial_spent, consensus_cost);
+        },
+    );
+}
+
+/// Builds a payload from `threshold` many fully-replicated shares for a request
+/// with the given `context`, and asserts that it carries `expected_responses`
+/// many responses.
+fn assert_responses_from_threshold_shares(
+    num_nodes: usize,
+    context: CanisterHttpRequestContext,
+    expected_responses: usize,
+) {
+    let cb_id = 0;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    // Ensure that the consensus cost is nonzero, so that the test only passes if the unspent
+    // allowance is sufficient, or if the consensus cost isn't enforced (free and legacy requests).
+    assert!(!non_flexible_consensus_cost(num_nodes, metadata.content_size).is_zero());
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(CallbackId::new(cb_id), context)],
+        |payload_builder, canister_http_pool| {
+            let shares = metadata_to_shares(num_nodes, &metadata);
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[1..threshold].to_vec());
+            }
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.num_responses(), expected_responses);
+        },
+    );
+}
+
+/// Legacy-priced requests are not refunded from a per-replica allowance, so
+/// their responses are delivered no matter how small that allowance is.
+#[test]
+fn initial_spent_is_not_limited_under_legacy_pricing() {
+    // `request_context` is priced with legacy pricing and has a zero allowance.
+    assert_responses_from_threshold_shares(4, request_context(Replication::FullyReplicated), 1);
+}
+
+/// Free subnets charge — and hence refund — nothing, so their responses are
+/// delivered despite the (zero) collective allowance.
+#[test]
+fn initial_spent_is_not_limited_on_a_free_subnet() {
+    let mut context = with_payg_allowance(
+        request_context(Replication::FullyReplicated),
+        Cycles::zero(),
+    );
+    context.cost_schedule = CanisterCyclesCostSchedule::Free;
+    assert_responses_from_threshold_shares(4, context, 1);
+}
+
+/// On a charging subnet with pay-as-you-go pricing, a zero collective
+/// allowance holds the response back.
+#[test]
+fn initial_spent_is_limited_under_pay_as_you_go_pricing() {
+    assert_responses_from_threshold_shares(
+        4,
+        with_payg_allowance(
+            request_context(Replication::FullyReplicated),
+            Cycles::zero(),
+        ),
+        0,
+    );
+}
+
+/// On a charging subnet with pay-as-you-go pricing, the pay-as-you-go response
+/// is delivered as soon as the collective allowance covers the consensus cost.
+#[test]
+fn initial_spent_is_covered_under_pay_as_you_go_pricing() {
+    let num_nodes = 4;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let (_, metadata) = test_response_and_metadata(0);
+    let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
+    let allowance = Cycles::new(consensus_cost.get().div_ceil(threshold as u128));
+    assert!(allowance * threshold >= consensus_cost);
+    assert!((allowance - Cycles::new(1)) * threshold < consensus_cost);
+
+    assert_responses_from_threshold_shares(
+        num_nodes,
+        with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
+        1,
+    );
+
+    assert_responses_from_threshold_shares(
+        num_nodes,
+        with_payg_allowance(
+            request_context(Replication::FullyReplicated),
+            allowance - Cycles::new(1),
+        ),
+        0,
+    );
+}
+
+/// A non-replicated response is held back while the designated replica's own
+/// allowance does not cover the consensus cost. No other replica contributes an
+/// allowance to a non-replicated outcall, so such a request can only time out.
+#[test]
+fn non_replicated_response_needs_the_designated_replicas_allowance() {
+    let num_nodes = 4;
+    let cb_id = 0;
+    let designated = node_test_id(0);
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
+
+    // Once the single allowance covers the consensus cost, the response is
+    // delivered; one cycle short of it, it never is.
+    for (allowance, expected_responses) in [
+        (consensus_cost, 1),
+        (consensus_cost - Cycles::new(1), 0),
+        (Cycles::zero(), 0),
+    ] {
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(
+                CallbackId::new(cb_id),
+                with_payg_allowance(
+                    request_context(Replication::NonReplicated(designated)),
+                    allowance,
+                ),
+            )],
+            |payload_builder, canister_http_pool| {
+                let share = metadata_to_share(node_id_to_u64(designated), &metadata);
+                {
+                    let mut pool_access = canister_http_pool.write().unwrap();
+                    add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+                }
+                let payload = build_and_validate_and_parse_payload(&payload_builder);
+                assert_eq!(
+                    payload.num_responses(),
+                    expected_responses,
+                    "unexpected payload for allowance {allowance}"
+                );
+            },
+        );
+    }
+}
+
+/// The validator rejects a fully-replicated response whose collective initial
+/// spend exceeds the signers' collective allowance.
+#[test]
+fn validate_payload_fails_for_initial_spent_exceeding_allowance() {
+    let num_nodes = 4;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let cb_id = 0;
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for signer in 0..threshold as u64 {
+        add_signer_to_proof(&mut proof, node_test_id(signer));
+    }
+    // An honestly computed spend, which a zero collective allowance still cannot
+    // cover.
+    proof.initial_spent =
+        non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(num_nodes as u32));
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            CallbackId::new(cb_id),
+            with_payg_allowance(
+                request_context(Replication::FullyReplicated),
+                Cycles::zero(),
+            ),
+        )],
+        |payload_builder, _pool| {
+            let payload = CanisterHttpPayload {
+                responses: vec![proof.clone()],
+                ..Default::default()
+            };
+            let result = payload_builder.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            );
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit {
+                            callback_id,
+                            initial_spent,
+                            per_replica_allowance,
+                            num_replicas,
+                        },
+                    ),
+                )) if callback_id == CallbackId::new(cb_id)
+                    && initial_spent == proof.initial_spent
+                    && per_replica_allowance == Cycles::zero()
+                    && num_replicas == threshold
+            );
+        },
+    );
+}
+
+#[test]
+fn validate_payload_accepts_initial_spent_within_the_collective_allowance() {
+    let num_nodes = 4;
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let cb_id = 0;
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for signer in 0..threshold as u64 {
+        add_signer_to_proof(&mut proof, node_test_id(signer));
+    }
+    proof.initial_spent =
+        non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(num_nodes as u32));
+
+    // The smallest per-replica allowance whose `threshold` many copies cover the
+    // spend...
+    let allowance = Cycles::new(proof.initial_spent.get().div_ceil(threshold as u128));
+    assert!(allowance * threshold >= proof.initial_spent);
+    // ...one cycle less per replica no longer does.
+    assert!((allowance - Cycles::new(1)) * threshold < proof.initial_spent);
+
+    let validate = |per_replica_allowance| {
+        let mut result = None;
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(
+                CallbackId::new(cb_id),
+                with_payg_allowance(
+                    request_context(Replication::FullyReplicated),
+                    per_replica_allowance,
+                ),
+            )],
+            |payload_builder, _pool| {
+                let payload = CanisterHttpPayload {
+                    responses: vec![proof.clone()],
+                    ..Default::default()
+                };
+                result = Some(payload_builder.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&default_validation_context()),
+                    &payload_to_bytes_max_4mb(payload),
+                    &[],
+                ));
+            },
+        );
+        result.expect("validation did not run")
+    };
+
+    assert_matches!(validate(allowance), Ok(()));
+    assert_matches!(
+        validate(allowance - Cycles::new(1)),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit { .. },
+            ),
+        ))
     );
 }
 
