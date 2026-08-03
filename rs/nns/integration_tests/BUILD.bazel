@@ -320,7 +320,7 @@ rust_ic_test(
 #     bazel \
 #         test \
 #         --test_env=SSH_AUTH_SOCK \
-#         --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=governance,root \
+#         --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=root,governance \
 #         --test_output=streamed \
 #         --test_arg=--nocapture \
 #         //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state

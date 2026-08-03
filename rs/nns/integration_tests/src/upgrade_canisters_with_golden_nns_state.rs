@@ -210,10 +210,9 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     // test? To do this, they set the NNS_CANISTER_UPGRADE_SEQUENCE environment variable.
 
     let all_canisters = [
-        // Keep sorted.
+        // Keep sorted, except governance, which must be upgraded last (see comment below).
         "cycles-minting",
         "genesis-token",
-        "governance",
         "ledger",
         "lifeline",
         "migration",
@@ -221,6 +220,15 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         "node-rewards",
         "root",
         "sns-wasm",
+        // Governance must be upgraded last, because it is the one that generally calls the
+        // other NNS canisters (e.g. Root, Registry, SNS-WASM), not the other way around. If
+        // new-build Governance runs before one of its callees is upgraded, it can send that
+        // callee a request using the new Candid encoding, which the callee's still-old-build
+        // decoder may reject. This is what happened when PR #10952 changed the shape of an
+        // argument that Governance passes to Root's `change_nns_canister`: Root's old decoder
+        // rejected the new-build Governance's request, because this test upgraded Governance
+        // before Root.
+        "governance",
     ]
     .join(",");
 
