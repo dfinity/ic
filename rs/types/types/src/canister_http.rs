@@ -56,7 +56,8 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
     DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, FlexibleCanisterHttpRequestArgs, HttpHeader,
-    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext,
+    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts,
+    TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -239,16 +240,22 @@ impl ReplicationKind {
         }
     }
 
-    /// The flexible replication a request that does not specify its response counts
-    /// gets on a subnet of `subnet_size` nodes: every node attempts the outcall and
+    /// The response counts a flexible request that does not specify its own gets on
+    /// a subnet of `subnet_size` nodes: every node attempts the outcall and
     /// `floor(2/3 * N) + 1` responses are required.
-    pub fn default_flexible(subnet_size: NumberOfNodes) -> Self {
+    pub fn default_flexible_counts(subnet_size: NumberOfNodes) -> ReplicationCounts {
         let n = subnet_size.get();
-        Self::Flexible {
+        ReplicationCounts {
             total_requests: n,
             min_responses: (2 * n) / 3 + 1,
             max_responses: n,
         }
+    }
+
+    /// The flexible replication a request that does not specify its response counts
+    /// gets on a subnet of `subnet_size` nodes, see [`Self::default_flexible_counts`].
+    pub fn default_flexible(subnet_size: NumberOfNodes) -> Self {
+        Self::from(&Self::default_flexible_counts(subnet_size))
     }
 
     /// The number of replicas that will attempt the outcall, see
@@ -258,6 +265,16 @@ impl ReplicationKind {
             Self::FullyReplicated => (subnet_size.get() as usize).max(1),
             Self::NonReplicated => 1,
             Self::Flexible { total_requests, .. } => (*total_requests as usize).max(1),
+        }
+    }
+}
+
+impl From<&ReplicationCounts> for ReplicationKind {
+    fn from(counts: &ReplicationCounts) -> Self {
+        Self::Flexible {
+            total_requests: counts.total_requests,
+            min_responses: counts.min_responses,
+            max_responses: counts.max_responses,
         }
     }
 }
@@ -704,7 +721,11 @@ impl CanisterHttpRequestContext {
         let max_response_bytes = validate_max_response_bytes(args.max_response_bytes)?;
 
         let n = node_ids.len() as u32;
-        let (total_requests, min_responses, max_responses) = match args.replication {
+        let ReplicationCounts {
+            total_requests,
+            min_responses,
+            max_responses,
+        } = match args.replication {
             Some(counts) => {
                 let total = counts.total_requests;
                 let min = counts.min_responses;
@@ -732,21 +753,13 @@ impl CanisterHttpRequestContext {
                         format!("max_responses ({max}) must not exceed total_requests ({total})"),
                     ));
                 }
-                (total, min, max)
+                counts
             }
             None => {
                 if n == 0 {
                     return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
                 }
-                let ReplicationKind::Flexible {
-                    total_requests,
-                    min_responses,
-                    max_responses,
-                } = ReplicationKind::default_flexible(NumberOfNodes::from(n))
-                else {
-                    unreachable!("`default_flexible` returns flexible replication");
-                };
-                (total_requests, min_responses, max_responses)
+                ReplicationKind::default_flexible_counts(NumberOfNodes::from(n))
             }
         };
         // From here, the following invariants are expected to hold:

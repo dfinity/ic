@@ -60,6 +60,11 @@ const CONSENSUS_PER_NODE_BYTE_FEE: u128 = 10;
 const CONSENSUS_BYTE_FEE: u128 = 600;
 const FLEXIBLE_RESPONSE_SIZE_OVERHEAD: u128 = 181;
 
+/// The number of nodes of the subnet described by `subnet_cycles_config`.
+fn subnet_size_of(subnet_cycles_config: CyclesAccountManagerSubnetConfig) -> NumberOfNodes {
+    NumberOfNodes::from(subnet_cycles_config.subnet_size as u32)
+}
+
 // ================================= Base fee =================================
 
 /// Computes the up-front base fee for an HTTP outcall request of size
@@ -74,14 +79,19 @@ pub fn base_fee(
         Cycles::new(base_fee_amount(
             request_size,
             replication.kind(),
-            subnet_cycles_config.subnet_size as u128,
+            subnet_size_of(subnet_cycles_config),
         )),
         subnet_cycles_config.cost_schedule,
     )
 }
 
-/// The [`base_fee`], on a subnet of `n` nodes.
-fn base_fee_amount(request_size: NumBytes, replication_kind: ReplicationKind, n: u128) -> u128 {
+/// The [`base_fee`], on a subnet of `subnet_size` nodes.
+fn base_fee_amount(
+    request_size: NumBytes,
+    replication_kind: ReplicationKind,
+    subnet_size: NumberOfNodes,
+) -> u128 {
+    let n = subnet_size.get() as u128;
     let request_bytes = request_size.get() as u128;
     let per_replica = match replication_kind {
         ReplicationKind::FullyReplicated => {
@@ -146,7 +156,11 @@ pub(crate) fn gossip_usage_fee(
 /// block on a subnet of size `subnet_size`.
 fn consensus_fee(response_bytes: u128, subnet_size: NumberOfNodes) -> Cycles {
     let n = subnet_size.get() as u128;
-    Cycles::from(n * (CONSENSUS_PER_NODE_BYTE_FEE * n + CONSENSUS_BYTE_FEE) * response_bytes)
+    Cycles::from(
+        (CONSENSUS_PER_NODE_BYTE_FEE * n + CONSENSUS_BYTE_FEE)
+            .saturating_mul(n)
+            .saturating_mul(response_bytes),
+    )
 }
 
 /// The additional consensus fee charged for `extra_responses` flexible responses
@@ -154,8 +168,10 @@ fn consensus_fee(response_bytes: u128, subnet_size: NumberOfNodes) -> Cycles {
 fn flexible_extra_response_fee(extra_responses: u128, subnet_size: NumberOfNodes) -> Cycles {
     let n = subnet_size.get() as u128;
     Cycles::from(
-        n * (HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * extra_responses
-            + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * extra_responses),
+        (HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n
+            + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE)
+            .saturating_mul(n)
+            .saturating_mul(extra_responses),
     )
 }
 
@@ -175,9 +191,8 @@ pub fn total_fee(
     replication_kind: ReplicationKind,
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> CompoundCycles<HTTPOutcalls> {
-    let n = subnet_cycles_config.subnet_size as u128;
-    let subnet_size = NumberOfNodes::from(subnet_cycles_config.subnet_size as u32);
-    let amount = Cycles::new(base_fee_amount(request_size, replication_kind, n))
+    let subnet_size = subnet_size_of(subnet_cycles_config);
+    let amount = Cycles::new(base_fee_amount(request_size, replication_kind, subnet_size))
         + usage_fee(
             replication_kind,
             http_roundtrip_time,
@@ -195,9 +210,7 @@ pub fn total_fee(
 /// [per-replica fee](per_replica_fee) of every replica attempting it, plus the
 /// consensus fee of delivering the responses.
 ///
-/// This is the `initial_spent` such an outcall's response would report (see
-/// [`non_flexible_initial_spent`] / [`flexible_initial_spent`]), i.e. the
-/// part of the price that the per-replica allowances have to cover.
+/// This is the part of the price that the per-replica allowances have to cover.
 fn usage_fee(
     replication_kind: ReplicationKind,
     http_roundtrip_time: Duration,
@@ -229,7 +242,9 @@ fn usage_fee(
             (
                 gossip_usage_fee(transformed_response_size, subnet_size),
                 consensus_fee(
-                    responses * (FLEXIBLE_RESPONSE_SIZE_OVERHEAD + transformed_bytes),
+                    responses.saturating_mul(
+                        FLEXIBLE_RESPONSE_SIZE_OVERHEAD.saturating_add(transformed_bytes),
+                    ),
                     subnet_size,
                 ) + flexible_extra_response_fee(
                     responses.saturating_sub(min_responses as u128),
@@ -240,18 +255,18 @@ fn usage_fee(
     };
 
     let per_replica_fee = network_usage_fee(raw_response_size, http_roundtrip_time)
-        + transform_usage_fee(transform_instructions)
-        + gossip_fee;
+        .saturating_add(transform_usage_fee(transform_instructions))
+        .saturating_add(gossip_fee);
     let replicas = replication_kind.node_count(subnet_size) as u128;
 
-    Cycles::new(replicas * per_replica_fee) + consensus_fee
+    Cycles::new(replicas.saturating_mul(per_replica_fee)) + consensus_fee
 }
 
 // ============================= Maximum usage fee =============================
 
 /// The most an HTTP outcall with the given `replication` and `max_response_bytes`
 /// can ever spend, i.e. its [`usage_fee`] in the worst case: a response of the
-/// largest permitted size, downloaded over the full [`MAX_RESPONSE_TIME`],
+/// largest permitted size, downloaded over the full `MAX_RESPONSE_TIME`,
 /// transformed with the full query instruction limit and delivered as a maximally
 /// large transformed response.
 ///
@@ -276,7 +291,12 @@ pub fn max_usage_fee(
         subnet_size,
     );
     let node_count = replication_kind.node_count(subnet_size) as u128;
-    Cycles::new(worst_case.get().div_ceil(node_count) * node_count)
+    Cycles::new(
+        worst_case
+            .get()
+            .div_ceil(node_count)
+            .saturating_mul(node_count),
+    )
 }
 
 // =============================== Initial spent ===============================

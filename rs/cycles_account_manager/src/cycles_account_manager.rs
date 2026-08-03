@@ -1235,8 +1235,8 @@ impl CyclesAccountManager {
         CompoundCycles::new(amount, subnet_cycles_config.cost_schedule)
     }
 
-    // Returns the base fee for an HTTP outcall, which is charged for every
-    // request upfront.
+    /// Returns the base fee for an HTTP outcall, which is charged for every
+    /// request upfront.
     pub fn http_request_base_fee(
         &self,
         request_size: NumBytes,

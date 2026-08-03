@@ -95,7 +95,6 @@ use num_traits::SaturatingAdd;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
-use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::{Into, TryFrom};
 use std::fmt;
@@ -2248,7 +2247,7 @@ impl ExecutionEnvironment {
 
         let http_outcalls_are_free = self.http_outcalls_are_free(cost_schedule);
 
-        // The refundable cycles are everything the payment covers beyond the
+        // The refundable payment is everything the payment covers beyond the
         // base fee; when the outcall is free nothing is charged, so nothing is
         // refundable. We set the refund status even for legacy pricing in order
         // to enable observability during the dark launch. However, nothing is
@@ -2273,7 +2272,7 @@ impl ExecutionEnvironment {
             canister_http_request_context.max_response_bytes,
             canister_http_request_context.subnet_size,
         );
-        let per_replica_allowance = min(refundable_payment, max_usage_fee) / node_count;
+        let per_replica_allowance = refundable_payment.min(max_usage_fee) / node_count;
         let refundable_cycles = per_replica_allowance * node_count;
         canister_http_request_context.refund_status = RefundStatus {
             refundable_cycles,

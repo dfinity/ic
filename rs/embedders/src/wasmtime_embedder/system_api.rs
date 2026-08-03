@@ -1975,6 +1975,25 @@ impl SystemApiImpl {
 
 /// Parameters of `ic0.cost_http_request_v2`, mirrors the
 /// management canister's HTTP-request cost arguments.
+///
+/// ```text
+/// record {
+///   request_bytes : nat64;
+///   http_roundtrip_time_ms : nat64;
+///   raw_response_bytes : nat64;
+///   transformed_response_bytes : nat64;
+///   transform_instructions : nat64;
+///   outcall_type : opt variant {
+///     fully_replicated : reserved;
+///     non_replicated : reserved;
+///     flexible : opt record {
+///       total_requests : nat32;
+///       min_responses : nat32;
+///       max_responses : nat32;
+///     };
+///   };
+/// }
+/// ```
 #[derive(CandidType, Deserialize)]
 struct CostHttpRequestV2Params {
     request_bytes: u64,
@@ -1982,16 +2001,22 @@ struct CostHttpRequestV2Params {
     raw_response_bytes: u64,
     transformed_response_bytes: u64,
     transform_instructions: u64,
-    /// The replication of the outcall being priced. Absent means fully replicated.
+    /// The replication of the outcall being priced. Absent means fully replicated,
+    /// so that params encoded before this field existed keep their meaning.
     outcall_type: Option<CostHttpRequestOutcallType>,
 }
 
+/// The replication of the outcall to be priced. The payloads of the two
+/// non-flexible variants are `reserved` (rather than `null`) so that they can be
+/// given a meaning later on without breaking callers.
 #[derive(CandidType, Deserialize)]
 enum CostHttpRequestOutcallType {
     #[serde(rename = "fully_replicated")]
     FullyReplicated(candid::Reserved),
     #[serde(rename = "non_replicated")]
     NonReplicated(candid::Reserved),
+    /// A flexible outcall with the given response counts; absent counts are the
+    /// defaults a `flexible_http_request` without a `replication` field gets.
     #[serde(rename = "flexible")]
     Flexible(Option<ReplicationCounts>),
 }
@@ -2006,20 +2031,24 @@ impl CostHttpRequestV2Params {
             Some(CostHttpRequestOutcallType::Flexible(None)) => {
                 ReplicationKind::default_flexible(subnet_size)
             }
-            Some(CostHttpRequestOutcallType::Flexible(Some(counts))) => ReplicationKind::Flexible {
-                total_requests: counts.total_requests,
-                min_responses: counts.min_responses,
-                max_responses: counts.max_responses,
-            },
+            // Note that the counts are not validated here (unlike the ones of an
+            // actual request): a caller asking for the price of an impossible
+            // outcall simply gets a price that no outcall will ever cost.
+            Some(CostHttpRequestOutcallType::Flexible(Some(counts))) => {
+                ReplicationKind::from(counts)
+            }
         }
     }
 }
 
 const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 144;
 
-/// How much work decoding [`CostHttpRequestV2Params`] may spend skipping the
-/// `reserved` payload of an `outcall_type` variant, in Candid's decoding cost units.
-const MAX_COST_HTTP_REQUEST_V2_SKIPPED_VALUES: usize = 1;
+/// How much work decoding [`CostHttpRequestV2Params`] may spend skipping values it
+/// has no type for — i.e. the `reserved` payload of an `outcall_type` variant — in
+/// Candid's decoding cost units. Skipping an empty payload is within this quota,
+/// while anything larger (in particular a payload that is cheap to encode but
+/// expensive to skip) is rejected.
+const MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA: usize = 1;
 
 impl SystemApi for SystemApiImpl {
     fn set_execution_error(&mut self, error: HypervisorError) {
@@ -4416,7 +4445,7 @@ impl SystemApi for SystemApiImpl {
         }
 
         let mut decoder_config = DecoderConfig::new();
-        decoder_config.set_skipping_quota(MAX_COST_HTTP_REQUEST_V2_SKIPPED_VALUES);
+        decoder_config.set_skipping_quota(MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA);
 
         let cost_params_v2: CostHttpRequestV2Params =
             decode_one_with_config(params_bytes, &decoder_config).map_err(|e| {
@@ -4771,7 +4800,7 @@ mod test {
         .unwrap();
 
         let mut decoder_config = DecoderConfig::new();
-        decoder_config.set_skipping_quota(MAX_COST_HTTP_REQUEST_V2_SKIPPED_VALUES);
+        decoder_config.set_skipping_quota(MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA);
         decode_one_with_config::<CostHttpRequestV2Params>(&blob, &decoder_config).map(|_| ())
     }
 
