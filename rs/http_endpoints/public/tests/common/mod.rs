@@ -534,7 +534,7 @@ impl HttpEndpointBuilder {
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
         let builder = self.delegation_from_nns.map(|delegation| {
-            Arc::new(NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap())
+            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
         });
         let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(builder);
         let nns_delegation_reader = NNSDelegationReader::new(nns_delegation_watcher_rx);

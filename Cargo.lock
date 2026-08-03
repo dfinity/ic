@@ -7038,7 +7038,6 @@ dependencies = [
  "maplit",
  "phantom_newtype",
  "proptest",
- "rstest",
  "serde",
  "serde_bytes",
  "serde_cbor",

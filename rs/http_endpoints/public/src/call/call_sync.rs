@@ -251,9 +251,7 @@ async fn call_sync(
         return SyncCallResponse::Certificate(Certificate {
             tree,
             signature: Blob(signature),
-            delegation: nns_delegation_reader
-                .builder()
-                .map(|builder| builder.build_unverified(delegation_filter)),
+            delegation: nns_delegation_reader.get_delegation(delegation_filter),
         });
     };
 
@@ -368,9 +366,7 @@ async fn call_sync(
     SyncCallResponse::Certificate(Certificate {
         tree,
         signature: Blob(signature),
-        delegation: nns_delegation_reader
-            .builder()
-            .map(|builder| builder.build_unverified(delegation_filter)),
+        delegation: nns_delegation_reader.get_delegation(delegation_filter),
     })
 }
 

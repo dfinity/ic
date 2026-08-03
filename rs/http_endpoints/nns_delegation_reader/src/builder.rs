@@ -5,10 +5,7 @@ use ic_crypto_tree_hash::{
 use ic_registry_routing_table::CanisterIdRanges;
 use ic_types::{
     CanisterId, SubnetId,
-    messages::{
-        Blob, Certificate, CertificateDelegation, CertificateDelegationFormat,
-        CertificateDelegationMetadata,
-    },
+    messages::{Blob, Certificate, CertificateDelegation},
 };
 use serde::ser::Serialize;
 
@@ -37,19 +34,6 @@ impl From<CanisterRangesCheck> for CanisterRangesFilter {
     fn from(ranges_check: CanisterRangesCheck) -> Self {
         match ranges_check {
             CanisterRangesCheck::AllSubnetRanges => CanisterRangesFilter::Flat,
-        }
-    }
-}
-
-impl From<CanisterRangesFilter> for CertificateDelegationMetadata {
-    /// The metadata describing a delegation built with the given filter.
-    fn from(canister_ranges_filter: CanisterRangesFilter) -> Self {
-        Self {
-            format: match canister_ranges_filter {
-                CanisterRangesFilter::Flat => CertificateDelegationFormat::Flat,
-                CanisterRangesFilter::Tree(_canister_id) => CertificateDelegationFormat::Tree,
-                CanisterRangesFilter::None => CertificateDelegationFormat::Pruned,
-            },
         }
     }
 }
@@ -615,14 +599,6 @@ mod tests {
             })
             .expect("the delegation should be consistent with the state view");
 
-        assert_eq!(
-            CertificateDelegationMetadata::from(CanisterRangesFilter::from(
-                CanisterRangesCheck::AllSubnetRanges
-            )),
-            CertificateDelegationMetadata {
-                format: CertificateDelegationFormat::Flat
-            }
-        );
         // The returned delegation should be built with the requested filter.
         assert!(
             path_exists(
