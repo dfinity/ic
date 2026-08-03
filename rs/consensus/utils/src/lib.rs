@@ -500,6 +500,7 @@ mod tests {
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
     use ic_types::{
+        NumberOfNodes,
         canister_http::{
             CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus,
             Replication,
@@ -510,6 +511,7 @@ mod tests {
         signature::ThresholdSignatureShare,
         time::UNIX_EPOCH,
     };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
 
     /// Test that two shares with the same content are grouped together, and
     /// that a different share is grouped by itself
@@ -737,6 +739,8 @@ mod tests {
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
             registry_version,
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 

@@ -10,7 +10,7 @@ pub struct Transaction {
     #[prost(message, repeated, tag = "4")]
     pub output: ::prost::alloc::vec::Vec<TxOut>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TxIn {
     #[prost(message, optional, tag = "1")]
     pub previous_output: ::core::option::Option<OutPoint>,
@@ -21,21 +21,21 @@ pub struct TxIn {
     #[prost(bytes = "vec", repeated, tag = "4")]
     pub witness: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TxOut {
     #[prost(uint64, tag = "1")]
     pub value: u64,
     #[prost(bytes = "vec", tag = "2")]
     pub script_pubkey: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OutPoint {
     #[prost(bytes = "vec", tag = "1")]
     pub txid: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint32, tag = "2")]
     pub vout: u32,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BlockHeader {
     #[prost(int32, tag = "1")]
     pub version: i32,
@@ -57,24 +57,24 @@ pub struct Block {
     #[prost(message, repeated, tag = "2")]
     pub txdata: ::prost::alloc::vec::Vec<Transaction>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SendTransactionRequest {
     #[prost(enumeration = "Network", tag = "1")]
     pub network: i32,
     #[prost(bytes = "vec", tag = "2")]
     pub transaction: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SendTransactionResponse {}
 /// Wraps the different types of requests to the Bitcoin Adapter.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BitcoinAdapterRequestWrapper {
     #[prost(oneof = "bitcoin_adapter_request_wrapper::R", tags = "3, 4")]
     pub r: ::core::option::Option<bitcoin_adapter_request_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterRequestWrapper`.
 pub mod bitcoin_adapter_request_wrapper {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum R {
         #[prost(message, tag = "3")]
         GetSuccessorsRequest(super::GetSuccessorsRequestInitial),
@@ -83,14 +83,14 @@ pub mod bitcoin_adapter_request_wrapper {
     }
 }
 /// Wraps the different types of responses from the Bitcoin Adapter.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BitcoinAdapterResponseWrapper {
     #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "3, 4, 5, 6")]
     pub r: ::core::option::Option<bitcoin_adapter_response_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterResponseWrapper`.
 pub mod bitcoin_adapter_response_wrapper {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum R {
         #[prost(message, tag = "3")]
         GetSuccessorsResponse(super::GetSuccessorsResponseComplete),
@@ -104,7 +104,7 @@ pub mod bitcoin_adapter_response_wrapper {
 }
 /// A Bitcoin Adapter request, used to store the requests in the
 /// `ReplicatedState`.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BitcoinAdapterRequest {
     /// The wrapped Bitcoin request to the Adapter.
     #[prost(message, optional, tag = "1")]
@@ -116,7 +116,7 @@ pub struct BitcoinAdapterRequest {
 }
 /// A Bitcoin Adapter response, used to store the responses in the
 /// `ReplicatedState`.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BitcoinAdapterResponse {
     /// The wrapped Bitcoin response from the Adapter.
     #[prost(message, optional, tag = "1")]
@@ -127,7 +127,7 @@ pub struct BitcoinAdapterResponse {
     pub callback_id: u64,
 }
 /// A request to retrieve new blocks from the specified Bitcoin network.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSuccessorsRequestInitial {
     #[prost(enumeration = "Network", tag = "1")]
     pub network: i32,
@@ -137,7 +137,7 @@ pub struct GetSuccessorsRequestInitial {
     pub anchor: ::prost::alloc::vec::Vec<u8>,
 }
 /// A response containing new successor blocks from the Bitcoin network.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSuccessorsResponseComplete {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub blocks: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
@@ -145,7 +145,7 @@ pub struct GetSuccessorsResponseComplete {
     pub next: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// A `GetSucceessors` reject response containing additional information about the rejection.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSuccessorsReject {
     #[prost(enumeration = "super::super::types::v1::RejectCode", tag = "3")]
     pub reject_code: i32,
@@ -153,7 +153,7 @@ pub struct GetSuccessorsReject {
     pub message: ::prost::alloc::string::String,
 }
 /// A `SendTransaction` reject response containing additional information about the rejection.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SendTransactionReject {
     #[prost(enumeration = "super::super::types::v1::RejectCode", tag = "3")]
     pub reject_code: i32,

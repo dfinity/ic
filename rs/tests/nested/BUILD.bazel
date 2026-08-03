@@ -17,16 +17,12 @@ rust_library(
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/common",
         "//rs/protobuf",
-        "//rs/registry/keys",
-        "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
-        "//rs/registry/transport",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:prost",
         "@crate_index//:regex",
         "@crate_index//:reqwest",
         "@crate_index//:slog",
@@ -57,6 +53,7 @@ system_test_nns(
     # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
+    enable_uvm = True,
     env = MAINNET_ENV,
     setupos = True,
     tags = ["long_test"],  # since it takes longer than 5 minutes.
@@ -99,6 +96,7 @@ system_test_nns(
     # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
+    enable_uvm = True,
     env = MAINNET_ENV,
     guestos_update = "test",
     setupos = True,
@@ -116,6 +114,7 @@ system_test_nns(
 system_test_nns(
     name = "guestos_upgrade_from_current_to_current_test_sev",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each); the bare-metal SEV HostOS node is external hardware, not a Farm VM.
+    enable_uvm = True,
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     guestos = True,
     guestos_update = "test",
@@ -143,6 +142,7 @@ system_test_nns(
     # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
+    enable_uvm = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
     setupos = "mainnet_latest_dev",
@@ -162,6 +162,7 @@ system_test_nns(
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current_sev",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each); the bare-metal SEV HostOS node is external hardware, not a Farm VM.
+    enable_uvm = True,
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
@@ -203,6 +204,7 @@ system_test_nns(
     # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
+    enable_uvm = True,
     env = MAINNET_ENV,
     hostos_update = "test",
     setupos = True,
@@ -225,6 +227,7 @@ system_test_nns(
     # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
+    enable_uvm = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     hostos_update = True,
     setupos = "mainnet_latest_dev",
@@ -244,6 +247,7 @@ system_test_nns(
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current_sev",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each); the bare-metal SEV HostOS node is external hardware, not a Farm VM.
+    enable_uvm = True,
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     hostos = "mainnet_latest_dev",
     hostos_update = True,
@@ -264,6 +268,7 @@ system_test_nns(
 system_test_nns(
     name = "sev_recovery",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each); the bare-metal SEV TEE HostOS node is external hardware, not a Farm VM.
+    enable_uvm = True,
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     guestos = {
         "default": True,

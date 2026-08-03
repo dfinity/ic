@@ -249,8 +249,9 @@ fn test_all_topics() {
             operation_arg: None,
         }),
         Err("Cannot interpret extension_canister_id as canister ID: \
-            Got an invalid principal id Byte 8 (9th) of Principal ID \
-            4zjg6-jalaa-aaaaa-aaaap-4ai is not 0x01: 0b00000000000000fe01"
+            Got an invalid principal id Principal ID 4zjg6-jalaa-aaaaa-aaaap-4ai \
+            ([11, 0, 0, 0, 0, 0, 0, 0, 254, 1]) is not a valid canister ID: \
+            10 bytes, class Ok(Opaque)"
             .to_string()),
     ));
     test_cases.push((

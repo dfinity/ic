@@ -14,4 +14,4 @@ path = "src/lib.rs"
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-sns-governance-api = { path = "../api" }
-maplit = "1.0.2"
+maplit = { workspace = true }

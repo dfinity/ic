@@ -23,7 +23,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion, ReplicaVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         ValidationContext,
@@ -41,6 +41,7 @@ use ic_types::{
     signature::BasicSignature,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 
 /// Registry version that the whole benchmark operates at. The subnet record,
 /// the node signing keys and the responses' metadata all use this version.
@@ -283,7 +284,7 @@ impl<'a> PayloadAssembler<'a> {
     }
 
     /// Builds a node's contribution to an aggregated proof: a default (zero
-    /// refund) payment receipt together with that node's signature over the
+    /// spent) payment receipt together with that node's signature over the
     /// corresponding receipt share.
     fn signature(
         &self,
@@ -303,7 +304,7 @@ impl<'a> PayloadAssembler<'a> {
     }
 
     /// Builds a single signed [`CanisterHttpResponseShare`] (receipt share with
-    /// a default, zero-refund payment receipt) for the given node.
+    /// a default, zero-spent payment receipt) for the given node.
     fn share(
         &self,
         signer: &Signer,
@@ -361,6 +362,7 @@ impl<'a> PayloadAssembler<'a> {
                     metadata,
                     signatures,
                 },
+                initial_spent: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -384,6 +386,7 @@ impl<'a> PayloadAssembler<'a> {
                     metadata,
                     signatures,
                 },
+                initial_spent: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -430,6 +433,7 @@ impl<'a> PayloadAssembler<'a> {
             flexible_responses.push(FlexibleCanisterHttpResponses {
                 callback_id: CallbackId::new(callback_id),
                 responses: entries,
+                initial_spent: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -489,6 +493,8 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     }
 }
 

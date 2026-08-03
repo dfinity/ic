@@ -126,9 +126,7 @@ mod tests {
     };
     use ic_base_types::{NumSeconds, PrincipalId};
     use ic_config::embedders::Config as EmbeddersConfig;
-    use ic_config::subnet_config::{
-        CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig,
-    };
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
     use ic_cycles_account_manager::{
         CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
     };
@@ -222,7 +220,6 @@ mod tests {
                 CanisterCyclesCostSchedule::Normal,
                 DEFAULT_REFERENCE_SUBNET_SIZE,
             ),
-            SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,
             BTreeSet::from([controller]),
@@ -244,7 +241,10 @@ mod tests {
         let mut fds: Vec<&mut std::os::unix::io::RawFd> = vec![];
         memory.enumerate_fds(&mut fds);
         for fd in fds.into_iter() {
-            *fd = nix::unistd::dup(*fd).unwrap();
+            use std::os::fd::{BorrowedFd, IntoRawFd};
+            // SAFETY: `*fd` is a valid file descriptor.
+            let borrowed = unsafe { BorrowedFd::borrow_raw(*fd) };
+            *fd = nix::unistd::dup(borrowed).unwrap().into_raw_fd();
         }
         memory
     }

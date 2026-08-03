@@ -1,11 +1,9 @@
-ansible>=12.2.0
 cbor>=1.0.0
 cbor2>=5.9.0
 configargparse
 cryptography>=48.0.1
 cvss>=2.5
 fabric
-GitPython>=3.1.50
 idracredfishsupport>=0.0.8
 invoke
 jira>=3.10.5

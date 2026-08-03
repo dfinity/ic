@@ -1,12 +1,14 @@
 use super::subnet_call_context_manager::{
-    EcdsaArguments, EcdsaMatchedPreSignature, InstallCodeCall, PreSignatureStash, RawRandContext,
-    SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall,
-    SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
+    DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT, EcdsaArguments, EcdsaMatchedPreSignature,
+    InstallCodeCall, PreSignatureStash, RawRandContext, SchnorrArguments,
+    SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
+    SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
 use crate::metadata_state::testing::SystemMetadataTesting;
+use crate::metrics::ReplicatedStateMetrics;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
-use crate::{CanisterPriority, InputQueueType};
+use crate::{CanisterPriority, InputQueueType, ReplicatedState};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
@@ -15,13 +17,16 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
+use ic_logger::no_op_logger;
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
+use ic_test_utilities_metrics::fetch_gauge;
 use ic_test_utilities_types::ids::{
     SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
     user_test_id,
@@ -40,8 +45,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers,
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{ExecutionRound, Height, RegistryVersion};
-use ic_types_cycles::{Cycles, NominalCyclesTesting};
+use ic_types::{ExecutionRound, Height, NumberOfNodes, RegistryVersion};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCyclesTesting};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -874,6 +879,8 @@ fn subnet_call_contexts_deserialization() {
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -969,6 +976,122 @@ fn subnet_call_contexts_deserialization() {
             time: UNIX_EPOCH,
         }]
     )
+}
+
+/// A `CanisterHttpRequestContext` from `canister_test_id(1)` with the given
+/// pricing version, made at `time`.
+fn canister_http_request_context(
+    pricing_version: PricingVersion,
+    time: Time,
+) -> CanisterHttpRequestContext {
+    CanisterHttpRequestContext {
+        request: RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(IC_00)
+            .method_payload(vec![1, 2, 3])
+            .build(),
+        url: "https://example.com".into(),
+        max_response_bytes: None,
+        headers: vec![],
+        body: Some(vec![4, 5, 6]),
+        http_method: CanisterHttpMethod::GET,
+        transform: Some(Transform {
+            method_name: "transform".into(),
+            context: vec![7, 8, 9],
+        }),
+        time,
+        replication: Replication::FullyReplicated,
+        pricing_version,
+        refund_status: RefundStatus {
+            refundable_cycles: Cycles::new(13_000),
+            per_replica_allowance: Cycles::new(1_000),
+            refunded_cycles: Cycles::zero(),
+            refunding_nodes: BTreeSet::new(),
+        },
+        registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
+    }
+}
+
+/// Retrieving the response for a pay-as-you-go priced HTTP outcall retains the
+/// context for refund accounting; a legacy priced one is not retained.
+#[test]
+fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
+    for (pricing_version, retained) in [
+        (PricingVersion::PayAsYouGo, true),
+        (PricingVersion::Legacy, false),
+    ] {
+        let mut manager = SubnetCallContextManager::default();
+        let context = canister_http_request_context(pricing_version, UNIX_EPOCH);
+        let callback_id =
+            manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
+
+        match manager.retrieve_context(callback_id, &no_op_logger()) {
+            Some(SubnetCallContext::CanisterHttpRequest(retrieved)) => {
+                assert_eq!(context, retrieved)
+            }
+            _ => panic!("Expected a `CanisterHttpRequest` context"),
+        }
+        // The context is always removed from the in-flight contexts.
+        assert!(manager.canister_http_request_contexts.is_empty());
+
+        let delivered = manager.delivered_canister_http_request_contexts;
+        if retained {
+            assert_eq!(btreemap! { callback_id => context }, delivered);
+        } else {
+            assert!(delivered.is_empty());
+        }
+    }
+}
+
+/// Delivered contexts are timed out (and returned along with their callback IDs)
+/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since the
+/// request was made, and retained until then.
+#[test]
+fn time_out_delivered_canister_http_request_contexts() {
+    let mut manager = SubnetCallContextManager::default();
+    // Two contexts, made 1 second apart.
+    let contexts: Vec<_> = [0, 1]
+        .iter()
+        .map(|i| {
+            let context = canister_http_request_context(
+                PricingVersion::PayAsYouGo,
+                UNIX_EPOCH + Duration::from_secs(*i),
+            );
+            let callback_id =
+                manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
+            manager.retrieve_context(callback_id, &no_op_logger());
+            (callback_id, context)
+        })
+        .collect();
+    assert_eq!(2, manager.delivered_canister_http_request_contexts.len());
+
+    // One nanosecond before the first context times out, nothing is timed out.
+    let before =
+        UNIX_EPOCH + (DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT - Duration::from_nanos(1));
+    assert!(
+        manager
+            .time_out_delivered_canister_http_request_contexts(before)
+            .is_empty()
+    );
+    assert_eq!(2, manager.delivered_canister_http_request_contexts.len());
+
+    // Exactly at its timeout, only the first context is timed out.
+    let at_first_timeout = UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
+    assert_eq!(
+        vec![contexts[0].clone()],
+        manager.time_out_delivered_canister_http_request_contexts(at_first_timeout)
+    );
+    assert_eq!(1, manager.delivered_canister_http_request_contexts.len());
+
+    // And a second later, the second one.
+    let at_second_timeout = at_first_timeout + Duration::from_secs(1);
+    assert_eq!(
+        vec![contexts[1].clone()],
+        manager.time_out_delivered_canister_http_request_contexts(at_second_timeout)
+    );
+    assert!(manager.delivered_canister_http_request_contexts.is_empty());
 }
 
 pub fn generate_pre_signature(
@@ -2384,25 +2507,256 @@ fn stream_responses_tracking() {
 
 #[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
+    // Each entry gets a distinct power of two so that the resulting total is a
+    // bitmask: any use case that is miscategorized (added when it should be
+    // skipped, or vice versa) changes the total by a unique amount that cannot
+    // be masked by other entries cancelling out.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
-    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(5));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(12));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(30));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
+    // Use cases covered by a dedicated scalar metric below; these must not be
+    // added to the total again (otherwise the cycles consumed by deleted
+    // canisters / outcalls would be double counted).
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(2));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(4));
+    // Canister-level use cases that only ever enter the map when a canister is
+    // deleted; already covered by the deleted canisters scalar, so not added to
+    // the total.
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(8));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ComputeAllocation, NominalCycles::new(16));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::IngressInduction, NominalCycles::new(32));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(64));
+    consumed_cycles_by_use_case.insert(
+        CyclesUseCase::RequestAndResponseTransmission,
+        NominalCycles::new(128),
+    );
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Uninstall, NominalCycles::new(256));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(512));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::BurnedCycles, NominalCycles::new(1024));
+    // Subnet-level use cases not covered by any scalar metric; these are added
+    // to the total.
+    consumed_cycles_by_use_case.insert(CyclesUseCase::SchnorrOutcalls, NominalCycles::new(2048));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::VetKd, NominalCycles::new(4096));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DroppedMessages, NominalCycles::new(8192));
+
+    // Every use case must be exercised above, so that adding a new variant
+    // forces this test (and the categorization in `consumed_cycles_total`) to
+    // be revisited.
+    for use_case in CyclesUseCase::iter() {
+        assert!(
+            consumed_cycles_by_use_case.contains_key(&use_case),
+            "use case {use_case:?} is not covered by this test"
+        );
+    }
 
     let subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
-        consumed_cycles_http_outcalls: NominalCycles::new(20),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(30),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(16384),
+        consumed_cycles_http_outcalls: NominalCycles::new(32768),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(65536),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
 
+    // 16384 (deleted canisters) + 32768 (HTTP outcalls) + 65536 (ECDSA outcalls)
+    // + 2048 (Schnorr outcalls) + 4096 (VetKd) + 8192 (dropped messages).
     assert_eq!(
         subnet_metrics.consumed_cycles_total(),
-        NominalCycles::new(250)
+        NominalCycles::new(129024)
+    );
+
+    // The legacy computation additionally sums the per-use-case entries that a
+    // deleted canister contributes to the map (already covered by the deleted
+    // canisters scalar), hence the double counting. On top of the 129024 from
+    // the fixed `consumed_cycles_total` above:
+    // 129024 + 8 (memory) + 16 (compute allocation) + 32 (ingress induction)
+    // + 64 (instructions) + 128 (request and response transmission)
+    // + 256 (uninstall) + 512 (canister creation) + 1024 (burned cycles).
+    assert_eq!(
+        subnet_metrics.consumed_cycles_total_v28(),
+        NominalCycles::new(131064)
+    );
+}
+
+/// The `replicated_state_consumed_cycles_since_replica_started` gauge is
+/// computed in `ReplicatedStateMetrics::observe` by summing the per-canister
+/// totals with the subnet-level use cases. This test exercises every
+/// subnet-level use case that contributes to the total, so that omitting any of
+/// them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use cases once were)
+/// would change the reported value and fail the assertion. Distinct powers of
+/// two are used so that a missing use case is always detectable in the total.
+#[test]
+fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
+    // The three use cases with a dedicated scalar field are also mirrored in the
+    // by-use-case map (as they are in production), while `SchnorrOutcalls`,
+    // `VetKd` and `DroppedMessages` live only in the map.
+    let mut consumed_cycles_by_use_case = BTreeMap::new();
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(2));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(4));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::SchnorrOutcalls, NominalCycles::new(8));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::VetKd, NominalCycles::new(16));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DroppedMessages, NominalCycles::new(32));
+
+    // The canister-level use cases are also present in the by-use-case map (in
+    // production they end up there via deleted canisters), but the gauge derives
+    // their contribution from the per-canister totals and the
+    // `consumed_cycles_by_deleted_canisters` scalar rather than from the map.
+    // Insert them with a large value to ensure they are *not* double-counted
+    // into the gauge total from the map.
+    for use_case in [
+        CyclesUseCase::Memory,
+        CyclesUseCase::ComputeAllocation,
+        CyclesUseCase::IngressInduction,
+        CyclesUseCase::Instructions,
+        CyclesUseCase::RequestAndResponseTransmission,
+        CyclesUseCase::Uninstall,
+        CyclesUseCase::CanisterCreation,
+        CyclesUseCase::BurnedCycles,
+    ] {
+        consumed_cycles_by_use_case.insert(use_case, NominalCycles::new(1024));
+    }
+
+    let subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(1),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(2),
+        consumed_cycles_http_outcalls: NominalCycles::new(4),
+        consumed_cycles_by_use_case,
+        ..Default::default()
+    };
+
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    state.metadata.subnet_metrics = subnet_metrics;
+
+    let registry = MetricsRegistry::new();
+    let metrics = ReplicatedStateMetrics::new(&registry);
+    metrics.observe(
+        state.metadata.own_subnet_id,
+        &state,
+        Height::new(0),
+        &no_op_logger(),
+    );
+
+    // Deleted canisters (1) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
+    // + dropped messages (32) = 63. There are no canisters, so the per-canister
+    // contribution is zero, and the canister-level use cases inserted into the
+    // map above (each worth 1024) must not appear in the total.
+    let gauge = fetch_gauge(
+        &registry,
+        "replicated_state_consumed_cycles_since_replica_started",
+    )
+    .unwrap();
+    assert_eq!(gauge, 63.0);
+}
+
+#[test]
+fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
+    let mut subnet_metrics = SubnetMetrics {
+        // Simulate a state persisted before use-case tracking existed: the scalar
+        // fields hold the full history while the use-case entries only cover a
+        // more recent (smaller) subset.
+        consumed_cycles_http_outcalls: NominalCycles::new(100),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
+        consumed_cycles_by_use_case: BTreeMap::from([
+            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
+            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
+        ]),
+        consumed_cycles_by_use_case_as_counters: BTreeMap::from([
+            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
+            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
+        ]),
+        ..Default::default()
+    };
+
+    // Observing an *unrelated* use case triggers the migration, i.e. it runs
+    // independently of whether the HTTP/ECDSA scalar fields are observed.
+    subnet_metrics
+        .observe_consumed_cycles_with_use_case(CyclesUseCase::Instructions, NominalCycles::new(5));
+
+    let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
+
+    // The HTTP/ECDSA use-case entries have been brought up to the (superset)
+    // scalar values, even though no outcall was observed.
+    assert_eq!(
+        by_use_case[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(100)
+    );
+    assert_eq!(
+        by_use_case[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+    // The observed use case was recorded as usual.
+    assert_eq!(
+        by_use_case[&CyclesUseCase::Instructions],
+        NominalCycles::new(5)
+    );
+
+    // The migration must NOT touch the monotonic counters map: its HTTP/ECDSA
+    // entries stay at their original values (only the just-observed use case
+    // grew).
+    let counters = subnet_metrics.get_consumed_cycles_by_use_case_as_counters();
+    assert_eq!(
+        counters[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(60)
+    );
+    assert_eq!(
+        counters[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(150)
+    );
+    assert_eq!(
+        counters[&CyclesUseCase::Instructions],
+        NominalCycles::new(5)
+    );
+
+    // The scalar fields are not zeroed (kept as the source of truth / for
+    // downgrade compatibility).
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_http_outcalls(),
+        NominalCycles::new(100)
+    );
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_ecdsa_outcalls(),
+        NominalCycles::new(200)
+    );
+}
+
+#[test]
+fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
+    let mut subnet_metrics = SubnetMetrics {
+        // Pre-use-case-tracking history: the scalar (100) is a superset of the
+        // use-case entry (60).
+        consumed_cycles_http_outcalls: NominalCycles::new(100),
+        consumed_cycles_by_use_case: BTreeMap::from([(
+            CyclesUseCase::HTTPOutcalls,
+            NominalCycles::new(60),
+        )]),
+        consumed_cycles_by_use_case_as_counters: BTreeMap::from([(
+            CyclesUseCase::HTTPOutcalls,
+            NominalCycles::new(60),
+        )]),
+        ..Default::default()
+    };
+
+    // Production order for an HTTP outcall: the scalar is bumped first, then the
+    // matching use case is observed.
+    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(5));
+    subnet_metrics
+        .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
+
+    // The use-case entry caught up to the (superset) scalar and grew by 5, with
+    // no double counting.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(105)
+    );
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_http_outcalls(),
+        NominalCycles::new(105)
+    );
+
+    // The counters map is not migrated: it only reflects its own increment (5),
+    // not the backfilled history.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(65)
     );
 }
 

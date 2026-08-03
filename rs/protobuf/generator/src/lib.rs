@@ -179,11 +179,11 @@ fn build_registry_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".registry.crypto.v1.PublicKey",
-        "#[derive(Eq, Hash, PartialOrd, Ord)]",
+        "#[derive(PartialOrd, Ord)]",
     );
     config.type_attribute(
         ".registry.crypto.v1.X509PublicKeyCert",
-        "#[derive(Eq, Hash, PartialOrd, Ord)]",
+        "#[derive(PartialOrd, Ord)]",
     );
     config.type_attribute(
         ".registry.node_operator",
@@ -219,31 +219,31 @@ fn build_registry_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".registry.subnet.v1.SubnetFeatures",
-        "#[derive(candid::CandidType, Eq)]",
+        "#[derive(candid::CandidType)]",
     );
     config.type_attribute(
         ".registry.subnet.v1.ResourceLimits",
-        "#[derive(candid::CandidType, Eq)]",
+        "#[derive(candid::CandidType)]",
     );
     config.type_attribute(
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
 
-    for type_name in [
-        "GuestLaunchMeasurement",
-        "GuestLaunchMeasurements",
-        "GuestLaunchMeasurementMetadata",
-    ] {
+    for type_name in ["GuestLaunchMeasurement", "GuestLaunchMeasurementMetadata"] {
         config.type_attribute(
             format!(".registry.replica_version.v1.{type_name}"),
-            "#[derive(Eq, candid::CandidType, comparable::Comparable)]",
+            "#[derive(candid::CandidType, comparable::Comparable)]",
         );
     }
+    config.type_attribute(
+        ".registry.replica_version.v1.GuestLaunchMeasurements",
+        "#[derive(Eq, candid::CandidType, comparable::Comparable)]",
+    );
 
     config.type_attribute(
         ".registry.hostos_version",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Serialize, serde::Deserialize, Ord, PartialOrd)]",
     );
     config.type_attribute(
         ".registry.node_rewards.v2",
@@ -259,7 +259,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".registry.node.v1.ConnectionEndpoint",
-        "#[derive(Eq, PartialOrd, Ord)]",
+        "#[derive(PartialOrd, Ord)]",
     );
     config.type_attribute(
         ".registry.api_boundary_node.v1.ApiBoundaryNodeRecord",
@@ -282,6 +282,9 @@ fn build_registry_proto(def: &Path, out: &Path) {
         def.join("registry/node_rewards/v2/node_rewards.proto"),
         def.join("registry/dc/v1/dc.proto"),
         def.join("registry/unassigned_nodes_config/v1/unassigned_nodes_config.proto"),
+        def.join(
+            "registry/standard_engine_replica_version/v1/standard_engine_replica_version.proto",
+        ),
     ];
 
     compile_protos(config, def, &registry_files);
@@ -363,14 +366,6 @@ fn build_types_proto(def: &Path, out: &Path) {
     ] {
         config.type_attribute(path, "#[derive(serde::Serialize, serde::Deserialize)]");
     }
-    config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.PrincipalId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.MasterPublicKeyId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.SchnorrKeyId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.VetKdKeyId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.EcdsaCurve", "#[derive(candid::CandidType)]");
     config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(candid::CandidType)]");
     config.type_attribute(

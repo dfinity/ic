@@ -5,7 +5,10 @@ use cycles_minting_canister::*;
 use environment::Environment;
 use exchange_rate_canister::{UpdateExchangeRateError, UpdateExchangeRateState};
 use ic_cdk::{
-    api::call::{CallResult, ManualReply},
+    api::{
+        call::CallResult, canister_cycle_balance, canister_self, certified_data_set,
+        msg_cycles_accept, msg_cycles_available, msg_reject, msg_reply,
+    },
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
@@ -75,7 +78,7 @@ const MAX_MEMO_LENGTH: usize = 32;
 
 /// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
 /// This is the minimum amount needed for creating a canister as of October 2023.
-const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
+const CREATE_CANISTER_MIN_CYCLES: u128 = 100_000_000_000;
 
 /// Prior to 2024-12-10, we used 50e15, but legitimate users started running
 /// into this. At that time, prices had recently gone up, so we resolved to
@@ -130,7 +133,7 @@ impl Environment for CanisterEnvironment {
     }
 
     fn set_certified_data(&self, data: &[u8]) {
-        ic_cdk::api::set_certified_data(data)
+        certified_data_set(data)
     }
 }
 
@@ -425,7 +428,7 @@ where
     yansi::Paint<S>: std::string::ToString,
 {
     #[cfg(target_arch = "wasm32")]
-    ic_cdk::api::print(yansi::Paint::yellow(s).to_string());
+    ic_cdk::api::debug_print(yansi::Paint::yellow(s).to_string());
 
     #[cfg(not(target_arch = "wasm32"))]
     println!("{}", yansi::Paint::yellow(s).to_string());
@@ -539,9 +542,11 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
 #[update(manual_reply = true)]
 fn update_subnet_type(args: UpdateSubnetTypeArgs) {
     match do_update_subnet_type(args) {
-        Ok(response) => ManualReply::<()>::one(response),
-        Err(err) => ManualReply::reject(err.to_string()),
-    };
+        Ok(response) => {
+            msg_reply(candid::encode_one(response).expect("Failed to encode the reply."))
+        }
+        Err(err) => msg_reject(err.to_string()),
+    }
 }
 
 /// Updates the set of available subnet types.
@@ -610,9 +615,11 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
 #[update(manual_reply = true)]
 fn change_subnet_type_assignment(args: ChangeSubnetTypeAssignmentArgs) {
     match do_change_subnet_type_assignment(args) {
-        Ok(response) => ManualReply::<()>::one(response),
-        Err(err) => ManualReply::reject(err.to_string()),
-    };
+        Ok(response) => {
+            msg_reply(candid::encode_one(response).expect("Failed to encode the reply."))
+        }
+        Err(err) => msg_reject(err.to_string()),
+    }
 }
 
 /// Changes the assignment of provided subnets to subnet types.
@@ -1480,32 +1487,32 @@ async fn create_canister(
         subnet_type,
     }: CreateCanister,
 ) -> Result<CanisterId, CreateCanisterError> {
-    let cycles = ic_cdk::api::call::msg_cycles_available();
+    let cycles = msg_cycles_available();
 
     if cycles < CREATE_CANISTER_MIN_CYCLES {
         return Err(CreateCanisterError::Refunded {
-            refund_amount: cycles.into(),
+            refund_amount: cycles,
             create_error: "Insufficient cycles attached.".to_string(),
         });
     }
     let subnet_selection =
         get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
             CreateCanisterError::Refunded {
-                refund_amount: cycles.into(),
+                refund_amount: cycles,
                 create_error: error_message,
             }
         })?;
 
     match do_create_canister(caller(), cycles.into(), subnet_selection, settings).await {
         Ok(canister_id) => {
-            ic_cdk::api::call::msg_cycles_accept(cycles);
+            msg_cycles_accept(cycles);
             Ok(canister_id)
         }
         Err(create_error) => {
-            ic_cdk::api::call::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
-            let refund_amount = ic_cdk::api::call::msg_cycles_available();
+            msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY);
+            let refund_amount = msg_cycles_available();
             Err(CreateCanisterError::Refunded {
-                refund_amount: refund_amount.into(),
+                refund_amount,
                 create_error,
             })
         }
@@ -1612,7 +1619,7 @@ async fn fetch_transaction(
     };
 
     let expected_to = AccountIdentifier::new(
-        PrincipalId::from(ic_cdk::api::id()),
+        PrincipalId::from(canister_self()),
         Some(expected_to_subaccount),
     );
     if to != expected_to {
@@ -1780,7 +1787,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
             spender: _,
         } => {
             let incoming_to_account_identifier = AccountIdentifier::new(
-                PrincipalId::from(ic_cdk::api::id()),
+                PrincipalId::from(canister_self()),
                 Some(incoming_to_subaccount),
             );
             if to != &incoming_to_account_identifier {
@@ -2306,7 +2313,7 @@ fn ensure_balance(
 ) -> Result<(), String> {
     let now = now_system_time();
 
-    let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
+    let current_balance = Cycles::from(canister_cycle_balance());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
@@ -2317,7 +2324,7 @@ fn ensure_balance(
 
     // unused because of check above
     let _minted_cycles = ic0_mint_cycles128(cycles_to_mint);
-    assert!(ic_cdk::api::canister_balance128() >= cycles.get());
+    assert!(canister_cycle_balance() >= cycles.get());
     Ok(())
 }
 

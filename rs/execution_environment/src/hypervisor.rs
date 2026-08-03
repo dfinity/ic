@@ -145,7 +145,6 @@ pub struct Hypervisor {
     compilation_cache: Arc<CompilationCache>,
     create_execution_state_base_cost: NumInstructions,
     cost_to_compile_wasm_instruction: NumInstructions,
-    dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
 }
 
@@ -158,6 +157,7 @@ impl Hypervisor {
         &self,
         canister_module: CanisterModule,
         canister_id: CanisterId,
+        last_install_timestamp: Time,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
     ) -> (NumInstructions, HypervisorResult<ExecutionState>) {
@@ -185,7 +185,7 @@ impl Hypervisor {
             Arc::clone(&self.compilation_cache),
         );
         match creation_result {
-            Ok((execution_state, compilation_cost, compilation_result)) => {
+            Ok((mut execution_state, compilation_cost, compilation_result)) => {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
@@ -193,6 +193,11 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
+                // Stamp the deployment-round install time onto the freshly
+                // created execution state. This is the single choke point for
+                // creating execution states, so every install/upgrade/snapshot
+                // restore is forced to provide it.
+                execution_state.last_install_timestamp = Some(last_install_timestamp);
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
                 round_limits.instructions -= as_round_instructions(total_cost);
@@ -261,7 +266,6 @@ impl Hypervisor {
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
-            dirty_page_overhead,
             canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
@@ -274,7 +278,6 @@ impl Hypervisor {
         wasm_executor: Arc<dyn WasmExecutor>,
         create_execution_state_base_cost: NumInstructions,
         cost_to_compile_wasm_instruction: NumInstructions,
-        dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
@@ -291,7 +294,6 @@ impl Hypervisor {
             ),
             create_execution_state_base_cost,
             cost_to_compile_wasm_instruction,
-            dirty_page_overhead,
             canister_guaranteed_callback_quota,
         }
     }
@@ -405,7 +407,6 @@ impl Hypervisor {
             system_state,
             *self.cycles_account_manager,
             network_topology,
-            self.dirty_page_overhead,
             execution_parameters.compute_allocation,
             available_callbacks,
             request_metadata,

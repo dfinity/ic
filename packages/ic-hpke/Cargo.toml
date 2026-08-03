@@ -11,9 +11,9 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hpke = { version = "0.12", default-features = false, features = [ "p384", "alloc" ] }
+hpke = { version = "0.13", default-features = false, features = [ "p384", "alloc" ] }
 
 [dev-dependencies]
-hex = "0.4"
-rand = { version = "0.8", default-features = false, features = ["getrandom"] }
-rand_chacha = { version = "0.3", default-features = false }
+hex = { workspace = true }
+rand = { version = "0.9", default-features = false, features = ["os_rng"] }
+rand_chacha = { version = "0.9", default-features = false }

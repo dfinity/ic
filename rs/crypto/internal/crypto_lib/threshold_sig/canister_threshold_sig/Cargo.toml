@@ -13,7 +13,7 @@ curve25519-dalek = { workspace = true }
 fe-derive = { path = "fe-derive" }
 group = "0.13"
 hex = { workspace = true }
-hex-literal = "0.4.1"
+hex-literal = { workspace = true }
 ic-crypto-internal-hmac = { path = "../../hmac" }
 ic-crypto-internal-seed = { path = "../../seed" }
 ic-crypto-internal-types = { path = "../../types" }
@@ -34,7 +34,7 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-bip32 = { version = "0.5", features = ["secp256k1"] }
+bip32 = { workspace = true, features = ["secp256k1"] }
 criterion = { workspace = true }
 ed25519-dalek = { workspace = true }
 ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils = { path = "test_utils" }

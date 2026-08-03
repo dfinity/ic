@@ -41,8 +41,8 @@ name = "ic-systest-nested-nns-recovery-local"
 path = "nr_local.rs"
 
 [[bin]]
-name = "ic-systest-nested-nns-recovery-no-bless-fix-like-np"
-path = "nr_no_bless_fix_like_np.rs"
+name = "ic-systest-nested-nns-recovery-no-elect-fix-like-np"
+path = "nr_no_elect_fix_like_np.rs"
 
 [[bin]]
 name = "ic-systest-nested-nns-recovery-all-broken-sequential-np-actions"

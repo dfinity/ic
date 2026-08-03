@@ -1,4 +1,4 @@
-use backoff::{ExponentialBackoff, retry_notify};
+use backon::{BlockingRetryable, ExponentialBuilder};
 use candid::Principal;
 use ic_system_test_driver::driver::{ic_gateway_vm::HasIcGatewayVm, test_env::TestEnv};
 use slog::{error, info};
@@ -29,12 +29,15 @@ pub fn get_asset_as_string(
     let resolve_override = ic_gateway.resolve_override_for_url(&parsed_asset_url);
     let accept_invalid_certs = ic_gateway.uses_self_signed_cert();
 
-    let backoff = ExponentialBackoff {
-        max_elapsed_time: Some(Duration::from_secs(120)),
-        ..Default::default()
-    };
+    let backoff = ExponentialBuilder::new()
+        .with_min_delay(Duration::from_millis(500))
+        .with_max_delay(Duration::from_secs(60))
+        .with_factor(1.5)
+        .with_jitter()
+        .with_total_delay(Some(Duration::from_secs(120)))
+        .without_max_times();
 
-    let notify = |err, dur| {
+    let notify = |err: &reqwest::Error, dur: Duration| {
         error!(log, "error: {err}");
         error!(log, "retry in {dur:?}");
     };
@@ -52,7 +55,7 @@ pub fn get_asset_as_string(
         Ok(body)
     };
 
-    let body = retry_notify(backoff, operation, notify).unwrap();
+    let body = operation.retry(backoff).notify(notify).call().unwrap();
 
     info!(log, "response body: {body}");
     body

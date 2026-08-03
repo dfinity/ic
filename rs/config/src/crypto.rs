@@ -156,7 +156,7 @@ impl CryptoConfig {
         if permissions_owner != 0o700 {
             return Err(format!(
                 "Crypto state directory {} has permissions {:#o}, disallowing owner access",
-                &dir.display(),
+                dir.display(),
                 unix_permission_bits
             ));
         }
@@ -164,7 +164,7 @@ impl CryptoConfig {
         if permissions_all != 0 {
             return Err(format!(
                 "Crypto state directory {} has permissions {:#o}, allowing general access",
-                &dir.display(),
+                dir.display(),
                 unix_permission_bits
             ));
         }

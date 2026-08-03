@@ -534,7 +534,7 @@ mod node_keys_errors_to_key_counts_conversions {
                 test.expected,
                 "for ParameterizedTest #{}: {:?}",
                 i,
-                &test
+                test
             );
         }
     }
@@ -660,7 +660,7 @@ mod node_keys_errors_to_key_counts_conversions {
                 test.expected,
                 "for ParameterizedTest #{}: {:?}",
                 i,
-                &test
+                test
             );
         }
     }
@@ -741,7 +741,7 @@ mod node_keys_errors_to_key_counts_conversions {
                 test.expected,
                 "for ParameterizedTest #{}: {:?}",
                 i,
-                &test
+                test
             );
         }
     }
@@ -1054,7 +1054,7 @@ mod node_keys_errors_to_key_counts_conversions {
                 test.expected,
                 "for ParameterizedTest #{}: {:?}",
                 i,
-                &test
+                test
             );
         }
     }

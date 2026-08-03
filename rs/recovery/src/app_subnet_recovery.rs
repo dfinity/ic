@@ -367,7 +367,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             StepType::ElectVersion => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
-                        read_optional(&self.logger, "Version to bless (and upgrade to): ");
+                        read_optional(&self.logger, "Version to elect (and upgrade to): ");
                 }
             }
 
@@ -376,7 +376,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version = read_optional(
                         &self.logger,
-                        "Version to upgrade to (WARN: it should already be blessed): ",
+                        "Version to upgrade to (WARN: it should already be elected): ",
                     );
                 }
             }

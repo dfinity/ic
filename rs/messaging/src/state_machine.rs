@@ -1,9 +1,11 @@
+use crate::canister_http_spent::{
+    deliver_canister_http_spent, refund_timed_out_canister_http_contexts,
+};
 use crate::message_routing::{CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics};
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::{
     StreamBuilder, generate_reject_responses_for_deleted_subnets,
 };
-use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
@@ -12,7 +14,7 @@ use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_replicated_state::{NetworkTopology, OwnSubnetInfo, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
-use ic_types::{ExecutionRound, NumBytes, SubnetId};
+use ic_types::{ExecutionRound, SubnetId};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -39,7 +41,6 @@ pub(crate) struct StateMachineImpl {
     scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
-    best_effort_message_memory_capacity: NumBytes,
     log: ReplicaLogger,
     metrics: MessageRoutingMetrics,
 }
@@ -49,7 +50,6 @@ impl StateMachineImpl {
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         demux: Box<dyn Demux>,
         stream_builder: Box<dyn StreamBuilder>,
-        hypervisor_config: HypervisorConfig,
         log: ReplicaLogger,
         metrics: MessageRoutingMetrics,
     ) -> Self {
@@ -57,8 +57,6 @@ impl StateMachineImpl {
             scheduler,
             demux,
             stream_builder,
-            best_effort_message_memory_capacity: hypervisor_config
-                .best_effort_message_memory_capacity,
             log,
             metrics,
         }
@@ -126,29 +124,36 @@ impl StateMachine for StateMachineImpl {
                 .observe_no_canister_allocation_range(&self.log, message);
         }
 
-        let (batch_messages, mut consensus_responses, chain_key_data, requires_full_state_hash) =
-            match batch.content {
-                // Regular batch, proceed with round execution.
-                BatchContent::Data {
-                    batch_messages,
-                    consensus_responses,
-                    chain_key_data,
-                    requires_full_state_hash,
-                } => (
-                    batch_messages,
-                    consensus_responses,
-                    chain_key_data,
-                    requires_full_state_hash,
-                ),
+        let (
+            batch_messages,
+            mut consensus_responses,
+            canister_http_spent,
+            chain_key_data,
+            requires_full_state_hash,
+        ) = match batch.content {
+            // Regular batch, proceed with round execution.
+            BatchContent::Data {
+                batch_messages,
+                consensus_responses,
+                canister_http_spent,
+                chain_key_data,
+                requires_full_state_hash,
+            } => (
+                batch_messages,
+                consensus_responses,
+                canister_http_spent,
+                chain_key_data,
+                requires_full_state_hash,
+            ),
 
-                // Consensus is telling us to split, do so and return the new state.
-                BatchContent::Splitting {
-                    new_subnet_id,
-                    other_subnet_id,
-                } => {
-                    return self.online_split(state, new_subnet_id, other_subnet_id);
-                }
-            };
+            // Consensus is telling us to split, do so and return the new state.
+            BatchContent::Splitting {
+                new_subnet_id,
+                other_subnet_id,
+            } => {
+                return self.online_split(state, new_subnet_id, other_subnet_id);
+            }
+        };
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch_messages.query_stats {
@@ -242,6 +247,26 @@ impl StateMachine for StateMachineImpl {
                 batch.batch_number
             )
         }
+
+        // Apply HTTP outcall spend reports and time out delivered request
+        // contexts. This runs after execution, so that contexts that were just
+        // responded to during the round have already been moved into the
+        // delivered collection and can therefore receive their refunds and have
+        // their consumed cycles reported.
+        deliver_canister_http_spent(
+            &mut state_after_execution,
+            &canister_http_spent,
+            &self.log,
+            &self.metrics.canister_http_spent_metrics,
+        );
+        let batch_time = state_after_execution.time();
+        refund_timed_out_canister_http_contexts(
+            &mut state_after_execution,
+            batch_time,
+            &self.log,
+            &self.metrics.canister_http_spent_metrics,
+        );
+
         execution_timer.observe_duration();
 
         // Postprocess the state: route messages into streams.
@@ -272,10 +297,11 @@ impl StateMachine for StateMachineImpl {
 
         // Shed enough messages to stay below the best-effort message memory limit.
         let shed_messages_timer = self.metrics.start_phase_timer(PHASE_SHED_MESSAGES);
-        state_after_stream_builder.enforce_best_effort_message_limit(
-            self.best_effort_message_memory_capacity,
-            &self.metrics,
-        );
+        let best_effort_message_memory_capacity = state_after_stream_builder
+            .metadata
+            .best_effort_message_memory_capacity();
+        state_after_stream_builder
+            .enforce_best_effort_message_limit(best_effort_message_memory_capacity, &self.metrics);
         #[cfg(debug_assertions)]
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         shed_messages_timer.observe_duration();

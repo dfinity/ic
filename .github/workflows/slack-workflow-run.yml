@@ -9,8 +9,6 @@ on:
       - rc--*
       - ic-mainnet-revisions
       - ic-nervous-system-wasms
-    tags:
-      - release-*
     workflows:
       - Schedule Daily
       - Schedule RC
@@ -68,11 +66,11 @@ jobs:
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update mainnet ICOS versions file" ]]; then
             CHANNEL="eng-consensus-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update mainnet canister versions file" ]]; then
-            CHANNEL="eng-nns"
+            CHANNEL="eng-nns-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Kickoff" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-mainnet-revisions" ]]; then
             CHANNEL="eng-consensus-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Kickoff" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-nervous-system-wasms" ]]; then
-            CHANNEL="eng-nns"
+            CHANNEL="eng-nns-alerts"
           fi
 
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT

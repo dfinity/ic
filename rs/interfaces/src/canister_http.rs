@@ -51,11 +51,22 @@ pub enum InvalidCanisterHttpPayloadReason {
     NotTimedOut(CallbackId),
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
-    /// A payment receipt claims a refund larger than the per-replica allowance
-    /// derived from the request's payment.
-    RefundExceedsAllowance {
-        refund: Cycles,
-        per_replica_allowance: Cycles,
+    /// A payment receipt claims the replica spent more than it was allowed to:
+    /// the per-replica allowance derived from the request's payment on a
+    /// charging subnet, or the free-subnet maximum on a free subnet.
+    SpentExceedsLimit {
+        spent: Cycles,
+        limit: Cycles,
+    },
+    /// The collective initial spent cycles included in the payload do not match
+    /// the value recomputed from the request context's subnet size and the
+    /// signed per-replica receipts.
+    InitialSpentMismatch {
+        callback_id: CallbackId,
+        /// The initial spend received in the payload.
+        received: Cycles,
+        /// The initial spend the validator recomputed and expected.
+        expected: Cycles,
     },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
@@ -74,6 +85,11 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
+    /// A divergence proof contains more than one share from the same signer.
+    DivergenceDuplicateSigner {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
     /// The callback_id in a flexible response group does not match a response or proof within it.
     FlexibleCallbackIdMismatch {
         callback_id: CallbackId,

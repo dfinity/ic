@@ -442,7 +442,7 @@ impl Player {
                         Some(printer) => printer(bytes),
                         _ => println!(
                             "Ingress id={} response={}",
-                            &msg.ingress.id(),
+                            msg.ingress.id(),
                             hex::encode(bytes)
                         ),
                     },
@@ -682,7 +682,7 @@ impl Player {
     /// Fetch registry records from the given `nns_url`, and update the local
     /// registry store with the new records.
     pub fn update_registry_local_store(&self) {
-        println!("RegistryLocalStore path: {:?}", &self.local_store_path);
+        println!("RegistryLocalStore path: {:?}", self.local_store_path);
         let latest_version = self.registry.get_latest_version();
         println!("RegistryLocalStore latest version: {latest_version}");
         let records = self
@@ -785,6 +785,7 @@ impl Player {
                 },
                 chain_key_data: Default::default(),
                 consensus_responses: Vec::new(),
+                canister_http_spent: Default::default(),
                 requires_full_state_hash: false,
             },
             // Use a fake randomness here since we don't have random tape for extra messages
@@ -825,6 +826,7 @@ impl Player {
                         batch_messages: BatchMessages::default(),
                         chain_key_data: Default::default(),
                         consensus_responses: Vec::new(),
+                        canister_http_spent: Default::default(),
                         requires_full_state_hash: !have_incomplete_msgs,
                     };
                     extra_batch.batch_number = message_routing.expected_batch_height();

@@ -4,7 +4,7 @@ use super::{
     ApiType, CERTIFIED_DATA_MAX_LENGTH, cycles_balance_change::CyclesBalanceChange, routing,
     routing::ResolveDestinationError,
 };
-use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -26,7 +26,7 @@ use ic_replicated_state::{
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumInstructions, Time,
+    CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, Time,
     messages::{CallContextId, NO_DEADLINE, RejectContext, RequestMetadata},
     time::CoarseTime,
 };
@@ -396,11 +396,11 @@ impl SystemStateModifications {
             // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
-        if system_state.log_memory_store.is_migrated() {
-            system_state
-                .log_memory_store
-                .append_delta_log(&mut self.canister_log.clone());
-        }
+        system_state
+            .log_memory_store
+            .append_delta_log(&mut self.canister_log.clone());
+        // Keep the legacy `canister_log` store up to date so that checkpoints
+        // remain readable by replicas that predate the log memory store.
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);
@@ -634,7 +634,6 @@ pub struct SandboxSafeSystemState {
     pub(super) status: CanisterStatusView,
     pub(super) subnet_type: SubnetType,
     pub(super) subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-    dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
     wasm_memory_threshold: NumBytes,
@@ -687,7 +686,6 @@ impl SandboxSafeSystemState {
         ic00_available_request_slots: usize,
         ic00_aliases: BTreeSet<CanisterId>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-        dirty_page_overhead: NumInstructions,
         global_timer: CanisterTimer,
         canister_version: u64,
         controllers: BTreeSet<PrincipalId>,
@@ -703,7 +701,6 @@ impl SandboxSafeSystemState {
             status,
             subnet_type: cycles_account_manager.subnet_type(),
             subnet_cycles_config,
-            dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
             environment_variables,
@@ -743,7 +740,6 @@ impl SandboxSafeSystemState {
         system_state: &SystemState,
         cycles_account_manager: CyclesAccountManager,
         network_topology: Arc<NetworkTopology>,
-        dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         available_callbacks: u64,
         request_metadata: RequestMetadata,
@@ -755,7 +751,6 @@ impl SandboxSafeSystemState {
             system_state,
             cycles_account_manager,
             network_topology,
-            dirty_page_overhead,
             compute_allocation,
             available_callbacks,
             request_metadata,
@@ -771,7 +766,6 @@ impl SandboxSafeSystemState {
         system_state: &SystemState,
         cycles_account_manager: CyclesAccountManager,
         network_topology: Arc<NetworkTopology>,
-        dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         available_callbacks: u64,
         request_metadata: RequestMetadata,
@@ -819,14 +813,10 @@ impl SandboxSafeSystemState {
             })
             .min()
             .unwrap_or(DEFAULT_QUEUE_CAPACITY);
-        let (next_canister_log_record_idx, canister_log_memory_limit) =
-            if system_state.log_memory_store.is_migrated() {
-                let lms = &system_state.log_memory_store;
-                (lms.next_idx(), lms.byte_capacity())
-            } else {
-                let cl = &system_state.canister_log;
-                (cl.next_idx(), cl.byte_capacity())
-            };
+        let (next_canister_log_record_idx, canister_log_memory_limit) = {
+            let lms = &system_state.log_memory_store;
+            (lms.next_idx(), lms.byte_capacity())
+        };
 
         Self::new_internal(
             system_state.canister_id(),
@@ -848,7 +838,6 @@ impl SandboxSafeSystemState {
             ic00_available_request_slots,
             ic00_aliases,
             subnet_cycles_config,
-            dirty_page_overhead,
             system_state.global_timer,
             system_state.canister_version(),
             system_state.controllers.clone(),
@@ -1179,23 +1168,6 @@ impl SandboxSafeSystemState {
         Ok(())
     }
 
-    /// Calculate the cost for newly created dirty pages.
-    pub fn dirty_page_cost(&self, dirty_pages: NumOsPages) -> HypervisorResult<NumInstructions> {
-        let (inst, overflow) = dirty_pages
-            .get()
-            .overflowing_mul(self.dirty_page_overhead.get());
-        if overflow {
-            Err(HypervisorError::ToolchainContractViolation {
-                error: format!(
-                    "Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}",
-                    self.dirty_page_overhead, dirty_pages
-                ),
-            })
-        } else {
-            Ok(NumInstructions::from(inst))
-        }
-    }
-
     pub fn is_controller(&self, principal_id: &PrincipalId) -> bool {
         self.controllers.contains(principal_id)
     }
@@ -1454,7 +1426,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
@@ -1594,7 +1566,6 @@ mod tests {
                 CanisterCyclesCostSchedule::Normal,
                 ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
             ),
-            SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,
             BTreeSet::new(),

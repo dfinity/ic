@@ -20,6 +20,7 @@ use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
 };
+use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
     AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
 };
@@ -407,6 +408,31 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                     block_number: block_number.try_into().unwrap(),
                 }
             }
+            EventPayload::RegisteredDepositAddresses {
+                scan_window_nanos,
+                capacity,
+                registrations,
+            } => ET::RegisteredDepositAddresses(
+                ic_cketh_minter::state::event::DepositAddressRegistry {
+                    scan_window_nanos,
+                    capacity,
+                    registrations: registrations
+                        .into_iter()
+                        .map(
+                            |a| ic_cketh_minter::state::event::DepositAddressRegistration {
+                                owner: a.owner,
+                                subaccount: a.subaccount,
+                                address: a.address.parse().unwrap(),
+                                expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
+                                last_scanned_block: a
+                                    .last_scanned_block
+                                    .map(|b| b.try_into().unwrap()),
+                                scan_count: a.scan_count.try_into().unwrap(),
+                            },
+                        )
+                        .collect(),
+                },
+            ),
         },
     }
 }

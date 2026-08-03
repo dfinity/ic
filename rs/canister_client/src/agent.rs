@@ -3,7 +3,7 @@ use crate::{
     cbor::{parse_query_response, prepare_query, prepare_read_state, prepare_update},
     http_client::{HttpClient, HttpClientConfig},
 };
-use backoff::backoff::Backoff;
+use backon::{BackoffBuilder, ExponentialBuilder};
 use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::Path;
 use ic_management_canister_types_private::{IC_00, InstallCodeArgs, Method, Payload};
@@ -54,17 +54,14 @@ pub fn update_path(cid: CanisterId) -> String {
 const NODE_STATUS_PATH: &str = "api/v2/status";
 const CATCH_UP_PACKAGE_PATH: &str = "/_/catch_up_package";
 
-pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
-    backoff::ExponentialBackoff {
-        initial_interval: MIN_POLL_INTERVAL,
-        current_interval: MIN_POLL_INTERVAL,
-        randomization_factor: 0.1,
-        multiplier: POLL_INTERVAL_MULTIPLIER,
-        start_time: std::time::Instant::now(),
-        max_interval: MAX_POLL_INTERVAL,
-        max_elapsed_time: None,
-        clock: backoff::SystemClock::default(),
-    }
+pub fn get_backoff_policy() -> backon::ExponentialBackoff {
+    ExponentialBuilder::new()
+        .with_min_delay(MIN_POLL_INTERVAL)
+        .with_max_delay(MAX_POLL_INTERVAL)
+        .with_factor(POLL_INTERVAL_MULTIPLIER as f32)
+        .with_jitter()
+        .without_max_times()
+        .build()
 }
 
 /// An agent to talk to the Internet Computer through the public endpoints.
@@ -281,7 +278,7 @@ impl Agent {
         // will take at least the time between consensus blocks.
         while next_poll_time < deadline {
             sleep_until(tokio::time::Instant::from_std(next_poll_time)).await;
-            next_poll_time = Instant::now() + backoff.next_backoff().expect("Backoff interval MUST be available. If you see this error the backoff is misconfigured.");
+            next_poll_time = Instant::now() + backoff.next().expect("Backoff interval MUST be available. If you see this error the backoff is misconfigured.");
             match self
                 .wait_ingress(request_id.clone(), deadline, effective_canister_id)
                 .await
