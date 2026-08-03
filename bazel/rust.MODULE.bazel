@@ -1487,7 +1487,7 @@ crate.spec(
 )
 crate.spec(
     package = "scraper",
-    version = "^0.17.1",
+    version = "^0.24.0",
 )
 crate.spec(
     default_features = False,
