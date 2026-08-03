@@ -157,11 +157,9 @@ pub struct Error {
     pub kind: ErrorKind,
 }
 
-/// Renders a [`Principal`] in its textual form (e.g. `aaaaa-aa`) when the
-/// enclosing type is formatted with `Debug`.
-///
-/// The `Debug` derived by `Principal` itself prints the raw bytes, which is
-/// unreadable in logs. Wrap the field to get the textual form instead:
+/// The `Debug` implementation of this uses the textual format (just like
+/// `Display`), whereas the `Debug` implementation on `Principal` is
+/// hostile to humans.
 ///
 /// ```ignore
 /// f.debug_struct("Account")
@@ -200,8 +198,7 @@ pub enum ErrorKind {
     Generic { generic_error_name: String },
 }
 
-// Hand-written so that `canister_id` is rendered as text. The exhaustive
-// patterns make the compiler flag any variant or field added later.
+// Hand-written so that `canister_id` is rendered as text.
 impl fmt::Debug for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
