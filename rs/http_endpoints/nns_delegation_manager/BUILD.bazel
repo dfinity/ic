@@ -1,5 +1,4 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = [
     "//rs/http_endpoints:__subpackages__",
@@ -14,12 +13,12 @@ rust_library(
     crate_name = "ic_nns_delegation_manager",
     deps = [
         # Keep sorted.
-        "//rs/canonical_state",
         "//rs/certification",
         "//rs/config",
         "//rs/crypto/tls_interfaces",
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
+        "//rs/http_endpoints/nns_delegation_reader",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/monitoring/logger",
@@ -37,7 +36,6 @@ rust_library(
         "@crate_index//:prometheus",
         "@crate_index//:rand",
         "@crate_index//:rustls",
-        "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:slog",
         "@crate_index//:tokio",
@@ -59,17 +57,13 @@ rust_test(
     env = {
         "RUST_TEST_THREADS": "4",
     },
-    tags = [
-        "cpu:4",
-        "requires-network",
-    ],
+    exec_properties = {"cpu": "4"},
     deps = [
         "//rs/certification/test-utils",
         "//rs/crypto/tls_interfaces",
         "//rs/crypto/tls_interfaces/mocks",
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
-        "//rs/http_endpoints/nns_delegation_manager/test_utils",
         "//rs/interfaces/state_manager/mocks",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
@@ -87,25 +81,6 @@ rust_test(
         "@crate_index//:rand",
         "@crate_index//:rcgen",
         "@crate_index//:rstest",
-        "@crate_index//:tokio",
-    ],
-)
-
-rust_ic_bench(
-    name = "nns_delegation_reader_bench",
-    testonly = True,
-    srcs = ["benches/nns_delegation_reader.rs"],
-    deps = [
-        # Keep sorted.
-        ":nns_delegation_manager",
-        "//rs/crypto/tree_hash",
-        "//rs/http_endpoints/nns_delegation_manager/test_utils",
-        "//rs/monitoring/logger",
-        "//rs/test_utilities/types",
-        "//rs/types/types",
-        "@crate_index//:criterion",
-        "@crate_index//:pprof",
-        "@crate_index//:serde_cbor",
         "@crate_index//:tokio",
     ],
 )

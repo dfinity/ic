@@ -2,7 +2,11 @@ use std::{convert::TryFrom, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::body::Body;
 use futures::FutureExt;
-use hickory_resolver::{Resolver, config::LookupIpStrategy};
+use hickory_resolver::{
+    Resolver,
+    config::{LookupIpStrategy, NameServerConfig, ResolverConfig},
+    net::runtime::TokioRuntimeProvider,
+};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
@@ -28,8 +32,8 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
-        Blob, Certificate, CertificateDelegationFormat, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope,
+        Blob, Certificate, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
+        HttpRequestEnvelope,
     },
     time::expiry_time_from_now,
 };
@@ -46,10 +50,8 @@ use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
-use crate::{
-    CanisterRangesFilter, NNSDelegationReader, metrics::DelegationManagerMetrics,
-    nns_delegation_reader::NNSDelegationBuilder,
-};
+use crate::metrics::DelegationManagerMetrics;
+use ic_nns_delegation_reader::{CanisterRangesCheck, NNSDelegationBuilder, NNSDelegationReader};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -93,7 +95,6 @@ pub fn start_nns_delegation_manager(
     tls_config: Arc<dyn TlsConfig>,
     cancellation_token: CancellationToken,
 ) -> (JoinHandle<()>, NNSDelegationReader) {
-    let logger = log.clone();
     let manager = DelegationManager {
         config,
         log,
@@ -116,7 +117,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader::new(rx, logger))
+    (join_handle, NNSDelegationReader::new(rx))
 }
 
 struct DelegationManager {
@@ -146,23 +147,33 @@ impl DelegationManager {
             return Some(true);
         };
 
-        ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state(
-            // Build the delegation in the flat format to capture all ranges
-            &delegation.build_or_original(CanisterRangesFilter::Flat, &self.log),
-            CertificateDelegationFormat::Flat,
-            self.state_reader.get_latest_certified_state()?.get_ref(),
-        )
-        .inspect_err(|err| {
-            warn!(
-                self.log,
-                "Failed to check if the delegation matches the certified state: {err}"
-            );
-            self.metrics.state_comparison_errors.inc();
-        })
-        .ok()
+        let state = self.state_reader.get_latest_certified_state()?;
+        let network_topology = &state.get_ref().metadata.network_topology;
+
+        delegation
+            .is_consistent_with(CanisterRangesCheck::AllSubnetRanges, |subnet_id| {
+                let subnet_topology = network_topology
+                    .subnets_for_certification()
+                    .get(&subnet_id)?;
+
+                Some((
+                    subnet_topology.public_key.clone(),
+                    network_topology
+                        .routing_table_for_certification()
+                        .ranges(subnet_id),
+                ))
+            })
+            .inspect_err(|err| {
+                warn!(
+                    self.log,
+                    "Failed to check if the delegation matches the certified state: {err}"
+                );
+                self.metrics.state_comparison_errors.inc();
+            })
+            .ok()
     }
 
-    async fn fetch(&self) -> Option<NNSDelegationBuilder> {
+    async fn fetch(&self) -> Option<Arc<NNSDelegationBuilder>> {
         let _timer = self.metrics.update_duration.start_timer();
 
         let delegation = load_root_delegation(
@@ -180,16 +191,17 @@ impl DelegationManager {
 
         self.metrics.updates.inc();
 
-        delegation
+        delegation.map(Arc::new)
     }
 
     /// Fetches a delegation from the NNS subnet proactively, i.e. without checking if the current
     /// delegation is still valid with respect to the certified state. If the new delegation is
     /// incompatible with the current certified state, it will be held back until the state has
     /// caught up (i.e. returns `None`).
-    async fn proactive_fetch(&self) -> Option<Option<NNSDelegationBuilder>> {
+    async fn proactive_fetch(&self) -> Option<Option<Arc<NNSDelegationBuilder>>> {
         let new_delegation = self.fetch().await;
-        if self.is_delegation_valid_with_respect_to_state(new_delegation.as_ref()) == Some(false) {
+        if self.is_delegation_valid_with_respect_to_state(new_delegation.as_deref()) == Some(false)
+        {
             // If the new delegation is incompatible with our state, hold it back. Once the state
             // will have caught up, `reactive_fetch` will fetch the new delegation.
             // When not being able to determine this (e.g. the call above returned `None`, still
@@ -207,7 +219,7 @@ impl DelegationManager {
     async fn reactive_fetch(
         &self,
         old_delegation: Option<&NNSDelegationBuilder>,
-    ) -> Option<Option<NNSDelegationBuilder>> {
+    ) -> Option<Option<Arc<NNSDelegationBuilder>>> {
         if self.is_delegation_valid_with_respect_to_state(old_delegation) == Some(false) {
             // If the old delegation is incompatible with our state, reactively fetch a new one.
             self.metrics.reactive_fetches.inc();
@@ -217,7 +229,7 @@ impl DelegationManager {
         None
     }
 
-    async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
+    async fn run(self, sender: watch::Sender<Option<Arc<NNSDelegationBuilder>>>) {
         let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
         let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
         // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
@@ -239,13 +251,13 @@ impl DelegationManager {
             // Fetch the delegation if enough time has passed
             let Some(new_delegation) = select!(
                 _ = proactive_interval.tick() => self.proactive_fetch().await,
-                _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_ref()).await,
+                _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_deref()).await,
             ) else {
                 // No new delegation was fetched. Retry on the next tick.
                 continue;
             };
 
-            sender.send_if_modified(|old_delegation: &mut Option<NNSDelegationBuilder>| {
+            sender.send_if_modified(|old_delegation: &mut Option<Arc<NNSDelegationBuilder>>| {
                 let modified = if &new_delegation != old_delegation {
                     old_delegation.clone_from(&new_delegation);
                     true
@@ -504,12 +516,28 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
-        log,
     );
 
-    nns_delegation_builder.observe_delegation_sizes(metrics);
+    observe_delegation_sizes(&nns_delegation_builder, metrics);
 
     Ok(nns_delegation_builder)
+}
+
+/// Records the sizes of the delegation certificates which can be served for the
+/// given delegation.
+fn observe_delegation_sizes(builder: &NNSDelegationBuilder, metrics: &DelegationManagerMetrics) {
+    metrics
+        .delegation_size
+        .with_label_values(&["both_canister_ranges"])
+        .observe(builder.original_certificate_size_bytes() as f64);
+    metrics
+        .delegation_size
+        .with_label_values(&["no_canister_ranges"])
+        .observe(builder.pruned_certificate_size_bytes() as f64);
+    metrics
+        .delegation_size
+        .with_label_values(&["flat_canister_ranges"])
+        .observe(builder.flat_certificate_size_bytes() as f64);
 }
 
 async fn connect(
@@ -548,7 +576,24 @@ async fn connect(
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
                 .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
-            let mut dns_resolver = Resolver::builder_tokio()?;
+            // To test the DNS resolution in a hermetic environment which does not have any external
+            // network access, we use a placeholder nameserver which is never contacted, because the
+            // domain used in the test is an IP literal. In production, the resolver will use the
+            // system's default nameservers to resolve the domain.
+            let mut dns_resolver = if !cfg!(test) {
+                Resolver::builder(TokioRuntimeProvider::default())?
+            } else {
+                Resolver::builder_with_config(
+                    ResolverConfig::from_parts(
+                        None,
+                        vec![],
+                        vec![NameServerConfig::udp_and_tcp(
+                            std::net::Ipv6Addr::LOCALHOST.into(),
+                        )],
+                    ),
+                    TokioRuntimeProvider::default(),
+                )
+            };
             dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
             let ip_addr = dns_resolver
                 .build()?
@@ -695,6 +740,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::RwLock;
 
+    use crate::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -746,8 +792,6 @@ mod tests {
 
     use tokio::time::timeout;
 
-    use crate::CanisterRangesFilter;
-
     use super::*;
 
     const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
@@ -761,7 +805,11 @@ mod tests {
     const VERIFIED_APP_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_4;
     const CLOUD_ENGINE_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_5;
     const API_BN_ID: NodeId = ic_test_utilities_types::ids::NODE_6;
-    const API_BN_DOMAIN: &str = "domain.invalid";
+    // An IPv6 loopback literal. `hickory`'s `lookup_ip` short-circuits IP literals and returns
+    // them without contacting any nameserver, so the CloudEngine code path resolves this offline
+    // (making the test hermetic) and then tries to connect to `[::1]:443`, where nothing is
+    // listening, yielding a fast connection-refused error inside the sandbox.
+    const API_BN_DOMAIN: &str = "::1";
 
     // Get a free port on this host to which we can connect transport to.
     fn get_free_localhost_socket_addr() -> SocketAddr {
@@ -1185,9 +1233,9 @@ mod tests {
             CancellationToken::new(),
         );
 
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
 
-        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
+        assert!(reader.builder().is_none());
     }
 
     #[tokio::test]
@@ -1219,11 +1267,12 @@ mod tests {
                 CancellationToken::new(),
             );
 
-            reader.receiver.changed().await.unwrap();
+            reader.wait_until_initialized().await.unwrap();
 
-            let delegation = reader
-                .get_delegation(CanisterRangesFilter::Flat)
+            let builder = reader
+                .builder()
                 .expect("Should return some delegation on non NNS subnet");
+            let delegation = builder.build_unverified(CanisterRangesFilter::Flat);
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
                 .expect("Should return a certificate which can be deserialized");
             let tree = LabeledTree::try_from(parsed_delegation.tree)
@@ -1261,13 +1310,13 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_PROACTIVE_UPDATE_INTERVAL`
         // has elapsed.
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL / 2,
-                reader.receiver.changed()
+                reader.wait_until_initialized()
             )
             .await
             .is_err()
@@ -1299,14 +1348,14 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_PROACTIVE_UPDATE_INTERVAL`
         // has passed. We use a timeout of 2x the interval to give enough margin for the
         // time it takes to fetch the delegation (TLS handshake, HTTP request, etc.).
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL * 2,
-                reader.receiver.changed()
+                reader.wait_until_initialized()
             )
             .await
             .is_ok()
@@ -1339,7 +1388,7 @@ mod tests {
         );
 
         // The initial *valid* delegation should be fetched immediately.
-        assert!(reader.receiver.changed().await.is_ok());
+        assert!(reader.wait_until_initialized().await.is_ok());
 
         // Mock an *invalid* certificate delegation.
         *override_nns_delegation.write().unwrap() = Some(CertificateDelegation {
@@ -1352,7 +1401,7 @@ mod tests {
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL,
-                reader.receiver.changed()
+                reader.wait_until_initialized()
             )
             .await
             .is_err()
@@ -1361,7 +1410,7 @@ mod tests {
         *override_nns_delegation.write().unwrap() = None;
         // The mocked NNS node should now return a valid certification, so we expect that
         // the manager will fetch and send it to all receivers.
-        assert!(reader.receiver.changed().await.is_ok());
+        assert!(reader.wait_until_initialized().await.is_ok());
     }
 
     #[tokio::test]
@@ -1421,7 +1470,7 @@ mod tests {
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(
                 &builder
-                    .build_or_original(CanisterRangesFilter::Flat, &no_op_logger())
+                    .build_unverified(CanisterRangesFilter::Flat)
                     .certificate,
             )
             .expect("Should return a certificate which can be deserialized");
@@ -1458,10 +1507,14 @@ mod tests {
         )
         .await;
 
-        // Since the API BN is configured with a domain that does not resolve, we expect the
-        // connection to fail with a name resolution error, which indicates that we indeed tried to
-        // connect to the API BN instead of an NNS node.
-        assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
+        // The API BN is configured with a loopback domain (`::1`) where nothing is listening on
+        // port 443 (the port hard-coded for API BNs). We therefore expect the connection to be
+        // refused. This indicates that we indeed tried to connect to the API BN (on port 443)
+        // instead of an NNS node (which would have connected to the mocked node's endpoint).
+        assert_matches!(
+            response,
+            Err(err) if format!("{err:?}").contains("Could not connect to node [::1]:443")
+        );
     }
 
     #[tokio::test]
@@ -1715,12 +1768,12 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
 
         // The next refresh can only be produced by `proactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect_err(
@@ -1754,7 +1807,7 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
 
         // Change the public key in the state, which should trigger a reactive refresh.
         {
@@ -1774,7 +1827,7 @@ mod tests {
         // The next refresh should be produced by `reactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect("`reactive_fetch` should refresh the delegation when the public key changed")
@@ -1784,7 +1837,7 @@ mod tests {
         // to refresh the delegation until it matches the current state.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect("Should try to reactively refresh the delegation until the latter matches the current state")
@@ -1857,7 +1910,7 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.receiver.changed().await.unwrap();
+        reader.wait_until_initialized().await.unwrap();
 
         // Change the canister ranges in the state, which should trigger a reactive refresh.
         {
@@ -1877,7 +1930,7 @@ mod tests {
         // The next refresh should be produced by `reactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect("`reactive_fetch` should refresh the delegation when the canister ranges changed")
@@ -1887,7 +1940,7 @@ mod tests {
         // to refresh the delegation until it matches the current state.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.receiver.changed(),
+            reader.wait_until_initialized(),
         )
         .await
         .expect("Should try to reactively refresh the delegation until the latter matches the current state")

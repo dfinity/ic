@@ -2,9 +2,8 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_crypto_tree_hash::LabeledTree;
-use ic_logger::no_op_logger;
-use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader};
-use ic_nns_delegation_manager_test_utils::create_fake_certificate_delegation;
+use ic_nns_delegation_reader::{CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader};
+use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
 use ic_test_utilities_types::ids::SUBNET_0;
 use ic_types::{
     CanisterId,
@@ -55,18 +54,13 @@ fn get_delegation_bench(
             LabeledTree::try_from(certificate.tree.clone()).unwrap(),
             Blob(vec![]),
             SUBNET_0,
-            &no_op_logger(),
         );
-        let (_sender, receiver) = watch::channel(Some(builder));
-
-        let reader = NNSDelegationReader::new(receiver, no_op_logger());
 
         println!(
             "The delegation size in bytes with {} canister ranges: {}",
             canister_id_ranges_count,
-            reader
-                .get_delegation(canister_ranges_filter)
-                .expect("We just set a delegation above")
+            builder
+                .build_unverified(canister_ranges_filter)
                 .certificate
                 .len()
         );
@@ -74,7 +68,7 @@ fn get_delegation_bench(
         group.bench_function(
             format!("{canister_id_ranges_count}_canister_id_ranges"),
             |bencher| {
-                bencher.iter(|| black_box(reader.get_delegation(canister_ranges_filter)));
+                bencher.iter(|| black_box(builder.build_unverified(canister_ranges_filter)));
             },
         );
     };
@@ -89,20 +83,19 @@ fn get_delegation_on_nns(criterion: &mut Criterion) {
 
     // On NNS there is no delegation
     let (_, rx) = watch::channel(None);
-    let reader = NNSDelegationReader::new(rx, no_op_logger());
+    let reader = NNSDelegationReader::new(rx);
 
+    // These are basically no-ops, there is no delegation to fetch on the NNS
     group.bench_function("tree", |bencher| {
-        bencher.iter(|| {
-            black_box(reader.get_delegation(CanisterRangesFilter::Tree(CanisterId::from(0))))
-        });
+        bencher.iter(|| black_box(reader.builder()));
     });
 
     group.bench_function("flat", |bencher| {
-        bencher.iter(|| black_box(reader.get_delegation(CanisterRangesFilter::Flat)));
+        bencher.iter(|| black_box(reader.builder()));
     });
 
     group.bench_function("none", |bencher| {
-        bencher.iter(|| black_box(reader.get_delegation(CanisterRangesFilter::None)));
+        bencher.iter(|| black_box(reader.builder()));
     });
 }
 

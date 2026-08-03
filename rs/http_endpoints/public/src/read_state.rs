@@ -281,13 +281,10 @@ pub(crate) async fn read_state(
             return (status, message).into_response();
         }
 
-        let delegation_from_nns = match (version, target) {
-            (Version::V2, _) => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
-            (Version::V3, Target::Canister) => nns_delegation_reader
-                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
-            (Version::V3, Target::Subnet) => {
-                nns_delegation_reader.get_delegation(CanisterRangesFilter::None)
-            }
+        let delegation_filter = match (version, target) {
+            (Version::V2, _) => CanisterRangesFilter::Flat,
+            (Version::V3, Target::Canister) => CanisterRangesFilter::Tree(effective_canister_id),
+            (Version::V3, Target::Subnet) => CanisterRangesFilter::None,
         };
 
         let maybe_nns_subnet_filter = match version {
@@ -297,7 +294,9 @@ pub(crate) async fn read_state(
 
         get_certificate_and_create_response(
             read_state.paths,
-            delegation_from_nns,
+            nns_delegation_reader
+                .builder()
+                .map(|builder| builder.build_unverified(delegation_filter)),
             certified_state_reader.as_ref(),
             maybe_nns_subnet_filter,
         )
