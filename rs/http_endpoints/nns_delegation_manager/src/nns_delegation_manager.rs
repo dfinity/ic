@@ -50,8 +50,10 @@ use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
-use crate::metrics::DelegationManagerMetrics;
-use ic_nns_delegation_reader::{CanisterRangesCheck, NNSDelegationBuilder, NNSDelegationReader};
+use crate::{
+    CanisterRangesCheck, NNSDelegationBuilder, NNSDelegationReader,
+    metrics::DelegationManagerMetrics,
+};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -149,7 +151,6 @@ impl DelegationManager {
 
         let state = self.state_reader.get_latest_certified_state()?;
         let network_topology = &state.get_ref().metadata.network_topology;
-
         delegation
             .is_consistent_with(CanisterRangesCheck::AllSubnetRanges, |subnet_id| {
                 let subnet_topology = network_topology
