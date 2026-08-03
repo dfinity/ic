@@ -47,16 +47,6 @@ build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
-# The hermetic toolchain passes driver flags (e.g. --unwindlib=none) that the
-# clang++ driver reports as unused on some rustc link invocations; rustc 1.97's
-# linker_messages lint then surfaces that as a warning on every link. Allow the
-# lint to keep build logs clean (linker errors still fail the build; this only
-# hides linker chatter, matching rustc's pre-1.97 behavior). A driver-level
-# -Wno-unused-command-line-argument is not an option because wasm targets link
-# through rust-lld directly, which rejects that clang driver flag.
-build --@rules_rust//:extra_rustc_flag=-Alinker_messages
-build --@rules_rust//:extra_exec_rustc_flag=-Alinker_messages
-
 # Build everything ic-os without sandbox
 build --strategy_regexp=ic-os[:/].*=local
 
