@@ -471,12 +471,12 @@ fn test_fetch_canister_logs_via_composite_query_call_disabled() {
             .build(),
     );
 
-    // This is expected to fail, because there is no route
-    // to the management canister in a composite query.
-    let reject_message = get_reject(actual_result);
-    assert!(
-        reject_message.contains("not found"),
-        "Unexpected reject message: {reject_message}"
+    // This is expected to fail, because there is no route to the management
+    // canister in a composite query: the request is resolved to the own subnet,
+    // which is not a canister hosted by that subnet.
+    assert_eq!(
+        get_reject(actual_result),
+        format!("Canister {} not found", env.get_subnet_id())
     );
 }
 
