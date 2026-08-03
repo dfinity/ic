@@ -135,11 +135,11 @@ pub fn default_signed_eip_1559_transaction() -> (
         .chain_id(1_u64);
     let sig = ethers_core::types::Signature {
         r: ethers_core::types::U256::from_dec_str(
-            "80728915039673634151963281987194499535727562641034879173530654129915839382129",
+            "78378320896144165623306772901883835881146801392437857873186382435197931981331",
         )
         .unwrap(),
         s: ethers_core::types::U256::from_dec_str(
-            "54281815563936592133007646348951747532427232100340298742740287107883437683286",
+            "11573774696968647626294885286453366440757932248598190533848223153778081228091",
         )
         .unwrap(),
         v: 1,
@@ -165,12 +165,12 @@ pub fn default_erc20_signed_eip_1559_transaction() -> (
         .chain_id(1_u64);
     let sig = ethers_core::types::Signature {
         r: ethers_core::types::U256::from_str_radix(
-            "bb694aec6175b489523a55d5fce39452368e97096d4afa2cdcc35cf2d805152f",
+            "da4f476ede0aaf7da633371a938d5e2525a65a23699b55761779871a313f8cb3",
             16,
         )
         .unwrap(),
         s: ethers_core::types::U256::from_str_radix(
-            "0112b26a028af84dd397d23549844efdaf761d90cdcfdbe6c3608239648a85a3",
+            "45833d409eba50e3e9b145d04ea294ee791c14465503818f8b325a881938ddc1",
             16,
         )
         .unwrap(),

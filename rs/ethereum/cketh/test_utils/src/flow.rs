@@ -9,13 +9,13 @@ use crate::{
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
     DEFAULT_DEPOSIT_TRANSACTION_INDEX, DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT,
     EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, JsonRpcProvider,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
     RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
     format_ethereum_address_to_eip_55,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::ckerc20::RetrieveErc20Request;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
@@ -27,12 +27,12 @@ use ic_cketh_minter::{
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
-use ic_state_machine_tests::StateMachine;
-use ic_types::messages::MessageId;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
 use num_traits::ToPrimitive;
+use pocket_ic::PocketIc;
+use pocket_ic::common::rest::RawMessageId;
 use serde_json::json;
 use std::convert::identity;
 use std::str::FromStr;
@@ -309,7 +309,7 @@ impl DepositFlow {
     fn updated_balance(&self, balance_before: &Nat) -> Nat {
         let mut current_balance = balance_before.clone();
         for _ in 0..10 {
-            self.setup.env.advance_time(Duration::from_secs(1));
+            self.setup.advance_time(Duration::from_secs(1));
             self.setup.env.tick();
             current_balance = self.setup.balance_of(self.params.recipient());
             if &current_balance != balance_before {
@@ -331,16 +331,19 @@ impl DepositFlow {
         let max_eth_logs_block_range = self.setup.max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+                // Constrained so the block height refresh timer's query for the latest
+                // block cannot consume this stub.
+                .with_request_params(json!(["finalized", false]))
                 .respond_for_all_with(block_response(latest_finalized_block));
         (self.override_rpc_eth_get_block_by_number)(default_get_block_by_number)
             .build()
             .expect_rpc_calls(&self.setup);
 
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         match &self.params {
             DepositParams::CkEth(_) => {
@@ -398,8 +401,8 @@ impl<T> LedgerTransactionAssert<T> {
 }
 
 pub fn call_ledger_id_get_transaction<T: Into<Nat>>(
-    env: &StateMachine,
-    ledger_id: CanisterId,
+    env: &PocketIc,
+    ledger_id: Principal,
     ledger_index: T,
 ) -> LedgerTransaction {
     use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
@@ -409,10 +412,12 @@ pub fn call_ledger_id_get_transaction<T: Into<Nat>>(
         length: 1_u8.into(),
     };
     let mut response = Decode!(
-        &assert_reply(
-            env.query(ledger_id, "get_transactions", Encode!(&request).unwrap())
-                .expect("failed to query get_transactions on the ledger")
-        ),
+        &assert_reply(env.query_call(
+            ledger_id,
+            Principal::anonymous(),
+            "get_transactions",
+            Encode!(&request).unwrap()
+        )),
         GetTransactionsResponse
     )
     .unwrap();
@@ -452,7 +457,7 @@ impl ApprovalFlow {
 
 pub struct WithdrawalFlow {
     pub(crate) setup: CkEthSetup,
-    pub(crate) message_id: MessageId,
+    pub(crate) message_id: RawMessageId,
 }
 
 impl WithdrawalFlow {
@@ -478,11 +483,10 @@ impl WithdrawalFlow {
     }
 
     fn minter_response(&self) -> Result<RetrieveEthRequest, WithdrawalError> {
-        Decode!(&assert_reply(
-        self.setup.env
-            .await_ingress(self.message_id.clone(), MAX_TICKS)
-            .expect("failed to resolve message with id: {message_id}"),
-    ), Result<RetrieveEthRequest, WithdrawalError>)
+        Decode!(
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
+            Result<RetrieveEthRequest, WithdrawalError>
+        )
         .unwrap()
     }
 }
