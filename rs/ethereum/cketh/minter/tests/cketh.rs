@@ -29,9 +29,9 @@ use ic_cketh_test_utils::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
-    DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS,
-    EXPECTED_BALANCE, GAS_USED, JsonRpcProvider, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
-    MINTER_ADDRESS,
+    DEFAULT_WITHDRAWAL_TRANSACTION, DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE,
+    ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED, JsonRpcProvider,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_management_canister_types_private::CanisterStatusType;
@@ -157,7 +157,7 @@ fn should_deposit_and_withdraw() {
             },
             EventPayload::SignedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
-                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+                raw_transaction: DEFAULT_WITHDRAWAL_TRANSACTION.to_string(),
             },
             EventPayload::FinalizedTransaction {
                 withdrawal_id,
@@ -167,8 +167,7 @@ fn should_deposit_and_withdraw() {
                     effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Success,
-                    transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                    transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                 },
             },
         ]);
@@ -523,8 +522,7 @@ fn should_reimburse() {
 
     let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
     let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1_u8);
-    let failed_tx_hash =
-        "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
+    let failed_tx_hash = DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string();
     assert_eq!(
         cketh.retrieve_eth_status(&withdrawal_id),
         RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
@@ -577,7 +575,7 @@ fn should_reimburse() {
             },
             EventPayload::SignedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
-                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+                raw_transaction: DEFAULT_WITHDRAWAL_TRANSACTION.to_string(),
             },
             EventPayload::FinalizedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
@@ -587,12 +585,11 @@ fn should_reimburse() {
                     effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Failure,
-                    transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                    transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                 },
             },
             EventPayload::ReimbursedEthWithdrawal {
-                transaction_hash: Some("0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()),
+                transaction_hash: Some(DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string()),
                 reimbursed_amount,
                 withdrawal_id: withdrawal_id.clone(),
                 reimbursed_in_block: withdrawal_id + Nat::from(1_u8),
