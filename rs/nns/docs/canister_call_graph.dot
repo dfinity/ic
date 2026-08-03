@@ -1,5 +1,4 @@
 digraph NNSBackendCanisterCalls {
-  rankdir=LR;
   graph [fontname="Helvetica", fontsize=11, labelloc=t, label="NNS backend canisters: inter-canister call graph\n(solid = real Candid calls; dotted orange = proposal-specified arbitrary-target relay)"];
   node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, fillcolor="#eef2ff", color="#3b4b8c"];
   edge [fontname="Helvetica", fontsize=9, color="#555555"];
