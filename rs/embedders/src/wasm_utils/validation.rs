@@ -1734,6 +1734,9 @@ pub fn wasmtime_validation_config(_embedders_config: &EmbeddersConfig) -> wasmti
     config.wasm_backtrace_max_frames(NonZero::new(20_usize));
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
+    // The exception-handling proposal is enabled by default since wasmtime v47,
+    // but it is not supported on the IC.
+    config.wasm_exceptions(false);
     config.wasm_function_references(false);
     config.wasm_gc(false);
     config.wasm_memory64(true);
@@ -1760,7 +1763,11 @@ pub fn wasmtime_validation_config(_embedders_config: &EmbeddersConfig) -> wasmti
         .memory_reservation(MAX_STABLE_MEMORY_IN_BYTES)
         .guard_before_linear_memory(true)
         .memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
-        .max_wasm_stack(MAX_WASM_STACK_SIZE);
+        .max_wasm_stack(MAX_WASM_STACK_SIZE)
+        // We don't use wasmtime's async support, but since wasmtime v47 the
+        // engine refuses to be created unless `async_stack_size` is at least
+        // as large as `max_wasm_stack`.
+        .async_stack_size(MAX_WASM_STACK_SIZE);
     config
 }
 
