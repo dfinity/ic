@@ -2290,8 +2290,9 @@ impl ExecutionEnvironment {
                 canister_http_request_context.request.payment -= legacy_fee.real();
             }
             PricingVersion::PayAsYouGo => {
-                // Take out the base fee plus the per-replica allowances, i.e. an
-                // upper bound on what the outcall can cost.
+                // Deduct the base fee plus the per-replica allowances.
+                // The remaining payment is refunded when the response is delivered.
+                // Part of the per-replica allowances may be refunded after the response is delivered.
                 if !http_outcalls_are_free {
                     canister_http_request_context.request.payment -=
                         base_fee.real() + refundable_cycles;

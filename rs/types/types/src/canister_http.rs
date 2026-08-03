@@ -218,13 +218,7 @@ impl Replication {
     }
 }
 
-/// The kind of replication of a request, along with the response counts of a
-/// flexible one.
-///
-/// This is everything the pricing of an outcall depends on. Unlike [`Replication`]
-/// it does not identify the participating nodes, so it can also describe a
-/// hypothetical outcall — e.g. one whose cost a canister asks for via
-/// `ic0.cost_http_request_v2`.
+/// The kind of replication of a request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReplicationKind {
     FullyReplicated,

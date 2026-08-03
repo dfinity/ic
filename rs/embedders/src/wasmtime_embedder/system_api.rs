@@ -1986,10 +1986,6 @@ struct CostHttpRequestV2Params {
     outcall_type: Option<CostHttpRequestOutcallType>,
 }
 
-/// The `outcall_type` of [`CostHttpRequestV2Params`]: which of the management
-/// canister's HTTP-outcall endpoints the cost is asked for. `flexible` carries the
-/// response counts the request would specify, absent meaning the defaults derived
-/// from the subnet size.
 #[derive(CandidType, Deserialize)]
 enum CostHttpRequestOutcallType {
     #[serde(rename = "fully_replicated")]

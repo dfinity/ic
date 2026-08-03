@@ -3598,9 +3598,6 @@ fn execute_flexible_canister_http_request() {
             CanisterCyclesCostSchedule::Free => Cycles::new(0),
             CanisterCyclesCostSchedule::Normal => payment - base_fee.real(),
         };
-        // Only whole per-replica allowances are refundable through the refund
-        // status, so `refundable_cycles` is their sum rather than the full payment
-        // beyond the base fee.
         let expected_allowance = refundable_payment / committee_size.max(1);
         assert_eq!(
             http_request_context.refund_status.per_replica_allowance,
@@ -3636,10 +3633,9 @@ fn execute_flexible_canister_http_request() {
 fn execute_canister_http_request_refunds_truncated_allowance_remainder() {
     // The payment beyond the base fee does not generally divide evenly into
     // per-replica allowances, and only whole allowances are ever refunded through
-    // the refund status (each replica is refunded what it left of its own). The
-    // truncated remainder is therefore not taken out of the payment, so that it is
-    // refunded along with the response instead of disappearing from the cycles
-    // accounting.
+    // the refund status. The truncated remainder is therefore not taken out of
+    // the payment, so that it is refunded along with the response instead of
+    // disappearing from the cycles accounting.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let build_test = || {
@@ -3962,9 +3958,6 @@ fn execute_flexible_canister_http_request_explicit_replication() {
         &http_request_context.replication,
     );
     let refundable_payment = payment - base_fee.real();
-    // Only whole per-replica allowances are refundable through the refund status,
-    // so `refundable_cycles` is their sum rather than the full payment beyond the
-    // base fee; the truncated remainder stays in the payment.
     let expected_allowance = refundable_payment / committee_size.max(1);
     assert_eq!(
         http_request_context.refund_status.per_replica_allowance,
