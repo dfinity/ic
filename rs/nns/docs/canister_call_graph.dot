@@ -1,10 +1,15 @@
 digraph NNSBackendCanisterCalls {
-  graph [fontname="Helvetica", fontsize=11, labelloc=t, label="NNS backend canisters: inter-canister call graph\n(solid = real Candid calls; dotted orange = proposal-specified arbitrary-target relay)"];
+  graph [fontname="Helvetica", fontsize=11, labelloc=t, splines=line, label="NNS backend canisters: inter-canister call graph\n(solid = real Candid calls; dotted orange = proposal-specified arbitrary-target relay)"];
   node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, fillcolor="#eef2ff", color="#3b4b8c"];
   edge [fontname="Helvetica", fontsize=9, color="#555555"];
 
-  Governance   [fillcolor="#dfe9ff"];
+  // Node declaration order below (left-to-right in the rendered layout) is
+  // chosen to balance visual weight on either side of the GTC -> Governance
+  // -> Registry -> IC Management trunk (see weight=10 edges on those edges),
+  // not to match any semantic grouping.
+  NodeRewards  [label="Node Rewards canister", fillcolor="#dfe9ff"];
   Root         [fillcolor="#dfe9ff"];
+  Governance   [fillcolor="#dfe9ff"];
   Registry     [fillcolor="#dfe9ff"];
   SnsWasm      [label="SNS-WASM", fillcolor="#dfe9ff"];
   Cmc          [label="CMC\n(Cycles Minting Canister)", fillcolor="#dfe9ff"];
@@ -12,7 +17,6 @@ digraph NNSBackendCanisterCalls {
   Lifeline     [fillcolor="#dfe9ff"];
   Ledger       [label="ICP Ledger", fillcolor="#dfe9ff"];
   Migration    [label="Migration canister", fillcolor="#dfe9ff"];
-  NodeRewards  [label="Node Rewards canister", fillcolor="#dfe9ff"];
   IcManagement [label="IC Management Canister\n(ic00 / aaaaa-aa)", shape=octagon, fillcolor="#ffe9cc", color="#b06a00"];
 
   // ---- Governance outbound ----
