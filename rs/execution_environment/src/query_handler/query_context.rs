@@ -836,7 +836,7 @@ impl<'a> QueryContext<'a> {
         if canister_id.get() == self.hypervisor.subnet_id().get()
             && self.composite_query_ic00_calls == FlagStatus::Enabled
         {
-            return self.handle_ic00_request(&request, to_query_result, measurement_scope);
+            return self.handle_ic00_request(&request, to_query_result);
         }
 
         // Add the canister to the set of evaluated canisters early, i.e. before any errors.
@@ -924,7 +924,6 @@ impl<'a> QueryContext<'a> {
         &mut self,
         request: &Request,
         to_query_result: impl Fn(Payload) -> QueryResponse,
-        measurement_scope: &MeasurementScope,
     ) -> ExecutionResult {
         // Results of query contexts calling the management canister are not cached.
         self.ic00_calls += 1;
@@ -965,10 +964,6 @@ impl<'a> QueryContext<'a> {
         // Account for the instructions consumed while producing the reply
         // in the same way as for the instructions executed by a canister.
         self.round_limits.instructions -= as_round_instructions(instructions);
-        if let Some(atomic) = self.instruction_observation.as_ref() {
-            atomic.fetch_add(instructions.get(), std::sync::atomic::Ordering::Relaxed);
-        }
-        measurement_scope.add(instructions, NumSlices::from(1), NumMessages::from(1));
 
         match result {
             Ok(reply) => ExecutionResult::Response(to_query_result(Payload::Data(reply))),
