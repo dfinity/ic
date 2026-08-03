@@ -43,6 +43,30 @@ fn test_round_trip() {
     assert_survives_round_trip("20:00 UTC", 72000, "20:00 UTC");
     assert_survives_round_trip("20:01 UTC", 72060, "20:01 UTC");
     assert_survives_round_trip("20:30 UTC", 73800, "20:30 UTC");
+    assert_survives_round_trip("23:00 UTC", 82800, "23:00 UTC");
+    assert_survives_round_trip("23:59 UTC", 86340, "23:59 UTC");
+}
+
+// Regression test for a bug where hour 23 (e.g. 11pm UTC) was incorrectly
+// rejected as invalid due to an off-by-one in the hour bound check (`hh >=
+// 23` instead of `hh >= 24`). Hours 0 through 23 are all valid; only 24 and
+// above are genuinely out of range.
+#[test]
+fn test_parse_hour_23_is_valid_but_hour_24_is_not() {
+    assert_eq!(
+        parse_time_of_day("23:00 UTC").unwrap(),
+        GlobalTimeOfDay {
+            seconds_after_utc_midnight: Some(23 * 60 * 60),
+        },
+    );
+    assert_eq!(
+        parse_time_of_day("23:59 UTC").unwrap(),
+        GlobalTimeOfDay {
+            seconds_after_utc_midnight: Some(23 * 60 * 60 + 59 * 60),
+        },
+    );
+
+    parse_time_of_day("24:00 UTC").unwrap_err();
 }
 
 #[test]
