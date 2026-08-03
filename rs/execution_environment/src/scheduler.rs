@@ -1398,6 +1398,11 @@ impl Scheduler for SchedulerImpl {
             &round_log,
         );
 
+        // Drop canisters that were deleted during the round (e.g. by a `delete_canister`
+        // subnet message) from the round schedule. Beyond this point it is safe to assume
+        // that the round schedule only refers to existing canisters.
+        round_schedule.retain_existing_canisters(&state);
+
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
             let _timer = self
