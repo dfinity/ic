@@ -16,8 +16,7 @@ fn project_dfx_json_without_networks_falls_back_to_shared_network() {
     write_shared_networks_json(config_root.path(), r#"{"local": {"bind": "shared:2718"}}"#);
 
     // Step 2: Run the code under test.
-    let result =
-        resolve_local_network_with(Some(project_dir.path()), Some(config_root.path())).unwrap();
+    let result = resolve_local_network_with(project_dir.path(), Some(config_root.path())).unwrap();
 
     // Step 3: Verify result(s).
     assert_eq!(result.providers, vec!["http://shared:2718".to_string()]);
@@ -41,8 +40,7 @@ fn project_dfx_json_with_its_own_local_network_takes_precedence() {
     write_shared_networks_json(config_root.path(), r#"{"local": {"bind": "shared:1111"}}"#);
 
     // Step 2: Run the code under test.
-    let result =
-        resolve_local_network_with(Some(project_dir.path()), Some(config_root.path())).unwrap();
+    let result = resolve_local_network_with(project_dir.path(), Some(config_root.path())).unwrap();
 
     // Step 3: Verify result(s).
     assert_eq!(result.providers, vec!["http://dfx-json:9999".to_string()]);
@@ -65,7 +63,7 @@ fn shared_network_without_local_entry_uses_default_shared_address() {
 
     // Step 2: Run the code under test, and verify the result.
     assert_eq!(
-        resolve_local_network_with(Some(project_dir.path()), Some(config_root.path())).unwrap(),
+        resolve_local_network_with(project_dir.path(), Some(config_root.path())).unwrap(),
         NetworkDescriptor {
             providers: vec![format!("http://{DEFAULT_SHARED_LOCAL_ADDRESS}")],
             is_ic: false,

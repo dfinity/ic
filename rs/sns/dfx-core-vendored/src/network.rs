@@ -17,8 +17,7 @@
 //! that doesn't declare `local`. Either address is overridden by the port
 //! recorded in the network's `webserver-port` file when a replica is running.
 use crate::config::directories::{
-    get_shared_network_data_directory, get_user_dfx_config_dir,
-    get_user_dfx_config_dir_with_override,
+    DFX_CONFIG_ROOT, get_shared_network_data_directory, get_user_dfx_config_dir_with_override,
 };
 use crate::error::config::ConfigError;
 use crate::error::get_user_home::GetUserHomeError;
@@ -46,6 +45,12 @@ pub enum NetworkResolutionError {
         "ComputeNetworkNotFound: Network '{0}' does not coincide with any known network. This vendored dfx subset only supports 'ic', 'local', and an IC HTTP endpoint URL."
     )]
     NetworkNotFound(String),
+
+    // dfx-core's `Config::from_current_dir` propagates a `std::env::current_dir`
+    // failure as an Err (`LoadDfxConfigError::DetermineCurrentWorkingDirFailed`),
+    // rather than treating it the same as no project root being found.
+    #[error("Failed to determine current working dir")]
+    DetermineCurrentWorkingDirFailed(#[source] std::io::Error),
 
     #[error("Failed to determine the shared local network data directory")]
     DetermineSharedNetworkDirectoryFailed(#[source] GetUserHomeError),
@@ -147,32 +152,28 @@ pub fn resolve_network(network_name: &str) -> Result<NetworkDescriptor, NetworkR
 
 /// Resolves the `local` network, mirroring dfx's default bind determination.
 fn resolve_local_network() -> Result<NetworkDescriptor, NetworkResolutionError> {
-    // `None` here means "use the ambient `DFX_CONFIG_ROOT` override (if any),
-    // exactly as `get_user_dfx_config_dir` already does" -- see
-    // `shared_local_address`.
-    resolve_local_network_with(std::env::current_dir().ok().as_deref(), None)
+    let start_dir = std::env::current_dir()
+        .map_err(NetworkResolutionError::DetermineCurrentWorkingDirFailed)?;
+    let config_root_override = DFX_CONFIG_ROOT.lock().unwrap().clone();
+    resolve_local_network_with(&start_dir, config_root_override.as_deref().map(Path::new))
 }
 
 /// Does the actual work of [`resolve_local_network`], but takes the working
-/// directory and shared config root as explicit parameters instead of reading
-/// them from process-global state (the working directory, and
-/// `DFX_CONFIG_ROOT`). This lets tests supply both directly, instead of
-/// mutating that global state, which would otherwise race across parallel
-/// test threads.
+/// directory and the `DFX_CONFIG_ROOT` override as explicit parameters
+/// instead of reading them from process-global state (`std::env::current_dir`,
+/// and the `DFX_CONFIG_ROOT` mutex). This lets tests supply both directly,
+/// instead of mutating that global state, which would otherwise race across
+/// parallel test threads.
 ///
 /// `start_dir` plays the role of the working directory (see
-/// `find_project_local_network`); `None` mirrors not being able to determine
-/// the working directory, which falls back to the shared network, same as
-/// dfx.json not being found. `config_root_override` plays the role of
-/// `DFX_CONFIG_ROOT` (see `shared_local_address`).
+/// `find_project_local_network`). `config_root_override` plays the role of
+/// the `DFX_CONFIG_ROOT` environment variable (see `shared_local_address`):
+/// `None` means it is not set, `Some` means it is set to that path.
 fn resolve_local_network_with(
-    start_dir: Option<&Path>,
+    start_dir: &Path,
     config_root_override: Option<&Path>,
 ) -> Result<NetworkDescriptor, NetworkResolutionError> {
-    let project_local_network = match start_dir {
-        Some(start_dir) => find_project_local_network(start_dir)?,
-        None => None,
-    };
+    let project_local_network = find_project_local_network(start_dir)?;
 
     let (data_directory, default_address) = match project_local_network {
         Some((project_root, bind)) => (
@@ -243,7 +244,7 @@ fn find_project_local_network(
                 NetworkResolutionError::ParseProjectDfxJsonFailed(dfx_json.clone(), err)
             })?;
 
-        // Get network.local out of dfx.json. If it doesn't exist, return None.
+        // Get networks.local out of dfx.json. If it doesn't exist, return None.
         let Some(local) = dfx_json_value
             .get("networks")
             .and_then(|networks| networks.get("local"))
@@ -284,24 +285,19 @@ fn find_project_local_network(
 ///
 /// Mirrors dfx's `create_shared_network_descriptor`.
 ///
-/// `config_root_override`, when `Some`, is used in place of the shared dfx
-/// config directory's usual location, the same way the real `DFX_CONFIG_ROOT`
-/// environment variable would. This lets a caller (in particular, a test)
-/// supply a value directly, instead of mutating the process-global
-/// `DFX_CONFIG_ROOT`, which would otherwise race across parallel test
-/// threads. `None` uses the ambient `DFX_CONFIG_ROOT` override, if any (see
-/// `get_user_dfx_config_dir`).
+/// `config_root_override` plays the role of the real `DFX_CONFIG_ROOT`
+/// environment variable, read by the caller (`resolve_local_network`) and
+/// passed in explicitly, rather than being read from process-global state
+/// here. This lets a caller (in particular, a test) supply a value directly.
+/// When `None`, `DFX_CONFIG_ROOT` is not set, and the shared dfx config
+/// directory falls back to its real default location (see
+/// `get_user_dfx_config_dir_with_override`).
 fn shared_local_address(
     config_root_override: Option<&Path>,
 ) -> Result<String, NetworkResolutionError> {
-    let networks_json = match config_root_override {
-        Some(config_root_override) => {
-            get_user_dfx_config_dir_with_override(Some(config_root_override))
-        }
-        None => get_user_dfx_config_dir(),
-    }
-    .map_err(NetworkResolutionError::DetermineSharedConfigDirectoryFailed)?
-    .join("networks.json");
+    let networks_json = get_user_dfx_config_dir_with_override(config_root_override)
+        .map_err(NetworkResolutionError::DetermineSharedConfigDirectoryFailed)?
+        .join("networks.json");
 
     if !networks_json.is_file() {
         // No networks.json: use the default. Mirrors dfx-core's
