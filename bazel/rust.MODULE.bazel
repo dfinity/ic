@@ -2189,14 +2189,6 @@ crate.annotation(
     crate = "libusb1-sys",
 )
 crate.annotation(
-    # Keep pkg-config probes of host libraries from emitting the host library
-    # dir (e.g. -L/usr/lib/x86_64-linux-gnu) as a rustc link-search path —
-    # that dir would land in the link line ahead of the hermetic toolchain's
-    # library search paths and poison `-lc` resolution (see the patch header
-    # for details). The probed libraries themselves are linked via cc_import
-    # deps, either on the crate (devicemapper-sys, libcryptsetup-rs-sys,
-    # libsystemd-sys below) or on the consuming binaries (virt-sys; see
-    # rs/ic_os/os_tools/guest_vm_runner).
     crate = "pkg-config",
     patch_args = ["-p1"],
     patches = ["@@//bazel:pkg-config.patch"],
