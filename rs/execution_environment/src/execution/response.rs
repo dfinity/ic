@@ -442,8 +442,8 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
-            // Composite queries executed in the replicated mode route
-            // their calls to ic:00 like any other replicated message.
+            // Composite queries are always executed in the non-replicated mode,
+            // where their responses are handled by the query handler.
             false,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
@@ -500,8 +500,8 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
-            // Composite queries executed in the replicated mode route
-            // their calls to ic:00 like any other replicated message.
+            // Composite queries are always executed in the non-replicated mode,
+            // where their responses are handled by the query handler.
             false,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );

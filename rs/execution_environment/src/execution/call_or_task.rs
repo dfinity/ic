@@ -558,8 +558,8 @@ impl CallOrTaskHelper {
                     round.counters.state_changes_error,
                     call_tree_metrics,
                     original.time,
-                    // Composite queries executed in the replicated mode route
-                    // their calls to ic:00 like any other replicated message.
+                    // Update methods and tasks are always executed in the
+                    // replicated mode and thus they are never composite queries.
                     false,
                     &|system_state| self.deallocation_sender.send(Box::new(system_state)),
                 );
@@ -579,8 +579,9 @@ impl CallOrTaskHelper {
                         &mut self.canister.system_state,
                         &round.network_topology,
                         round.hypervisor.subnet_id(),
-                        // Composite queries executed in the replicated mode route
-                        // their calls to ic:00 like any other replicated message.
+                        // Composite queries are always executed in the
+                        // non-replicated mode: a composite query called in the
+                        // replicated mode is rejected before its execution.
                         false,
                         round.hypervisor.metrics(),
                         round.log,
