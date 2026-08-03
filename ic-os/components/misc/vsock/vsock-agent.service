@@ -3,7 +3,7 @@ Description=VSOCK agent daemon
 
 [Service]
 ExecStart=/opt/ic/bin/vsock_host
-Restart=always
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
