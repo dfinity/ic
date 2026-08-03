@@ -10,7 +10,7 @@
 <title>NNSBackendCanisterCalls</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-550.98 1513,-550.98 1513,4 -4,4"/>
 <text text-anchor="middle" x="754.5" y="-534.18" font-family="Helvetica,sans-Serif" font-size="11.00">NNS backend canisters: inter&#45;canister call graph</text>
-<text text-anchor="middle" x="754.5" y="-522.18" font-family="Helvetica,sans-Serif" font-size="11.00">(solid = real Candid calls; dotted orange = proposal&#45;specified arbitrary&#45;target relay)</text>
+<text text-anchor="middle" x="754.5" y="-522.18" font-family="Helvetica,sans-Serif" font-size="11.00">(solid = real Candid calls)</text>
 <!-- NodeRewards -->
 <g id="node1" class="node">
 <title>NodeRewards</title>
@@ -20,8 +20,8 @@
 <!-- Root -->
 <g id="node2" class="node">
 <title>Root</title>
-<path fill="#dfe9ff" stroke="#3b4b8c" d="M366,-232.98C366,-232.98 336,-232.98 336,-232.98 330,-232.98 324,-226.98 324,-220.98 324,-220.98 324,-208.98 324,-208.98 324,-202.98 330,-196.98 336,-196.98 336,-196.98 366,-196.98 366,-196.98 372,-196.98 378,-202.98 378,-208.98 378,-208.98 378,-220.98 378,-220.98 378,-226.98 372,-232.98 366,-232.98"/>
-<text text-anchor="middle" x="351" y="-212.18" font-family="Helvetica,sans-Serif" font-size="11.00">Root</text>
+<path fill="#dfe9ff" stroke="#3b4b8c" d="M340,-232.98C340,-232.98 310,-232.98 310,-232.98 304,-232.98 298,-226.98 298,-220.98 298,-220.98 298,-208.98 298,-208.98 298,-202.98 304,-196.98 310,-196.98 310,-196.98 340,-196.98 340,-196.98 346,-196.98 352,-202.98 352,-208.98 352,-208.98 352,-220.98 352,-220.98 352,-226.98 346,-232.98 340,-232.98"/>
+<text text-anchor="middle" x="325" y="-212.18" font-family="Helvetica,sans-Serif" font-size="11.00">Root</text>
 </g>
 <!-- Registry -->
 <g id="node4" class="node">
@@ -32,9 +32,9 @@
 <!-- Root&#45;&gt;Registry -->
 <g id="edge11" class="edge">
 <title>Root&#45;&gt;Registry</title>
-<path fill="none" stroke="#555555" d="M378.1,-207C438.92,-191.31 586.65,-153.21 658.88,-134.59"/>
-<polygon fill="#555555" stroke="#555555" points="660.16,-137.87 668.97,-131.99 658.41,-131.09 660.16,-137.87"/>
-<text text-anchor="middle" x="616" y="-166.78" font-family="Helvetica,sans-Serif" font-size="9.00">looks up canister&#39;s subnet</text>
+<path fill="none" stroke="#555555" d="M352.27,-207.44C417.36,-191.82 582.07,-152.29 659.1,-133.8"/>
+<polygon fill="#555555" stroke="#555555" points="660.03,-137.18 668.93,-131.44 658.39,-130.37 660.03,-137.18"/>
+<text text-anchor="middle" x="621" y="-166.78" font-family="Helvetica,sans-Serif" font-size="9.00">looks up canister&#39;s subnet</text>
 </g>
 <!-- IcManagement -->
 <g id="node11" class="node">
@@ -46,7 +46,7 @@
 <!-- Root&#45;&gt;IcManagement -->
 <g id="edge10" class="edge">
 <title>Root&#45;&gt;IcManagement</title>
-<path fill="none" stroke="#555555" d="M356.72,-196.75C365.93,-167.41 383,-112.98 383,-112.98 383,-112.98 525.56,-73.19 619.47,-46.97"/>
+<path fill="none" stroke="#555555" d="M335.37,-196.75C352.05,-167.41 383,-112.98 383,-112.98 383,-112.98 525.56,-73.19 619.47,-46.97"/>
 <polygon fill="#555555" stroke="#555555" points="620.56,-50.3 629.25,-44.24 618.68,-43.56 620.56,-50.3"/>
 <text text-anchor="middle" x="316.5" y="-125.78" font-family="Helvetica,sans-Serif" font-size="9.00">installs/upgrades/stops/starts</text>
 <text text-anchor="middle" x="316.5" y="-115.78" font-family="Helvetica,sans-Serif" font-size="9.00">NNS canisters</text>
@@ -54,17 +54,17 @@
 <!-- ArbitraryCanister -->
 <g id="node12" class="node">
 <title>ArbitraryCanister</title>
-<path fill="#fff3e0" stroke="#b06a00" stroke-dasharray="5,2" d="M600.5,-140.98C600.5,-140.98 413.5,-140.98 413.5,-140.98 407.5,-140.98 401.5,-134.98 401.5,-128.98 401.5,-128.98 401.5,-116.98 401.5,-116.98 401.5,-110.98 407.5,-104.98 413.5,-104.98 413.5,-104.98 600.5,-104.98 600.5,-104.98 606.5,-104.98 612.5,-110.98 612.5,-116.98 612.5,-116.98 612.5,-128.98 612.5,-128.98 612.5,-134.98 606.5,-140.98 600.5,-140.98"/>
-<text text-anchor="middle" x="507" y="-126.18" font-family="Helvetica,sans-Serif" font-size="11.00" fill="#b06a00">Bitcoin canister</text>
-<text text-anchor="middle" x="507" y="-114.18" font-family="Helvetica,sans-Serif" font-size="11.00" fill="#b06a00">(or other proposal&#45;specified target)</text>
+<path fill="#dfe9ff" stroke="#3b4b8c" d="M600.5,-140.98C600.5,-140.98 413.5,-140.98 413.5,-140.98 407.5,-140.98 401.5,-134.98 401.5,-128.98 401.5,-128.98 401.5,-116.98 401.5,-116.98 401.5,-110.98 407.5,-104.98 413.5,-104.98 413.5,-104.98 600.5,-104.98 600.5,-104.98 606.5,-104.98 612.5,-110.98 612.5,-116.98 612.5,-116.98 612.5,-128.98 612.5,-128.98 612.5,-134.98 606.5,-140.98 600.5,-140.98"/>
+<text text-anchor="middle" x="507" y="-126.18" font-family="Helvetica,sans-Serif" font-size="11.00">Bitcoin canister</text>
+<text text-anchor="middle" x="507" y="-114.18" font-family="Helvetica,sans-Serif" font-size="11.00">(or other proposal&#45;specified target)</text>
 </g>
 <!-- Root&#45;&gt;ArbitraryCanister -->
 <g id="edge12" class="edge">
 <title>Root&#45;&gt;ArbitraryCanister</title>
-<path fill="none" stroke="#b06a00" stroke-dasharray="1,5" d="M378.17,-198.31C403.22,-183.86 440.66,-162.26 468.73,-146.06"/>
-<polygon fill="#b06a00" stroke="#b06a00" points="470.57,-149.04 477.49,-141.01 467.07,-142.98 470.57,-149.04"/>
-<text text-anchor="middle" x="419" y="-171.78" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#b06a00">relays proposal&#45;specified calls</text>
-<text text-anchor="middle" x="419" y="-161.78" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#b06a00">(e.g. Bitcoin canister config)</text>
+<path fill="none" stroke="#555555" d="M352.25,-200.51C381.52,-186.03 428.49,-162.8 463.02,-145.73"/>
+<polygon fill="#555555" stroke="#555555" points="464.99,-148.66 472.4,-141.09 461.88,-142.39 464.99,-148.66"/>
+<text text-anchor="middle" x="406" y="-171.78" font-family="Helvetica,sans-Serif" font-size="9.00">configures Bitcoin integration</text>
+<text text-anchor="middle" x="406" y="-161.78" font-family="Helvetica,sans-Serif" font-size="9.00">(or other proposal&#45;specified target)</text>
 </g>
 <!-- Governance -->
 <g id="node3" class="node">
@@ -82,8 +82,8 @@
 <!-- Governance&#45;&gt;Root -->
 <g id="edge1" class="edge">
 <title>Governance&#45;&gt;Root</title>
-<path fill="none" stroke="#555555" d="M672.65,-396.98C628.15,-367.7 545,-312.98 545,-312.98 545,-312.98 443.48,-261.7 387.32,-233.33"/>
-<polygon fill="#555555" stroke="#555555" points="388.89,-230.2 378.38,-228.82 385.73,-236.45 388.89,-230.2"/>
+<path fill="none" stroke="#555555" d="M672.65,-396.98C628.15,-367.7 545,-312.98 545,-312.98 545,-312.98 424.12,-259.14 361.57,-231.27"/>
+<polygon fill="#555555" stroke="#555555" points="362.98,-228.07 352.42,-227.2 360.13,-234.46 362.98,-228.07"/>
 <text text-anchor="middle" x="457.5" y="-325.78" font-family="Helvetica,sans-Serif" font-size="9.00">manages NNS canister lifecycle</text>
 <text text-anchor="middle" x="457.5" y="-315.78" font-family="Helvetica,sans-Serif" font-size="9.00">(install, upgrade, stop/start, snapshot)</text>
 </g>
@@ -182,8 +182,8 @@
 <!-- SnsWasm&#45;&gt;Root -->
 <g id="edge15" class="edge">
 <title>SnsWasm&#45;&gt;Root</title>
-<path fill="none" stroke="#555555" d="M252.8,-304.95C272.13,-287.44 302.41,-260.01 324.24,-240.23"/>
-<polygon fill="#555555" stroke="#555555" points="326.8,-242.63 331.86,-233.32 322.1,-237.44 326.8,-242.63"/>
+<path fill="none" stroke="#555555" d="M248.62,-304.95C263.46,-287.67 286.59,-260.73 303.51,-241.02"/>
+<polygon fill="#555555" stroke="#555555" points="306.26,-243.19 310.11,-233.32 300.94,-238.63 306.26,-243.19"/>
 <text text-anchor="middle" x="301.5" y="-271.78" font-family="Helvetica,sans-Serif" font-size="9.00">checks/transfers control</text>
 <text text-anchor="middle" x="301.5" y="-261.78" font-family="Helvetica,sans-Serif" font-size="9.00">of SNS canisters</text>
 </g>

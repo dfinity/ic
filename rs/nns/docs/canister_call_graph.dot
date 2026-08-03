@@ -1,5 +1,5 @@
 digraph NNSBackendCanisterCalls {
-  graph [fontname="Helvetica", fontsize=11, labelloc=t, splines=line, label="NNS backend canisters: inter-canister call graph\n(solid = real Candid calls; dotted orange = proposal-specified arbitrary-target relay)"];
+  graph [fontname="Helvetica", fontsize=11, labelloc=t, splines=line, label="NNS backend canisters: inter-canister call graph\n(solid = real Candid calls)"];
   node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, fillcolor="#eef2ff", color="#3b4b8c"];
   edge [fontname="Helvetica", fontsize=9, color="#555555"];
 
@@ -18,7 +18,7 @@ digraph NNSBackendCanisterCalls {
   Ledger       [label="ICP Ledger", fillcolor="#dfe9ff"];
   Migration    [label="Migration canister", fillcolor="#dfe9ff"];
   IcManagement [label="IC Management Canister\n(ic00 / aaaaa-aa)", shape=octagon, fillcolor="#ffe9cc", color="#b06a00"];
-  ArbitraryCanister [label="Bitcoin canister\n(or other proposal-specified target)", style="rounded,filled,dashed", fillcolor="#fff3e0", color="#b06a00", fontcolor="#b06a00"];
+  ArbitraryCanister [label="Bitcoin canister\n(or other proposal-specified target)", fillcolor="#dfe9ff"];
 
   // ---- Governance outbound ----
   Governance -> Root     [label="manages NNS canister lifecycle\n(install, upgrade, stop/start, snapshot)"];
@@ -34,7 +34,7 @@ digraph NNSBackendCanisterCalls {
   // ---- Root outbound ----
   Root -> IcManagement [label="installs/upgrades/stops/starts\nNNS canisters"];
   Root -> Registry     [label="looks up canister's subnet"];
-  Root -> ArbitraryCanister [label="relays proposal-specified calls\n(e.g. Bitcoin canister config)", style=dotted, color="#b06a00", fontcolor="#b06a00"];
+  Root -> ArbitraryCanister [label="configures Bitcoin integration\n(or other proposal-specified target)"];
 
   // ---- Root -> Governance: NOT a real Candid call ----
   // (No confirmed rs/nns/handlers/root call into Governance's own API.)
