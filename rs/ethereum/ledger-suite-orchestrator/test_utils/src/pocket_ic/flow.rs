@@ -5,15 +5,12 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
-use ic_management_canister_types::{
-    CanisterId, CanisterInfoResult, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
-};
+use ic_management_canister_types::{CanisterId, CanisterInfoResult, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use pocket_ic::PocketIc;
-use pocket_ic::common::rest::RawEffectivePrincipal;
 use std::collections::BTreeSet;
 
 pub struct AddErc20TokenFlow {
@@ -252,19 +249,11 @@ impl ManagedCanistersAssert {
         })));
         self.setup
             .env
-            .update_call_with_effective_principal(
-                Principal::management_canister(),
-                RawEffectivePrincipal::CanisterId(self.ledger_canister_id().as_slice().to_vec()),
-                self.setup.ledger_suite_orchestrator_id,
-                "install_code",
-                Encode!(&InstallCodeArgs {
-                    mode: CanisterInstallMode::Upgrade(None),
-                    canister_id: self.ledger_canister_id(),
-                    wasm_module: crate::ledger_wasm().to_bytes(),
-                    arg: Encode!(&upgrade_args).unwrap(),
-                    sender_canister_version: None,
-                })
-                .unwrap(),
+            .upgrade_canister(
+                self.ledger_canister_id(),
+                crate::ledger_wasm().to_bytes(),
+                Encode!(&upgrade_args).unwrap(),
+                Some(self.setup.ledger_suite_orchestrator_id),
             )
             .expect("failed to change archive options");
         let module_hash_after = self

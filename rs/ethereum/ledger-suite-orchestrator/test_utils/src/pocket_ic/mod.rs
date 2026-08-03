@@ -11,11 +11,9 @@ use ic_ledger_suite_orchestrator::candid::{
     ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator::state::{LedgerSuiteVersion, WasmHash};
-use ic_management_canister_types::{
-    CanisterId, CanisterInstallMode, CanisterStatusResult, CanisterStatusType, InstallCodeArgs,
-};
+use ic_management_canister_types::{CanisterId, CanisterStatusResult, CanisterStatusType};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
-use pocket_ic::common::rest::{IcpConfig, IcpConfigFlag, RawEffectivePrincipal};
+use pocket_ic::common::rest::{IcpConfig, IcpConfigFlag};
 use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
 use std::sync::Arc;
 
@@ -349,21 +347,7 @@ pub fn out_of_band_upgrade(
     target: Principal,
     wasm: Vec<u8>,
 ) -> Result<(), RejectResponse> {
-    env.update_call_with_effective_principal(
-        Principal::management_canister(),
-        RawEffectivePrincipal::CanisterId(target.as_slice().to_vec()),
-        controller,
-        "install_code",
-        Encode!(&InstallCodeArgs {
-            mode: CanisterInstallMode::Upgrade(None),
-            canister_id: target,
-            wasm_module: wasm,
-            arg: Encode!(&()).unwrap(),
-            sender_canister_version: None,
-        })
-        .unwrap(),
-    )
-    .map(|_| ())
+    env.upgrade_canister(target, wasm, Encode!(&()).unwrap(), Some(controller))
 }
 
 pub fn stop_canister(env: &PocketIc, controller: Principal, target: Principal) {
