@@ -248,6 +248,69 @@ mod deposit_erc20 {
     }
 
     #[test]
+    fn should_update_latest_block_height_and_never_decrease() {
+        let ckerc20 = CkErc20Setup::default();
+
+        // The refresh timer records the latest block height in the metric.
+        ckerc20.refresh_latest_block(1_000);
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(r"cketh_minter_latest_block_height 1000 \d+");
+
+        // A higher latest block advances the metric.
+        ckerc20.refresh_latest_block(2_000);
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(r"cketh_minter_latest_block_height 2000 \d+");
+
+        // A lower latest block (a lagging or reorged provider) must not move the
+        // metric backwards.
+        ckerc20.refresh_latest_block(1_500);
+        ckerc20
+            .cketh
+            .check_minter_metrics()
+            .assert_contains_metric_matching(r"cketh_minter_latest_block_height 2000 \d+")
+            .assert_does_not_contain_metric_matching(r"cketh_minter_latest_block_height 1500 \d+");
+    }
+
+    #[test]
+    fn should_report_balance_scan_progress_via_deposit_erc20() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let tokens = ckerc20.supported_erc20_tokens.len();
+        assert!(
+            tokens >= 1,
+            "BUG: expected at least one supported ckERC20 token"
+        );
+
+        // A freshly registered address has not been scanned yet.
+        let (ckerc20, before) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(before.scan_count, 0);
+        assert_eq!(before.last_scanned_block, None);
+
+        // Establish a latest block height, then run one balance-scan tick over the single armed
+        // address (one balance per supported token; the values are irrelevant to scan progress).
+        let scanned_at = 4_500_000_u64;
+        ckerc20.refresh_latest_block(scanned_at);
+        ckerc20.run_balance_scan(&vec![2_000_000_u128; tokens]);
+
+        // deposit_erc20 now reports the address as scanned once, at that block height.
+        let (_ckerc20, after) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(after.address, before.address);
+        assert_eq!(after.scan_count, 1);
+        assert_eq!(
+            after.last_scanned_block,
+            Some(candid::Nat::from(scanned_at))
+        );
+    }
+
+    #[test]
     fn should_not_record_one_event_per_registered_deposit_address() {
         let mut ckerc20 = CkErc20Setup::default();
         let caller = ckerc20.caller();
@@ -293,9 +356,9 @@ mod deposit_erc20 {
         assert_matches!(
             snapshot_and_upgrade.as_slice(),
             [
-                EventPayload::RegisteredDepositAddresses { addresses, .. },
+                EventPayload::RegisteredDepositAddresses { registrations, .. },
                 EventPayload::Upgrade(_)
-            ] if addresses.len() == subaccounts.len(),
+            ] if registrations.len() == subaccounts.len(),
             "BUG: expected a single deposit-address snapshot with all addresses and one upgrade event, got {new_events:#?}"
         );
 
@@ -629,6 +692,7 @@ mod withdraw_erc20 {
             ]);
 
             ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
+            ckerc20.env.tick();
             ckerc20.env.tick();
             let balance_after_reimbursement = ckerc20.cketh.balance_of(caller);
             assert_eq!(

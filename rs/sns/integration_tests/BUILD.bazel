@@ -297,7 +297,12 @@ rust_ic_test_suite_with_extra_srcs(
     env = dict(ENV.items() + [
         ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_canisters//:swap.wasm.gz)"),
     ]),
-    exec_properties = {"cpu": "8"},
+    exec_properties = {
+        "cpu": "8",
+        # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
+        # so we need this Namespace.so-specific execution property to open up the network on RBE:
+        "namespace_requires_network": "true",
+    },
     extra_srcs = [],
     proc_macro_deps = [
         # Keep sorted.

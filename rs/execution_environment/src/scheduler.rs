@@ -423,7 +423,6 @@ impl SchedulerImpl {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
 
-        let mut ingress_execution_results = Vec::new();
         let mut is_first_iteration = true;
         let mut total_heap_delta = NumBytes::new(0);
         let mut heartbeat_and_timer_canisters = BTreeSet::new();
@@ -432,6 +431,7 @@ impl SchedulerImpl {
         //      - Execute subnet messages.
         //      - Execute heartbeat and global timer tasks.
         //      - Execute canisters input messages in parallel.
+        //      - Update the ingress history with the resulting ingress statuses.
         //      - Induct messages on the same subnet.
         let mut state = loop {
             // Execute subnet messages.
@@ -513,7 +513,7 @@ impl SchedulerImpl {
                 executed_canisters,
                 canisters_with_completed_messages,
                 canisters_with_zero_instruction_executions,
-                ingress_results: mut loop_ingress_execution_results,
+                ingress_results: iteration_ingress_execution_results,
                 heap_delta,
             } = self.execute_canisters_in_inner_round(
                 active_canisters_partitioned_by_cores,
@@ -540,7 +540,20 @@ impl SchedulerImpl {
             }
             state.put_canister_states(canisters);
 
-            ingress_execution_results.append(&mut loop_ingress_execution_results);
+            // Write the ingress statuses produced by this iteration's canister
+            // executions to the ingress history right away, i.e., before the next
+            // iteration's subnet messages are executed. Subnet messages update the
+            // ingress history directly, so deferring these updates to
+            // the end of the round would apply them out of order.
+            for (message_id, status) in iteration_ingress_execution_results {
+                let old_status = self.ingress_history_writer.set_status(
+                    &mut state,
+                    message_id,
+                    status,
+                    current_round,
+                );
+                canister_ingress_latencies.on_ingress_status_changed(&old_status);
+            }
 
             round_schedule.end_iteration(
                 &mut state,
@@ -604,16 +617,6 @@ impl SchedulerImpl {
                     .task_queue
                     .remove_heartbeat_and_global_timer();
             }
-        }
-
-        for (message_id, status) in ingress_execution_results {
-            let old_status = self.ingress_history_writer.set_status(
-                &mut state,
-                message_id,
-                status,
-                current_round,
-            );
-            canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
 
         state
@@ -871,7 +874,6 @@ impl SchedulerImpl {
                 all_rejects.push(uninstall_canister(
                     &self.log,
                     canister,
-                    None, /* we're at the end of a round so no need to update round limits */
                     state_time,
                     Arc::clone(&self.fd_factory),
                 ));
