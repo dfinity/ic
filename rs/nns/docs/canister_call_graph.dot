@@ -4,21 +4,32 @@ digraph NNSBackendCanisterCalls {
   edge [fontname="Helvetica", fontsize=9, color="#555555"];
 
   // Node declaration order below (left-to-right in the rendered layout) is
-  // chosen to balance visual weight on either side of the GTC -> Governance
-  // -> Registry -> IC Management trunk (see weight=10 edges on those edges),
-  // not to match any semantic grouping.
+  // chosen for two things at once: (1) balance visual weight on either side
+  // of the GTC -> Governance -> Registry -> IC Management trunk (see
+  // weight=10 edges on those edges), and (2) place canisters that are more
+  // central to NNS operation closer to that trunk, with narrower/rarer-use
+  // canisters pushed toward the left/right peripheries. Root is treated as
+  // effectively part of the trunk's inner ring (it installs/upgrades every
+  // other NNS canister); SnsWasm/Cmc/Ledger form the next ring in; and
+  // NodeRewards/ArbitraryCanister (left) and Migration/Lifeline (right) are
+  // the peripheral, narrow-scope canisters. This is a judgment call, not a
+  // rigid formula -- see PR discussion for the reasoning. Note that dot's
+  // layout is driven mostly by actual edge structure rather than pure
+  // declaration order once a node has more than one real edge, so getting
+  // this ring structure to render as intended also requires the invisible
+  // ordering edge down by the real edges (see below).
   NodeRewards  [label="Node Rewards canister", fillcolor="#dfe9ff"];
+  ArbitraryCanister [label="Bitcoin canister\n(or other proposal-specified target)", fillcolor="#dfe9ff"];
+  SnsWasm      [label="SNS-WASM", fillcolor="#dfe9ff"];
   Root         [fillcolor="#dfe9ff"];
+  Gtc          [label="GTC\n(Genesis Token Canister)", fillcolor="#dfe9ff"];
   Governance   [fillcolor="#dfe9ff"];
   Registry     [fillcolor="#dfe9ff"];
-  SnsWasm      [label="SNS-WASM", fillcolor="#dfe9ff"];
-  Cmc          [label="CMC\n(Cycles Minting Canister)", fillcolor="#dfe9ff"];
-  Gtc          [label="GTC\n(Genesis Token Canister)", fillcolor="#dfe9ff"];
-  Lifeline     [fillcolor="#dfe9ff"];
-  Ledger       [label="ICP Ledger", fillcolor="#dfe9ff"];
-  Migration    [label="Migration canister", fillcolor="#dfe9ff"];
   IcManagement [label="IC Management Canister\n(ic00 / aaaaa-aa)", shape=octagon, fillcolor="#ffe9cc", color="#b06a00"];
-  ArbitraryCanister [label="Bitcoin canister\n(or other proposal-specified target)", fillcolor="#dfe9ff"];
+  Cmc          [label="CMC\n(Cycles Minting Canister)", fillcolor="#dfe9ff"];
+  Ledger       [label="ICP Ledger", fillcolor="#dfe9ff"];
+  Migration    [label="(Canister) Migration", fillcolor="#dfe9ff"];
+  Lifeline     [fillcolor="#dfe9ff"];
 
   // ---- Governance outbound ----
   Governance -> Root     [label="manages NNS canister lifecycle\n(install, upgrade, stop/start, snapshot)"];
@@ -69,4 +80,13 @@ digraph NNSBackendCanisterCalls {
   Registry -> IcManagement [label="runs subnet DKG /\nkey operations", weight=10];
 
   // Node Rewards canister: no confirmed outbound calls found (read-only via caller checks).
+
+  // ---- layout-only ordering hint (no real call) ----
+  // ArbitraryCanister (Bitcoin) only has a real edge to Root, which pulls it
+  // toward the trunk despite it being one of the most peripheral, narrowest-
+  // scope canisters (a single proposal-specified relay target). This
+  // invisible edge to Node Rewards canister -- the other peripheral,
+  // narrow-scope canister on this side of the trunk -- keeps them grouped
+  // together at the periphery instead.
+  NodeRewards -> ArbitraryCanister [style=invis, weight=5];
 }
