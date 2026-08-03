@@ -1637,6 +1637,50 @@ fn composite_query_cache_never_caches_calls_to_management_canister_from_callback
 }
 
 #[test]
+fn composite_query_cache_never_caches_calls_to_management_canister_from_nested_call() {
+    let mut test = builder_with_query_cache_expiry_times()
+        .with_composite_query_ic00_calls()
+        .build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    // Canister B, called by canister A in a nested composite query call, calls
+    // the management canister to request its own status.
+    // A canister is always allowed to request its own status.
+    let b = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "canister_status",
+            call_args()
+                .other_side(CanisterIdRecord::from(b_id).encode())
+                .on_reject(wasm().reject_message().append_and_reply()),
+        )
+        .build();
+    let a = wasm()
+        // By default the on reply and on reject handlers propagate the other side response.
+        .composite_query(b_id, call_args().other_side(b))
+        .build();
+
+    let res_1 = test.non_replicated_query(a_id, "composite_query", a.clone());
+    // The call to the management canister succeeded, i.e. the reply is the
+    // canister status of canister B and not a reject message.
+    let reply = res_1.clone().unwrap();
+    let status = Decode!(&reply.bytes(), CanisterStatusResultV2).unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 1);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 1);
+
+    // Do not change balance or time: the result must still not be cached.
+    let res_2 = test.non_replicated_query(a_id, "composite_query", a.clone());
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 2);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 2);
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
 fn query_cache_supports_query_stats() {
     let q = wasm().reply_data(&[42]);
     for_query_and_composite_query(q, |mut test, a_id, b_id, method, q| {
