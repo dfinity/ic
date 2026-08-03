@@ -786,6 +786,35 @@ impl CallContextManager {
             }
     }
 
+    /// Calls `for_each` with the originator of every unresponded call context with
+    /// a pending unbounded-wait (i.e. guaranteed) response.
+    ///
+    /// Note that this does not take into account a potential paused or aborted
+    /// canister request execution (equivalent to one extra call context, see
+    /// [`Self::unresponded_guaranteed_response_call_contexts()`]).
+    ///
+    /// Time complexity: `O(n)`; `O(1)` if there is no such call context.
+    pub fn for_each_unresponded_unbounded_wait_originator(
+        &self,
+        mut for_each: impl FnMut(CanisterId),
+    ) {
+        if self.stats.unresponded_guaranteed_response_call_contexts == 0 {
+            return;
+        }
+
+        for call_context in self.call_contexts.values() {
+            if call_context.responded {
+                continue;
+            }
+            if let CallOrigin::CanisterUpdate(originator, _, deadline, _) =
+                &call_context.call_origin
+                && *deadline == NO_DEADLINE
+            {
+                for_each(*originator);
+            }
+        }
+    }
+
     /// Returns the number of unresponded callbacks, including those for which
     /// responses are already enqueued.
     ///

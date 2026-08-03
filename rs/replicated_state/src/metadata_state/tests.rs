@@ -1,7 +1,9 @@
 use super::subnet_call_context_manager::{
-    EcdsaArguments, EcdsaMatchedPreSignature, InstallCodeCall, PreSignatureStash, RawRandContext,
-    SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall,
-    SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
+    BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, EcdsaArguments,
+    EcdsaMatchedPreSignature, InstallCodeCall, PreSignatureStash, RawRandContext,
+    ReshareChainKeyContext, SchnorrArguments, SchnorrMatchedPreSignature, SetupInitialDkgContext,
+    SignWithThresholdContext, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
+    ThresholdArguments,
 };
 use super::*;
 use crate::metadata_state::testing::SystemMetadataTesting;
@@ -9,6 +11,7 @@ use crate::metrics::ReplicatedStateMetrics;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
 use crate::{CanisterPriority, InputQueueType, ReplicatedState};
 use assert_matches::assert_matches;
+use ic_btc_replica_types::{GetSuccessorsRequestInitial, Network, SendTransactionRequest};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
     generate_key_transcript, setup_unmasked_random_params,
@@ -41,6 +44,7 @@ use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSign
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
@@ -849,6 +853,161 @@ fn system_metadata_online_split() {
     expected.subnet_metrics = Default::default();
     // Everything else should be unchanged.
     assert_eq!(expected, metadata_b);
+}
+
+#[test]
+fn subnet_call_context_manager_context_counts() {
+    let request = || {
+        RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(canister_test_id(2))
+            .build()
+    };
+    let call = || CanisterCall::Request(Arc::new(request()));
+    let canister_http_request_context = || CanisterHttpRequestContext {
+        request: request(),
+        url: "https://".to_string(),
+        max_response_bytes: None,
+        headers: Vec::new(),
+        body: None,
+        http_method: CanisterHttpMethod::GET,
+        transform: None,
+        time: UNIX_EPOCH,
+        replication: Replication::FullyReplicated,
+        pricing_version: PricingVersion::Legacy,
+        refund_status: RefundStatus::default(),
+        registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
+    };
+
+    let mut subnet_call_context_manager = SubnetCallContextManager::default();
+
+    // Push a different number of contexts of each type, so that the test fails if
+    // any two of the counts were to be mixed up.
+    for _ in 0..1 {
+        subnet_call_context_manager.push_context(SubnetCallContext::SetupInitialDKG(
+            SetupInitialDkgContext {
+                request: request(),
+                nodes_in_target_subnet: BTreeSet::new(),
+                target_id: NiDkgTargetId::new([0_u8; 32]),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+            },
+        ));
+    }
+    for _ in 0..2 {
+        subnet_call_context_manager.push_context(SubnetCallContext::SignWithThreshold(
+            SignWithThresholdContext {
+                request: request(),
+                args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                    key_id: make_key_id(),
+                    message_hash: [0_u8; 32],
+                    pre_signature: None,
+                }),
+                derivation_path: Arc::new(vec![]),
+                batch_time: UNIX_EPOCH,
+                nonce: None,
+            },
+        ));
+    }
+    for _ in 0..3 {
+        subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
+            canister_http_request_context(),
+        ));
+    }
+    for i in 0..4 {
+        // Delivered HTTP requests are only ever moved here from
+        // `canister_http_request_contexts`, so they have no `push` method.
+        subnet_call_context_manager
+            .delivered_canister_http_request_contexts
+            .insert(CallbackId::new(1000 + i), canister_http_request_context());
+    }
+    for _ in 0..5 {
+        subnet_call_context_manager.push_context(SubnetCallContext::ReshareChainKey(
+            ReshareChainKeyContext {
+                request: request(),
+                key_id: MasterPublicKeyId::Ecdsa(make_key_id()),
+                nodes: BTreeSet::new(),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+                target_id: NiDkgTargetId::new([0_u8; 32]),
+            },
+        ));
+    }
+    for _ in 0..6 {
+        subnet_call_context_manager.push_context(SubnetCallContext::BitcoinGetSuccessors(
+            BitcoinGetSuccessorsContext {
+                request: request(),
+                payload: GetSuccessorsRequestInitial {
+                    network: Network::BitcoinMainnet,
+                    anchor: vec![1, 2, 3],
+                    processed_block_hashes: vec![],
+                },
+                time: UNIX_EPOCH,
+            },
+        ));
+    }
+    for _ in 0..7 {
+        subnet_call_context_manager.push_context(
+            SubnetCallContext::BitcoinSendTransactionInternal(
+                BitcoinSendTransactionInternalContext {
+                    request: request(),
+                    payload: SendTransactionRequest {
+                        network: Network::BitcoinMainnet,
+                        transaction: vec![1, 2, 3],
+                    },
+                    time: UNIX_EPOCH,
+                },
+            ),
+        );
+    }
+    for _ in 0..8 {
+        subnet_call_context_manager.push_raw_rand_request(
+            request(),
+            ExecutionRound::from(1),
+            UNIX_EPOCH,
+        );
+    }
+    for i in 0..9 {
+        subnet_call_context_manager.push_install_code_call(InstallCodeCall {
+            call: call(),
+            effective_canister_id: canister_test_id(i),
+            time: UNIX_EPOCH,
+        });
+    }
+    for i in 0..10 {
+        subnet_call_context_manager.push_stop_canister_call(StopCanisterCall {
+            call: call(),
+            effective_canister_id: canister_test_id(i),
+            time: UNIX_EPOCH,
+        });
+    }
+
+    assert_eq!(
+        vec![
+            ("setup_initial_dkg", 1),
+            ("sign_with_threshold", 2),
+            ("canister_http_request", 3),
+            ("delivered_canister_http_request", 4),
+            ("reshare_chain_key", 5),
+            ("bitcoin_get_successors", 6),
+            ("bitcoin_send_transaction_internal", 7),
+            ("raw_rand", 8),
+            ("install_code", 9),
+            ("stop_canister", 10),
+        ],
+        subnet_call_context_manager
+            .context_counts()
+            .collect::<Vec<_>>()
+    );
+
+    // A default manager holds no contexts at all.
+    assert!(
+        SubnetCallContextManager::default()
+            .context_counts()
+            .all(|(_, count)| count == 0)
+    );
 }
 
 #[test]
@@ -1835,6 +1994,129 @@ fn ingress_history_split() {
 
     ingress_history.split(is_local_canister);
     assert_eq!(expected, ingress_history);
+}
+
+#[test]
+fn ingress_history_state_counts() {
+    use IngressState::*;
+
+    let mut ingress_history = IngressHistoryState::new();
+
+    let insert = |ingress_history: &mut IngressHistoryState, i: u64, state: IngressState| {
+        let time = Time::from_nanos_since_unix_epoch(i);
+        ingress_history.insert(
+            message_test_id(i),
+            IngressStatus::Known {
+                receiver: canister_test_id(i).get(),
+                user_id: user_test_id(i),
+                time,
+                state,
+            },
+            time,
+            NumBytes::from(u64::MAX),
+            |_| {},
+        );
+    };
+
+    assert_eq!(
+        IngressStateCounts::default(),
+        ingress_history.state_counts()
+    );
+
+    insert(&mut ingress_history, 1, Received);
+    insert(&mut ingress_history, 2, Received);
+    insert(&mut ingress_history, 3, Processing);
+    insert(
+        &mut ingress_history,
+        4,
+        Completed(WasmResult::Reply(vec![1, 2, 3])),
+    );
+    insert(
+        &mut ingress_history,
+        5,
+        Failed(UserError::new(ErrorCode::CanisterTrapped, "Oops")),
+    );
+    insert(&mut ingress_history, 6, Done);
+
+    assert_eq!(6, ingress_history.len());
+    assert_eq!(
+        IngressStateCounts {
+            received: 2,
+            processing: 1,
+            completed: 1,
+            failed: 1,
+            done: 1,
+            unknown: 0,
+        },
+        ingress_history.state_counts()
+    );
+
+    // Overwriting an entry adjusts the counts of both the old and the new state.
+    insert(&mut ingress_history, 1, Processing);
+    assert_eq!(
+        IngressStateCounts {
+            received: 1,
+            processing: 2,
+            completed: 1,
+            failed: 1,
+            done: 1,
+            unknown: 0,
+        },
+        ingress_history.state_counts()
+    );
+
+    // Forgetting the terminal statuses with payloads transitions them to `Done`.
+    ingress_history.forget_terminal_statuses(
+        NumBytes::from(0),
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
+    assert_eq!(
+        IngressStateCounts {
+            received: 1,
+            processing: 2,
+            done: 3,
+            ..Default::default()
+        },
+        ingress_history.state_counts()
+    );
+
+    // Pruning drops the terminal statuses altogether.
+    ingress_history.prune(Time::from_nanos_since_unix_epoch(u64::MAX));
+    assert_eq!(
+        IngressStateCounts {
+            received: 1,
+            processing: 2,
+            ..Default::default()
+        },
+        ingress_history.state_counts()
+    );
+
+    // `IngressStatus::Unknown` is counted separately.
+    ingress_history.insert(
+        message_test_id(7),
+        IngressStatus::Unknown,
+        Time::from_nanos_since_unix_epoch(7),
+        NumBytes::from(u64::MAX),
+        |_| {},
+    );
+    assert_eq!(
+        IngressStateCounts {
+            received: 1,
+            processing: 2,
+            unknown: 1,
+            ..Default::default()
+        },
+        ingress_history.state_counts()
+    );
+    assert_eq!(
+        ingress_history.len(),
+        ingress_history
+            .state_counts()
+            .iter()
+            .map(|(_, count)| count)
+            .sum::<usize>()
+    );
 }
 
 #[derive(Clone)]

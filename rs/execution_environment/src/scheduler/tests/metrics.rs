@@ -10,7 +10,7 @@ use super::{
 };
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_error_types::RejectCode;
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_logger::no_op_logger;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord, DerivationPath,
@@ -19,20 +19,26 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    InstallCodeCall, StopCanisterCall,
+};
 use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
-use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
+use ic_replicated_state::{CallOrigin, SubnetTopology};
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
     fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
+use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
+use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
+    CallbackId, CanisterCall, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::time::UNIX_EPOCH;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
 };
@@ -549,6 +555,309 @@ fn replicated_state_metrics_stop_contexts_with_missing_call_ids() {
     state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
 
     assert_eq!(state_metrics.stop_canister_calls_without_call_id(), 1);
+}
+
+#[test]
+fn replicated_state_metrics_ingress_history_by_state() {
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+
+    let set_ingress_status = |state: &mut ReplicatedState, i: u64, ingress_state: IngressState| {
+        state.set_ingress_status(
+            message_test_id(i),
+            IngressStatus::Known {
+                receiver: canister_test_id(i).get(),
+                user_id: user_test_id(i),
+                time: UNIX_EPOCH,
+                state: ingress_state,
+            },
+            NumBytes::new(u64::MAX),
+            |_| {},
+        );
+    };
+    set_ingress_status(&mut state, 1, IngressState::Received);
+    set_ingress_status(&mut state, 2, IngressState::Received);
+    set_ingress_status(&mut state, 3, IngressState::Processing);
+    set_ingress_status(
+        &mut state,
+        4,
+        IngressState::Completed(WasmResult::Reply(vec![1, 2, 3])),
+    );
+    set_ingress_status(
+        &mut state,
+        5,
+        IngressState::Failed(UserError::new(ErrorCode::CanisterTrapped, "Oops")),
+    );
+    set_ingress_status(&mut state, 6, IngressState::Done);
+    set_ingress_status(&mut state, 7, IngressState::Done);
+    // `Unknown` is not a valid ingress history state, but it is counted regardless.
+    state.set_ingress_status(
+        message_test_id(8),
+        IngressStatus::Unknown,
+        NumBytes::new(u64::MAX),
+        |_| {},
+    );
+
+    let registry = MetricsRegistry::new();
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
+
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
+
+    assert_eq!(
+        fetch_int_gauge(&registry, "replicated_state_ingress_history_length"),
+        Some(8)
+    );
+    assert_eq!(
+        fetch_int_gauge_vec(
+            &registry,
+            "replicated_state_ingress_history_length_by_state"
+        ),
+        metric_vec(&[
+            (&[("state", "received")], 2),
+            (&[("state", "processing")], 1),
+            (&[("state", "completed")], 1),
+            (&[("state", "failed")], 1),
+            (&[("state", "done")], 2),
+            (&[("state", "unknown")], 1),
+        ]),
+    );
+}
+
+#[test]
+fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
+    let own_subnet = subnet_test_id(1);
+    let remote_subnet = subnet_test_id(2);
+    // A subnet with no unresponded unbounded-wait calls into this subnet.
+    let idle_subnet = subnet_test_id(3);
+    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
+
+    // Canisters 0..9 are hosted by this subnet, canisters 10..19 by `remote_subnet`.
+    state.metadata.modify_network_topology(|network_topology| {
+        for (range, subnet_id) in [
+            ((canister_test_id(0), canister_test_id(9)), own_subnet),
+            ((canister_test_id(10), canister_test_id(19)), remote_subnet),
+        ] {
+            network_topology
+                .routing_table_mut()
+                .insert(
+                    CanisterIdRange {
+                        start: range.0,
+                        end: range.1,
+                    },
+                    subnet_id,
+                )
+                .unwrap();
+        }
+        let subnets = [own_subnet, remote_subnet, idle_subnet]
+            .into_iter()
+            .map(|subnet_id| (subnet_id, SubnetTopology::default()))
+            .collect();
+        network_topology.set_subnets(subnets);
+    });
+
+    let mut canister = get_running_canister(canister_test_id(0));
+    let mut new_call_context = |sender: CanisterId, callback_id: u64, deadline: CoarseTime| {
+        canister
+            .system_state
+            .new_call_context(
+                CallOrigin::CanisterUpdate(
+                    sender,
+                    CallbackId::from(callback_id),
+                    deadline,
+                    String::from(""),
+                ),
+                Cycles::zero(),
+                UNIX_EPOCH,
+                Default::default(),
+                None,
+            )
+            .unwrap()
+    };
+    // Two unbounded-wait calls from a local canister, one from a remote canister.
+    new_call_context(canister_test_id(1), 1, NO_DEADLINE);
+    new_call_context(canister_test_id(1), 2, NO_DEADLINE);
+    new_call_context(canister_test_id(11), 3, NO_DEADLINE);
+    // Plus a best-effort call from a remote canister, which is not counted.
+    new_call_context(
+        canister_test_id(12),
+        4,
+        CoarseTime::from_secs_since_unix_epoch(13),
+    );
+    // And an unbounded-wait call from a canister that cannot be routed anywhere.
+    new_call_context(canister_test_id(100), 5, NO_DEADLINE);
+    state.put_canister_state(canister);
+
+    let registry = MetricsRegistry::new();
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
+
+    state_metrics.observe(own_subnet, &state, 0.into(), &no_op_logger());
+
+    assert_eq!(
+        fetch_int_gauge_vec(
+            &registry,
+            "replicated_state_unresponded_unbounded_wait_call_contexts"
+        ),
+        metric_vec(&[
+            (&[("sender_subnet", &own_subnet.to_string())], 2),
+            (&[("sender_subnet", &remote_subnet.to_string())], 1),
+            (&[("sender_subnet", &idle_subnet.to_string())], 0),
+            (&[("sender_subnet", &"unknown".to_string())], 1),
+        ]),
+    );
+}
+
+#[test]
+fn replicated_state_metrics_subnet_call_contexts() {
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+
+    let call = || {
+        CanisterCall::Request(Arc::new(
+            RequestBuilder::new()
+                .sender(canister_test_id(1))
+                .receiver(CanisterId::ic_00())
+                .build(),
+        ))
+    };
+    let subnet_call_context_manager = &mut state.metadata.subnet_call_context_manager;
+    subnet_call_context_manager.push_raw_rand_request(
+        RequestBuilder::new().sender(canister_test_id(1)).build(),
+        ExecutionRound::from(1),
+        UNIX_EPOCH,
+    );
+    subnet_call_context_manager.push_install_code_call(InstallCodeCall {
+        call: call(),
+        time: UNIX_EPOCH,
+        effective_canister_id: canister_test_id(2),
+    });
+    for i in 0..2 {
+        subnet_call_context_manager.push_stop_canister_call(StopCanisterCall {
+            call: call(),
+            time: UNIX_EPOCH,
+            effective_canister_id: canister_test_id(i),
+        });
+    }
+
+    let registry = MetricsRegistry::new();
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
+
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
+
+    assert_eq!(
+        fetch_int_gauge_vec(&registry, "replicated_state_subnet_call_contexts"),
+        metric_vec(&[
+            (&[("type", "setup_initial_dkg")], 0),
+            (&[("type", "sign_with_threshold")], 0),
+            (&[("type", "canister_http_request")], 0),
+            (&[("type", "delivered_canister_http_request")], 0),
+            (&[("type", "reshare_chain_key")], 0),
+            (&[("type", "bitcoin_get_successors")], 0),
+            (&[("type", "bitcoin_send_transaction_internal")], 0),
+            (&[("type", "raw_rand")], 1),
+            (&[("type", "install_code")], 1),
+            (&[("type", "stop_canister")], 2),
+        ]),
+    );
+}
+
+#[test]
+fn replicated_state_metrics_pending_refunds() {
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+
+    state.add_refund(canister_test_id(1), Cycles::new(13));
+    state.add_refund(canister_test_id(2), Cycles::new(169));
+    // Refunds are accumulated per receiver.
+    state.add_refund(canister_test_id(2), Cycles::new(1));
+
+    let registry = MetricsRegistry::new();
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
+
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
+
+    assert_eq!(
+        fetch_int_gauge(&registry, "replicated_state_pending_refunds"),
+        Some(2)
+    );
+}
+
+#[test]
+fn replicated_state_metrics_queue_messages() {
+    let own_subnet = subnet_test_id(1);
+    let local_canister = canister_test_id(0);
+    let remote_canister = canister_test_id(10);
+    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
+    state.put_canister_state(get_running_canister(local_canister));
+
+    let mut subnet_available_guaranteed_response_memory = i64::MAX / 2;
+    let mut push_input = |state: &mut ReplicatedState, receiver: CanisterId, callback_id: u64| {
+        let request = RequestBuilder::new()
+            .sender(remote_canister)
+            .receiver(receiver)
+            .sender_reply_callback(CallbackId::from(callback_id))
+            .build();
+        state
+            .push_input(
+                request.into(),
+                &mut subnet_available_guaranteed_response_memory,
+            )
+            .unwrap();
+    };
+    let response = |respondent: CanisterId, callback_id: u64| {
+        Arc::new(
+            ResponseBuilder::new()
+                .originator(remote_canister)
+                .respondent(respondent)
+                .originator_reply_callback(CallbackId::from(callback_id))
+                .build(),
+        )
+    };
+
+    // Two requests to the local canister, one to the subnet (i.e. management
+    // canister); each of them reserving a slot for the matching response.
+    push_input(&mut state, local_canister, 1);
+    push_input(&mut state, local_canister, 2);
+    push_input(&mut state, CanisterId::from(own_subnet), 3);
+    // Respond to one request of each.
+    state
+        .canister_state_make_mut(&local_canister)
+        .unwrap()
+        .system_state
+        .push_output_response(response(local_canister, 1));
+    state
+        .subnet_queues_mut()
+        .push_output_response(response(CanisterId::from(own_subnet), 3));
+    // Plus two ingress messages to the subnet.
+    for _ in 0..2 {
+        state.subnet_queues_mut().push_ingress(
+            IngressBuilder::new()
+                .receiver(CanisterId::from(own_subnet))
+                .build(),
+        );
+    }
+
+    let registry = MetricsRegistry::new();
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
+
+    state_metrics.observe(own_subnet, &state, 0.into(), &no_op_logger());
+
+    // Two requests in the local canister's input queues, one response in its output
+    // queues.
+    assert_eq!(
+        fetch_int_gauge_vec(&registry, "execution_input_queue_messages"),
+        metric_vec(&[(&[("kind", "canister")], 2), (&[("kind", "ingress")], 0)]),
+    );
+    assert_eq!(
+        fetch_int_gauge(&registry, "execution_output_queue_messages"),
+        Some(1)
+    );
+    // One request and two ingress messages in the subnet input queues, one response
+    // in the subnet output queues.
+    assert_eq!(
+        fetch_int_gauge_vec(&registry, "execution_subnet_input_queue_messages"),
+        metric_vec(&[(&[("kind", "canister")], 1), (&[("kind", "ingress")], 2)]),
+    );
+    assert_eq!(
+        fetch_int_gauge(&registry, "execution_subnet_output_queue_messages"),
+        Some(1)
+    );
 }
 
 #[test]

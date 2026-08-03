@@ -463,6 +463,86 @@ fn callback_stats() {
 }
 
 #[test]
+fn test_for_each_unresponded_unbounded_wait_originator() {
+    let mut ccm = CallContextManager::default();
+
+    let new_call_context = |ccm: &mut CallContextManager, origin: CallOrigin| {
+        ccm.new_call_context(origin, Cycles::zero(), UNIX_EPOCH, Default::default(), None)
+    };
+    let originators = |ccm: &CallContextManager| {
+        let mut originators = Vec::new();
+        ccm.for_each_unresponded_unbounded_wait_originator(|originator| {
+            originators.push(originator)
+        });
+        originators
+    };
+
+    // No call contexts, no originators.
+    assert_eq!(Vec::<CanisterId>::new(), originators(&ccm));
+
+    // Two unbounded-wait calls from `canister_test_id(1)`, one from
+    // `canister_test_id(2)`.
+    let unbounded_wait_call_context_id = new_call_context(
+        &mut ccm,
+        CallOrigin::CanisterUpdate(
+            canister_test_id(1),
+            CallbackId::from(1),
+            NO_DEADLINE,
+            String::from(""),
+        ),
+    );
+    new_call_context(
+        &mut ccm,
+        CallOrigin::CanisterUpdate(
+            canister_test_id(1),
+            CallbackId::from(2),
+            NO_DEADLINE,
+            String::from(""),
+        ),
+    );
+    new_call_context(
+        &mut ccm,
+        CallOrigin::CanisterUpdate(
+            canister_test_id(2),
+            CallbackId::from(3),
+            NO_DEADLINE,
+            String::from(""),
+        ),
+    );
+    // Plus a best-effort call and an ingress message, neither of which is reported.
+    new_call_context(
+        &mut ccm,
+        CallOrigin::CanisterUpdate(
+            canister_test_id(3),
+            CallbackId::from(4),
+            CoarseTime::from_secs_since_unix_epoch(13),
+            String::from(""),
+        ),
+    );
+    new_call_context(
+        &mut ccm,
+        CallOrigin::Ingress(user_test_id(4), message_test_id(4), String::from("")),
+    );
+
+    assert_eq!(
+        vec![
+            canister_test_id(1),
+            canister_test_id(1),
+            canister_test_id(2)
+        ],
+        originators(&ccm)
+    );
+
+    // Responding to one of `canister_test_id(1)`'s call contexts drops it from the
+    // reported originators.
+    ccm.mark_responded(unbounded_wait_call_context_id).unwrap();
+    assert_eq!(
+        vec![canister_test_id(1), canister_test_id(2)],
+        originators(&ccm)
+    );
+}
+
+#[test]
 fn test_expire_callbacks() {
     fn callback_with_deadline(deadline: CoarseTime) -> Callback {
         Callback::new(
