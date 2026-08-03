@@ -1,21 +1,66 @@
 #![allow(deprecated)]
 use candid::{CandidType, Nat, Principal, define_function};
-use ic_cdk::api::call::{RejectionCode, accept_message, arg_data_raw, reject};
-use ic_cdk::api::management_canister::ecdsa::{
-    EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
-    SignWithEcdsaResponse, ecdsa_public_key as ic_cdk_ecdsa_public_key,
+use ic_cdk::api::{
+    accept_message, canister_self, debug_print, instruction_counter, msg_arg_data, msg_reject,
 };
-use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs, TransformContext,
-    TransformFunc, http_request as canister_http_outcall,
+use ic_cdk::call::Error as CallError;
+use ic_cdk::management_canister::{
+    EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult, HttpMethod, HttpRequestArgs,
+    HttpRequestResult, SignWithEcdsaArgs, SignWithEcdsaResult, TransformArgs, TransformContext,
+    TransformFunc, ecdsa_public_key as ic_cdk_ecdsa_public_key,
+    http_request as canister_http_outcall,
 };
-use ic_cdk::api::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
-use ic_cdk::api::{canister_self, debug_print, instruction_counter};
+use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
+
+/// The reject code that `canister_http` reports back to its callers.
+///
+/// The variants and their ordering define the `RejectionCode` variant declared in
+/// `canister.did`, so the numbering must stay in sync with the reject codes of the
+/// [IC interface specification](https://internetcomputer.org/docs/references/ic-interface-spec#reject-codes).
+#[derive(Copy, Clone, Debug, CandidType, Deserialize)]
+pub enum RejectionCode {
+    NoError,
+    SysFatal,
+    SysTransient,
+    DestinationInvalid,
+    CanisterReject,
+    CanisterError,
+    Unknown,
+}
+
+impl RejectionCode {
+    /// Translates a raw reject code, as reported by the system, into the variant
+    /// this canister exposes over Candid.
+    fn from_raw(raw: u32) -> Self {
+        match raw {
+            0 => Self::NoError,
+            1 => Self::SysFatal,
+            2 => Self::SysTransient,
+            3 => Self::DestinationInvalid,
+            4 => Self::CanisterReject,
+            5 => Self::CanisterError,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// Translates a failed call into the reject code and message `canister_http`
+/// reports back over Candid.
+fn map_call_error(err: CallError) -> (RejectionCode, String) {
+    match err {
+        CallError::CallRejected(rejected) => (
+            RejectionCode::from_raw(rejected.raw_reject_code()),
+            rejected.reject_message().to_string(),
+        ),
+        // Nothing reached the callee, so there is no reject code to report.
+        other => (RejectionCode::Unknown, other.to_string()),
+    }
+}
 
 // HTTP gateway interface
 
@@ -193,8 +238,8 @@ async fn ecdsa_public_key(
     canister_id: Option<Principal>,
     derivation_path: Vec<Vec<u8>>,
     name: String,
-) -> Result<EcdsaPublicKeyResponse, String> {
-    let arg = EcdsaPublicKeyArgument {
+) -> Result<EcdsaPublicKeyResult, String> {
+    let arg = EcdsaPublicKeyArgs {
         canister_id,
         derivation_path,
         key_id: EcdsaKeyId {
@@ -202,10 +247,9 @@ async fn ecdsa_public_key(
             name,
         },
     };
-    Ok(ic_cdk_ecdsa_public_key(arg)
+    ic_cdk_ecdsa_public_key(&arg)
         .await
-        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
-        .0)
+        .map_err(|err| format!("ecdsa_public_key failed: {err}"))
 }
 
 #[update]
@@ -219,7 +263,7 @@ async fn sign_with_ecdsa(
     } else {
         10_000_000_000
     };
-    let arg = SignWithEcdsaArgument {
+    let arg = SignWithEcdsaArgs {
         message_hash,
         derivation_path,
         key_id: EcdsaKeyId {
@@ -227,7 +271,7 @@ async fn sign_with_ecdsa(
             name,
         },
     };
-    let (res,): (SignWithEcdsaResponse,) = ic_cdk::api::call::call_with_payment128(
+    let (res,): (SignWithEcdsaResult,) = ic_cdk::api::call::call_with_payment128(
         Principal::management_canister(),
         "sign_with_ecdsa",
         (arg,),
@@ -341,21 +385,23 @@ async fn vetkd_derive_key(
 // canister HTTP outcalls
 
 #[update]
-async fn canister_http(http_server_addr: String) -> Result<HttpResponse, (RejectionCode, String)> {
-    let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
+async fn canister_http(
+    http_server_addr: String,
+) -> Result<HttpRequestResult, (RejectionCode, String)> {
+    let arg = HttpRequestArgs {
         url: http_server_addr,
         max_response_bytes: None,
         method: HttpMethod::GET,
         headers: vec![],
         body: None,
         transform: None,
+        is_replicated: None,
     };
-    let cycles = 100_000_000_000; // enough cycles for any canister http outcall
-    canister_http_outcall(arg, cycles).await.map(|resp| resp.0)
+    canister_http_outcall(&arg).await.map_err(map_call_error)
 }
 
 #[query]
-async fn transform(transform_args: TransformArgs) -> HttpResponse {
+async fn transform(transform_args: TransformArgs) -> HttpRequestResult {
     let mut resp = transform_args.response;
     resp.headers = vec![];
     resp.body = transform_args.context;
@@ -363,9 +409,9 @@ async fn transform(transform_args: TransformArgs) -> HttpResponse {
 }
 
 #[update]
-async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse {
+async fn canister_http_with_transform(http_server_addr: String) -> HttpRequestResult {
     let context = b"this is my transform context".to_vec();
-    let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
+    let arg = HttpRequestArgs {
         url: http_server_addr,
         max_response_bytes: None,
         method: HttpMethod::GET,
@@ -378,9 +424,9 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse 
             }),
             context,
         }),
+        is_replicated: None,
     };
-    let cycles = 100_000_000_000; // enough cycles for any canister http outcall
-    canister_http_outcall(arg, cycles).await.unwrap().0
+    canister_http_outcall(&arg).await.unwrap()
 }
 
 // inter-canister calls
@@ -478,7 +524,7 @@ fn time() -> u64 {
 
 #[inspect_message]
 fn inspect_message() {
-    let arg_data = arg_data_raw();
+    let arg_data = msg_arg_data();
     if arg_data == b"trap" {
         trap("trap in inspect message");
     } else if arg_data == b"skip" {
@@ -489,12 +535,12 @@ fn inspect_message() {
 
 #[query(manual_reply = true)]
 fn reject_query() {
-    reject("reject in query method");
+    msg_reject("reject in query method");
 }
 
 #[update(manual_reply = true)]
 fn reject_update() {
-    reject("reject in update method");
+    msg_reject("reject in update method");
 }
 
 #[query]

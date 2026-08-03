@@ -96,7 +96,7 @@ pub struct ReplicatedStateMetrics {
 
 impl ReplicatedStateMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
-        Self {
+        let metrics = Self {
             canister_balance: cycles_histogram(
                 "canister_balance_cycles",
                 "Canisters balance distribution in Cycles.",
@@ -316,7 +316,26 @@ impl ReplicatedStateMetrics {
                 // 10 s .. 5×10⁶ s (~58 d), plus zero — 19 total buckets (0 + 18 powers).
                 decimal_buckets_with_zero(1, 6),
             ),
-        }
+        };
+
+        // Export the consumed-cycles metrics under their new names as well,
+        // sharing the same underlying metrics. This is a transitional step of
+        // renaming these metrics: the old names can only be dropped once the
+        // new names have been rolled out to all subnets.
+        // TODO: Drop the old names (and these aliases) once the new names have
+        // been rolled out to all subnets.
+        metrics_registry
+            .register_alias(&metrics.consumed_cycles, "replicated_state_consumed_cycles");
+        metrics_registry.register_alias(
+            &metrics.consumed_cycles_by_use_case,
+            "replicated_state_consumed_cycles_by_use_case",
+        );
+        metrics_registry.register_alias(
+            &metrics.consumed_cycles_by_use_case_as_counters,
+            "replicated_state_consumed_cycles_by_use_case_as_counters",
+        );
+
+        metrics
     }
 
     fn observe_consumed_cycles_by_use_case(
@@ -868,19 +887,13 @@ impl ReplicatedStateInvariants {
         // `O(|hot canisters|)` thanks to `CanisterStates` maintaining precomputed stats
         // for all cold canisters.
         let canisters_memory = state.canister_states().memory_taken();
-        let total_canister_history_memory_usage = canisters_memory.canister_history();
         let total_canister_memory_allocated_bytes = canisters_memory.execution();
         let subnet_memory_capacity = state
             .resource_limits()
             .maximum_state_size_or(self.default_subnet_memory_capacity);
 
         // Check that subnet memory usage invariant still holds after the round execution.
-        // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
-        // by `total_canister_history_memory_usage` because the canister history
-        // memory usage is not tracked during a round in `SubnetAvailableMemory`.
-        if total_canister_memory_allocated_bytes
-            > subnet_memory_capacity + total_canister_history_memory_usage
-        {
+        if total_canister_memory_allocated_bytes > subnet_memory_capacity {
             self.subnet_memory_usage_invariant.inc();
             warn!(
                 logger,

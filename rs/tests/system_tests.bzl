@@ -23,6 +23,7 @@ def system_test(
         tags = [],
         backend = None,
         test_timeout = "long",
+        enable_uvm = False,
         enable_metrics = False,
         prometheus_vm_required_host_features = [],
         prometheus_vm_resources = default_vm_resources,
@@ -59,6 +60,7 @@ def system_test(
         If "local" the non `_local` variants will be tagged as "manual".
         If None, both the `_local` and the non `_local` variants won't be tagged as "manual" and will run by default.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
+      enable_uvm: if True, depend on the @farm_universal_vm_img for local system-tests.
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
       prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
@@ -297,8 +299,12 @@ def system_test(
     for image_name, image_path in icos_config.local_only_icos_images.items():
         _local_only_deps[image_name + "_PATH"] = image_path
 
-    _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
-    _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+    if enable_uvm:
+        _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+
+    if enable_metrics:
+        _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+
     _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
     _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
     _local_only_deps["ENV_DEPS__QEMU_SYSTEM_X86_64_PATH"] = "@qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu//:qemu-system-x86_64"

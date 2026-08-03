@@ -14,42 +14,47 @@ bump `TAG` — don't do it in your commit.
 
 After changing Rust code (`*.rs`) follow these steps in order:
 
-1. **Format** by running the following from the root of the repository:
-   ```
-   cd "$(git rev-parse --show-toplevel)"
-   rustfmt <MODIFIED_RUST_FILES>
-   ```
-   where `<MODIFIED_RUST_FILES>` is a space separated list of paths of all modified Rust files relative to the root of the repository.
-2. **Check** by running the following from the root of the repository:
+1. **Check** by running the following from the root of the repository:
    ```
    cd "$(git rev-parse --show-toplevel)"
    cargo check --all-targets --all-features <CRATES>
    ```
-   where `<CRATES>` is the same space separated list of `-p <CRATE>` options as
-   used for clippy below. `--all-targets` covers `--tests`, `--benches`,
-   `--examples`, and `--bins`, so it also checks test code. This is a fast
-   compile-only pass to catch basic errors before the slower clippy/bazel steps.
+   where `<CRATES>` is a space separated list of `-p <CRATE>` options for all
+   modified crates, e.g. `-p ic-crypto -p ic-types` if both were modified. To
+   determine the crate name, check the `name` field in the nearest ancestor
+   `Cargo.toml` relative to the modified file.
+
+   This is a fast compile-only pass over just the modified crates, so it
+   surfaces basic errors well before the slower whole-workspace steps below.
+   `--all-targets` covers `--tests`, `--benches`, `--examples` and `--bins`, so
+   it checks test code too. It is a fast inner loop while iterating, not a
+   substitute for the steps below.
 
    Fix any compile errors.
+2. **Format** by running the following from the root of the repository:
+   ```
+   cd "$(git rev-parse --show-toplevel)"
+   cargo fmt
+   ```
+   This formats the whole workspace, which is the granularity the lint step
+   below verifies. Formatting individual files with `rustfmt <FILE>` is not
+   equivalent: it picks up a different configuration, so a file that looks
+   formatted that way can still fail the lint step.
 3. **Lint** by running the following from the root of the repository:
    ```
    cd "$(git rev-parse --show-toplevel)"
-   cargo clippy --all-features <CRATES> -- \
-       -D warnings \
-       -D clippy::all \
-       -D clippy::mem_forget \
-       -D clippy::unseparated_literal_suffix \
-       -A clippy::uninlined_format_args
+   ./ci/scripts/rust-lint.sh
    ```
-   where `<CRATES>` is a space separated list of
-   `-p <CRATE>` options for all modified crates.
-   e.g., `-p ic-crypto -p ic-types` if both were modified.
-   Run a single clippy invocation covering all modified crates.
+   This runs the repository's formatting and linting checks over the whole
+   workspace. It is the same script CI runs, so it is the authoritative gate;
+   read the script itself if you need to know exactly what it checks.
 
-   To determine the crate name, check the `name` field in the nearest
-   ancestor `Cargo.toml` relative to the modified file.
+   It stops at the first check that fails, so the later checks do not run until
+   the earlier ones pass. Re-run it after each fix, and treat it as clean only
+   when it exits 0 — check its exit status and output directly rather than
+   inferring success from a wrapper command around it.
 
-   Fix any linting errors.
+   Fix all formatting and linting errors.
 4. **Repin**, if any `Cargo.toml` changed which third-party crate dependency is
    used (added, removed, or version-bumped):
 
