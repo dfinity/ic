@@ -284,7 +284,7 @@ fn test_canister_snapshot_download_empty_stable_memory_and_chunk_store() {
     // Neither a file for the (empty) stable memory nor a directory
     // for the (empty) WASM chunk store is expected.
     let expected_files = BTreeMap::from([
-        // The metadata is checked separately after parsing it.
+        // The metadata is checked separately.
         ("metadata.json".to_string(), None),
         // The contents of the WASM memory are hard to reproduce.
         ("wasm_memory.bin".to_string(), None),
@@ -328,7 +328,7 @@ fn test_canister_snapshot_download_nonempty_stable_memory_and_chunk_store() {
     // A file for the stable memory and one file per WASM chunk
     // in the WASM chunk store directory are expected in addition.
     let mut expected_files = BTreeMap::from([
-        // The metadata is checked separately after parsing it.
+        // The metadata is checked separately.
         ("metadata.json".to_string(), None),
         (
             "stable_memory.bin".to_string(),
