@@ -19,9 +19,9 @@
 //! split, the delegation might already carry the new key while the certified state
 //! still carries the old key.
 
-use ic_crypto_tree_hash::{LabeledTree, LookupLowerBoundStatus, lookup_lower_bound, lookup_path};
+use ic_crypto_tree_hash::{LabeledTree, lookup_path};
 use ic_registry_routing_table::CanisterIdRanges;
-use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types::{PrincipalId, SubnetId};
 use std::fmt;
 
 /// What to check the canister ranges certified in a delegation against.
