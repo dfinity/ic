@@ -19,9 +19,6 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    InstallCodeCall, StopCanisterCall,
-};
 use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{
@@ -29,8 +26,9 @@ use ic_replicated_state::testing::{
 };
 use ic_replicated_state::{CallOrigin, SubnetTopology};
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
-    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+    HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
+    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, labels,
+    metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
@@ -38,9 +36,9 @@ use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallbackId, CanisterCall, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
+    CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
 };
@@ -560,354 +558,6 @@ fn replicated_state_metrics_stop_contexts_with_missing_call_ids() {
 }
 
 #[test]
-fn replicated_state_metrics_ingress_history_by_state() {
-    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-
-    let set_ingress_status = |state: &mut ReplicatedState, i: u64, ingress_state: IngressState| {
-        state.set_ingress_status(
-            message_test_id(i),
-            IngressStatus::Known {
-                receiver: canister_test_id(i).get(),
-                user_id: user_test_id(i),
-                time: UNIX_EPOCH,
-                state: ingress_state,
-            },
-            NumBytes::new(u64::MAX),
-            |_| {},
-        );
-    };
-    set_ingress_status(&mut state, 1, IngressState::Received);
-    set_ingress_status(&mut state, 2, IngressState::Received);
-    set_ingress_status(&mut state, 3, IngressState::Processing);
-    set_ingress_status(
-        &mut state,
-        4,
-        IngressState::Completed(WasmResult::Reply(vec![1, 2, 3])),
-    );
-    set_ingress_status(
-        &mut state,
-        5,
-        IngressState::Failed(UserError::new(ErrorCode::CanisterTrapped, "Oops")),
-    );
-    set_ingress_status(&mut state, 6, IngressState::Done);
-    set_ingress_status(&mut state, 7, IngressState::Done);
-
-    let registry = MetricsRegistry::new();
-    let state_metrics = ReplicatedStateMetrics::new(&registry);
-
-    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
-
-    assert_eq!(
-        fetch_int_gauge(&registry, "replicated_state_ingress_history_length"),
-        Some(7)
-    );
-    assert_eq!(
-        fetch_int_gauge_vec(
-            &registry,
-            "replicated_state_ingress_history_length_by_state"
-        ),
-        metric_vec(&[
-            (&[("state", "received")], 2),
-            (&[("state", "processing")], 1),
-            (&[("state", "completed")], 1),
-            (&[("state", "failed")], 1),
-            (&[("state", "done")], 2),
-            // Recording an `IngressStatus::Unknown` is `debug_assert`ed against in
-            // `IngressHistoryState::insert()`, so this is always zero.
-            (&[("state", "unknown")], 0),
-        ]),
-    );
-}
-
-#[test]
-fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
-    let own_subnet = subnet_test_id(1);
-    let remote_subnet = subnet_test_id(2);
-    // A subnet with no unresponded unbounded-wait calls into this subnet.
-    let idle_subnet = subnet_test_id(3);
-    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
-
-    // Canisters 0..9 are hosted by this subnet, canisters 10..19 by `remote_subnet`.
-    state.metadata.modify_network_topology(|network_topology| {
-        for (range, subnet_id) in [
-            ((canister_test_id(0), canister_test_id(9)), own_subnet),
-            ((canister_test_id(10), canister_test_id(19)), remote_subnet),
-        ] {
-            network_topology
-                .routing_table_mut()
-                .insert(
-                    CanisterIdRange {
-                        start: range.0,
-                        end: range.1,
-                    },
-                    subnet_id,
-                )
-                .unwrap();
-        }
-        let subnets = [own_subnet, remote_subnet, idle_subnet]
-            .into_iter()
-            .map(|subnet_id| (subnet_id, SubnetTopology::default()))
-            .collect();
-        network_topology.set_subnets(subnets);
-    });
-
-    let mut canister = get_running_canister(canister_test_id(0));
-    let mut new_call_context = |sender: CanisterId, callback_id: u64, deadline: CoarseTime| {
-        canister
-            .system_state
-            .new_call_context(
-                CallOrigin::CanisterUpdate(
-                    sender,
-                    CallbackId::from(callback_id),
-                    deadline,
-                    String::from(""),
-                ),
-                Cycles::zero(),
-                UNIX_EPOCH,
-                Default::default(),
-                None,
-            )
-            .unwrap()
-    };
-    // Two unbounded-wait calls from a local canister, one from a remote canister.
-    let local_call_context_id = new_call_context(canister_test_id(1), 1, NO_DEADLINE);
-    new_call_context(canister_test_id(1), 2, NO_DEADLINE);
-    new_call_context(canister_test_id(11), 3, NO_DEADLINE);
-    // Plus a best-effort call from a remote canister, which is not counted.
-    new_call_context(
-        canister_test_id(12),
-        4,
-        CoarseTime::from_secs_since_unix_epoch(13),
-    );
-    // And an unbounded-wait call from a canister that cannot be routed anywhere.
-    new_call_context(canister_test_id(100), 5, NO_DEADLINE);
-    state.put_canister_state(canister);
-
-    let registry = MetricsRegistry::new();
-    let state_metrics = ReplicatedStateMetrics::new(&registry);
-
-    state_metrics.observe(own_subnet, &state, 0.into(), &no_op_logger());
-
-    assert_eq!(
-        fetch_int_gauge_vec(
-            &registry,
-            "replicated_state_unresponded_unbounded_wait_call_contexts"
-        ),
-        metric_vec(&[
-            (&[("sender_subnet", &own_subnet.to_string())], 2),
-            (&[("sender_subnet", &remote_subnet.to_string())], 1),
-            (&[("sender_subnet", &idle_subnet.to_string())], 0),
-            (&[("sender_subnet", &"unknown".to_string())], 1),
-        ]),
-    );
-
-    // Make a downstream call on behalf of one of the two unbounded-wait calls from
-    // the local canister, so that its call context will stay around after it has
-    // been responded to.
-    let mut downstream_call = OutputRequestBuilder::default()
-        .sender(canister_test_id(0))
-        .receiver(canister_test_id(20))
-        .build();
-    downstream_call.call_context_id = local_call_context_id;
-    let system_state = &mut state
-        .canister_state_make_mut(&canister_test_id(0))
-        .unwrap()
-        .system_state;
-    system_state
-        .push_output_request(downstream_call, UNIX_EPOCH)
-        .unwrap();
-
-    // Responding to that call drops it from the count, even though its call context
-    // is retained (pending the response to the downstream call): only calls still
-    // awaiting a response are counted.
-    system_state
-        .on_canister_result(
-            local_call_context_id,
-            Ok(Some(WasmResult::Reply(vec![]))),
-            NumInstructions::from(0),
-        )
-        .unwrap();
-    assert!(
-        system_state
-            .call_context_manager()
-            .unwrap()
-            .call_context(local_call_context_id)
-            .unwrap()
-            .has_responded()
-    );
-
-    state_metrics.observe(own_subnet, &state, 1.into(), &no_op_logger());
-
-    assert_eq!(
-        fetch_int_gauge_vec(
-            &registry,
-            "replicated_state_unresponded_unbounded_wait_call_contexts"
-        ),
-        metric_vec(&[
-            (&[("sender_subnet", &own_subnet.to_string())], 1),
-            (&[("sender_subnet", &remote_subnet.to_string())], 1),
-            (&[("sender_subnet", &idle_subnet.to_string())], 0),
-            (&[("sender_subnet", &"unknown".to_string())], 1),
-        ]),
-    );
-}
-
-#[test]
-fn replicated_state_metrics_subnet_call_contexts() {
-    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-
-    let call = || {
-        CanisterCall::Request(Arc::new(
-            RequestBuilder::new()
-                .sender(canister_test_id(1))
-                .receiver(CanisterId::ic_00())
-                .build(),
-        ))
-    };
-    let subnet_call_context_manager = &mut state.metadata.subnet_call_context_manager;
-    subnet_call_context_manager.push_raw_rand_request(
-        RequestBuilder::new().sender(canister_test_id(1)).build(),
-        ExecutionRound::from(1),
-        UNIX_EPOCH,
-    );
-    subnet_call_context_manager.push_install_code_call(InstallCodeCall {
-        call: call(),
-        time: UNIX_EPOCH,
-        effective_canister_id: canister_test_id(2),
-    });
-    for i in 0..2 {
-        subnet_call_context_manager.push_stop_canister_call(StopCanisterCall {
-            call: call(),
-            time: UNIX_EPOCH,
-            effective_canister_id: canister_test_id(i),
-        });
-    }
-
-    let registry = MetricsRegistry::new();
-    let state_metrics = ReplicatedStateMetrics::new(&registry);
-
-    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
-
-    assert_eq!(
-        fetch_int_gauge_vec(&registry, "replicated_state_subnet_call_contexts"),
-        metric_vec(&[
-            (&[("type", "setup_initial_dkg")], 0),
-            (&[("type", "sign_with_threshold")], 0),
-            (&[("type", "canister_http_request")], 0),
-            (&[("type", "delivered_canister_http_request")], 0),
-            (&[("type", "reshare_chain_key")], 0),
-            (&[("type", "bitcoin_get_successors")], 0),
-            (&[("type", "bitcoin_send_transaction_internal")], 0),
-            (&[("type", "raw_rand")], 1),
-            (&[("type", "install_code")], 1),
-            (&[("type", "stop_canister")], 2),
-        ]),
-    );
-}
-
-#[test]
-fn replicated_state_metrics_pending_refunds() {
-    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-
-    state.add_refund(canister_test_id(1), Cycles::new(13));
-    state.add_refund(canister_test_id(2), Cycles::new(169));
-    // Refunds are accumulated per receiver.
-    state.add_refund(canister_test_id(2), Cycles::new(1));
-
-    let registry = MetricsRegistry::new();
-    let state_metrics = ReplicatedStateMetrics::new(&registry);
-
-    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
-
-    assert_eq!(
-        fetch_int_gauge(&registry, "replicated_state_pending_refunds"),
-        Some(2)
-    );
-}
-
-#[test]
-fn replicated_state_metrics_queue_messages() {
-    let own_subnet = subnet_test_id(1);
-    let local_canister = canister_test_id(0);
-    let remote_canister = canister_test_id(10);
-    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
-    state.put_canister_state(get_running_canister(local_canister));
-
-    let mut subnet_available_guaranteed_response_memory = i64::MAX / 2;
-    let mut push_input = |state: &mut ReplicatedState, receiver: CanisterId, callback_id: u64| {
-        let request = RequestBuilder::new()
-            .sender(remote_canister)
-            .receiver(receiver)
-            .sender_reply_callback(CallbackId::from(callback_id))
-            .build();
-        state
-            .push_input(
-                request.into(),
-                &mut subnet_available_guaranteed_response_memory,
-            )
-            .unwrap();
-    };
-    let response = |respondent: CanisterId, callback_id: u64| {
-        Arc::new(
-            ResponseBuilder::new()
-                .originator(remote_canister)
-                .respondent(respondent)
-                .originator_reply_callback(CallbackId::from(callback_id))
-                .build(),
-        )
-    };
-
-    // Two requests to the local canister, one to the subnet (i.e. management
-    // canister); each of them reserving a slot for the matching response.
-    push_input(&mut state, local_canister, 1);
-    push_input(&mut state, local_canister, 2);
-    push_input(&mut state, CanisterId::from(own_subnet), 3);
-    // Respond to one request of each.
-    state
-        .canister_state_make_mut(&local_canister)
-        .unwrap()
-        .system_state
-        .push_output_response(response(local_canister, 1));
-    state
-        .subnet_queues_mut()
-        .push_output_response(response(CanisterId::from(own_subnet), 3));
-    // Plus two ingress messages to the subnet.
-    for _ in 0..2 {
-        state.subnet_queues_mut().push_ingress(
-            IngressBuilder::new()
-                .receiver(CanisterId::from(own_subnet))
-                .build(),
-        );
-    }
-
-    let registry = MetricsRegistry::new();
-    let state_metrics = ReplicatedStateMetrics::new(&registry);
-
-    state_metrics.observe(own_subnet, &state, 0.into(), &no_op_logger());
-
-    // Two requests in the local canister's input queues, one response in its output
-    // queues.
-    assert_eq!(
-        fetch_int_gauge_vec(&registry, "execution_input_queue_messages"),
-        metric_vec(&[(&[("kind", "canister")], 2), (&[("kind", "ingress")], 0)]),
-    );
-    assert_eq!(
-        fetch_int_gauge(&registry, "execution_output_queue_messages"),
-        Some(1)
-    );
-    // One request and two ingress messages in the subnet input queues, one response
-    // in the subnet output queues.
-    assert_eq!(
-        fetch_int_gauge_vec(&registry, "execution_subnet_input_queue_messages"),
-        metric_vec(&[(&[("kind", "canister")], 1), (&[("kind", "ingress")], 2)]),
-    );
-    assert_eq!(
-        fetch_int_gauge(&registry, "execution_subnet_output_queue_messages"),
-        Some(1)
-    );
-}
-
-#[test]
 fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
@@ -936,6 +586,402 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
         fetch_int_gauge(&registry, "replicated_state_canisters_not_in_routing_table"),
         Some(1)
     );
+}
+
+/// Observes the replicated state metrics of `state` into a fresh registry.
+fn observe_replicated_state(state: &ReplicatedState) -> MetricsRegistry {
+    let registry = MetricsRegistry::new();
+    ReplicatedStateMetrics::new(&registry).observe(
+        state.metadata.own_subnet_id,
+        state,
+        0.into(),
+        &no_op_logger(),
+    );
+    registry
+}
+
+/// Asserts that the given gauge has the given value.
+fn assert_gauge(expected: u64, state: &ReplicatedState, name: &str) {
+    assert_eq!(
+        Some(expected),
+        fetch_int_gauge(&observe_replicated_state(state), name),
+        "unexpected value of `{name}`"
+    );
+}
+
+/// Asserts that the given gauge vector has a value of 1 for `one` and of 0 for all
+/// the other `label_values`; or 0 for all of them, if `one` is `None`.
+fn assert_gauge_vec(
+    one: Option<&str>,
+    state: &ReplicatedState,
+    name: &str,
+    label_name: &str,
+    label_values: &[&str],
+) {
+    if let Some(one) = one {
+        assert!(label_values.contains(&one), "unexpected label value {one}");
+    }
+    let expected: MetricVec<u64> = label_values
+        .iter()
+        .map(|value| {
+            (
+                labels(&[(label_name, value)]),
+                u64::from(Some(*value) == one),
+            )
+        })
+        .collect();
+    assert_eq!(
+        expected,
+        fetch_int_gauge_vec(&observe_replicated_state(state), name),
+        "unexpected value of `{name}`"
+    );
+}
+
+const INGRESS_HISTORY_LENGTH_BY_STATE: &str = "replicated_state_ingress_history_length_by_state";
+/// All label values of `INGRESS_HISTORY_LENGTH_BY_STATE`.
+const INGRESS_STATES: &[&str] = &[
+    "received",
+    "processing",
+    "completed",
+    "failed",
+    "done",
+    "unknown",
+];
+
+#[test]
+fn replicated_state_metrics_ingress_history_length_by_state() {
+    let known_status = |state: IngressState| IngressStatus::Known {
+        receiver: canister_test_id(1).get(),
+        user_id: user_test_id(1),
+        time: UNIX_EPOCH,
+        state,
+    };
+
+    // Note that `IngressState::Done` is not covered here: it cannot be recorded
+    // directly, only reached by forgetting a terminal status (see below). And
+    // neither is `IngressStatus::Unknown`, which must never be recorded at all
+    // (`IngressHistoryState::insert()` `debug_assert`s against it), so it can only
+    // ever be observed as zero.
+    for (label_value, ingress_state) in [
+        ("received", IngressState::Received),
+        ("processing", IngressState::Processing),
+        (
+            "completed",
+            IngressState::Completed(WasmResult::Reply(vec![1, 2, 3])),
+        ),
+        (
+            "failed",
+            IngressState::Failed(UserError::new(ErrorCode::CanisterTrapped, "Oops")),
+        ),
+    ] {
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        assert_gauge_vec(
+            None,
+            &state,
+            INGRESS_HISTORY_LENGTH_BY_STATE,
+            "state",
+            INGRESS_STATES,
+        );
+
+        // Recording an ingress message in the given state bumps its count to 1.
+        state.set_ingress_status(
+            message_test_id(1),
+            known_status(ingress_state),
+            NumBytes::new(u64::MAX),
+            |_| {},
+        );
+        assert_gauge_vec(
+            Some(label_value),
+            &state,
+            INGRESS_HISTORY_LENGTH_BY_STATE,
+            "state",
+            INGRESS_STATES,
+        );
+
+        // Making it terminal and pruning it drops the count back to 0.
+        state.set_ingress_status(
+            message_test_id(1),
+            known_status(IngressState::Completed(WasmResult::Reply(vec![]))),
+            NumBytes::new(u64::MAX),
+            |_| {},
+        );
+        state
+            .metadata
+            .ingress_history
+            .prune(Time::from_nanos_since_unix_epoch(u64::MAX));
+        assert_gauge_vec(
+            None,
+            &state,
+            INGRESS_HISTORY_LENGTH_BY_STATE,
+            "state",
+            INGRESS_STATES,
+        );
+    }
+
+    // `IngressState::Done` is reached by forgetting the payload of a terminal
+    // status, which happens as soon as the ingress history exceeds its memory
+    // capacity.
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    state.set_ingress_status(
+        message_test_id(1),
+        known_status(IngressState::Completed(WasmResult::Reply(vec![1, 2, 3]))),
+        NumBytes::new(0),
+        |_| {},
+    );
+    assert_gauge_vec(
+        Some("done"),
+        &state,
+        INGRESS_HISTORY_LENGTH_BY_STATE,
+        "state",
+        INGRESS_STATES,
+    );
+
+    state
+        .metadata
+        .ingress_history
+        .prune(Time::from_nanos_since_unix_epoch(u64::MAX));
+    assert_gauge_vec(
+        None,
+        &state,
+        INGRESS_HISTORY_LENGTH_BY_STATE,
+        "state",
+        INGRESS_STATES,
+    );
+}
+
+#[test]
+fn replicated_state_metrics_output_queue_messages() {
+    const NAME: &str = "execution_output_queue_messages";
+    let local_canister = canister_test_id(0);
+    let remote_canister = canister_test_id(10);
+
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    state.put_canister_state(get_running_canister(local_canister));
+    assert_gauge(0, &state, NAME);
+
+    // Inducting a request reserves a slot for its response; enqueueing the response
+    // bumps the count to 1.
+    let mut subnet_available_guaranteed_response_memory = i64::MAX / 2;
+    state
+        .push_input(
+            RequestBuilder::new()
+                .sender(remote_canister)
+                .receiver(local_canister)
+                .sender_reply_callback(CallbackId::from(1))
+                .build()
+                .into(),
+            &mut subnet_available_guaranteed_response_memory,
+        )
+        .unwrap();
+    state
+        .canister_state_make_mut(&local_canister)
+        .unwrap()
+        .system_state
+        .push_output_response(Arc::new(
+            ResponseBuilder::new()
+                .originator(remote_canister)
+                .respondent(local_canister)
+                .originator_reply_callback(CallbackId::from(1))
+                .build(),
+        ));
+    assert_gauge(1, &state, NAME);
+
+    // Popping the response drops it back to 0.
+    assert_eq!(1, state.output_into_iter().count());
+    assert_gauge(0, &state, NAME);
+}
+
+#[test]
+fn replicated_state_metrics_subnet_queue_messages() {
+    const INPUT: &str = "execution_subnet_input_queue_messages";
+    const OUTPUT: &str = "execution_subnet_output_queue_messages";
+    const KINDS: &[&str] = &["ingress", "canister"];
+    let own_subnet = subnet_test_id(1);
+    let subnet_canister = CanisterId::from(own_subnet);
+    let remote_canister = canister_test_id(10);
+
+    //
+    // An ingress message to the subnet.
+    //
+    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
+    assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
+
+    state.subnet_queues_mut().push_ingress(
+        IngressBuilder::new()
+            .receiver(subnet_canister)
+            .method_name("method")
+            .build(),
+    );
+    assert_gauge_vec(Some("ingress"), &state, INPUT, "kind", KINDS);
+
+    assert_eq!(
+        1,
+        state.subnet_queues_retain_ingress_messages(|_| false).len()
+    );
+    assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
+
+    //
+    // A request to the subnet, and the response to it.
+    //
+    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
+    assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
+    assert_gauge(0, &state, OUTPUT);
+
+    let mut subnet_available_guaranteed_response_memory = i64::MAX / 2;
+    state
+        .push_input(
+            RequestBuilder::new()
+                .sender(remote_canister)
+                .receiver(subnet_canister)
+                .sender_reply_callback(CallbackId::from(1))
+                .build()
+                .into(),
+            &mut subnet_available_guaranteed_response_memory,
+        )
+        .unwrap();
+    assert_gauge_vec(Some("canister"), &state, INPUT, "kind", KINDS);
+    assert_gauge(0, &state, OUTPUT);
+
+    // Popping the request drops the input count back to 0; responding to it bumps
+    // the output count to 1.
+    assert!(state.pop_subnet_input().is_some());
+    assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
+
+    state.subnet_queues_mut().push_output_response(Arc::new(
+        ResponseBuilder::new()
+            .originator(remote_canister)
+            .respondent(subnet_canister)
+            .originator_reply_callback(CallbackId::from(1))
+            .build(),
+    ));
+    assert_gauge(1, &state, OUTPUT);
+
+    // And popping the response drops it back to 0.
+    assert_eq!(1, state.output_into_iter().count());
+    assert_gauge(0, &state, OUTPUT);
+}
+
+#[test]
+fn replicated_state_metrics_pending_refunds() {
+    const NAME: &str = "replicated_state_pending_refunds";
+
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    assert_gauge(0, &state, NAME);
+
+    state.add_refund(canister_test_id(1), Cycles::new(13));
+    assert_gauge(1, &state, NAME);
+
+    state.take_refunds(|_| true);
+    assert_gauge(0, &state, NAME);
+}
+
+#[test]
+fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
+    const NAME: &str = "replicated_state_unresponded_unbounded_wait_call_contexts";
+    let own_subnet = subnet_test_id(1);
+    let remote_subnet = subnet_test_id(2);
+    let local_canister = canister_test_id(0);
+
+    let subnet_label_values = &[
+        own_subnet.to_string(),
+        remote_subnet.to_string(),
+        "unknown".to_string(),
+    ];
+    let subnet_label_values: Vec<&str> = subnet_label_values.iter().map(String::as_str).collect();
+
+    // A sender on this subnet, one on a remote subnet and one that cannot be routed
+    // anywhere; each expected under the respective label value.
+    for (sender, label_value) in [
+        (canister_test_id(1), own_subnet.to_string()),
+        (canister_test_id(11), remote_subnet.to_string()),
+        (canister_test_id(100), "unknown".to_string()),
+    ] {
+        let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
+        state.metadata.modify_network_topology(|network_topology| {
+            for (range, subnet_id) in [
+                ((canister_test_id(0), canister_test_id(9)), own_subnet),
+                ((canister_test_id(10), canister_test_id(19)), remote_subnet),
+            ] {
+                network_topology
+                    .routing_table_mut()
+                    .insert(
+                        CanisterIdRange {
+                            start: range.0,
+                            end: range.1,
+                        },
+                        subnet_id,
+                    )
+                    .unwrap();
+            }
+            let subnets = [own_subnet, remote_subnet]
+                .into_iter()
+                .map(|subnet_id| (subnet_id, SubnetTopology::default()))
+                .collect();
+            network_topology.set_subnets(subnets);
+        });
+        state.put_canister_state(get_running_canister(local_canister));
+        assert_gauge_vec(None, &state, NAME, "sender_subnet", &subnet_label_values);
+
+        // An unbounded-wait call from `sender`, awaiting a response, bumps the count
+        // for its subnet to 1.
+        let system_state = &mut state
+            .canister_state_make_mut(&local_canister)
+            .unwrap()
+            .system_state;
+        let call_context_id = system_state
+            .new_call_context(
+                CallOrigin::CanisterUpdate(
+                    sender,
+                    CallbackId::from(1),
+                    NO_DEADLINE,
+                    String::from(""),
+                ),
+                Cycles::zero(),
+                UNIX_EPOCH,
+                Default::default(),
+                None,
+            )
+            .unwrap();
+        assert_gauge_vec(
+            Some(&label_value),
+            &state,
+            NAME,
+            "sender_subnet",
+            &subnet_label_values,
+        );
+
+        // Responding to it drops the count back to 0. A downstream call is made
+        // first, so that the call context survives being responded to and the count
+        // drops because of the response, not because the call context is gone.
+        let system_state = &mut state
+            .canister_state_make_mut(&local_canister)
+            .unwrap()
+            .system_state;
+        let mut downstream_call = OutputRequestBuilder::default()
+            .sender(local_canister)
+            .receiver(canister_test_id(20))
+            .build();
+        downstream_call.call_context_id = call_context_id;
+        system_state
+            .push_output_request(downstream_call, UNIX_EPOCH)
+            .unwrap();
+        system_state
+            .on_canister_result(
+                call_context_id,
+                Ok(Some(WasmResult::Reply(vec![]))),
+                NumInstructions::from(0),
+            )
+            .unwrap();
+        assert!(
+            system_state
+                .call_context_manager()
+                .unwrap()
+                .call_context(call_context_id)
+                .unwrap()
+                .has_responded()
+        );
+        assert_gauge_vec(None, &state, NAME, "sender_subnet", &subnet_label_values);
+    }
 }
 
 #[test]

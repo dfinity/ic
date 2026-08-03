@@ -28,7 +28,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities_metrics::fetch_gauge;
+use ic_test_utilities_metrics::{MetricVec, fetch_gauge, fetch_int_gauge_vec, labels};
 use ic_test_utilities_types::ids::{
     SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
     user_test_id,
@@ -855,12 +855,57 @@ fn system_metadata_online_split() {
     assert_eq!(expected, metadata_b);
 }
 
+const SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts";
+/// All label values of `SUBNET_CALL_CONTEXTS`.
+const SUBNET_CALL_TYPES: &[&str] = &[
+    "setup_initial_dkg",
+    "sign_with_threshold",
+    "canister_http_request",
+    "delivered_canister_http_request",
+    "reshare_chain_key",
+    "bitcoin_get_successors",
+    "bitcoin_send_transaction_internal",
+    "raw_rand",
+    "install_code",
+    "stop_canister",
+];
+
+/// Asserts that `SUBNET_CALL_CONTEXTS` has a value of 1 for `one` and of 0 for all
+/// the other call types; or 0 for all of them, if `one` is `None`.
+fn assert_subnet_call_contexts(one: Option<&str>, state: &ReplicatedState) {
+    let registry = MetricsRegistry::new();
+    ReplicatedStateMetrics::new(&registry).observe(
+        state.metadata.own_subnet_id,
+        state,
+        0.into(),
+        &no_op_logger(),
+    );
+
+    let expected: MetricVec<u64> = SUBNET_CALL_TYPES
+        .iter()
+        .map(|call_type| {
+            (
+                labels(&[("type", call_type)]),
+                u64::from(Some(*call_type) == one),
+            )
+        })
+        .collect();
+    assert_eq!(
+        expected,
+        fetch_int_gauge_vec(&registry, SUBNET_CALL_CONTEXTS)
+    );
+}
+
+/// Tests that each subnet call type is counted under its own label value: pushing
+/// one call of a given type bumps that label value to 1 (and no other), while
+/// removing it again drops it back to 0.
 #[test]
-fn subnet_call_context_manager_context_counts() {
+fn subnet_call_contexts_metric() {
+    let fresh_state = || ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     let request = || {
         RequestBuilder::default()
             .sender(canister_test_id(1))
-            .receiver(canister_test_id(2))
+            .receiver(CanisterId::ic_00())
             .build()
     };
     let call = || CanisterCall::Request(Arc::new(request()));
@@ -881,24 +926,21 @@ fn subnet_call_context_manager_context_counts() {
         cost_schedule: CanisterCyclesCostSchedule::Normal,
     };
 
-    let mut subnet_call_context_manager = SubnetCallContextManager::default();
-
-    // Push a different number of contexts of each type, so that the test fails if
-    // any two of the counts were to be mixed up.
-    for _ in 0..1 {
-        subnet_call_context_manager.push_context(SubnetCallContext::SetupInitialDKG(
-            SetupInitialDkgContext {
+    // All the call types that are pushed and retrieved by callback ID.
+    for (call_type, context) in [
+        (
+            "setup_initial_dkg",
+            SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
                 request: request(),
                 nodes_in_target_subnet: BTreeSet::new(),
                 target_id: NiDkgTargetId::new([0_u8; 32]),
                 registry_version: RegistryVersion::from(1),
                 time: UNIX_EPOCH,
-            },
-        ));
-    }
-    for _ in 0..2 {
-        subnet_call_context_manager.push_context(SubnetCallContext::SignWithThreshold(
-            SignWithThresholdContext {
+            }),
+        ),
+        (
+            "sign_with_threshold",
+            SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request: request(),
                 args: ThresholdArguments::Ecdsa(EcdsaArguments {
                     key_id: make_key_id(),
@@ -908,36 +950,26 @@ fn subnet_call_context_manager_context_counts() {
                 derivation_path: Arc::new(vec![]),
                 batch_time: UNIX_EPOCH,
                 nonce: None,
-            },
-        ));
-    }
-    for _ in 0..3 {
-        subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
-            canister_http_request_context(),
-        ));
-    }
-    for i in 0..4 {
-        // Delivered HTTP requests are only ever moved here from
-        // `canister_http_request_contexts`, so they have no `push` method.
-        subnet_call_context_manager
-            .delivered_canister_http_request_contexts
-            .insert(CallbackId::new(1000 + i), canister_http_request_context());
-    }
-    for _ in 0..5 {
-        subnet_call_context_manager.push_context(SubnetCallContext::ReshareChainKey(
-            ReshareChainKeyContext {
+            }),
+        ),
+        (
+            "canister_http_request",
+            SubnetCallContext::CanisterHttpRequest(canister_http_request_context()),
+        ),
+        (
+            "reshare_chain_key",
+            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
                 request: request(),
                 key_id: MasterPublicKeyId::Ecdsa(make_key_id()),
                 nodes: BTreeSet::new(),
                 registry_version: RegistryVersion::from(1),
                 time: UNIX_EPOCH,
                 target_id: NiDkgTargetId::new([0_u8; 32]),
-            },
-        ));
-    }
-    for _ in 0..6 {
-        subnet_call_context_manager.push_context(SubnetCallContext::BitcoinGetSuccessors(
-            BitcoinGetSuccessorsContext {
+            }),
+        ),
+        (
+            "bitcoin_get_successors",
+            SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
                 request: request(),
                 payload: GetSuccessorsRequestInitial {
                     network: Network::BitcoinMainnet,
@@ -945,11 +977,10 @@ fn subnet_call_context_manager_context_counts() {
                     processed_block_hashes: vec![],
                 },
                 time: UNIX_EPOCH,
-            },
-        ));
-    }
-    for _ in 0..7 {
-        subnet_call_context_manager.push_context(
+            }),
+        ),
+        (
+            "bitcoin_send_transaction_internal",
             SubnetCallContext::BitcoinSendTransactionInternal(
                 BitcoinSendTransactionInternalContext {
                     request: request(),
@@ -960,54 +991,108 @@ fn subnet_call_context_manager_context_counts() {
                     time: UNIX_EPOCH,
                 },
             ),
+        ),
+    ] {
+        let mut state = fresh_state();
+        assert_subnet_call_contexts(None, &state);
+
+        let callback_id = state
+            .metadata
+            .subnet_call_context_manager
+            .push_context(context);
+        assert_subnet_call_contexts(Some(call_type), &state);
+
+        assert!(
+            state
+                .metadata
+                .subnet_call_context_manager
+                .retrieve_context(callback_id, &no_op_logger())
+                .is_some()
         );
-    }
-    for _ in 0..8 {
-        subnet_call_context_manager.push_raw_rand_request(
-            request(),
-            ExecutionRound::from(1),
-            UNIX_EPOCH,
-        );
-    }
-    for i in 0..9 {
-        subnet_call_context_manager.push_install_code_call(InstallCodeCall {
-            call: call(),
-            effective_canister_id: canister_test_id(i),
-            time: UNIX_EPOCH,
-        });
-    }
-    for i in 0..10 {
-        subnet_call_context_manager.push_stop_canister_call(StopCanisterCall {
-            call: call(),
-            effective_canister_id: canister_test_id(i),
-            time: UNIX_EPOCH,
-        });
+        assert_subnet_call_contexts(None, &state);
     }
 
+    // Delivered canister HTTP requests are only ever moved here from
+    // `canister_http_request_contexts`, and are dropped once they time out.
+    let mut state = fresh_state();
+    assert_subnet_call_contexts(None, &state);
+    state
+        .metadata
+        .subnet_call_context_manager
+        .delivered_canister_http_request_contexts
+        .insert(CallbackId::new(1), canister_http_request_context());
+    assert_subnet_call_contexts(Some("delivered_canister_http_request"), &state);
     assert_eq!(
-        vec![
-            ("setup_initial_dkg", 1),
-            ("sign_with_threshold", 2),
-            ("canister_http_request", 3),
-            ("delivered_canister_http_request", 4),
-            ("reshare_chain_key", 5),
-            ("bitcoin_get_successors", 6),
-            ("bitcoin_send_transaction_internal", 7),
-            ("raw_rand", 8),
-            ("install_code", 9),
-            ("stop_canister", 10),
-        ],
-        subnet_call_context_manager
-            .context_counts()
-            .collect::<Vec<_>>()
+        1,
+        state
+            .metadata
+            .subnet_call_context_manager
+            .time_out_delivered_canister_http_request_contexts(
+                UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+            )
+            .len()
     );
+    assert_subnet_call_contexts(None, &state);
 
-    // A default manager holds no contexts at all.
-    assert!(
-        SubnetCallContextManager::default()
-            .context_counts()
-            .all(|(_, count)| count == 0)
+    // `RawRand` requests are dropped if their sender is no longer local.
+    let mut state = fresh_state();
+    assert_subnet_call_contexts(None, &state);
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_raw_rand_request(request(), ExecutionRound::from(1), UNIX_EPOCH);
+    assert_subnet_call_contexts(Some("raw_rand"), &state);
+    assert_eq!(
+        1,
+        state
+            .metadata
+            .subnet_call_context_manager
+            .remove_non_local_raw_rand_calls(|_| false)
+            .len()
     );
+    assert_subnet_call_contexts(None, &state);
+
+    // Install code calls are removed by call ID.
+    let mut state = fresh_state();
+    assert_subnet_call_contexts(None, &state);
+    let call_id = state
+        .metadata
+        .subnet_call_context_manager
+        .push_install_code_call(InstallCodeCall {
+            call: call(),
+            time: UNIX_EPOCH,
+            effective_canister_id: canister_test_id(2),
+        });
+    assert_subnet_call_contexts(Some("install_code"), &state);
+    assert!(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .remove_install_code_call(call_id)
+            .is_some()
+    );
+    assert_subnet_call_contexts(None, &state);
+
+    // As are stop canister calls.
+    let mut state = fresh_state();
+    assert_subnet_call_contexts(None, &state);
+    let call_id = state
+        .metadata
+        .subnet_call_context_manager
+        .push_stop_canister_call(StopCanisterCall {
+            call: call(),
+            time: UNIX_EPOCH,
+            effective_canister_id: canister_test_id(2),
+        });
+    assert_subnet_call_contexts(Some("stop_canister"), &state);
+    assert!(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .remove_stop_canister_call(call_id)
+            .is_some()
+    );
+    assert_subnet_call_contexts(None, &state);
 }
 
 #[test]
