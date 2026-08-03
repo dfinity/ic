@@ -1,5 +1,5 @@
 {
-  "checksum": "4eb6d15fe0a50be732d31728d688bf3379b4bf80fa3a63f6e0f4ec8d81ed4d3d",
+  "checksum": "17ed7b0bb760bec0b3cf93b42579f0bed7ff868bcc145e4807d6438efe2e95de",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -21152,7 +21152,7 @@
               "target": "metrics_proxy"
             },
             {
-              "id": "minicbor 0.19.1",
+              "id": "minicbor 0.22.0",
               "target": "minicbor"
             },
             {
@@ -21937,7 +21937,7 @@
               "target": "indoc"
             },
             {
-              "id": "minicbor-derive 0.13.0",
+              "id": "minicbor-derive 0.14.0",
               "target": "minicbor_derive"
             },
             {
@@ -46984,14 +46984,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "minicbor 0.19.1": {
+    "minicbor 0.22.0": {
       "name": "minicbor",
-      "version": "0.19.1",
+      "version": "0.22.0",
       "package_url": "https://gitlab.com/twittner/minicbor",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/minicbor/0.19.1/download",
-          "sha256": "d7005aaf257a59ff4de471a9d5538ec868a21586534fff7f85dd97d4043a6139"
+          "url": "https://static.crates.io/crates/minicbor/0.22.0/download",
+          "sha256": "076217b1b5f78c7e96f833ff894273369bb70e414c23625d091f281857abf8b8"
         }
       },
       "targets": [
@@ -47036,7 +47036,7 @@
         "deps": {
           "common": [
             {
-              "id": "minicbor 0.19.1",
+              "id": "minicbor 0.22.0",
               "target": "build_script_build"
             }
           ],
@@ -47046,13 +47046,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "minicbor-derive 0.13.0",
+              "id": "minicbor-derive 0.14.0",
               "target": "minicbor_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.19.1"
+        "version": "0.22.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -47071,14 +47071,14 @@
       ],
       "license_file": "LICENSE.md"
     },
-    "minicbor-derive 0.13.0": {
+    "minicbor-derive 0.14.0": {
       "name": "minicbor-derive",
-      "version": "0.13.0",
+      "version": "0.14.0",
       "package_url": "https://gitlab.com/twittner/minicbor",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/minicbor-derive/0.13.0/download",
-          "sha256": "1154809406efdb7982841adb6311b3d095b46f78342dd646736122fe6b19e267"
+          "url": "https://static.crates.io/crates/minicbor-derive/0.14.0/download",
+          "sha256": "8f29ac9686ec36cb5c82e866f97eaa67e299bf4ecab0c152f2860e1145be468e"
         }
       },
       "targets": [
@@ -47117,14 +47117,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.13.0"
+        "version": "0.14.0"
       },
       "license": "BlueOak-1.0.0",
       "license_ids": [
@@ -96609,8 +96609,8 @@
     "memchr 2.7.4",
     "memmap2 0.9.5",
     "metrics-proxy 0.1.0",
-    "minicbor 0.19.1",
-    "minicbor-derive 0.13.0",
+    "minicbor 0.22.0",
+    "minicbor-derive 0.14.0",
     "mockall 0.13.1",
     "mockito 1.7.0",
     "moka 0.12.15",
