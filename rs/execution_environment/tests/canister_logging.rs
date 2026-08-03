@@ -308,7 +308,7 @@ fn test_metric_fetch_canister_logs_via_query_call() {
 #[test]
 fn test_fetch_canister_logs_via_inter_canister_update_call_disabled() {
     // Test fetch_canister_logs call fails for inter-canister update call.
-    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // There are 3 actors with the following controller relationship: user -> canister_a -> canister_b.
     // The user uses update call to canister_a to fetch logs of canister_b, which should fail.
     let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
     let user_controller = PrincipalId::new_user_test_id(42);
@@ -363,7 +363,7 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_disabled() {
 #[test]
 fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
     // Test fetch_canister_logs call succeeds for inter-canister update call.
-    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // There are 3 actors with the following controller relationship: user -> canister_a -> canister_b.
     // The user uses update call to canister_a to fetch logs of canister_b, which should succeed.
     let replicated_inter_canister_log_fetch = FlagStatus::Enabled;
     let user_controller = PrincipalId::new_user_test_id(42);
@@ -429,7 +429,7 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
 fn test_fetch_canister_logs_via_composite_query_call_disabled() {
     // Test that fetch_canister_logs API is not accessible via composite query call
     // if the corresponding feature is disabled.
-    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // There are 3 actors with the following controller relationship: user -> canister_a -> canister_b.
     // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
     let user_controller = PrincipalId::new_user_test_id(42);
     let log_visibility = LogVisibilityV2::Controllers;
@@ -484,7 +484,7 @@ fn test_fetch_canister_logs_via_composite_query_call_disabled() {
 fn test_fetch_canister_logs_via_composite_query_call_enabled() {
     // Test that fetch_canister_logs API is accessible via composite query call
     // if the corresponding feature is enabled.
-    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // There are 3 actors with the following controller relationship: user -> canister_a -> canister_b.
     // The user uses composite_query to canister_a to fetch logs of canister_b.
     let user_controller = PrincipalId::new_user_test_id(42);
     let log_visibility = LogVisibilityV2::Controllers;
