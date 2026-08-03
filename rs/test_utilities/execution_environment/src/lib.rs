@@ -85,7 +85,7 @@ use ic_types::{
     },
     time::UNIX_EPOCH,
 };
-use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
+use ic_types::{ExecutionRound, NumberOfNodes, RegistryVersion, ReplicaVersion};
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
     HTTPOutcalls, Instructions, NominalCycles, RequestAndResponseTransmission,
@@ -580,6 +580,19 @@ impl ExecutionTest {
             request_size,
             replication,
             self.get_own_subnet_cycles_config(),
+        )
+    }
+
+    pub fn max_http_request_usage_fee(
+        &self,
+        replication: &Replication,
+        max_response_bytes: Option<NumBytes>,
+        subnet_size: NumberOfNodes,
+    ) -> Cycles {
+        self.cycles_account_manager.max_http_request_usage_fee(
+            replication,
+            max_response_bytes,
+            subnet_size,
         )
     }
 

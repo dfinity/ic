@@ -15,8 +15,8 @@ use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId,
-    TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, ReplicationCounts, SchnorrAlgorithm,
+    SchnorrKeyId, TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -45,7 +45,8 @@ use ic_types::messages::{
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, ComputeAllocation, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    NumberOfNodes, PrincipalId, Time,
+    canister_http::ReplicationKind,
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
 };
@@ -9370,16 +9371,33 @@ fn invoke_cost_http_request() {
     assert_eq!(actual_cost, expected_cost.real());
 }
 
-#[test]
-fn invoke_cost_http_request_v2() {
-    #[derive(CandidType)]
-    struct CostHttpRequestV2Params {
-        request_bytes: u64,
-        http_roundtrip_time_ms: u64,
-        raw_response_bytes: u64,
-        transformed_response_bytes: u64,
-        transform_instructions: u64,
-    }
+#[derive(CandidType)]
+struct CostHttpRequestV2Params {
+    request_bytes: u64,
+    http_roundtrip_time_ms: u64,
+    raw_response_bytes: u64,
+    transformed_response_bytes: u64,
+    transform_instructions: u64,
+    outcall_type: Option<CostHttpRequestOutcallType>,
+}
+
+#[derive(CandidType, serde::Deserialize)]
+enum CostHttpRequestOutcallType {
+    #[serde(rename = "fully_replicated")]
+    FullyReplicated(candid::Reserved),
+    #[serde(rename = "non_replicated")]
+    NonReplicated(candid::Reserved),
+    #[serde(rename = "flexible")]
+    Flexible(Option<ReplicationCounts>),
+}
+
+/// Asks a canister for the cost of an HTTP outcall of the given `outcall_type` via
+/// `ic0.cost_http_request_v2` and asserts that it matches the cost of the same
+/// outcall with the given `replication_kind`.
+fn assert_cost_http_request_v2(
+    outcall_type: Option<CostHttpRequestOutcallType>,
+    replication_kind: ReplicationKind,
+) {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
     let request_bytes = 1000;
@@ -9393,6 +9411,7 @@ fn invoke_cost_http_request_v2() {
         raw_response_bytes,
         transformed_response_bytes,
         transform_instructions,
+        outcall_type,
     };
     let params_blob = Encode!(&params).unwrap();
 
@@ -9408,11 +9427,60 @@ fn invoke_cost_http_request_v2() {
         raw_response_bytes.into(),
         transform_instructions.into(),
         transformed_response_bytes.into(),
+        replication_kind,
         test.get_own_subnet_cycles_config(),
     );
     let bytes = get_reply(res);
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost.real());
+}
+
+#[test]
+fn invoke_cost_http_request_v2() {
+    // An absent `outcall_type` prices a fully-replicated outcall, as does the
+    // explicit variant.
+    assert_cost_http_request_v2(None, ReplicationKind::FullyReplicated);
+    assert_cost_http_request_v2(
+        Some(CostHttpRequestOutcallType::FullyReplicated(
+            candid::Reserved,
+        )),
+        ReplicationKind::FullyReplicated,
+    );
+}
+
+#[test]
+fn invoke_cost_http_request_v2_non_replicated() {
+    assert_cost_http_request_v2(
+        Some(CostHttpRequestOutcallType::NonReplicated(candid::Reserved)),
+        ReplicationKind::NonReplicated,
+    );
+}
+
+#[test]
+fn invoke_cost_http_request_v2_flexible() {
+    assert_cost_http_request_v2(
+        Some(CostHttpRequestOutcallType::Flexible(Some(
+            ReplicationCounts {
+                total_requests: 4,
+                min_responses: 2,
+                max_responses: 3,
+            },
+        ))),
+        ReplicationKind::Flexible {
+            total_requests: 4,
+            min_responses: 2,
+            max_responses: 3,
+        },
+    );
+}
+
+#[test]
+fn invoke_cost_http_request_v2_flexible_without_counts_uses_the_defaults() {
+    let subnet_size = ExecutionTestBuilder::new().build().subnet_size();
+    assert_cost_http_request_v2(
+        Some(CostHttpRequestOutcallType::Flexible(None)),
+        ReplicationKind::default_flexible(NumberOfNodes::from(subnet_size as u32)),
+    );
 }
 
 #[test]
@@ -9424,6 +9492,7 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
         raw_response_bytes: u64,
         transformed_response_bytes: u64,
         transform_instructions: u64,
+        outcall_type: Option<CostHttpRequestOutcallType>,
         garbage: Vec<u8>,
     }
     let mut test = ExecutionTestBuilder::new().build();
@@ -9434,6 +9503,7 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
     let transformed_response_bytes = 800_000;
     let transform_instructions = 500_000_000;
     let garbage = "Some garbage to DoS the System API by making Candid decoding more expensive"
+        .repeat(10)
         .as_bytes()
         .into();
     let params = CostHttpRequestV2ParamsExtended {
@@ -9442,6 +9512,7 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
         raw_response_bytes,
         transformed_response_bytes,
         transform_instructions,
+        outcall_type: None,
         garbage,
     };
     let params_blob = Encode!(&params).unwrap();

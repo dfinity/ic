@@ -8,10 +8,7 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
-use crate::fees::{
-    FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE, PER_DOWNLOADED_BYTE_FEE, PER_RESPONSE_MS_FEE,
-    TRANSFORM_INSTRUCTION_DIVISOR,
-};
+use crate::fees::{gossip_usage_fee, network_usage_fee, transform_usage_fee};
 use crate::{AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError};
 
 /// This tracker implements the per-replica part of pay-as-you-go pricing. The formula
@@ -97,10 +94,7 @@ impl BudgetTracker for PayAsYouGoTracker {
             response_size,
             response_time,
         } = network_usage;
-        let cost = PER_DOWNLOADED_BYTE_FEE
-            .saturating_mul(response_size.get() as u128)
-            .saturating_add(PER_RESPONSE_MS_FEE.saturating_mul(response_time.as_millis()));
-        self.charge(cost)
+        self.charge(network_usage_fee(response_size, response_time))
     }
 
     fn get_transform_limit(&self) -> NumInstructions {
@@ -109,8 +103,7 @@ impl BudgetTracker for PayAsYouGoTracker {
     }
 
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError> {
-        let cost = (usage.get() as u128) / TRANSFORM_INSTRUCTION_DIVISOR;
-        self.charge(cost)
+        self.charge(transform_usage_fee(usage))
     }
 
     fn subtract_gossip_usage(
@@ -123,10 +116,10 @@ impl BudgetTracker for PayAsYouGoTracker {
         if !self.is_gossiping {
             return Ok(());
         }
-        let cost = FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
-            .saturating_mul(transformed_response_size.get() as u128)
-            .saturating_mul(self.subnet_size.get() as u128);
-        self.charge(cost)
+        self.charge(gossip_usage_fee(
+            transformed_response_size,
+            self.subnet_size,
+        ))
     }
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
@@ -149,6 +142,10 @@ impl BudgetTracker for PayAsYouGoTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fees::{
+        FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE, PER_DOWNLOADED_BYTE_FEE, PER_RESPONSE_MS_FEE,
+        TRANSFORM_INSTRUCTION_DIVISOR,
+    };
     use ic_types::{
         CanisterId, NodeId, PrincipalId, RegistryVersion,
         canister_http::{CanisterHttpMethod, PricingVersion, RefundStatus},

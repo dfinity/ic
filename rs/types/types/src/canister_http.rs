@@ -194,8 +194,16 @@ impl Replication {
     pub fn kind(&self) -> ReplicationKind {
         match self {
             Replication::FullyReplicated => ReplicationKind::FullyReplicated,
-            Replication::Flexible { .. } => ReplicationKind::Flexible,
             Replication::NonReplicated(_) => ReplicationKind::NonReplicated,
+            Replication::Flexible {
+                committee,
+                min_responses,
+                max_responses,
+            } => ReplicationKind::Flexible {
+                total_requests: committee.len() as u32,
+                min_responses: *min_responses,
+                max_responses: *max_responses,
+            },
         }
     }
 
@@ -206,19 +214,25 @@ impl Replication {
     /// its `per_replica_allowance` and the number of allowances that have to be
     /// accounted for before the request is fully settled.
     pub fn node_count(&self, subnet_size: NumberOfNodes) -> usize {
-        match self {
-            Replication::FullyReplicated => (subnet_size.get() as usize).max(1),
-            Replication::NonReplicated(_) => 1,
-            Replication::Flexible { committee, .. } => committee.len().max(1),
-        }
+        self.kind().node_count(subnet_size)
     }
 }
 
-/// The kind of replication of a request.
+/// The kind of replication of a request, along with the response counts of a
+/// flexible one.
+///
+/// This is everything the pricing of an outcall depends on. Unlike [`Replication`]
+/// it does not identify the participating nodes, so it can also describe a
+/// hypothetical outcall — e.g. one whose cost a canister asks for via
+/// `ic0.cost_http_request_v2`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReplicationKind {
     FullyReplicated,
-    Flexible,
+    Flexible {
+        total_requests: u32,
+        min_responses: u32,
+        max_responses: u32,
+    },
     NonReplicated,
 }
 
@@ -226,8 +240,30 @@ impl ReplicationKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             ReplicationKind::FullyReplicated => "fully_replicated",
-            ReplicationKind::Flexible => "flexible",
+            ReplicationKind::Flexible { .. } => "flexible",
             ReplicationKind::NonReplicated => "non_replicated",
+        }
+    }
+
+    /// The flexible replication a request that does not specify its response counts
+    /// gets on a subnet of `subnet_size` nodes: every node attempts the outcall and
+    /// `floor(2/3 * N) + 1` responses are required.
+    pub fn default_flexible(subnet_size: NumberOfNodes) -> Self {
+        let n = subnet_size.get();
+        Self::Flexible {
+            total_requests: n,
+            min_responses: (2 * n) / 3 + 1,
+            max_responses: n,
+        }
+    }
+
+    /// The number of replicas that will attempt the outcall, see
+    /// [`Replication::node_count`].
+    pub fn node_count(&self, subnet_size: NumberOfNodes) -> usize {
+        match self {
+            Self::FullyReplicated => (subnet_size.get() as usize).max(1),
+            Self::NonReplicated => 1,
+            Self::Flexible { total_requests, .. } => (*total_requests as usize).max(1),
         }
     }
 }
@@ -708,8 +744,15 @@ impl CanisterHttpRequestContext {
                 if n == 0 {
                     return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
                 }
-                let default_min = (2 * n) / 3 + 1; // floor(2/3 * n) + 1
-                (n, default_min, n)
+                let ReplicationKind::Flexible {
+                    total_requests,
+                    min_responses,
+                    max_responses,
+                } = ReplicationKind::default_flexible(NumberOfNodes::from(n))
+                else {
+                    unreachable!("`default_flexible` returns flexible replication");
+                };
+                (total_requests, min_responses, max_responses)
             }
         };
         // From here, the following invariants are expected to hold:
