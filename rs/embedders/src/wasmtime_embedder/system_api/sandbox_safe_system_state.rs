@@ -387,7 +387,7 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
-        is_non_replicated_composite_query: bool,
+        is_composite_query: bool,
         metrics: &Metrics,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
@@ -462,7 +462,7 @@ impl SystemStateModifications {
                     Ok(()) => {
                         // This is a request to the management canister.
                         // Update the receiver to the appropriate subnet.
-                        let destination = if is_non_replicated_composite_query {
+                        let destination = if is_composite_query {
                             // Requests to the management canister made by a composite
                             // query are not routed based on the method and the payload:
                             // they are executed by the query handler against the state

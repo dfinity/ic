@@ -597,7 +597,7 @@ fn try_apply_canister_state_changes(
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
-    is_non_replicated_composite_query: bool,
+    is_composite_query: bool,
     metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
@@ -614,7 +614,7 @@ fn try_apply_canister_state_changes(
         system_state,
         network_topology,
         subnet_id,
-        is_non_replicated_composite_query,
+        is_composite_query,
         metrics,
         log,
     )
@@ -644,7 +644,7 @@ pub fn apply_canister_state_changes(
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
     call_context_creation_time: Time,
-    is_non_replicated_composite_query: bool,
+    is_composite_query: bool,
     deallocate: &dyn Fn(SystemState),
 ) {
     let CanisterStateChanges {
@@ -665,7 +665,7 @@ pub fn apply_canister_state_changes(
         time,
         network_topology,
         subnet_id,
-        is_non_replicated_composite_query,
+        is_composite_query,
         metrics,
         log,
     ) {
