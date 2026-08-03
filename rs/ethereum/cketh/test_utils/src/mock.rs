@@ -109,11 +109,6 @@ impl JsonRpcRequestMatcher {
     }
 
     fn tick_until_next_http_request(&self, env: &PocketIc) {
-        // Outcalls that a time advance pushed past CANISTER_HTTP_TIMEOUT_INTERVAL stay
-        // listed until a round processes their timeouts. Settle them first, otherwise a
-        // stub binds to one of them and its response is discarded, leaving the request
-        // the next scraping cycle issues unanswered.
-        env.tick();
         for _ in 0..MAX_TICKS {
             let has_matching_request = env
                 .get_canister_http()
