@@ -5412,7 +5412,10 @@ fn initial_spent_is_covered_under_pay_as_you_go_pricing() {
 
     assert_responses_from_threshold_shares(
         num_nodes,
-        with_payg_allowance(request_context(Replication::FullyReplicated), allowance - 1),
+        with_payg_allowance(
+            request_context(Replication::FullyReplicated),
+            allowance - Cycles::new(1),
+        ),
         0,
     );
 }
