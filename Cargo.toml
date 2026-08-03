@@ -967,6 +967,7 @@ virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.26.4"
 wasm-encoder = { version = "0.252.0", features = ["wasmparser"] }
+wasm-smith = { version = "0.252.0", default-features = false, features = ["wasmparser"] }
 wasmparser = "0.252.0"
 wasmprinter = "0.252.0"
 wasmtime = { version = "47.0.3", default-features = false, features = ["cranelift", "gc", "gc-null", "parallel-compilation", "runtime"] }
