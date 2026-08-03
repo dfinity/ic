@@ -1790,9 +1790,13 @@ impl Default for IngressHistoryState {
 
 /// The number of ingress history entries in each `IngressState`.
 ///
-/// `IngressStatus::Unknown` is not a valid ingress history state (it is only ever
-/// used as a stand-in for a missing entry), but it is counted regardless, so that
-/// the sum of all counts is always equal to the number of entries.
+/// `IngressStatus::Unknown` does not describe an entry at all: it is the stand-in
+/// for a message with no ingress history entry, which is why
+/// `IngressStatus::is_valid_state_transition()` never allows a transition to it.
+/// Nothing prevents one from being inserted, though, so it is given a count of
+/// its own instead of being ignored: this way the counts always add up to
+/// `IngressHistoryState::len()` and a non-zero `unknown` count reveals that
+/// something did insert one.
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct IngressStateCounts {
     pub received: usize,

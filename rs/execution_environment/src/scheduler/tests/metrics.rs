@@ -24,7 +24,9 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 };
 use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
-use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
+use ic_replicated_state::testing::{
+    OutputRequestBuilder, ReplicatedStateTesting, SystemStateTesting,
+};
 use ic_replicated_state::{CallOrigin, SubnetTopology};
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
@@ -673,7 +675,7 @@ fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
             .unwrap()
     };
     // Two unbounded-wait calls from a local canister, one from a remote canister.
-    new_call_context(canister_test_id(1), 1, NO_DEADLINE);
+    let local_call_context_id = new_call_context(canister_test_id(1), 1, NO_DEADLINE);
     new_call_context(canister_test_id(1), 2, NO_DEADLINE);
     new_call_context(canister_test_id(11), 3, NO_DEADLINE);
     // Plus a best-effort call from a remote canister, which is not counted.
@@ -698,6 +700,56 @@ fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
         ),
         metric_vec(&[
             (&[("sender_subnet", &own_subnet.to_string())], 2),
+            (&[("sender_subnet", &remote_subnet.to_string())], 1),
+            (&[("sender_subnet", &idle_subnet.to_string())], 0),
+            (&[("sender_subnet", &"unknown".to_string())], 1),
+        ]),
+    );
+
+    // Make a downstream call on behalf of one of the two unbounded-wait calls from
+    // the local canister, so that its call context will stay around after it has
+    // been responded to.
+    let mut downstream_call = OutputRequestBuilder::default()
+        .sender(canister_test_id(0))
+        .receiver(canister_test_id(20))
+        .build();
+    downstream_call.call_context_id = local_call_context_id;
+    let system_state = &mut state
+        .canister_state_make_mut(&canister_test_id(0))
+        .unwrap()
+        .system_state;
+    system_state
+        .push_output_request(downstream_call, UNIX_EPOCH)
+        .unwrap();
+
+    // Responding to that call drops it from the count, even though its call context
+    // is retained (pending the response to the downstream call): only calls still
+    // awaiting a response are counted.
+    system_state
+        .on_canister_result(
+            local_call_context_id,
+            Ok(Some(WasmResult::Reply(vec![]))),
+            NumInstructions::from(0),
+        )
+        .unwrap();
+    assert!(
+        system_state
+            .call_context_manager()
+            .unwrap()
+            .call_context(local_call_context_id)
+            .unwrap()
+            .has_responded()
+    );
+
+    state_metrics.observe(own_subnet, &state, 1.into(), &no_op_logger());
+
+    assert_eq!(
+        fetch_int_gauge_vec(
+            &registry,
+            "replicated_state_unresponded_unbounded_wait_call_contexts"
+        ),
+        metric_vec(&[
+            (&[("sender_subnet", &own_subnet.to_string())], 1),
             (&[("sender_subnet", &remote_subnet.to_string())], 1),
             (&[("sender_subnet", &idle_subnet.to_string())], 0),
             (&[("sender_subnet", &"unknown".to_string())], 1),

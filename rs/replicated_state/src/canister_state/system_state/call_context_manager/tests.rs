@@ -540,6 +540,13 @@ fn test_for_each_unresponded_unbounded_wait_originator() {
         vec![canister_test_id(1), canister_test_id(2)],
         originators(&ccm)
     );
+    // And it is dropped because it was responded to, not because it is gone: a
+    // responded call context stays around until all its callbacks have completed.
+    assert!(
+        ccm.call_context(unbounded_wait_call_context_id)
+            .unwrap()
+            .has_responded()
+    );
 }
 
 #[test]
