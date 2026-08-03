@@ -1027,11 +1027,11 @@ crate.spec(
         "derive",
     ],
     package = "minicbor",
-    version = "^0.19.1",
+    version = "^0.22.0",
 )
 crate.spec(
     package = "minicbor-derive",
-    version = "^0.13.0",
+    version = "^0.14.0",
 )
 crate.spec(
     package = "mockall",

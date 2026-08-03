@@ -68,6 +68,15 @@ pub enum InvalidCanisterHttpPayloadReason {
         /// The initial spend the validator recomputed and expected.
         expected: Cycles,
     },
+    /// The collective initial spent cycles of a response exceed the collective
+    /// allowance of the replicas that contributed to it, i.e. the sum of their
+    /// per-replica allowances.
+    InitialSpentExceedsLimit {
+        callback_id: CallbackId,
+        initial_spent: Cycles,
+        per_replica_allowance: Cycles,
+        num_replicas: usize,
+    },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
     SignersNotMembers {
