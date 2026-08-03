@@ -206,9 +206,9 @@ pub fn total_fee(
 }
 
 /// Everything an HTTP outcall of the given `replication_kind` with the given
-/// resource usage costs beyond its up-front [`base_fee`]: the
-/// [per-replica fee](per_replica_fee) of every replica attempting it, plus the
-/// consensus fee of delivering the responses.
+/// resource usage costs beyond its up-front [`base_fee`]: the per-replica fee of
+/// every replica attempting it, plus the consensus fee of delivering the responses.
+///
 ///
 /// This is the part of the price that the per-replica allowances have to cover.
 fn usage_fee(

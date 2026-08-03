@@ -20,6 +20,7 @@ use ic_execution_environment::{
     as_num_instructions, as_round_instructions,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_management_canister_types_private::ReplicationCounts;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
@@ -47,13 +48,6 @@ enum CostHttpRequestOutcallType {
     NonReplicated(candid::Reserved),
     #[serde(rename = "flexible")]
     Flexible(Option<ReplicationCounts>),
-}
-
-#[derive(CandidType, Deserialize)]
-struct ReplicationCounts {
-    total_requests: u32,
-    min_responses: u32,
-    max_responses: u32,
 }
 
 const COST_HTTP_REQUEST_V2_PARAMS: CostHttpRequestV2Params = CostHttpRequestV2Params {
