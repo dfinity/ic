@@ -146,16 +146,9 @@ impl ConsensusImpl {
         let last_summary_block = pool.dkg_summary_block(parent.as_ref())?;
 
         // Get the subnet records that are relevant to making a block
-        let stable_registry_version = self.block_maker.get_stable_registry_version(
-            parent.as_ref(),
-            last_summary_block.context.registry_version,
-            last_summary_block
-                .payload
-                .as_ref()
-                .as_summary()
-                .dkg
-                .get_next_start_height(),
-        )?;
+        let stable_registry_version = self
+            .block_maker
+            .get_stable_registry_version(parent.as_ref(), &last_summary_block)?;
         let subnet_records = block_maker::subnet_records_for_registry_version(
             &self.block_maker,
             registry_version,

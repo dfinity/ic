@@ -218,16 +218,8 @@ impl BlockMaker {
 
         // The stable registry version to be agreed on in this block. If this is a summary
         // block, this version will be the new membership version of the next dkg interval.
-        let stable_registry_version = self.get_stable_registry_version(
-            parent.as_ref(),
-            last_summary_block.context.registry_version,
-            last_summary_block
-                .payload
-                .as_ref()
-                .as_summary()
-                .dkg
-                .get_next_start_height(),
-        )?;
+        let stable_registry_version =
+            self.get_stable_registry_version(parent.as_ref(), &last_summary_block)?;
         // Get the subnet records that are relevant to making a block
         let subnet_records =
             subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
@@ -537,11 +529,17 @@ impl BlockMaker {
     pub(crate) fn get_stable_registry_version(
         &self,
         parent: &Block,
-        last_summary_block_registry_version: RegistryVersion,
-        next_summary_block_height: Height,
+        last_summary: &Block,
     ) -> Option<RegistryVersion> {
         let parents_version = parent.context.registry_version;
         let parents_height = parent.height();
+        let last_summary_block_registry_version = last_summary.context.registry_version;
+        let next_summary_block_height = last_summary
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .get_next_start_height();
         let latest_version = self.registry_client.get_latest_version();
         // Check if there is a stable version that we can bump up to.
         for v in (parents_version.get()..=latest_version.get()).rev() {
@@ -1282,11 +1280,12 @@ mod tests {
             // Now we just request versions at every interval of the previously added
             // version.
             let mut parent = pool.get_cache().finalized_block();
+            let last_summary = pool.get_cache().summary_block();
             block_maker.stable_registry_version_age =
                 current_time().saturating_duration_since(v3_timestamp);
             assert_eq!(
                 block_maker
-                    .get_stable_registry_version(&parent, RegistryVersion::new(1), Height::new(100))
+                    .get_stable_registry_version(&parent, &last_summary)
                     .unwrap(),
                 RegistryVersion::from(3)
             );
@@ -1294,7 +1293,7 @@ mod tests {
                 current_time().saturating_duration_since(v2_timestamp);
             assert_eq!(
                 block_maker
-                    .get_stable_registry_version(&parent, RegistryVersion::new(1), Height::new(100))
+                    .get_stable_registry_version(&parent, &last_summary)
                     .unwrap(),
                 RegistryVersion::from(2)
             );
@@ -1302,7 +1301,7 @@ mod tests {
                 current_time().saturating_duration_since(v1_timestamp);
             assert_eq!(
                 block_maker
-                    .get_stable_registry_version(&parent, RegistryVersion::new(1), Height::new(100))
+                    .get_stable_registry_version(&parent, &last_summary)
                     .unwrap(),
                 RegistryVersion::from(1)
             );
@@ -1310,7 +1309,7 @@ mod tests {
             parent.context.registry_version = RegistryVersion::from(2);
             assert_eq!(
                 block_maker
-                    .get_stable_registry_version(&parent, RegistryVersion::new(1), Height::new(100))
+                    .get_stable_registry_version(&parent, &last_summary)
                     .unwrap(),
                 RegistryVersion::from(2)
             );
@@ -1548,18 +1547,28 @@ mod tests {
                 }
 
                 registry.update_to_latest_version();
+
                 let mut parent = pool.get_cache().finalized_block();
                 parent.height = test_case.parent_height;
                 parent.context.registry_version = RegistryVersion::from(1);
+                let mut last_summary = pool.get_cache().summary_block();
+                last_summary.context.registry_version =
+                    test_case.last_summary_block_registry_version;
+                let mut summary_payload = last_summary.payload.as_ref().as_summary().clone();
+                // Set the interval length such that the next summary block is created at
+                // `test_case.next_summary_block_height`.
+                summary_payload.dkg.interval_length = test_case
+                    .next_summary_block_height
+                    .saturating_sub(&summary_payload.dkg.height)
+                    - Height::from(1);
+                last_summary.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(summary_payload),
+                );
 
-                std::thread::sleep(Duration::from_secs(1));
                 assert_eq!(
                     block_maker
-                        .get_stable_registry_version(
-                            &parent,
-                            test_case.last_summary_block_registry_version,
-                            test_case.next_summary_block_height,
-                        )
+                        .get_stable_registry_version(&parent, &last_summary)
                         .unwrap(),
                     test_case.expected_stable_registry_version,
                 );
