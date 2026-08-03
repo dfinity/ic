@@ -61,8 +61,10 @@ jobs:
   ci-rbe-evaluation:
     name: CI RBE Evaluation
     # for dfinity/ic: run on all events except for forked PRs
-    if: |
-      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    # NOTE: currently disabled due to the following error:
+    #
+    # > No available targets are compatible with triple “x86_64-unknown-linux5.10.0-gnu2.31.0”
+    if: false
     uses: ./.github/workflows/ci-rbe-evaluation.yml
     secrets: inherit
     with:
