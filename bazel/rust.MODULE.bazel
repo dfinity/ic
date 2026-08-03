@@ -384,10 +384,6 @@ crate.spec(
     version = "^5.3.4",
 )
 crate.spec(
-    package = "derivative",
-    version = "^2.2",
-)
-crate.spec(
     default_features = False,
     features = ["derive"],
     package = "der",
