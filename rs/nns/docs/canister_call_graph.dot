@@ -9,11 +9,13 @@ digraph NNSBackendCanisterCalls {
   // weight=10 edges on those edges), and (2) place canisters that are more
   // central to NNS operation closer to that trunk, with narrower/rarer-use
   // canisters pushed toward the left/right peripheries. Root is treated as
-  // effectively part of the trunk's inner ring (it installs/upgrades every
-  // other NNS canister); SnsWasm/Cmc/Ledger form the next ring in; and
-  // NodeRewards/ArbitraryCanister (left) and Migration/Lifeline (right) are
-  // the peripheral, narrow-scope canisters. This is a judgment call, not a
-  // rigid formula -- see PR discussion for the reasoning. Note that dot's
+  // effectively part of the trunk itself, not just adjacent to it -- it
+  // installs/upgrades every other NNS canister -- and its Governance -> Root
+  // / Root -> Registry edges are weighted (weight=20, see below) to actually
+  // pull it onto the trunk line; SnsWasm/Cmc/Ledger form the next ring in;
+  // and NodeRewards/ArbitraryCanister (left) and Migration/Lifeline (right)
+  // are the peripheral, narrow-scope canisters. This is a judgment call, not
+  // a rigid formula -- see PR discussion for the reasoning. Note that dot's
   // layout is driven mostly by actual edge structure rather than pure
   // declaration order once a node has more than one real edge, so getting
   // this ring structure to render as intended also requires the invisible
@@ -40,7 +42,17 @@ digraph NNSBackendCanisterCalls {
   // stop_or_start_canister.rs:84-86; create_canister_and_install_code.rs:220-222;
   // take_canister_snapshot.rs:42-44; load_canister_snapshot.rs:50-52;
   // update_canister_settings.rs:143-149
-  Governance -> Root     [label="manages NNS canister lifecycle\n(install, upgrade, stop/start, snapshot)"];
+  // weight=20 (along with the matching weight on Root -> Registry below) pulls
+  // Root fully onto the Gtc -> Governance -> Registry -> IC Management trunk
+  // line -- Root is conceptually part of that control-plane trunk (it
+  // installs/upgrades every other NNS canister), so this edge and Root ->
+  // Registry are weighted higher than a typical edge to reflect that. Lower
+  // weights (e.g. 5-17) pull Root partway in but leave the trunk itself
+  // visibly bent; empirically (via `dot -Tplain` coordinates) weight=18+ is
+  // where the layout snaps to a straight trunk with Root sitting exactly on
+  // it, and it stays stable well past 20, so 20 was chosen with margin rather
+  // than sitting on the edge of that transition.
+  Governance -> Root     [label="manages NNS canister lifecycle\n(install, upgrade, stop/start, snapshot)", weight=20];
   // Governance -> Registry: create_subnet, add_node_operator, recover_subnet,
   // update_node_rewards_table, reroute_canister_ranges, ... (ExecuteNnsFunction dispatch)
   // See: rs/nns/governance/src/proposals/execute_nns_function.rs:483-595
@@ -55,6 +67,14 @@ digraph NNSBackendCanisterCalls {
   // (update_sns_subnet_list), :560-562 (insert_upgrade_path_entries);
   // proposals/update_canister_settings.rs:143-149 (target-dispatch logic; note this
   // actually routes through Root/Lifeline, not directly to SnsWasm)
+  // NOTE: deliberately left at the default weight (no weight= attribute here).
+  // SnsWasm's own x-coordinate did not move at all in `dot -Tplain` measurements
+  // when this edge's weight was raised (tried 5 through 10) -- SnsWasm is only
+  // pulled inward as a side effect of Root moving onto the trunk (via the
+  // SnsWasm -> Root edge below), and raising *this* edge's weight instead just
+  // bent the Gtc -> Governance -> Registry -> IC Management trunk for no
+  // benefit. So the real lever for SnsWasm turned out to be the Root -> trunk
+  // weights, not this edge.
   Governance -> SnsWasm  [label="manages SNS deployment\nand upgrade path"];
   // Governance -> Cmc: get_average_icp_xdr_conversion_rate, set_authorized_subnetwork_list,
   // update_subnet_type, change_subnet_type_assignment
@@ -98,7 +118,10 @@ digraph NNSBackendCanisterCalls {
   Root -> IcManagement [label="installs/upgrades/stops/starts\nNNS canisters"];
   // Root -> Registry: get_subnet_for_canister
   // See: rs/nns/handlers/root/impl/src/root_proposals.rs:465-482
-  Root -> Registry     [label="looks up canister's subnet"];
+  // weight=20: see the matching comment on Governance -> Root above -- this
+  // is Root's other trunk-anchoring edge and needs the same weight to pull
+  // Root fully onto the trunk line instead of just partway.
+  Root -> Registry     [label="looks up canister's subnet", weight=20];
   // Root -> ArbitraryCanister (was Root -> IcManagement call_canister(*)):
   // call_canister(*) (arbitrary proposal-specified target, routed as an
   // ic00-style raw call)
