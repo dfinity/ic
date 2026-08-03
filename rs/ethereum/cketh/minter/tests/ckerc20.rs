@@ -117,12 +117,12 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
     let stop_res = ckerc20.env.await_call(stop_msg_id);
     assert_matches!(stop_res, Ok(_));
     assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopped);
-    ckerc20.env.advance_time(RETRY_FREQUENCY);
+    ckerc20.advance_time(RETRY_FREQUENCY);
     ckerc20.env.tick();
 
     ckerc20.cketh.start_minter();
     assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Running);
-    ckerc20.env.advance_time(RETRY_FREQUENCY);
+    ckerc20.advance_time(RETRY_FREQUENCY);
     ckerc20.env.tick();
 
     ckerc20
@@ -672,7 +672,7 @@ mod withdraw_erc20 {
                 },
             ]);
 
-            ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
+            ckerc20.advance_time(PROCESS_REIMBURSEMENT);
             ckerc20.env.tick();
             ckerc20.env.tick();
             let balance_after_reimbursement = ckerc20.cketh.balance_of(caller);
@@ -771,7 +771,7 @@ mod withdraw_erc20 {
             .expect_refresh_gas_fee_estimate(identity)
             .expect_error(insufficient_allowance_error.clone());
 
-        ckerc20.env.advance_time(Duration::from_secs(59));
+        ckerc20.advance_time(Duration::from_secs(59));
 
         let ckerc20 = ckerc20
             .call_minter_withdraw_erc20(
@@ -783,7 +783,7 @@ mod withdraw_erc20 {
             .expect_no_refresh_gas_fee_estimate()
             .expect_error(insufficient_allowance_error.clone());
 
-        ckerc20.env.advance_time(Duration::from_millis(1_001));
+        ckerc20.advance_time(Duration::from_millis(1_001));
 
         ckerc20
             .call_minter_withdraw_erc20(
@@ -1037,7 +1037,7 @@ mod withdraw_erc20 {
                 },
             ]);
 
-            ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
+            ckerc20.advance_time(PROCESS_REIMBURSEMENT);
             let cketh_balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
                 ckerc20.cketh_ledger_id(),
                 cketh_account,
@@ -1737,7 +1737,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
     assert_matches!(start_res, Ok(()), "Failed to start ckETH ledger");
     ckerc20.start_ckerc20_ledger(ckusdc.ledger_canister_id);
 
-    ckerc20.env.advance_time(MINT_RETRY_DELAY);
+    ckerc20.advance_time(MINT_RETRY_DELAY);
     ckerc20.env.tick();
 
     let ckerc20 = ckerc20.check_events().assert_has_unique_events_in_order(&[
@@ -1950,8 +1950,9 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // Set latest_finalized_block so that we scraped twice each time.
     let latest_finalized_block =
         LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range * 2;
-    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    ckerc20.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
         .expect_rpc_calls(&ckerc20);
@@ -2027,8 +2028,9 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // Advance block height and scrape again
     let latest_finalized_block =
         u64::try_from(second_to_block.into_inner()).unwrap() + max_eth_logs_block_range;
-    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    ckerc20.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
         .expect_rpc_calls(&ckerc20);
@@ -2069,7 +2071,7 @@ fn should_not_scrape_when_no_erc20_token() {
 
     // Set latest_finalized_block so that we scrapped twice each time.
     let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range;
-    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    ckerc20.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()

@@ -108,54 +108,25 @@ impl JsonRpcRequestMatcher {
         self
     }
 
-    fn poll_for_request(&self, env: &PocketIc) -> bool {
+    fn tick_until_next_http_request(&self, env: &PocketIc) {
         for _ in 0..MAX_TICKS {
-            let pending = env.get_canister_http();
-            if pending.iter().any(|request| self.matches(request)) {
-                return true;
-            }
-            for request in pending
+            let has_matching_request = env
+                .get_canister_http()
                 .iter()
-                .filter(|request| is_latest_block_refresh(request))
-            {
-                crate::reject_stray_http_outcall(env, request);
+                .any(|request| self.matches(request));
+            if has_matching_request {
+                break;
             }
             env.tick();
             env.advance_time(Duration::from_nanos(1));
         }
-        false
     }
 
     pub fn find_rpc_call(&self, env: &PocketIc) -> Option<CanisterHttpRequest> {
-        self.poll_for_request(env);
+        self.tick_until_next_http_request(env);
         env.get_canister_http()
             .into_iter()
             .find(|request| self.matches(request))
-    }
-
-    // Like `find_rpc_call`, but for callers that know a matching request should eventually
-    // appear. The block height refresh timer's own outcall competes with the scrape's for
-    // ic-cdk-timers' per-timer concurrent-call cap (5 overlapping invocations): a big enough
-    // `advance_time` jump can make several of its intervals due at once, hit that cap, and make
-    // it defer itself by a full `REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL`. Nanosecond ticking can
-    // never cross that gap on its own, so jump forward to unstick it, then retry. This must not
-    // be used for negative expectations (no call should appear): jumping forward burns simulated
-    // time regardless of outcome, which can itself trigger unrelated periodic minter work.
-    //
-    // Capped at `SCRAPING_ETH_LOGS_INTERVAL` (3 minutes): retrying for longer than that could
-    // itself trigger an extra, unrelated log scrape, whose outcall the very next stub might then
-    // answer instead of the one this call is actually waiting for. A smaller cap (5 attempts,
-    // 150s) was tried and is not enough: several tests then failed to find their target call
-    // within budget, so this stays at the interval's exact boundary rather than strictly under it.
-    fn find_rpc_call_retrying(&self, env: &PocketIc) -> Option<CanisterHttpRequest> {
-        const MAX_RETRY_ATTEMPTS: usize = 6; // 6 * REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL (30s) = 180s
-        for _ in 0..MAX_RETRY_ATTEMPTS {
-            if let Some(request) = self.find_rpc_call(env) {
-                return Some(request);
-            }
-            env.advance_time(ic_cketh_minter::REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL);
-        }
-        self.find_rpc_call(env)
     }
 }
 
@@ -183,21 +154,7 @@ impl Matcher for JsonRpcRequestMatcher {
                 .match_request_params
                 .as_ref()
                 .map(|expected_params| expected_params == &json_rpc_request.params)
-                .unwrap_or_else(|| !is_latest_block_refresh(request))
-    }
-}
-
-// The minter also polls `eth_getBlockByNumber("latest")` on its own periodic schedule (unrelated
-// to log scraping) to refresh a metric. A mock that doesn't constrain params is only ever meant to
-// answer the scrape-triggered call, so it must not accidentally swallow that unrelated poll.
-pub(crate) fn is_latest_block_refresh(request: &CanisterHttpRequest) -> bool {
-    let request_body = std::str::from_utf8(&request.body).unwrap();
-    match JsonRpcRequest::from_str(request_body) {
-        Ok(json_rpc_request) => {
-            json_rpc_request.method == JsonRpcMethod::EthGetBlockByNumber
-                && json_rpc_request.params == json!(["latest", false])
-        }
-        Err(_) => false,
+                .unwrap_or(true)
     }
 }
 
@@ -218,7 +175,7 @@ impl StubOnce {
     }
 
     fn expect_rpc_call(self, env: &PocketIc) {
-        let request = self.matcher.find_rpc_call_retrying(env).unwrap_or_else(|| {
+        let request = self.matcher.find_rpc_call(env).unwrap_or_else(|| {
             panic!(
                 "no request found matching the stub {:?}. Current requests {}",
                 self,

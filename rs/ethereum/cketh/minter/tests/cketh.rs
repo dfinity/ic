@@ -466,7 +466,7 @@ fn should_reimburse() {
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
     // advance time so that time does not grow implicitly when executing a round
-    cketh.env.advance_time(Duration::from_secs(1));
+    cketh.advance_time(Duration::from_secs(1));
     let time_at_withdrawal = cketh.env.get_time().as_nanos_since_unix_epoch();
 
     let cketh = cketh
@@ -502,7 +502,7 @@ fn should_reimburse() {
 
     assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
 
-    cketh.env.advance_time(PROCESS_REIMBURSEMENT);
+    cketh.advance_time(PROCESS_REIMBURSEMENT);
     cketh.env.tick();
 
     let cost_of_failed_transaction = withdrawal_amount
@@ -702,7 +702,7 @@ fn should_not_overlap_when_scrapping_logs() {
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.max_logs_block_range();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
@@ -753,8 +753,11 @@ fn should_retry_from_same_block_when_scrapping_fails() {
     let max_eth_logs_block_range = cketh.max_logs_block_range();
     let prev_events_len = cketh.get_all_events().len();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    // Constrained so the block height refresh timer's query for the latest block
+    // cannot consume this stub and leave the finalized one unanswered.
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
         .expect_rpc_calls(&cketh);
@@ -782,8 +785,9 @@ fn should_retry_from_same_block_when_scrapping_fails() {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
         .expect_rpc_calls(&cketh);
@@ -809,7 +813,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
     let cketh = CkEthSetup::default();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1))
         .build()
@@ -847,7 +851,7 @@ fn should_be_able_to_stop_canister_during_scraping() {
 
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     mock_eth_get_block_by_number(&cketh, MAX_BLOCK);
 
     // Starts scraping to create open call contexts.
@@ -911,7 +915,7 @@ fn should_be_able_to_stop_canister_during_scraping() {
     // Restarting the canister should resume scraping from where we stopped
     cketh.start_minter();
     cketh.tick_until_minter_canister_status(CanisterStatusType::Running);
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     mock_eth_get_block_by_number(&cketh, MAX_BLOCK);
 
     from_block = to_block.checked_increment().unwrap();
@@ -935,8 +939,11 @@ fn should_panic_when_last_finalized_block_in_the_past() {
     let cketh = CkEthSetup::default();
     let prev_events_len = cketh.get_all_events().len();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    // Constrained so the block height refresh timer's query for the latest block
+    // cannot consume this stub and leave the finalized one unanswered.
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL - 1))
         .build()
         .expect_rpc_calls(&cketh);
@@ -950,8 +957,9 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         }]);
 
     let last_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 10;
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(last_finalized_block))
         .build()
         .expect_rpc_calls(&cketh);
@@ -1046,7 +1054,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
         .checked_add(BlockNumber::from(max_eth_logs_block_range / 2))
         .unwrap();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
@@ -1095,7 +1103,7 @@ fn should_skip_single_block_containing_too_many_events() {
     let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_500);
     assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
         .build()
@@ -1173,6 +1181,16 @@ fn should_skip_single_block_containing_too_many_events() {
         ]);
 }
 
+#[test]
+fn should_derive_minter_address() {
+    let cketh = CkEthSetup::default();
+
+    assert_eq!(
+        Address::from_str(&cketh.minter_address()).unwrap(),
+        Address::from_str(MINTER_ADDRESS).unwrap()
+    );
+}
+
 #[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
@@ -1186,7 +1204,9 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_at_start,
         MinterInfo {
-            minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            // The minter derives its address from a timer scheduled at install, so a
+            // fixture that has executed no round has not derived it yet.
+            minter_address: None,
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
@@ -1219,6 +1239,7 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_after_deposit,
         MinterInfo {
+            minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
             last_observed_block_number: Some(Nat::from(new_eth_scraped_block_number)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
             last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
@@ -1309,7 +1330,7 @@ mod cketh_evm_rpc {
     fn should_retrieve_block_number() {
         let cketh = CkEthSetup::default();
 
-        cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
             .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
             .build()
@@ -1329,7 +1350,7 @@ mod cketh_evm_rpc {
             .expect("Failed to stop EVM RPC canister");
         cketh.start_minter();
 
-        cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         for _ in 0..10 {
             cketh.env.tick();

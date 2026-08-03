@@ -53,9 +53,12 @@ pub const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
 pub const CKETH_MINIMUM_WITHDRAWAL_AMOUNT: u64 = 30_000_000_000_000_000;
 pub const MAX_TICKS: usize = 10;
 
-// `ic_error_types::RejectCode` values relevant to canister-http mocking.
+// `ic_error_types::RejectCode` value relevant to canister-http mocking.
 pub(crate) const REJECT_CODE_SYS_FATAL: u64 = 1;
 pub(crate) const REJECT_CODE_SYS_TRANSIENT: u64 = 2;
+// ic_types::canister_http::CANISTER_HTTP_TIMEOUT_INTERVAL, past which PocketIC fails
+// canister http requests still in flight.
+const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 pub const DEFAULT_PRINCIPAL_ID: u64 = 10352385;
 pub const DEFAULT_USER_SUBACCOUNT: [u8; 32] = [42; 32];
 pub const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
@@ -169,26 +172,14 @@ impl CkEthSetup {
         let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
 
         let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
-        let cketh = Self {
+        Self {
             env,
             caller,
             ledger_id,
             minter_id,
             evm_rpc_id,
             support_subaccount: false,
-        };
-
-        assert_eq!(
-            Address::from_str(MINTER_ADDRESS).unwrap(),
-            Address::from_str(&cketh.minter_address()).unwrap()
-        );
-
-        // The minter's startup timers fire HTTP outcalls while ticking through `minter_address()`
-        // above. Left pending, they would cross PocketIC's 60s canister-http timeout the first
-        // time a test advances time by `SCRAPING_ETH_LOGS_INTERVAL` (3 minutes).
-        drain_startup_http_outcalls(&cketh.env);
-
-        cketh
+        }
     }
 
     pub fn add_support_for_subaccount(self) -> Self {
@@ -515,11 +506,6 @@ impl CkEthSetup {
             )
             .unwrap();
         self.start_minter();
-        // `post_upgrade` re-runs the minter's startup timers, which immediately re-fire the block
-        // height refresh. Unlike at genesis, tests routinely rely on answering the accompanying
-        // log-scraping call themselves (e.g. right after changing `ethereum_block_height`), so
-        // only the refresh call is drained here.
-        drain_stray_latest_block_refresh_calls(&self.env);
     }
 
     pub fn submit_stop_minter(&self) -> RawMessageId {
@@ -541,6 +527,10 @@ impl CkEthSetup {
     /// call is still processing (i.e. blocked on the open call contexts for those outcalls).
     pub fn try_stop_minter_without_stopping_ongoing_https_outcalls(&self) {
         let stop_msg_id = self.submit_stop_minter();
+        // The stop request only takes effect in the next round, and the outcalls the
+        // minter's timers issue in that last running round become visible only after
+        // it, so a drain placed before this tick would run too early and leave them
+        // pending forever.
         self.env.tick();
         assert!(
             self.env.ingress_status(stop_msg_id).is_none(),
@@ -563,46 +553,48 @@ impl CkEthSetup {
 
     pub fn stop_minter(&self) {
         let stop_msg_id = self.submit_stop_minter();
-        let stop_res = await_call_draining_outcalls(&self.env, stop_msg_id);
+        self.env.tick();
+        self.stop_ongoing_https_outcalls();
+        let stop_res = self.env.await_call(stop_msg_id);
         assert_matches!(stop_res, Ok(_));
     }
 
     pub fn stop_ongoing_https_outcalls(&self) {
-        for _ in 0..MAX_TICKS {
-            if self.drain_pending_https_outcalls() {
-                return;
-            }
-            // The block height refresh timer can be mid-backoff after hitting ic-cdk-timers'
-            // per-timer concurrent-call cap (see
-            // `JsonRpcRequestMatcher::find_rpc_call_retrying` in mock.rs), with nothing
-            // currently pending for us to drain; nanosecond ticking can't cross that gap, so
-            // jump forward to give it a chance to resurface before giving up.
-            self.env
-                .advance_time(ic_cketh_minter::REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL);
+        for request in self.env.get_canister_http() {
+            reply_500(&self.env, &request);
         }
-        panic!(
-            "failed to drain pending https outcalls after {MAX_TICKS} attempts, still pending: {}",
-            mock::debug_http_outcalls(&self.env)
-        );
-    }
-
-    fn drain_pending_https_outcalls(&self) -> bool {
-        for _ in 0..MAX_TICKS {
-            let requests = self.env.get_canister_http();
-            if requests.is_empty() {
-                return true;
-            }
-            for request in requests {
-                reply_500(&self.env, &request);
-            }
-            self.env.tick();
-        }
-        false
+        self.env.tick();
     }
 
     pub fn start_minter(&self) {
         let start_res = self.env.start_canister(self.minter_id, None);
         assert_matches!(start_res, Ok(()));
+    }
+
+    /// Advancing past the canister http timeout fails every outcall in flight, but the
+    /// requests stay listed until a round processes the failures, and the cycle awaiting
+    /// them keeps holding its TimerGuard until it learns of them. A stub could then bind
+    /// to a request that is already dead, and the firing due at the new time would be
+    /// dropped as AlreadyProcessing. Do to those outcalls up front, and deterministically,
+    /// what the advance would have done to them anyway.
+    pub fn advance_time(&self, duration: Duration) {
+        if duration > CANISTER_HTTP_TIMEOUT_INTERVAL {
+            self.fail_pending_https_outcalls();
+        }
+        self.env.advance_time(duration);
+    }
+
+    fn fail_pending_https_outcalls(&self) {
+        let pending = self.env.get_canister_http();
+        // Ticking with nothing in flight would let the timers of a fixture that has
+        // executed no round fire early, which the flows rely on doing themselves.
+        if pending.is_empty() {
+            return;
+        }
+        for request in &pending {
+            fail_as_timed_out(&self.env, request);
+        }
+        self.env.tick();
     }
 
     pub fn minter_status(&self) -> CanisterStatusType {
@@ -829,41 +821,7 @@ fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal) {
     env.install_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap(), None);
 }
 
-fn drain_startup_http_outcalls(env: &PocketIc) {
-    for _ in 0..MAX_TICKS {
-        env.tick();
-        let pending = env.get_canister_http();
-        if pending.is_empty() {
-            return;
-        }
-        for request in &pending {
-            // Reject rather than answer: these are the startup timers' one-shot log-scraping and
-            // block-height-refresh calls, which no test expects to have already succeeded (e.g.
-            // `last_observed_block_number` is asserted `None` right after install).
-            // Rejecting them still resolves the outcall, so it cannot later cross PocketIC's 60s
-            // canister-http timeout.
-            reject_stray_http_outcall(env, request);
-        }
-    }
-}
-
-fn drain_stray_latest_block_refresh_calls(env: &PocketIc) {
-    for _ in 0..MAX_TICKS {
-        env.tick();
-        let pending = env.get_canister_http();
-        if pending.is_empty() {
-            return;
-        }
-        for request in pending
-            .iter()
-            .filter(|request| mock::is_latest_block_refresh(request))
-        {
-            reject_stray_http_outcall(env, request);
-        }
-    }
-}
-
-fn reject_stray_http_outcall(env: &PocketIc, request: &CanisterHttpRequest) {
+fn fail_as_timed_out(env: &PocketIc, request: &CanisterHttpRequest) {
     env.mock_canister_http_response(MockCanisterHttpResponse {
         subnet_id: request.subnet_id,
         request_id: request.request_id,
@@ -890,81 +848,6 @@ fn reply_500(env: &PocketIc, request: &CanisterHttpRequest) {
 
 fn assert_reply(result: Result<Vec<u8>, RejectResponse>) -> Vec<u8> {
     result.unwrap_or_else(|reject| panic!("Expected a successful reply, got a reject: {reject}"))
-}
-
-/// Polls `ingress_status` until `message_id` completes. Unlike [`PocketIc::await_call`], which
-/// ticks internally with no injection point, this gives the caller a chance to break a deadlock
-/// where the call is itself awaiting a pending HTTP outcall that only a test can answer.
-///
-/// Still clears stray latest-block-refresh outcalls between rounds (see
-/// `mock::is_latest_block_refresh`), since leaving them unanswered would otherwise let them pile
-/// up and starve later polling. A stub left without explicit request params never targets one of
-/// these (mock.rs's own matching excludes them), so this cannot swallow it out from under an
-/// awaited call. A stub built with explicit `["latest", false]` params (two exist:
-/// `tests/cketh.rs:842`, `tests/ckerc20.rs:258`) *can* match a refresh outcall too, but is safe
-/// here only because it is built and consumed synchronously by `expect_rpc_calls` before any
-/// await runs, not because of any exclusion — interleaving such a stub with an awaited call would
-/// let this function reject its request instead. Callers that additionally want every *other*
-/// pending outcall drained (currently only [`CkEthSetup::stop_minter`]) should use
-/// [`await_call_draining_outcalls`] instead.
-pub(crate) fn await_call(
-    env: &PocketIc,
-    message_id: RawMessageId,
-) -> Result<Vec<u8>, RejectResponse> {
-    poll_for_call(env, message_id, OutcallPolicy::RejectRefreshOnly)
-}
-
-/// Like [`await_call`], but also answers every *other* pending HTTP outcall with an HTTP 500
-/// between rounds, since a slow background timer or a large in-flight scrape (deterministic time
-/// slicing can spread these over many rounds) can otherwise keep the call from ever settling.
-pub(crate) fn await_call_draining_outcalls(
-    env: &PocketIc,
-    message_id: RawMessageId,
-) -> Result<Vec<u8>, RejectResponse> {
-    poll_for_call(env, message_id, OutcallPolicy::DrainAll)
-}
-
-/// What [`poll_for_call`] does with pending HTTP outcalls between rounds while it waits.
-enum OutcallPolicy {
-    /// Only reject stray latest-block-refresh outcalls (see `mock::is_latest_block_refresh`);
-    /// leave everything else pending for a test's own stub to answer.
-    RejectRefreshOnly,
-    /// Answer every pending outcall with an HTTP 500.
-    DrainAll,
-}
-
-fn poll_for_call(
-    env: &PocketIc,
-    message_id: RawMessageId,
-    outcall_policy: OutcallPolicy,
-) -> Result<Vec<u8>, RejectResponse> {
-    // 100x the ordinary `MAX_TICKS` budget: this replaces `StateMachine`'s
-    // `await_ingress(id, MAX_TICKS)`, but a large in-flight log scrape can be sliced (DTS) across
-    // many more rounds than that on PocketIC.
-    const MAX_AWAIT_TICKS: usize = 1000;
-    for _ in 0..MAX_AWAIT_TICKS {
-        if let Some(result) = env.ingress_status(message_id.clone()) {
-            return result;
-        }
-        let pending = env.get_canister_http();
-        match outcall_policy {
-            OutcallPolicy::DrainAll => {
-                for request in &pending {
-                    reply_500(env, request);
-                }
-            }
-            OutcallPolicy::RejectRefreshOnly => {
-                for request in pending
-                    .iter()
-                    .filter(|request| mock::is_latest_block_refresh(request))
-                {
-                    reject_stray_http_outcall(env, request);
-                }
-            }
-        }
-        env.tick();
-    }
-    panic!("call {message_id:?} did not complete after {MAX_AWAIT_TICKS} ticks");
 }
 
 pub struct LedgerBalance {

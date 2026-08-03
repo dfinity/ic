@@ -363,6 +363,10 @@ impl CkErc20Setup {
         }
     }
 
+    pub fn advance_time(&self, duration: Duration) {
+        self.cketh.advance_time(duration);
+    }
+
     pub fn caller(&self) -> Principal {
         self.cketh.caller.into()
     }
@@ -780,8 +784,9 @@ impl CkErc20DepositFlow {
         let max_eth_logs_block_range = self.as_ref().max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .with_request_params(json!(["finalized", false]))
             .respond_for_all_with(block_response(latest_finalized_block))
             .build()
             .expect_rpc_calls(self);
@@ -937,7 +942,7 @@ pub struct Erc20WithdrawalFlow {
 
 impl Erc20WithdrawalFlow {
     pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
-        let result = crate::await_call(&self.setup.env, self.message_id.clone());
+        let result = self.setup.env.await_call(self.message_id.clone());
         assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
         self.setup
     }
@@ -966,7 +971,7 @@ impl Erc20WithdrawalFlow {
     #[allow(clippy::result_large_err)]
     fn minter_response(&self) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
         Decode!(
-            &assert_reply(crate::await_call(&self.setup.env, self.message_id.clone())),
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
             Result<RetrieveErc20Request, WithdrawErc20Error>
         )
         .unwrap()
@@ -980,7 +985,7 @@ pub struct DepositErc20Flow {
 
 impl DepositErc20Flow {
     pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
-        let result = crate::await_call(&self.setup.env, self.message_id.clone());
+        let result = self.setup.env.await_call(self.message_id.clone());
         assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
         self.setup
     }
@@ -1003,7 +1008,7 @@ impl DepositErc20Flow {
 
     fn minter_response(&self) -> Result<DepositErc20Response, DepositErc20Error> {
         Decode!(
-            &assert_reply(crate::await_call(&self.setup.env, self.message_id.clone())),
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
             Result<DepositErc20Response, DepositErc20Error>
         )
         .unwrap()

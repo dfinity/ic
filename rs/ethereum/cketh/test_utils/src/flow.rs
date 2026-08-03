@@ -309,7 +309,7 @@ impl DepositFlow {
     fn updated_balance(&self, balance_before: &Nat) -> Nat {
         let mut current_balance = balance_before.clone();
         for _ in 0..10 {
-            self.setup.env.advance_time(Duration::from_secs(1));
+            self.setup.advance_time(Duration::from_secs(1));
             self.setup.env.tick();
             current_balance = self.setup.balance_of(self.params.recipient());
             if &current_balance != balance_before {
@@ -331,16 +331,19 @@ impl DepositFlow {
         let max_eth_logs_block_range = self.setup.max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+                // Constrained so the block height refresh timer's query for the latest
+                // block cannot consume this stub.
+                .with_request_params(json!(["finalized", false]))
                 .respond_for_all_with(block_response(latest_finalized_block));
         (self.override_rpc_eth_get_block_by_number)(default_get_block_by_number)
             .build()
             .expect_rpc_calls(&self.setup);
 
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         match &self.params {
             DepositParams::CkEth(_) => {
@@ -481,7 +484,7 @@ impl WithdrawalFlow {
 
     fn minter_response(&self) -> Result<RetrieveEthRequest, WithdrawalError> {
         Decode!(
-            &assert_reply(crate::await_call(&self.setup.env, self.message_id.clone())),
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
             Result<RetrieveEthRequest, WithdrawalError>
         )
         .unwrap()
