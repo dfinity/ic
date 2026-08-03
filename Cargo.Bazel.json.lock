@@ -1,5 +1,5 @@
 {
-  "checksum": "acd67285278efabe29414ce9f954a39d284591a15dbd00af1082f17adf6449bc",
+  "checksum": "7597bec30b923e7f7a3e7323192575ce88f5d06444ea8d8ce5e16bbbc1c993c4",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20844,7 +20844,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "humantime 2.2.0",
+              "id": "humantime 2.4.0",
               "target": "humantime"
             },
             {
@@ -21647,7 +21647,7 @@
               "target": "tar"
             },
             {
-              "id": "tarpc 0.34.0",
+              "id": "tarpc 0.37.0",
               "target": "tarpc"
             },
             {
@@ -21703,7 +21703,7 @@
               "target": "tokio_rustls"
             },
             {
-              "id": "tokio-serde 0.8.0",
+              "id": "tokio-serde 0.9.0",
               "target": "tokio_serde"
             },
             {
@@ -21933,7 +21933,7 @@
               "target": "derive_new"
             },
             {
-              "id": "educe 0.4.22",
+              "id": "educe 0.5.11",
               "target": "educe"
             },
             {
@@ -23084,14 +23084,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "educe 0.4.22": {
+    "educe 0.5.11": {
       "name": "educe",
-      "version": "0.4.22",
+      "version": "0.5.11",
       "package_url": "https://github.com/magiclen/educe",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/educe/0.4.22/download",
-          "sha256": "079044df30bb07de7d846d41a184c4b00e66ebdac93ee459253474f3a47e50ae"
+          "url": "https://static.crates.io/crates/educe/0.5.11/download",
+          "sha256": "e4bd92664bf78c4d3dba9b7cdafce6fa15b13ed3ed16175218196942e99168a8"
         }
       },
       "targets": [
@@ -23123,6 +23123,7 @@
             "DerefMut",
             "Eq",
             "Hash",
+            "Into",
             "Ord",
             "PartialEq",
             "PartialOrd",
@@ -23133,6 +23134,10 @@
         "deps": {
           "common": [
             {
+              "id": "enum-ordinalize 4.4.2",
+              "target": "enum_ordinalize"
+            },
+            {
               "id": "proc-macro2 1.0.106",
               "target": "proc_macro2"
             },
@@ -23141,23 +23146,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "enum-ordinalize 3.1.13",
-              "target": "enum_ordinalize"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.4.22"
+        "version": "0.5.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -23698,19 +23694,19 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "enum-ordinalize 3.1.13": {
+    "enum-ordinalize 4.4.2": {
       "name": "enum-ordinalize",
-      "version": "3.1.13",
+      "version": "4.4.2",
       "package_url": "https://github.com/magiclen/enum-ordinalize",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/enum-ordinalize/3.1.13/download",
-          "sha256": "e4f76552f53cefc9a7f64987c3701b99d982f7690606fd67de1d09712fbf52f1"
+          "url": "https://static.crates.io/crates/enum-ordinalize/4.4.2/download",
+          "sha256": "89dd01549b09589510cf0647475075d12071456586d70f5c75c98ae2a5537677"
         }
       },
       "targets": [
         {
-          "ProcMacro": {
+          "Library": {
             "crate_name": "enum_ordinalize",
             "crate_root": "src/lib.rs",
             "srcs": {
@@ -23727,16 +23723,61 @@
         "compile_data_glob": [
           "**"
         ],
-        "deps": {
+        "crate_features": {
+          "common": [
+            "derive"
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "proc_macro_deps": {
           "common": [
             {
-              "id": "num-bigint 0.4.6",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            },
+              "id": "enum-ordinalize-derive 4.4.2",
+              "target": "enum_ordinalize_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "4.4.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "enum-ordinalize-derive 4.4.2": {
+      "name": "enum-ordinalize-derive",
+      "version": "4.4.2",
+      "package_url": "https://github.com/magiclen/enum-ordinalize",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/enum-ordinalize-derive/4.4.2/download",
+          "sha256": "a65863d15a4ce2888bd2f0f543cc963d3879c3a022c8ee43f6141d479a3ac815"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "enum_ordinalize_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "enum_ordinalize_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
             {
               "id": "proc-macro2 1.0.106",
               "target": "proc_macro2"
@@ -23746,14 +23787,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.119",
+              "id": "syn 3.0.2",
               "target": "syn"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "3.1.13"
+        "edition": "2024",
+        "version": "4.4.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -24018,7 +24059,7 @@
               "target": "env_filter"
             },
             {
-              "id": "humantime 2.2.0",
+              "id": "humantime 2.4.0",
               "target": "humantime"
             },
             {
@@ -32252,14 +32293,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "humantime 2.2.0": {
+    "humantime 2.4.0": {
       "name": "humantime",
-      "version": "2.2.0",
+      "version": "2.4.0",
       "package_url": "https://github.com/chronotope/humantime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/humantime/2.2.0/download",
-          "sha256": "9b112acc8b3adf4b107a8ec20977da0273a8c386765a3ec0229bd500a1443f9f"
+          "url": "https://static.crates.io/crates/humantime/2.4.0/download",
+          "sha256": "15cdd26707701c53297e2fa6afb323d55fbc1d0810c3aec078ae3ef0424c3c15"
         }
       },
       "targets": [
@@ -32282,7 +32323,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "2.2.0"
+        "version": "2.4.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -32323,7 +32364,7 @@
         "deps": {
           "common": [
             {
-              "id": "humantime 2.2.0",
+              "id": "humantime 2.4.0",
               "target": "humantime"
             },
             {
@@ -33638,7 +33679,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "humantime 2.2.0",
+              "id": "humantime 2.4.0",
               "target": "humantime"
             },
             {
@@ -35347,7 +35388,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "humantime 2.2.0",
+              "id": "humantime 2.4.0",
               "target": "humantime"
             },
             {
@@ -51922,63 +51963,6 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "opentelemetry 0.18.0": {
-      "name": "opentelemetry",
-      "version": "0.18.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry/0.18.0/download",
-          "sha256": "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "opentelemetry_api 0.18.0",
-              "target": "opentelemetry_api"
-            },
-            {
-              "id": "opentelemetry_sdk 0.18.0",
-              "target": "opentelemetry_sdk"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.18.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "opentelemetry 0.21.0": {
       "name": "opentelemetry",
       "version": "0.21.0",
@@ -52426,187 +52410,6 @@
         },
         "edition": "2021",
         "version": "0.13.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "opentelemetry_api 0.18.0": {
-      "name": "opentelemetry_api",
-      "version": "0.18.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry_api/0.18.0/download",
-          "sha256": "c24f96e21e7acc813c7a8394ee94978929db2bcc46cf6b5014fc612bf7760c22"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_api",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_api",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "pin-project-lite",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "futures-channel 0.3.31",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "indexmap 1.9.3",
-              "target": "indexmap"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "pin-project-lite 0.2.17",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {
-            "cfg(target_arch = \"wasm32\")": [
-              {
-                "id": "js-sys 0.3.103",
-                "target": "js_sys"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.18.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "opentelemetry_sdk 0.18.0": {
-      "name": "opentelemetry_sdk",
-      "version": "0.18.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.18.0/download",
-          "sha256": "1ca41c4933371b61c2a2f214bf16931499af4ec90543604ec828f7a625c09113"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_sdk",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_sdk",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "async-trait",
-            "crossbeam-channel",
-            "default",
-            "percent-encoding",
-            "rand",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "crossbeam-channel 0.5.15",
-              "target": "crossbeam_channel"
-            },
-            {
-              "id": "futures-channel 0.3.31",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-executor 0.3.31",
-              "target": "futures_executor"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "opentelemetry_api 0.18.0",
-              "target": "opentelemetry_api"
-            },
-            {
-              "id": "percent-encoding 2.3.1",
-              "target": "percent_encoding"
-            },
-            {
-              "id": "rand 0.8.6",
-              "target": "rand"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.18.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -76923,14 +76726,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "tarpc 0.34.0": {
+    "tarpc 0.37.0": {
       "name": "tarpc",
-      "version": "0.34.0",
+      "version": "0.37.0",
       "package_url": "https://github.com/google/tarpc",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tarpc/0.34.0/download",
-          "sha256": "93a1870169fb9490fb3b37df7f50782986475c33cb90955f9f9b9ae659124200"
+        "Git": {
+          "remote": "https://github.com/dfinity/tarpc",
+          "commitish": {
+            "Rev": "cddf1c64011d00f36016146e8447bef99531030c"
+          },
+          "strip_prefix": "tarpc"
         }
       },
       "targets": [
@@ -76971,10 +76777,6 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.104",
-              "target": "anyhow"
-            },
-            {
               "id": "fnv 1.0.7",
               "target": "fnv"
             },
@@ -76983,11 +76785,11 @@
               "target": "futures"
             },
             {
-              "id": "humantime 2.2.0",
+              "id": "humantime 2.4.0",
               "target": "humantime"
             },
             {
-              "id": "opentelemetry 0.18.0",
+              "id": "opentelemetry 0.32.0",
               "target": "opentelemetry"
             },
             {
@@ -76995,7 +76797,7 @@
               "target": "pin_project"
             },
             {
-              "id": "rand 0.8.6",
+              "id": "rand 0.9.4",
               "target": "rand"
             },
             {
@@ -77007,7 +76809,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -77015,7 +76817,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-serde 0.8.0",
+              "id": "tokio-serde 0.9.0",
               "target": "tokio_serde"
             },
             {
@@ -77027,23 +76829,23 @@
               "target": "tracing"
             },
             {
-              "id": "tracing-opentelemetry 0.18.0",
+              "id": "tracing-opentelemetry 0.33.0",
               "target": "tracing_opentelemetry"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
+        "edition": "2024",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "tarpc-plugins 0.13.1",
+              "id": "tarpc-plugins 0.14.1",
               "target": "tarpc_plugins"
             }
           ],
           "selects": {}
         },
-        "version": "0.34.0"
+        "version": "0.37.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -77051,14 +76853,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "tarpc-plugins 0.13.1": {
+    "tarpc-plugins 0.14.1": {
       "name": "tarpc-plugins",
-      "version": "0.13.1",
+      "version": "0.14.1",
       "package_url": "https://github.com/google/tarpc",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tarpc-plugins/0.13.1/download",
-          "sha256": "ad8302bea2fb8a2b01b025d23414b0b4ed32a783b95e5d818c3320a8bc4baada"
+        "Git": {
+          "remote": "https://github.com/dfinity/tarpc",
+          "commitish": {
+            "Rev": "cddf1c64011d00f36016146e8447bef99531030c"
+          },
+          "strip_prefix": "plugins"
         }
       },
       "targets": [
@@ -77097,14 +76902,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.13.1"
+        "edition": "2024",
+        "version": "0.14.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -79630,14 +79435,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "tokio-serde 0.8.0": {
+    "tokio-serde 0.9.0": {
       "name": "tokio-serde",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "package_url": "https://github.com/carllerche/tokio-serde",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-serde/0.8.0/download",
-          "sha256": "911a61637386b789af998ee23f50aa30d5fd7edcec8d6d3dedae5e5815205466"
+          "url": "https://static.crates.io/crates/tokio-serde/0.9.0/download",
+          "sha256": "caf600e7036b17782571dd44fa0a5cea3c82f60db5137f774a325a76a0d6852b"
         }
       },
       "targets": [
@@ -79704,17 +79509,17 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "educe 0.4.22",
+              "id": "educe 0.5.11",
               "target": "educe"
             }
           ],
           "selects": {}
         },
-        "version": "0.8.0"
+        "version": "0.9.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -82255,69 +82060,6 @@
         },
         "edition": "2018",
         "version": "0.2.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "tracing-opentelemetry 0.18.0": {
-      "name": "tracing-opentelemetry",
-      "version": "0.18.0",
-      "package_url": "https://github.com/tokio-rs/tracing",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tracing-opentelemetry/0.18.0/download",
-          "sha256": "21ebb87a95ea13271332df069020513ab70bdb5637ca42d6e492dc3bbbad48de"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tracing_opentelemetry",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tracing_opentelemetry",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "opentelemetry 0.18.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "tracing 0.1.44",
-              "target": "tracing"
-            },
-            {
-              "id": "tracing-core 0.1.36",
-              "target": "tracing_core"
-            },
-            {
-              "id": "tracing-subscriber 0.3.23",
-              "target": "tracing_subscriber"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.18.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -96407,7 +96149,7 @@
     "directories-next 2.0.0",
     "dyn-clone 1.0.20",
     "ed25519-dalek 2.2.0",
-    "educe 0.4.22",
+    "educe 0.5.11",
     "env-file-reader 0.3.0",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
@@ -96439,7 +96181,7 @@
     "http 1.3.1",
     "http-body 1.0.1",
     "http-body-util 0.1.3",
-    "humantime 2.2.0",
+    "humantime 2.4.0",
     "humantime-serde 1.1.1",
     "hyper 1.8.1",
     "hyper-rustls 0.27.7",
@@ -96646,7 +96388,7 @@
     "systemd 0.10.0",
     "tabled 0.20.0",
     "tar 0.4.46",
-    "tarpc 0.34.0",
+    "tarpc 0.37.0",
     "tempfile 3.23.0",
     "test-strategy 0.3.1",
     "textplots 0.8.4",
@@ -96661,7 +96403,7 @@
     "tokio-metrics 0.4.0",
     "tokio-rusqlite 0.7.0",
     "tokio-rustls 0.26.0",
-    "tokio-serde 0.8.0",
+    "tokio-serde 0.9.0",
     "tokio-socks 0.5.2",
     "tokio-stream 0.1.17",
     "tokio-test 0.4.4",
