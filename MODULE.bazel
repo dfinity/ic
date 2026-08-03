@@ -1349,16 +1349,10 @@ register_toolchains(
     "//bazel:hermetic_cc_linux_x86_64_to_linux_aarch64",
     "//bazel:hermetic_cc_linux_x86_64_to_none_wasm32",
     "//bazel:hermetic_cc_linux_aarch64_to_linux_aarch64",
-    "//bazel:hermetic_cc_linux_aarch64_to_linux_x86_64",
-    "//bazel:hermetic_cc_linux_aarch64_to_none_wasm32",
 
-    # macOS executors: wasm only. The zig toolchain's none_wasm had no exec
-    # constraints, so canister (wasm) builds on macs relied on it; these keep
-    # that working. Native macOS targets deliberately stay on the system
-    # Xcode toolchain: hermetic-llvm's macOS support (trimmed Apple SDK
-    # sysroot, resource-dir handling) is not yet mature enough for the full
-    # darwin build (e.g. configure-based cargo build scripts fail to find
-    # SDK headers).
+    # macOS executors: wasm only. Native macOS targets deliberately stay on the system Xcode toolchain:
+    # hermetic-llvm's macOS support (trimmed Apple SDK sysroot, resource-dir handling)
+    # is not yet mature enough for the full darwin build (e.g. configure-based cargo build scripts fail to find SDK headers).
     "//bazel:hermetic_cc_macos_x86_64_to_none_wasm32",
     "//bazel:hermetic_cc_macos_aarch64_to_none_wasm32",
 

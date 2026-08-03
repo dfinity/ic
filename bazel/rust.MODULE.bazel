@@ -6,17 +6,6 @@ bazel_dep(name = "rules_rust", version = "0.71.3")
 archive_override(
     module_name = "rules_rust",
     integrity = "sha256-5GXwZtp5VlNxMI+dolYYxhyhG5f5ReZ5qz30gAbPsrg=",
-    # rules_rust drops the cc_toolchain's static C++ runtime
-    # (`static_runtime_lib`: hermetic-llvm's libc++/libc++abi/libunwind, the
-    # sole provider of the `_Unwind_*` symbols rust std needs since the
-    # toolchain links with `--unwindlib=none`) in two places this patch fixes:
-    # `rust_doc_test` links (every doc test fails to link with undefined
-    # `_Unwind_*`) and dylib/cdylib links (rules_rust links the — here empty —
-    # dynamic runtime instead, and since shared-library links don't fail on
-    # undefined symbols the breakage only surfaces at runtime: dlopen of e.g.
-    # libnss_icos.so fails, leaving GuestOS unable to resolve "hostos" and
-    # nft unable to load the orchestrator's firewall rules). TODO: upstream to
-    # the dfinity rules_rust fork and drop the patch on the next fork bump.
     patch_strip = 1,
     patches = ["//bazel:rules_rust_static_runtime.patch"],
     strip_prefix = "rules_rust-f8f382c7e351a797242ce4a92262342f8994e265",
@@ -2195,20 +2184,10 @@ crate.annotation(
     patches = ["@@//bazel:lmdb_rkv_sys.patch"],
 )
 crate.annotation(
-    # Build the bundled pcre2 from source instead of probing the system one
-    # via pkg-config. The probe injects the host library dir (e.g.
-    # /usr/lib/x86_64-linux-gnu) into the link line ahead of the hermetic
-    # toolchain's library search paths, which makes `-lc` resolve to the HOST
-    # glibc while the crt objects come from the hermetic glibc — an
-    # incompatible mix (undefined __libc_csu_init/__libc_csu_fini, wrong
-    # GLIBC_ symbol versions).
     build_script_env = {"PCRE2_SYS_STATIC": "1"},
     crate = "pcre2-sys",
 )
 crate.annotation(
-    # The bundled libusb is built from source instead of probing the system
-    # one via pkg-config (host -L dir leak, see the pcre2-sys annotation
-    # above); the `vendored` feature comes from the rusb crate.spec above.
     # Disabling the libudev probe makes the vendored libusb fall back to its
     # netlink hotplug backend, dropping the libudev dependency entirely.
     build_script_env = {"LIBUDEV_NO_PKG_CONFIG": "1"},

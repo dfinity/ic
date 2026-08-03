@@ -1,3 +1,13 @@
+# rules_rust drops the cc_toolchain's static C++ runtime
+# (`static_runtime_lib`: hermetic-llvm's libc++/libc++abi/libunwind, the
+# sole provider of the `_Unwind_*` symbols rust std needs since the
+# toolchain links with `--unwindlib=none`) in two places this patch fixes:
+# `rust_doc_test` links (every doc test fails to link with undefined
+# `_Unwind_*`) and dylib/cdylib links (rules_rust links the — here empty —
+# dynamic runtime instead, and since shared-library links don't fail on
+# undefined symbols the breakage only surfaces at runtime: dlopen of e.g.
+# libnss_icos.so fails, leaving GuestOS unable to resolve "hostos" and
+# nft unable to load the orchestrator's firewall rules).
 diff -ruN a/rust/private/rustc.bzl b/rust/private/rustc.bzl
 --- a/rust/private/rustc.bzl	2026-08-02 08:25:10.631982814 +0000
 +++ b/rust/private/rustc.bzl	2026-08-02 08:31:11.230009543 +0000
@@ -25,9 +35,9 @@ diff -ruN a/rust/private/rustc.bzl b/rust/private/rustc.bzl
 +            runtime_libs = cc_toolchain.dynamic_runtime_lib(feature_configuration = feature_configuration)
      else:
          runtime_libs = cc_toolchain.static_runtime_lib(feature_configuration = feature_configuration)
- 
+
 @@ -2874,18 +2886,25 @@
- 
+
      if cc_toolchain:
          if crate_type in ["dylib", "cdylib"]:
 -            # For shared libraries we want to link C++ runtime library dynamically
@@ -63,7 +73,7 @@ diff -ruN a/rust/private/rustdoc.bzl b/rust/private/rustdoc.bzl
 @@ -170,6 +170,26 @@
                  else:
                      rustdoc_flags.append("-Clink-arg=%s" % arg)
- 
+
 +        # `include_link_flags = False` below also drops the `-lstatic` flags for
 +        # the C++ runtime libraries the cc_toolchain links via
 +        # `static_runtime_lib` (e.g. libc++, libc++abi and libunwind for
@@ -96,13 +106,13 @@ diff -ruN a/rust/private/rustdoc_test.bzl b/rust/private/rustdoc_test.bzl
  load("//rust/private:rustdoc.bzl", "rustdoc_compile_action")
 -load("//rust/private:utils.bzl", "dedent", "find_toolchain", "transform_deps")
 +load("//rust/private:utils.bzl", "dedent", "find_cc_toolchain", "find_toolchain", "transform_deps")
- 
+
  def _collect_library_roots(roots, deps):
      for dep in deps.to_list():
 @@ -89,6 +89,18 @@
          if dep_cc_info:
              _collect_library_roots(roots, dep_cc_info.linking_context.linker_inputs)
- 
+
 +    # The `-Lnative` flags for the cc_toolchain's static C++ runtime libraries
 +    # (`static_runtime_lib`, e.g. hermetic toolchains' libc++/libunwind) point
 +    # into the toolchain's own configuration root, which the dependency roots
@@ -116,5 +126,5 @@ diff -ruN a/rust/private/rustdoc_test.bzl b/rust/private/rustdoc_test.bzl
 +            roots.append(lib.root.path)
 +
      writer_args.add_all(roots, format_each = "--strip_substring=%s/", uniquify = True)
- 
+
      # Indicate that the rustdoc_test args are over.

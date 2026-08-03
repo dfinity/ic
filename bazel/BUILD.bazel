@@ -55,10 +55,8 @@ config_setting(
     },
 )
 
-# The hermetic toolchain's libunwind headers, exposed as a directory for the
-# cc-rs-compiled C code in //rs/canister_sandbox (which does
-# `#include <libunwind.h>`). zig cc shipped these headers in its default
-# include path; hermetic-llvm's zero-sysroot clang does not.
+# The hermetic toolchain's libunwind headers, exposed as a directory for the cc-rs-compiled C code in
+# //rs/canister_sandbox (which does `#include <libunwind.h>`).
 cc_headers_dir(
     name = "libunwind_include",
     strip_prefix = "libunwind/include/",
@@ -100,8 +98,6 @@ cc_headers_dir(
         ("linux", "x86_64", "linux", "aarch64"),
         ("linux", "x86_64", "none", "wasm32"),
         ("linux", "aarch64", "linux", "aarch64"),
-        ("linux", "aarch64", "linux", "x86_64"),
-        ("linux", "aarch64", "none", "wasm32"),
         # macOS executors: wasm only; native macOS targets use the system
         # Xcode toolchain (see MODULE.bazel).
         ("macos", "x86_64", "none", "wasm32"),
