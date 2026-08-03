@@ -17,38 +17,47 @@ digraph NNSBackendCanisterCalls {
   // is driven mostly by actual edge structure rather than pure declaration
   // order once a node has more than one real edge, so getting this ring
   // structure to render as intended also requires the invisible ordering
-  // edge down by the real edges (see below).
+  // edges down by the real edges (see below).
   //
-  // Left side: SnsWasm sits in the innermost ring (closest to the trunk, via
-  // its SnsWasm -> Root edge); Cmc/Ledger and the peripheral,
-  // narrow-scope NodeRewards/ArbitraryCanister sit further out. Cmc/Ledger
-  // were moved here (they used to sit on the right, next to the trunk) to
-  // rebalance the two sides after Root was pulled fully onto the trunk --
-  // that change alone had made the right side visibly heavier. Empirically
-  // (via `dot -Tplain` coordinates) this declaration order -- SnsWasm, then
-  // Cmc/Ledger, then NodeRewards/ArbitraryCanister -- is what keeps the
-  // trunk straight while landing Cmc/Ledger on the left; other orderings
-  // tried either bent the trunk or flipped SnsWasm to the right side (moving
-  // it away from the trunk, undoing its own closer-to-trunk positioning).
-  // Moving Migration to the left instead of/alongside Cmc/Ledger was also
-  // tried (per PR discussion) but consistently broke the trunk's
-  // straightness or collapsed the whole layout to one side, so Migration
-  // stays on the right with Lifeline.
+  // Moving Cmc/Ledger to the left (tried in an earlier pass, to numerically
+  // rebalance the two sides after Root was pulled fully onto the trunk) was
+  // reverted: it improved the raw left/right balance measurement (imbalance
+  // -0.493 vs the +4.007 below), but visually packed several edges nearly on
+  // top of each other next to the Ledger node -- a real mess of edge
+  // overlaps (per Daniel Wong's review). Cleanliness matters more than
+  // numeric balance, so Cmc/Ledger are back on their original right side,
+  // next to the trunk. Moving Migration to the left instead of/alongside
+  // Cmc/Ledger was also tried in that same earlier pass (per PR discussion)
+  // but consistently broke the trunk's straightness or collapsed the whole
+  // layout to one side.
   //
-  // Right side: Migration/Lifeline are the peripheral, narrow-scope
-  // canisters here now that Cmc/Ledger have moved to the left.
-  SnsWasm      [label="SNS-WASM", fillcolor="#dfe9ff"];
-  Cmc          [label="CMC\n(Cycles Minting Canister)", fillcolor="#dfe9ff"];
-  Ledger       [label="ICP Ledger", fillcolor="#dfe9ff"];
+  // Lifeline was tried on the left side instead, using the same
+  // declaration-order technique (moved in next to SnsWasm, the other
+  // trunk-adjacent left canister) plus an invisible NodeRewards -> Lifeline
+  // ordering edge (weight=5, matching the existing NodeRewards ->
+  // ArbitraryCanister one) to keep it grouped with the left periphery
+  // instead of drifting. Without that invisible edge, or with Lifeline's
+  // declaration placed anywhere closer to Root's, the trunk bent or SnsWasm
+  // flipped to the wrong side; this combination was the one that kept the
+  // trunk straight, kept SnsWasm's distance from the trunk unchanged (1.889,
+  // same as before), and rendered with no edge overlaps -- see PR discussion
+  // for the rendered comparison. It also nudges the balance in the right
+  // direction (imbalance +3.701, an ~8% reduction from +4.007) without the
+  // Cmc/Ledger move's visual cost. So Lifeline now sits on the left with
+  // NodeRewards/ArbitraryCanister, and Migration is the sole remaining
+  // peripheral canister on the right (with Cmc/Ledger next to the trunk).
   NodeRewards  [label="Node Rewards canister", fillcolor="#dfe9ff"];
   ArbitraryCanister [label="Bitcoin canister\n(or other proposal-specified target)", fillcolor="#dfe9ff"];
+  SnsWasm      [label="SNS-WASM", fillcolor="#dfe9ff"];
+  Lifeline     [fillcolor="#dfe9ff"];
   Root         [fillcolor="#dfe9ff"];
   Gtc          [label="GTC\n(Genesis Token Canister)", fillcolor="#dfe9ff"];
   Governance   [fillcolor="#dfe9ff"];
   Registry     [fillcolor="#dfe9ff"];
   IcManagement [label="IC Management Canister\n(ic00 / aaaaa-aa)", shape=octagon, fillcolor="#ffe9cc", color="#b06a00"];
+  Cmc          [label="CMC\n(Cycles Minting Canister)", fillcolor="#dfe9ff"];
+  Ledger       [label="ICP Ledger", fillcolor="#dfe9ff"];
   Migration    [label="(Canister) Migration", fillcolor="#dfe9ff"];
-  Lifeline     [fillcolor="#dfe9ff"];
 
   // ---- Governance outbound ----
   // Governance -> Root: change_nns_canister, call_canister, stop_or_start_nns_canister,
@@ -215,7 +224,7 @@ digraph NNSBackendCanisterCalls {
 
   // Node Rewards canister: no confirmed outbound calls found (read-only via caller checks).
 
-  // ---- layout-only ordering hint (no real call) ----
+  // ---- layout-only ordering hints (no real calls) ----
   // ArbitraryCanister (Bitcoin) only has a real edge to Root, which pulls it
   // toward the trunk despite it being one of the most peripheral, narrowest-
   // scope canisters (a single proposal-specified relay target). This
@@ -223,4 +232,11 @@ digraph NNSBackendCanisterCalls {
   // narrow-scope canister on this side of the trunk -- keeps them grouped
   // together at the periphery instead.
   NodeRewards -> ArbitraryCanister [style=invis, weight=5];
+  // Lifeline's only real edges are Governance -> Lifeline and Lifeline ->
+  // IcManagement, both of which also pull toward the trunk; without this
+  // invisible edge to Node Rewards canister, Lifeline drifts away from the
+  // NodeRewards/ArbitraryCanister group it was declared next to (and, in
+  // some orderings tried, bends the trunk or pulls SnsWasm to the wrong
+  // side). This keeps Lifeline grouped with the rest of the left periphery.
+  NodeRewards -> Lifeline [style=invis, weight=5];
 }
