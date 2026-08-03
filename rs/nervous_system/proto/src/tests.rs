@@ -12,15 +12,15 @@ fn test_global_time_of_day_from_hh_mm_accepts_all_valid_hours_and_minutes() {
 
 #[test]
 fn test_global_time_of_day_from_hh_mm_rejects_invalid_hours_and_minutes() {
-    for (hh, mm) in [
-        (24, 0),
-        (25, 0),
-        (u64::MAX, 0),
-        (0, 60),
-        (0, 61),
-        (0, u64::MAX),
-    ] {
-        GlobalTimeOfDay::from_hh_mm(hh, mm).unwrap_err();
+    for hh in [0, 24, 25, u64::MAX] {
+        for mm in [0, 60, 61, u64::MAX] {
+            let is_valid = hh < 24 && mm < 60;
+            if is_valid {
+                continue;
+            }
+
+            GlobalTimeOfDay::from_hh_mm(hh, mm).unwrap_err();
+        }
     }
 }
 

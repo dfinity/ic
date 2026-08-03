@@ -48,9 +48,7 @@ fn test_round_trip() {
 }
 
 // Regression test for a bug where hour 23 (e.g. 11pm UTC) was incorrectly
-// rejected as invalid due to an off-by-one in the hour bound check (`hh >=
-// 23` instead of `hh >= 24`). Hours 0 through 23 are all valid; only 24 and
-// above are genuinely out of range.
+// rejected.
 #[test]
 fn test_parse_hour_23_is_valid_but_hour_24_is_not() {
     assert_eq!(
