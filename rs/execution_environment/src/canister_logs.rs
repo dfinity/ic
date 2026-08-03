@@ -15,11 +15,10 @@ pub(crate) fn fetch_canister_logs(
     round_limits: &mut RoundLimits,
 ) -> Result<CanisterManagerResponse, CanisterManagerError> {
     let canister_id = canister.canister_id();
-    let (reply, record_count, content_size) = fetch_canister_logs_response(sender, canister, args)?;
+    let (reply, instructions) = fetch_canister_logs_reply(sender, canister, args)?;
     // Charge the read/encode work against the round's instruction budget. No cycles
     // fee is charged for the call because every term is already covered by fees the
     // caller pays (per-message execution fee and per-byte response transmission fee).
-    let instructions = fetch_canister_logs_instructions(record_count, content_size);
     round_limits.instructions -= as_round_instructions(instructions);
     Ok(CanisterManagerResponse {
         canister_id,
@@ -30,6 +29,26 @@ pub(crate) fn fetch_canister_logs(
         stop_call_id_to_remove: None,
         stop_contexts_to_reject: vec![],
     })
+}
+
+/// Executes the `fetch_canister_logs` management method against the given canister
+/// on behalf of the given sender and returns the Candid-encoded
+/// `FetchCanisterLogsResponse` together with the number of instructions consumed
+/// while producing it.
+///
+/// This is shared by the replicated path (see `fetch_canister_logs`) and the
+/// non-replicated path (see `crate::query_handler::subnet_query`) so that both
+/// charge the same number of instructions for the same reply.
+pub(crate) fn fetch_canister_logs_reply(
+    sender: PrincipalId,
+    canister: &CanisterState,
+    args: FetchCanisterLogsRequest,
+) -> Result<(Vec<u8>, NumInstructions), CanisterManagerError> {
+    let (reply, record_count, content_size) = fetch_canister_logs_response(sender, canister, args)?;
+    Ok((
+        reply,
+        fetch_canister_logs_instructions(record_count, content_size),
+    ))
 }
 
 /// Derives the number of round instructions to deduct for a `fetch_canister_logs`

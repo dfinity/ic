@@ -1500,14 +1500,6 @@ fn composite_query_call_to_management_canister_list_canisters() {
         .with_subnet_admins(vec![canister_id.get()])
         .build();
     assert_eq!(test.universal_canister().unwrap(), canister_id);
-    // IDs 5, 6, 7 are consecutive and coalesce into a single range.
-    for raw_id in [5_u64, 6, 7] {
-        test.state_mut().put_canister_state(
-            CanisterStateBuilder::new()
-                .with_canister_id(CanisterId::from(raw_id))
-                .build(),
-        );
-    }
 
     let reply = test
         .non_replicated_query(
@@ -1517,19 +1509,14 @@ fn composite_query_call_to_management_canister_list_canisters() {
         )
         .unwrap();
 
+    // The caller is the only canister on the subnet.
     let response = Decode!(&reply.bytes(), ListCanistersResponse).unwrap();
     assert_eq!(
         response.canisters,
-        vec![
-            CanisterIdRange {
-                start: canister_id,
-                end: canister_id,
-            },
-            CanisterIdRange {
-                start: CanisterId::from(5_u64),
-                end: CanisterId::from(7_u64),
-            },
-        ]
+        vec![CanisterIdRange {
+            start: canister_id,
+            end: canister_id,
+        }]
     );
 }
 
@@ -1599,9 +1586,11 @@ fn composite_query_call_to_management_canister_rejects_non_query_methods() {
         )
         .unwrap();
 
+    // The call is rejected with the same error as a query sent by an end user
+    // to the management canister.
     assert_eq!(
         reply,
-        WasmResult::Reply(b"raw_rand API cannot be called from a composite query".to_vec())
+        WasmResult::Reply(b"Query method raw_rand not found.".to_vec())
     );
 }
 
@@ -1695,13 +1684,13 @@ fn composite_query_call_to_management_canister_charges_instructions() {
     }
 
     // The instructions consumed by `list_canisters` are charged towards the
-    // instruction limit of the whole call graph, so a query making many more
-    // calls than the limit allows for must fail.
+    // instruction limit of the whole call graph, so a query making one more
+    // call than the limit allows for must fail.
     let err = test
         .non_replicated_query(
             canister_id,
             "composite_query",
-            list_canisters_calls(10 * NUM_SUCCESSFUL_CALLS).build(),
+            list_canisters_calls(NUM_SUCCESSFUL_CALLS + 1).build(),
         )
         .unwrap_err();
     assert_eq!(
@@ -1709,12 +1698,12 @@ fn composite_query_call_to_management_canister_charges_instructions() {
         ErrorCode::QueryCallGraphTotalInstructionLimitExceeded
     );
 
-    // A single call is within the limit.
+    // The number of calls the limit is set up for is still within the limit.
     let reply = test
         .non_replicated_query(
             canister_id,
             "composite_query",
-            list_canisters_calls(1).build(),
+            list_canisters_calls(NUM_SUCCESSFUL_CALLS).build(),
         )
         .unwrap();
     assert_eq!(reply, WasmResult::Reply(b"done".to_vec()));

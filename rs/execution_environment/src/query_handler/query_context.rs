@@ -917,9 +917,9 @@ impl<'a> QueryContext<'a> {
     /// Executes a call to the management canister made by a composite query.
     ///
     /// The call is executed against the state of the own subnet, i.e. it can
-    /// only target canisters hosted by the own subnet (just like a management
-    /// canister query sent by an end user). Calls to management canister
-    /// methods that cannot be executed in the non-replicated mode are rejected.
+    /// only target canisters hosted by the own subnet. Calls to management
+    /// canister methods that cannot be executed in the non-replicated mode
+    /// are rejected.
     fn handle_ic00_request(
         &mut self,
         request: &Request,
@@ -928,26 +928,25 @@ impl<'a> QueryContext<'a> {
     ) -> ExecutionResult {
         // Results of query contexts calling the management canister are not cached.
         self.ic00_calls += 1;
-        // Charge the base overhead of a query call even if the call is rejected below.
-        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
 
         let reject = |err: UserError| {
             ExecutionResult::Response(to_query_result(Payload::Reject(RejectContext::from(err))))
         };
 
-        // Reject the calls to all the management canister methods
-        // that cannot be executed in the non-replicated mode. Note that calls to
+        // Reject the calls to all the management canister methods that cannot be
+        // executed in the non-replicated mode with the same error as for such a
+        // query sent by an end user to the management canister. Note that calls to
         // methods not exported by the management canister at all are rejected
         // before they even reach the query handler.
-        let Ok(method) = parse_query_method(&request.method_name) else {
-            return reject(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} API cannot be called from a composite query",
-                    request.method_name
-                ),
-            ));
+        let method = match parse_query_method(&request.method_name) {
+            Ok(method) => method,
+            Err(err) => return reject(err),
         };
+
+        // Charge the base overhead of a query call. This happens after rejecting
+        // calls to methods that are not management canister query methods, in the
+        // same way as calls to non-existing methods of a canister are not charged.
+        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
 
         let since = Instant::now(); // Start logging execution time.
         let (result, instructions) = match execute_subnet_query(

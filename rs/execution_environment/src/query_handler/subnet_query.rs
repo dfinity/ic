@@ -1,13 +1,12 @@
 //! This module implements the execution of the management canister query
-//! methods, i.e. those management canister methods that can be served from a
-//! (certified) state snapshot without going through consensus.
+//! methods.
 //!
 //! The same code is used for queries sent by end users directly to the
 //! management canister and for calls to the management canister made by
 //! composite queries.
 
 use crate::CanisterManager;
-use crate::canister_logs::fetch_canister_logs_response;
+use crate::canister_logs::fetch_canister_logs_reply;
 use crate::execution::common::list_canisters;
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -45,9 +44,7 @@ pub(super) fn execute_subnet_query(
         QueryMethod::FetchCanisterLogs => {
             let args = FetchCanisterLogsRequest::decode(payload)?;
             let canister = get_canister(state, args.get_canister_id())?;
-            let (reply, _record_count, _content_size) =
-                fetch_canister_logs_response(caller, canister, args).map_err(UserError::from)?;
-            Ok((reply, NumInstructions::new(0)))
+            fetch_canister_logs_reply(caller, canister, args).map_err(UserError::from)
         }
         QueryMethod::CanisterStatus => {
             let args = CanisterIdRecord::decode(payload)?;

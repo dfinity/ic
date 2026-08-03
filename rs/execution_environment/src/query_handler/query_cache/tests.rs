@@ -4,11 +4,14 @@ use crate::{
     query_handler::query_cache::{EntryEnv, EntryKey, EntryValue},
 };
 use assert_matches::assert_matches;
+use candid::Decode;
 use ic_base_types::CanisterId;
 use ic_error_types::ErrorCode;
 use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
-use ic_management_canister_types_private::{CanisterIdRecord, Payload};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType, Payload,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::universal_canister::wasm;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
@@ -1580,6 +1583,52 @@ fn composite_query_cache_never_caches_successful_calls_to_management_canister() 
 
     // Do not change balance or time: the result must still not be cached.
     let res_2 = test.non_replicated_query(a_id, "composite_query", q.clone());
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 2);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 2);
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn composite_query_cache_never_caches_calls_to_management_canister_from_callback() {
+    let mut test = builder_with_query_cache_expiry_times()
+        .with_composite_query_ic00_calls()
+        .build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    // Canister A calls the management canister in the reply callback of a nested
+    // composite query call to canister B.
+    // A canister is always allowed to request its own status.
+    let b = wasm().reply_data(&[42]).build();
+    let a = wasm()
+        .composite_query(
+            b_id,
+            call_args().other_side(b).on_reply(
+                wasm().call_simple(
+                    CanisterId::ic_00(),
+                    "canister_status",
+                    call_args()
+                        .other_side(CanisterIdRecord::from(a_id).encode())
+                        .on_reject(wasm().reject_message().append_and_reply()),
+                ),
+            ),
+        )
+        .build();
+
+    let res_1 = test.non_replicated_query(a_id, "composite_query", a.clone());
+    // The call to the management canister succeeded, i.e. the reply is the
+    // canister status of canister A and not a reject message.
+    let reply = res_1.clone().unwrap();
+    let status = Decode!(&reply.bytes(), CanisterStatusResultV2).unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 1);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 1);
+
+    // Do not change balance or time: the result must still not be cached.
+    let res_2 = test.non_replicated_query(a_id, "composite_query", a.clone());
     let m = query_cache_metrics(&test);
     assert_eq!(m.hits.get(), 0);
     assert_eq!(m.misses.get(), 2);

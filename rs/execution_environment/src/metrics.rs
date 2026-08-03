@@ -299,9 +299,9 @@ impl QueryHandlerMetrics {
         }
     }
 
-    /// Observes the execution of a management canister query method,
-    /// i.e. a method served in the non-replicated mode. The result is
-    /// either the encoded reply or the error the execution failed with.
+    /// Observes the execution of a management canister query method served
+    /// in the non-replicated mode. The result is either the encoded reply
+    /// or the error the execution failed with.
     pub fn observe_subnet_query_message(
         &self,
         query_method: QueryMethod,
