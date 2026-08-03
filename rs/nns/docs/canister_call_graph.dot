@@ -17,7 +17,7 @@ digraph NNSBackendCanisterCalls {
 
   // ---- Governance outbound ----
   Governance -> Root     [label="change_nns_canister / call_canister /\nstop_or_start_nns_canister / create_canister_and_install_code /\ntake_canister_snapshot / load_canister_snapshot /\nupdate_canister_settings / add_nns_canister"];
-  Governance -> Registry [label="create_subnet / add_node_operator / recover_subnet /\nupdate_node_rewards_table / reroute_canister_ranges / ...\n(ExecuteNnsFunction dispatch)"];
+  Governance -> Registry [label="create_subnet / add_node_operator / recover_subnet /\nupdate_node_rewards_table / reroute_canister_ranges / ...\n(ExecuteNnsFunction dispatch)", weight=10];
   Governance -> SnsWasm  [label="deploy_new_sns / list_deployed_snses /\nadd_wasm / update_sns_subnet_list /\ninsert_upgrade_path_entries / update_canister_settings target"];
   Governance -> Cmc      [label="get_average_icp_xdr_conversion_rate /\nset_authorized_subnetwork_list / update_subnet_type /\nchange_subnet_type_assignment"];
   Governance -> Ledger   [label="transfer_funds / account_balance / total_supply\n(disburse, spawn, refunds, metrics)"];
@@ -48,7 +48,9 @@ digraph NNSBackendCanisterCalls {
   SnsWasm -> Root         [label="canister_status / change_canister_controllers"];
 
   // ---- GTC outbound ----
-  Gtc -> Governance [label="claim_gtc_neurons / transfer_gtc_neuron"];
+  // weight=10 pulls this edge straight so the GTC -> Governance -> Registry ->
+  // IC Management spine renders centered instead of drifting to one side.
+  Gtc -> Governance [label="claim_gtc_neurons / transfer_gtc_neuron", weight=10];
 
   // ---- CMC outbound ----
   Cmc -> IcManagement [label="raw_rand / deposit_cycles /\ncreate_canister (on target subnet)"];
@@ -59,7 +61,7 @@ digraph NNSBackendCanisterCalls {
   Migration -> Registry     [label="get_subnet_for_canister / get_subnet /\nmigrate_canisters"];
 
   // ---- Registry outbound ----
-  Registry -> IcManagement [label="setup_initial_dkg / reshare_chain_key\n(create_subnet, split_subnet, recover_subnet)"];
+  Registry -> IcManagement [label="setup_initial_dkg / reshare_chain_key\n(create_subnet, split_subnet, recover_subnet)", weight=10];
 
   // Node Rewards canister: no confirmed outbound calls found (read-only via caller checks).
 }
