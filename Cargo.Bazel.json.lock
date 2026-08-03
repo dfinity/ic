@@ -1,5 +1,5 @@
 {
-  "checksum": "39c653e3d17d18021279bbe0e13db16a60efa774235e89bffa90689d33448b06",
+  "checksum": "3fea3d3e450e0bca87879553b95e707f5d491cc792e174e3dcd3d7022d2af4e9",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20036,12 +20036,6 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
-        "data": {
-          "common": [
-            "@@//bazel:pkg_config_no_link_metadata.sh"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -20056,12 +20050,6 @@
               "target": "pkg_config"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
-          },
           "selects": {}
         }
       },
@@ -42592,12 +42580,6 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
-        "data": {
-          "common": [
-            "@@//bazel:pkg_config_no_link_metadata.sh"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -42612,12 +42594,6 @@
               "target": "semver"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
-          },
           "selects": {}
         }
       },
@@ -42693,12 +42669,6 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
-        "data": {
-          "common": [
-            "@@//bazel:pkg_config_no_link_metadata.sh"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -42721,12 +42691,6 @@
               "target": "semver"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
-          },
           "selects": {}
         }
       },
@@ -43799,12 +43763,6 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
-        "data": {
-          "common": [
-            "@@//bazel:pkg_config_no_link_metadata.sh"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -43819,12 +43777,6 @@
               "target": "pkg_config"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
-          },
           "selects": {}
         }
       },
@@ -56021,7 +55973,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/pkg-config/0.3.32/download",
-          "sha256": "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
+          "sha256": "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:pkg-config.patch"
+          ]
         }
       },
       "targets": [
@@ -85628,12 +85586,6 @@
         "compile_data_glob_excludes": [
           "**/*.rs"
         ],
-        "data": {
-          "common": [
-            "@@//bazel:pkg_config_no_link_metadata.sh"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -85644,12 +85596,6 @@
               "target": "pkg_config"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "PKG_CONFIG": "$(execpath @@//bazel:pkg_config_no_link_metadata.sh)"
-          },
           "selects": {}
         },
         "links": "virt"

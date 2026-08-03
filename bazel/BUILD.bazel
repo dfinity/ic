@@ -157,7 +157,6 @@ exports_files(
         "canbench.sh",
         "check_endpoints_test.sh",
         "file_size_test.sh",
-        "pkg_config_no_link_metadata.sh",
     ],
     visibility = ["//visibility:public"],
 )
