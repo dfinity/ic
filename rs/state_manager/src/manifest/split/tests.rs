@@ -123,27 +123,35 @@ fn split_manifest_unassigned_canister() {
     );
 }
 
+/// Every split / merge marker file is a precondition of `SystemMetadata::split()`,
+/// so a manifest containing one cannot be the input of a split.
 #[test]
-fn split_manifest_state_already_splitting() {
-    let manifest = Manifest::new(
-        CURRENT_STATE_SYNC_VERSION,
-        vec![empty_file_info(SPLIT_MARKER_FILE)],
-        vec![],
-    );
+fn split_manifest_marked_state() {
+    for (marker_file, reason) in [
+        (SPLIT_MARKER_FILE, "state is already undergoing a split"),
+        (SUBNET_MERGED_FILE, "state was just merged"),
+    ] {
+        let manifest = Manifest::new(
+            CURRENT_STATE_SYNC_VERSION,
+            vec![empty_file_info(marker_file)],
+            vec![],
+        );
 
-    assert_eq!(
-        Err(ManifestValidationError::InconsistentManifest {
-            reason: "state is already undergoing a split".into()
-        }),
-        split_manifest(
-            &manifest,
-            SUBNET_0,
-            SUBNET_1,
-            SubnetType::Application,
-            BATCH_TIME,
-            &RoutingTable::default(),
-        )
-    );
+        assert_eq!(
+            Err(ManifestValidationError::InconsistentManifest {
+                reason: reason.into()
+            }),
+            split_manifest(
+                &manifest,
+                SUBNET_0,
+                SUBNET_1,
+                SubnetType::Application,
+                BATCH_TIME,
+                &RoutingTable::default(),
+            ),
+            "unexpected result for {marker_file}"
+        );
+    }
 }
 
 #[test]

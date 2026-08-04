@@ -441,6 +441,13 @@ impl CheckpointLoader {
             );
         }
 
+        // Same for the "subnet was merged" marker.
+        metadata.subnet_merged = self
+            .checkpoint_layout
+            .subnet_merged_marker()
+            .deserialize()?
+            .merged;
+
         Ok(metadata)
     }
 
