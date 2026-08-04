@@ -19,6 +19,7 @@
 use crate::config::directories::{
     DFX_CONFIG_ROOT, get_shared_network_data_directory, get_user_dfx_config_dir_with_override,
 };
+use crate::error::fs::ReadToStringError;
 use crate::error::get_user_home::GetUserHomeError;
 use crate::error::load_dfx_config::LoadDfxConfigError;
 use crate::error::load_networks_config::LoadNetworksConfigError;
@@ -97,11 +98,18 @@ pub enum NetworkResolutionError {
     #[error(transparent)]
     LoadSharedNetworksConfigFailed(#[from] LoadNetworksConfigError),
 
-    #[error("Failed to read webserver port from {0}")]
-    ReadWebserverPortFailed(PathBuf, #[source] std::io::Error),
+    // Copied (name + shape) from dfx-core's `NetworkConfigError::ReadWebserverPortFailed`
+    // (`error/network_config.rs`), which wraps `ReadToStringError` rather than
+    // an unadorned `std::io::Error` -- the path is carried by `ReadToStringError`
+    // itself, not duplicated onto this variant.
+    #[error("Failed to read webserver port")]
+    ReadWebserverPortFailed(#[source] ReadToStringError),
 
-    #[error("Failed to parse port value in {0}")]
-    ParsePortValueFailed(PathBuf, #[source] std::num::ParseIntError),
+    // Copied (name, shape, and message) from dfx-core's
+    // `NetworkConfigError::ParsePortValueFailed` (`error/network_config.rs`),
+    // including its boxing of both fields.
+    #[error("Failed to parse contents of {0} as a port value")]
+    ParsePortValueFailed(Box<PathBuf>, #[source] Box<std::num::ParseIntError>),
 }
 
 /// Determines whether the provided connection is the official IC.
@@ -160,8 +168,8 @@ fn resolve_local_network() -> Result<NetworkDescriptor, NetworkResolutionError> 
 }
 
 /// Does the actual work of [`resolve_local_network`], but takes the working
-/// directory and the `DFX_CONFIG_ROOT` environment variable override as explicit parameters
-/// instead of reading them, making this more testable.
+/// directory and the `DFX_CONFIG_ROOT` environment variable override as
+/// explicit parameters instead of reading them, making this more testable.
 ///
 /// `dfx_config_root` is the value of the `DFX_CONFIG_ROOT` environment
 /// variable: `None` means it is not set, `Some` means it is set to that path.
@@ -318,15 +326,15 @@ fn get_running_webserver_address(
     let local_address = default_local_address.to_string();
     let path = data_directory.join("webserver-port");
     if path.exists() {
-        let s = std::fs::read_to_string(&path)
-            .map_err(|e| NetworkResolutionError::ReadWebserverPortFailed(path.clone(), e))?;
+        let s = crate::fs::read_to_string(&path)
+            .map_err(NetworkResolutionError::ReadWebserverPortFailed)?;
         let s = s.trim();
         if s.is_empty() {
             Ok(local_address)
         } else {
-            let port = s
-                .parse::<u16>()
-                .map_err(|e| NetworkResolutionError::ParsePortValueFailed(path.clone(), e))?;
+            let port = s.parse::<u16>().map_err(|e| {
+                NetworkResolutionError::ParsePortValueFailed(Box::new(path), Box::new(e))
+            })?;
             // converting to a socket address, and then setting the port,
             // will unfortunately transform "localhost:port" to "[::1]:{port}",
             // which the agent fails to connect with.
