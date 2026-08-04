@@ -186,4 +186,6 @@ pub struct InternetIdentityInit {
     pub enable_dnssec_email_recovery: Option<bool>,
     pub dnssec_config: Option<Option<DnssecConfig>>,
     pub doh_config: Option<Option<DohConfig>>,
+    pub mcp_official_url: Option<Option<String>>,
+    pub mcp_config_migration: Option<bool>,
 }
