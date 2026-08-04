@@ -1,5 +1,5 @@
 {
-  "checksum": "24e47016011d24391555266e3b362a6065c01e0d6b189fc9e9387b75df9f1be1",
+  "checksum": "0ab74b113c84c2d02a55dcfc84f5926dc0476e40464e5202318783ea53e65207",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -1849,7 +1849,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -3401,7 +3401,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -11011,7 +11011,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -13601,7 +13601,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -20919,7 +20919,7 @@
               "target": "ic_vetkeys"
             },
             {
-              "id": "ic-wasm 0.10.0",
+              "id": "ic-wasm 0.11.1",
               "target": "ic_wasm"
             },
             {
@@ -21593,7 +21593,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -21865,6 +21865,10 @@
             {
               "id": "educe 0.5.11",
               "target": "educe"
+            },
+            {
+              "id": "enum-ordinalize-derive 4.4.1",
+              "target": "enum_ordinalize_derive"
             },
             {
               "id": "indoc 1.0.9",
@@ -23663,7 +23667,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "enum-ordinalize-derive 4.4.2",
+              "id": "enum-ordinalize-derive 4.4.1",
               "target": "enum_ordinalize_derive"
             }
           ],
@@ -23677,14 +23681,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "enum-ordinalize-derive 4.4.2": {
+    "enum-ordinalize-derive 4.4.1": {
       "name": "enum-ordinalize-derive",
-      "version": "4.4.2",
+      "version": "4.4.1",
       "package_url": "https://github.com/magiclen/enum-ordinalize",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/enum-ordinalize-derive/4.4.2/download",
-          "sha256": "a65863d15a4ce2888bd2f0f543cc963d3879c3a022c8ee43f6141d479a3ac815"
+          "url": "https://static.crates.io/crates/enum-ordinalize-derive/4.4.1/download",
+          "sha256": "42e528e2d34ba8a67a1a650b86beae8ef69fc5fdb638016f386b973226590432"
         }
       },
       "targets": [
@@ -23706,6 +23710,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -23717,14 +23727,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 3.0.2",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "4.4.2"
+        "version": "4.4.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -25246,7 +25256,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -29625,7 +29635,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -29704,7 +29714,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -31019,7 +31029,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -31157,7 +31167,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -31291,7 +31301,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -33381,7 +33391,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -33725,7 +33735,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -33983,7 +33993,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -34081,7 +34091,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -34227,7 +34237,7 @@
               "target": "slotmap"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -34307,7 +34317,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -34592,7 +34602,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -34951,7 +34961,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -35101,7 +35111,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -35358,7 +35368,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -35661,7 +35671,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -36347,7 +36357,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -36449,7 +36459,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -36699,14 +36709,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-wasm 0.10.0": {
+    "ic-wasm 0.11.1": {
       "name": "ic-wasm",
-      "version": "0.10.0",
+      "version": "0.11.1",
       "package_url": "https://github.com/dfinity/ic-wasm",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-wasm/0.10.0/download",
-          "sha256": "44ab14c3676c8881fc1a8bad7a2c19cc6f7511584008f777c12cd42a70f380ab"
+          "url": "https://static.crates.io/crates/ic-wasm/0.11.1/download",
+          "sha256": "62beb934ad93d6cab235018e6b2ad15c72a54cd2148885f7b83dc8f5362806b7"
         }
       },
       "targets": [
@@ -36786,7 +36796,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -36801,7 +36811,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.0"
+        "version": "0.11.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -39362,7 +39372,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -40574,7 +40584,7 @@
               "target": "simd_cesu8"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -45855,7 +45865,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -51717,7 +51727,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -51807,7 +51817,7 @@
               "target": "prost"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -52212,7 +52222,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -55947,7 +55957,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -57884,7 +57894,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -59679,7 +59689,7 @@
               "target": "rustls"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -59804,7 +59814,7 @@
               "target": "slab"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -61573,7 +61583,7 @@
               "target": "libredox"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -63344,7 +63354,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -66087,7 +66097,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -69544,7 +69554,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -73006,7 +73016,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -75031,73 +75041,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "syn 3.0.2": {
-      "name": "syn",
-      "version": "3.0.2",
-      "package_url": "https://github.com/dtolnay/syn",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/syn/3.0.2/download",
-          "sha256": "a207d6d6a2b7fc470b80443726053f18a2481b7e1eee970597051596567987a3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "syn",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "syn",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "clone-impls",
-            "default",
-            "derive",
-            "parsing",
-            "printing",
-            "proc-macro"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "unicode-ident 1.0.22",
-              "target": "unicode_ident"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "3.0.2"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "sync_wrapper 0.1.2": {
       "name": "sync_wrapper",
       "version": "0.1.2",
@@ -76434,7 +76377,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -77262,14 +77205,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror 2.0.19": {
+    "thiserror 2.0.18": {
       "name": "thiserror",
-      "version": "2.0.19",
+      "version": "2.0.18",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/2.0.19/download",
-          "sha256": "09a43598840e33d5b0331f38c5e30d13bb11c11210a4b58f0d9b18a5a5eefcd9"
+          "url": "https://static.crates.io/crates/thiserror/2.0.18/download",
+          "sha256": "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
         }
       },
       "targets": [
@@ -77313,7 +77256,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "build_script_build"
             }
           ],
@@ -77323,13 +77266,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 2.0.19",
+              "id": "thiserror-impl 2.0.18",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "2.0.19"
+        "version": "2.0.18"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -77405,14 +77348,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 2.0.19": {
+    "thiserror-impl 2.0.18": {
       "name": "thiserror-impl",
-      "version": "2.0.19",
+      "version": "2.0.18",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/2.0.19/download",
-          "sha256": "43cbfe0cf76104d42a574802844187e84a305e531ed54455f11fbde0f10541cd"
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.18/download",
+          "sha256": "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
         }
       },
       "targets": [
@@ -77445,14 +77388,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 3.0.2",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.19"
+        "version": "2.0.18"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -81242,7 +81185,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -82676,7 +82619,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -82766,7 +82709,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -87526,7 +87469,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -94075,7 +94018,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.19",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -95378,7 +95321,7 @@
   },
   "binary_crates": [
     "ic-gateway 0.2.0",
-    "ic-wasm 0.10.0",
+    "ic-wasm 0.11.1",
     "metrics-proxy 0.1.0"
   ],
   "workspace_members": {
@@ -95772,6 +95715,7 @@
     "dyn-clone 1.0.20",
     "ed25519-dalek 2.2.0",
     "educe 0.5.11",
+    "enum-ordinalize-derive 4.4.1",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
     "ethers-core 2.0.8",
@@ -95837,7 +95781,7 @@
     "ic-utils 0.49.1",
     "ic-verify-bls-signature 0.6.0",
     "ic-vetkeys 0.7.0",
-    "ic-wasm 0.10.0",
+    "ic-wasm 0.11.1",
     "ic-xrc-types 1.2.0",
     "ic0 1.1.0",
     "ic_bls12_381 0.10.1",
@@ -96013,7 +95957,7 @@
     "tempfile 3.23.0",
     "test-strategy 0.3.1",
     "textplots 0.8.4",
-    "thiserror 2.0.19",
+    "thiserror 2.0.18",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.7.0",
