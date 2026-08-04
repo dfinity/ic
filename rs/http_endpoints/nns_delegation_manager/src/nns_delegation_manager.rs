@@ -1845,7 +1845,6 @@ mod tests {
         .unwrap();
     }
 
-    #[tokio::test]
     #[rstest]
     // Note: the subnet under test is initialized with canister ranges 1-10
     #[case::new_canister_range(
@@ -1884,6 +1883,7 @@ mod tests {
             }
         ]
     )]
+    #[tokio::test]
     async fn manager_run_reactively_refreshes_when_canister_ranges_changed_test(
         #[case] new_canister_ranges: Vec<CanisterIdRange>,
     ) {
