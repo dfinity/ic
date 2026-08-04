@@ -8104,6 +8104,7 @@ async fn test_max_number_of_proposals_with_ballots() {
                     skip_stopping_before_installing: None,
                     wasm_module_hash: Some(vec![7, 8, 9]),
                     arg_hash: Some(vec![10, 11, 12]),
+                    canister_upgrade_options: None,
                 })),
                 ..Default::default()
             },
