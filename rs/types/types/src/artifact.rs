@@ -4,10 +4,11 @@ use crate::{
     canister_http::CanisterHttpResponseShare,
     consensus::{
         ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasHash, HasHeight,
+        UpgradePermitAuthorizationShare,
         certification::{CertificationMessage, CertificationMessageHash},
         idkg::IDkgArtifactId,
     },
-    crypto::{CryptoHash, crypto_hash},
+    crypto::{CryptoHash, CryptoHashOf, crypto_hash},
     messages::{MessageId, SignedIngress},
 };
 #[cfg(test)]
@@ -246,3 +247,58 @@ pub type IDkgMessageId = IDkgArtifactId;
 // CanisterHttp artifacts
 
 pub type CanisterHttpResponseId = CanisterHttpResponseShare;
+
+// -----------------------------------------------------------------------------
+// Upgrade permit authorization artifacts
+
+/// Upgrade permit authorization message identifier carries both a message hash
+/// and a height, used by the upgrade permit auth pool for lookup.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+pub struct UpgradePermitAuthId {
+    pub hash: CryptoHashOf<UpgradePermitAuthorizationShare>,
+    pub height: Height,
+}
+
+impl HasHeight for UpgradePermitAuthId {
+    fn height(&self) -> Height {
+        self.height
+    }
+}
+
+impl IdentifiableArtifact for UpgradePermitAuthorizationShare {
+    const NAME: &'static str = "upgrade_permit_auth";
+    type Id = UpgradePermitAuthId;
+    fn id(&self) -> Self::Id {
+        UpgradePermitAuthId {
+            hash: crypto_hash(self),
+            height: self.content.height(),
+        }
+    }
+}
+
+impl From<&UpgradePermitAuthorizationShare> for UpgradePermitAuthId {
+    fn from(share: &UpgradePermitAuthorizationShare) -> Self {
+        share.id()
+    }
+}
+
+impl From<UpgradePermitAuthId> for pb::UpgradePermitAuthMessageId {
+    fn from(id: UpgradePermitAuthId) -> Self {
+        Self {
+            hash: id.hash.clone().get().0,
+            height: id.height.get(),
+        }
+    }
+}
+
+impl TryFrom<pb::UpgradePermitAuthMessageId> for UpgradePermitAuthId {
+    type Error = ProxyDecodeError;
+
+    fn try_from(id: pb::UpgradePermitAuthMessageId) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hash: CryptoHash(id.hash.clone()).into(),
+            height: Height::from(id.height),
+        })
+    }
+}
+

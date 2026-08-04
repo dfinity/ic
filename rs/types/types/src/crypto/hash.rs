@@ -7,7 +7,7 @@ use crate::canister_http::{
 use crate::consensus::{
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitAuthorizationContent,
     certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
@@ -16,7 +16,6 @@ use crate::consensus::{
         EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare,
         VetKdKeyShare,
     },
-    upgrade::UpgradeStatus,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,
@@ -69,8 +68,13 @@ mod private {
     impl CryptoHashDomainSeal for Block {}
     impl CryptoHashDomainSeal for Signed<HashedBlock, BasicSignature<BlockMetadata>> {}
     impl CryptoHashDomainSeal for EquivocationProof {}
-    impl CryptoHashDomainSeal for UpgradeStatus {}
     impl CryptoHashDomainSeal for BlockPayload {}
+
+    impl CryptoHashDomainSeal for UpgradePermitAuthorizationContent {}
+    impl CryptoHashDomainSeal
+        for Signed<UpgradePermitAuthorizationContent, BasicSignature<UpgradePermitAuthorizationContent>>
+    {
+    }
 
     impl CryptoHashDomainSeal for RandomBeaconContent {}
     impl CryptoHashDomainSeal for Signed<RandomBeaconContent, ThresholdSignature<RandomBeaconContent>> {}
@@ -224,9 +228,17 @@ impl CryptoHashDomain for EquivocationProof {
     }
 }
 
-impl CryptoHashDomain for UpgradeStatus {
+impl CryptoHashDomain for UpgradePermitAuthorizationContent {
     fn domain(&self) -> String {
-        "ic-consensus-upgrade-status".to_string()
+        DomainSeparator::UpgradePermitAuthorizationContent.to_string()
+    }
+}
+
+impl CryptoHashDomain
+    for Signed<UpgradePermitAuthorizationContent, BasicSignature<UpgradePermitAuthorizationContent>>
+{
+    fn domain(&self) -> String {
+        DomainSeparator::UpgradePermitAuthorization.to_string()
     }
 }
 

@@ -10,6 +10,7 @@ import "registry/subnet/v1/subnet.proto";
 import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
+import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
 message CertificationMessage {
@@ -87,7 +88,6 @@ message ConsensusMessage {
     CatchUpPackage cup = 10;
     CatchUpPackageShare cup_share = 11;
     EquivocationProof equivocation_proof = 12;
-    UpgradeStatus upgrade_status = 13;
   }
 }
 
@@ -173,12 +173,6 @@ message EquivocationProof {
   // Second equivocating block
   bytes hash2 = 7;
   bytes signature2 = 8;
-}
-
-message UpgradeStatus {
-  NodeId node_id = 1;
-  string guestos_version = 2;
-  uint64 height = 3;
 }
 
 message SubnetStreamSlice {
@@ -290,4 +284,44 @@ message StrippedConsensusMessage {
 
 message StrippedConsensusMessageId {
   ConsensusMessageId unstripped_id = 1;
+}
+
+message UpgradePayloadProto {
+  UpgradePayloadContentProto content = 1;
+}
+
+message UpgradePayloadContentProto {
+  oneof content {
+    UpgradePayloadRequestProto request = 1;
+    UpgradePayloadAuthorizeProto authorize = 2;
+    UpgradePayloadReturnProto return_val = 3;
+  }
+}
+
+message UpgradePayloadRequestProto {
+  types.v1.NodeId node = 1;
+  uint64 request_height = 2;
+}
+
+message UpgradePayloadAuthorizeProto {
+  types.v1.NodeId node = 1;
+  repeated UpgradePermitAuthShare shares = 2;
+}
+
+message UpgradePayloadReturnProto {
+  types.v1.NodeId node = 1;
+}
+
+// UpgradePermitAuthShare is the protobuf encoding of an
+// `UpgradePermitAuthorizationShare`, gossiped over P2P and stored in the
+// `UpgradePermitAuthPool`. It carries the signed content (the node requesting
+// the upgrade permit and the request height) and the basic signature over it.
+message UpgradePermitAuthShare {
+  UpgradePermitAuthShareContent content = 1;
+  types.v1.BasicSignature signature = 2;
+}
+
+message UpgradePermitAuthShareContent {
+  types.v1.NodeId node = 1;
+  uint64 request_height = 2;
 }

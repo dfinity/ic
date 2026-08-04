@@ -50,6 +50,7 @@ use std::{
     mem::size_of,
     sync::Arc,
 };
+use ic_types::consensus::upgrade::UpgradeState;
 
 /// `BTreeMap` of streams by destination `SubnetId`.
 pub type StreamMap = BTreeMap<SubnetId, Stream>;
@@ -190,7 +191,7 @@ pub struct SystemMetadata {
     /// (re-derived from finalized blocks on replay), so excluded from
     /// checkpoint validation.
     #[validate_eq(Ignore)]
-    pub upgrade_state: ic_types::consensus::upgrade::UpgradeState,
+    pub upgrade_state: UpgradeState,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.

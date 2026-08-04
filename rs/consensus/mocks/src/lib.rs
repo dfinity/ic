@@ -1,6 +1,7 @@
 //! Contains mocks for traits internal to consensus
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
+    upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::membership::Membership;
@@ -103,6 +104,7 @@ pub struct Dependencies {
     pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
+    pub upgrade_permit_auth_pool: Arc<RwLock<UpgradePermitAuthPoolImpl>>,
 }
 
 /// Creates most common consensus components used for testing. All components
@@ -146,6 +148,10 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
     )));
     let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
         ic_metrics::MetricsRegistry::new(),
+        log.clone(),
+    )));
+    let upgrade_permit_auth_pool = Arc::new(RwLock::new(UpgradePermitAuthPoolImpl::new(
+        ic_metrics::MetricsRegistry::new(),
         log,
     )));
     let pool = TestConsensusPool::new(
@@ -175,6 +181,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         dkg_pool,
         idkg_pool,
         canister_http_pool,
+        upgrade_permit_auth_pool,
     }
 }
 
@@ -199,7 +206,7 @@ pub fn dependencies_with_subnet_params(
         dkg_pool,
         idkg_pool,
         canister_http_pool,
-        ..
+        upgrade_permit_auth_pool,
     } = dependencies_with_subnet_records_with_raw_state_manager(pool_config, subnet_id, records);
 
     state_manager
@@ -222,6 +229,7 @@ pub fn dependencies_with_subnet_params(
         dkg_pool,
         idkg_pool,
         canister_http_pool,
+        upgrade_permit_auth_pool,
     }
 }
 

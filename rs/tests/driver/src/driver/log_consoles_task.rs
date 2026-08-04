@@ -323,10 +323,10 @@ async fn stream_console_file(logger: Logger, label: String, path: PathBuf) {
                     // keep accumulating into `line` on the next read.
                 }
                 Err(err) => {
-                    // error!(
-                    //     logger,
-                    //     "Reading console log for [console={label}] failed: {err}; reopening ..."
-                    // );
+                    error!(
+                        logger,
+                        "Reading console log for [console={label}] failed: {err}; reopening ..."
+                    );
                     break;
                 }
             }

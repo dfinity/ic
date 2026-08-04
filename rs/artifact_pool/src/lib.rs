@@ -9,6 +9,7 @@ pub mod ingress_pool;
 mod inmemory_pool;
 mod metrics;
 mod pool_common;
+pub mod upgrade_permit_auth_pool;
 #[cfg(test)]
 mod test_utils;
 

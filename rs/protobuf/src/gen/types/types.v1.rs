@@ -1244,6 +1244,13 @@ pub struct DkgMessageId {
     pub height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradePermitAuthMessageId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub hash: ::core::option::Option<ConsensusMessageHash>,
@@ -1286,8 +1293,6 @@ pub mod consensus_message_hash {
         CatchUpPackageShare(::prost::alloc::vec::Vec<u8>),
         #[prost(bytes, tag = "12")]
         EquivocationProof(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "13")]
-        UpgradeStatus(::prost::alloc::vec::Vec<u8>),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1428,7 +1433,7 @@ pub struct Block {
 pub struct ConsensusMessage {
     #[prost(
         oneof = "consensus_message::Msg",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
     )]
     pub msg: ::core::option::Option<consensus_message::Msg>,
 }
@@ -1461,8 +1466,6 @@ pub mod consensus_message {
         CupShare(super::CatchUpPackageShare),
         #[prost(message, tag = "12")]
         EquivocationProof(super::EquivocationProof),
-        #[prost(message, tag = "13")]
-        UpgradeStatus(super::UpgradeStatus),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1596,15 +1599,6 @@ pub struct EquivocationProof {
     pub hash2: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "8")]
     pub signature2: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UpgradeStatus {
-    #[prost(message, optional, tag = "1")]
-    pub node_id: ::core::option::Option<NodeId>,
-    #[prost(string, tag = "2")]
-    pub guestos_version: ::prost::alloc::string::String,
-    #[prost(uint64, tag = "3")]
-    pub height: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetStreamSlice {
@@ -1764,6 +1758,65 @@ pub mod stripped_consensus_message {
 pub struct StrippedConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub unstripped_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradePayloadProto {
+    #[prost(message, optional, tag = "1")]
+    pub content: ::core::option::Option<UpgradePayloadContentProto>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradePayloadContentProto {
+    #[prost(oneof = "upgrade_payload_content_proto::Content", tags = "1, 2, 3")]
+    pub content: ::core::option::Option<upgrade_payload_content_proto::Content>,
+}
+/// Nested message and enum types in `UpgradePayloadContentProto`.
+pub mod upgrade_payload_content_proto {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Content {
+        #[prost(message, tag = "1")]
+        Request(super::UpgradePayloadRequestProto),
+        #[prost(message, tag = "2")]
+        Authorize(super::UpgradePayloadAuthorizeProto),
+        #[prost(message, tag = "3")]
+        ReturnVal(super::UpgradePayloadReturnProto),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradePayloadRequestProto {
+    #[prost(message, optional, tag = "1")]
+    pub node: ::core::option::Option<NodeId>,
+    #[prost(uint64, tag = "2")]
+    pub request_height: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradePayloadAuthorizeProto {
+    #[prost(message, optional, tag = "1")]
+    pub node: ::core::option::Option<NodeId>,
+    #[prost(message, repeated, tag = "2")]
+    pub shares: ::prost::alloc::vec::Vec<UpgradePermitAuthShare>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradePayloadReturnProto {
+    #[prost(message, optional, tag = "1")]
+    pub node: ::core::option::Option<NodeId>,
+}
+/// UpgradePermitAuthShare is the protobuf encoding of an
+/// `UpgradePermitAuthorizationShare`, gossiped over P2P and stored in the
+/// `UpgradePermitAuthPool`. It carries the signed content (the node requesting
+/// the upgrade permit and the request height) and the basic signature over it.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradePermitAuthShare {
+    #[prost(message, optional, tag = "1")]
+    pub content: ::core::option::Option<UpgradePermitAuthShareContent>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<BasicSignature>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradePermitAuthShareContent {
+    #[prost(message, optional, tag = "1")]
+    pub node: ::core::option::Option<NodeId>,
+    #[prost(uint64, tag = "2")]
+    pub request_height: u64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

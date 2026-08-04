@@ -3,7 +3,7 @@ mod framework;
 
 use crate::framework::ConsensusDriver;
 use assert_matches::assert_matches;
-use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
+use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool, upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl};
 use ic_consensus::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{DkgKeyManager, get_dkg_summary_from_cup_contents};
@@ -160,6 +160,10 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
+        let upgrade_permit_auth_pool = Arc::new(RwLock::new(UpgradePermitAuthPoolImpl::new(
+            metrics_registry.clone(),
+            no_op_logger(),
+        )));
 
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
             replica_config.clone(),
@@ -172,6 +176,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
             chain_key_payload_builder,
+            upgrade_permit_auth_pool,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),

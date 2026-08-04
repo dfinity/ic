@@ -84,8 +84,7 @@ fn compute_bouncer(
         | ConsensusMessageHash::Finalization(_)
         | ConsensusMessageHash::FinalizationShare(_)
         | ConsensusMessageHash::BlockProposal(_)
-        | ConsensusMessageHash::EquivocationProof(_)
-        | ConsensusMessageHash::UpgradeStatus(_) => {
+        | ConsensusMessageHash::EquivocationProof(_) => {
             // Ignore finalized
             if height <= finalized_height {
                 Unwanted

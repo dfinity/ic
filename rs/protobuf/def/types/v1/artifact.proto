@@ -12,6 +12,11 @@ message DkgMessageId {
   uint64 height = 2;
 }
 
+message UpgradePermitAuthMessageId {
+  bytes hash = 1;
+  uint64 height = 2;
+}
+
 message ConsensusMessageId {
   ConsensusMessageHash hash = 1;
   uint64 height = 2;
@@ -31,7 +36,6 @@ message ConsensusMessageHash {
     bytes catch_up_package = 10;
     bytes catch_up_package_share = 11;
     bytes equivocation_proof = 12;
-    bytes upgrade_status = 13;
   }
 }
 

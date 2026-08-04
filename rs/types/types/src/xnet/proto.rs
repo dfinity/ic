@@ -6,7 +6,6 @@ use crate::{
     CryptoHashOfPartialState, Height,
     consensus::certification::{Certification, CertificationContent, CertificationShare},
     crypto::{CryptoHash, Signed},
-    guestos_version::GuestOsVersionParseError,
     replica_version::ReplicaVersionParseError,
     xnet::CertifiedStreamSlice,
 };
@@ -20,12 +19,6 @@ mod tests;
 
 impl From<ReplicaVersionParseError> for ProxyDecodeError {
     fn from(err: ReplicaVersionParseError) -> Self {
-        Self::ReplicaVersionParseError(Box::new(err))
-    }
-}
-
-impl From<GuestOsVersionParseError> for ProxyDecodeError {
-    fn from(err: GuestOsVersionParseError) -> Self {
         Self::ReplicaVersionParseError(Box::new(err))
     }
 }

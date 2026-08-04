@@ -26,7 +26,7 @@ pub use vetkd::*;
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitAuthorizationContent,
     certification::CertificationContent,
     dkg as consensus_dkg,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
@@ -73,6 +73,9 @@ pub trait Crypto:
     // IDkgOpeningContent
     + BasicSigner<IDkgOpeningContent>
     + BasicSigVerifier<IDkgOpeningContent>
+    // UpgradePermitAuthorizationContent
+    + BasicSigner<UpgradePermitAuthorizationContent>
+    + BasicSigVerifier<UpgradePermitAuthorizationContent>
     + IDkgProtocol
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
@@ -141,6 +144,8 @@ impl<T> Crypto for T where
         + BasicSigVerifier<IDkgComplaintContent>
         + BasicSigner<IDkgOpeningContent>
         + BasicSigVerifier<IDkgOpeningContent>
+        + BasicSigner<UpgradePermitAuthorizationContent>
+        + BasicSigVerifier<UpgradePermitAuthorizationContent>
         + BasicSigner<CanisterHttpResponseReceipt>
         + BasicSigVerifier<CanisterHttpResponseReceipt>
         + BasicSigner<QueryResponseHash>

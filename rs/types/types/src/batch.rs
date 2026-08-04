@@ -6,6 +6,7 @@ mod chain_key;
 mod execution_environment;
 mod ingress;
 mod self_validating;
+mod upgrade;
 mod xnet;
 
 pub use self::{
@@ -23,6 +24,7 @@ pub use self::{
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
+    upgrade::{bytes_to_upgrade_payload, upgrade_payload_to_bytes},
     xnet::XNetPayload,
 };
 use crate::{
@@ -44,6 +46,7 @@ use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
+use crate::consensus::upgrade::UpgradePayload;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BatchContent {
@@ -54,8 +57,6 @@ pub enum BatchContent {
         consensus_responses: Vec<ConsensusResponse>,
         /// Data required by the chain key service
         chain_key_data: ChainKeyData,
-        /// Phase-2 upgrade section (statuses delta + permits), CBOR-encoded.
-        upgrade: Vec<u8>,
         /// Whether the state obtained by executing this batch needs to be fully
         /// hashed to be eligible for StateSync.
         requires_full_state_hash: bool,
@@ -201,6 +202,7 @@ pub struct BatchMessages {
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
     pub query_stats: Option<QueryStatsPayload>,
+    pub upgrade: UpgradePayload,
 }
 
 /// Error type that can occur during an `BatchPayload::into_messages` call
@@ -208,6 +210,7 @@ pub struct BatchMessages {
 pub enum IntoMessagesError {
     IngressPayloadError(IngressPayloadError),
     QueryStatsPayloadError(ProxyDecodeError),
+    UpgradePayloadError(ProxyDecodeError),
 }
 
 impl BatchPayload {
@@ -225,6 +228,12 @@ impl BatchPayload {
             bitcoin_adapter_responses: self.self_validating.0,
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
+            upgrade: if self.upgrade.is_empty() {
+                UpgradePayload::default()
+            } else {
+                bytes_to_upgrade_payload(&self.upgrade)
+                    .map_err(IntoMessagesError::UpgradePayloadError)?
+            },
         })
     }
 

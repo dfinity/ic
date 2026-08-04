@@ -3,16 +3,15 @@
 //!
 //! Response is CBOR-encoded [`UpgradeStateResponse`].
 
-use crate::common::{self, Cbor};
+use crate::common::Cbor;
 
 use axum::Router;
 use axum::extract::State;
 use ic_interfaces_state_manager::StateReader;
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::upgrade::{UpgradeState, UpgradeStateResponse};
+use ic_types::consensus::upgrade::UpgradeStateResponse;
 use ic_types::NodeId;
 use std::sync::Arc;
-use tower::BoxError;
 
 #[derive(Clone)]
 pub(crate) struct UpgradeStateService {
@@ -51,15 +50,7 @@ pub(crate) async fn upgrade_state(
         })
         .unwrap_or_default();
 
-    let permit = upgrade_state.issued_permits.get(&state.node_id).cloned();
+    let has_permit = upgrade_state.authorized.contains(&state.node_id);
 
-    let target_guestos_version = permit
-        .as_ref()
-        .map(|p| p.target_version.clone());
-
-    Cbor(UpgradeStateResponse {
-        target_guestos_version,
-        has_permit: permit.is_some(),
-        permit,
-    })
+    Cbor(UpgradeStateResponse { has_permit })
 }

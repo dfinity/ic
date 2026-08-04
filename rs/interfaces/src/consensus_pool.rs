@@ -235,11 +235,6 @@ pub trait PoolSection<T> {
     /// Return the HeightIndexedPool for [`EquivocationProof`].
     fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof>;
 
-    /// Return the HeightIndexedPool for [`UpgradeStatus`](ic_types::consensus::upgrade::UpgradeStatus).
-    fn upgrade_status(
-        &self,
-    ) -> &dyn HeightIndexedPool<ic_types::consensus::upgrade::UpgradeStatus>;
-
     fn highest_catch_up_package(&self) -> CatchUpPackage {
         let proto = self.highest_catch_up_package_proto();
         CatchUpPackage::try_from(&proto).expect("deserializing CUP from protobuf artifact failed")

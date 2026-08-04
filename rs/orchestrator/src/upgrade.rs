@@ -985,8 +985,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
                 Some(resp) if resp.has_permit => {
                     info!(
                         self.logger,
-                        "Phase 2: permit received for {:?}; committing GuestOS reboot",
-                        resp.permit
+                        "Phase 2: permit received; committing GuestOS reboot",
                     );
                     self.commit_upgrade_and_reboot().await?;
                     Ok(UpgradeOutcome::Rebooting)

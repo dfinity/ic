@@ -175,6 +175,7 @@ where
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             metrics_registry,
             no_op_logger(),
         ));

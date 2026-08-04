@@ -6,7 +6,6 @@ use crate::{
     consensus::dkg::DkgPayload,
     crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
-    guestos_version::GuestOsVersion,
     replica_version::ReplicaVersion,
     signature::*,
     *,
@@ -34,7 +33,6 @@ pub mod idkg;
 mod payload;
 pub mod thunk;
 pub mod upgrade;
-use upgrade::UpgradeStatus;
 
 pub use catchup::*;
 use hashed::Hashed;
@@ -241,18 +239,6 @@ impl HasVersion for EquivocationProof {
 }
 
 impl HasHeight for EquivocationProof {
-    fn height(&self) -> Height {
-        self.height
-    }
-}
-
-impl HasVersion for upgrade::UpgradeStatus {
-    fn version(&self) -> &ReplicaVersion {
-        &self.version
-    }
-}
-
-impl HasHeight for upgrade::UpgradeStatus {
     fn height(&self) -> Height {
         self.height
     }
@@ -915,28 +901,6 @@ impl TryFrom<pb::EquivocationProof> for EquivocationProof {
     }
 }
 
-impl From<upgrade::UpgradeStatus> for pb::UpgradeStatus {
-    fn from(status: upgrade::UpgradeStatus) -> Self {
-        Self {
-            node_id: Some(node_id_into_protobuf(status.node_id)),
-            guestos_version: status.guestos_version.to_string(),
-            height: status.height.get(),
-        }
-    }
-}
-
-impl TryFrom<pb::UpgradeStatus> for upgrade::UpgradeStatus {
-    type Error = ProxyDecodeError;
-    fn try_from(status: pb::UpgradeStatus) -> Result<Self, Self::Error> {
-        Ok(Self {
-            version: ReplicaVersion::default(),
-            node_id: node_id_try_from_option(status.node_id)?,
-            guestos_version: GuestOsVersion::try_from(status.guestos_version)?,
-            height: Height::new(status.height),
-        })
-    }
-}
-
 /// The enum encompassing all of the consensus artifacts exchanged between
 /// replicas.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -954,7 +918,6 @@ pub enum ConsensusMessage {
     CatchUpPackage(CatchUpPackage),
     CatchUpPackageShare(CatchUpPackageShare),
     EquivocationProof(EquivocationProof),
-    UpgradeStatus(UpgradeStatus),
 }
 
 impl IdentifiableArtifact for ConsensusMessage {
@@ -988,7 +951,6 @@ impl From<ConsensusMessage> for pb::ConsensusMessage {
                 ConsensusMessage::CatchUpPackage(x) => Msg::Cup(x.into()),
                 ConsensusMessage::CatchUpPackageShare(x) => Msg::CupShare(x.into()),
                 ConsensusMessage::EquivocationProof(x) => Msg::EquivocationProof(x.into()),
-                ConsensusMessage::UpgradeStatus(x) => Msg::UpgradeStatus(x.into()),
             }),
         }
     }
@@ -1013,7 +975,6 @@ impl TryFrom<pb::ConsensusMessage> for ConsensusMessage {
             Msg::Cup(ref x) => ConsensusMessage::CatchUpPackage(x.try_into()?),
             Msg::CupShare(x) => ConsensusMessage::CatchUpPackageShare(x.try_into()?),
             Msg::EquivocationProof(x) => ConsensusMessage::EquivocationProof(x.try_into()?),
-            Msg::UpgradeStatus(x) => ConsensusMessage::UpgradeStatus(x.try_into()?),
         })
     }
 }
@@ -1052,7 +1013,7 @@ macro_rules! impl_cm_conversion {
 impl_cm_conversion! {
     RandomBeacon, Finalization, Notarization, BlockProposal, RandomBeaconShare,
     NotarizationShare, FinalizationShare, RandomTape, RandomTapeShare,
-    CatchUpPackage, CatchUpPackageShare, EquivocationProof, UpgradeStatus
+    CatchUpPackage, CatchUpPackageShare, EquivocationProof
 }
 
 /// ConsensusMessageHash has the same variants as [ConsensusMessage], but
@@ -1071,7 +1032,6 @@ pub enum ConsensusMessageHash {
     CatchUpPackage(CryptoHashOf<CatchUpPackage>),
     CatchUpPackageShare(CryptoHashOf<CatchUpPackageShare>),
     EquivocationProof(CryptoHashOf<EquivocationProof>),
-    UpgradeStatus(CryptoHashOf<UpgradeStatus>),
 }
 
 impl From<ConsensusMessageHash> for pb::ConsensusMessageHash {
@@ -1090,7 +1050,6 @@ impl From<ConsensusMessageHash> for pb::ConsensusMessageHash {
             ConsensusMessageHash::CatchUpPackage(x) => Kind::CatchUpPackage(x.get().0),
             ConsensusMessageHash::CatchUpPackageShare(x) => Kind::CatchUpPackageShare(x.get().0),
             ConsensusMessageHash::EquivocationProof(x) => Kind::EquivocationProof(x.get().0),
-            ConsensusMessageHash::UpgradeStatus(x) => Kind::UpgradeStatus(x.get().0),
         };
         Self { kind: Some(kind) }
     }
@@ -1141,9 +1100,6 @@ impl TryFrom<pb::ConsensusMessageHash> for ConsensusMessageHash {
             Kind::EquivocationProof(x) => {
                 ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash(x)))
             }
-            Kind::UpgradeStatus(x) => {
-                ConsensusMessageHash::UpgradeStatus(CryptoHashOf::new(CryptoHash(x)))
-            }
         })
     }
 }
@@ -1174,12 +1130,6 @@ impl ContentEq for EquivocationProof {
             && self.height == other.height
             && self.subnet_id == other.subnet_id
             && same_hash
-    }
-}
-
-impl ContentEq for upgrade::UpgradeStatus {
-    fn content_eq(&self, other: &upgrade::UpgradeStatus) -> bool {
-        self == other
     }
 }
 
@@ -1222,9 +1172,6 @@ impl ContentEq for ConsensusMessage {
             ConsensusMessage::EquivocationProof(x) => other
                 .try_into()
                 .is_ok_and(|y: &EquivocationProof| y.content_eq(x)),
-            ConsensusMessage::UpgradeStatus(x) => other
-                .try_into()
-                .is_ok_and(|y: &upgrade::UpgradeStatus| y == x),
         }
     }
 }
@@ -1244,7 +1191,6 @@ impl HasVersion for ConsensusMessage {
             ConsensusMessage::CatchUpPackage(x) => x.version(),
             ConsensusMessage::CatchUpPackageShare(x) => x.version(),
             ConsensusMessage::EquivocationProof(x) => x.version(),
-            ConsensusMessage::UpgradeStatus(x) => x.version(),
         }
     }
 }
@@ -1264,7 +1210,6 @@ impl HasHeight for ConsensusMessage {
             ConsensusMessage::CatchUpPackage(x) => x.height(),
             ConsensusMessage::CatchUpPackageShare(x) => x.height(),
             ConsensusMessage::EquivocationProof(x) => x.height(),
-            ConsensusMessage::UpgradeStatus(x) => x.height(),
         }
     }
 }
@@ -1278,8 +1223,7 @@ impl IsShare for ConsensusMessage {
             | ConsensusMessage::Finalization(_)
             | ConsensusMessage::CatchUpPackage(_)
             | ConsensusMessage::BlockProposal(_)
-            | ConsensusMessage::EquivocationProof(_)
-            | ConsensusMessage::UpgradeStatus(_) => false,
+            | ConsensusMessage::EquivocationProof(_) => false,
 
             ConsensusMessage::RandomBeaconShare(_)
             | ConsensusMessage::RandomTapeShare(_)
@@ -1305,7 +1249,6 @@ impl ConsensusMessageHash {
             ConsensusMessageHash::CatchUpPackage(hash) => hash.get_ref(),
             ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
             ConsensusMessageHash::EquivocationProof(hash) => hash.get_ref(),
-            ConsensusMessageHash::UpgradeStatus(hash) => hash.get_ref(),
         }
     }
 }
@@ -1827,28 +1770,77 @@ impl ConsensusMessageHashable for EquivocationProof {
     }
 }
 
-impl ConsensusMessageHashable for upgrade::UpgradeStatus {
-    fn get_id(&self) -> ConsensusMessageId {
-        ConsensusMessageId {
-            hash: self.get_cm_hash(),
-            height: self.height(),
+/// UpgradePermitAuthorizationContent holds the values that are signed in an
+/// upgrade permit authorization share.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+pub struct UpgradePermitAuthorizationContent {
+    pub node: NodeId,
+    pub request_height: Height,
+}
+
+impl SignedBytesWithoutDomainSeparator for UpgradePermitAuthorizationContent {
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
+    }
+}
+
+impl HasHeight for UpgradePermitAuthorizationContent {
+    fn height(&self) -> Height {
+        self.request_height
+    }
+}
+
+/// An upgrade permit authorization share is a basic signature share on an
+/// [`UpgradePermitAuthorizationContent`].
+pub type UpgradePermitAuthorizationShare =
+    Signed<UpgradePermitAuthorizationContent, BasicSignature<UpgradePermitAuthorizationContent>>;
+
+impl PbArtifact for UpgradePermitAuthorizationShare {
+    type PbId = ic_protobuf::types::v1::UpgradePermitAuthMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::UpgradePermitAuthShare;
+    type PbMessageError = ProxyDecodeError;
+}
+
+impl From<UpgradePermitAuthorizationContent> for pb::UpgradePermitAuthShareContent {
+    fn from(content: UpgradePermitAuthorizationContent) -> Self {
+        pb::UpgradePermitAuthShareContent {
+            node: Some(node_id_into_protobuf(content.node)),
+            request_height: content.request_height.get(),
         }
     }
+}
 
-    fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::UpgradeStatus(crypto_hash(self))
+impl TryFrom<pb::UpgradePermitAuthShareContent> for UpgradePermitAuthorizationContent {
+    type Error = ProxyDecodeError;
+
+    fn try_from(content: pb::UpgradePermitAuthShareContent) -> Result<Self, Self::Error> {
+        Ok(UpgradePermitAuthorizationContent {
+            node: node_id_try_from_option(content.node)?,
+            request_height: Height::from(content.request_height),
+        })
     }
+}
 
-    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
-        if let ConsensusMessage::UpgradeStatus(value) = msg {
-            Some(value)
-        } else {
-            None
+impl From<UpgradePermitAuthorizationShare> for pb::UpgradePermitAuthShare {
+    fn from(share: UpgradePermitAuthorizationShare) -> Self {
+        pb::UpgradePermitAuthShare {
+            content: Some(pb::UpgradePermitAuthShareContent::from(share.content)),
+            signature: Some(pb::BasicSignature::from(share.signature)),
         }
     }
+}
 
-    fn into_message(self) -> ConsensusMessage {
-        ConsensusMessage::UpgradeStatus(self)
+impl TryFrom<pb::UpgradePermitAuthShare> for UpgradePermitAuthorizationShare {
+    type Error = ProxyDecodeError;
+
+    fn try_from(message: pb::UpgradePermitAuthShare) -> Result<Self, Self::Error> {
+        let content = try_from_option_field(message.content, "UpgradePermitAuthShare::content")?;
+        let signature = try_from_option_field(message.signature, "UpgradePermitAuthShare::signature")?;
+        Ok(UpgradePermitAuthorizationShare {
+            content,
+            signature,
+        })
     }
 }
 
@@ -1874,7 +1866,6 @@ impl ConsensusMessageHashable for ConsensusMessage {
             ConsensusMessage::CatchUpPackage(value) => value.get_cm_hash(),
             ConsensusMessage::CatchUpPackageShare(value) => value.get_cm_hash(),
             ConsensusMessage::EquivocationProof(value) => value.get_cm_hash(),
-            ConsensusMessage::UpgradeStatus(value) => value.get_cm_hash(),
         }
     }
 
@@ -1900,7 +1891,6 @@ impl ConsensusMessageHashable for ConsensusMessage {
             ConsensusMessage::CatchUpPackage(value) => value.check_integrity(),
             ConsensusMessage::CatchUpPackageShare(value) => value.check_integrity(),
             ConsensusMessage::EquivocationProof(value) => value.check_integrity(),
-            ConsensusMessage::UpgradeStatus(value) => value.check_integrity(),
         }
     }
 }

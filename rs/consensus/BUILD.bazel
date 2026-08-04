@@ -15,6 +15,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-error-types",
+        "//rs/artifact_pool",
         "//rs/config",
         "//rs/consensus/chain_key",
         "//rs/consensus/dkg",
@@ -60,6 +61,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-error-types",
+        "//rs/artifact_pool",
         "//rs/config",
         "//rs/consensus/certification",
         "//rs/consensus/chain_key",

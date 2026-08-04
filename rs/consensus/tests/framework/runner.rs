@@ -153,6 +153,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.canister_http_payload_builder.clone(),
             deps.query_stats_payload_builder.clone(),
             deps.chain_key_payload_builder.clone(),
+            deps.upgrade_permit_auth_pool.clone(),
             deps.dkg_pool.clone(),
             deps.idkg_pool.clone(),
             dkg_key_manager.clone(),

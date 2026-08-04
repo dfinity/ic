@@ -21,8 +21,8 @@ use ic_types::{
     consensus::{
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
         ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
-        Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
-        RandomTapeShare,
+        Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare,
+        RandomTape, RandomTapeShare,
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg::DkgDataPayload,
     },
@@ -647,12 +647,6 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
     }
 
     fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
-        self
-    }
-
-    fn upgrade_status(
-        &self,
-    ) -> &dyn HeightIndexedPool<ic_types::consensus::upgrade::UpgradeStatus> {
         self
     }
 

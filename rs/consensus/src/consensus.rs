@@ -19,8 +19,8 @@ mod random_beacon_maker;
 mod random_tape_maker;
 mod share_aggregator;
 mod status;
+pub mod upgrade_permit_auth_pool_manager;
 pub mod upgrade_section;
-mod upgrade_status_manager;
 pub mod validator;
 
 #[cfg(all(test, feature = "proptest"))]
@@ -33,6 +33,7 @@ use crate::consensus::{
     random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
     share_aggregator::ShareAggregator, validator::Validator,
 };
+use ic_artifact_pool::upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
     RoundRobin, bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto,
@@ -50,6 +51,7 @@ use ic_interfaces::{
     p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
+    upgrade_permit_auth::UpgradePermitAuthPool,
 };
 use ic_interfaces_registry::{POLLING_PERIOD, RegistryClient};
 use ic_interfaces_state_manager::{StateManager, StateReader};
@@ -70,8 +72,6 @@ use std::{
     time::Duration,
 };
 use strum_macros::AsRefStr;
-use ic_types::consensus::upgrade::UpgradeState;
-use upgrade_status_manager::UpgradeStatusManager;
 
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the notarization/certification gap.
@@ -102,7 +102,6 @@ enum ConsensusSubcomponent {
     Validator,
     Aggregator,
     Purger,
-    UpgradeStatusManager,
 }
 
 /// Describe expected version and artifact version when there is a mismatch.
@@ -144,7 +143,6 @@ pub struct ConsensusImpl {
     validator: Validator,
     aggregator: ShareAggregator,
     purger: Purger,
-    upgrade_status_manager: UpgradeStatusManager,
     metrics: ConsensusMetrics,
     time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
@@ -173,6 +171,7 @@ impl ConsensusImpl {
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        upgrade_permit_auth_pool: Arc<RwLock<UpgradePermitAuthPoolImpl>>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -193,10 +192,6 @@ impl ConsensusImpl {
 
         let stable_registry_version_age =
             POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
-        let upgrade_state: Arc<RwLock<UpgradeState>> =
-            Arc::new(RwLock::new(
-                UpgradeState::default(),
-            ));
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             replica_config.subnet_id,
             replica_config.node_id,
@@ -209,9 +204,9 @@ impl ConsensusImpl {
             chain_key_payload_builder,
             Arc::new(upgrade_section::UpgradePayloadBuilder::new(
                 replica_config.node_id,
-                replica_config.subnet_id,
-                registry_client.clone(),
-                upgrade_state.clone(),
+                state_manager.clone(),
+                upgrade_permit_auth_pool.clone() as Arc<RwLock<dyn UpgradePermitAuthPool>>,
+                crypto.clone(),
                 logger.clone(),
             )),
             metrics_registry.clone(),
@@ -229,10 +224,6 @@ impl ConsensusImpl {
         last_invoked.insert(ConsensusSubcomponent::Validator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Aggregator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Purger, current_time);
-        last_invoked.insert(
-            ConsensusSubcomponent::UpgradeStatusManager,
-            current_time,
-        );
 
         ConsensusImpl {
             dkg_key_manager,
@@ -317,13 +308,6 @@ impl ConsensusImpl {
                 registry_client.clone(),
                 logger.clone(),
                 metrics_registry.clone(),
-            ),
-            upgrade_status_manager: UpgradeStatusManager::new(
-                replica_config.node_id,
-                replica_config.subnet_id,
-                registry_client.clone(),
-                upgrade_state.clone(),
-                logger.clone(),
             ),
             metrics: ConsensusMetrics::new(metrics_registry),
             log: logger,
@@ -535,19 +519,8 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
                 self.purger.on_state_change(&pool_reader)
             })
         };
-        let manage_upgrade_status = || {
-            self.call_with_metrics(
-                ConsensusSubcomponent::UpgradeStatusManager,
-                || {
-                    add_to_validated(
-                        time_now,
-                        self.upgrade_status_manager.on_state_change(&pool_reader),
-                    )
-                },
-            )
-        };
 
-        let calls: [&'_ dyn Fn() -> Mutations; 11] = [
+        let calls: [&'_ dyn Fn() -> Mutations; 10] = [
             &finalize,
             &make_catch_up_package,
             &aggregate,
@@ -558,7 +531,6 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
             &make_block,
             &validate,
             &purge,
-            &manage_upgrade_status,
         ];
 
         let changeset = self.schedule.call_next(&calls);
@@ -715,6 +687,7 @@ mod tests {
             state_manager,
             dkg_pool,
             idkg_pool,
+            upgrade_permit_auth_pool,
             ..
         } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record)]);
         state_manager
@@ -743,6 +716,7 @@ mod tests {
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
+            upgrade_permit_auth_pool,
             dkg_pool,
             idkg_pool,
             Arc::new(Mutex::new(DkgKeyManager::new(

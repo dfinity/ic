@@ -292,6 +292,7 @@ pub(crate) mod test {
             FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
         let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
         let chain_key_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let upgrade_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -303,6 +304,7 @@ pub(crate) mod test {
             Arc::new(canister_http_payload_builder),
             Arc::new(query_stats_payload_builder),
             Arc::new(chain_key_payload_builder),
+            Arc::new(upgrade_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )
@@ -549,7 +551,7 @@ pub(crate) mod test {
                         canister_http: settings.http_outcalls_payload_to_return,
                         query_stats: settings.query_stats_payload_to_return,
                         chain_key: settings.chain_key_payload_to_return,
-                        upgrade: vec![],
+                        upgrade: Vec::new(),
                     },
                     dkg: DkgDataPayload::new_empty(Height::from(0)),
                     idkg: None,
@@ -672,6 +674,7 @@ pub(crate) mod test {
             Arc::new(canister_http_payload_builder),
             Arc::new(query_stats_payload_builder),
             Arc::new(chain_key_payload_builder),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             MetricsRegistry::new(),
             no_op_logger(),
         )

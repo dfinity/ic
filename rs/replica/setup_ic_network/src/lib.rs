@@ -7,10 +7,11 @@ use ic_artifact_manager::{create_artifact_handler, create_ingress_handlers};
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
     consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
-    ingress_pool::IngressPoolImpl,
+    ingress_pool::IngressPoolImpl, upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::consensus::{
+    upgrade_permit_auth_pool_manager::{UpgradePermitAuthBouncer, UpgradePermitAuthPoolManager},
     ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
 };
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
@@ -54,8 +55,8 @@ use ic_types::{
         CanisterHttpResponseArtifact,
     },
     consensus::{
-        CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage, dkg,
-        idkg::IDkgMessage,
+        CatchUpPackage, ConsensusMessage, HasHeight, UpgradePermitAuthorizationShare,
+        certification::CertificationMessage, dkg, idkg::IDkgMessage,
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
@@ -81,6 +82,7 @@ struct ArtifactPools {
     dkg_pool: Arc<RwLock<DkgPoolImpl>>,
     idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
     https_outcalls_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
+    upgrade_permit_auth_pool: Arc<RwLock<UpgradePermitAuthPoolImpl>>,
 }
 
 impl ArtifactPools {
@@ -123,12 +125,17 @@ impl ArtifactPools {
             metrics_registry.clone(),
             log.clone(),
         )));
+        let upgrade_permit_auth_pool = Arc::new(RwLock::new(UpgradePermitAuthPoolImpl::new(
+            metrics_registry.clone(),
+            log.clone(),
+        )));
         Self {
             ingress_pool,
             certification_pool,
             dkg_pool,
             idkg_pool,
             https_outcalls_pool,
+            upgrade_permit_auth_pool,
         }
     }
 }
@@ -140,6 +147,7 @@ struct Bouncers {
     dkg: Arc<DkgBouncer>,
     idkg: Arc<IDkgBouncer>,
     https_outcalls: Arc<CanisterHttpGossipImpl>,
+    upgrade_permit_auth: Arc<UpgradePermitAuthBouncer>,
 }
 
 impl Bouncers {
@@ -166,6 +174,7 @@ impl Bouncers {
         ));
 
         let https_outcalls = Arc::new(CanisterHttpGossipImpl::new(state_reader.clone()));
+        let upgrade_permit_auth = Arc::new(UpgradePermitAuthBouncer);
 
         Self {
             ingress,
@@ -174,6 +183,7 @@ impl Bouncers {
             idkg,
             certifier,
             https_outcalls,
+            upgrade_permit_auth,
         }
     }
 }
@@ -185,6 +195,7 @@ struct AbortableBroadcastChannels {
     dkg: AbortableBroadcastChannel<dkg::Message>,
     idkg: AbortableBroadcastChannel<IDkgMessage>,
     https_outcalls: AbortableBroadcastChannel<CanisterHttpResponseArtifact>,
+    upgrade_permit_auth: AbortableBroadcastChannel<UpgradePermitAuthorizationShare>,
 }
 
 impl AbortableBroadcastChannels {
@@ -297,6 +308,17 @@ impl AbortableBroadcastChannels {
             new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
         };
 
+        let upgrade_permit_auth = {
+            let assembler = ic_artifact_downloader::FetchArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                artifact_pools.upgrade_permit_auth_pool.clone(),
+                bouncers.upgrade_permit_auth,
+                metrics_registry.clone(),
+            );
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+        };
+
         (
             Self {
                 ingress,
@@ -305,6 +327,7 @@ impl AbortableBroadcastChannels {
                 dkg,
                 idkg,
                 https_outcalls,
+                upgrade_permit_auth,
             },
             new_p2p_consensus,
         )
@@ -562,6 +585,7 @@ fn start_consensus(
         https_outcalls_payload_builder,
         Arc::from(query_stats_payload_builder),
         chain_key_payload_builder,
+        Arc::clone(&artifact_pools.upgrade_permit_auth_pool),
         Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
         Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
         Arc::clone(&dkg_key_manager) as Arc<_>,
@@ -669,6 +693,18 @@ fn start_consensus(
         ),
         Arc::clone(&time_source) as Arc<_>,
         artifact_pools.https_outcalls_pool,
+        metrics_registry.clone(),
+    ));
+    join_handles.push(create_artifact_handler(
+        abortable_broadcast_channels.upgrade_permit_auth,
+        UpgradePermitAuthPoolManager::new(
+            node_id,
+            Arc::clone(&consensus_crypto),
+            consensus_pool.read().unwrap().get_block_cache(),
+            log.clone(),
+        ),
+        Arc::clone(&time_source) as Arc<_>,
+        artifact_pools.upgrade_permit_auth_pool,
         metrics_registry.clone(),
     ));
 

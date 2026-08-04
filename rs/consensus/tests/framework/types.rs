@@ -2,6 +2,7 @@
 use ic_artifact_pool::{
     canister_http_pool, certification_pool::CertificationPoolImpl,
     consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
+    upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::{
@@ -180,6 +181,7 @@ pub struct ConsensusDependencies {
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<canister_http_pool::CanisterHttpPoolImpl>>,
+    pub(crate) upgrade_permit_auth_pool: Arc<RwLock<UpgradePermitAuthPoolImpl>>,
     pub message_routing: Arc<FakeMessageRouting>,
     pub state_manager: Arc<FakeStateManager>,
     pub thread_pool: Arc<ThreadPool>,
@@ -221,6 +223,10 @@ impl ConsensusDependencies {
         );
         let canister_http_pool =
             canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
+        let upgrade_permit_auth_pool = UpgradePermitAuthPoolImpl::new(
+            metrics_registry.clone(),
+            no_op_logger(),
+        );
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
 
         ConsensusDependencies {
@@ -229,6 +235,7 @@ impl ConsensusDependencies {
             dkg_pool: Arc::new(RwLock::new(dkg_pool)),
             idkg_pool: Arc::new(RwLock::new(idkg_pool)),
             canister_http_pool: Arc::new(RwLock::new(canister_http_pool)),
+            upgrade_permit_auth_pool: Arc::new(RwLock::new(upgrade_permit_auth_pool)),
             message_routing: Arc::new(FakeMessageRouting::with_state_manager(
                 state_manager.clone(),
             )),

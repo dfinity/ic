@@ -3104,6 +3104,7 @@ impl StateMachine {
                     .map(|p| p.get().to_vec())
                     .unwrap_or_default(),
                 query_stats: payload.query_stats,
+                upgrade: Default::default(),
             },
             chain_key_data: ChainKeyData {
                 master_public_keys: self.chain_key_subnet_public_keys.clone(),
@@ -3112,7 +3113,6 @@ impl StateMachine {
             },
             consensus_responses: payload.consensus_responses,
             // TODO: add upgrade
-            upgrade: vec![],
             requires_full_state_hash,
         };
         let blockmaker_metrics = payload

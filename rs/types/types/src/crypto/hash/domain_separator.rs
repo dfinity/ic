@@ -16,6 +16,8 @@ pub enum DomainSeparator {
     BlockMetadata,
     BlockMetadataProposal,
     EquivocationProof,
+    UpgradePermitAuthorizationContent,
+    UpgradePermitAuthorization,
     InmemoryPayload,
     RandomBeaconContent,
     RandomBeacon,
@@ -80,6 +82,10 @@ impl DomainSeparator {
             DomainSeparator::BlockMetadata => "block_metadata_domain",
             DomainSeparator::BlockMetadataProposal => "block_metadata_proposal_domain",
             DomainSeparator::EquivocationProof => "equivocation_proof_domain",
+            DomainSeparator::UpgradePermitAuthorizationContent => {
+                "ic-consensus-upgrade-permit-auth-content"
+            }
+            DomainSeparator::UpgradePermitAuthorization => "ic-consensus-upgrade-permit-auth",
             DomainSeparator::InmemoryPayload => "inmemory_payload_domain",
             DomainSeparator::RandomBeaconContent => "random_beacon_content_domain",
             DomainSeparator::RandomBeacon => "random_beacon_domain",
@@ -194,6 +200,14 @@ fn domain_separators_are_stable() {
         ("BlockMetadata", "block_metadata_domain"),
         ("BlockMetadataProposal", "block_metadata_proposal_domain"),
         ("EquivocationProof", "equivocation_proof_domain"),
+        (
+            "UpgradePermitAuthorizationContent",
+            "ic-consensus-upgrade-permit-auth-content",
+        ),
+        (
+            "UpgradePermitAuthorization",
+            "ic-consensus-upgrade-permit-auth",
+        ),
         ("InmemoryPayload", "inmemory_payload_domain"),
         ("RandomBeaconContent", "random_beacon_content_domain"),
         ("RandomBeacon", "random_beacon_domain"),

@@ -19,6 +19,8 @@ pub mod p2p;
 pub mod query_stats;
 pub mod self_validating_payload;
 pub mod time_source;
+pub mod upgrade;
+pub mod upgrade_permit_auth;
 pub mod validation;
 
 // Note [Associated Types in Interfaces]
