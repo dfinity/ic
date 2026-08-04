@@ -874,10 +874,12 @@ mod eth_transactions {
                     test.price_at_tx_resubmission.clone(),
                 );
                 let expected_resubmitted_tx_amount = match withdrawal_request {
-                    WithdrawalRequest::CkEth(_) => initial_tx
-                        .amount
-                        .checked_sub(test.resubmitted_cketh_tx_amount_deduction)
-                        .unwrap(),
+                    WithdrawalRequest::CkEth(_) | WithdrawalRequest::SweeperFunding(_) => {
+                        initial_tx
+                            .amount
+                            .checked_sub(test.resubmitted_cketh_tx_amount_deduction)
+                            .unwrap()
+                    }
                     WithdrawalRequest::CkErc20(_) => initial_tx.amount,
                 };
                 let expected_resubmitted_tx = Eip1559TransactionRequest {
@@ -1819,7 +1821,8 @@ mod eth_transactions {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let mut rng = reproducible_rng();
             let [withdrawal_request] = create_ck_withdrawal_requests(&mut rng);
-            let reimbursement_index = ReimbursementIndex::from(&withdrawal_request);
+            let reimbursement_index = ReimbursementIndex::try_from(&withdrawal_request)
+                .expect("BUG: create_ck_withdrawal_requests only builds user withdrawals");
             let _eth_transaction = withdrawal_flow(
                 &mut transactions,
                 withdrawal_request,
@@ -2040,7 +2043,8 @@ mod eth_transactions {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let mut rng = reproducible_rng();
             let [withdrawal_request] = create_ck_withdrawal_requests(&mut rng);
-            let reimbursement_index = ReimbursementIndex::from(&withdrawal_request);
+            let reimbursement_index = ReimbursementIndex::try_from(&withdrawal_request)
+                .expect("BUG: create_ck_withdrawal_requests only builds user withdrawals");
             let receipt = withdrawal_flow(
                 &mut transactions,
                 withdrawal_request,
@@ -2117,6 +2121,222 @@ mod eth_transactions {
         let receipt = transaction_receipt(&signed_tx, status);
         transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
         receipt
+    }
+
+    mod sweeper_funding {
+        use super::withdrawal_flow;
+        use super::*;
+        use crate::eth_logs::LedgerSubaccount;
+        use crate::lifecycle::EthereumNetwork;
+        use crate::numeric::TransactionCount;
+        use crate::numeric::{GasAmount, Wei, WeiPerGas};
+        use crate::state::transactions::ResubmitTransactionError;
+        use crate::state::transactions::tests::{
+            DEFAULT_CREATED_AT, DEFAULT_PRINCIPAL, DEFAULT_WITHDRAWAL_AMOUNT,
+            create_and_record_signed_transaction,
+        };
+        use crate::state::transactions::{
+            CreateTransactionError, NotReimbursable, ReimbursementIndex, SweeperFundingRequest,
+            create_transaction,
+        };
+        use crate::tx::GasFeeEstimate;
+        use assert_matches::assert_matches;
+        use ic_ethereum_types::Address;
+        use maplit::{btreemap, btreeset};
+        use std::str::FromStr;
+
+        const SWEEPER_FUNDING_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
+
+        fn sweeper_funding_request() -> SweeperFundingRequest {
+            SweeperFundingRequest {
+                withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
+                destination: Address::new([0x53; 20]),
+                ledger_burn_index: LedgerBurnIndex::new(15),
+                from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
+                from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
+                created_at: DEFAULT_CREATED_AT,
+            }
+        }
+
+        #[test]
+        fn should_not_be_reimbursable() {
+            let request = Into::<WithdrawalRequest>::into(sweeper_funding_request());
+
+            assert!(!request.is_reimbursable());
+            assert_eq!(
+                ReimbursementIndex::try_from(&request),
+                Err(NotReimbursable),
+                "a funding request must not yield a reimbursement index"
+            );
+        }
+
+        #[test]
+        fn should_never_enter_maybe_reimburse() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let funding = sweeper_funding_request();
+
+            transactions.record_withdrawal_request(funding.clone());
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                funding.clone(),
+                gas_fee_estimate(),
+            );
+            create_and_record_signed_transaction(&mut transactions, created_tx);
+
+            assert_eq!(
+                transactions.maybe_reimburse,
+                btreeset! {},
+                "funding must not be tracked for reimbursement"
+            );
+        }
+
+        #[test]
+        fn should_not_reimburse_a_failed_funding() {
+            for status in [TransactionStatus::Success, TransactionStatus::Failure] {
+                let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+
+                let _receipt =
+                    withdrawal_flow(&mut transactions, sweeper_funding_request(), status);
+
+                assert_eq!(transactions.maybe_reimburse, btreeset! {});
+                assert_eq!(
+                    transactions.reimbursement_requests,
+                    btreemap! {},
+                    "a {status:?} funding must not create a reimbursement request"
+                );
+                assert_eq!(transactions.reimbursed, btreemap! {});
+            }
+        }
+
+        #[test]
+        fn should_still_reimburse_a_failed_user_withdrawal() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+
+            let _receipt = withdrawal_flow(
+                &mut transactions,
+                cketh_withdrawal_request_with_index(LedgerBurnIndex::new(15)),
+                TransactionStatus::Failure,
+            );
+
+            assert_eq!(
+                transactions.reimbursement_requests.len(),
+                1,
+                "a failed user withdrawal must still be reimbursed"
+            );
+        }
+
+        #[test]
+        fn should_deduct_the_transaction_fee_from_the_funded_amount() {
+            let funding = sweeper_funding_request();
+            let gas_fee = gas_fee_estimate();
+            let expected_fee = gas_fee
+                .clone()
+                .to_price(SWEEPER_FUNDING_GAS_LIMIT)
+                .max_transaction_fee();
+
+            let tx = create_transaction(
+                &Into::<WithdrawalRequest>::into(funding.clone()),
+                TransactionNonce::ZERO,
+                gas_fee,
+                SWEEPER_FUNDING_GAS_LIMIT,
+                EthereumNetwork::Mainnet,
+            )
+            .expect("the funded amount must cover the fee");
+
+            assert_eq!(tx.destination, funding.destination);
+            assert_eq!(
+                tx.amount,
+                funding
+                    .withdrawal_amount
+                    .checked_sub(expected_fee)
+                    .expect("test setup: the fee must fit inside the funded amount"),
+                "the ETH delivered is the burn minus the fee, so total spend never exceeds the burn"
+            );
+            assert!(tx.data.is_empty(), "funding is a plain value transfer");
+        }
+
+        #[test]
+        fn should_fail_to_create_a_transaction_when_the_fee_exceeds_the_funded_amount() {
+            let funding = SweeperFundingRequest {
+                withdrawal_amount: Wei::new(1),
+                ..sweeper_funding_request()
+            };
+
+            assert_matches!(
+                create_transaction(
+                    &Into::<WithdrawalRequest>::into(funding),
+                    TransactionNonce::ZERO,
+                    gas_fee_estimate(),
+                    SWEEPER_FUNDING_GAS_LIMIT,
+                    EthereumNetwork::Mainnet,
+                ),
+                Err(CreateTransactionError::InsufficientTransactionFee {
+                    cketh_ledger_burn_index,
+                    allowed_max_transaction_fee,
+                    ..
+                }) if cketh_ledger_burn_index == LedgerBurnIndex::new(15)
+                    && allowed_max_transaction_fee == Wei::new(1)
+            );
+        }
+
+        #[test]
+        fn should_cap_resubmission_at_the_funded_amount() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let funding = sweeper_funding_request();
+            transactions.record_withdrawal_request(funding.clone());
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                funding.clone(),
+                gas_fee_estimate(),
+            );
+            create_and_record_signed_transaction(&mut transactions, created_tx);
+
+            let spiked_fee = GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::from(10_000_000_000_000_u64),
+                ..gas_fee_estimate()
+            };
+            let resubmitted =
+                transactions.create_resubmit_transactions(TransactionCount::ZERO, spiked_fee);
+
+            assert_matches!(
+                resubmitted.first().expect("BUG: nothing to resubmit"),
+                Err(ResubmitTransactionError::InsufficientTransactionFee {
+                    allowed_max_transaction_fee,
+                    max_transaction_fee,
+                    ..
+                }) if *allowed_max_transaction_fee == funding.withdrawal_amount
+                    && *max_transaction_fee > funding.withdrawal_amount
+            );
+        }
+
+        #[test]
+        fn should_use_the_plain_transfer_gas_limit() {
+            let request: WithdrawalRequest = sweeper_funding_request().into();
+
+            assert_eq!(
+                crate::withdraw::estimate_gas_limit(&request),
+                crate::withdraw::CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+            );
+        }
+
+        #[test]
+        fn should_survive_an_event_encoding_roundtrip() {
+            use crate::state::event::{Event, EventType};
+            use ic_stable_structures::storable::Storable;
+
+            let event = Event {
+                timestamp: DEFAULT_CREATED_AT,
+                payload: EventType::AcceptedSweeperFundingRequest(sweeper_funding_request()),
+            };
+            let bytes = event.to_bytes();
+
+            assert_eq!(
+                event,
+                Event::from_bytes(bytes.clone()),
+                "failed to decode {}",
+                hex::encode(bytes)
+            );
+        }
     }
 }
 
@@ -2220,6 +2440,7 @@ mod oldest_incomplete_withdrawal_timestamp {
         match withdrawal_request {
             WithdrawalRequest::CkEth(request) => request.created_at = Some(created_at),
             WithdrawalRequest::CkErc20(request) => request.created_at = created_at,
+            WithdrawalRequest::SweeperFunding(request) => request.created_at = created_at,
         }
     }
 }

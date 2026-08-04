@@ -13,7 +13,9 @@ use crate::state::audit::apply_state_transition;
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::event::{Event, EventType};
-use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest, ReimbursementIndex, SweeperFundingRequest,
+};
 use crate::state::{Erc20Balances, State};
 use crate::test_fixtures::{
     arb::{arb_address, arb_checked_amount_of, arb_hash, arb_ledger_subaccount},
@@ -736,6 +738,26 @@ prop_compose! {
     }
 }
 
+prop_compose! {
+    fn arb_sweeper_funding_request()(
+        withdrawal_amount in arb_checked_amount_of(),
+        destination in arb_address(),
+        ledger_burn_index in any::<u64>(),
+        from in arb_principal(),
+        from_subaccount in arb_ledger_subaccount(),
+        created_at in any::<u64>(),
+    ) -> SweeperFundingRequest {
+        SweeperFundingRequest {
+            withdrawal_amount,
+            destination,
+            ledger_burn_index: ledger_burn_index.into(),
+            from,
+            from_subaccount,
+            created_at,
+        }
+    }
+}
+
 fn arb_event_type() -> impl Strategy<Value = EventType> {
     prop_oneof![
         arb_init_arg().prop_map(EventType::Init),
@@ -752,6 +774,7 @@ fn arb_event_type() -> impl Strategy<Value = EventType> {
                 mint_block_index: index.into(),
             }
         }),
+        arb_sweeper_funding_request().prop_map(EventType::AcceptedSweeperFundingRequest),
         arb_checked_amount_of().prop_map(|block_number| EventType::SyncedToBlock { block_number }),
         arb_checked_amount_of()
             .prop_map(|block_number| EventType::SyncedErc20ToBlock { block_number }),
@@ -1620,14 +1643,10 @@ mod eth_balance {
         }
 
         fn apply(self, state: &mut State) -> TransactionReceipt {
-            let accepted_withdrawal_request_event = match &self.withdrawal_request {
-                WithdrawalRequest::CkEth(eth_request) => {
-                    EventType::AcceptedEthWithdrawalRequest(eth_request.clone())
-                }
-                WithdrawalRequest::CkErc20(erc20_request) => {
-                    EventType::AcceptedErc20WithdrawalRequest(erc20_request.clone())
-                }
-            };
+            let accepted_withdrawal_request_event = self
+                .withdrawal_request
+                .clone()
+                .into_accepted_withdrawal_request_event();
             apply_state_transition(state, &accepted_withdrawal_request_event);
 
             let transaction = create_transaction(

@@ -7,6 +7,7 @@ use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
+use crate::logs::INFO;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
     CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
@@ -18,6 +19,7 @@ use crate::tx::{
     SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
 };
 use candid::Principal;
+use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
@@ -36,6 +38,7 @@ pub enum WithdrawalSearchParameter {
 pub enum WithdrawalRequest {
     CkEth(EthWithdrawalRequest),
     CkErc20(Erc20WithdrawalRequest),
+    SweeperFunding(SweeperFundingRequest),
 }
 
 impl WithdrawalRequest {
@@ -43,6 +46,7 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => request.ledger_burn_index,
             WithdrawalRequest::CkErc20(request) => request.cketh_ledger_burn_index,
+            WithdrawalRequest::SweeperFunding(request) => request.ledger_burn_index,
         }
     }
 
@@ -50,6 +54,7 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => request.created_at,
             WithdrawalRequest::CkErc20(request) => Some(request.created_at),
+            WithdrawalRequest::SweeperFunding(request) => Some(request.created_at),
         }
     }
 
@@ -58,6 +63,7 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => request.destination,
             WithdrawalRequest::CkErc20(request) => request.destination,
+            WithdrawalRequest::SweeperFunding(request) => request.destination,
         }
     }
 
@@ -66,6 +72,7 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => request.destination,
             WithdrawalRequest::CkErc20(request) => request.erc20_contract_address,
+            WithdrawalRequest::SweeperFunding(request) => request.destination,
         }
     }
 
@@ -73,6 +80,7 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => request.from,
             WithdrawalRequest::CkErc20(request) => request.from,
+            WithdrawalRequest::SweeperFunding(request) => request.from,
         }
     }
 
@@ -80,6 +88,15 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => request.from_subaccount.as_ref(),
             WithdrawalRequest::CkErc20(request) => request.from_subaccount.as_ref(),
+            WithdrawalRequest::SweeperFunding(request) => request.from_subaccount.as_ref(),
+        }
+    }
+
+    /// Whether this request can be paid back if its transaction fails.
+    pub fn is_reimbursable(&self) -> bool {
+        match self {
+            WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => true,
+            WithdrawalRequest::SweeperFunding(_) => false,
         }
     }
 
@@ -88,6 +105,9 @@ impl WithdrawalRequest {
             WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
             WithdrawalRequest::CkErc20(request) => {
                 EventType::AcceptedErc20WithdrawalRequest(request)
+            }
+            WithdrawalRequest::SweeperFunding(request) => {
+                EventType::AcceptedSweeperFundingRequest(request)
             }
         }
     }
@@ -118,6 +138,12 @@ impl From<Erc20WithdrawalRequest> for WithdrawalRequest {
     }
 }
 
+impl From<SweeperFundingRequest> for WithdrawalRequest {
+    fn from(value: SweeperFundingRequest) -> Self {
+        WithdrawalRequest::SweeperFunding(value)
+    }
+}
+
 /// Ethereum withdrawal request issued by the user.
 #[derive(Clone, Eq, PartialEq, Decode, Encode)]
 pub struct EthWithdrawalRequest {
@@ -139,6 +165,29 @@ pub struct EthWithdrawalRequest {
     /// The IC time at which the withdrawal request arrived.
     #[n(5)]
     pub created_at: Option<u64>,
+}
+
+/// Sweeper gas funding request issued by the minter itself. Never reimbursed.
+#[derive(Clone, Eq, PartialEq, Decode, Encode)]
+pub struct SweeperFundingRequest {
+    /// The ckETH burned for this funding, and the ceiling on what it may spend in total.
+    #[n(0)]
+    pub withdrawal_amount: Wei,
+    /// The minter's dedicated sweeper address (tECDSA derivation path `[3]`).
+    #[n(1)]
+    pub destination: Address,
+    /// The transaction ID of the ckETH burn on the ckETH ledger.
+    #[cbor(n(2), with = "crate::cbor::id")]
+    pub ledger_burn_index: LedgerBurnIndex,
+    /// The owner of the account from which the minter burned ckETH: the minter itself.
+    #[cbor(n(3), with = "icrc_cbor::principal")]
+    pub from: Principal,
+    /// The subaccount from which the minter burned ckETH.
+    #[n(4)]
+    pub from_subaccount: Option<LedgerSubaccount>,
+    /// The IC time at which the funding was decided.
+    #[n(5)]
+    pub created_at: u64,
 }
 
 /// ERC-20 withdrawal request issued by the user.
@@ -197,17 +246,23 @@ pub enum ReimbursementIndex {
     },
 }
 
-impl From<&WithdrawalRequest> for ReimbursementIndex {
-    fn from(value: &WithdrawalRequest) -> Self {
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct NotReimbursable;
+
+impl TryFrom<&WithdrawalRequest> for ReimbursementIndex {
+    type Error = NotReimbursable;
+
+    fn try_from(value: &WithdrawalRequest) -> Result<Self, Self::Error> {
         match value {
-            WithdrawalRequest::CkEth(request) => ReimbursementIndex::CkEth {
+            WithdrawalRequest::CkEth(request) => Ok(ReimbursementIndex::CkEth {
                 ledger_burn_index: request.ledger_burn_index,
-            },
-            WithdrawalRequest::CkErc20(request) => ReimbursementIndex::CkErc20 {
+            }),
+            WithdrawalRequest::CkErc20(request) => Ok(ReimbursementIndex::CkErc20 {
                 cketh_ledger_burn_index: request.cketh_ledger_burn_index,
                 ledger_id: request.ckerc20_ledger_id,
                 ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
-            },
+            }),
+            WithdrawalRequest::SweeperFunding(_) => Err(NotReimbursable),
         }
     }
 }
@@ -298,6 +353,30 @@ impl fmt::Debug for EthWithdrawalRequest {
             created_at,
         } = self;
         f.debug_struct("EthWithdrawalRequest")
+            .field("withdrawal_amount", withdrawal_amount)
+            .field("destination", destination)
+            .field("ledger_burn_index", ledger_burn_index)
+            .field("from", &format_args!("{from}"))
+            .field(
+                "from_subaccount",
+                &format_args!("{}", DisplayOption(from_subaccount)),
+            )
+            .field("created_at", created_at)
+            .finish()
+    }
+}
+
+impl fmt::Debug for SweeperFundingRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        let SweeperFundingRequest {
+            withdrawal_amount,
+            destination,
+            ledger_burn_index,
+            from,
+            from_subaccount,
+            created_at,
+        } = self;
+        f.debug_struct("SweeperFundingRequest")
             .field("withdrawal_amount", withdrawal_amount)
             .field("destination", destination)
             .field("ledger_burn_index", ledger_burn_index)
@@ -517,6 +596,12 @@ impl EthTransactions {
                     "BUG: ERC-20 transaction amount should be zero"
                 );
             }
+            WithdrawalRequest::SweeperFunding(req) => {
+                assert!(
+                    req.withdrawal_amount > transaction.amount,
+                    "BUG: transaction amount should be the funded amount deducted from transaction fees"
+                );
+            }
         }
         let nonce = self.next_nonce;
         assert_eq!(transaction.nonce, nonce, "BUG: transaction nonce mismatch");
@@ -534,6 +619,11 @@ impl EthTransactions {
                 WithdrawalRequest::CkErc20(ckerc20) => ResubmissionStrategy::GuaranteeEthAmount {
                     allowed_max_transaction_fee: ckerc20.max_transaction_fee,
                 },
+                WithdrawalRequest::SweeperFunding(funding) => {
+                    ResubmissionStrategy::ReduceEthAmount {
+                        withdrawal_amount: funding.withdrawal_amount,
+                    }
+                }
             },
         };
         assert_eq!(
@@ -544,12 +634,15 @@ impl EthTransactions {
             ),
             Ok(())
         );
+        let is_reimbursable = withdrawal_request.is_reimbursable();
         assert_eq!(
             self.processed_withdrawal_requests
                 .insert(withdrawal_id, withdrawal_request),
             None
         );
-        assert!(self.maybe_reimburse.insert(withdrawal_id));
+        if is_reimbursable {
+            assert!(self.maybe_reimburse.insert(withdrawal_id));
+        }
     }
 
     pub fn record_signed_transaction(
@@ -706,20 +799,29 @@ impl EthTransactions {
             Ok(())
         );
 
-        assert!(
-            self.maybe_reimburse.remove(&ledger_burn_index),
-            "failed to remove entry from maybe_reimburse with block index: {ledger_burn_index}",
-        );
+        // Funding was never inserted, so asserting on its removal would trap the canister.
+        if self
+            .processed_withdrawal_requests
+            .get(&ledger_burn_index)
+            .expect("BUG: missing processed withdrawal request")
+            .is_reimbursable()
+        {
+            assert!(
+                self.maybe_reimburse.remove(&ledger_burn_index),
+                "failed to remove entry from maybe_reimburse with block index: {ledger_burn_index}",
+            );
+        }
 
         let request = self.processed_withdrawal_requests
             .get(&ledger_burn_index)
             .expect("failed to find entry from processed_withdrawal_requests with block index: {ledger_burn_index}");
-        let index = ReimbursementIndex::from(request);
         match &request {
             WithdrawalRequest::CkEth(request) => {
                 if receipt.status == TransactionStatus::Failure {
                     self.record_reimbursement_request(
-                        index,
+                        ReimbursementIndex::CkEth {
+                            ledger_burn_index: request.ledger_burn_index,
+                        },
                         ReimbursementRequest {
                             ledger_burn_index,
                             to: request.from,
@@ -733,7 +835,11 @@ impl EthTransactions {
             WithdrawalRequest::CkErc20(request) => {
                 if receipt.status == TransactionStatus::Failure {
                     self.record_reimbursement_request(
-                        index,
+                        ReimbursementIndex::CkErc20 {
+                            cketh_ledger_burn_index: request.cketh_ledger_burn_index,
+                            ledger_id: request.ckerc20_ledger_id,
+                            ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
+                        },
                         ReimbursementRequest {
                             ledger_burn_index: request.ckerc20_ledger_burn_index,
                             reimbursed_amount: request.withdrawal_amount.change_units(),
@@ -741,6 +847,19 @@ impl EthTransactions {
                             to_subaccount: request.from_subaccount.clone(),
                             transaction_hash: Some(receipt.transaction_hash),
                         },
+                    );
+                }
+            }
+            WithdrawalRequest::SweeperFunding(request) => {
+                if receipt.status == TransactionStatus::Failure {
+                    log!(
+                        INFO,
+                        "[record_finalized_transaction]: sweeper funding {} of {} to {} FAILED \
+                         (tx {}); the burn is NOT reimbursed and stays available as prepaid gas",
+                        ledger_burn_index,
+                        request.withdrawal_amount,
+                        request.destination,
+                        receipt.transaction_hash,
                     );
                 }
             }
@@ -1119,15 +1238,26 @@ pub fn create_transaction(
         "BUG: gas limit should be non-zero"
     );
     match withdrawal_request {
-        WithdrawalRequest::CkEth(request) => {
+        WithdrawalRequest::CkEth(EthWithdrawalRequest {
+            withdrawal_amount,
+            destination,
+            ledger_burn_index,
+            ..
+        })
+        | WithdrawalRequest::SweeperFunding(SweeperFundingRequest {
+            withdrawal_amount,
+            destination,
+            ledger_burn_index,
+            ..
+        }) => {
             let transaction_price = gas_fee_estimate.to_price(gas_limit);
             let max_transaction_fee = transaction_price.max_transaction_fee();
-            let tx_amount = match request.withdrawal_amount.checked_sub(max_transaction_fee) {
+            let tx_amount = match withdrawal_amount.checked_sub(max_transaction_fee) {
                 Some(tx_amount) => tx_amount,
                 None => {
                     return Err(CreateTransactionError::InsufficientTransactionFee {
-                        cketh_ledger_burn_index: request.ledger_burn_index,
-                        allowed_max_transaction_fee: request.withdrawal_amount,
+                        cketh_ledger_burn_index: *ledger_burn_index,
+                        allowed_max_transaction_fee: *withdrawal_amount,
                         actual_max_transaction_fee: max_transaction_fee,
                     });
                 }
@@ -1138,7 +1268,7 @@ pub fn create_transaction(
                 max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
                 max_fee_per_gas: transaction_price.max_fee_per_gas,
                 gas_limit: transaction_price.gas_limit,
-                destination: request.destination,
+                destination: *destination,
                 amount: tx_amount,
                 data: Vec::new(),
                 access_list: Default::default(),

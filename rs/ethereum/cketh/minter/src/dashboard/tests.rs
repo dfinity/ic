@@ -884,12 +884,16 @@ fn should_display_reimbursed_requests() {
                                 },
                             );
                         }
+                        WithdrawalRequest::SweeperFunding(_) => {
+                            unreachable!("sweeper funding is never reimbursed")
+                        }
                     }
                 } else {
                     apply_state_transition(
                         &mut state,
                         &EventType::QuarantinedReimbursement {
-                            index: ReimbursementIndex::from(&req),
+                            index: ReimbursementIndex::try_from(&req)
+                                .expect("BUG: this test's fixtures are all user withdrawals"),
                         },
                     )
                 }

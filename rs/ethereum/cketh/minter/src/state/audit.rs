@@ -74,6 +74,13 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 .eth_transactions
                 .record_withdrawal_request(request.clone());
         }
+        EventType::AcceptedSweeperFundingRequest(request) => {
+            // Recorded through the same pipeline as a user withdrawal, so replay reconstructs it
+            // with the existing machinery; it differs only in never being reimbursed (`R14`).
+            state
+                .eth_transactions
+                .record_withdrawal_request(request.clone());
+        }
         EventType::CreatedTransaction {
             withdrawal_id,
             transaction,

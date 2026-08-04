@@ -297,7 +297,11 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
 
 pub fn estimate_gas_limit(withdrawal_request: &WithdrawalRequest) -> GasAmount {
     match withdrawal_request {
-        WithdrawalRequest::CkEth(_) => CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+        // Sweeper funding is a plain value transfer to a code-less EOA, so the 21'000 base cost is
+        // exactly right — and, having no code to run, such a transfer cannot revert.
+        WithdrawalRequest::CkEth(_) | WithdrawalRequest::SweeperFunding(_) => {
+            CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT
+        }
         WithdrawalRequest::CkErc20(_) => CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
     }
 }
