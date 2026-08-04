@@ -125,6 +125,10 @@ enum InvalidArtifactReason {
         subnet_split_scheduled_at: RegistryVersion,
         context_registry_version: RegistryVersion,
     },
+    WrongRegistryVersionAtSubnetSplittingSummary {
+        context_registry_version: RegistryVersion,
+        expected_registry_version: RegistryVersion,
+    },
 }
 
 impl From<CryptoError> for ValidationFailure {
@@ -1277,23 +1281,39 @@ impl Validator {
             .into());
         }
 
-        // If it's not a summary block, make sure that the registry version is 'frozen' during
-        // subnet splitting
-        if !proposal.payload.is_summary() {
-            match subnet_splitting::get_status(
-                self.registry_client.as_ref(),
-                self.replica_config.subnet_id,
-                last_summary_block.context.registry_version,
-                proposal.context.registry_version,
-            )
-            .map_err(ValidationFailure::SubnetSplittingStatusError)?
-            {
-                subnet_splitting::Status::NotScheduled => {}
-                subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
+        // Ensure the registry version is as expected during subnet splitting
+        match subnet_splitting::get_status(
+            self.registry_client.as_ref(),
+            self.replica_config.subnet_id,
+            last_summary_block.context.registry_version,
+            proposal.context.registry_version,
+        )
+        .map_err(ValidationFailure::SubnetSplittingStatusError)?
+        {
+            subnet_splitting::Status::NotScheduled => {}
+            subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
+                // If a subnet splitting is scheduled, then this means that
+                // `last_summary_block_registry_version < scheduled_at <= proposal.context.registry_version`
+                // (see `subnet_splitting::get_status`).
+                // This should not happen for a data block, because the registry version should be
+                // frozen to a version lower than `scheduled_at` until reaching a summary.
+                if !proposal.payload.is_summary() {
                     return Err(
                         InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
                             context_registry_version: proposal.context.registry_version,
                             subnet_split_scheduled_at: scheduled_at,
+                        }
+                        .into(),
+                    );
+                }
+
+                // The summary block should contain precisely the registry version at which the
+                // subnet splitting is scheduled.
+                if proposal.context.registry_version != scheduled_at {
+                    return Err(
+                        InvalidArtifactReason::WrongRegistryVersionAtSubnetSplittingSummary {
+                            context_registry_version: proposal.context.registry_version,
+                            expected_registry_version: scheduled_at,
                         }
                         .into(),
                     );
@@ -3301,6 +3321,93 @@ pub mod test {
                         }
                     )) if context_registry_version == block_registry_version
                         && subnet_split_scheduled_at == SUBNET_SPLIT_REGISTRY_VERSION
+                );
+            }
+        })
+    }
+
+    /// The summary block starting the split must reference *precisely* the registry version at
+    /// which the split is scheduled. A summary block referencing a version below the scheduled
+    /// version is valid, but one referencing a version above it is invalid.
+    #[rstest]
+    #[case::below_the_scheduled_version(SUBNET_SPLIT_REGISTRY_VERSION.decrement())]
+    #[case::at_the_scheduled_version(SUBNET_SPLIT_REGISTRY_VERSION)]
+    #[case::above_the_scheduled_version(SUBNET_SPLIT_REGISTRY_VERSION.increment())]
+    fn test_summary_block_during_subnet_splitting(#[case] block_registry_version: RegistryVersion) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                state_manager,
+                data_provider,
+                registry_client,
+                mut pool,
+                time_source,
+                replica_config,
+                ..
+            } = setup_dependencies_with_dkg_interval_length(
+                pool_config,
+                &committee,
+                DKG_INTERVAL_LENGTH,
+            );
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+
+            // Advance to the block right before the next summary height *before* scheduling the
+            // split, so that all parents keep referencing the initial registry version and the
+            // summary block below is the first one that could adopt the scheduled version.
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+            if block_registry_version >= SUBNET_SPLIT_REGISTRY_VERSION {
+                schedule_subnet_split(
+                    &data_provider,
+                    &registry_client,
+                    replica_config.subnet_id,
+                    &committee,
+                    block_registry_version,
+                );
+            }
+
+            // The proposal picks up the latest registry version, and its payload is built for that
+            // very version, so the only thing under test is the version itself.
+            let summary_proposal = make_next_block(&pool);
+            assert!(
+                summary_proposal.content.as_ref().payload.is_summary(),
+                "expected a summary block at the DKG boundary",
+            );
+
+            let context = summary_proposal.content.as_ref().context.clone();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(context.certified_height);
+            time_source.set_time(context.time).unwrap();
+
+            if block_registry_version < SUBNET_SPLIT_REGISTRY_VERSION {
+                schedule_subnet_split(
+                    &data_provider,
+                    &registry_client,
+                    replica_config.subnet_id,
+                    &committee,
+                    SUBNET_SPLIT_REGISTRY_VERSION,
+                );
+            }
+
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &summary_proposal);
+            if block_registry_version <= SUBNET_SPLIT_REGISTRY_VERSION {
+                assert_matches!(result, Ok(()));
+            } else {
+                assert_matches!(
+                    result,
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidArtifactReason::WrongRegistryVersionAtSubnetSplittingSummary {
+                            context_registry_version,
+                            expected_registry_version,
+                        }
+                    )) if context_registry_version == context.registry_version
+                        && expected_registry_version == SUBNET_SPLIT_REGISTRY_VERSION
                 );
             }
         })
