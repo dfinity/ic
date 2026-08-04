@@ -29,7 +29,7 @@ async fn test_() {
 // async fn test() {
 //     println!("Playground test was called");
 //     ic_cdk::futures::spawn_017_compat(async move {
-//         let _: () = ic_cdk::call(ic_cdk::api::id(), "test_2", ()).await.unwrap();
+//         ic_cdk::call::Call::unbounded_wait(ic_cdk::api::canister_self(), "test_2").await.unwrap();
 //     });
 //     ic_cdk_timers::set_timer(Duration::from_millis(0), || {
 //         println!("Timer call worked!");
