@@ -114,22 +114,45 @@ mod tests {
             })),
         )]
         cup_type: Option<CupType>,
+        #[values(
+            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+            REGISTRY_CUP_REGISTRY_VERSION,
+            REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        )]
+        last_summary_block_registry_version: RegistryVersion,
+        #[values(
+            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+            REGISTRY_CUP_REGISTRY_VERSION,
+            REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        )]
+        looked_up_registry_version: RegistryVersion,
     ) {
         let registry = set_up_registry(cup_type);
 
         let status = get_status(
             registry.as_ref(),
             SUBNET_1,
-            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-            REGISTRY_CUP_REGISTRY_VERSION,
+            last_summary_block_registry_version,
+            looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
 
         assert_eq!(status, Status::NotScheduled);
     }
 
-    #[test]
-    fn get_status_should_return_scheduled_test() {
+    #[rstest]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION,
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
+    fn get_status_should_return_scheduled_test(
+        #[case] last_summary_block_registry_version: RegistryVersion,
+        #[case] looked_up_registry_version: RegistryVersion,
+    ) {
         let registry = set_up_registry(Some(CupType::SubnetSplitting(
             ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
@@ -139,8 +162,8 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
-            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-            REGISTRY_CUP_REGISTRY_VERSION,
+            last_summary_block_registry_version,
+            looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
 
@@ -153,8 +176,36 @@ mod tests {
         );
     }
 
-    #[test]
-    fn get_status_should_return_not_scheduled_when_subnet_splitting_was_already_done_test() {
+    #[rstest]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION,
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(REGISTRY_CUP_REGISTRY_VERSION, REGISTRY_CUP_REGISTRY_VERSION)]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION,
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION,
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
+    fn get_status_should_return_not_scheduled_when_subnet_splitting_was_already_done_test(
+        #[case] last_summary_block_registry_version: RegistryVersion,
+        #[case] looked_up_registry_version: RegistryVersion,
+    ) {
         let registry = set_up_registry(Some(CupType::SubnetSplitting(
             ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
@@ -164,8 +215,8 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
-            REGISTRY_CUP_REGISTRY_VERSION,
-            REGISTRY_CUP_REGISTRY_VERSION,
+            last_summary_block_registry_version,
+            looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
 
