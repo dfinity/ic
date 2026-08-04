@@ -11,7 +11,9 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::{HASH_LENGTH, HashOf};
 use ic_ledger_suite_in_memory_ledger::{AllowancesRecentlyPurged, verify_ledger_state};
-use ic_ledger_suite_state_machine_helpers::{AllowanceProvider, send_approval, send_transfer_from};
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, await_archiving, send_approval, send_transfer_from,
+};
 use ic_ledger_suite_state_machine_tests::MINTER;
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
@@ -843,12 +845,16 @@ fn transfer(
         .execute_ingress_as(from.owner.into(), ledger_id, "icrc1_transfer", args)
         .expect("Unable to perform icrc1_transfer")
         .bytes();
-    Decode!(&res, Result<Nat, TransferError>)
+    let block_index = Decode!(&res, Result<Nat, TransferError>)
         .unwrap()
         .expect("Unable to decode icrc1_transfer error")
         .0
         .to_u64()
-        .unwrap()
+        .unwrap();
+    // The ledger replies before it archives, so let any archiving triggered by
+    // this transfer run to completion.
+    await_archiving(env);
+    block_index
 }
 
 #[test]

@@ -5122,8 +5122,19 @@ pub mod archiving {
             "icrc1_transfer",
             encode_transfer_args(p1.0, p2.0, 10_000),
         );
-        let mut transfer_status = message_status(&env, &transfer_message_id).unwrap();
-        assert!(transfer_status.is_none());
+        // The ledger archives after replying, so the transfer completes in the
+        // first round while the archiving continues in the background.
+        let transfer_result = Decode!(
+            &message_status(&env, &transfer_message_id)
+                .unwrap()
+                .expect("the transfer should have completed")
+                .bytes(),
+            Result<Nat, TransferError>
+        )
+        .expect("failed to decode transfer response")
+        .map(|n| n.0.to_u64().unwrap())
+        .expect("transfer should succeed");
+        assert_eq!(transfer_result, NUM_INITIAL_BALANCES);
 
         // Keep listing the archives and calling env.tick() until the ledger reports that an
         // archive has been created.
@@ -5156,24 +5167,14 @@ pub mod archiving {
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
 
-        // Tick until the transfer completes, meaning the archiving also completes.
+        // Tick until the archiving completes.
         const MAX_TICKS: usize = 500;
         let mut ticks = 0;
-        while transfer_status.is_none() {
+        while env.has_inflight_messages() {
             env.tick();
             ticks += 1;
             assert!(ticks < MAX_TICKS);
-            transfer_status = message_status(&env, &transfer_message_id).unwrap();
         }
-        let transfer_result = Decode!(
-            &transfer_status.unwrap()
-            .bytes(),
-            Result<Nat, TransferError>
-        )
-        .expect("failed to decode transfer response")
-        .map(|n| n.0.to_u64().unwrap())
-        .expect("transfer should succeed");
-        assert_eq!(transfer_result, NUM_INITIAL_BALANCES);
 
         // Verify that the ledger now does not return the first block, but reports that it is in
         // the first archive.
@@ -5261,15 +5262,27 @@ pub mod archiving {
                 &get_blocks_res
             ));
 
-            // Tick until the transfer completes, meaning the archiving also completes.
+            // The ledger archives after replying, so the transfer completes in
+            // the first round while the archiving continues in the background.
+            let transfer_result = Decode!(
+                &message_status(&env, &transfer_message_id)
+                    .unwrap()
+                    .expect("the transfer should have completed")
+                    .bytes(),
+                Result<Nat, TransferError>
+            )
+            .expect("failed to decode transfer response")
+            .map(|n| n.0.to_u64().unwrap())
+            .expect("transfer should succeed");
+            assert_eq!(transfer_result, NUM_INITIAL_BALANCES + i - 1);
+
+            // Tick until the archiving completes.
             const MAX_TICKS: usize = 500;
             let mut ticks = 0;
-            let mut transfer_status = message_status(&env, &transfer_message_id).unwrap();
-            while transfer_status.is_none() {
+            while env.has_inflight_messages() {
                 env.tick();
                 ticks += 1;
                 assert!(ticks < MAX_TICKS);
-                transfer_status = message_status(&env, &transfer_message_id).unwrap();
                 // Verify that block `0` is only reported to exist in one place.
                 let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
                 assert!(!ledger_reports_first_block_in_two_places(
@@ -5277,15 +5290,6 @@ pub mod archiving {
                     &get_blocks_res
                 ));
             }
-            let transfer_result = Decode!(
-                &transfer_status.unwrap()
-                .bytes(),
-                Result<Nat, TransferError>
-            )
-            .expect("failed to decode transfer response")
-            .map(|n| n.0.to_u64().unwrap())
-            .expect("transfer should succeed");
-            assert_eq!(transfer_result, NUM_INITIAL_BALANCES + i - 1);
 
             // An archive should exist
             assert!(!get_archives(&env, ledger_id).is_empty());

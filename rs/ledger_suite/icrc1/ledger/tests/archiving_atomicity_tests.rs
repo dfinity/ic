@@ -305,6 +305,48 @@ fn submit_triggering_transfer(
     }
 }
 
+/// Archiving must recover once the condition that killed it is gone.
+///
+/// The archiving lock is taken before the first await, so a trapped
+/// continuation could leave `archiving_in_progress` set and silently stop the
+/// ledger from ever archiving again. It should be cleared while the task is
+/// canceled. Now that a failure to archive is invisible to callers, a stuck
+/// lock would be easy to miss.
+#[test]
+fn archiving_recovers_after_a_trapped_attempt() {
+    let (env, ledger, filler) = setup();
+    fill_up_to_archive_trigger(&env, ledger);
+
+    let transfer = submit_triggering_transfer(&env, ledger, filler);
+    assert!(
+        transfer.result.is_ok(),
+        "the transfer should have succeeded: {:?}",
+        transfer.result
+    );
+    assert!(
+        list_archives(&env, ledger).is_empty(),
+        "expected the archive continuation to have been trapped"
+    );
+
+    // Raise the reservation limit, as an operator would once alerted, and let
+    // the ledger reach the archive trigger threshold again.
+    env.update_settings(
+        &ledger,
+        canister_settings(LEDGER_CYCLES / 2).build(),
+    )
+    .expect("failed to raise the ledger's reserved cycles limit");
+    env.execute_ingress_as(minter(), ledger, "icrc1_transfer", mint_arg(MINT_AMOUNT))
+        .expect("failed to mint");
+
+    for _ in 0..20 {
+        if !list_archives(&env, ledger).is_empty() {
+            return;
+        }
+        env.tick();
+    }
+    panic!("the ledger never archived again after a trapped archiving attempt");
+}
+
 /// A rejected `icrc1_transfer` must not leave a committed block behind.
 ///
 /// Before archiving was moved off the reply path this failed: the ledger
