@@ -3469,6 +3469,7 @@ dependencies = [
  "dyn-clone",
  "ed25519-dalek",
  "educe",
+ "enum-ordinalize-derive",
  "erased-serde",
  "escargot",
  "ethers-core",

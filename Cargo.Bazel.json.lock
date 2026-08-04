@@ -1,5 +1,5 @@
 {
-  "checksum": "feb8067e63073c430e7775025ee4ae3c2dba8c0253491bdbffbdcca3d938923c",
+  "checksum": "7715396b0cb71a6d82b810c1643994794f30ce0ebab5f668467709f25216961e",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -95685,6 +95685,7 @@
     "dyn-clone 1.0.20",
     "ed25519-dalek 2.2.0",
     "educe 0.5.11",
+    "enum-ordinalize-derive 4.4.1",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
     "ethers-core 2.0.8",
