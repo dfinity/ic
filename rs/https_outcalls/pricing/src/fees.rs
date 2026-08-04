@@ -101,9 +101,9 @@ fn base_fee_amount(
                 + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n
         }
         // Non-replicated is equivalent to flexible replication with min_responses = 1.
-        ReplicationKind::NonReplicated => flexible_base_fee_per_replica(request_bytes, n, 1),
+        ReplicationKind::NonReplicated => gossipping_base_fee_per_replica(request_bytes, n, 1),
         ReplicationKind::Flexible { min_responses, .. } => {
-            flexible_base_fee_per_replica(request_bytes, n, min_responses as u128)
+            gossipping_base_fee_per_replica(request_bytes, n, min_responses as u128)
         }
     };
 
@@ -113,7 +113,7 @@ fn base_fee_amount(
 /// The per-replica part of the base fee of a gossiping (flexible or
 /// non-replicated) outcall of `request_bytes` bytes that requires
 /// `min_responses` responses, on a subnet of `n` nodes.
-fn flexible_base_fee_per_replica(request_bytes: u128, n: u128, min_responses: u128) -> u128 {
+fn gossipping_base_fee_per_replica(request_bytes: u128, n: u128, min_responses: u128) -> u128 {
     HTTP_REQUEST_BASE_FEE
         + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
         + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
@@ -268,9 +268,6 @@ fn usage_fee(
 /// largest permitted size, downloaded over the full `MAX_RESPONSE_TIME`,
 /// transformed with the full query instruction limit and delivered as a maximally
 /// large transformed response.
-///
-/// This is everything the per-replica allowances of a request have to cover, so
-/// withholding more of its payment than this cannot buy the caller anything.
 ///
 /// The result is rounded up to a multiple of the number of participating replicas,
 /// so that splitting it evenly among them always yields allowances that add up to at

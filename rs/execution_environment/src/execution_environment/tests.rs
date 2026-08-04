@@ -3285,7 +3285,7 @@ fn execute_canister_http_request() {
             http_request_context.variable_parts_size(),
             &http_request_context.replication,
         );
-        let node_count = test.subnet_size().max(1);
+        let node_count = test.subnet_size();
         let refundable_payment = match cost_schedule {
             CanisterCyclesCostSchedule::Free => Cycles::new(0),
             CanisterCyclesCostSchedule::Normal => payment - base_fee.real(),
@@ -3615,6 +3615,7 @@ fn execute_flexible_canister_http_request() {
                 refundable_payment - expected_allowance * committee_size.max(1)
             }
         };
+        assert_ne!(expected_payment, Cycles::new(0));
         assert_eq!(http_request_context.request.payment, expected_payment);
         assert_eq!(
             http_request_context.refund_status.refunded_cycles,

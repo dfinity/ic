@@ -425,6 +425,11 @@ mod tests {
                     Ok(()),
                     "{replication:?}, {max_response_bytes:?}"
                 );
+                // There should still be allowance left for the consensus cost.
+                assert!(
+                    tracker.spent < allowance.get(),
+                    "{replication:?}, {max_response_bytes:?}"
+                );
             }
         }
     }

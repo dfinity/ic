@@ -2013,7 +2013,7 @@ enum CostHttpRequestOutcallType {
     FullyReplicated(candid::Reserved),
     #[serde(rename = "non_replicated")]
     NonReplicated(candid::Reserved),
-    /// `None` defaults to n, (2 * n) / 3 + 1, n
+    /// `None` defaults to n, floor(2/3 * N) + 1, n
     #[serde(rename = "flexible")]
     Flexible(Option<ReplicationCounts>),
 }

@@ -240,9 +240,8 @@ impl ReplicationKind {
         }
     }
 
-    /// The response counts for a flexible request that does not specify its own gets
-    /// on a subnet of `subnet_size` nodes: every node attempts the outcall and
-    /// `floor(2/3 * N) + 1` responses are required.
+    /// The response counts for a flexible request that does not specify its own:
+    /// Every node attempts the outcall and `floor(2/3 * N) + 1` responses are required.
     pub fn default_flexible_counts(subnet_size: NumberOfNodes) -> ReplicationCounts {
         let n = subnet_size.get();
         ReplicationCounts {
@@ -252,8 +251,8 @@ impl ReplicationKind {
         }
     }
 
-    /// The flexible replication for a request that does not specify its response counts
-    /// gets on a subnet of `subnet_size` nodes, see [`Self::default_flexible_counts`].
+    /// The response counts for a flexible request that does not specify its own:
+    /// Every node attempts the outcall and `floor(2/3 * N) + 1` responses are required.
     pub fn default_flexible(subnet_size: NumberOfNodes) -> Self {
         Self::from(&Self::default_flexible_counts(subnet_size))
     }
