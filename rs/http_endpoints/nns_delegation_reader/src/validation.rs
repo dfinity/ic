@@ -338,28 +338,11 @@ mod tests {
         );
     }
 
-    /// Certifying a strict subset of the state's ranges is invalid: all ranges which
-    /// the state assigns to the subnet must be certified.
-    #[test]
-    fn delegation_certifying_a_subset_of_state_ranges_is_invalid() {
-        let subnet_id = SUBNET_1;
-        let public_key = vec![1, 2, 3];
-        let state_ranges = [range(10, 20), range(100, 200), range(300, 400)];
-        // Certify only a subset of the ranges the state assigns to the subnet.
-        let subset = [range(10, 20), range(300, 400)];
-        let tree = build_tree(subnet_id, &public_key, &subset);
-
-        assert_matches!(
-            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &state_ranges),
-            Ok(false),
-            "certifying a strict subset of the state's ranges should be invalid"
-        );
-    }
-
     /// A delegation certifying ranges which do not exactly match the ranges the state
     /// assigns to the subnet is invalid.
     #[rstest]
     #[case::different_end(vec![range(10, 999)])]
+    #[case::missing_range(vec![range(10, 20)])]
     #[case::extra_range(vec![range(10, 20), range(100, 200), range(500, 1000)])]
     #[case::replaced_range(vec![range(10, 20), range(500, 1000)])]
     #[case::disjoint_range(vec![range(30, 40)])]
