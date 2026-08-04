@@ -357,9 +357,8 @@ impl CyclesAccountManager {
     ///       for inter-canister transfers, use `withdraw_cycles_for_transfer`.
     ///
     /// Only non-refundable use cases can be consumed this way: refundable ones
-    /// are prepaid and must go through the dedicated methods that pair the
-    /// prepayment with its refund (e.g. `prepay_execution_cycles` or
-    /// `consume_cycles_for_final_instructions`).
+    /// are prepaid and must go through a dedicated method (e.g.
+    /// `prepay_execution_cycles` or `consume_cycles_for_final_instructions`).
     ///
     /// # Errors
     ///
@@ -945,9 +944,8 @@ impl CyclesAccountManager {
     /// cycles are not being sent somewhere else.
     ///
     /// Only non-refundable use cases can be consumed this way: refundable ones
-    /// are prepaid and must go through the dedicated methods that pair the
-    /// prepayment with its refund (e.g. `prepay_execution_cycles` or
-    /// `consume_cycles_for_final_instructions`).
+    /// are prepaid and must go through a dedicated method (e.g.
+    /// `prepay_execution_cycles` or `consume_cycles_for_final_instructions`).
     pub fn consume_with_threshold<T: CyclesUseCaseNonRefundableKind>(
         &self,
         system_state: &mut SystemState,
