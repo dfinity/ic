@@ -174,7 +174,6 @@ pub(crate) fn check_initial_spent_within_limit(
     }
 }
 
-<<<<<<< HEAD
 /// Checks that a flexible outcall has run out of cycles, i.e. that its
 /// committee's remaining allowances can no longer cover the consensus cost of
 /// delivering any response.
@@ -225,8 +224,6 @@ pub(crate) fn check_out_of_cycles<'a>(
     Ok(())
 }
 
-=======
->>>>>>> master
 /// Reconstructs, for every signer of an aggregated proof, the
 /// [`CanisterHttpResponseShare`] that signer actually signed: the shared
 /// [`CanisterHttpResponseMetadata`] combined with that signer's own
