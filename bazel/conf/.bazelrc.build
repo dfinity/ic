@@ -15,16 +15,23 @@ common --experimental_remote_downloader_propagate_credentials
 common --incompatible_enable_proto_toolchain_resolution
 
 # protobuf 33's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
-# __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used by
-# the hermetic zig toolchain on Linux) garbage-collects these under its default
-# --start-stop-gc together with our opt-mode --gc-sections, breaking the link
-# with "undefined symbol: __start_linkarr_upb_AllExts". The lld-suggested
-# `-z nostart-stop-gc` is rejected by zig's wrapper, so we disable section GC
-# instead. Scoped to the exec config (these are build-time `[for tool]` targets,
-# so target binaries/canisters keep --gc-sections) and to Linux via
-# --enable_platform_specific_config (the macOS system linker rejects this flag).
+# __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used
+# by the hermetic toolchain on Linux) garbage-collects these under its default
+# --start-stop-gc together with opt-mode --gc-sections, which either breaks
+# the link with "undefined symbol: __start_linkarr_upb_AllExts" or silently
+# empties upb's extension registry. -z nostart-stop-gc disables only that:
+# sections referenced via __start_/__stop_ symbols are kept, while ordinary
+# --gc-sections stays in effect. Scoped to the exec config (these are
+# build-time `[for tool]` targets) and to Linux via
+# --enable_platform_specific_config (the macOS linker rejects this flag).
 common --enable_platform_specific_config
-build:linux --host_linkopt=-Wl,--no-gc-sections
+build:linux --host_linkopt=-Wl,-z,nostart-stop-gc
+
+# Pin the glibc version the hermetic toolchain targets to 2.31 (see
+# //:linux-glibc-2.31). Both the target and the exec platform are pinned so
+# host tools and target binaries agree on the glibc floor.
+build:linux --host_platform=//:linux-glibc-2.31
+build:linux --platforms=//:linux-glibc-2.31
 
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
@@ -128,14 +135,3 @@ common --test_env=RUST_BACKTRACE=full
 
 # Give canceled actions some more time to cleanup
 common --local_termination_grace_seconds=90
-
-# Speed up compilation with zig cc
-# zig cc compiles the standard library on demand, so a shared cache makes a big
-# difference by cutting out duplicated work.
-
-# Set the cache path for all environments
-build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
-# Share /tmp/zig-cache across targets
-build --sandbox_add_mount_pair=/tmp/zig-cache
-# Allow writes to the shared cache
-build --sandbox_writable_path=/tmp/zig-cache
