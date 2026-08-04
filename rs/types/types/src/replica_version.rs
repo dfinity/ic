@@ -14,24 +14,6 @@ pub struct ReplicaVersion {
 static DEFAULT_VERSION_ID: OnceCell<String> = OnceCell::new();
 pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
 
-/// Epoch seconds when the replica process started. Set once at first access.
-pub static REPLICA_START_TIME: OnceCell<u64> = OnceCell::new();
-
-/// Path to the file containing the replica binary version (populated by the
-/// GuestOS rootfs and, after a fast-upgrade overlay merge, by the overlay).
-pub const REPLICA_VERSION_FILE_PATH: &str = "/opt/ic/share/replica_version.txt";
-
-/// Initialize `REPLICA_START_TIME` if not already set. Called from the status
-/// handler.
-pub fn ensure_replica_start_time_set() -> u64 {
-    *REPLICA_START_TIME.get_or_init(|| {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
-    })
-}
-
 /// The default replica version can be initialized only once to prevent
 /// accidental mistakes. Otherwise its value is taken from environment
 /// CARGO_PKG_VERSION at compile time.
@@ -51,12 +33,7 @@ impl Default for ReplicaVersion {
     fn default() -> Self {
         ReplicaVersion {
             version_id: DEFAULT_VERSION_ID
-                .get_or_init(|| {
-                    std::fs::read_to_string(REPLICA_VERSION_FILE_PATH)
-                        .expect("Failed to read replica version file")
-                        .trim()
-                        .to_string()
-                })
+                .get_or_init(|| env!("CARGO_PKG_VERSION").to_string())
                 .clone(),
         }
     }

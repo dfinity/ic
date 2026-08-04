@@ -26,7 +26,15 @@ pub struct ReplicaArgs {
     #[clap(long)]
     pub catch_up_package: Option<PathBuf>,
 
-    /// The version of the Replica being run
+    /// The version of the GuestOS the node booted from
+    #[clap(long)]
+    pub guestos_version: ReplicaVersion,
+
+    /// The version of the replica binary. Under normal conditions, this is the same as
+    /// `guestos_version`. During a GuestOS fast upgrade, binaries from the target (new) GuestOS
+    /// are hot-swapped in the running (old) GuestOS to allow the subnet to continue running
+    /// without downtime. Eventually the node reboots into the target GuestOS, at which point
+    /// the binary and GuestOS versions will be the same again.
     #[clap(long)]
     pub replica_version: ReplicaVersion,
 

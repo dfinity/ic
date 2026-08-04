@@ -130,6 +130,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
     let replica_config = ReplicaConfig {
         subnet_id,
         node_id: node_test_id(0),
+        platform_version: Default::default(),
     };
     let crypto = Arc::new(CryptoReturningOk::default());
     let state_manager = Arc::new(RefMockStateManager::default());

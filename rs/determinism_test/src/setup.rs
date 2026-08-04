@@ -101,6 +101,7 @@ pub(crate) fn setup() -> (
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,
+        platform_version: Default::default(),
     };
 
     let metrics_registry = MetricsRegistry::new();

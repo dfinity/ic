@@ -24,7 +24,7 @@ use ic_types::consensus::upgrade::{UpgradePermitAction, UpgradePermitShares};
 use ic_replicated_state::metadata_state::{REQUEST_TIMEOUT_BLOCKS, UpgradeState};
 use ic_types::consensus::UpgradePermitAuthorizationContent;
 use ic_types::batch::{bytes_to_upgrade_payload, upgrade_payload_to_bytes};
-use ic_types::{Height, NodeId, NumBytes};
+use ic_types::{Height, NodeId, NumBytes, PlatformVersion};
 use num_traits::SaturatingSub;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
@@ -35,6 +35,7 @@ pub struct UpgradePayloadBuilder {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pool: Arc<RwLock<dyn UpgradePermitAuthPool>>,
     crypto: Arc<dyn ConsensusCrypto>,
+    platform_version: PlatformVersion,
     logger: ReplicaLogger,
 }
 
@@ -45,6 +46,7 @@ impl UpgradePayloadBuilder {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         pool: Arc<RwLock<dyn UpgradePermitAuthPool>>,
         crypto: Arc<dyn ConsensusCrypto>,
+        platform_version: PlatformVersion,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -52,6 +54,7 @@ impl UpgradePayloadBuilder {
             state_reader,
             pool,
             crypto,
+            platform_version,
             logger,
         }
     }
@@ -197,7 +200,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         // (replica_version.txt). After Phase 1 overlay, they differ (V1 vs V2).
         // After Phase 2 reboot, they match again.
         let needs_reboot =
-            ic_types::GuestOsVersion::default() != ic_types::ReplicaVersion::default();
+            self.platform_version.guestos_version != self.platform_version.binary_version;
 
         let upgrade_state = self.read_upgrade_state(past_payloads, &members);
 

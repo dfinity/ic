@@ -314,6 +314,7 @@ impl TestRunner {
                     .map(|(index, _)| ReplicaConfig {
                         node_id: node_test_id(index as u64),
                         subnet_id,
+                        platform_version: Default::default(),
                     })
                     .collect();
                 let node_ids: Vec<_> = replica_configs

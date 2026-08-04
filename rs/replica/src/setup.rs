@@ -27,16 +27,14 @@ pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
     })
 }
 
-/// Log the GuestOS version from `--replica-version`. The replica binary version
-/// is read lazily from `/opt/ic/share/replica_version.txt` by
-/// `ReplicaVersion::default()` (so it reflects the overlay after a fast upgrade).
+/// Log the GuestOS version and replica binary version from CLI args.
 pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &ReplicaLogger) {
     if let Ok(args) = args {
         info!(
             logger,
-            "GuestOS version from --replica-version: {} (replica binary version: {})",
-            args.replica_version.as_ref(),
-            ReplicaVersion::default().as_ref()
+            "GuestOS version: {}, replica binary version: {}",
+            args.guestos_version.as_ref(),
+            args.replica_version.as_ref()
         );
     }
 }

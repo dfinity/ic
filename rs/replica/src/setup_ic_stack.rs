@@ -28,7 +28,7 @@ use ic_replicated_state::{ReplicatedState, metrics::ReplicatedStateInvariants};
 use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    Height, NodeId, PlatformVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
@@ -67,6 +67,7 @@ pub fn construct_ic_stack(
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
+    platform_version: PlatformVersion,
     registry: Arc<impl RegistryClient + 'static>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
@@ -316,6 +317,7 @@ pub fn construct_ic_stack(
         node_id,
         subnet_id,
         subnet_type,
+        platform_version,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::new(state_sync) as Arc<_>,

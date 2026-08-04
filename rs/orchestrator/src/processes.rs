@@ -20,11 +20,13 @@ pub(crate) struct ReplicaProcessConfig {
     pub ic_binary_dir: PathBuf,
     pub cup_path: PathBuf,
     pub replica_config_file: PathBuf,
+    pub guestos_version: ReplicaVersion,
 }
 
 pub(crate) struct ReplicaProcess {
     ic_binary_dir: PathBuf,
     replica_version: ReplicaVersion,
+    guestos_version: ReplicaVersion,
     cup_path: PathBuf,
     replica_config_file: PathBuf,
     subnet_id: SubnetId,
@@ -43,6 +45,7 @@ impl Process for ReplicaProcess {
         Ok(Self {
             ic_binary_dir: config.ic_binary_dir.clone(),
             replica_version,
+            guestos_version: config.guestos_version.clone(),
             cup_path: config.cup_path.clone(),
             replica_config_file: config.replica_config_file.clone(),
             subnet_id,
@@ -57,6 +60,8 @@ impl Process for ReplicaProcess {
     }
     fn get_args(&self) -> Vec<OsString> {
         vec![
+            OsString::from("--guestos-version"),
+            self.guestos_version.to_string().into(),
             OsString::from("--replica-version"),
             self.replica_version.to_string().into(),
             OsString::from("--config-file"),

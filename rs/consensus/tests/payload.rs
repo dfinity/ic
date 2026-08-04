@@ -107,7 +107,7 @@ fn consensus_produces_expected_batches() {
         let router = Arc::new(router);
         let node_id = node_test_id(0);
         let subnet_id = subnet_test_id(0);
-        let replica_config = ReplicaConfig { node_id, subnet_id };
+        let replica_config = ReplicaConfig { node_id, subnet_id, platform_version: Default::default() };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();

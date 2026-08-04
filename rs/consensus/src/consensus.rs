@@ -207,6 +207,7 @@ impl ConsensusImpl {
                 state_manager.clone(),
                 upgrade_permit_auth_pool.clone() as Arc<RwLock<dyn UpgradePermitAuthPool>>,
                 crypto.clone(),
+                replica_config.platform_version.clone(),
                 logger.clone(),
             )),
             metrics_registry.clone(),

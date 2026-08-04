@@ -134,11 +134,14 @@ impl Orchestrator {
         .unwrap()?;
 
         let metrics_registry = MetricsRegistry::global();
-        let replica_version = load_version_from_file(&logger, &args.version_file)
+        let replica_version = load_version_from_file(&logger, &args.binary_version_file)
+            .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
+        let guestos_version = load_version_from_file(&logger, &args.guestos_version_file)
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
         info!(
             logger,
-            "Orchestrator started: version={}, config={:?}", replica_version, config
+            "Orchestrator started: version={}, guestos_version={}, config={:?}",
+            replica_version, guestos_version, config
         );
         UtilityCommand::notify_host(
             format!("node-id {node_id}: starting with version {replica_version}").as_str(),
@@ -265,6 +268,7 @@ impl Orchestrator {
             ic_binary_dir: args.ic_binary_directory.clone(),
             cup_path: local_cup_reader.get_cup_path(),
             replica_config_file: args.replica_config_file.clone(),
+            guestos_version,
         };
         let ic_gateway_process_config = IcGatewayProcessConfig {
             ic_binary_dir: args.ic_binary_directory.clone(),
