@@ -97,6 +97,7 @@ pub fn start_nns_delegation_manager(
     tls_config: Arc<dyn TlsConfig>,
     cancellation_token: CancellationToken,
 ) -> (JoinHandle<()>, NNSDelegationReader) {
+    let logger = log.clone();
     let manager = DelegationManager {
         config,
         log,
@@ -119,7 +120,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader::new(rx))
+    (join_handle, NNSDelegationReader::new(rx, logger))
 }
 
 struct DelegationManager {
@@ -516,6 +517,7 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
+        log,
     );
 
     observe_delegation_sizes(&nns_delegation_builder, metrics);
@@ -1469,7 +1471,7 @@ mod tests {
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(
                 &builder
-                    .build_unverified(CanisterRangesFilter::Flat)
+                    .build_unverified(CanisterRangesFilter::Flat, &no_op_logger())
                     .certificate,
             )
             .expect("Should return a certificate which can be deserialized");
