@@ -22,7 +22,9 @@ use ic_crypto_utils_threshold_sig_der::{
 };
 use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
-use ic_management_canister_types_private::{CanisterInstallMode, CanisterInstallModeV2};
+use ic_management_canister_types_private::{
+    CanisterInstallMode, CanisterInstallModeV2, WasmMemoryPersistence,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -59,7 +61,10 @@ use ic_nns_governance_api::{
         },
         swap_parameters,
     },
-    install_code::CanisterInstallMode as GovernanceInstallMode,
+    install_code::{
+        CanisterInstallMode as GovernanceInstallMode,
+        CanisterUpgradeOptions as GovernanceCanisterUpgradeOptions,
+    },
     proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
@@ -86,6 +91,7 @@ use ic_protobuf::registry::{
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
+use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry, chain_keys::ChainKeysRegistry,
@@ -1446,6 +1452,19 @@ struct ProposeToChangeNnsCanisterCmd {
     /// The sha256 of the arg binary file.
     #[clap(long)]
     arg_sha256: Option<String>,
+
+    #[clap(long)]
+    /// Whether to skip the canister's pre_upgrade hook. Only valid when mode is upgrade.
+    skip_pre_upgrade: Option<bool>,
+
+    #[clap(long)]
+    /// Whether to retain (keep) or drop (replace) the canister's main memory
+    /// before running the new code (between pre- and post-upgrade). Required
+    /// when upgrading a canister whose current/old WASM module has the
+    /// `icp:private enhanced-orthogonal-persistence` custom section (this
+    /// happens with modern Motoko canisters, which use Enhanced Orthogonal
+    /// Persistence). Only valid when mode is upgrade.
+    wasm_memory_persistence: Option<WasmMemoryPersistence>,
 }
 
 #[async_trait]
@@ -1520,17 +1539,43 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             CanisterInstallMode::Upgrade => Some(GovernanceInstallMode::Upgrade as i32),
         };
 
+        let canister_upgrade_options =
+            assemble_canister_upgrade_options(self.skip_pre_upgrade, self.wasm_memory_persistence);
+
         let install_code = InstallCodeRequest {
             skip_stopping_before_installing,
             install_mode,
             canister_id,
             wasm_module,
             arg,
-            canister_upgrade_options: None,
+            canister_upgrade_options,
         };
 
         ProposalActionRequest::InstallCode(install_code)
     }
+}
+
+/// Constructs a CanisterUpgradeOptions from its constituents.
+/// 
+/// (Presumably, the pieces were passed via CLI flags.)
+///
+/// Returns None if neither flag was passed.
+fn assemble_canister_upgrade_options(
+    skip_pre_upgrade: Option<bool>,
+    wasm_memory_persistence: Option<WasmMemoryPersistence>,
+) -> Option<GovernanceCanisterUpgradeOptions> {
+    if skip_pre_upgrade.is_none() && wasm_memory_persistence.is_none() {
+        return None;
+    }
+
+    let wasm_memory_persistence = wasm_memory_persistence.map(|wasm_memory_persistence| {
+        WasmMemoryPersistenceProto::from(&wasm_memory_persistence) as i32
+    });
+
+    Some(GovernanceCanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    })
 }
 
 /// Sub-command to submit a proposal to upgrade an NNS canister.
