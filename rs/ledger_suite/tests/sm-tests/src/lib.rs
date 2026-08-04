@@ -5822,7 +5822,7 @@ pub mod archiving {
         )
     }
 
-    fn encode_transfer_args(
+    pub(crate) fn encode_transfer_args(
         from: impl Into<Account>,
         to: impl Into<Account>,
         amount: u64,
@@ -5923,6 +5923,160 @@ pub mod archiving {
             });
         }
         Log { entries }
+    }
+}
+
+/// Tests covering how the ledger behaves when the subnet it runs on has no
+/// memory left.
+pub mod subnet_memory {
+    use super::*;
+    use ic_ledger_suite_state_machine_helpers::{balance_of, total_supply};
+    use ic_state_machine_tests::StateMachineBuilder;
+    use ic_types::NumBytes;
+    use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
+    use std::fmt::Debug;
+
+    const WASM_PAGE_SIZE: u64 = 64 * 1024;
+    const MIB: u64 = 1024 * 1024;
+    const GIB: u64 = 1024 * MIB;
+
+    /// Deliberately small, so that the filler canister can exhaust it. The
+    /// reservation threshold is set to the capacity, which switches storage
+    /// reservation off entirely (`ResourceSaturation::reservation_factor`
+    /// returns 0 once the two are equal) — this test is about running out of
+    /// memory, not about running out of reserved cycles.
+    const SUBNET_MEMORY_CAPACITY: u64 = 8 * GIB;
+
+    /// Chunk sizes, in bytes, used to fill the subnet: each is grown repeatedly
+    /// until it no longer fits, so the leftover headroom ends up below the
+    /// smallest chunk. A single message can only grow memory by
+    /// `(capacity - usage) / scheduler_cores`, hence the first chunk is well
+    /// below the capacity.
+    const FILLER_CHUNKS: [u64; 4] = [GIB, 64 * MIB, MIB, WASM_PAGE_SIZE];
+
+    /// A transaction that arrives when the subnet is out of memory must leave
+    /// no trace.
+    ///
+    /// The ledger applies a transaction synchronously, so a trap while applying
+    /// it — here because the ledger cannot allocate the memory its first block
+    /// needs — discards the whole message: the caller gets an error, and no
+    /// block, balance or supply change is committed.
+    ///
+    /// This is the counterpart to the archiving atomicity test: a failure
+    /// *before* the ledger's first await is atomic, whereas one after it is
+    /// not, which is why archiving must not be awaited before replying.
+    ///
+    /// Note what it takes to get here. A full subnet is not by itself enough to
+    /// make a transaction fail: the ledger allocates in large chunks and serves
+    /// most transactions out of memory it already holds. This test relies on a
+    /// freshly installed ledger, whose first transaction has to allocate the
+    /// memory for its block log.
+    pub fn test_transfer_when_subnet_is_out_of_memory<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        get_blocks_fn: fn(
+            &StateMachine,
+            CanisterId,
+            u64,
+            usize,
+        ) -> archiving::GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        let p1 = PrincipalId::new_user_test_id(1);
+
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                SubnetConfig::new(SubnetType::Application),
+                HypervisorConfig {
+                    subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY),
+                    subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY),
+                    // Memory held back for response callbacks. At the mainnet
+                    // value it would exceed the scaled-down capacity.
+                    subnet_memory_reservation: NumBytes::new(0),
+                    ..HypervisorConfig::default()
+                },
+            )))
+            .build();
+
+        // A ledger with no initial balances has no blocks yet, so its first
+        // transaction is also its first allocation.
+        let ledger_id = env
+            .install_canister_with_cycles(
+                ledger_wasm,
+                Encode!(&encode_init_args(init_args(vec![]))).unwrap(),
+                None,
+                Cycles::new(100_000_000_000_000),
+            )
+            .expect("failed to install the ledger");
+        assert_eq!(get_blocks_fn(&env, ledger_id, 0, 1).chain_length, 0);
+
+        // Fill the subnet. The filler only grows logical stable memory, which
+        // it never writes to, so this costs no host storage.
+        let filler = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                None,
+                Cycles::new(100_000_000_000_000_000),
+            )
+            .expect("failed to install the filler canister");
+        for chunk in FILLER_CHUNKS {
+            while grow_filler(&env, filler, chunk / WASM_PAGE_SIZE) {}
+        }
+
+        // The mint has to allocate, and cannot.
+        let mint_result = env.execute_ingress_as(
+            PrincipalId(MINTER.owner),
+            ledger_id,
+            "icrc1_transfer",
+            archiving::encode_transfer_args(MINTER, p1.0, 10_000_000),
+        );
+        let err = mint_result.expect_err("the mint should have failed on a full subnet");
+        println!("mint on a full subnet failed with `{err}`");
+        assert_eq!(
+            get_blocks_fn(&env, ledger_id, 0, 1).chain_length,
+            0,
+            "the ledger rejected the mint with `{err}` but recorded a block anyway"
+        );
+        assert_eq!(
+            balance_of(&env, ledger_id, p1.0),
+            0,
+            "the ledger rejected the mint with `{err}` but minted funds anyway"
+        );
+        assert_eq!(
+            total_supply(&env, ledger_id),
+            0,
+            "the ledger rejected the mint with `{err}` but changed the total supply anyway"
+        );
+
+        // Give the memory back: the very same mint now succeeds, which shows
+        // the ledger was only held up by the subnet being full and that the
+        // failed attempt left it in a usable state.
+        env.uninstall_code(filler)
+            .expect("failed to uninstall the filler canister");
+        env.execute_ingress_as(
+            PrincipalId(MINTER.owner),
+            ledger_id,
+            "icrc1_transfer",
+            archiving::encode_transfer_args(MINTER, p1.0, 10_000_000),
+        )
+        .expect("the mint should succeed once the subnet has memory again");
+        assert_eq!(get_blocks_fn(&env, ledger_id, 0, 1).chain_length, 1);
+        assert_eq!(balance_of(&env, ledger_id, p1.0), 10_000_000);
+    }
+
+    /// Grows the filler's logical stable memory, returning whether it fit.
+    fn grow_filler(env: &StateMachine, filler: CanisterId, pages: u64) -> bool {
+        let reply = env
+            .execute_ingress(
+                filler,
+                "update",
+                wasm().stable64_grow(pages).reply_int64().build(),
+            )
+            .expect("failed to call the filler canister");
+        u64::from_le_bytes(reply.bytes()[..8].try_into().unwrap()) != u64::MAX
     }
 }
 

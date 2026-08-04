@@ -555,6 +555,15 @@ fn test_get_blocks_returns_multiple_archive_callbacks() {
 }
 
 #[test]
+fn test_transfer_when_subnet_is_out_of_memory() {
+    ic_ledger_suite_state_machine_tests::subnet_memory::test_transfer_when_subnet_is_out_of_memory(
+        ledger_wasm(),
+        encode_init_args,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
 fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
     ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles(
         ledger_wasm(),
