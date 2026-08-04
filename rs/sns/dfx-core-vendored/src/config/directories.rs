@@ -26,9 +26,9 @@ pub fn get_shared_network_data_directory(network: &str) -> Result<PathBuf, GetUs
         .join(network))
 }
 
-/// Returns the user's dfx config directory. Usually `~/.config/dfx`: see
-/// `get_user_dfx_config_dir_with_override` for the exact rule, including the
-/// `DFX_CONFIG_ROOT` override and the Windows-specific location.
+/// Usually `~/.config/dfx`: see `get_user_dfx_config_dir_with_override` for
+/// the exact rule, including the `DFX_CONFIG_ROOT` override and the
+/// Windows-specific location.
 pub fn get_user_dfx_config_dir() -> Result<PathBuf, ConfigError> {
     let config_root = DFX_CONFIG_ROOT.lock().unwrap().clone();
     get_user_dfx_config_dir_with_override(config_root.as_deref().map(Path::new))

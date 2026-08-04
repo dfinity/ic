@@ -47,6 +47,50 @@ fn project_dfx_json_with_its_own_local_network_takes_precedence() {
 }
 
 #[test]
+fn non_string_bind_in_project_dfx_json_is_an_error() {
+    // Step 1: Prepare the world.
+    let project_dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project_dir.path().join("dfx.json"),
+        r#"{"networks": {"local": {"bind": 42}}}"#,
+    )
+    .unwrap();
+
+    // Step 2: Run the code under test.
+    let result = resolve_local_network_with(project_dir.path(), None);
+
+    // Step 3: Verify result(s).
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, NetworkResolutionError::LoadProjectDfxJsonFailed(_)),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn non_string_bind_in_shared_networks_json_is_an_error() {
+    // Step 1: Prepare the world.
+    let project_dir = tempfile::tempdir().unwrap();
+    std::fs::write(project_dir.path().join("dfx.json"), r#"{"canisters": {}}"#).unwrap();
+
+    let config_root = tempfile::tempdir().unwrap();
+    write_shared_networks_json(config_root.path(), r#"{"local": {"bind": 42}}"#);
+
+    // Step 2: Run the code under test.
+    let result = resolve_local_network_with(project_dir.path(), Some(config_root.path()));
+
+    // Step 3: Verify result(s).
+    let err = result.unwrap_err();
+    assert!(
+        matches!(
+            err,
+            NetworkResolutionError::LoadSharedNetworksConfigFailed(_)
+        ),
+        "{err:?}"
+    );
+}
+
+#[test]
 fn shared_network_without_local_entry_uses_default_shared_address() {
     // Step 1: Prepare the world.
     //
