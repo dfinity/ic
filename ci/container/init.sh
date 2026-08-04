@@ -37,4 +37,10 @@ if [ ! -d /tmp/zig-cache ]; then
     sudo chown "$(id -u)":"$(id -g)" /tmp/zig-cache
 fi
 
+# Installs rustc and friends (collectively, they form a "toolchain"). The
+# version of Rust is determined by the /ic/rust-toolchain.toml (and of course,
+# the target platform is this one, x86-64 + Linux). Installing pre-emptively
+# here avoids the rust-analyzer VS Code extension failing.
+rustup toolchain install --no-self-update 2>/dev/null || true
+
 exec "$@"
