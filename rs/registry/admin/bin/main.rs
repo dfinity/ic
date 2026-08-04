@@ -1570,11 +1570,7 @@ fn assemble_canister_upgrade_options(
         return None;
     }
 
-    let skip_pre_upgrade = if skip_pre_upgrade {
-        Some(true)
-    } else {
-        None
-    };
+    let skip_pre_upgrade = if skip_pre_upgrade { Some(true) } else { None };
 
     let wasm_memory_persistence = wasm_memory_persistence.map(|wasm_memory_persistence| {
         WasmMemoryPersistenceProto::from(&wasm_memory_persistence) as i32
