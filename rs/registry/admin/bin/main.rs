@@ -1556,7 +1556,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
 }
 
 /// Constructs a CanisterUpgradeOptions from its constituents.
-/// 
+///
 /// (Presumably, the pieces were passed via CLI flags.)
 ///
 /// Returns None if neither flag was passed.
