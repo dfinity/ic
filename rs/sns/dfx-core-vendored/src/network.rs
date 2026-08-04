@@ -162,9 +162,8 @@ pub fn resolve_network(network_name: &str) -> Result<NetworkDescriptor, NetworkR
 fn resolve_local_network() -> Result<NetworkDescriptor, NetworkResolutionError> {
     let working_directory = std::env::current_dir()
         .map_err(NetworkResolutionError::DetermineCurrentWorkingDirFailed)?;
-    let dfx_config_root = DFX_CONFIG_ROOT.lock().unwrap().clone();
-    let dfx_config_root = dfx_config_root.as_deref().map(Path::new);
-    resolve_local_network_with(&working_directory, dfx_config_root)
+    let dfx_config_root = DFX_CONFIG_ROOT.lock().unwrap().clone().map(PathBuf::from);
+    resolve_local_network_with(&working_directory, dfx_config_root.as_deref())
 }
 
 /// Does the actual work of [`resolve_local_network`], but takes the working
@@ -213,10 +212,10 @@ fn resolve_local_network_with(
 /// network descriptor for networks actually present in the project's `dfx.json`.
 ///
 /// Returns `Err` if the nearest `dfx.json` exists, but cannot be read or
-/// parsed as JSON -- including a "bind" value that is present but not a
-/// string, which fails that same parse. Unlike "no dfx.json" or "dfx.json has
-/// no local network" (both legitimate, and treated as `None`), these are all
-/// real problems with the user's project.
+/// parsed as JSON. A "bind" value that is present but not a string fails
+/// that same parse, so it returns `Err` too. Unlike "no dfx.json" or
+/// "dfx.json has no local network" (both legitimate, and treated as
+/// `None`), these are all real problems with the user's project.
 fn find_project_local_network(
     working_directory: &Path,
 ) -> Result<Option<(PathBuf, String)>, NetworkResolutionError> {
@@ -309,7 +308,7 @@ fn load_shared_networks_config(
     if !networks_json.is_file() {
         // No networks.json: use the default. Mirrors dfx-core's
         // `NetworksConfig::new`, which only defaults when the file doesn't
-        // exist -- if it exists but can't be read or parsed, that's an Err
+        // exist. If it exists but can't be read or parsed, that's an Err
         // instead (see `LoadConfigFromFileFailed` below).
         return Ok(SharedNetworksJson::new());
     }
