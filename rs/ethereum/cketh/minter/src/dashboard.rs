@@ -361,6 +361,13 @@ impl DashboardTemplate {
                         created_at: Some(req.created_at),
                     }
                 }
+                WithdrawalRequest::SweeperFunding(req) => DashboardWithdrawalRequest {
+                    cketh_ledger_burn_index: req.ledger_burn_index,
+                    destination: req.destination,
+                    value: req.withdrawal_amount.into(),
+                    token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
+                    created_at: Some(req.created_at),
+                },
             })
             .collect();
         withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.cketh_ledger_burn_index));

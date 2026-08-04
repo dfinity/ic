@@ -570,6 +570,16 @@ type Event = record {
             from_subaccount : opt blob;
             created_at: opt nat64;
         };
+        // The minter burned ckETH from its fee subaccount to prepay gas for sweeping,
+        // and is sending that ETH to its dedicated sweeper address.
+        AcceptedSweeperFundingRequest : record {
+            withdrawal_amount : nat;
+            destination : text;
+            ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
+            created_at: nat64;
+        };
         CreatedTransaction : record {
             withdrawal_id : nat;
             transaction : UnsignedTransaction;
