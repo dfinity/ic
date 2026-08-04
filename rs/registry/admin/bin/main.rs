@@ -1455,7 +1455,7 @@ struct ProposeToChangeNnsCanisterCmd {
 
     #[clap(long)]
     /// Whether to skip the canister's pre_upgrade hook. Only valid when mode is upgrade.
-    skip_pre_upgrade: Option<bool>,
+    skip_pre_upgrade: bool,
 
     #[clap(long)]
     /// Whether to retain (keep) or drop (replace) the canister's main memory
@@ -1559,14 +1559,22 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
 ///
 /// (Presumably, the pieces were passed via CLI flags.)
 ///
-/// Returns None if neither flag was passed.
+/// Returns None if skip_pre_upgrade is false and wasm_memory_persistence is
+/// None, i.e. there is nothing to say.
 fn assemble_canister_upgrade_options(
-    skip_pre_upgrade: Option<bool>,
+    skip_pre_upgrade: bool,
     wasm_memory_persistence: Option<WasmMemoryPersistence>,
 ) -> Option<GovernanceCanisterUpgradeOptions> {
-    if skip_pre_upgrade.is_none() && wasm_memory_persistence.is_none() {
+    let has_option = skip_pre_upgrade || wasm_memory_persistence.is_some();
+    if !has_option {
         return None;
     }
+
+    let skip_pre_upgrade = if skip_pre_upgrade {
+        Some(true)
+    } else {
+        None
+    };
 
     let wasm_memory_persistence = wasm_memory_persistence.map(|wasm_memory_persistence| {
         WasmMemoryPersistenceProto::from(&wasm_memory_persistence) as i32
