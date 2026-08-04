@@ -153,8 +153,8 @@ pub(crate) fn gossip_usage_fee(
 // =============================== Consensus fee ===============================
 
 /// The consensus fee for putting `response_bytes` many response bytes into a
-/// block on a subnet of size `subnet_size`.
-fn consensus_fee(response_bytes: u128, subnet_size: NumberOfNodes) -> Cycles {
+/// block on a subnet of size `subnet_size`, i.e. `N * (10 * N + 600) * response_bytes`.
+pub fn consensus_fee(response_bytes: u128, subnet_size: NumberOfNodes) -> Cycles {
     let n = subnet_size.get() as u128;
     Cycles::from(
         (CONSENSUS_PER_NODE_BYTE_FEE * n + CONSENSUS_BYTE_FEE)
