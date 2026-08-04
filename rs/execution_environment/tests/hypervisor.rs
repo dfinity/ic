@@ -9398,21 +9398,28 @@ fn assert_cost_http_request_v2(
     outcall_type: Option<CostHttpRequestOutcallType>,
     replication_kind: ReplicationKind,
 ) {
+    assert_cost_http_request_v2_params(
+        CostHttpRequestV2Params {
+            request_bytes: 1000,
+            http_roundtrip_time_ms: 2_000,
+            raw_response_bytes: 1_000_000,
+            transformed_response_bytes: 800_000,
+            transform_instructions: 500_000_000,
+            outcall_type,
+        },
+        replication_kind,
+    );
+}
+
+/// Asks a canister for the cost of the HTTP outcall described by `params` via
+/// `ic0.cost_http_request_v2` and asserts that it matches the cost of the same
+/// outcall with the given `replication_kind`.
+fn assert_cost_http_request_v2_params(
+    params: CostHttpRequestV2Params,
+    replication_kind: ReplicationKind,
+) {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let request_bytes = 1000;
-    let http_roundtrip_time_ms = 2_000;
-    let raw_response_bytes = 1_000_000;
-    let transformed_response_bytes = 800_000;
-    let transform_instructions = 500_000_000;
-    let params = CostHttpRequestV2Params {
-        request_bytes,
-        http_roundtrip_time_ms,
-        raw_response_bytes,
-        transformed_response_bytes,
-        transform_instructions,
-        outcall_type,
-    };
     let params_blob = Encode!(&params).unwrap();
 
     let payload = wasm()
@@ -9422,11 +9429,11 @@ fn assert_cost_http_request_v2(
         .build();
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test.cycles_account_manager().http_request_fee_v2(
-        request_bytes.into(),
-        Duration::from_millis(http_roundtrip_time_ms),
-        raw_response_bytes.into(),
-        transform_instructions.into(),
-        transformed_response_bytes.into(),
+        params.request_bytes.into(),
+        Duration::from_millis(params.http_roundtrip_time_ms),
+        params.raw_response_bytes.into(),
+        params.transform_instructions.into(),
+        params.transformed_response_bytes.into(),
         replication_kind,
         test.get_own_subnet_cycles_config(),
     );
@@ -9480,6 +9487,35 @@ fn invoke_cost_http_request_v2_flexible_without_counts_uses_the_defaults() {
     assert_cost_http_request_v2(
         Some(CostHttpRequestOutcallType::Flexible(None)),
         ReplicationKind::default_flexible(NumberOfNodes::from(subnet_size as u32)),
+    );
+}
+
+#[test]
+fn cost_http_request_v2_accepts_maximal_params() {
+    // The largest params a caller can send: every value at its maximum, with the
+    // `outcall_type` variant that encodes largest. This is exactly
+    // `MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE` bytes, so it has to pass the size check
+    // and decode within the skipping quota rather than being rejected as too large.
+    assert_cost_http_request_v2_params(
+        CostHttpRequestV2Params {
+            request_bytes: u64::MAX,
+            http_roundtrip_time_ms: u64::MAX,
+            raw_response_bytes: u64::MAX,
+            transformed_response_bytes: u64::MAX,
+            transform_instructions: u64::MAX,
+            outcall_type: Some(CostHttpRequestOutcallType::Flexible(Some(
+                ReplicationCounts {
+                    total_requests: u32::MAX,
+                    min_responses: u32::MAX,
+                    max_responses: u32::MAX,
+                },
+            ))),
+        },
+        ReplicationKind::Flexible {
+            total_requests: u32::MAX,
+            min_responses: u32::MAX,
+            max_responses: u32::MAX,
+        },
     );
 }
 

@@ -2006,17 +2006,14 @@ struct CostHttpRequestV2Params {
     outcall_type: Option<CostHttpRequestOutcallType>,
 }
 
-/// The replication of the outcall to be priced. The payloads of the two
-/// non-flexible variants are `reserved` (rather than `null`) so that they can be
-/// given a meaning later on without breaking callers.
+/// The replication of the HTTP outcall to be priced.
 #[derive(CandidType, Deserialize)]
 enum CostHttpRequestOutcallType {
     #[serde(rename = "fully_replicated")]
     FullyReplicated(candid::Reserved),
     #[serde(rename = "non_replicated")]
     NonReplicated(candid::Reserved),
-    /// A flexible outcall with the given response counts; absent counts are the
-    /// defaults a `flexible_http_request` without a `replication` field gets.
+    /// `None` defaults to n, (2 * n) / 3 + 1, n
     #[serde(rename = "flexible")]
     Flexible(Option<ReplicationCounts>),
 }
@@ -2044,10 +2041,7 @@ impl CostHttpRequestV2Params {
 const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 144;
 
 /// How much work decoding [`CostHttpRequestV2Params`] may spend skipping values it
-/// has no type for — i.e. the `reserved` payload of an `outcall_type` variant — in
-/// Candid's decoding cost units. Skipping an empty payload is within this quota,
-/// while anything larger (in particular a payload that is cheap to encode but
-/// expensive to skip) is rejected.
+/// has no type for — i.e. the `reserved` payload of an `outcall_type` variant.
 const MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA: usize = 1;
 
 impl SystemApi for SystemApiImpl {

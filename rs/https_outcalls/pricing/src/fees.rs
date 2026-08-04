@@ -209,7 +209,6 @@ pub fn total_fee(
 /// resource usage costs beyond its up-front [`base_fee`]: the per-replica fee of
 /// every replica attempting it, plus the consensus fee of delivering the responses.
 ///
-///
 /// This is the part of the price that the per-replica allowances have to cover.
 fn usage_fee(
     replication_kind: ReplicationKind,
@@ -582,6 +581,46 @@ mod tests {
         assert_eq!(
             fee.real(),
             Cycles::new(31_551_000 + 3 * (USAGE_FEE + 50 * 500 * 13) + 19_388_070 + 1_638_000)
+        );
+    }
+
+    /// [`total_fee`] of the largest outcall a canister can ask the price of: every
+    /// byte and instruction count at `u64::MAX`, every response count at `u32::MAX`.
+    fn total_fee_of_maximal_params(subnet_size: usize) -> Cycles {
+        total_fee(
+            NumBytes::from(u64::MAX),
+            Duration::from_millis(u64::MAX),
+            NumBytes::from(u64::MAX),
+            NumInstructions::from(u64::MAX),
+            NumBytes::from(u64::MAX),
+            ReplicationKind::Flexible {
+                total_requests: u32::MAX,
+                min_responses: u32::MAX,
+                max_responses: u32::MAX,
+            },
+            CyclesAccountManagerSubnetConfig::new(
+                subnet_size,
+                CanisterCyclesCostSchedule::Normal,
+                13,
+            ),
+        )
+        .real()
+    }
+
+    #[test]
+    fn total_fee_of_maximal_params_saturates_instead_of_overflowing() {
+        // The cost doesn't overflow on realistic subnet sizes
+        for subnet_size in [0, 1, 13, 40, 1_000] {
+            let fee = total_fee_of_maximal_params(subnet_size);
+            assert!(
+                fee < Cycles::new(u128::MAX),
+                "subnet size {subnet_size}: price saturated at {fee}"
+            );
+        }
+        // The cost saturates at the maximum value
+        assert_eq!(
+            total_fee_of_maximal_params(u32::MAX as usize),
+            Cycles::new(u128::MAX)
         );
     }
 
