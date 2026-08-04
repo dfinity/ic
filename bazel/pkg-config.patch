@@ -20,6 +20,8 @@
 # `print_system_cflags` intentionally stays true: without
 # PKG_CONFIG_ALLOW_SYSTEM_CFLAGS, pkg-config would also filter the system
 # `-I` dirs that bindgen needs.
+#
+# See: https://github.com/hermeticbuild/hermetic-llvm/issues/697
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
