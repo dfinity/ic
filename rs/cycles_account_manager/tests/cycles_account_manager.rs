@@ -872,7 +872,7 @@ fn cycles_withdraw_for_execution() {
         CompoundCycles::<Instructions>::new(Cycles::from(initial_amount / 2), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -885,7 +885,7 @@ fn cycles_withdraw_for_execution() {
     assert_eq!(system_state.balance(), initial_cycles - amount.real());
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -915,7 +915,7 @@ fn cycles_withdraw_for_execution() {
     );
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -948,7 +948,7 @@ fn cycles_withdraw_for_execution() {
     // no more cycles can be withdrawn, the rest is reserved for storage
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -960,7 +960,7 @@ fn cycles_withdraw_for_execution() {
     );
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -972,7 +972,7 @@ fn cycles_withdraw_for_execution() {
     );
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -984,7 +984,7 @@ fn cycles_withdraw_for_execution() {
     );
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -1038,7 +1038,7 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
         CompoundCycles::<Instructions>::new(Cycles::from(initial_amount / 2), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -1241,10 +1241,16 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
         .build();
     system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
-    cam.consume_with_threshold(
+    cam.consume_cycles_for_final_instructions(
         &mut system_state,
+        NumBytes::from(0),
+        MessageMemoryUsage::ZERO,
         CompoundCycles::<Instructions>::new(Cycles::new(2_000_000), cost_schedule),
-        Cycles::new(0),
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
         false,
     )
     .unwrap();

@@ -109,6 +109,14 @@ pub trait CyclesUseCaseKind: Copy + Clone + Debug {
 /// i.e. the ones that are prepaid and expected to be refunded if not fully consumed.
 pub trait CyclesUseCaseRefundableKind: CyclesUseCaseKind {}
 
+/// Marker trait to identify which use cases of `CyclesUseCase` are non-refundable,
+/// i.e. the ones that are charged directly, without a prepayment that would later
+/// be refunded via a call to `SystemState::refund_cycles`.
+///
+/// This trait is disjoint from `CyclesUseCaseRefundableKind`: every use case
+/// implements exactly one of the two.
+pub trait CyclesUseCaseNonRefundableKind: CyclesUseCaseKind {}
+
 /*
  * Empty structs are added for each use case to act like tags that can be used
  * to allow the compiler to enforce type-safe operations on `CompoundCycles`
@@ -125,6 +133,8 @@ impl CyclesUseCaseKind for Memory {
     }
 }
 
+impl CyclesUseCaseNonRefundableKind for Memory {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct ComputeAllocation;
 
@@ -134,6 +144,8 @@ impl CyclesUseCaseKind for ComputeAllocation {
     }
 }
 
+impl CyclesUseCaseNonRefundableKind for ComputeAllocation {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct IngressInduction;
 
@@ -142,6 +154,8 @@ impl CyclesUseCaseKind for IngressInduction {
         CyclesUseCase::IngressInduction
     }
 }
+
+impl CyclesUseCaseNonRefundableKind for IngressInduction {}
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct Instructions;
@@ -174,6 +188,8 @@ impl CyclesUseCaseKind for Uninstall {
     }
 }
 
+impl CyclesUseCaseNonRefundableKind for Uninstall {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct CanisterCreation;
 
@@ -182,6 +198,8 @@ impl CyclesUseCaseKind for CanisterCreation {
         CyclesUseCase::CanisterCreation
     }
 }
+
+impl CyclesUseCaseNonRefundableKind for CanisterCreation {}
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct ECDSAOutcalls;
@@ -192,6 +210,8 @@ impl CyclesUseCaseKind for ECDSAOutcalls {
     }
 }
 
+impl CyclesUseCaseNonRefundableKind for ECDSAOutcalls {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct HTTPOutcalls;
 
@@ -200,6 +220,8 @@ impl CyclesUseCaseKind for HTTPOutcalls {
         CyclesUseCase::HTTPOutcalls
     }
 }
+
+impl CyclesUseCaseNonRefundableKind for HTTPOutcalls {}
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct DeletedCanisters;
@@ -210,6 +232,8 @@ impl CyclesUseCaseKind for DeletedCanisters {
     }
 }
 
+impl CyclesUseCaseNonRefundableKind for DeletedCanisters {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct BurnedCycles;
 
@@ -218,6 +242,8 @@ impl CyclesUseCaseKind for BurnedCycles {
         CyclesUseCase::BurnedCycles
     }
 }
+
+impl CyclesUseCaseNonRefundableKind for BurnedCycles {}
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct SchnorrOutcalls;
@@ -228,6 +254,8 @@ impl CyclesUseCaseKind for SchnorrOutcalls {
     }
 }
 
+impl CyclesUseCaseNonRefundableKind for SchnorrOutcalls {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct VetKd;
 
@@ -237,6 +265,8 @@ impl CyclesUseCaseKind for VetKd {
     }
 }
 
+impl CyclesUseCaseNonRefundableKind for VetKd {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct DroppedMessages;
 
@@ -245,3 +275,5 @@ impl CyclesUseCaseKind for DroppedMessages {
         CyclesUseCase::DroppedMessages
     }
 }
+
+impl CyclesUseCaseNonRefundableKind for DroppedMessages {}
