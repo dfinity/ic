@@ -523,9 +523,12 @@ impl BlockMaker {
         }
     }
 
-    /// Returns the registry version received from the NNS some specified amount of
-    /// time ago. If the parent's context references higher version which is already
-    /// available locally, we use that version.
+    /// Returns the registry version received from the NNS some specified amount of time ago. If the
+    /// parent's context references higher version which is already available locally, we use that
+    /// version.
+    /// If a subnet split is in progress, we "freeze" the registry version at the last version that
+    /// does not contain the split, until we reach the next summary block, at which point we bump
+    /// the registry version to the scheduled version of the split.
     pub(crate) fn get_stable_registry_version(
         &self,
         parent: &Block,
