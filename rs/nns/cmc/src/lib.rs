@@ -1,10 +1,9 @@
-#![allow(deprecated)]
 pub use ic_management_canister_types::CanisterSettings;
 
 use candid::{CandidType, Nat};
-use ic_cdk::api::{
-    call::{CallResult, RejectionCode},
-    msg_caller,
+use ic_cdk::{
+    api::msg_caller,
+    call::{Call, Error as IcCdkCallError, RejectCode},
 };
 use std::time::{Duration, SystemTime};
 
@@ -66,29 +65,53 @@ pub fn caller() -> PrincipalId {
     PrincipalId::from(msg_caller())
 }
 
+/// Translates a failed call into the `(reject code, message)` pair that [`call_protobuf`]
+/// and this canister's error messages report.
+pub fn map_call_error(err: IcCdkCallError) -> (i32, String) {
+    match err {
+        IcCdkCallError::CallRejected(rejected) => (
+            rejected.raw_reject_code() as i32,
+            rejected.reject_message().to_string(),
+        ),
+        // A response that cannot be decoded means the callee misbehaved.
+        IcCdkCallError::CandidDecodeFailed(err) => {
+            (RejectCode::CanisterError as i32, err.to_string())
+        }
+        // The call never left this canister, so it may well succeed if retried.
+        err => (RejectCode::SysTransient as i32, err.to_string()),
+    }
+}
+
+/// A Protobuf codec failure is not a reject, so no `RejectCode` really describes it.
+/// `SysUnknown` has the same numeric value (6) as the `RejectionCode::Unknown` that this
+/// used to report, so callers that log the code observe no change.
+const PROTOBUF_CODEC_FAILURE_CODE: i32 = RejectCode::SysUnknown as i32;
+
 // Duplicating some functionality that is no longer available
 // after migration to ic_cdk
 pub async fn call_protobuf<Arg, Res>(
     canister_id: CanisterId,
     method_name: &str,
     arg: Arg,
-) -> CallResult<Res>
+) -> Result<Res, (i32, String)>
 where
     Arg: ToProto,
     Res: ToProto,
 {
     let bytes = ProtoBuf::new(arg)
         .into_bytes()
-        .map_err(|e| (RejectionCode::Unknown, e.to_string()))?;
+        .map_err(|e| (PROTOBUF_CODEC_FAILURE_CODE, e.to_string()))?;
 
-    let res: CallResult<Vec<u8>> =
-        ic_cdk::api::call::call_raw(canister_id.get().0, method_name, bytes.as_slice(), 0).await;
+    let response = Call::unbounded_wait(canister_id.get().0, method_name)
+        .take_raw_args(bytes)
+        .await
+        .map_err(|err| map_call_error(err.into()))?;
 
-    res.and_then(|bytes| {
-        Ok(ProtoBuf::<Res>::from_bytes(bytes)
-            .map_err(|e| (RejectionCode::Unknown, e.to_string()))?
-            .into_inner())
-    })
+    let res = ProtoBuf::<Res>::from_bytes(response.into_bytes())
+        .map_err(|e| (PROTOBUF_CODEC_FAILURE_CODE, e.to_string()))?
+        .into_inner();
+
+    Ok(res)
 }
 
 pub fn now_system_time() -> SystemTime {
