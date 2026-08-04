@@ -16,9 +16,10 @@ cc_library(
     name = "libsystemd",
     includes = ["include"],
     # The host libsystemd.so is built against the host glibc, which is newer
-    # than the glibc 2.31 the zig toolchains target. zig 0.15's lld checks the
-    # undefined *versioned* symbol references of every shared library against
-    # the target glibc stubs, so it rejects the ones added after 2.31 (e.g.
+    # than the glibc our hermetic toolchain targets. lld (default
+    # --no-allow-shlib-undefined for executables) checks the undefined
+    # *versioned* symbol references of every shared library against the target
+    # glibc stubs, so it rejects the ones added after the target version (e.g.
     # `dlopen@GLIBC_2.34`). This library is system-provided: those symbols are
     # resolved by the host glibc at runtime, so don't reject them at link time.
     linkopts = ["-Wl,--allow-shlib-undefined"],
