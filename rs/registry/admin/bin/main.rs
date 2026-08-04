@@ -1526,6 +1526,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             canister_id,
             wasm_module,
             arg,
+            canister_upgrade_options: None,
         };
 
         ProposalActionRequest::InstallCode(install_code)
