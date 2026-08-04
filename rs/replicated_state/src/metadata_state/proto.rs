@@ -14,7 +14,7 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
-use ic_types::{AccumulatedPriority, ExecutionRound, subnet_id_try_from_protobuf};
+use ic_types::{AccumulatedPriority, ExecutionRound, Height, subnet_id_try_from_protobuf};
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
@@ -481,7 +481,48 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     last_full_execution_round: priority.last_full_execution_round.get(),
                 })
                 .collect(),
+            upgrade_state: Some((&item.upgrade_state).into()),
         }
+    }
+}
+
+impl From<&UpgradeState> for pb_metadata::UpgradeState {
+    fn from(item: &UpgradeState) -> Self {
+        Self {
+            requested: item
+                .requested
+                .iter()
+                .map(|(node, height)| pb_metadata::upgrade_state::RequestedEntry {
+                    node: Some(node_id_into_protobuf(*node)),
+                    request_height: height.get(),
+                })
+                .collect(),
+            authorized: item
+                .authorized
+                .iter()
+                .map(|node| node_id_into_protobuf(*node))
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::UpgradeState> for UpgradeState {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_metadata::UpgradeState) -> Result<Self, Self::Error> {
+        let mut requested = BTreeMap::new();
+        for entry in item.requested {
+            let node = node_id_try_from_option(entry.node)?;
+            requested.insert(node, Height::from(entry.request_height));
+        }
+        let mut authorized = BTreeSet::new();
+        for node in item.authorized {
+            authorized.insert(node_id_try_from_option(Some(node))?);
+        }
+        Ok(UpgradeState {
+            requested,
+            authorized,
+        })
     }
 }
 
@@ -650,7 +691,11 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             },
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
-            upgrade_state: Default::default(),
+            upgrade_state: item
+                .upgrade_state
+                .map(UpgradeState::try_from)
+                .transpose()?
+                .unwrap_or_default(),
         })
     }
 }

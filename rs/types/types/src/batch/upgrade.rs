@@ -1,91 +1,72 @@
-//! Protobuf (de)serialization for the Phase-2 [`UpgradePayload`] carried in a
-//! block's [`crate::batch::BatchPayload`].
+//! Protobuf (de)serialization for the Phase-2 upgrade payload section carried
+//! in a block's [`crate::batch::BatchPayload`].
 //!
-//! Unlike the chain-key payload (a list of length-delimited messages), the
-//! upgrade payload is a single protobuf message, so it is encoded with
-//! [`prost::Message::encode`] and decoded with [`prost::Message::decode`].
+//! The upgrade section is a stream of length-delimited protobuf messages
+//! (one per [`UpgradePermitAction`]), following the same pattern as the chain-key
+//! and canister-http sections. This allows incremental size-limiting: actions
+//! that don't fit within `max_size` are silently dropped by
+//! [`iterator_to_bytes`].
 
 use ic_base_types::NumBytes;
 use ic_protobuf::{
     proxy::ProxyDecodeError,
     types::v1::{
-        UpgradePayloadAuthorizeProto, UpgradePayloadContentProto, UpgradePayloadProto,
-        UpgradePayloadRequestProto, UpgradePayloadReturnProto,
+        UpgradePayloadContentProto,
         upgrade_payload_content_proto::Content as UpgradePayloadContentProtoContent,
     },
 };
-use prost::Message;
 
 use crate::{
     Height,
-    consensus::upgrade::{UpgradePayload, UpgradePayloadContent, UpgradePermitShares},
+    consensus::upgrade::UpgradePermitAction,
 };
+use super::{iterator_to_bytes, slice_to_messages};
 
-/// Serializes an [`UpgradePayload`] to its protobuf encoding. Returns empty
-/// bytes if the encoded payload would exceed `max_size`.
-pub fn upgrade_payload_to_bytes(payload: UpgradePayload, max_size: NumBytes) -> Vec<u8> {
-    let proto = UpgradePayloadProto::from(payload);
-    let encoded_len = proto.encoded_len();
-    if encoded_len > max_size.get() as usize {
-        return Vec::new();
-    }
-    let mut bytes = Vec::with_capacity(encoded_len);
-    proto
-        .encode(&mut bytes)
-        .expect("encoding into Vec<u8> is infallible");
-    bytes
+/// Serializes a list of [`UpgradePermitAction`]s to a length-delimited protobuf
+/// stream, respecting the `max_size` budget. Actions that don't fit are
+/// silently dropped.
+pub fn upgrade_payload_to_bytes(actions: Vec<UpgradePermitAction>, max_size: NumBytes) -> Vec<u8> {
+    let message_iterator = actions.into_iter().map(UpgradePayloadContentProto::from);
+    iterator_to_bytes(message_iterator, max_size)
 }
 
-/// Deserializes an [`UpgradePayload`] from its protobuf encoding.
-pub fn bytes_to_upgrade_payload(data: &[u8]) -> Result<UpgradePayload, ProxyDecodeError> {
-    let proto = UpgradePayloadProto::decode(data).map_err(ProxyDecodeError::DecodeError)?;
-    UpgradePayload::try_from(proto)
+/// Deserializes a length-delimited protobuf stream into a list of
+/// [`UpgradePermitAction`]s. An empty byte slice yields an empty list.
+pub fn bytes_to_upgrade_payload(data: &[u8]) -> Result<Vec<UpgradePermitAction>, ProxyDecodeError> {
+    let messages: Vec<UpgradePayloadContentProto> =
+        slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?;
+    messages.into_iter().map(UpgradePermitAction::try_from).collect()
 }
 
-impl From<UpgradePayload> for UpgradePayloadProto {
-    fn from(payload: UpgradePayload) -> Self {
-        Self {
-            content: payload.content.map(UpgradePayloadContentProto::from),
-        }
-    }
-}
-
-impl TryFrom<UpgradePayloadProto> for UpgradePayload {
-    type Error = ProxyDecodeError;
-
-    fn try_from(proto: UpgradePayloadProto) -> Result<Self, Self::Error> {
-        Ok(Self {
-            content: proto
-                .content
-                .map(UpgradePayloadContent::try_from)
-                .transpose()?,
-        })
-    }
-}
-
-impl From<UpgradePayloadContent> for UpgradePayloadContentProto {
-    fn from(content: UpgradePayloadContent) -> Self {
-        let proto_content = match content {
-            UpgradePayloadContent::Request { node, request_height } => {
-                UpgradePayloadContentProtoContent::Request(UpgradePayloadRequestProto {
-                    node: Some(crate::node_id_into_protobuf(node)),
-                    request_height: request_height.get(),
-                })
+impl From<UpgradePermitAction> for UpgradePayloadContentProto {
+    fn from(action: UpgradePermitAction) -> Self {
+        let proto_content = match action {
+            UpgradePermitAction::Request { node, request_height } => {
+                UpgradePayloadContentProtoContent::Request(
+                    ic_protobuf::types::v1::UpgradePayloadRequestProto {
+                        node: Some(crate::node_id_into_protobuf(node)),
+                        request_height: request_height.get(),
+                    },
+                )
             }
-            UpgradePayloadContent::Authorize(shares) => {
-                UpgradePayloadContentProtoContent::Authorize(UpgradePayloadAuthorizeProto {
-                    node: Some(crate::node_id_into_protobuf(shares.node)),
-                    shares: shares
-                        .shares
-                        .into_iter()
-                        .map(ic_protobuf::types::v1::UpgradePermitAuthShare::from)
-                        .collect(),
-                })
+            UpgradePermitAction::Authorize(shares) => {
+                UpgradePayloadContentProtoContent::Authorize(
+                    ic_protobuf::types::v1::UpgradePayloadAuthorizeProto {
+                        node: Some(crate::node_id_into_protobuf(shares.node)),
+                        shares: shares
+                            .shares
+                            .into_iter()
+                            .map(ic_protobuf::types::v1::UpgradePermitAuthShare::from)
+                            .collect(),
+                    },
+                )
             }
-            UpgradePayloadContent::Return { node } => {
-                UpgradePayloadContentProtoContent::ReturnVal(UpgradePayloadReturnProto {
-                    node: Some(crate::node_id_into_protobuf(node)),
-                })
+            UpgradePermitAction::Return { node } => {
+                UpgradePayloadContentProtoContent::ReturnVal(
+                    ic_protobuf::types::v1::UpgradePayloadReturnProto {
+                        node: Some(crate::node_id_into_protobuf(node)),
+                    },
+                )
             }
         };
         Self {
@@ -94,7 +75,7 @@ impl From<UpgradePayloadContent> for UpgradePayloadContentProto {
     }
 }
 
-impl TryFrom<UpgradePayloadContentProto> for UpgradePayloadContent {
+impl TryFrom<UpgradePayloadContentProto> for UpgradePermitAction {
     type Error = ProxyDecodeError;
 
     fn try_from(proto: UpgradePayloadContentProto) -> Result<Self, Self::Error> {
@@ -102,14 +83,12 @@ impl TryFrom<UpgradePayloadContentProto> for UpgradePayloadContent {
             "UpgradePayloadContentProto::content",
         ))?;
         Ok(match content {
-            UpgradePayloadContentProtoContent::Request(request) => {
-                UpgradePayloadContent::Request {
-                    node: crate::node_id_try_from_option(request.node)?,
-                    request_height: Height::new(request.request_height),
-                }
-            }
+            UpgradePayloadContentProtoContent::Request(request) => UpgradePermitAction::Request {
+                node: crate::node_id_try_from_option(request.node)?,
+                request_height: Height::new(request.request_height),
+            },
             UpgradePayloadContentProtoContent::Authorize(authorize) => {
-                UpgradePayloadContent::Authorize(UpgradePermitShares {
+                UpgradePermitAction::Authorize(crate::consensus::upgrade::UpgradePermitShares {
                     node: crate::node_id_try_from_option(authorize.node)?,
                     shares: authorize
                         .shares
@@ -118,11 +97,9 @@ impl TryFrom<UpgradePayloadContentProto> for UpgradePayloadContent {
                         .collect::<Result<_, _>>()?,
                 })
             }
-            UpgradePayloadContentProtoContent::ReturnVal(return_val) => {
-                UpgradePayloadContent::Return {
-                    node: crate::node_id_try_from_option(return_val.node)?,
-                }
-            }
+            UpgradePayloadContentProtoContent::ReturnVal(return_val) => UpgradePermitAction::Return {
+                node: crate::node_id_try_from_option(return_val.node)?,
+            },
         })
     }
 }
@@ -140,45 +117,67 @@ mod tests {
 
     #[test]
     fn test_round_trip_request() {
-        let payload = UpgradePayload {
-            content: Some(UpgradePayloadContent::Request {
-                node: node(3),
-                request_height: Height::new(42),
-            }),
-        };
-        let bytes = upgrade_payload_to_bytes(payload.clone(), NumBytes::new(u64::MAX));
+        let actions = vec![UpgradePermitAction::Request {
+            node: node(3),
+            request_height: Height::new(42),
+        }];
+        let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
         let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert_eq!(payload, decoded);
+        assert_eq!(actions, decoded);
     }
 
     #[test]
     fn test_round_trip_authorize() {
-        let payload = UpgradePayload {
-            content: Some(UpgradePayloadContent::Authorize(UpgradePermitShares {
+        let actions = vec![UpgradePermitAction::Authorize(
+            crate::consensus::upgrade::UpgradePermitShares {
                 node: node(5),
                 shares: vec![],
-            })),
-        };
-        let bytes = upgrade_payload_to_bytes(payload.clone(), NumBytes::new(u64::MAX));
+            },
+        )];
+        let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
         let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert_eq!(payload, decoded);
+        assert_eq!(actions, decoded);
     }
 
     #[test]
     fn test_round_trip_return() {
-        let payload = UpgradePayload {
-            content: Some(UpgradePayloadContent::Return { node: node(7) }),
-        };
-        let bytes = upgrade_payload_to_bytes(payload.clone(), NumBytes::new(u64::MAX));
+        let actions = vec![UpgradePermitAction::Return { node: node(7) }];
+        let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
         let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert_eq!(payload, decoded);
+        assert_eq!(actions, decoded);
     }
 
     #[test]
     fn test_round_trip_empty() {
-        let payload = UpgradePayload::default();
-        let bytes = upgrade_payload_to_bytes(payload.clone(), NumBytes::new(u64::MAX));
+        let bytes = upgrade_payload_to_bytes(vec![], NumBytes::new(u64::MAX));
+        assert!(bytes.is_empty());
         let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert_eq!(payload, decoded);
+        assert!(decoded.is_empty());
+    }
+
+    #[test]
+    fn test_round_trip_multiple_actions() {
+        let actions = vec![
+            UpgradePermitAction::Request {
+                node: node(1),
+                request_height: Height::new(10),
+            },
+            UpgradePermitAction::Authorize(crate::consensus::upgrade::UpgradePermitShares {
+                node: node(2),
+                shares: vec![],
+            }),
+            UpgradePermitAction::Return { node: node(3) },
+        ];
+        let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
+        let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
+        assert_eq!(actions, decoded);
+    }
+
+    #[test]
+    fn test_max_size_drops_overflow() {
+        // With max_size = 0, no actions should be encoded.
+        let actions = vec![UpgradePermitAction::Return { node: node(1) }];
+        let bytes = upgrade_payload_to_bytes(actions, NumBytes::new(0));
+        assert!(bytes.is_empty());
     }
 }

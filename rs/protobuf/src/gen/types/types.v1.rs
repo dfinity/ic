@@ -1760,11 +1760,6 @@ pub struct StrippedConsensusMessageId {
     pub unstripped_id: ::core::option::Option<ConsensusMessageId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UpgradePayloadProto {
-    #[prost(message, optional, tag = "1")]
-    pub content: ::core::option::Option<UpgradePayloadContentProto>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpgradePayloadContentProto {
     #[prost(oneof = "upgrade_payload_content_proto::Content", tags = "1, 2, 3")]
     pub content: ::core::option::Option<upgrade_payload_content_proto::Content>,

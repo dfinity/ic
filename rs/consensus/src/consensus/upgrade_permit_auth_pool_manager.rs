@@ -17,18 +17,16 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use ic_artifact_pool::upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer};
-use ic_interfaces::upgrade_permit_auth::{
-    UpgradePermitAuthChangeAction, UpgradePermitAuthChangeSet, UpgradePermitAuthPool as _,
-};
+use ic_interfaces::upgrade_permit_auth::{UpgradePermitAuthChangeAction, UpgradePermitAuthChangeSet, UpgradePermitAuthPool as _, UpgradePermitAuthPool};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::consensus::{
     UpgradePermitAuthorizationContent, UpgradePermitAuthorizationShare,
-    upgrade::{REQUEST_TIMEOUT_BLOCKS, UpgradePayloadContent},
+    upgrade::UpgradePermitAction,
 };
+use ic_replicated_state::metadata_state::REQUEST_TIMEOUT_BLOCKS;
 use ic_types::batch::bytes_to_upgrade_payload;
 use ic_types::{Height, NodeId};
 use num_traits::SaturatingSub;
@@ -92,12 +90,13 @@ impl UpgradePermitAuthPoolManager {
             if upgrade_bytes.is_empty() {
                 continue;
             }
-            let Ok(upgrade_payload) = bytes_to_upgrade_payload(upgrade_bytes) else {
+            let Ok(actions) = bytes_to_upgrade_payload(upgrade_bytes) else {
                 continue;
             };
-            if let Some(UpgradePayloadContent::Request { node, request_height }) =
-                upgrade_payload.content
-            {
+            for action in actions {
+                let UpgradePermitAction::Request { node, request_height } = action else {
+                    continue;
+                };
                 let key = (node, request_height);
                 if signed.contains(&key) {
                     continue;
@@ -110,17 +109,13 @@ impl UpgradePermitAuthPoolManager {
                 // block containing the request, so that verifiers resolve the
                 // signer's public key at the same version.
                 let registry_version = block.context.registry_version;
-                match self
-                    .crypto
-                    .sign(&content, self.node_id, registry_version)
-                {
+                match self.crypto.sign(&content, self.node_id, registry_version) {
                     Ok(signature) => {
                         signed.insert(key);
                         info!(
                             self.logger,
                             "permit_auth: signed share for node {:?} at height {:?}",
-                            node,
-                            request_height
+                            node, request_height
                         );
                         change_set.push(UpgradePermitAuthChangeAction::AddToValidated(
                             UpgradePermitAuthorizationShare { content, signature },
@@ -130,8 +125,7 @@ impl UpgradePermitAuthPoolManager {
                         warn!(
                             self.logger,
                             "permit_auth: failed to sign share for node {:?}: {:?}",
-                            node,
-                            e
+                            node, e
                         );
                     }
                 }
@@ -143,12 +137,21 @@ impl UpgradePermitAuthPoolManager {
     /// Validate gossiped shares found in the unvalidated section of the pool.
     fn validate_gossiped_shares(
         &self,
-        pool: &UpgradePermitAuthPoolImpl,
+        pool: &dyn UpgradePermitAuthPool,
     ) -> UpgradePermitAuthChangeSet {
         let chain = self.consensus_pool_cache.finalized_chain();
         let unvalidated: Vec<UpgradePermitAuthorizationShare> =
             pool.get_unvalidated_shares().cloned().collect();
         let mut change_set = vec![];
+
+        if !unvalidated.is_empty() {
+            info!(
+                self.logger,
+                "permit_auth: validating {} gossiped shares, validated pool has {}",
+                unvalidated.len(),
+                pool.get_validated_shares().count()
+            );
+        }
 
         for share in unvalidated {
             // The public key used to verify the share is bound to the registry
@@ -198,7 +201,7 @@ impl UpgradePermitAuthPoolManager {
     /// Purge shares (both validated and unvalidated) whose request has expired
     /// (the request height is older than `REQUEST_TIMEOUT_BLOCKS` below the
     /// current finalized height).
-    fn purge_expired_shares(&self, pool: &UpgradePermitAuthPoolImpl) -> UpgradePermitAuthChangeSet {
+    fn purge_expired_shares(&self, pool: &dyn UpgradePermitAuthPool) -> UpgradePermitAuthChangeSet {
         let current_height = self.consensus_pool_cache.finalized_chain().tip().height;
         let expiry_threshold = current_height.saturating_sub(&REQUEST_TIMEOUT_BLOCKS);
 
@@ -221,10 +224,10 @@ impl UpgradePermitAuthPoolManager {
     }
 }
 
-impl PoolMutationsProducer<UpgradePermitAuthPoolImpl> for UpgradePermitAuthPoolManager {
+impl <T: UpgradePermitAuthPool> PoolMutationsProducer<T> for UpgradePermitAuthPoolManager {
     type Mutations = UpgradePermitAuthChangeSet;
 
-    fn on_state_change(&self, pool: &UpgradePermitAuthPoolImpl) -> Self::Mutations {
+    fn on_state_change(&self, pool: &T) -> Self::Mutations {
         let mut change_set = self.sign_shares_for_new_requests();
         change_set.extend(self.validate_gossiped_shares(pool));
         change_set.extend(self.purge_expired_shares(pool));

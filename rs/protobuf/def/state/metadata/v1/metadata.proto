@@ -429,6 +429,19 @@ message SystemMetadata {
   registry.subnet.v1.ResourceLimits own_resource_limits = 24;
 
   repeated CanisterPriority subnet_schedule = 25;
+
+  // Phase-2 upgrade permit state: tracks outstanding reboot requests and
+  // authorized nodes for the rolling GuestOS reboot.
+  UpgradeState upgrade_state = 27;
+}
+
+message UpgradeState {
+  message RequestedEntry {
+    types.v1.NodeId node = 1;
+    uint64 request_height = 2;
+  }
+  repeated RequestedEntry requested = 1;
+  repeated types.v1.NodeId authorized = 2;
 }
 
 message CanisterPriority {

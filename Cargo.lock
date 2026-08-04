@@ -11137,6 +11137,7 @@ dependencies = [
  "messaging-test",
  "messaging-test-utils",
  "mockall 0.13.1",
+ "num-traits",
  "pretty_assertions",
  "prometheus",
  "proptest",

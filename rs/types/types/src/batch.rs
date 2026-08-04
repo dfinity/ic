@@ -46,7 +46,7 @@ use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
-use crate::consensus::upgrade::UpgradePayload;
+use crate::consensus::upgrade::UpgradePermitAction;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BatchContent {
@@ -174,8 +174,6 @@ pub struct BatchPayload {
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
     pub chain_key: Vec<u8>,
-    /// Phase-2 upgrade section: CBOR-encoded [`UpgradePayload`] (statuses delta
-    /// + permits). Empty outside Phase 2.
     pub upgrade: Vec<u8>,
 }
 
@@ -202,7 +200,7 @@ pub struct BatchMessages {
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
     pub query_stats: Option<QueryStatsPayload>,
-    pub upgrade: UpgradePayload,
+    pub upgrade: Vec<UpgradePermitAction>,
 }
 
 /// Error type that can occur during an `BatchPayload::into_messages` call
@@ -229,7 +227,7 @@ impl BatchPayload {
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
             upgrade: if self.upgrade.is_empty() {
-                UpgradePayload::default()
+                Vec::new()
             } else {
                 bytes_to_upgrade_payload(&self.upgrade)
                     .map_err(IntoMessagesError::UpgradePayloadError)?

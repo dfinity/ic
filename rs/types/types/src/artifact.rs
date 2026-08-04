@@ -266,7 +266,7 @@ impl HasHeight for UpgradePermitAuthId {
 }
 
 impl IdentifiableArtifact for UpgradePermitAuthorizationShare {
-    const NAME: &'static str = "upgrade_permit_auth";
+    const NAME: &'static str = "upgrade";
     type Id = UpgradePermitAuthId;
     fn id(&self) -> Self::Id {
         UpgradePermitAuthId {

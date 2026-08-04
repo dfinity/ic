@@ -286,10 +286,6 @@ message StrippedConsensusMessageId {
   ConsensusMessageId unstripped_id = 1;
 }
 
-message UpgradePayloadProto {
-  UpgradePayloadContentProto content = 1;
-}
-
 message UpgradePayloadContentProto {
   oneof content {
     UpgradePayloadRequestProto request = 1;

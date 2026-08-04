@@ -20,12 +20,12 @@ use ic_interfaces::upgrade_permit_auth::UpgradePermitAuthPool;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::upgrade::{
-    UpgradePayload, UpgradePayloadContent, UpgradePermitShares, UpgradeState,
-};
+use ic_types::consensus::upgrade::{UpgradePermitAction, UpgradePermitShares};
+use ic_replicated_state::metadata_state::{REQUEST_TIMEOUT_BLOCKS, UpgradeState};
 use ic_types::consensus::UpgradePermitAuthorizationContent;
 use ic_types::batch::{bytes_to_upgrade_payload, upgrade_payload_to_bytes};
 use ic_types::{Height, NodeId, NumBytes};
+use num_traits::SaturatingSub;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
 
@@ -87,8 +87,9 @@ impl UpgradePayloadBuilder {
             .map(|s| s.get_ref().system_metadata().upgrade_state.clone())
             .unwrap_or_default();
         for pp in past_payloads {
-            if let Ok(payload) = bytes_to_upgrade_payload(pp.payload) {
-                state.apply(&payload, pp.height, members);
+            if let Ok(actions) = bytes_to_upgrade_payload(pp.payload) {
+                let prune_below = pp.height.saturating_sub(&REQUEST_TIMEOUT_BLOCKS);
+                state.apply(&actions, prune_below, members);
             }
         }
         state
@@ -118,7 +119,8 @@ impl UpgradePayloadBuilder {
         // Deduplicate shares by signer; each share must reference the same
         // (node, request_height) and the signer must be a current member.
         let registry_version = proposal_context.validation_context.registry_version;
-        let mut seen_signers: BTreeMap<NodeId, ()> = BTreeMap::new();
+
+        let mut signers: BTreeMap<NodeId, ()> = BTreeMap::new();
         for share in &shares.shares {
             // The share content must match the authorized node + its request height.
             if share.content.node != shares.node
@@ -165,13 +167,13 @@ impl UpgradePayloadBuilder {
                     },
                 ));
             }
-            seen_signers.insert(share.signature.signer, ());
+            signers.insert(share.signature.signer, ());
         }
 
-        if seen_signers.len() < threshold {
+        if signers.len() < threshold {
             return Err(invalid_upgrade(
                 InvalidUpgradePayloadReason::AuthorizeInsufficientShares {
-                    collected: seen_signers.len(),
+                    collected: signers.len(),
                     threshold,
                 },
             ));
@@ -199,78 +201,105 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
 
         let upgrade_state = self.read_upgrade_state(past_payloads, &members);
 
-        // Determine the content for this block.
-        let content = if upgrade_state.authorized.contains(&self.node_id) {
-            // Already authorized: if we've rebooted (versions match), return.
-            if !needs_reboot {
-                Some(UpgradePayloadContent::Return { node: self.node_id })
-            } else {
-                None // still rebooting
-            }
-        } else if needs_reboot
+        info!(
+            self.logger,
+            "upgrade_payload: height={} needs_reboot={} authorized_contains_self={} authorized={:?} requested={:?} slots={}",
+            height,
+            needs_reboot,
+            upgrade_state.authorized.contains(&self.node_id),
+            upgrade_state.authorized,
+            upgrade_state.requested,
+            upgrade_state.slots_in_use(),
+        );
+
+        // Collect upgrade actions for this block. A block maker may produce
+        // multiple actions — e.g. Request for itself and Authorize for another
+        // node — as long as each is independently valid.
+        let mut actions = vec![];
+
+        // 1. If we are authorized and have finished rebooting, Return.
+        if upgrade_state.authorized.contains(&self.node_id) && !needs_reboot {
+            actions.push(UpgradePermitAction::Return { node: self.node_id });
+        }
+
+        // 2. If we need a reboot and slots are available, Request.
+        if needs_reboot
+            && !upgrade_state.authorized.contains(&self.node_id)
             && upgrade_state.slots_in_use() < UpgradeState::faults_tolerated(members.len())
         {
-            // Phase 2 needed and slots available → request.
-            Some(UpgradePayloadContent::Request {
+            actions.push(UpgradePermitAction::Request {
                 node: self.node_id,
                 request_height: height,
-            })
-        } else {
-            // Not requesting ourselves: check if we can authorize someone else.
+            });
+        }
+
+        // 3. Authorize all outstanding requests that have collected enough
+        //    shares, up to the slot capacity.
+        {
             let n = members.len();
             let p = UpgradeState::faults_tolerated(n);
             let threshold = n.saturating_sub(p);
             let pool = self.pool.read().unwrap();
-            let collected: std::collections::BTreeMap<
-                (NodeId, ic_types::Height),
-                std::collections::BTreeMap<NodeId, ic_types::consensus::UpgradePermitAuthorizationShare>,
-            > = {
-                let mut map = std::collections::BTreeMap::new();
+            let validated_count = pool.get_validated_shares().count();
+            let collected = {
+                let mut map: BTreeMap<
+                    (NodeId, ic_types::Height),
+                    BTreeMap<NodeId, ic_types::consensus::UpgradePermitAuthorizationShare>,
+                > = BTreeMap::new();
                 for share in pool.get_validated_shares() {
                     let key = (share.content.node, share.content.request_height);
                     map.entry(key)
-                        .or_insert_with(std::collections::BTreeMap::new)
+                        .or_default()
                         .insert(share.signature.signer, share.clone());
                 }
                 map
             };
-            // Find the first outstanding request with enough shares that hasn't
-            // been authorized yet.
-            upgrade_state
-                .requested
-                .iter()
-                .find_map(|(&req_node, &req_height)| {
-                    if upgrade_state.authorized.contains(&req_node) {
-                        return None;
-                    }
-                    let shares_map = collected.get(&(req_node, req_height))?;
+            info!(
+                self.logger,
+                "upgrade_payload: authorize check: n={} threshold={} validated_shares={} collected_keys={:?} requested={:?}",
+                n,
+                threshold,
+                validated_count,
+                collected.keys().collect::<Vec<_>>(),
+                upgrade_state.requested,
+            );
+            // Limit the number of simultaneously authorized (rebooting) nodes
+            // to P. Authorizing a node transitions it from `requested` to
+            // `authorized`, so we count authorized nodes plus any Authorize
+            // actions already added in this block.
+            let mut authorized_after = upgrade_state.authorized.len();
+            for (&req_node, &req_height) in &upgrade_state.requested {
+                if authorized_after >= p {
+                    break;
+                }
+                if upgrade_state.authorized.contains(&req_node) {
+                    continue;
+                }
+                if let Some(shares_map) = collected.get(&(req_node, req_height)) {
                     if shares_map.len() >= threshold {
-                        Some(UpgradePayloadContent::Authorize(
-                            ic_types::consensus::upgrade::UpgradePermitShares {
-                                node: req_node,
-                                shares: shares_map.values().cloned().collect(),
-                            },
-                        ))
-                    } else {
-                        None
+                        actions.push(UpgradePermitAction::Authorize(UpgradePermitShares {
+                            node: req_node,
+                            shares: shares_map.values().cloned().collect(),
+                        }));
+                        authorized_after += 1;
                     }
-                })
-        };
+                }
+            }
+        }
 
         info!(
             self.logger,
-            "upgrade_payload: height={} n={} p={} slots={} requested={} authorized={} content={:?}",
+            "upgrade_payload: height={} n={} p={} slots={} requested={} authorized={} actions={:?}",
             height,
             members.len(),
             UpgradeState::faults_tolerated(members.len()),
             upgrade_state.slots_in_use(),
             upgrade_state.requested.len(),
             upgrade_state.authorized.len(),
-            content,
+            actions,
         );
 
-        let payload = UpgradePayload { content };
-        upgrade_payload_to_bytes(payload, max_size)
+        upgrade_payload_to_bytes(actions, max_size)
     }
 
     fn validate_payload(
@@ -283,15 +312,15 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         if payload.is_empty() {
             return Ok(());
         }
-        let parsed = bytes_to_upgrade_payload(payload)
+        let actions = bytes_to_upgrade_payload(payload)
             .map_err(|e| invalid_upgrade(InvalidUpgradePayloadReason::DecodeFailed(e.to_string())))?;
 
         let members = self.read_node_ids();
-        let upgrade_state = self.read_upgrade_state(past_payloads, &members);
+        let mut upgrade_state = self.read_upgrade_state(past_payloads, &members);
 
-        if let Some(content) = &parsed.content {
-            match content {
-                UpgradePayloadContent::Request { node, .. } => {
+        for action in &actions {
+            match action {
+                UpgradePermitAction::Request { node, request_height } => {
                     if *node != proposal_context.proposer {
                         return Err(invalid_upgrade(
                             InvalidUpgradePayloadReason::RequestNodeMismatch {
@@ -309,8 +338,13 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                             },
                         ));
                     }
+                    // Fold this action into the state so subsequent actions in
+                    // the same block see its effect (e.g. a Request then
+                    // Authorize for the same node).
+                    let prune_below = request_height.saturating_sub(&REQUEST_TIMEOUT_BLOCKS);
+                    upgrade_state.apply(&[action.clone()], prune_below, &members);
                 }
-                UpgradePayloadContent::Return { node } => {
+                UpgradePermitAction::Return { node } => {
                     if *node != proposal_context.proposer {
                         return Err(invalid_upgrade(
                             InvalidUpgradePayloadReason::ReturnNodeMismatch {
@@ -320,13 +354,19 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                         ));
                     }
                 }
-                UpgradePayloadContent::Authorize(shares) => {
-                    return self.validate_authorize(
+                UpgradePermitAction::Authorize(shares) => {
+                    self.validate_authorize(
                         shares,
                         &upgrade_state,
                         &members,
                         proposal_context,
-                    );
+                    )?;
+                    // Fold so subsequent actions see the updated state.
+                    let prune_below = proposal_context
+                        .validation_context
+                        .certified_height
+                        .saturating_sub(&REQUEST_TIMEOUT_BLOCKS);
+                    upgrade_state.apply(&[action.clone()], prune_below, &members);
                 }
             }
         }

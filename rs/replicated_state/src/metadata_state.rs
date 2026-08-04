@@ -24,7 +24,7 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
+    CountBytes, CryptoHashOfPartialState, Height, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
@@ -50,10 +50,77 @@ use std::{
     mem::size_of,
     sync::Arc,
 };
-use ic_types::consensus::upgrade::UpgradeState;
+use ic_types::consensus::upgrade::UpgradePermitAction;
 
 /// `BTreeMap` of streams by destination `SubnetId`.
 pub type StreamMap = BTreeMap<SubnetId, Stream>;
+
+/// If a permit Request is not Authorize'd within this many blocks, it expires
+/// and the slot is freed for the next block maker to issue a new Request.
+pub const REQUEST_TIMEOUT_BLOCKS: Height = Height::new(20);
+
+/// The agreed Phase-2 upgrade state, stored in `SystemMetadata`.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct UpgradeState {
+    /// Nodes that have requested a reboot permit but not yet been authorized,
+    /// mapped to the height at which they requested (for timeout expiry).
+    pub requested: BTreeMap<NodeId, Height>,
+    /// Nodes that have been authorized to reboot (collected enough shares).
+    pub authorized: BTreeSet<NodeId>,
+}
+
+impl UpgradeState {
+    /// Apply a block's upgrade actions to this state. Also prunes expired
+    /// requests and permits for nodes that left the membership.
+    ///
+    /// `prune_below_height` is the oldest request height still considered
+    /// valid; requests made below this height are expired and removed.
+    /// `members` is the current subnet membership.
+    pub fn apply(
+        &mut self,
+        actions: &[UpgradePermitAction],
+        prune_below_height: Height,
+        members: &BTreeSet<NodeId>,
+    ) {
+        // Apply each action in order.
+        for action in actions {
+            match action {
+                UpgradePermitAction::Request {
+                    node,
+                    request_height,
+                } => {
+                    self.requested.insert(*node, *request_height);
+                }
+                UpgradePermitAction::Authorize(shares) => {
+                    self.requested.remove(&shares.node);
+                    self.authorized.insert(shares.node);
+                }
+                UpgradePermitAction::Return { node } => {
+                    self.authorized.remove(node);
+                }
+            }
+        }
+
+        // Expire stale requests and prune departed members.
+        self.requested.retain(|node, req_height| {
+            *req_height >= prune_below_height && members.contains(node)
+        });
+
+        // Prune departed members.
+        self.authorized.retain(|node| members.contains(node));
+    }
+
+    /// Number of reboot slots in use: outstanding requests + authorized nodes
+    /// that haven't returned yet.
+    pub fn slots_in_use(&self) -> usize {
+        self.requested.len() + self.authorized.len()
+    }
+
+    /// The fault tolerance: `f = ⌊(N−1)/3⌋`.
+    pub fn faults_tolerated(num_members: usize) -> usize {
+        (num_members.max(1) - 1) / 3
+    }
+}
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
@@ -186,11 +253,8 @@ pub struct SystemMetadata {
     #[validate_eq(Ignore)]
     pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
 
-    /// Phase-2 upgrade state accumulator: tracks per-node GuestOS statuses and
-    /// outstanding reboot permits. Not persisted in the checkpoint protobuf
-    /// (re-derived from finalized blocks on replay), so excluded from
-    /// checkpoint validation.
-    #[validate_eq(Ignore)]
+    /// Phase-2 upgrade state accumulator: tracks outstanding reboot requests
+    /// and authorized nodes for the rolling GuestOS reboot.
     pub upgrade_state: UpgradeState,
 }
 

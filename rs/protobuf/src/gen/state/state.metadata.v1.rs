@@ -626,6 +626,27 @@ pub struct SystemMetadata {
         ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
     #[prost(message, repeated, tag = "25")]
     pub subnet_schedule: ::prost::alloc::vec::Vec<CanisterPriority>,
+    /// Phase-2 upgrade permit state: tracks outstanding reboot requests and
+    /// authorized nodes for the rolling GuestOS reboot.
+    #[prost(message, optional, tag = "27")]
+    pub upgrade_state: ::core::option::Option<UpgradeState>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradeState {
+    #[prost(message, repeated, tag = "1")]
+    pub requested: ::prost::alloc::vec::Vec<upgrade_state::RequestedEntry>,
+    #[prost(message, repeated, tag = "2")]
+    pub authorized: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+}
+/// Nested message and enum types in `UpgradeState`.
+pub mod upgrade_state {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+    pub struct RequestedEntry {
+        #[prost(message, optional, tag = "1")]
+        pub node: ::core::option::Option<super::super::super::super::types::v1::NodeId>,
+        #[prost(uint64, tag = "2")]
+        pub request_height: u64,
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CanisterPriority {
