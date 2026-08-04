@@ -1938,7 +1938,7 @@ dependencies = [
  "hex",
  "lalrpop 0.20.2",
  "lalrpop-util 0.20.2",
- "logos 0.13.0",
+ "logos",
  "num-bigint 0.4.6",
  "pretty",
  "thiserror 1.0.69",
@@ -4200,17 +4200,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.2",
-]
-
-[[package]]
-name = "env-file-reader"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0a86dcbc0fd1a07f5c318a2215338f0c870336851e8b566ebef1576eddb3728"
-dependencies = [
- "lalrpop 0.19.12",
- "lalrpop-util 0.19.12",
- "logos 0.12.1",
 ]
 
 [[package]]
@@ -16948,28 +16937,6 @@ dependencies = [
 
 [[package]]
 name = "lalrpop"
-version = "0.19.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a1cbf952127589f2851ab2046af368fd20645491bb4b376f04b7f94d7a9837b"
-dependencies = [
- "ascii-canvas 3.0.0",
- "bit-set 0.5.3",
- "diff",
- "ena",
- "is-terminal",
- "itertools 0.10.5",
- "lalrpop-util 0.19.12",
- "petgraph 0.6.5",
- "regex",
- "regex-syntax 0.6.29",
- "string_cache",
- "term 0.7.0",
- "tiny-keccak",
- "unicode-xid",
-]
-
-[[package]]
-name = "lalrpop"
 version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55cb077ad656299f160924eb2912aa147d7339ea7d69e1b5517326fdcec3c1ca"
@@ -17009,15 +16976,6 @@ dependencies = [
  "term 1.2.1",
  "unicode-xid",
  "walkdir",
-]
-
-[[package]]
-name = "lalrpop-util"
-version = "0.19.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3c48237b9604c5a4702de6b824e02006c3214327564636aef27c1028a8fa0ed"
-dependencies = [
- "regex",
 ]
 
 [[package]]
@@ -17469,20 +17427,11 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "logos"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf8b031682c67a8e3d5446840f9573eb7fe26efe7ec8d195c9ac4c0647c502f1"
-dependencies = [
- "logos-derive 0.12.1",
-]
-
-[[package]]
-name = "logos"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c000ca4d908ff18ac99b93a062cb8958d331c3220719c52e77cb19cc6ac5d2c1"
 dependencies = [
- "logos-derive 0.13.0",
+ "logos-derive",
 ]
 
 [[package]]
@@ -17497,20 +17446,6 @@ dependencies = [
  "quote",
  "regex-syntax 0.6.29",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "logos-derive"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1d849148dbaf9661a6151d1ca82b13bb4c4c128146a88d05253b38d4e2f496c"
-dependencies = [
- "beef",
- "fnv",
- "proc-macro2",
- "quote",
- "regex-syntax 0.6.29",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -18931,7 +18866,6 @@ dependencies = [
  "config_tool",
  "config_types",
  "der",
- "env-file-reader",
  "exec",
  "guest_upgrade_server",
  "hex",
