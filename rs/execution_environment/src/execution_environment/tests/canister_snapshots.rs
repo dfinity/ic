@@ -35,11 +35,12 @@ use ic_types::{
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
 use std::borrow::Borrow;
+use std::collections::BTreeMap;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
@@ -1856,6 +1857,73 @@ fn take_canister_snapshot_charges_canister_cycles() {
         test.canister_state(canister_id).system_state.balance(),
         initial_balance - expected_charge,
     );
+}
+
+// On a free subnet the real instruction charge for `take_canister_snapshot` is
+// zero, but its nominal amount must still be recorded on both the
+// consumed-cycles gauge and the monotonic counter. Regression test that the
+// nominal amount is not dropped along the way.
+#[test]
+fn take_canister_snapshot_records_nominal_cycles_on_free_subnet() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+
+    let scheduler_config = SubnetConfig::new(SubnetType::Application).scheduler_config;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .build();
+
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
+    let instructions = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(canister_snapshot_size.get());
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(instructions, test.get_own_subnet_cycles_config());
+    // Nothing is actually withdrawn on a free subnet, but the nominal amount is
+    // what the consumed-cycles metrics account for.
+    assert_eq!(expected_charge.real(), Cycles::zero());
+    assert_ne!(expected_charge.nominal(), NominalCycles::zero());
+
+    let instruction_cycles = |test: &ExecutionTest| {
+        let canister_metrics = test
+            .canister_state(canister_id)
+            .system_state
+            .canister_metrics();
+        let instructions = |use_cases: &BTreeMap<CyclesUseCase, NominalCycles>| {
+            use_cases
+                .get(&CyclesUseCase::Instructions)
+                .cloned()
+                .unwrap_or_default()
+        };
+        (
+            instructions(canister_metrics.consumed_cycles_by_use_cases()),
+            instructions(canister_metrics.consumed_cycles_by_use_cases_as_counters()),
+        )
+    };
+
+    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    let (gauge_before, counter_before) = instruction_cycles(&test);
+
+    let args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+    test.subnet_message("take_canister_snapshot", args.encode())
+        .unwrap();
+
+    let (gauge_after, counter_after) = instruction_cycles(&test);
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance,
+    );
+    assert_eq!(gauge_after - gauge_before, expected_charge.nominal());
+    assert_eq!(counter_after - counter_before, expected_charge.nominal());
 }
 
 #[test]
