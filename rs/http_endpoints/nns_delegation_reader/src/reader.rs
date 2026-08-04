@@ -640,7 +640,7 @@ mod tests {
             builder.is_consistent_with(CanisterRangesCheck::AllSubnetRanges, |_subnet_id| Some((
                 public_key.clone(),
                 subnet_ranges(RANGES)
-            )),),
+            ))),
             Ok(true)
         );
     }
@@ -653,7 +653,7 @@ mod tests {
             builder.is_consistent_with(CanisterRangesCheck::AllSubnetRanges, |_subnet_id| Some((
                 vec![9, 9, 9],
                 subnet_ranges(RANGES)
-            )),),
+            ))),
             Ok(false)
         );
     }
