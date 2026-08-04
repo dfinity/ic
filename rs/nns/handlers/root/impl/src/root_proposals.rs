@@ -2,7 +2,7 @@
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
 use ic_cdk::call;
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallModeV2;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultFromManagementCanister,
@@ -186,7 +186,7 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
     // - That it is an upgrade (reinstall is not supported).
     if request.wasm_module.is_empty()
         || request.canister_id != GOVERNANCE_CANISTER_ID
-        || request.mode != CanisterInstallMode::Upgrade
+        || !matches!(request.mode, CanisterInstallModeV2::Upgrade(_))
     {
         let message = format!(
             "{LOG_PREFIX}Invalid proposal. Proposal must be an upgrade proposal \

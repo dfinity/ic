@@ -14,9 +14,6 @@
 # Finally ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
 #
-# For the `test` command a single `_local` system-test is re-added to smoke-test the local-backend machinery
-# whenever its Farm sibling is already selected.
-#
 # When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness.
 #
 # The script will print the bazel query to stderr which is useful for debugging:
@@ -44,10 +41,6 @@ EXCLUDED_TAGS = [
     "fi_tests_nightly",
     "nns_tests_nightly",
     "pocketic_tests_nightly",
-    # The `_local` system-tests use too many resources to run on every PR so
-    # they run in the dedicated `local-system-tests.yml` workflow instead of
-    # in the `bazel-test-all` job.
-    "local_system_test",
 ]
 
 # Return all bazel targets (//...) sans the long_tests (if --skip_long_tests is specified)
@@ -217,16 +210,6 @@ def targets(
         sys.exit(result.returncode)
 
     result_targets = result.stdout.splitlines()
-
-    # The `_local` system-tests are excluded from the inferred test targets (via
-    # the `local_system_test` tag in EXCLUDED_TAGS) and run in the dedicated
-    # `local-system-tests.yml` workflow instead. To still smoke-test the
-    # local-backend machinery, we re-add a single `_local` test, but only when
-    # its Farm sibling is already being tested so that it respects the diff-only
-    # target selection.
-    LOCAL_SMOKE_TEST_FARM_SIBLING = "//rs/tests/idx:basic_health_test"
-    if command == "test" and LOCAL_SMOKE_TEST_FARM_SIBLING in result_targets:
-        result_targets.append(f"{LOCAL_SMOKE_TEST_FARM_SIBLING}_local")
 
     # Print the targets each on their own line. When there are no targets we
     # print nothing (instead of an empty line) so the caller can detect the

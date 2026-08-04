@@ -5,24 +5,27 @@
 bazel_dep(name = "rules_rust", version = "0.71.3")
 archive_override(
     module_name = "rules_rust",
-    integrity = "sha256-h8txtdi9xcNfgjdTBYX+R9CEsxKDucJx+OPvezmkTQM=",
-    patch_strip = 1,
-    patches = [
-        # Configure per-compilation-mode strip levels, which the native
-        # `rust.toolchain` tag's flat `strip_level` string_dict cannot express
-        # (https://github.com/bazelbuild/rules_rust/issues/3730).
-        "//bazel:rules_rust_strip_level.patch",
-        # Fix cross-crate DEP_* env vars being redacted to an `${out_dir}` token
-        # that downstream crates' build scripts cannot resolve (see patch header).
-        "//bazel:rules_rust_dep_env.patch",
-    ],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.71.3/rules_rust-0.71.3.tar.gz"],
+    integrity = "sha256-5GXwZtp5VlNxMI+dolYYxhyhG5f5ReZ5qz30gAbPsrg=",
+    strip_prefix = "rules_rust-f8f382c7e351a797242ce4a92262342f8994e265",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/dfinity/rules_rust/tar.gz/f8f382c7e351a797242ce4a92262342f8994e265"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
     versions = ["1.97.1"],
+)
+
+# Strip debug_info, but preserve symbols, to fix traces. zig cc can only strip
+# everything, or nothing at all. We disable the default stripping, then patch
+# hermetic_cc_toolchain to strip only debug_info, outside of the main call to
+# zig cc.
+rust.strip_level_select(
+    dbg = "none",
+    fastbuild = "none",
+    opt = "none",
+    triples = ["x86_64-unknown-linux-gnu"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -252,7 +255,7 @@ crate.spec(
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.31",
+    version = "^0.10.34",
 )
 crate.spec(
     package = "cargo_metadata",
@@ -381,10 +384,6 @@ crate.spec(
     version = "^5.3.4",
 )
 crate.spec(
-    package = "derivative",
-    version = "^2.2",
-)
-crate.spec(
     default_features = False,
     features = ["derive"],
     package = "der",
@@ -425,11 +424,16 @@ crate.spec(
 )
 crate.spec(
     package = "educe",
-    version = "^0.4",
+    version = "^0.5",
 )
+
+# Not used directly; spec'd only to constrain the version resolved for `educe`'s
+# transitive `enum-ordinalize` -> `enum-ordinalize-derive` chain.
+# DO NOT upgrade to >=4.4.2 as it pulls in syn 3 whereas the rest of the
+# codebase uses syn 2.
 crate.spec(
-    package = "env-file-reader",
-    version = "^0.3",
+    package = "enum-ordinalize-derive",
+    version = "=4.4.1",
 )
 crate.spec(
     package = "erased-serde",
@@ -678,13 +682,10 @@ crate.spec(
 crate.spec(
     features = [
         "acme-alpn",
+        "pubsub",
     ],
     package = "ic-bn-lib",
-    version = "^0.2.3",
-)
-crate.spec(
-    package = "ic-bn-lib-common",
-    version = "^0.2.2",
+    version = "^0.5.0",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -743,19 +744,7 @@ crate.spec(
     default_features = False,
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    rev = "3e698972422be07776bf888666285b7b3f7c984e",
-)
-crate.spec(
-    package = "ic-custom-domains-backend",
-    version = "^0.2.4",
-)
-crate.spec(
-    package = "ic-custom-domains-base",
-    version = "^0.2.4",
-)
-crate.spec(
-    package = "ic-custom-domains-canister-client",
-    version = "^0.2.4",
+    rev = "3e015f17b8ad302a42fd1ac68b7b139867b71c5f",
 )
 crate.spec(
     package = "ic-http-certification",
@@ -837,7 +826,9 @@ crate.spec(
         "exe",
     ],
     package = "ic-wasm",
-    version = "^0.10.0",
+    # 0.11.1 relaxed the `thiserror` requirement to "2"; anything older forces
+    # thiserror >=2.0.19, which pulls in syn 3. See the `thiserror` spec below.
+    version = "^0.11.1",
 )
 crate.spec(
     package = "ic-xrc-types",
@@ -977,7 +968,7 @@ crate.spec(
 )
 crate.spec(
     package = "local-ip-address",
-    version = "^0.5.6",
+    version = "^0.6.13",
 )
 crate.spec(
     package = "loopdev-3",
@@ -1039,11 +1030,11 @@ crate.spec(
         "derive",
     ],
     package = "minicbor",
-    version = "^0.19.1",
+    version = "^0.22.0",
 )
 crate.spec(
     package = "minicbor-derive",
-    version = "^0.13.0",
+    version = "^0.14.0",
 )
 crate.spec(
     package = "mockall",
@@ -1499,7 +1490,7 @@ crate.spec(
 )
 crate.spec(
     package = "scraper",
-    version = "^0.17.1",
+    version = "^0.24.0",
 )
 crate.spec(
     default_features = False,
@@ -1720,8 +1711,9 @@ crate.spec(
     features = [
         "full",
     ],
+    git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
-    version = "^0.34",
+    rev = "cddf1c64011d00f36016146e8447bef99531030c",
 )
 crate.spec(
     package = "tempfile",
@@ -1739,9 +1731,12 @@ crate.spec(
     package = "tui-textarea",
     version = "^0.7",
 )
+
+# DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
+# codebase uses syn 2.
 crate.spec(
     package = "thiserror",
-    version = "^2.0.18",
+    version = "=2.0.18",
 )
 crate.spec(
     package = "thousands",
@@ -1795,7 +1790,7 @@ crate.spec(
         "json",
     ],
     package = "tokio-serde",
-    version = "^0.8",
+    version = "^0.9",
 )
 crate.spec(
     package = "tokio-socks",
@@ -1964,7 +1959,7 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-encoder",
-    version = "^0.251.0",
+    version = "^0.252.0",
 )
 crate.spec(
     default_features = False,
@@ -1972,15 +1967,15 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-smith",
-    version = "^0.251.0",
+    version = "^0.252.0",
 )
 crate.spec(
     package = "wasmparser",
-    version = "^0.251.0",
+    version = "^0.252.0",
 )
 crate.spec(
     package = "wasmprinter",
-    version = "^0.251.0",
+    version = "^0.252.0",
 )
 crate.spec(
     default_features = False,
@@ -1992,15 +1987,15 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^46.0.1",
+    version = "^47.0.3",
 )
 crate.spec(
     package = "wast",
-    version = "^251.0.0",
+    version = "^252.0.0",
 )
 crate.spec(
     package = "wat",
-    version = "~1.251.0",
+    version = "~1.252.0",
 )
 crate.spec(
     package = "webpki-roots",

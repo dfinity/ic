@@ -58,6 +58,25 @@ pub enum InvalidCanisterHttpPayloadReason {
         spent: Cycles,
         limit: Cycles,
     },
+    /// The collective initial spent cycles included in the payload do not match
+    /// the value recomputed from the request context's subnet size and the
+    /// signed per-replica receipts.
+    InitialSpentMismatch {
+        callback_id: CallbackId,
+        /// The initial spend received in the payload.
+        received: Cycles,
+        /// The initial spend the validator recomputed and expected.
+        expected: Cycles,
+    },
+    /// The collective initial spent cycles of a response exceed the collective
+    /// allowance of the replicas that contributed to it, i.e. the sum of their
+    /// per-replica allowances.
+    InitialSpentExceedsLimit {
+        callback_id: CallbackId,
+        initial_spent: Cycles,
+        per_replica_allowance: Cycles,
+        num_replicas: usize,
+    },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
     SignersNotMembers {
@@ -75,6 +94,11 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
+    /// A divergence proof contains more than one share from the same signer.
+    DivergenceDuplicateSigner {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
     /// The callback_id in a flexible response group does not match a response or proof within it.
     FlexibleCallbackIdMismatch {
         callback_id: CallbackId,

@@ -434,9 +434,11 @@ fn verify_paths(
             [b"time"] => {
                 metrics.observe_read_state_path(endpoint, "time");
             }
-            [b"canister", canister_id, b"controllers" | b"module_hash"]
-                if target == Target::Canister =>
-            {
+            [
+                b"canister",
+                canister_id,
+                b"controllers" | b"module_hash" | b"last_install_timestamp",
+            ] if target == Target::Canister => {
                 let canister_id = parse_principal_id(canister_id)?;
                 verify_principal_ids(&canister_id, &effective_principal_id)?;
                 metrics.observe_read_state_path(endpoint, "canister_info");
@@ -1309,6 +1311,11 @@ mod test {
                     canister_id.get().to_vec().into(),
                     Label::from("module_hash"),
                 ]),
+                Path::new(vec![
+                    Label::from("canister"),
+                    canister_id.get().to_vec().into(),
+                    Label::from("last_install_timestamp"),
+                ]),
                 Path::new(vec![Label::from("api_boundary_nodes")]),
                 Path::new(vec![
                     Label::from("subnet"),
@@ -1366,7 +1373,7 @@ mod test {
                 .read_state_path_type_total
                 .with_label_values(&["canister", "canister_info"])
                 .get(),
-            1
+            2
         );
         assert_eq!(
             metrics

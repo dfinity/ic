@@ -198,6 +198,20 @@ impl Replication {
             Replication::NonReplicated(_) => ReplicationKind::NonReplicated,
         }
     }
+
+    /// The number of nodes that will attempt the HTTP request. `subnet_size` is
+    /// the size of the subnet at the time the request was made.
+    ///
+    /// This is both the divisor that splits a request's `refundable_cycles` into
+    /// its `per_replica_allowance` and the number of allowances that have to be
+    /// accounted for before the request is fully settled.
+    pub fn node_count(&self, subnet_size: NumberOfNodes) -> usize {
+        match self {
+            Replication::FullyReplicated => (subnet_size.get() as usize).max(1),
+            Replication::NonReplicated(_) => 1,
+            Replication::Flexible { committee, .. } => committee.len().max(1),
+        }
+    }
 }
 
 /// The kind of replication of a request.
@@ -1046,12 +1060,18 @@ impl From<HttpMethod> for CanisterHttpMethod {
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
+    /// The total amount of cycles spent by the subnet to produce this response.
+    pub initial_spent: Cycles,
 }
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponseWithConsensus { content, proof } = &self;
-        proof.count_bytes() + content.count_bytes()
+        let CanisterHttpResponseWithConsensus {
+            content,
+            proof,
+            initial_spent,
+        } = &self;
+        proof.count_bytes() + content.count_bytes() + size_of_val(initial_spent)
     }
 }
 
