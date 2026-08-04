@@ -677,7 +677,7 @@ mod tests {
             }),
 
             // The rest of this object is not really interesting to this test.
-            // (It need to look right though to avoid triggering some other
+            // (It needs to look right though to avoid triggering some other
             // validation issue.)
             canister_id: Some(REGISTRY_CANISTER_ID.get()),
             wasm_module: Some(vec![1, 2, 3]),
