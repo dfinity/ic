@@ -384,10 +384,6 @@ crate.spec(
     version = "^5.3.4",
 )
 crate.spec(
-    package = "derivative",
-    version = "^2.2",
-)
-crate.spec(
     default_features = False,
     features = ["derive"],
     package = "der",
@@ -428,11 +424,7 @@ crate.spec(
 )
 crate.spec(
     package = "educe",
-    version = "^0.4",
-)
-crate.spec(
-    package = "env-file-reader",
-    version = "^0.3",
+    version = "^0.5",
 )
 crate.spec(
     package = "erased-serde",
@@ -965,7 +957,7 @@ crate.spec(
 )
 crate.spec(
     package = "local-ip-address",
-    version = "^0.5.6",
+    version = "^0.6.13",
 )
 crate.spec(
     package = "loopdev-3",
@@ -1027,11 +1019,11 @@ crate.spec(
         "derive",
     ],
     package = "minicbor",
-    version = "^0.19.1",
+    version = "^0.22.0",
 )
 crate.spec(
     package = "minicbor-derive",
-    version = "^0.13.0",
+    version = "^0.14.0",
 )
 crate.spec(
     package = "mockall",
@@ -1487,7 +1479,7 @@ crate.spec(
 )
 crate.spec(
     package = "scraper",
-    version = "^0.17.1",
+    version = "^0.24.0",
 )
 crate.spec(
     default_features = False,
@@ -1708,8 +1700,9 @@ crate.spec(
     features = [
         "full",
     ],
+    git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
-    version = "^0.34",
+    rev = "cddf1c64011d00f36016146e8447bef99531030c",
 )
 crate.spec(
     package = "tempfile",
@@ -1783,7 +1776,7 @@ crate.spec(
         "json",
     ],
     package = "tokio-serde",
-    version = "^0.8",
+    version = "^0.9",
 )
 crate.spec(
     package = "tokio-socks",
@@ -1952,7 +1945,7 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-encoder",
-    version = "^0.251.0",
+    version = "^0.252.0",
 )
 crate.spec(
     default_features = False,
@@ -1960,15 +1953,15 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-smith",
-    version = "^0.251.0",
+    version = "^0.252.0",
 )
 crate.spec(
     package = "wasmparser",
-    version = "^0.251.0",
+    version = "^0.252.0",
 )
 crate.spec(
     package = "wasmprinter",
-    version = "^0.251.0",
+    version = "^0.252.0",
 )
 crate.spec(
     default_features = False,
@@ -1980,15 +1973,15 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^46.0.1",
+    version = "^47.0.3",
 )
 crate.spec(
     package = "wast",
-    version = "^251.0.0",
+    version = "^252.0.0",
 )
 crate.spec(
     package = "wat",
-    version = "~1.251.0",
+    version = "~1.252.0",
 )
 crate.spec(
     package = "webpki-roots",

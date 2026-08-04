@@ -151,6 +151,8 @@ rust_test(
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz)",
         },
+        # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
+        # so we need this Namespace.so-specific execution property to open up the network on RBE:
         exec_properties = {"namespace_requires_network": "true"},
         tags = [
             "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.

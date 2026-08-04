@@ -258,8 +258,10 @@ impl CanisterHttpPayloadBuilderImpl {
                         if let Some(response) = find_fully_replicated_response(
                             grouped_shares,
                             threshold,
-                            subnet_size,
+                            request,
                             &*pool_access,
+                            &self.log,
+                            &self.metrics,
                         ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
@@ -292,8 +294,10 @@ impl CanisterHttpPayloadBuilderImpl {
                         if let Some(response) = find_non_replicated_response(
                             grouped_shares,
                             designated_node_id,
-                            subnet_size,
+                            request,
                             &*pool_access,
+                            &self.log,
+                            &self.metrics,
                         ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
@@ -500,7 +504,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
             // The collective initial spend must match the value recomputed from
             // the request context's subnet size and the signed per-replica
-            // receipts.
+            // receipts, and must stay within the signers' collective allowance.
             let expected = non_flexible_initial_spent(&response.proof, subnet_size);
             if response.initial_spent != expected {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
@@ -509,6 +513,14 @@ impl CanisterHttpPayloadBuilderImpl {
                     expected,
                 });
             }
+            utils::check_initial_spent_within_limit(
+                response.initial_spent,
+                response.proof.signatures.len(),
+                callback_id,
+                request_context,
+                None,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             // Reconstruct the per-signer shares from the response proof.
             reconstructed_shares.extend(
