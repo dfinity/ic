@@ -122,6 +122,7 @@ enum InvalidArtifactReason {
     ReplicaVersionMismatch,
     NotABlockmaker,
     RegistryVersionNotFrozenDuringSubnetSplitting {
+        subnet_split_scheduled_at: RegistryVersion,
         context_registry_version: RegistryVersion,
     },
 }
@@ -1288,10 +1289,11 @@ impl Validator {
             .map_err(ValidationFailure::SubnetSplittingStatusError)?
             {
                 subnet_splitting::Status::NotScheduled => {}
-                subnet_splitting::Status::Scheduled { .. } => {
+                subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
                     return Err(
                         InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
                             context_registry_version: proposal.context.registry_version,
+                            subnet_split_scheduled_at: scheduled_at,
                         }
                         .into(),
                     );
@@ -1992,8 +1994,12 @@ pub mod test {
     use ic_interfaces_mocks::messaging::RefMockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::subnet::v1::{
+        SubnetSplittingArgs as SubnetSplittingArgsProto, catch_up_package_contents::CupType,
+    };
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::subnet::SubnetRegistry;
+    use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         SetupInitialDkgContext, SignWithThresholdContext,
@@ -2031,6 +2037,7 @@ pub mod test {
         },
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
+        subnet_id_into_protobuf,
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use rstest::rstest;
@@ -3177,6 +3184,126 @@ pub mod test {
         next_block.content.as_mut().rank = Rank(0);
         next_block.update_content();
         next_block
+    }
+
+    /// The DKG interval length used by the subnet splitting tests below.
+    const DKG_INTERVAL_LENGTH: u64 = 9;
+
+    /// The registry version at which the subnet split is scheduled in the tests below.
+    const SUBNET_SPLIT_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
+
+    /// Schedules a subnet split at [`SUBNET_SPLIT_REGISTRY_VERSION`] by overwriting the subnet's
+    /// CUP contents record with one carrying a [`CupType::SubnetSplitting`], the way the NNS would.
+    /// Registry versions up to (and including) `latest_registry_version` are populated with subnet
+    /// records, so that blocks can reference versions above the scheduled split as well.
+    fn schedule_subnet_split(
+        data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_client: &FakeRegistryClient,
+        subnet_id: SubnetId,
+        committee: &[NodeId],
+        latest_registry_version: RegistryVersion,
+    ) {
+        assert!(latest_registry_version >= SUBNET_SPLIT_REGISTRY_VERSION);
+
+        // Keep everything but the CUP type as it is at genesis, so that the scheduled split is the
+        // only difference between the two records.
+        let mut cup_contents = registry_client
+            .get_cup_contents(subnet_id, registry_client.get_latest_version())
+            .expect("Failed to get the CUP contents")
+            .value
+            .expect("The CUP contents should be in the registry");
+        cup_contents.cup_type = Some(CupType::SubnetSplitting(SubnetSplittingArgsProto {
+            destination_subnet_id: Some(subnet_id_into_protobuf(subnet_test_id(1))),
+        }));
+
+        for version in 2..=latest_registry_version.get() {
+            add_subnet_record(
+                data_provider,
+                version,
+                subnet_id,
+                SubnetRecordBuilder::from(committee)
+                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                    .build(),
+            );
+        }
+        data_provider
+            .add(
+                &make_catch_up_package_contents_key(subnet_id),
+                SUBNET_SPLIT_REGISTRY_VERSION,
+                Some(cup_contents),
+            )
+            .expect("Failed to add the CUP contents");
+        registry_client.update_to_latest_version();
+    }
+
+    /// Until the summary block starting the split is reached, data blocks must keep their registry
+    /// version frozen *below* the version at which the split is scheduled. A data block
+    /// referencing the scheduled version, or anything above it, is invalid.
+    #[rstest]
+    #[case::below_the_scheduled_version(SUBNET_SPLIT_REGISTRY_VERSION.decrement())]
+    #[case::at_the_scheduled_version(SUBNET_SPLIT_REGISTRY_VERSION)]
+    #[case::above_the_scheduled_version(SUBNET_SPLIT_REGISTRY_VERSION.increment())]
+    fn test_data_block_during_subnet_splitting(#[case] block_registry_version: RegistryVersion) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                state_manager,
+                data_provider,
+                registry_client,
+                pool,
+                time_source,
+                replica_config,
+                ..
+            } = setup_dependencies_with_dkg_interval_length(
+                pool_config,
+                &committee,
+                DKG_INTERVAL_LENGTH,
+            );
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            schedule_subnet_split(
+                &data_provider,
+                &registry_client,
+                replica_config.subnet_id,
+                &committee,
+                SUBNET_SPLIT_REGISTRY_VERSION.increment(),
+            );
+
+            let mut test_block = make_next_block(&pool);
+            test_block.content.as_mut().context.registry_version = block_registry_version;
+            test_block.update_content();
+            assert!(
+                !test_block.content.as_ref().payload.is_summary(),
+                "expected a data block below the DKG boundary",
+            );
+
+            let context = test_block.content.as_ref().context.clone();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(context.certified_height);
+            time_source.set_time(context.time).unwrap();
+
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            if block_registry_version < SUBNET_SPLIT_REGISTRY_VERSION {
+                assert_matches!(result, Ok(()));
+            } else {
+                assert_matches!(
+                    validator.check_block_validity(&PoolReader::new(&pool), &test_block),
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
+                            context_registry_version,
+                            subnet_split_scheduled_at,
+                        }
+                    )) if context_registry_version == block_registry_version
+                        && subnet_split_scheduled_at == SUBNET_SPLIT_REGISTRY_VERSION
+                );
+            }
+        })
     }
 
     #[test]
