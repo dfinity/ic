@@ -414,3 +414,133 @@ fn transfer_reject_must_not_leave_a_committed_block() {
     }
 }
 
+
+/// Shows how narrow the post-commit window is: it needs the ledger to grow its
+/// memory, which archiving only does when it creates an archive canister.
+///
+/// A routine round hands the archive another chunk of blocks using memory the
+/// allocator already has from the previous round, so it neither grows nor
+/// traps, even under the storage pressure that breaks the creation round. Note
+/// that this is about the *ledger's* memory: the archive canister running out
+/// of memory is harmless, because it answers with a reject that the ledger
+/// handles gracefully rather than trapping on.
+///
+/// If this test ever fails, routine archiving has started to allocate as well,
+/// and the window is wider than it is assumed to be here.
+///
+/// Uses production-shaped archive options: 1000 blocks per round, and enough
+/// initial balances that the first two transfers each trigger a full round —
+/// the first creating the archive, the second appending to an archive that
+/// already holds 1000 blocks.
+#[test]
+fn routine_archiving_does_not_grow_the_ledger() {
+    const BLOCKS_PER_ROUND: usize = 1_000;
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            hypervisor_config(),
+        )))
+        .build();
+    let filler = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(canister_settings(FILLER_CYCLES).build()),
+            Cycles::new(FILLER_CYCLES),
+        )
+        .expect("failed to install the filler canister");
+    let initial_balances: Vec<_> = (0..2 * BLOCKS_PER_ROUND)
+        .map(|i| {
+            (
+                Account::from(PrincipalId::new_user_test_id(1_000 + i as u64).0),
+                Nat::from(MINT_AMOUNT),
+            )
+        })
+        .collect();
+    let ledger = env
+        .install_canister_with_cycles(
+            ledger_wasm(),
+            Encode!(&LedgerArgument::Init(InitArgs {
+                minting_account: minter().0.into(),
+                fee_collector_account: None,
+                initial_balances,
+                transfer_fee: TRANSFER_FEE.into(),
+                token_name: "Test Token".to_string(),
+                decimals: Some(8),
+                token_symbol: "XTST".to_string(),
+                metadata: vec![],
+                archive_options: ArchiveOptions {
+                    trigger_threshold: BLOCKS_PER_ROUND,
+                    num_blocks_to_archive: BLOCKS_PER_ROUND,
+                    node_max_memory_size_bytes: None,
+                    max_message_size_bytes: None,
+                    controller_id: minter(),
+                    more_controller_ids: None,
+                    cycles_for_archive_creation: Some(CYCLES_FOR_ARCHIVE_CREATION),
+                    max_transactions_per_response: None,
+                },
+                max_memo_length: None,
+                feature_flags: None,
+                index_principal: None,
+            }))
+            .unwrap(),
+            Some(canister_settings(LEDGER_RESERVED_CYCLES_LIMIT).build()),
+            Cycles::new(LEDGER_CYCLES),
+        )
+        .expect("failed to install the ledger canister");
+    grow_filler(&env, filler, FILLER_BASE_PAGES);
+
+    // First round: creates the archive and fills it with 1000 blocks. There is
+    // still memory at this point, so it succeeds.
+    let (memory_before, _) = memory_and_reservation(&env, ledger);
+    env.execute_ingress_as(minter(), ledger, "icrc1_transfer", mint_arg(MINT_AMOUNT))
+        .expect("failed to mint");
+    env.run_until_completion(200);
+    let archives = list_archives(&env, ledger);
+    assert_eq!(archives.len(), 1, "the archive was not created");
+    let (memory_after_creation, _) = memory_and_reservation(&env, ledger);
+    println!(
+        "archive creation round: {:?}, ledger memory {memory_before}->{memory_after_creation}",
+        archives[0]
+    );
+    assert!(
+        memory_after_creation > memory_before,
+        "creating the archive did not grow the ledger's memory, so the \
+         comparison below says nothing"
+    );
+
+    // Second round: appends another 1000 blocks to the archive that now holds
+    // 1000, with the subnet pushed over the reservation threshold while the
+    // ledger is doing it.
+    let chain_length_before = chain_length(&env, ledger);
+    let transfer = submit_triggering_transfer(&env, ledger, filler);
+    let (memory_after_round, _) = memory_and_reservation(&env, ledger);
+    println!(
+        "routine round: chain_length={}->{} ledger memory {memory_after_creation}->{memory_after_round} archives={:?}",
+        chain_length_before,
+        transfer.chain_length_after,
+        list_archives(&env, ledger),
+    );
+
+    assert!(
+        transfer.result.is_ok(),
+        "the routine archiving round should not have failed: {:?}",
+        transfer.result
+    );
+    assert_eq!(
+        memory_after_round, memory_after_creation,
+        "the routine archiving round grew the ledger's memory"
+    );
+    assert_eq!(
+        parse_metric(&env, ledger, "ledger_archiving_failures"),
+        0,
+        "the routine archiving round failed"
+    );
+    let archives = list_archives(&env, ledger);
+    assert_eq!(archives.len(), 1);
+    assert_eq!(
+        archives[0].block_range_end,
+        Nat::from(2 * BLOCKS_PER_ROUND as u64 - 1),
+        "the second round did not archive its blocks"
+    );
+}
