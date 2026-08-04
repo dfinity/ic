@@ -112,7 +112,9 @@ impl BudgetTracker for DarkLaunchTracker {
     }
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
-        self.real.create_payment_receipt()
+        // Return the shadow's receipt for observability.
+        // This is safe because receipts are unused under legacy pricing.
+        self.shadow.create_payment_receipt()
     }
 }
 
