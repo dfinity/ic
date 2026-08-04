@@ -299,6 +299,110 @@ mod upgrade {
     use std::str::FromStr;
 
     #[test]
+    fn should_configure_the_sweeper_funding_bounds() {
+        let mut state = initial_state();
+        let default_config = state.sweeper_funding_config.clone();
+
+        let mark = 30_000_000_000_000_000_u128; // 0.03 ETH
+        let target = 200_000_000_000_000_000_u128; // 0.2 ETH
+        state
+            .upgrade(UpgradeArg {
+                sweeper_funding_low_water_mark: Some(Nat::from(mark)),
+                sweeper_funding_target: Some(Nat::from(target)),
+                ..Default::default()
+            })
+            .expect("a target well above the mark must be accepted");
+
+        assert_eq!(state.sweeper_funding_config.low_water_mark, Wei::new(mark));
+        assert_eq!(state.sweeper_funding_config.target, Wei::new(target));
+        assert_ne!(state.sweeper_funding_config, default_config);
+    }
+
+    #[test]
+    fn should_keep_the_other_bound_when_only_one_is_given() {
+        let mut state = initial_state();
+        let original_mark = state.sweeper_funding_config.low_water_mark;
+
+        state
+            .upgrade(UpgradeArg {
+                sweeper_funding_target: Some(Nat::from(u128::from(u64::MAX))),
+                ..Default::default()
+            })
+            .expect("raising only the target must be accepted");
+
+        assert_eq!(
+            state.sweeper_funding_config.low_water_mark, original_mark,
+            "an omitted bound must not be reset"
+        );
+        assert_eq!(
+            state.sweeper_funding_config.target,
+            Wei::new(u128::from(u64::MAX))
+        );
+    }
+
+    #[test]
+    fn should_reject_a_sweeper_funding_target_below_the_low_water_mark() {
+        for (mark, target) in [(10_u64, 10_u64), (10, 9), (10, 0)] {
+            let mut state = initial_state();
+            let unchanged = state.sweeper_funding_config.clone();
+
+            assert_matches!(
+                state.upgrade(UpgradeArg {
+                    sweeper_funding_low_water_mark: Some(Nat::from(mark)),
+                    sweeper_funding_target: Some(Nat::from(target)),
+                    ..Default::default()
+                }),
+                Err(InvalidStateError::InvalidSweeperFundingConfig(_)),
+                "mark {mark} with target {target} must be rejected"
+            );
+            assert_eq!(
+                state.sweeper_funding_config, unchanged,
+                "a rejected upgrade must not partially apply the config"
+            );
+        }
+    }
+
+    #[test]
+    fn should_reject_an_install_whose_minimum_exceeds_the_default_funding_headroom() {
+        use crate::lifecycle::init::InitArg;
+        use crate::state::State;
+        use crate::test_fixtures::valid_init_arg;
+
+        let too_large = InitArg {
+            // Above the 0.08 ETH of headroom the default bounds leave.
+            minimum_withdrawal_amount: Nat::from(90_000_000_000_000_000_u128),
+            ..valid_init_arg()
+        };
+
+        assert_matches!(
+            State::try_from(too_large),
+            Err(InvalidStateError::InvalidSweeperFundingConfig(_)),
+            "the install must be refused rather than silently over-burning on every funding"
+        );
+    }
+
+    #[test]
+    fn should_reject_a_minimum_withdrawal_amount_that_exceeds_the_funding_headroom() {
+        let mut state = initial_state();
+        state
+            .upgrade(UpgradeArg {
+                sweeper_funding_low_water_mark: Some(Nat::from(20_000_000_000_000_000_u128)),
+                sweeper_funding_target: Some(Nat::from(60_000_000_000_000_000_u128)),
+                ..Default::default()
+            })
+            .expect("0.04 ETH of headroom is fine at the default minimum");
+
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                minimum_withdrawal_amount: Some(Nat::from(50_000_000_000_000_000_u128)),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidSweeperFundingConfig(_)),
+            "a minimum burn above the headroom must be rejected even when the bounds are untouched"
+        );
+    }
+
+    #[test]
     fn should_fail_when_upgrade_args_invalid() {
         let mut state = initial_state();
         assert_matches!(
@@ -669,6 +773,9 @@ prop_compose! {
         deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
         last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
         sweeper_contract_address in proptest::option::of(arb_address()),
+        sweeper_funding_bounds in proptest::option::of((0_u128..u128::MAX / 4).prop_map(|mark| {
+            (Nat::from(mark), Nat::from(mark + 1_000_000_000_000_000_000_u128))
+        })),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
@@ -679,6 +786,12 @@ prop_compose! {
             erc20_helper_contract_address: erc20_helper_contract_address.map(|addr| addr.to_string()),
             last_erc20_scraped_block_number,
             evm_rpc_id,
+            sweeper_funding_low_water_mark: sweeper_funding_bounds
+                .as_ref()
+                .map(|(mark, _target)| mark.clone()),
+            sweeper_funding_target: sweeper_funding_bounds
+                .as_ref()
+                .map(|(_mark, target)| target.clone()),
             deposit_with_subaccount_helper_contract_address: deposit_with_subaccount_helper_contract_address.map(|addr| addr.to_string()),
             last_deposit_with_subaccount_scraped_block_number,
             ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
@@ -1124,6 +1237,8 @@ fn state_equivalence() {
         deposits
     };
     let state = State {
+        sweeper_funding: Default::default(),
+        sweeper_funding_config: Default::default(),
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
@@ -1607,6 +1722,125 @@ mod eth_balance {
             receipt_succeeded,
             receipt_failed,
         }
+    }
+
+    #[test]
+    fn should_account_for_a_successful_sweeper_funding() {
+        use crate::state::transactions::SweeperFundingRequest;
+
+        let mut state = initial_state();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+        let eth_balance_before = state.eth_balance.eth_balance();
+
+        let funding = SweeperFundingRequest {
+            withdrawal_amount: Wei::new(10_000_000_000_000_000),
+            destination: "0x5353535353535353535353535353535353535353"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: crate::eth_logs::LedgerSubaccount::from_bytes(
+                crate::CKETH_FEE_SUBACCOUNT,
+            ),
+            created_at: 1699527697000000000,
+        };
+        let receipt = WithdrawalFlow {
+            tx_status: TransactionStatus::Success,
+            ..WithdrawalFlow::for_request(funding.clone())
+        }
+        .apply(&mut state);
+
+        assert_eq!(
+            state.sweeper_funding.cumulative_burned(),
+            funding.withdrawal_amount,
+            "the burn is recorded when the funding is accepted, before any ETH moves"
+        );
+        let spent = state.sweeper_funding.cumulative_spent();
+        let unspent_fee_allowance = state.eth_balance.total_unspent_tx_fees();
+        assert!(
+            unspent_fee_allowance > Wei::ZERO,
+            "test setup: the effective fee must be below the charged max fee"
+        );
+        assert_eq!(
+            spent,
+            funding
+                .withdrawal_amount
+                .checked_sub(unspent_fee_allowance)
+                .unwrap(),
+            "spend is the burn minus the fee allowance that was charged but not used"
+        );
+        assert_eq!(
+            state.sweeper_funding.burned_not_yet_spent(),
+            unspent_fee_allowance,
+            "the unused fee allowance remains prepaid and offsets the next funding"
+        );
+        assert_eq!(
+            state.eth_balance.eth_balance(),
+            eth_balance_before.checked_sub(spent).unwrap(),
+            "the ETH balance is debited by exactly what was spent"
+        );
+        assert!(
+            state.sweeper_funding.cumulative_burned() >= spent,
+            "burned must never fall below spent"
+        );
+        assert_eq!(receipt.status, TransactionStatus::Success);
+    }
+
+    #[test]
+    fn should_keep_a_failed_sweeper_funding_as_prepaid_gas() {
+        use crate::state::transactions::SweeperFundingRequest;
+
+        let mut state = initial_state();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+        let eth_balance_before = state.eth_balance.eth_balance();
+
+        let funding = SweeperFundingRequest {
+            withdrawal_amount: Wei::new(10_000_000_000_000_000),
+            destination: "0x5353535353535353535353535353535353535353"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: crate::eth_logs::LedgerSubaccount::from_bytes(
+                crate::CKETH_FEE_SUBACCOUNT,
+            ),
+            created_at: 1699527697000000000,
+        };
+        WithdrawalFlow {
+            tx_status: TransactionStatus::Failure,
+            ..WithdrawalFlow::for_request(funding.clone())
+        }
+        .apply(&mut state);
+
+        let spent = state.sweeper_funding.cumulative_spent();
+        assert_eq!(
+            state.sweeper_funding.cumulative_burned(),
+            funding.withdrawal_amount
+        );
+        assert!(
+            spent > Wei::ZERO && spent < funding.withdrawal_amount,
+            "only the wasted gas was spent, got {spent}"
+        );
+        assert_eq!(
+            state.sweeper_funding.burned_not_yet_spent(),
+            funding.withdrawal_amount.checked_sub(spent).unwrap(),
+            "the rest stays prepaid and offsets the next funding"
+        );
+        assert_eq!(
+            state.eth_balance.eth_balance(),
+            eth_balance_before.checked_sub(spent).unwrap(),
+            "only the fee left the main address, so ckETH is over-backed, never under-backed"
+        );
     }
 
     #[test]

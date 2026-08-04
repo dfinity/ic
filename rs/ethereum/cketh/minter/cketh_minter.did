@@ -151,6 +151,13 @@ type UpgradeArg = record {
 
     // Change the sweeper smart contract address.
     ethereum_sweeper_contract_address : opt text;
+
+    // Sweeper balance (in wei) below which the minter tops it up with gas for sweeping.
+    // Must stay strictly below sweeper_funding_target, otherwise funding would loop.
+    sweeper_funding_low_water_mark : opt nat;
+
+    // Sweeper balance (in wei) the minter tops up to.
+    sweeper_funding_target : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };

@@ -13,6 +13,7 @@ use crate::numeric::{
 };
 use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
+use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
@@ -32,6 +33,7 @@ pub mod audit;
 pub mod automatic_deposits;
 pub mod eth_logs_scraping;
 pub mod event;
+pub mod sweeper_funding;
 pub mod transactions;
 
 #[cfg(test)]
@@ -120,6 +122,10 @@ pub struct State {
     /// Address of the sweeper smart contract on Ethereum, which the minter
     /// delegates to when sweeping funded deposit addresses.
     pub sweeper_contract_address: Option<Address>,
+    /// Burn-first accounting for sweeper fee funding, folded from the audit events.
+    pub sweeper_funding: SweeperFundingAccounting,
+    /// When to top the sweeper address up, and to what (proposal-configurable).
+    pub sweeper_funding_config: SweeperFundingConfig,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -131,6 +137,7 @@ pub enum InvalidStateError {
     InvalidMinimumWithdrawalAmount(String),
     InvalidLastScrapedBlockNumber(String),
     InvalidLastErc20ScrapedBlockNumber(String),
+    InvalidSweeperFundingConfig(String),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -181,6 +188,16 @@ impl State {
             EthereumNetwork::Mainnet => Wei::new(2_000_000_000_000),
             EthereumNetwork::Sepolia => Wei::new(10_000_000_000),
         };
+        self.sweeper_funding_config
+            .validate(self.cketh_minimum_withdrawal_amount)
+            .map_err(|e| {
+                InvalidStateError::InvalidSweeperFundingConfig(format!(
+                    "ERROR: sweeper funding bounds are invalid for the minimum withdrawal \
+                     amount: {e:?}. Raise sweeper_funding_target (upgrade argument) so the \
+                     headroom above the low-water mark covers the minimum withdrawal amount. \
+                     Note InitArg cannot set the bounds, so at install the defaults apply."
+                ))
+            })?;
         if self.cketh_minimum_withdrawal_amount < cketh_ledger_transfer_fee {
             return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
                 "minimum_withdrawal_amount must cover ledger transaction fee, \
@@ -429,6 +446,15 @@ impl State {
         self.eth_balance.total_effective_tx_fees_add(tx_fee);
         self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
 
+        if matches!(withdrawal_request, WithdrawalRequest::SweeperFunding(_)) {
+            let transferred = match receipt.status {
+                TransactionStatus::Success => tx.transaction().amount,
+                TransactionStatus::Failure => Wei::ZERO,
+            };
+            self.sweeper_funding
+                .record_finalized_funding(transferred, tx_fee);
+        }
+
         if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
             let TransactionCallData::Erc20Transfer { to: _, value } = TransactionCallData::decode(
                 tx.transaction_data(),
@@ -517,6 +543,8 @@ impl State {
             deposit_with_subaccount_helper_contract_address,
             last_deposit_with_subaccount_scraped_block_number,
             ethereum_sweeper_contract_address,
+            sweeper_funding_low_water_mark,
+            sweeper_funding_target,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
@@ -592,6 +620,29 @@ impl State {
             })?;
             self.sweeper_contract_address = Some(address);
         }
+        if sweeper_funding_low_water_mark.is_some() || sweeper_funding_target.is_some() {
+            let mut config = self.sweeper_funding_config.clone();
+            if let Some(low_water_mark) = sweeper_funding_low_water_mark {
+                config.low_water_mark = Wei::try_from(low_water_mark).map_err(|e| {
+                    InvalidStateError::InvalidSweeperFundingConfig(format!(
+                        "ERROR: invalid low-water mark: {e}"
+                    ))
+                })?;
+            }
+            if let Some(target) = sweeper_funding_target {
+                config.target = Wei::try_from(target).map_err(|e| {
+                    InvalidStateError::InvalidSweeperFundingConfig(format!(
+                        "ERROR: invalid target: {e}"
+                    ))
+                })?;
+            }
+            config
+                .validate(self.cketh_minimum_withdrawal_amount)
+                .map_err(|e| {
+                    InvalidStateError::InvalidSweeperFundingConfig(format!("ERROR: {e:?}"))
+                })?;
+            self.sweeper_funding_config = config;
+        }
         self.validate_config()
     }
 
@@ -632,6 +683,8 @@ impl State {
             self.sweeper_contract_address,
             other.sweeper_contract_address
         );
+        ensure_eq!(self.sweeper_funding, other.sweeper_funding);
+        ensure_eq!(self.sweeper_funding_config, other.sweeper_funding_config);
 
         self.withdrawal_transactions
             .is_equivalent_to(&other.withdrawal_transactions)
