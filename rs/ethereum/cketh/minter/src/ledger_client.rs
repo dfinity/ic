@@ -66,9 +66,48 @@ impl LedgerClient {
         }
     }
 
+    /// Burns `amount` from `from`, with the minter's *default* subaccount as the ICRC-2 spender.
+    ///
+    /// This is the user-withdrawal path: since the spender differs from `from`, it requires an
+    /// allowance from `from` towards the minter. To burn from an account the minter itself owns,
+    /// use [`Self::burn_from_own_subaccount`].
     pub async fn burn_from<A: Into<Nat>>(
         &self,
         from: Account,
+        amount: A,
+        memo: BurnMemo,
+    ) -> Result<LedgerBurnIndex, LedgerBurnError> {
+        self.burn_from_with_spender(from, None, amount, memo).await
+    }
+
+    /// Burns `amount` from a subaccount that the *minter itself* owns, such as its fee
+    /// subaccount ([`crate::CKETH_FEE_SUBACCOUNT`]).
+    ///
+    /// Naming the same subaccount as both `from` and the spender is what makes this need no
+    /// allowance: the ledger skips the allowance check only when the spender equals the `from`
+    /// account, compared as a **full account** (`Operation::Burn` in
+    /// `rs/ledger_suite/icrc1/src/lib.rs`: `spender.is_some() && from != &spender.unwrap()`).
+    /// Going through [`Self::burn_from`] instead would name `{minter, None}` as the spender, which
+    /// does not equal `{minter, Some(subaccount)}` and is rejected with `InsufficientAllowance` —
+    /// pinned by `tests/fee_account.rs`.
+    pub async fn burn_from_own_subaccount<A: Into<Nat>>(
+        &self,
+        subaccount: [u8; 32],
+        amount: A,
+        memo: BurnMemo,
+    ) -> Result<LedgerBurnIndex, LedgerBurnError> {
+        let from = Account {
+            owner: ic_cdk::api::canister_self(),
+            subaccount: Some(subaccount),
+        };
+        self.burn_from_with_spender(from, Some(subaccount), amount, memo)
+            .await
+    }
+
+    async fn burn_from_with_spender<A: Into<Nat>>(
+        &self,
+        from: Account,
+        spender_subaccount: Option<[u8; 32]>,
         amount: A,
         memo: BurnMemo,
     ) -> Result<LedgerBurnIndex, LedgerBurnError> {
@@ -76,7 +115,7 @@ impl LedgerClient {
         match self
             .client
             .transfer_from(TransferFromArgs {
-                spender_subaccount: None,
+                spender_subaccount,
                 from,
                 to: ic_cdk::api::canister_self().into(),
                 amount: amount.clone(),
