@@ -1475,6 +1475,7 @@ fn serialize_snapshot_protos_to_checkpoint_readwrite(
             on_low_wasm_memory_hook_status: canister_snapshot
                 .execution_snapshot()
                 .on_low_wasm_memory_hook_status,
+            restored: canister_snapshot.restored(),
         }
         .into(),
     )?;

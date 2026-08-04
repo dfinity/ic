@@ -29,6 +29,7 @@ pub(crate) fn fetch_canister_logs(
         deleted_call_context_responses: vec![],
         stop_call_id_to_remove: None,
         stop_contexts_to_reject: vec![],
+        snapshot_to_make_immutable: None,
     })
 }
 

@@ -548,6 +548,80 @@ fn upload_and_load_snapshot_with_wasm_memory() {
     ));
 }
 
+// Once a metadata-upload snapshot has been loaded onto a canister it becomes
+// immutable and rejects further `upload_canister_snapshot_data`, no matter
+// whether it was loaded onto the canister owning it or onto another one.
+fn upload_snapshot_data_rejected_after_load(load_onto_other_canister: bool) {
+    let env = StateMachineBuilder::new().build();
+
+    let canister_id = env.create_canister(None);
+
+    // The canister is never executed, so the module only has to be loadable:
+    // it declares no globals, matching the `globals` of the uploaded metadata.
+    const PAGES: u64 = 32;
+    const HEAP_SIZE: u64 = PAGES * 64 * 1024;
+    let wasm = wat::parse_str(format!("(module (memory {PAGES} {PAGES}))")).unwrap();
+    let heap = vec![7_u8; HEAP_SIZE as usize];
+
+    let upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,              /* replace_snapshot */
+        wasm.len() as u64, /* wasm_module_size */
+        vec![],            /* globals */
+        HEAP_SIZE,         /* wasm_memory_size */
+        0,                 /* stable_memory_size */
+        vec![],            /* certified_data */
+        None,              /* global_timer */
+        None,              /* on_low_wasm_memory_hook_status */
+    );
+    let snapshot_id = env
+        .upload_canister_snapshot_metadata(&upload_args)
+        .unwrap()
+        .snapshot_id;
+
+    env.upload_snapshot_module(canister_id, snapshot_id, &wasm, None, None)
+        .unwrap();
+
+    // Before the snapshot is loaded it is mutable: uploading wasm memory succeeds.
+    let write_memory =
+        |env: &StateMachine| env.upload_snapshot_heap(canister_id, snapshot_id, &heap, None, None);
+    write_memory(&env).unwrap();
+
+    let target_canister_id = if load_onto_other_canister {
+        // Loading onto another canister copies the snapshot's memories, which
+        // requires them to have been flushed to disk first.
+        env.checkpointed_tick();
+        env.create_canister(None)
+    } else {
+        canister_id
+    };
+    let load_args = LoadCanisterSnapshotArgs::new(target_canister_id, snapshot_id, None);
+    env.load_canister_snapshot(load_args).unwrap();
+
+    // The snapshot is now immutable: the same upload is rejected.
+    let err = write_memory(&env).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterSnapshotImmutable);
+    assert_eq!(
+        err.description(),
+        "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister."
+    );
+
+    // The `restored` flag persists across a checkpoint, so the rejection holds.
+    env.checkpointed_tick();
+    let err = write_memory(&env).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterSnapshotImmutable);
+}
+
+#[test]
+fn upload_snapshot_data_rejected_after_load_onto_own_canister() {
+    upload_snapshot_data_rejected_after_load(false);
+}
+
+#[test]
+fn upload_snapshot_data_rejected_after_load_onto_other_canister() {
+    upload_snapshot_data_rejected_after_load(true);
+}
+
 #[test]
 fn upgrade_with_keep_heap_exceeds_module_max_fails_gracefully() {
     // The custom section marks the module as supporting enhanced orthogonal

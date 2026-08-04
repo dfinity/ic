@@ -2136,6 +2136,13 @@ impl ExecutionEnvironment {
                         .unflushed_checkpoint_ops
                         .push(unflushed_checkpoint_op);
                 }
+                if let Some(snapshot_id) = response.snapshot_to_make_immutable
+                    && let Some(canister) =
+                        state.canister_state_make_mut(&snapshot_id.get_canister_id())
+                    && let Some(snapshot) = canister.canister_snapshots.get_mut(snapshot_id)
+                {
+                    Arc::make_mut(snapshot).set_restored();
+                }
                 crate::util::process_responses(
                     response.deleted_call_context_responses,
                     state,
