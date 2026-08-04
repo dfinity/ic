@@ -113,8 +113,8 @@ pub trait CyclesUseCaseRefundableKind: CyclesUseCaseKind {}
 /// i.e. the ones that are charged directly, without a prepayment that would later
 /// be refunded via a call to `SystemState::refund_cycles`.
 ///
-/// This trait is disjoint from `CyclesUseCaseRefundableKind`: every use case
-/// implements exactly one of the two.
+/// Intended to be disjoint from `CyclesUseCaseRefundableKind`: each built-in use case
+/// in this crate implements exactly one of the two traits.
 pub trait CyclesUseCaseNonRefundableKind: CyclesUseCaseKind {}
 
 /*
