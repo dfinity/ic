@@ -101,7 +101,7 @@ impl Process for IcBoundaryProcess {
         config: &Self::Config,
         (replica_version, domain_name): Self::Args,
     ) -> OrchestratorResult<Self> {
-        let env = match env_file_reader::read_file(&config.ic_boundary_env_file) {
+        let env = match crate::env_file::read_file(&config.ic_boundary_env_file) {
             Ok(env) => env
                 .into_iter()
                 .map(|(k, v)| (OsString::from(k), OsString::from(v)))
@@ -167,7 +167,7 @@ impl Process for IcGatewayProcess {
     type Args = ReplicaVersion;
 
     fn build(config: &Self::Config, replica_version: Self::Args) -> OrchestratorResult<Self> {
-        let env = match env_file_reader::read_file(&config.ic_gateway_env_file) {
+        let env = match crate::env_file::read_file(&config.ic_gateway_env_file) {
             Ok(env) => env
                 .into_iter()
                 .map(|(k, v)| (OsString::from(k), OsString::from(v)))
