@@ -29,7 +29,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_suite_state_machine_helpers::{balance_of, icrc3_get_blocks, list_archives};
+use ic_ledger_suite_state_machine_helpers::{balance_of, icrc3_get_blocks, list_archives, parse_metric};
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -385,6 +385,15 @@ fn transfer_reject_must_not_leave_a_committed_block() {
         "expected the archive continuation to have been trapped, but an archive \
          was created; the test is not exercising a post-commit failure"
     );
+    // The caller no longer learns that archiving failed, so it has to be
+    // recorded. A trap discards everything the failing message did, but
+    // destructors still run while the task is canceled, and that is where the
+    // archiving guard counts the failure.
+    assert_eq!(
+        parse_metric(&env, ledger, "ledger_archiving_failures"),
+        1,
+        "the trapped archiving attempt was not counted"
+    );
 
     // The invariant: having committed the transfer, the ledger must not reply
     // with a reject.
@@ -404,3 +413,4 @@ fn transfer_reject_must_not_leave_a_committed_block() {
         }
     }
 }
+
