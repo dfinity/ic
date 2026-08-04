@@ -28,6 +28,27 @@ pub enum StatusError {
     CatchUpContentsDeserializationError(ProxyDecodeError),
 }
 
+/// Returns whether a split of `subnet_id` is still pending, as seen from
+/// `looked_up_registry_version`.
+///
+/// A [`CupType::SubnetSplitting`] record is never deleted — a later split, a recovery or the
+/// genesis record just overwrite it — so its presence alone doesn't mean the split is still ahead
+/// of us. Three versions decide that:
+///
+/// * `looked_up_registry_version` is only an upper bound: the lookup returns the latest CUP
+///   contents record written at or below it.
+/// * That record's own version is the version the subnet must adopt for the split to happen, and
+///   is reported as `scheduled_at`.
+/// * `last_summary_block_registry_version` is the watermark: the block maker bumps the registry
+///   version to `scheduled_at` exactly at the summary block starting the split (see
+///   `BlockMaker::get_stable_registry_version`), so a record at or below the last summary's version
+///   describes a split already picked up — [`Status::NotScheduled`].
+///
+/// Two consequences: a lookup at or below `last_summary_block_registry_version` never reports
+/// [`Status::Scheduled`], and a fixed `looked_up_registry_version` flips to
+/// [`Status::NotScheduled`] once a summary block adopts `scheduled_at`.
+/// Said differently, the following invariant holds for a returned [`Status::Scheduled`] value:
+/// `last_summary_block_registry_version < scheduled_at <= looked_up_registry_version`.
 pub fn get_status(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
@@ -49,7 +70,8 @@ pub fn get_status(
     };
 
     if versioned_record.version <= last_summary_block_registry_version {
-        // This record corresponds to a past subnet split
+        // The last summary block already references this version, so this record corresponds to a
+        // past subnet split rather than a pending one.
         return Ok(Status::NotScheduled);
     }
 
@@ -173,6 +195,12 @@ mod tests {
                 destination_subnet_id: DESTINATION_SUBNET_ID,
                 scheduled_at: REGISTRY_CUP_REGISTRY_VERSION,
             }
+        );
+        // Asserting the invariant described in the function documentation:
+        // `last_summary_block_registry_version < scheduled_at <= looked_up_registry_version`.
+        assert!(
+            last_summary_block_registry_version < REGISTRY_CUP_REGISTRY_VERSION
+                && REGISTRY_CUP_REGISTRY_VERSION <= looked_up_registry_version
         );
     }
 
