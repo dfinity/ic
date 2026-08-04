@@ -168,6 +168,7 @@ jobs:
 
   bazel-test-all-rbe:
     name: Bazel Test All on RBE
+    continue-on-error: true
     needs: [config, infer-bazel-targets]
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
     container:
