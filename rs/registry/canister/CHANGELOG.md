@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-31: Proposal 143259
+
+http://dashboard.internetcomputer.org/proposal/143259
+
+## Fixed
+
+* `do_split_subnet` - don't assume that all the registry entries exist when checking whether the
+  entries changed across await point
+
+
 # 2026-07-24: Proposal 143074
 
 http://dashboard.internetcomputer.org/proposal/143074

@@ -1,0 +1,22 @@
+# Aliases into the host-import repos (see BUILD.devmapper.bazel and
+# BUILD.cryptsetup.bazel), so that crate annotations in
+# bazel/rust.MODULE.bazel can reference them with stable root-repo labels
+# (apparent repo names like @devmapper don't resolve from inside the
+# generated crate repositories).
+alias(
+    name = "cryptsetup",
+    actual = "@cryptsetup//:cryptsetup",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "devmapper",
+    actual = "@devmapper//:devmapper",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "systemd",
+    actual = "@libsystemd//:libsystemd",
+    visibility = ["//visibility:public"],
+)
