@@ -62,6 +62,7 @@ jobs:
           CANISTERS=(
             "canister-creator-canister.wasm"
             "cycles-minting-canister.wasm"
+            "engine-controller-canister.wasm"
             "genesis-token-canister.wasm"
             "governance-canister.wasm"
             "governance-canister_test.wasm"
