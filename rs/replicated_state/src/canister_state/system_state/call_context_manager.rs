@@ -756,6 +756,7 @@ impl CallContextManager {
     }
 
     /// Returns the number of unresponded canister update call contexts, also taking
+    /// into account a potential paused or aborted canister request execution
     /// (equivalent to one extra call context).
     ///
     /// Time complexity: `O(1)`.
@@ -790,8 +791,10 @@ impl CallContextManager {
     /// a pending unbounded-wait (i.e. guaranteed) response.
     ///
     /// Note that this does not take into account a potential paused or aborted
-    /// canister request execution (equivalent to one extra call context, see
-    /// [`Self::unresponded_guaranteed_response_call_contexts()`]).
+    /// canister request execution (equivalent to one extra call context,
+    /// originating from the request's sender), whose call context is not part of
+    /// this `CallContextManager`. Callers requiring an exact count must handle such
+    /// a request separately, see `SystemState::aborted_or_paused_request()`.
     ///
     /// Time complexity: `O(n)`; `O(1)` if there is no such call context.
     pub fn for_each_unresponded_unbounded_wait_originator(

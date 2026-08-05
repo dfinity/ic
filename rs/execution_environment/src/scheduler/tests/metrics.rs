@@ -36,9 +36,10 @@ use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
+    CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RejectContext, StopCanisterCallId,
+    StopCanisterContext,
 };
-use ic_types::time::UNIX_EPOCH;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
 };
@@ -981,6 +982,47 @@ fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
                 .has_responded()
         );
         assert_gauge_vec(None, &state, NAME, "sender_subnet", &subnet_label_values);
+
+        // The call context of a paused or aborted request execution is not part of
+        // the `CallContextManager`, but it is counted all the same. Not so for a
+        // best-effort request.
+        let system_state = &mut state
+            .canister_state_make_mut(&local_canister)
+            .unwrap()
+            .system_state;
+        let aborted_execution = |deadline| ExecutionTask::AbortedExecution {
+            input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::new(
+                RequestBuilder::default()
+                    .sender(sender)
+                    .receiver(local_canister)
+                    .deadline(deadline)
+                    .build(),
+            ))),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
+        };
+        system_state
+            .task_queue
+            .enqueue(aborted_execution(CoarseTime::from_secs_since_unix_epoch(1)));
+        assert_gauge_vec(None, &state, NAME, "sender_subnet", &subnet_label_values);
+
+        let system_state = &mut state
+            .canister_state_make_mut(&local_canister)
+            .unwrap()
+            .system_state;
+        system_state.task_queue.pop_front();
+        system_state
+            .task_queue
+            .enqueue(aborted_execution(NO_DEADLINE));
+        assert_gauge_vec(
+            Some(&label_value),
+            &state,
+            NAME,
+            "sender_subnet",
+            &subnet_label_values,
+        );
     }
 }
 

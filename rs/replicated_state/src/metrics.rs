@@ -9,6 +9,7 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{
     binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
 };
+use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     CanisterId, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes,
     NumInstructions, Time,
@@ -600,6 +601,16 @@ impl ReplicatedStateMetrics {
                         .entry(sender)
                         .or_default() += 1;
                 });
+            }
+
+            // The call context of a paused or aborted request execution is not part of
+            // the `CallContextManager`, so count it separately.
+            if let Some(request) = canister.system_state.aborted_or_paused_request()
+                && request.deadline == NO_DEADLINE
+            {
+                *unresponded_unbounded_wait_call_contexts_by_sender
+                    .entry(request.sender)
+                    .or_default() += 1;
             }
 
             total_canister_snapshots_memory_taken += canister.canister_snapshots.memory_taken();
