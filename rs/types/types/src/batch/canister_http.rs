@@ -62,6 +62,10 @@ pub enum FlexibleCanisterHttpError {
         /// The total amount of cycles spent by the subnet to produce this response.
         initial_spent: Cycles,
     },
+    OutOfCycles {
+        callback_id: CallbackId,
+        all_seen_shares: Vec<CanisterHttpResponseShare>,
+    },
 }
 
 impl FlexibleCanisterHttpError {
@@ -69,18 +73,22 @@ impl FlexibleCanisterHttpError {
         match self {
             Self::Timeout { callback_id }
             | Self::ResponsesTooLarge { callback_id, .. }
-            | Self::TooManyRejects { callback_id, .. } => *callback_id,
+            | Self::TooManyRejects { callback_id, .. }
+            | Self::OutOfCycles { callback_id, .. } => *callback_id,
         }
     }
 
     /// The signed receipts this error carries without a response body: the
-    /// evidence behind [`Self::ResponsesTooLarge`] and the extra shares funding a
-    /// [`Self::TooManyRejects`]. Empty for [`Self::Timeout`], which carries no
-    /// shares at all.
+    /// evidence behind [`Self::ResponsesTooLarge`] and [`Self::OutOfCycles`], and
+    /// the extra shares funding a [`Self::TooManyRejects`]. Empty for
+    /// [`Self::Timeout`], which carries no shares at all.
     pub fn shares_without_response(&self) -> &[CanisterHttpResponseShare] {
         match self {
             Self::Timeout { .. } => &[],
             Self::ResponsesTooLarge {
+                all_seen_shares, ..
+            }
+            | Self::OutOfCycles {
                 all_seen_shares, ..
             } => all_seen_shares,
             Self::TooManyRejects { extra_shares, .. } => extra_shares,
@@ -182,6 +190,16 @@ impl CountBytes for FlexibleCanisterHttpError {
                         .sum::<usize>()
                     + extra_shares.iter().map(|s| s.count_bytes()).sum::<usize>()
                     + std::mem::size_of_val(initial_spent)
+            }
+            Self::OutOfCycles {
+                callback_id,
+                all_seen_shares,
+            } => {
+                callback_id.count_bytes()
+                    + all_seen_shares
+                        .iter()
+                        .map(|s| s.count_bytes())
+                        .sum::<usize>()
             }
         }
     }
@@ -569,6 +587,14 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                     .collect(),
                 initial_spent: Some(initial_spent.into()),
             }),
+            FlexibleCanisterHttpError::OutOfCycles {
+                all_seen_shares, ..
+            } => ErrorDetails::OutOfCycles(pb::FlexibleCanisterHttpOutOfCycles {
+                all_seen_shares: all_seen_shares
+                    .into_iter()
+                    .map(pb::CanisterHttpShare::from)
+                    .collect(),
+            }),
         };
         pb::FlexibleCanisterHttpError {
             callback_id,
@@ -619,6 +645,17 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                         details.initial_spent,
                         "FlexibleCanisterHttpTooManyRejects::initial_spent",
                     )?,
+                })
+            }
+            Some(ErrorDetails::OutOfCycles(details)) => {
+                let all_seen_shares = details
+                    .all_seen_shares
+                    .into_iter()
+                    .map(CanisterHttpResponseShare::try_from)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(FlexibleCanisterHttpError::OutOfCycles {
+                    callback_id,
+                    all_seen_shares,
                 })
             }
             None => Err(ProxyDecodeError::MissingField(

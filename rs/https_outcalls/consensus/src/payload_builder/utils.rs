@@ -1,4 +1,6 @@
-use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
+use ic_https_outcalls_pricing::fees::{
+    flexible_initial_spent, min_flexible_consensus_cost, non_flexible_initial_spent,
+};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_logger::{ReplicaLogger, warn};
 use ic_types::{
@@ -169,6 +171,63 @@ pub(crate) fn check_initial_spent_within_limit(
         }
         _ => Ok(()),
     }
+}
+
+/// Checks that a flexible outcall has run out of cycles, i.e. that its
+/// committee's remaining allowances can no longer cover the consensus cost of
+/// delivering any response.
+///
+/// `seen_shares` are the shares the committee has produced so far, at most one
+/// per member. What is left of the committee's collective allowance is at most
+/// the sum of the unspent allowances of those shares' signers, plus a full
+/// allowance for every committee member that has not been seen yet — the best
+/// case, in which it turns out to have spent nothing. Delivering a response costs
+/// at least [`min_flexible_consensus_cost`] of the same shares, so if even that
+/// best case falls short, no share arriving later can change it: a share only ever
+/// replaces a full allowance by the smaller unspent part of one, and only ever
+/// raises the cost of delivering a response by pinning down a body size that was
+/// until then assumed to be empty.
+pub(crate) fn check_out_of_cycles<'a>(
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare> + Clone,
+    committee_size: usize,
+    min_responses: u32,
+    callback_id: CallbackId,
+    context: &CanisterHttpRequestContext,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    let min_cost = min_flexible_consensus_cost(
+        seen_shares.clone(),
+        context.subnet_size,
+        committee_size,
+        min_responses,
+    );
+    let ConsensusCostAllowance::PayAsYouGo(allowance) = per_replica_consensus_allowance(context)
+    else {
+        // Nothing is refunded from an allowance, so there is nothing to run out
+        // of (see `per_replica_consensus_allowance`).
+        return Err(InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+            callback_id,
+            unspent_allowance: Cycles::zero(),
+            min_cost,
+        });
+    };
+
+    let mut unspent_allowance = Cycles::zero();
+    let mut seen = 0;
+    for share in seen_shares {
+        // `Cycles::sub` saturates at zero.
+        unspent_allowance += allowance - share.content.payment_receipt.spent;
+        seen += 1;
+    }
+    unspent_allowance += allowance * committee_size.saturating_sub(seen);
+
+    if unspent_allowance >= min_cost {
+        return Err(InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+            callback_id,
+            unspent_allowance,
+            min_cost,
+        });
+    }
+    Ok(())
 }
 
 /// Reconstructs, for every signer of an aggregated proof, the
@@ -526,6 +585,8 @@ struct FlexibleCandidate<'a> {
 ///   allows (`committee.len() - min_responses`).
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
 ///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
+/// - **OutOfCycles**: delivering a response can never be paid for again (see
+///   [`check_out_of_cycles`]).
 /// - **Pending**: not enough data to decide yet.
 ///
 /// Both of the results that deliver response bodies — `OkResponses` and
@@ -669,7 +730,25 @@ pub(crate) fn find_flexible_result(
         }
     }
 
-    // 4. Not enough data yet
+    // 4. Can delivering a response ever be paid for?
+    if check_out_of_cycles(
+        all_shares.iter().copied(),
+        committee.len(),
+        min_responses as u32,
+        callback_id,
+        context,
+    )
+    .is_ok()
+    {
+        let error = FlexibleCanisterHttpError::OutOfCycles {
+            callback_id,
+            all_seen_shares: all_shares.into_iter().cloned().collect(),
+        };
+        let error_size = error.count_bytes();
+        return FlexibleFindResult::Error(error, error_size);
+    }
+
+    // 5. Not enough data yet
     FlexibleFindResult::Pending
 }
 

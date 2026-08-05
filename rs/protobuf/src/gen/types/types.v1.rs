@@ -686,12 +686,17 @@ pub struct FlexibleCanisterHttpTooManyRejects {
     pub extra_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpOutOfCycles {
+    #[prost(message, repeated, tag = "1")]
+    pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpError {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
     #[prost(
         oneof = "flexible_canister_http_error::ErrorDetails",
-        tags = "2, 3, 4"
+        tags = "2, 3, 4, 5"
     )]
     pub error_details: ::core::option::Option<flexible_canister_http_error::ErrorDetails>,
 }
@@ -705,6 +710,8 @@ pub mod flexible_canister_http_error {
         ResponsesTooLarge(super::FlexibleCanisterHttpResponsesTooLarge),
         #[prost(message, tag = "4")]
         TooManyRejects(super::FlexibleCanisterHttpTooManyRejects),
+        #[prost(message, tag = "5")]
+        OutOfCycles(super::FlexibleCanisterHttpOutOfCycles),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

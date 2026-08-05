@@ -57,6 +57,7 @@ use ic_types::{
     registry::RegistryClientError,
     signature::BasicSigBatchEntry,
 };
+use ic_types_cycles::Cycles;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::{Arc, RwLock},
@@ -929,6 +930,20 @@ impl CanisterHttpPayloadBuilderImpl {
                         );
                     }
                 }
+                FlexibleCanisterHttpError::OutOfCycles {
+                    all_seen_shares, ..
+                } => {
+                    // The shares must prove that the committee's remaining
+                    // allowances can no longer pay for a response.
+                    utils::check_out_of_cycles(
+                        all_seen_shares.iter(),
+                        flex_committee.len(),
+                        min_responses as u32,
+                        callback_id,
+                        context,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                }
             }
         }
 
@@ -1167,9 +1182,13 @@ impl
                         nodes,
                     })
                 }
-                // `ResponsesTooLarge` delivers no body, so its consensus cost is
-                // zero and its spend is summed on the fly from the seen shares.
+                // `ResponsesTooLarge` and `OutOfCycles` deliver no body, so their
+                // consensus cost is zero and their spend is summed on the fly from
+                // the seen shares.
                 FlexibleCanisterHttpError::ResponsesTooLarge {
+                    all_seen_shares, ..
+                }
+                | FlexibleCanisterHttpError::OutOfCycles {
                     all_seen_shares, ..
                 } => {
                     let nodes: BTreeSet<NodeId> = all_seen_shares
@@ -1346,6 +1365,41 @@ fn flexible_error_into_consensus_response(
             );
             FlexibleHttpRequestErr {
                 global_error: Some(FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved)),
+                node_details,
+                message,
+            }
+        }
+        FlexibleCanisterHttpError::OutOfCycles {
+            all_seen_shares, ..
+        } => {
+            let node_details: Vec<_> = all_seen_shares
+                .iter()
+                .map(|share| FlexibleHttpNodeDetail {
+                    node_id: candid::Principal::from(share.signature.signer.get()),
+                    report: HttpRequestResourceReport::default(),
+                    error: Some(FlexibleHttpNodeError {
+                        code: if share.content.is_reject() {
+                            "reject".to_string()
+                        } else {
+                            "ok".to_string()
+                        },
+                        message: format!("{} cycles spent", share.content.spent()),
+                    }),
+                })
+                .collect();
+
+            let total_spent: Cycles = all_seen_shares
+                .iter()
+                .map(|share| share.content.spent())
+                .sum();
+            let message = format!(
+                "Out of cycles: {} of the assigned replicas have collectively spent {} cycles, \
+                 leaving too little of the attached payment to pay for delivering a response",
+                all_seen_shares.len(),
+                total_spent,
+            );
+            FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved)),
                 node_details,
                 message,
             }
