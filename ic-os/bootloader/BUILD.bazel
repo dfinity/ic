@@ -20,7 +20,12 @@ genrule(
     outs = [
         "bootloader-tree.tar",
     ],
-    cmd = "$(location build-bootloader-tree.sh) -b $< -o $@",
+    # Run under proc_wrapper like the other ic-os build steps: it sets up (and
+    # tears down) the temporary directories this script builds in, and pre-warms
+    # podman's SHM lock segment so this action cannot race concurrent ic-os
+    # actions to create it.
+    cmd = "$(location //toolchains/sysimage:proc_wrapper) " +
+          "$(location build-bootloader-tree.sh) -b $< -o $@",
     # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
     # so we need this Namespace.so-specific execution property to open up the network on RBE:
     exec_properties = {"namespace_requires_network": "true"},
@@ -31,7 +36,10 @@ genrule(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    tools = ["build-bootloader-tree.sh"],
+    tools = [
+        "build-bootloader-tree.sh",
+        "//toolchains/sysimage:proc_wrapper",
+    ],
 )
 
 vfat_image(
