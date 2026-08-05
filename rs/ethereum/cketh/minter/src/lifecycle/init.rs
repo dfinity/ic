@@ -121,6 +121,7 @@ impl TryFrom<InitArg> for State {
             automatic_deposits: AutomaticDeposits::default(),
             sweeper_contract_address,
             sweeper_funding: Default::default(),
+            last_observed_sweeper_balance: None,
         };
         state.validate_config()?;
         Ok(state)

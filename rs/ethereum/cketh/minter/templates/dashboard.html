@@ -181,6 +181,40 @@
                 </tbody>
             </table>
 
+            <h3 id="sweeper-funding">Sweeper fee funding</h3>
+            <table>
+                <tbody>
+                    <tr id="sweeper-address">
+                        <th>Sweeper address</th>
+                        <td>{% if sweeper_funding.sweeper_address.is_some() %}{% call etherscan_address_link(sweeper_funding.sweeper_address.as_ref().unwrap()) %}{% endcall %}{% else %}unknown (ECDSA public key not yet available){% endif %}</td>
+                    </tr>
+                    <tr id="sweeper-prepaid-gas">
+                        <th>Prepaid gas (last observed balance)</th>
+                        <td>{% if sweeper_funding.observed_balance.is_some() %}{{ sweeper_funding.observed_balance.unwrap() }} Wei, observed at {{ sweeper_funding.observed_at_nanos.unwrap()|timestamp_to_datetime }}{% else %}never observed{% endif %}</td>
+                    </tr>
+                    <tr id="sweeper-funding-bounds">
+                        <th>Fund below / up to</th>
+                        <td>{{ sweeper_funding.low_water_mark }} Wei / {{ sweeper_funding.target }} Wei</td>
+                    </tr>
+                    <tr id="sweeper-cketh-burned">
+                        <th>ckETH burned for sweeping</th>
+                        <td>{{ sweeper_funding.cketh_burned }} Wei</td>
+                    </tr>
+                    <tr id="sweeper-eth-spent">
+                        <th>ETH spent on sweeping</th>
+                        <td>{{ sweeper_funding.eth_spent }} Wei</td>
+                    </tr>
+                    <tr id="sweeper-in-flight-funding">
+                        <th>Funding in flight</th>
+                        <td>{% if sweeper_funding.in_flight.is_some() %}burn index {{ sweeper_funding.in_flight.as_ref().unwrap().ledger_burn_index }}, {{ sweeper_funding.in_flight.as_ref().unwrap().amount }} Wei, accepted at {{ sweeper_funding.in_flight.as_ref().unwrap().created_at|timestamp_to_datetime }}{% else %}none{% endif %}</td>
+                    </tr>
+                    <tr id="sweeper-burned-not-yet-spent">
+                        <th>Burned but not yet spent</th>
+                        <td>{{ sweeper_funding.burned_not_yet_spent }} Wei</td>
+                    </tr>
+                </tbody>
+            </table>
+
             <h3 id="helper-smart-contracts">Helper Smart Contracts</h3>
             <table>
                 <thead>

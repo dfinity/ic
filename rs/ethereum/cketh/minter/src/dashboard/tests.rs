@@ -27,6 +27,68 @@ use maplit::{btreemap, btreeset};
 use std::str::FromStr;
 
 #[test]
+fn should_display_sweeper_funding() {
+    use ic_cketh_minter::state::sweeper_funding::ObservedSweeperBalance;
+
+    let mut state = initial_state();
+    state.sweeper_funding.record_burn(Wei::from(1_000_000_u64));
+    state.sweeper_funding.mark_funding_in_flight(
+        LedgerBurnIndex::new(1),
+        Wei::from(950_000_u64),
+        0,
+    );
+    state.sweeper_funding.record_finalized_funding(
+        LedgerBurnIndex::new(1),
+        Wei::from(900_000_u64),
+        Wei::from(50_000_u64),
+    );
+    state.last_observed_sweeper_balance = Some(ObservedSweeperBalance {
+        balance: Wei::from(900_000_u64),
+        observed_at_nanos: 0,
+    });
+
+    let dashboard = DashboardTemplate::from_state(&state, DashboardPaginationParameters::default());
+
+    DashboardAssert::assert_that(dashboard)
+        .has_sweeper_cketh_burned("1_000_000 Wei")
+        .has_sweeper_eth_spent("950_000 Wei")
+        // 1_000_000 burned - 950_000 spent: the credit that offsets the next funding.
+        .has_sweeper_burned_not_yet_spent("50_000 Wei");
+}
+
+#[test]
+fn should_display_an_in_flight_sweeper_funding() {
+    let mut state = initial_state();
+    state.sweeper_funding.record_burn(Wei::from(1_000_000_u64));
+    state.sweeper_funding.mark_funding_in_flight(
+        LedgerBurnIndex::new(42),
+        Wei::from(900_000_u64),
+        1_620_328_630_000_000_000,
+    );
+
+    let dashboard = DashboardTemplate::from_state(&state, DashboardPaginationParameters::default());
+
+    let row = DashboardAssert::assert_that(dashboard);
+    row.has_sweeper_in_flight_funding_containing("burn index 42");
+    row.has_sweeper_in_flight_funding_containing("900_000 Wei");
+}
+
+#[test]
+fn should_display_no_in_flight_sweeper_funding_when_idle() {
+    DashboardAssert::assert_that(initial_dashboard()).has_sweeper_in_flight_funding("none");
+}
+
+#[test]
+fn should_display_sweeper_funding_without_an_observation() {
+    let dashboard = initial_dashboard();
+
+    DashboardAssert::assert_that(dashboard)
+        .has_sweeper_prepaid_gas("never observed")
+        .has_sweeper_cketh_burned("0 Wei")
+        .has_sweeper_eth_spent("0 Wei");
+}
+
+#[test]
 fn should_display_metadata() {
     let dashboard = DashboardTemplate {
         minter_address: "0x1789F79e95324A47c5Fd6693071188e82E9a3558".to_string(),
@@ -1700,6 +1762,58 @@ mod assertions {
 
         pub fn has_eth_balance(&self, expected_value: &str) -> &Self {
             self.has_string_value("#eth-balance > td", expected_value, "wrong ETH balance")
+        }
+
+        pub fn has_sweeper_prepaid_gas(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-prepaid-gas > td",
+                expected_value,
+                "wrong sweeper prepaid gas",
+            )
+        }
+
+        pub fn has_sweeper_in_flight_funding(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-in-flight-funding > td",
+                expected_value,
+                "wrong in-flight funding",
+            )
+        }
+
+        pub fn has_sweeper_in_flight_funding_containing(&self, expected: &str) -> &Self {
+            let actual = self
+                .select_only_one("#sweeper-in-flight-funding > td")
+                .text()
+                .collect::<String>();
+            assert!(
+                actual.contains(expected),
+                "expected the in-flight funding row to contain {expected:?}, got {actual:?}"
+            );
+            self
+        }
+
+        pub fn has_sweeper_cketh_burned(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-cketh-burned > td",
+                expected_value,
+                "wrong ckETH burned for sweeping",
+            )
+        }
+
+        pub fn has_sweeper_eth_spent(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-eth-spent > td",
+                expected_value,
+                "wrong ETH spent on sweeping",
+            )
+        }
+
+        pub fn has_sweeper_burned_not_yet_spent(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-burned-not-yet-spent > td",
+                expected_value,
+                "wrong burned-but-not-yet-spent amount",
+            )
         }
 
         pub fn has_total_effective_tx_fees(&self, expected_value: &str) -> &Self {

@@ -296,6 +296,32 @@ pub struct DashboardTemplate {
     pub eth_balance: EthBalance,
     pub skipped_blocks: BTreeMap<String, BTreeSet<BlockNumber>>,
     pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
+    pub sweeper_funding: DashboardSweeperFunding,
+}
+
+/// Sweeper fee funding: where sweep gas comes from and how much of it is prepaid.
+#[derive(Clone)]
+pub struct DashboardSweeperFunding {
+    pub sweeper_address: Option<String>,
+    pub cketh_burned: Wei,
+    pub eth_spent: Wei,
+    pub burned_not_yet_spent: Wei,
+    /// Prepaid gas as last read on chain, as a timestamp rather than an age: `from_state` must stay
+    /// callable outside a canister, where `ic_cdk::api::time()` traps.
+    pub observed_balance: Option<Wei>,
+    pub observed_at_nanos: Option<u64>,
+    pub low_water_mark: Wei,
+    pub target: Wei,
+    /// The funding between its burn and its finalized transfer, if any. Shown because one that never
+    /// finalizes blocks every later funding, and no other view reveals it.
+    pub in_flight: Option<DashboardInFlightFunding>,
+}
+
+#[derive(Clone)]
+pub struct DashboardInFlightFunding {
+    pub ledger_burn_index: LedgerBurnIndex,
+    pub amount: Wei,
+    pub created_at: u64,
 }
 
 impl DashboardTemplate {
@@ -510,6 +536,28 @@ impl DashboardTemplate {
                 .map(|(contract_address, blocks)| (contract_address.to_string(), blocks.clone()))
                 .collect(),
             supported_ckerc20_tokens,
+            sweeper_funding: DashboardSweeperFunding {
+                sweeper_address: ic_cketh_minter::sweeper::sweeper_address_from_state(state)
+                    .map(|address| address.to_string()),
+                cketh_burned: state.sweeper_funding.cumulative_burned(),
+                eth_spent: state.sweeper_funding.cumulative_spent(),
+                burned_not_yet_spent: state.sweeper_funding.burned_not_yet_spent(),
+                observed_balance: state
+                    .last_observed_sweeper_balance
+                    .map(|observed| observed.balance),
+                observed_at_nanos: state
+                    .last_observed_sweeper_balance
+                    .map(|observed| observed.observed_at_nanos),
+                low_water_mark: state.sweeper_funding_config().low_water_mark,
+                target: state.sweeper_funding_config().target,
+                in_flight: state.sweeper_funding.in_flight_funding().map(|f| {
+                    DashboardInFlightFunding {
+                        ledger_burn_index: f.ledger_burn_index,
+                        amount: f.amount,
+                        created_at: f.created_at_nanos,
+                    }
+                }),
+            },
         }
     }
 }
