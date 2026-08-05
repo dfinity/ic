@@ -59,10 +59,6 @@ impl Ic00MethodPermissions {
             | Ic00Method::BitcoinSendTransactionInternal
             | Ic00Method::BitcoinGetSuccessors
             | Ic00Method::NodeMetricsHistory
-            // `counts_toward_round_limit` is never consulted for `SubnetMetrics`:
-            // the method has no effective canister ID, so it is handled by the
-            // special case in `Scheduler::can_execute_subnet_msg` instead.
-            | Ic00Method::SubnetMetrics
             | Ic00Method::SubnetInfo
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister
@@ -76,7 +72,15 @@ impl Ic00MethodPermissions {
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            Ic00Method::FetchCanisterLogs
+            // `SubnetMetrics` consumes round instructions, and is recorded as such
+            // here. Note the flag is not actually consulted for it: the method has no
+            // effective canister ID, so `Scheduler::can_execute_subnet_msg` returns
+            // before reaching `can_be_executed`. Its deferral comes from the dedicated
+            // special case there, which must not be removed on the strength of this
+            // flag. (`ListCanisters` is in the same position but is recorded as
+            // `false`; see the note above.)
+            Ic00Method::SubnetMetrics
+            | Ic00Method::FetchCanisterLogs
             | Ic00Method::ReadCanisterSnapshotMetadata
             | Ic00Method::ReadCanisterSnapshotData => Self {
                 method,

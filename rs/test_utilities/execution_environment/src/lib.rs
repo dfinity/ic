@@ -3263,9 +3263,12 @@ fn check_is_install_code(message: SubnetMessage) -> bool {
 }
 
 /// Whether the message is one of the management methods that consume round
-/// instructions even though they have no effective canister ID (and therefore
-/// cannot use `Ic00MethodPermissions::counts_toward_round_limit`). Keep in sync
-/// with the special case in `Scheduler::can_execute_subnet_msg`.
+/// instructions even though they have no effective canister ID. Their
+/// `Ic00MethodPermissions::counts_toward_round_limit` flag is never consulted —
+/// `Scheduler::can_execute_subnet_msg` returns before reaching
+/// `can_be_executed` — so it cannot be used to identify them, whatever its
+/// value. Keep in sync with the special case in
+/// `Scheduler::can_execute_subnet_msg`.
 fn check_consumes_round_instructions_without_effective_canister_id(message: SubnetMessage) -> bool {
     let message = match message {
         SubnetMessage::Response(_) => return false,
