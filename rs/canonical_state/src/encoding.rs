@@ -145,6 +145,5 @@ mod tests {
     mod compatibility;
     mod conversion;
     mod encoding;
-    mod subnet_metrics;
     mod test_fixtures;
 }

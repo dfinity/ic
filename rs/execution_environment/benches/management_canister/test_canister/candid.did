@@ -45,5 +45,4 @@ service : {
     "sign_with_ecdsa" : (ecdsa_args) -> ();
     "http_request" : (http_request_args) -> ();
     "list_canisters" : () -> (nat64);
-    "subnet_metrics" : (principal) -> (nat64);
 };

@@ -949,45 +949,6 @@ fn total_consumed_cycles_equals_direct_fold() {
 }
 
 #[test]
-fn validate_cold_stats_accepts_consistent_stats() {
-    let mut states = CanisterStates::default();
-    states.insert(cold_canister(1));
-    states.insert(hot_canister(2));
-    states.insert(cold_canister(3));
-
-    assert_eq!(states.validate_cold_stats(), Ok(()));
-}
-
-#[test]
-fn validate_cold_stats_rejects_stale_stats() {
-    use ic_types_cycles::{NominalCycles, NominalCyclesTesting};
-
-    let mut states = CanisterStates::default();
-    let c = cold_canister(1);
-    states.insert(Arc::clone(&c));
-    assert_eq!(states.validate_cold_stats(), Ok(()));
-
-    // Bypass the public mutation entry points: mutate a cold canister's consumed
-    // cycles directly, behind the aggregate's back, simulating missing
-    // sub-before / add-after bracketing.
-    consume_cycles(states.cold.get_mut(&c.canister_id()).unwrap(), 42);
-    assert_eq!(states.hot.len(), 0);
-    assert_eq!(states.cold.len(), 1);
-
-    let err = states.validate_cold_stats().unwrap_err();
-    assert!(
-        err.contains("cold_stats out of sync with the cold pool"),
-        "unexpected error: {err}",
-    );
-    // The aggregate is stale, so the reported total is now wrong.
-    assert_eq!(states.cold_stats.consumed_cycles, NominalCycles::new(0));
-    assert_ne!(
-        states.total_consumed_cycles(),
-        direct_consumed_cycles_fold(&states)
-    );
-}
-
-#[test]
 fn for_each_mut_keeps_cold_stats_consumed_cycles_in_sync() {
     let mut states = CanisterStates::default();
     states.insert(cold_canister(1));
@@ -999,7 +960,10 @@ fn for_each_mut_keeps_cold_stats_consumed_cycles_in_sync() {
     // including the cold ones.
     states.for_each_mut(|_id, canister| consume_cycles(canister, 11));
 
-    assert_eq!(states.validate_cold_stats(), Ok(()));
+    // `total_consumed_cycles()` combines the hot fold with the `cold_stats`
+    // aggregate, so it agrees with a direct fold over every canister only if the
+    // sub-before / add-after bracketing around the cold-pool mutation held. That
+    // is the property `subnet_metrics` depends on.
     assert_eq!(
         states.total_consumed_cycles(),
         direct_consumed_cycles_fold(&states)

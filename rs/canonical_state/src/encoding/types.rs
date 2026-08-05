@@ -744,7 +744,7 @@ impl
         // `consumed_cycles_total` (which no longer double counts deleted
         // canisters) plus the cycles consumed by all non-deleted canisters.
         let consumed_cycles_total = if certification_version >= CertificationVersion::V29 {
-            metrics.consumed_cycles_total() + consumed_cycles_by_canisters
+            metrics.consumed_cycles_total_including_canisters(consumed_cycles_by_canisters)
         } else {
             metrics.consumed_cycles_total_v28()
         };

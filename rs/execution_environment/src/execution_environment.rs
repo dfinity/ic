@@ -3404,17 +3404,11 @@ impl ExecutionEnvironment {
             ));
         }
         let metrics = &state.metadata.subnet_metrics;
-        // Keep in sync with the certified state tree at
-        // `/subnet/<subnet_id>/metrics`: this is the same sum that
-        // `ic_canonical_state::encoding::types::SubnetMetrics::from` computes
-        // starting with certification version `V29`. Pinned by
-        // `subnet_metrics_consumed_cycles_matches_v29_canonical_encoding` in
-        // `rs/canonical_state`, which carries the reciprocal comment.
-        //
-        // `total_consumed_cycles()` reads the derived `ColdStats::consumed_cycles`
-        // aggregate.
-        let consumed_cycles_total =
-            metrics.consumed_cycles_total() + state.canister_states().total_consumed_cycles();
+        // The same function the certified state tree at `/subnet/<subnet_id>/metrics`
+        // uses from certification version `V29` on, so the two cannot drift.
+        let consumed_cycles_total = metrics.consumed_cycles_total_including_canisters(
+            state.canister_states().total_consumed_cycles(),
+        );
         let res = SubnetMetricsResponse {
             // The height of the block in whose execution this call is processed.
             // `ExecutionRound` is numerically the finalized consensus block
@@ -5085,9 +5079,15 @@ pub(crate) fn full_subnet_memory_capacity(
 ///
 /// The base covers the per-call work that does not scale with the number of
 /// canisters: the Candid decode of the argument, five field reads, and the Candid
-/// encode of five `Nat`s. That is well under 50us. It is estimated from that
-/// work rather than measured end to end, deliberately on the generous side, and
-/// is 200x below `list_canisters`'s 20M.
+/// encode of five `Nat`s. **It is estimated from that work and was never measured
+/// end to end** — there is no benchmark for it, deliberately, since an end-to-end
+/// `StateMachine` measurement is dominated by round overhead rather than by the
+/// handler. The estimate is generous: that work is order 2-10us against the 50us
+/// that 100K instructions represents, and the constant is 200x below
+/// `list_canisters`'s 20M. Over-estimating the base is safe for the wall-clock
+/// bound (fewer calls are served per round) and costs only denial headroom, which
+/// is priced in the security review against `fetch_canister_logs` — a deployed
+/// method of the same shape with a *larger* base of 150K and likewise no cycle fee.
 ///
 /// Both constants are far below `list_canisters`'s 20M / 16K. That is
 /// intentional: `list_canisters` is gated to subnet admins, whereas
