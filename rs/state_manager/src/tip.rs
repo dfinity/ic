@@ -1197,7 +1197,8 @@ fn serialize_protos_to_checkpoint_readwrite(
         }
     }
 
-    // Same for the "subnet was merged" marker.
+    // Like the split marker, the "subnet was merged" marker is serialized
+    // separately from `SystemMetadata`.
     checkpoint_readwrite
         .subnet_merged_marker()
         .serialize(SubnetMerged {

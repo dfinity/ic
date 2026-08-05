@@ -123,8 +123,9 @@ fn split_manifest_unassigned_canister() {
     );
 }
 
-/// Every split / merge marker file is a precondition of `SystemMetadata::split()`,
-/// so a manifest containing one cannot be the input of a split.
+/// `SystemMetadata::split()` requires the absence of both the split and the
+/// "subnet was merged" markers, so a manifest containing either marker file
+/// cannot be the input of a split.
 #[test]
 fn split_manifest_marked_state() {
     for (marker_file, reason) in [
