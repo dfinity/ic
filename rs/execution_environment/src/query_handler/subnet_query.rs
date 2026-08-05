@@ -6,7 +6,7 @@
 //! composite queries.
 
 use crate::CanisterManager;
-use crate::canister_logs::fetch_canister_logs_reply;
+use crate::canister_logs::fetch_canister_logs_response;
 use crate::execution::common::list_canisters;
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -44,7 +44,7 @@ pub(super) fn execute_subnet_query(
         QueryMethod::FetchCanisterLogs => {
             let args = FetchCanisterLogsRequest::decode(payload)?;
             let canister = get_canister(state, args.get_canister_id())?;
-            fetch_canister_logs_reply(caller, canister, args).map_err(UserError::from)
+            fetch_canister_logs_response(caller, canister, args).map_err(UserError::from)
         }
         QueryMethod::CanisterStatus => {
             let args = CanisterIdRecord::decode(payload)?;
