@@ -35,18 +35,21 @@ if [ "$EUID" -eq 0 ]; then
 else
     podman_lock_segment="/dev/shm/libpod_rootless_lock_$EUID"
 fi
+# The whole block is best-effort, hence the trailing `|| true`: opening the lock
+# file can fail (/dev/shm is world-writable, so another uid can be squatting our
+# fixed path), and `set -e` would otherwise turn that into a failed build. If any
+# of this does not work out we simply build unprotected, exactly as before.
 if [ -w /dev/shm ] && [ ! -e "$podman_lock_segment" ]; then
     (
         flock 9
         # Re-check under the lock: whoever got here first already created it.
         if [ ! -e "$podman_lock_segment" ]; then
             # Any podman command initializes the lock manager; `info` is the
-            # cheapest. A failure here is not fatal -- we are only pre-warming,
-            # and the build below reports real podman problems itself.
+            # cheapest. Real podman problems are reported by the build below.
             podman --root "$podman_storage_dir/root" --runroot "$podman_storage_dir/runroot" \
                 info >/dev/null 2>&1 || true
         fi
-    ) 9>"/dev/shm/icos-podman-lock-init.$EUID.lck"
+    ) 9>"/dev/shm/icos-podman-lock-init.$EUID.lck" || true
 fi
 
 tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")

@@ -34,13 +34,14 @@ if [ "$EUID" -eq 0 ]; then
 else
     PODMAN_LOCK_SEGMENT="/dev/shm/libpod_rootless_lock_$EUID"
 fi
+# Best-effort, hence the trailing `|| true` -- see proc_wrapper.sh.
 if [ -w /dev/shm ] && [ ! -e "$PODMAN_LOCK_SEGMENT" ]; then
     (
         flock 9
         if [ ! -e "$PODMAN_LOCK_SEGMENT" ]; then
             podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" info >/dev/null 2>&1 || true
         fi
-    ) 9>"/dev/shm/icos-podman-lock-init.$EUID.lck"
+    ) 9>"/dev/shm/icos-podman-lock-init.$EUID.lck" || true
 fi
 
 BASE_IMAGE="$(cat ${BASE_IMAGE_FILE})"
