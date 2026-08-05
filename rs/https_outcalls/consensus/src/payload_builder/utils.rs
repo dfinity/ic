@@ -181,18 +181,25 @@ pub(crate) fn check_initial_spent_within_limit(
 /// per member. What is left of the committee's collective allowance is at most
 /// the sum of the unspent allowances of those shares' signers, plus a full
 /// allowance for every committee member that has not been seen yet — the best
-/// case, in which it turns out to have spent nothing. Delivering a response
-/// costs at least [`min_flexible_consensus_cost`], so if even that best case
-/// falls short, no share arriving later can change it: a share only ever
-/// replaces a full allowance by the smaller unspent part of one.
+/// case, in which it turns out to have spent nothing. Delivering a response costs
+/// at least [`min_flexible_consensus_cost`] of the same shares, so if even that
+/// best case falls short, no share arriving later can change it: a share only ever
+/// replaces a full allowance by the smaller unspent part of one, and only ever
+/// raises the cost of delivering a response by pinning down a body size that was
+/// until then assumed to be empty.
 pub(crate) fn check_out_of_cycles<'a>(
-    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare> + Clone,
     committee_size: usize,
     min_responses: u32,
     callback_id: CallbackId,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    let min_cost = min_flexible_consensus_cost(context.subnet_size, committee_size, min_responses);
+    let min_cost = min_flexible_consensus_cost(
+        seen_shares.clone(),
+        context.subnet_size,
+        committee_size,
+        min_responses,
+    );
     let ConsensusCostAllowance::PayAsYouGo(allowance) = per_replica_consensus_allowance(context)
     else {
         // Nothing is refunded from an allowance, so there is nothing to run out
