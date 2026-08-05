@@ -1558,6 +1558,22 @@ mod tests {
             parent_registry_version: RegistryVersion::new(3),
             expected_stable_registry_version: RegistryVersion::new(3),
         })]
+        #[case::status_unavailable_but_was_later_patched(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(6)),
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(4),
+            expected_stable_registry_version: RegistryVersion::new(4),
+        })]
+        #[case::status_unavailable_but_was_later_patched_summary(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(6)),
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            is_summary_block: true,
+            parent_registry_version: RegistryVersion::new(4),
+            expected_stable_registry_version: RegistryVersion::new(6),
+        })]
         fn test_stable_registry_version_with_subnet_splitting(#[case] test_case: TestCase) {
             const DKG_INTERVAL_LENGTH: u64 = 4;
             const SOURCE_SUBNET_ID: SubnetId = SUBNET_0;
