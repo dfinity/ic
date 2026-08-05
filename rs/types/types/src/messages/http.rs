@@ -898,8 +898,6 @@ pub enum ReplicaHealthStatus {
 #[serde(rename_all = "snake_case")]
 pub struct HttpStatusResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub impl_hash: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub root_key: Option<Blob>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub impl_version: Option<String>,

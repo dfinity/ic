@@ -844,7 +844,6 @@ mod cbor_serialization {
             &HttpStatusResponse {
                 root_key: None,
                 impl_version: Some("0.0".to_string()),
-                impl_hash: None,
                 replica_health_status: Some(ReplicaHealthStatus::Starting),
                 certified_height: None,
             },
@@ -861,7 +860,6 @@ mod cbor_serialization {
             &HttpStatusResponse {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
-                impl_hash: None,
                 replica_health_status: Some(ReplicaHealthStatus::Healthy),
                 certified_height: None,
             },
@@ -879,7 +877,6 @@ mod cbor_serialization {
             &HttpStatusResponse {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
-                impl_hash: None,
                 replica_health_status: None,
                 certified_height: None,
             },
@@ -896,7 +893,6 @@ mod cbor_serialization {
             &HttpStatusResponse {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
-                impl_hash: None,
                 replica_health_status: Some(ReplicaHealthStatus::Healthy),
                 certified_height: Some(AmountOf::new(1)),
             },

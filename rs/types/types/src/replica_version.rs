@@ -12,7 +12,6 @@ pub struct ReplicaVersion {
 }
 
 static DEFAULT_VERSION_ID: OnceCell<String> = OnceCell::new();
-pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
 
 /// The default replica version can be initialized only once to prevent
 /// accidental mistakes. Otherwise its value is taken from environment

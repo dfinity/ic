@@ -206,7 +206,6 @@ pub async fn status(
     let status = HttpStatusResponse {
         root_key: rk.root_key().map(|x| x.into()),
         impl_version: None,
-        impl_hash: None,
         replica_health_status: Some(health),
         certified_height: None,
     };
