@@ -208,6 +208,7 @@ rust_ic_test_suite(
             "tests/deposit_from_cex_demo.rs",
             "tests/deposit_from_cex.rs",
             "tests/sweeper_funding.rs",
+            "tests/sweeper_funding_hardening.rs",
         ],
     ),
     data = [
@@ -328,6 +329,36 @@ rust_test(
         "//packages/ic-ethereum-types",
         "//rs/ethereum/cketh/test_utils",
         "@crate_index//:assert_matches",
+    ],
+)
+
+rust_test(
+    name = "sweeper_funding_hardening",
+    # Three live scenarios, two of which watch for longer than a withdrawal-timer tick to show the
+    # minter does *not* act. Slower than the happy path by design.
+    size = "enormous",
+    timeout = "eternal",
+    srcs = ["tests/sweeper_funding_hardening.rs"],
+    data = [
+        ":cketh_minter_debug.wasm.gz",
+        "//:anvil",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "@evm_rpc.wasm.gz//file",
+    ],
+    env = {
+        "ANVIL_BIN": "$(rootpath //:anvil)",
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
+        "EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    tags = ["long_test"],  # ~9 minutes; two scenarios watch for 8 to show the minter does nothing.
+    deps = [
+        # Keep sorted.
+        ":minter",
+        "//rs/ethereum/cketh/test_utils",
     ],
 )
 

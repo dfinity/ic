@@ -18,7 +18,7 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
     let fee_account_before = setup.cketh_balance_of(setup.fee_account());
     let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
 
-    let sweeper = setup.await_funding_decision(Duration::from_secs(120));
+    let sweeper = setup.await_sweeper_address(Duration::from_secs(180));
     assert_eq!(
         setup.anvil_eth_balance(&sweeper),
         0,
