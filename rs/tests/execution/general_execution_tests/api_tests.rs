@@ -253,11 +253,21 @@ pub fn subnet_metrics_own_subnet_succeeds(env: TestEnv) {
             // Assert.
             let bytes = result.expect("subnet_metrics call failed");
             let response = decode_subnet_metrics(&bytes);
-            // The universal canister itself is on the subnet, so there is at
-            // least one canister and some state.
+            // The universal canister itself is on the subnet, so all three are
+            // non-zero by the time this call executes. `num_canisters` and
+            // `update_transactions_total` are written at the end of every round, so
+            // they are non-zero as soon as the canister exists.
             assert!(response.num_canisters > 0_u64);
-            assert!(response.canister_state_bytes > 0_u64);
             assert!(response.update_transactions_total > 0_u64);
+            // `canister_state_bytes` is refreshed only on rounds whose batch number
+            // is a multiple of 10 (`rs/messaging/src/message_routing.rs`), so unlike
+            // the other two it legitimately reads 0 for the first rounds after a
+            // subnet's first canister appears — measured in-process as 0 at heights
+            // 5 and 9, non-zero from height 17. By the time this test runs the
+            // subnet is well past that, and this assertion is observed to hold; it
+            // is noted here as the first thing to look at should this test ever
+            // start flaking.
+            assert!(response.canister_state_bytes > 0_u64);
         }
     })
 }
@@ -418,6 +428,35 @@ pub fn subnet_metrics_query_fails(env: TestEnv) {
     })
 }
 
+/// Documents what a canister developer actually observes when calling
+/// `subnet_metrics` from a composite query.
+///
+/// **This test is weak, and deliberately so.** It asserts only that the caller gets
+/// no response, which any failure to reply would also produce — it cannot
+/// distinguish "stopped by the `subnet_metrics` composite-query arm in
+/// `resolve_destination`" from any other reason the canister did not reply, and it
+/// would pass against a stub. The test that actually proves the arm is
+/// `resolve_subnet_metrics_rejects_composite_query` in
+/// `rs/embedders/src/wasmtime_embedder/system_api/routing.rs`, which calls
+/// `resolve_destination` directly and asserts its error code and exact message. The
+/// division of labour is: **that** unit test proves the arm; **this** system test
+/// documents the end-to-end user-visible behaviour.
+///
+/// **Why the arm's message cannot be asserted here.** The arm makes
+/// `resolve_destination` fail, so the request never becomes a message:
+/// `reject_subnet_message_routing` synthesises a reject response into the calling
+/// canister's system state, and on the *query* path that response is never delivered
+/// back to the callback. The universal canister therefore ends its composite query
+/// without replying, and the caller gets `ErrorCode::CanisterDidNotReply` →
+/// `RejectCode::CanisterError`, `"Canister <id> did not produce a response"` —
+/// never `"subnet_metrics API cannot be called from a composite query"`.
+///
+/// That swallowing is **pre-existing platform behaviour of this arm, not something
+/// `subnet_metrics` introduced**: `fetch_canister_logs` has the identical arm, ships
+/// enabled by default, and behaves the same way. It went unnoticed because there is
+/// no end-to-end test of it anywhere in the repo. Improving the error a developer
+/// sees would mean changing how routing rejects are delivered on the query path for
+/// every ic00 method, which is a platform change and out of scope here.
 pub fn subnet_metrics_composite_query_fails(env: TestEnv) {
     // Arrange.
     let (app_node, agent) = setup_app_node_and_agent(&env);
@@ -431,8 +470,8 @@ pub fn subnet_metrics_composite_query_fails(env: TestEnv) {
                 &logger,
             )
             .await;
-            // Act. This is the only path on which the new `resolve_destination`
-            // arm runs with `is_composite_query == true`.
+            // Act. This is the only path on which `resolve_destination` runs with
+            // `is_composite_query == true`.
             let result = canister
                 .composite_query(
                     wasm().call_simple(
@@ -440,24 +479,20 @@ pub fn subnet_metrics_composite_query_fails(env: TestEnv) {
                         Method::SubnetMetrics,
                         call_args()
                             .other_side(ic00::SubnetMetricsArgs { subnet_id }.encode())
-                            // Surface the inner reject message so the assertion below
-                            // can distinguish "rejected before the handler ran" from
-                            // "the handler ran and rejected".
+                            // Kept even though it never fires, so that if the platform
+                            // ever does deliver the routing reject, this test fails
+                            // loudly with the inner message rather than silently
+                            // continuing to assert the swallowed behaviour.
                             .on_reject(wasm().reject_message().reject()),
                     ),
                 )
                 .await;
-            // Assert. The call is rejected by `resolve_destination`'s explicit
-            // composite-query arm, before the handler runs and before the request
-            // is ever routed. `reject_subnet_message_routing` turns that into a
-            // `DestinationInvalid` reject on the inner call, whose message the
-            // universal canister re-rejects above — so the method name in the
-            // asserted text is what makes this test method-specific rather than a
-            // generic "queries cannot call ic00" check.
+            // Assert. See the doc comment: the reject is swallowed, so the
+            // observable outcome is that the canister produced no response.
             assert_reject_msg(
                 result,
-                RejectCode::CanisterReject,
-                "subnet_metrics API cannot be called from a composite query",
+                RejectCode::CanisterError,
+                "did not produce a response",
             );
         }
     })

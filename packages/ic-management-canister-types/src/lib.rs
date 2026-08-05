@@ -1388,6 +1388,23 @@ pub struct SubnetMetricsArgs {
 /// Result type of [`subnet_metrics`](https://docs.internetcomputer.org/references/management-canister/#subnet_metrics).
 ///
 /// This API is EXPERIMENTAL and may evolve in a non-backward-compatible way.
+///
+/// # Freshness
+///
+/// Only `block_height` is current as of the block in which the call is executed.
+/// The other four are read from the subnet's aggregated metrics, which the replica
+/// updates at the *end* of a round, so they describe the state as of an earlier
+/// block:
+///
+/// - `num_canisters`, `update_transactions_total` and `consumed_cycles_total` are
+///   as of the end of the previous round.
+/// - `canister_state_bytes` is recomputed only every 10 rounds, because summing it
+///   over every canister is expensive and it does not need to be exact. It can
+///   therefore be up to ten rounds stale, and reads as `0` for the first rounds
+///   after a subnet's first canister appears.
+///
+/// These are the same values, with the same staleness, that `read_state` returns
+/// for the `/subnet/<subnet_id>/metrics` path, so the two agree.
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
@@ -1396,15 +1413,20 @@ pub struct SubnetMetricsResult {
     /// execution the call is processed. Monotonically non-decreasing for a given
     /// subnet; heights of different subnets are unrelated.
     pub block_height: Nat,
-    /// Current number of canisters on the subnet.
+    /// Number of canisters on the subnet, as of the end of the previous round.
     pub num_canisters: Nat,
-    /// Current total size in bytes of the state taken by canisters on the subnet.
+    /// Total size in bytes of the state taken by canisters on the subnet.
+    ///
+    /// Refreshed only every 10 rounds, so this can be up to ten rounds stale (and
+    /// reads as `0` for the first rounds of a subnet's life). See the type-level
+    /// "Freshness" note.
     pub canister_state_bytes: Nat,
     /// Total cycles removed from circulation on the subnet by all current and
-    /// deleted canisters.
+    /// deleted canisters, as of the end of the previous round.
     pub consumed_cycles_total: Nat,
     /// Total number of transactions processed on the subnet, i.e. the total
-    /// number of messages executed in replicated mode.
+    /// number of messages executed in replicated mode, as of the end of the
+    /// previous round.
     pub update_transactions_total: Nat,
 }
 
