@@ -1455,6 +1455,9 @@ struct ProposeToChangeNnsCanisterCmd {
 
     #[clap(long)]
     /// Whether to skip the canister's pre_upgrade hook. Only valid when mode is upgrade.
+    // This is not Option<bool>, because `--skip-pre-upgrade true` looks stupid.
+    // At the same time, it is fine that we do not support both `None` and
+    // `Some(false)`, because those end up having the same behavior.
     skip_pre_upgrade: bool,
 
     #[clap(long)]
@@ -1555,22 +1558,31 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
     }
 }
 
-/// Constructs a CanisterUpgradeOptions from its constituents.
-///
-/// (Presumably, the pieces were passed via CLI flags.)
+/// Constructs a CanisterUpgradeOptions from its flag values.
 ///
 /// Returns None if skip_pre_upgrade is false and wasm_memory_persistence is
 /// None, i.e. there is nothing to say.
 fn assemble_canister_upgrade_options(
+    // These parameter types match the corresponding flags.
     skip_pre_upgrade: bool,
     wasm_memory_persistence: Option<WasmMemoryPersistence>,
 ) -> Option<GovernanceCanisterUpgradeOptions> {
     let has_option = skip_pre_upgrade || wasm_memory_persistence.is_some();
     if !has_option {
+        // It is not ok to always return an "empty" CanisterUpgradeOptions,
+        // because that is only allowed when `--mode upgrade`.
         return None;
     }
 
-    let skip_pre_upgrade = if skip_pre_upgrade { Some(true) } else { None };
+    let skip_pre_upgrade = if skip_pre_upgrade {
+        Some(true)
+    } else {
+        // Alternatively, we could use Some(false) here, but when false is
+        // passed to this function, that means that there was no
+        // `--skip-pre-upgrade` in the command. This better reflects that
+        // omission.
+        None
+    };
 
     let wasm_memory_persistence = wasm_memory_persistence.map(|wasm_memory_persistence| {
         WasmMemoryPersistenceProto::from(&wasm_memory_persistence) as i32
