@@ -3,7 +3,7 @@ use crate::events::MinterEventAssert;
 use crate::flow::{
     ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
 };
-use crate::mock::JsonRpcMethod;
+use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, debug_http_outcalls, pending_outcalls_for};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
@@ -47,6 +47,7 @@ pub mod flow;
 pub mod live_scan;
 pub mod mock;
 pub mod response;
+pub mod sweeper_funding;
 
 pub use evm_rpc_provider::JsonRpcProvider;
 
@@ -156,14 +157,48 @@ impl CkEthSetup {
         install_evm_rpc(&env, &canisters, &backend);
         install_minter(&env, &canisters, &backend);
 
-        Self {
+        let cketh = Self {
             env,
             caller: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID),
             ledger_id: canisters.ledger_id,
             minter_id: canisters.minter_id,
             evm_rpc_id: canisters.evm_rpc_id,
             support_subaccount: false,
+        };
+
+        assert_eq!(
+            Address::from_str(MINTER_ADDRESS).unwrap(),
+            Address::from_str(&cketh.minter_address()).unwrap()
+        );
+
+        cketh.settle_initial_sweeper_funding_check();
+        cketh
+    }
+
+    /// Answers the balance read that an install schedules, reporting a sweeper balance above the
+    /// low-water mark so no funding is due. Every mocked test needs it: an unanswered outcall stays
+    /// in flight forever, which skews pending-outcall assertions and stops the minter from stopping.
+    fn settle_initial_sweeper_funding_check(&self) {
+        const TOPPED_UP: &str = "0x16345785d8a0000"; // 0.1 ETH
+        self.env
+            .advance_time(ic_cketh_minter::INITIAL_SWEEPER_FUNDING_DELAY);
+        // Waits for the outcall rather than ticking a fixed number of times, so a check that stops
+        // firing fails here instead of surfacing in whichever test runs next.
+        let mut ticks = 0;
+        while pending_outcalls_for(&self.env, &JsonRpcMethod::EthGetBalance) == 0 {
+            assert!(
+                ticks < MAX_TICKS,
+                "no eth_getBalance outcall after {MAX_TICKS} ticks; the install-time sweeper \
+                 funding check did not fire. Pending outcalls:\n{}",
+                debug_http_outcalls(&self.env)
+            );
+            self.env.tick();
+            ticks += 1;
         }
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBalance)
+            .respond_for_all_with(TOPPED_UP)
+            .build()
+            .expect_rpc_calls(self);
     }
 
     pub fn add_support_for_subaccount(self) -> Self {
@@ -490,6 +525,9 @@ impl CkEthSetup {
             )
             .unwrap();
         self.start_minter();
+        // Deliberately not settled again after an upgrade: advancing time to it perturbs the other
+        // periodic timers and breaks unrelated tests, and `stop_minter` drains pending outcalls
+        // anyway. Assertions counting pending outcalls should filter by method.
     }
 
     pub fn submit_stop_minter(&self) -> RawMessageId {

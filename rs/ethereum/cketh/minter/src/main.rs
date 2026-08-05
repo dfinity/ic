@@ -37,15 +37,18 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
-use ic_cketh_minter::timed_sized_map::Timestamp;
+use ic_cketh_minter::sweeper::fund_sweeper_address;
+use ic_cketh_minter::timed_sized_map::{Entry, Timestamp};
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
     CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
     process_reimbursement, process_retrieve_eth_requests,
 };
 use ic_cketh_minter::{
-    BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
-    REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL, state, storage,
+    BALANCE_SCAN_INTERVAL, INITIAL_SWEEPER_FUNDING_DELAY,
+    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
+    REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL, SWEEPER_FUNDING_INTERVAL,
+    state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -106,6 +109,15 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(BALANCE_SCAN_INTERVAL, async || {
         balance_scan().await;
+    });
+    // Checked shortly after install as well as on the interval, so an upgrade that finds the
+    // sweeper address low does not have to wait a whole interval to act on it. Deliberately not at
+    // zero: see INITIAL_SWEEPER_FUNDING_DELAY.
+    ic_cdk_timers::set_timer(INITIAL_SWEEPER_FUNDING_DELAY, async {
+        fund_sweeper_address().await;
+    });
+    ic_cdk_timers::set_timer_interval(SWEEPER_FUNDING_INTERVAL, async || {
+        fund_sweeper_address().await;
     });
 }
 
@@ -873,6 +885,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from,
                     from_subaccount,
                     created_at,
+                    cketh_burned,
                 }) => EP::AcceptedSweeperFundingRequest {
                     withdrawal_amount: withdrawal_amount.into(),
                     destination: destination.to_string(),
@@ -880,6 +893,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from,
                     from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
                     created_at,
+                    cketh_burned: cketh_burned.into(),
                 },
                 EventType::CreatedTransaction {
                     withdrawal_id,

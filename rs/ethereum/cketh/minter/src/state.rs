@@ -450,7 +450,7 @@ impl State {
                 TransactionStatus::Failure => Wei::ZERO,
             };
             self.sweeper_funding
-                .record_finalized_funding(transferred, tx_fee);
+                .record_finalized_funding(*withdrawal_id, transferred, tx_fee);
         }
 
         if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
@@ -932,4 +932,5 @@ pub enum TaskType {
     MintCkErc20,
     RefreshLatestBlockHeight,
     BalanceScan,
+    SweeperFunding,
 }

@@ -329,6 +329,7 @@ impl GetEventsFile {
                     from,
                     from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                     created_at,
+                    cketh_burned: cketh_burned.try_into().unwrap(),
                 }),
                 EventPayload::CreatedTransaction {
                     withdrawal_id,

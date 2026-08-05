@@ -42,6 +42,18 @@ pub struct Anvil {
 
 impl Anvil {
     pub fn start() -> Self {
+        Self::start_with_args(&[])
+    }
+
+    /// Starts anvil impersonating Ethereum mainnet: chain id 1, so transactions the minter signs for
+    /// `EthereumNetwork::Mainnet` are accepted, with one slot per epoch so the `finalized` block tag
+    /// trails `latest` by two blocks instead of the default 64 (2 epochs x 32 slots) — which is what
+    /// lets a test drive the minter at its production `BlockTag::Finalized`.
+    pub fn start_mainnet_like() -> Self {
+        Self::start_with_args(&["--chain-id", "1", "--slots-in-an-epoch", "1"])
+    }
+
+    fn start_with_args(extra_args: &[&str]) -> Self {
         let bin = std::env::var("ANVIL_BIN").expect("ANVIL_BIN not set by Bazel");
         let port = {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -52,6 +64,7 @@ impl Anvil {
             .arg("127.0.0.1")
             .arg("--port")
             .arg(port.to_string())
+            .args(extra_args)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -118,6 +131,31 @@ impl Anvil {
             "anvil_setStorageAt",
             serde_json::json!([to_hex(address.as_ref()), to_hex(slot), to_hex(value)]),
         );
+    }
+
+    /// Credits `address` with `wei` of native ETH (foundry's `anvil_setBalance`).
+    pub(crate) fn set_balance(&self, address: &Address, wei: u128) {
+        self.rpc(
+            "anvil_setBalance",
+            serde_json::json!([to_hex(address.as_ref()), format!("0x{wei:x}")]),
+        );
+    }
+
+    /// The native ETH balance of `address` at `block`, read straight from anvil, i.e. the
+    /// ground truth an `eth_getBalance` routed through the EVM RPC canister must reproduce.
+    pub(crate) fn eth_balance(&self, address: &Address, block: &str) -> u128 {
+        let hex = self.rpc(
+            "eth_getBalance",
+            serde_json::json!([to_hex(address.as_ref()), block]),
+        );
+        let hex = hex.as_str().expect("eth_getBalance must return a string");
+        u128::from_str_radix(hex.trim_start_matches("0x"), 16)
+            .expect("eth_getBalance must return a hex quantity")
+    }
+
+    /// Mines `count` blocks (foundry's `anvil_mine`).
+    pub(crate) fn mine(&self, count: u64) {
+        self.rpc("anvil_mine", serde_json::json!([format!("0x{count:x}")]));
     }
 
     /// A create-style `eth_call` (no `to`): anvil runs `data` as init code and returns whatever it

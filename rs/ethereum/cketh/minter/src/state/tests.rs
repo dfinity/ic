@@ -859,6 +859,7 @@ prop_compose! {
             from,
             from_subaccount,
             created_at,
+            cketh_burned,
         }
     }
 }
