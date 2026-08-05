@@ -598,20 +598,19 @@ pub(crate) fn find_flexible_result(
             callback_id,
             /* min_to_select = */ min_responses,
             /* max_to_select = */ max_responses as usize,
-            min_responses as u32,
+            /* min_responses = */ min_responses as u32,
             accumulated_size,
             max_payload_size,
             context,
         ) {
-            return FlexibleFindResult::OkResponses(
-                FlexibleCanisterHttpResponses {
-                    callback_id,
-                    responses: into_responses_with_proof(ok_candidates, selection.count),
-                    extra_shares: selection.extra_shares.into_iter().cloned().collect(),
-                    initial_spent: selection.initial_spent,
-                },
-                selection.size,
-            );
+            let group = FlexibleCanisterHttpResponses {
+                callback_id,
+                responses: into_responses_with_proof(ok_candidates, selection.count),
+                extra_shares: selection.extra_shares.into_iter().cloned().collect(),
+                initial_spent: selection.initial_spent,
+            };
+            let group_size = group.count_bytes();
+            return FlexibleFindResult::OkResponses(group, group_size);
         }
     }
     // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
@@ -625,7 +624,7 @@ pub(crate) fn find_flexible_result(
             callback_id,
             /* min_to_select = */ min_rejects,
             /* max_to_select = */ reject_candidates.len(),
-            min_responses as u32,
+            /* min_responses = */ min_responses as u32,
             accumulated_size,
             max_payload_size,
             context,
@@ -697,8 +696,6 @@ struct FlexibleSelection<'a> {
     extra_shares: Vec<&'a CanisterHttpResponseShare>,
     /// The collective cost of the selected candidates and any extra shares.
     initial_spent: Cycles,
-    /// The total size of the selected candidates and any extra shares.
-    size: usize,
 }
 
 /// Returns how many (up to `max_to_select`) of `candidates` to include in the payload, and
@@ -720,58 +717,51 @@ fn select_flexible_responses<'a>(
     context: &CanisterHttpRequestContext,
 ) -> Option<FlexibleSelection<'a>> {
     let max_to_select = max_to_select.min(candidates.len());
-    // Initially, select as many candidates as possible (up to max_to_select), and
-    // compute their total size.
-    let mut selected_responses_size = FlexibleCanisterHttpResponses::base_count_bytes();
-    let mut selected_signers = BTreeSet::new();
-    for candidate in &candidates[..max_to_select] {
-        selected_responses_size += candidate.size;
-        selected_signers.insert(candidate.share.signature.signer);
-    }
 
-    // Check if the current selection is funded (potentially by adding extra shares) and
-    // fits into the block. If not, give up the largest response and try again with one fewer.
+    // Start with as many candidates as possible (up to `max_to_select`). Check whether the
+    // current selection is funded (potentially by adding extra shares) and fits into the
+    // block. If not, give up the largest response and try again with one fewer.
     for selected in (min_to_select..=max_to_select).rev() {
+        let selected = &candidates[..selected];
         // Compute the cost of the current selection without any extra shares.
         let selected_spend = flexible_initial_spent(
-            candidates[..selected]
-                .iter()
-                .map(|candidate| candidate.share),
+            selected.iter().map(|candidate| candidate.share),
             std::iter::empty(),
             context.subnet_size,
             min_responses,
         );
+        let selected_signers: BTreeSet<_> = selected
+            .iter()
+            .map(|candidate| candidate.share.signature.signer)
+            .collect();
         // If the current selection is not covered by unspent allowance, try to fund it
         // by adding extra shares.
-        if let Some((extra_shares, extra_spent)) = fund_flexible_selection(
+        let Some((extra_shares, extra_spent)) = fund_flexible_selection(
             selected_spend,
-            selected,
+            selected.len(),
             &selected_signers,
             all_shares,
             callback_id,
             context,
-        ) {
-            let size = selected_responses_size
-                + extra_shares
-                    .iter()
-                    .map(|share| share.count_bytes())
-                    .sum::<usize>();
-            if NumBytes::new((accumulated_size + size) as u64) < max_payload_size {
-                // Return the selection if it is covered by unspent allowance and
-                // fits into the block.
-                return Some(FlexibleSelection {
-                    count: selected,
-                    extra_shares,
-                    initial_spent: selected_spend + extra_spent,
-                    size,
-                });
-            }
-        }
-        // Else: the selection could not be funded or didn't fit into the block.
-        // Give up the largest response and try again with one fewer.
-        if let Some(candidate) = selected.checked_sub(1).map(|last| &candidates[last]) {
-            selected_responses_size -= candidate.size;
-            selected_signers.remove(&candidate.share.signature.signer);
+        ) else {
+            continue;
+        };
+        let size = FlexibleCanisterHttpResponses::base_count_bytes()
+            + selected
+                .iter()
+                .map(|candidate| candidate.size)
+                .sum::<usize>()
+            + extra_shares
+                .iter()
+                .map(|share| share.count_bytes())
+                .sum::<usize>();
+        // Return the selection if it also fits into the block.
+        if NumBytes::new((accumulated_size + size) as u64) < max_payload_size {
+            return Some(FlexibleSelection {
+                count: selected.len(),
+                extra_shares,
+                initial_spent: selected_spend + extra_spent,
+            });
         }
     }
     None
@@ -780,7 +770,7 @@ fn select_flexible_responses<'a>(
 /// Picks the fewest of `all_shares` required to cover the collective spend of
 /// `selected_count` many responses with unspent allowance.
 /// Returns the chosen shares together with the spend they add, or `None` if
-/// even all of them together can not cover the `selected_spend`.
+/// even all of them together cannot cover the `selected_spend`.
 fn fund_flexible_selection<'a>(
     selected_spend: Cycles,
     selected_count: usize,
@@ -806,13 +796,13 @@ fn fund_flexible_selection<'a>(
         )
         .is_ok()
         {
-            // Return the chosen extra shares and the spend they add,
-            //if the candidates are now covered by unspent allowance.
+            // Return the chosen extra shares and the spend they add, if the
+            // candidates are now covered by unspent allowance.
             return Some((extra_shares, extra_spent));
         }
         // Else: Add another share if one exists.
         let share = fundable.next()?;
-        extra_spent += share.content.payment_receipt.spent;
+        extra_spent += share.content.spent();
         extra_shares.push(*share);
     }
 }

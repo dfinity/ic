@@ -73,11 +73,12 @@ impl FlexibleCanisterHttpError {
         }
     }
 
-    /// The signed receipts this error carries without a response body: the
-    /// evidence behind [`Self::ResponsesTooLarge`] and the extra shares funding a
-    /// [`Self::TooManyRejects`]. Empty for [`Self::Timeout`], which carries no
-    /// shares at all.
-    pub fn shares_without_response(&self) -> &[CanisterHttpResponseShare] {
+    /// The signed receipts this error carries whose response body is *not* part of
+    /// the payload: all of the evidence behind [`Self::ResponsesTooLarge`], and the
+    /// extra shares funding a [`Self::TooManyRejects`] (whose reject bodies *are*
+    /// delivered, so their proofs are not included here). Empty for
+    /// [`Self::Timeout`], which carries no shares at all.
+    pub fn shares_without_delivered_response(&self) -> &[CanisterHttpResponseShare] {
         match self {
             Self::Timeout { .. } => &[],
             Self::ResponsesTooLarge {
@@ -114,6 +115,20 @@ impl FlexibleCanisterHttpResponses {
     /// sizes via [`CanisterHttpResponseShare::count_bytes`].
     pub fn base_count_bytes() -> usize {
         std::mem::size_of::<CallbackId>() + std::mem::size_of::<Cycles>()
+    }
+}
+
+impl CountBytes for FlexibleCanisterHttpResponses {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            callback_id: _,
+            responses,
+            extra_shares,
+            initial_spent: _,
+        } = self;
+        Self::base_count_bytes()
+            + responses.iter().map(|r| r.count_bytes()).sum::<usize>()
+            + extra_shares.iter().map(|s| s.count_bytes()).sum::<usize>()
     }
 }
 
