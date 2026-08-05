@@ -375,8 +375,9 @@ impl ReplicatedStateMetrics {
     /// pending unbounded-wait response by the sender's subnet and observes them.
     ///
     /// All subnets in the network topology are observed (with a zero count if they
-    /// have no such call context), so that the full set of time series is exported
-    /// and no stale values are left behind.
+    /// have no such call context), so that the full set of time series is exported.
+    /// And the time series of subnets that are no longer part of the network
+    /// topology are dropped, so no stale values are left behind.
     fn observe_unresponded_unbounded_wait_call_contexts(
         &self,
         state: &ReplicatedState,
@@ -396,6 +397,11 @@ impl ReplicatedStateMetrics {
                 .entry(network_topology.route(sender.get()))
                 .or_default() += count;
         }
+
+        // Drop the time series of all subnets observed so far, as a subnet that is no
+        // longer part of the network topology (e.g. because it was merged into
+        // another one) would otherwise linger at its last observed value forever.
+        self.unresponded_unbounded_wait_call_contexts.reset();
 
         for (subnet, count) in counts_by_subnet {
             let label = match subnet {

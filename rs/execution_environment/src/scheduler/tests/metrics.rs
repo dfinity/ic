@@ -32,7 +32,6 @@ use ic_test_utilities_metrics::{
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
-use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
@@ -40,6 +39,7 @@ use ic_types::messages::{
     StopCanisterContext,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::{NumBytes, SubnetId};
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
 };
@@ -991,6 +991,52 @@ fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
             &subnet_label_values,
         );
     }
+}
+
+#[test]
+fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts_drops_removed_subnets() {
+    const NAME: &str = "replicated_state_unresponded_unbounded_wait_call_contexts";
+    let own_subnet = subnet_test_id(1);
+    let remote_subnet = subnet_test_id(2);
+
+    let set_subnets = |state: &mut ReplicatedState, subnet_ids: &[SubnetId]| {
+        let subnets = subnet_ids
+            .iter()
+            .map(|subnet_id| (*subnet_id, SubnetTopology::default()))
+            .collect();
+        state
+            .metadata
+            .modify_network_topology(|network_topology| network_topology.set_subnets(subnets));
+    };
+
+    // Unlike elsewhere in this test module, the same metrics registry is used across
+    // both observations, in order to be able to observe stale time series.
+    let registry = MetricsRegistry::new();
+    let metrics = ReplicatedStateMetrics::new(&registry);
+
+    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
+    set_subnets(&mut state, &[own_subnet, remote_subnet]);
+    metrics.observe(own_subnet, &state, 0.into(), &no_op_logger());
+    assert_eq!(
+        metric_vec(&[
+            (&[("sender_subnet", own_subnet.to_string())], 0),
+            (&[("sender_subnet", remote_subnet.to_string())], 0),
+            (&[("sender_subnet", "unknown".into())], 0),
+        ]),
+        fetch_int_gauge_vec(&registry, NAME)
+    );
+
+    // Dropping `remote_subnet` from the network topology (e.g. because it was merged
+    // into `own_subnet`) drops its time series, rather than leaving it behind.
+    set_subnets(&mut state, &[own_subnet]);
+    metrics.observe(own_subnet, &state, 0.into(), &no_op_logger());
+    assert_eq!(
+        metric_vec(&[
+            (&[("sender_subnet", own_subnet.to_string())], 0),
+            (&[("sender_subnet", "unknown".into())], 0),
+        ]),
+        fetch_int_gauge_vec(&registry, NAME)
+    );
 }
 
 #[test]
