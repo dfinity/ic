@@ -948,3 +948,67 @@ fn validate_strict_split_rejects_stale_cold_canister() {
         "unexpected error: {err}",
     );
 }
+
+/// Consumes `amount` cycles on `canister`, as storage / instruction charging
+/// does. Consuming cycles does not create work, so a cold canister stays cold.
+fn consume_cycles(canister: &mut Arc<CanisterState>, amount: u128) {
+    use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Instructions};
+
+    Arc::make_mut(canister)
+        .system_state
+        .consume_cycles(CompoundCycles::<Instructions>::new(
+            Cycles::new(amount),
+            CanisterCyclesCostSchedule::Normal,
+        ));
+}
+
+/// Folds `consumed_cycles` over every canister, hot and cold, without going
+/// through the `cold_stats` aggregate.
+fn direct_consumed_cycles_fold(states: &CanisterStates) -> ic_types_cycles::NominalCycles {
+    use ic_types_cycles::NominalCycles;
+
+    states
+        .all_values()
+        .fold(NominalCycles::zero(), |acc, canister| {
+            acc + canister.system_state.canister_metrics().consumed_cycles()
+        })
+}
+
+#[test]
+fn validate_cold_stats_accepts_consistent_stats() {
+    let mut states = CanisterStates::default();
+    states.insert(cold_canister(1));
+    states.insert(hot_canister(2));
+    states.insert(cold_canister(3));
+
+    assert_eq!(states.validate_cold_stats(), Ok(()));
+}
+
+#[test]
+fn validate_cold_stats_rejects_stale_stats() {
+    use ic_types_cycles::{NominalCycles, NominalCyclesTesting};
+
+    let mut states = CanisterStates::default();
+    let c = cold_canister(1);
+    states.insert(Arc::clone(&c));
+    assert_eq!(states.validate_cold_stats(), Ok(()));
+
+    // Bypass the public mutation entry points: mutate a cold canister's consumed
+    // cycles directly, behind the aggregate's back, simulating missing
+    // sub-before / add-after bracketing.
+    consume_cycles(states.cold.get_mut(&c.canister_id()).unwrap(), 42);
+    assert_eq!(states.hot.len(), 0);
+    assert_eq!(states.cold.len(), 1);
+
+    let err = states.validate_cold_stats().unwrap_err();
+    assert!(
+        err.contains("cold_stats out of sync with the cold pool"),
+        "unexpected error: {err}",
+    );
+    // The aggregate is stale, so the reported total is now wrong.
+    assert_eq!(states.cold_stats.consumed_cycles, NominalCycles::new(0));
+    assert_ne!(
+        states.total_consumed_cycles(),
+        direct_consumed_cycles_fold(&states)
+    );
+}
