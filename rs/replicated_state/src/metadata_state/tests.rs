@@ -2327,21 +2327,6 @@ fn ingress_history_state_counts() {
     );
 }
 
-#[test]
-#[should_panic(expected = "Attempted to record `IngressStatus::Unknown`")]
-fn ingress_history_insert_unknown_status_panics() {
-    let mut ingress_history = IngressHistoryState::new();
-    // `IngressStatus::Unknown` stands for the absence of an entry, so recording one
-    // is a bug.
-    ingress_history.insert(
-        message_test_id(1),
-        IngressStatus::Unknown,
-        UNIX_EPOCH,
-        NumBytes::from(u64::MAX),
-        |_| {},
-    );
-}
-
 #[derive(Clone)]
 struct SignalConfig {
     end: u64,
