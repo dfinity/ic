@@ -683,7 +683,7 @@ mod tests {
         // beyond `min_responses`.
         //   per replica    = 50_000 + latency + transform + gossip
         //   consensus      = 9_490 * 3 * (181 + 2_000_000)   = 56_945_153_070
-        //   extra response = 13 * (2_000 * 13 + 100_000)     =      1_638_000
+        //   extra response = (3 - 2) * 13 * (2_000 * 13 + 100_000)     =      1_638_000
         let per_replica = 50_000 + MAX_LATENCY_FEE + MAX_TRANSFORM_FEE + MAX_GOSSIP_FEE;
         let consensus = 9_490 * 3 * (181 + 2_000_000) + 13 * (2_000 * 13 + 100_000);
         let replication = Replication::Flexible {
