@@ -462,6 +462,14 @@ impl CheckpointLoader {
             );
         }
 
+        // Like the split marker, the "subnet was merged" marker is persisted
+        // separately from `SystemMetadata`.
+        metadata.subnet_merged = self
+            .checkpoint_layout
+            .subnet_merged_marker()
+            .deserialize()?
+            .merged;
+
         Ok(metadata)
     }
 

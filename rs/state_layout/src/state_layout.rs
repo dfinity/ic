@@ -65,6 +65,7 @@ pub const QUEUES_FILE: &str = "queues.pbuf";
 pub const CANISTER_FILE: &str = "canister.pbuf";
 pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
 pub const SPLIT_MARKER_FILE: &str = "split_from.pbuf";
+pub const SUBNET_MERGED_FILE: &str = "subnet_merged.pbuf";
 pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
 pub const REFUNDS_FILE: &str = "refunds.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
@@ -322,6 +323,7 @@ struct CheckpointRefData {
 /// │   │           └── vmemory_0.bin
 /// │   ├── ingress_history.pbuf
 /// │   ├── split_from.pbuf
+/// │   ├── subnet_merged.pbuf
 /// │   ├── subnet_queues.pbuf
 /// │   └── system_metadata.pbuf
 /// │
@@ -345,6 +347,7 @@ struct CheckpointRefData {
 /// │      │           └── vmemory_0.bin
 /// │      ├── ingress_history.pbuf
 /// │      ├── split_from.pbuf
+/// │      ├── subnet_merged.pbuf
 /// │      ├── subnet_queues.pbuf
 /// │      └── system_metadata.pbuf
 /// │
@@ -1765,6 +1768,14 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn split_marker(&self) -> ProtoFileWith<pb_metadata::SplitFrom, Permissions> {
         self.0.root.join(SPLIT_MARKER_FILE).into()
+    }
+
+    /// The "subnet was merged" marker, backing `SystemMetadata::subnet_merged`.
+    ///
+    /// A `false` flag encodes to an empty message, so (as with all other empty
+    /// protos) the file is not written at all in that case.
+    pub fn subnet_merged_marker(&self) -> ProtoFileWith<pb_metadata::SubnetMerged, Permissions> {
+        self.0.root.join(SUBNET_MERGED_FILE).into()
     }
 
     pub fn stats(&self) -> ProtoFileWith<pb_stats::Stats, Permissions> {

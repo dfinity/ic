@@ -615,6 +615,9 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 .subnet_split_from
                 .map(subnet_id_try_from_protobuf)
                 .transpose()?,
+            // Note: `load_checkpoint()` will set this based on the presence of
+            // `subnet_merged.pbuf`.
+            subnet_merged: false,
             canister_allocation_ranges,
             last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
