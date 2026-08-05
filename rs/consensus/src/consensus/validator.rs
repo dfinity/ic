@@ -783,7 +783,10 @@ impl Validator {
         pool_reader: &PoolReader<'_>,
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
-        check_protocol_version(artifact.version())
+        check_protocol_version(
+            artifact.version(),
+            &self.replica_config.platform_version.binary_version,
+        )
             .map_err(|_| InvalidArtifactReason::ReplicaVersionMismatch)?;
         artifact.verify_signature(
             self.membership.as_ref(),
@@ -901,7 +904,12 @@ impl Validator {
         Signed<T, S>: SignatureVerify + ConsensusMessageHashable + Clone,
         T: NotaryIssued + HasVersion,
     {
-        if check_protocol_version(notary_issued.content.version()).is_err() {
+        if check_protocol_version(
+            notary_issued.content.version(),
+            &self.replica_config.platform_version.binary_version,
+        )
+        .is_err()
+        {
             return Some(ChangeAction::RemoveFromUnvalidated(
                 notary_issued.into_message(),
             ));

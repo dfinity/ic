@@ -5,7 +5,6 @@
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    is_current_protocol_version,
     membership::{Membership, MembershipError},
 };
 use ic_interfaces::{
@@ -507,7 +506,9 @@ impl CanisterHttpPoolManagerImpl {
                 let share = &artifact.share;
 
                 // Reject shares from different replica versions
-                if !is_current_protocol_version(share.content.replica_version()) {
+                if share.content.replica_version()
+                    != &self.replica_config.platform_version.binary_version
+                {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 }
 

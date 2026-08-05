@@ -80,7 +80,7 @@ pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatu
         impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
         replica_health_status: Some(state.replica_health_status.load()),
         certified_height: Some(state.state_reader.latest_certified_height()),
-        replica_start_time: Some(ic_types::replica_version::ensure_replica_start_time_set()),
+        replica_start_time: None,
     };
     Cbor(response)
 }

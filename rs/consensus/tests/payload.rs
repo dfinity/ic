@@ -194,6 +194,7 @@ fn consensus_produces_expected_batches() {
         let dkg = ic_consensus_dkg::DkgImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
+            replica_config.platform_version.binary_version.clone(),
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,

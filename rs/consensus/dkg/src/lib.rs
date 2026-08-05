@@ -64,6 +64,7 @@ const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attempts to run this DKG repeat
 pub struct DkgImpl {
     node_id: NodeId,
     subnet_id: SubnetId,
+    binary_version: ReplicaVersion,
     registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -78,6 +79,7 @@ impl DkgImpl {
     pub fn new(
         node_id: NodeId,
         subnet_id: SubnetId,
+        binary_version: ReplicaVersion,
         registry_client: Arc<dyn RegistryClient>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         crypto: Arc<dyn ConsensusCrypto>,
@@ -89,6 +91,7 @@ impl DkgImpl {
         Self {
             node_id,
             subnet_id,
+            binary_version,
             registry_client,
             state_reader,
             crypto,
@@ -189,7 +192,7 @@ impl DkgImpl {
             return Mutations::new();
         };
 
-        if message.content.version != ReplicaVersion::default() {
+        if message.content.version != self.binary_version {
             return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
@@ -534,6 +537,8 @@ mod tests {
                 let dkg = DkgImpl::new(
                     replica_1,
                     subnet_id,
+    ReplicaVersion::default(),
+ ReplicaVersion::default(),
                     registry.clone(),
                     state_manager.clone(),
                     crypto.clone(),
@@ -604,6 +609,8 @@ mod tests {
                 let dkg_2 = DkgImpl::new(
                     replica_2,
                     subnet_id,
+    ReplicaVersion::default(),
+ ReplicaVersion::default(),
                     registry,
                     state_manager,
                     crypto,
@@ -692,7 +699,8 @@ mod tests {
                 let dkg = DkgImpl::new(
                     node_test_id(3),
                     replica_config.subnet_id,
-                    registry.clone(),
+    ReplicaVersion::default(),
+registry.clone(),
                     state_manager.clone(),
                     crypto.clone(),
                     pool.get_cache(),
@@ -708,7 +716,8 @@ mod tests {
                 let dkg = DkgImpl::new(
                     node_test_id(1),
                     replica_config.subnet_id,
-                    registry,
+    ReplicaVersion::default(),
+registry,
                     state_manager,
                     crypto,
                     pool.get_cache(),
@@ -806,7 +815,8 @@ mod tests {
                 let dkg = DkgImpl::new(
                     node_test_id(1),
                     subnet_id,
-                    registry.clone(),
+    ReplicaVersion::default(),
+registry.clone(),
                     state_manager.clone(),
                     crypto,
                     pool.get_cache(),
@@ -1098,6 +1108,7 @@ mod tests {
                     let dkg_1 = DkgImpl::new(
                         node_id_1,
                         replica_config_1.subnet_id,
+                    ReplicaVersion::default(),
                         registry_1,
                         state_manager_1,
                         crypto.clone(),
@@ -1115,6 +1126,7 @@ mod tests {
                     let dkg_2 = DkgImpl::new(
                         node_id_2,
                         replica_config_2.subnet_id,
+                    ReplicaVersion::default(),
                         registry_2,
                         state_manager_2,
                         crypto.clone(),
@@ -1603,7 +1615,8 @@ mod tests {
                     let dkg_1 = DkgImpl::new(
                         node_test_id(1),
                         subnet_id_1,
-                        registry_1,
+    ReplicaVersion::default(),
+registry_1,
                         state_manager_1,
                         crypto_1,
                         pool_1.get_cache(),
@@ -1615,7 +1628,8 @@ mod tests {
                     let dkg_2 = DkgImpl::new(
                         node_test_id(2),
                         subnet_id_2,
-                        registry_2,
+    ReplicaVersion::default(),
+registry_2,
                         state_manager_2,
                         crypto_2.clone(),
                         pool_2.get_cache(),
@@ -2127,6 +2141,7 @@ mod tests {
                 let receiver_dkg = DkgImpl::new(
                     node_test_id(2),
                     deps.replica_config.subnet_id,
+                    ReplicaVersion::default(),
                     deps.registry.clone(),
                     deps.state_manager.clone(),
                     deps.crypto.clone(),

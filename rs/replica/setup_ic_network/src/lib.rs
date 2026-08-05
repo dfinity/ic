@@ -620,7 +620,7 @@ fn start_consensus(
 
     // Create the certification client.
     let certifier = CertifierImpl::new(
-        replica_config,
+        replica_config.clone(),
         Arc::clone(&registry_client),
         Arc::clone(&certifier_crypto),
         Arc::clone(&state_manager) as Arc<_>,
@@ -641,6 +641,7 @@ fn start_consensus(
         ic_consensus_dkg::DkgImpl::new(
             node_id,
             subnet_id,
+            replica_config.platform_version.binary_version.clone(),
             Arc::clone(&registry_client),
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_crypto),

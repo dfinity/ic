@@ -409,11 +409,6 @@ fn get_transcript_data_at_given_summary<T>(
 ///
 /// # Returns
 ///
-/// - `true` if `version` matches the current version
-/// - `false` otherwise
-pub fn is_current_protocol_version(version: &ReplicaVersion) -> bool {
-    version == &ReplicaVersion::default()
-}
 
 /// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
 pub fn get_subnet_record(

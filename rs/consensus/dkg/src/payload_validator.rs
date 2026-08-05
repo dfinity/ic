@@ -279,7 +279,7 @@ mod tests {
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
     };
     use ic_types::{
-        Height, NodeId, RegistryVersion,
+        Height, NodeId, RegistryVersion, ReplicaVersion,
         batch::BatchPayload,
         consensus::{
             DataPayload, Payload,
@@ -790,6 +790,7 @@ mod tests {
             let dkg_impl = DkgImpl::new(
                 node_id,
                 subnet_id,
+                ReplicaVersion::default(),
                 registry.clone(),
                 state_manager.clone(),
                 crypto.clone(),

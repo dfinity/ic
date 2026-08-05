@@ -112,9 +112,9 @@ pub(crate) struct ReplicaVersionMismatch {}
 /// protocol version and returns an error if it does not.
 pub(crate) fn check_protocol_version(
     version: &ReplicaVersion,
+    expected_version: &ReplicaVersion,
 ) -> Result<(), ReplicaVersionMismatch> {
-    let expected_version = ReplicaVersion::default();
-    if version != &expected_version {
+    if version != expected_version {
         Err(ReplicaVersionMismatch {})
     } else {
         Ok(())
