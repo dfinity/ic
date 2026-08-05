@@ -42,6 +42,8 @@ pub const LABEL_IO_ERROR: &str = "io";
 pub const LABEL_TLS_ERROR: &str = "tls_handshake_failed";
 pub const LABEL_TIMEOUT_ERROR: &str = "timeout";
 
+pub const LABEL_DELEGATION_FORMAT: &str = "delegation_format";
+
 pub const REQUESTS_NUM_LABELS: usize = 2;
 pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] =
     [LABEL_REQUEST_TYPE, LABEL_HTTP_STATUS_CODE];
@@ -59,6 +61,7 @@ pub struct HttpHandlerMetrics {
     pub health_status_transitions_total: IntCounterVec,
     pub connection_setup_duration: HistogramVec,
     pub connection_duration: HistogramVec,
+    pub verify_delegation_duration: HistogramVec,
 
     // Ingress watcher metrics
     pub ingress_watcher_tracked_messages: IntGauge,
@@ -147,6 +150,13 @@ impl HttpHandlerMetrics {
                 // 10ms, 20ms, ... 50000s
                 decimal_buckets(-2, 4),
                 &[LABEL_PROTOCOL],
+            ),
+            verify_delegation_duration: metrics_registry.histogram_vec(
+                "replica_http_verify_delegation_duration_seconds",
+                "Duration of verifying delegation, by delegation format.",
+                // 0.1ms, 0.2ms, ... 5s
+                decimal_buckets(-4, 0),
+                &[LABEL_DELEGATION_FORMAT],
             ),
             // Ingress watcher metrics
             ingress_watcher_subscriptions_total: metrics_registry.int_counter(

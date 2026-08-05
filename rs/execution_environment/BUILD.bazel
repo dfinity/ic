@@ -14,6 +14,7 @@ rust_library(
         "//packages/ic-error-types",
         "//packages/ic-heap-bytes",
         "//rs/canister_sandbox:backend_lib",
+        "//rs/canonical_state",
         "//rs/config",
         "//rs/crypto/prng",
         "//rs/crypto/tree_hash",

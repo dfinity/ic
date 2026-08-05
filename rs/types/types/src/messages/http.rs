@@ -848,6 +848,16 @@ pub enum CertificateDelegationFormat {
     Pruned,
 }
 
+impl fmt::Display for CertificateDelegationFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CertificateDelegationFormat::Flat => write!(f, "flat"),
+            CertificateDelegationFormat::Tree => write!(f, "tree"),
+            CertificateDelegationFormat::Pruned => write!(f, "pruned"),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct CertificateDelegationMetadata {
     pub format: CertificateDelegationFormat,
