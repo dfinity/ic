@@ -616,6 +616,53 @@ fn can_recover_refunds() {
     });
 }
 
+/// Checkpoints a state with the given `SystemMetadata::subnet_merged` value and
+/// asserts that the `subnet_merged.pbuf` marker file is present iff
+/// `subnet_merged`; and that the value is derived from the checkpoint.
+fn test_can_derive_subnet_merged(subnet_merged: bool) {
+    with_test_replica_logger(|log| {
+        let tmp = tmpdir("checkpoint");
+        let root = tmp.path().to_path_buf();
+        let (_tip_handler, tip_channel, layout, state_manager_metrics) = init(&root, &log);
+
+        const HEIGHT: Height = Height::new(42);
+
+        let own_subnet_type = SubnetType::Application;
+        let subnet_id = subnet_test_id(1);
+        let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
+        state.metadata.subnet_merged = subnet_merged;
+
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
+
+        let checkpoint_layout = layout.checkpoint_verified(HEIGHT).unwrap();
+        let marker = checkpoint_layout.subnet_merged_marker();
+        // A `false` flag encodes to an empty message, i.e. to no file at all.
+        assert_eq!(subnet_merged, marker.raw_path().exists());
+        assert_eq!(subnet_merged, marker.deserialize().unwrap().merged);
+
+        let derived_state = load_checkpoint(
+            &checkpoint_layout,
+            own_subnet_type,
+            &state_manager_metrics.checkpoint_metrics,
+            Some(&mut thread_pool()),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        )
+        .unwrap();
+
+        assert_eq!(subnet_merged, derived_state.metadata.subnet_merged);
+    });
+}
+
+#[test]
+fn can_derive_subnet_merged() {
+    test_can_derive_subnet_merged(true);
+}
+
+#[test]
+fn can_derive_not_subnet_merged() {
+    test_can_derive_subnet_merged(false);
+}
+
 #[test]
 fn empty_protobufs_are_loaded_correctly() {
     with_test_replica_logger(|log| {
@@ -655,6 +702,11 @@ fn empty_protobufs_are_loaded_correctly() {
             checkpoint_layout.subnet_queues().raw_path().to_owned(),
             checkpoint_layout.ingress_history().raw_path().to_owned(),
             checkpoint_layout.refunds().raw_path().to_owned(),
+            checkpoint_layout.split_marker().raw_path().to_owned(),
+            checkpoint_layout
+                .subnet_merged_marker()
+                .raw_path()
+                .to_owned(),
             canister_layout.queues().raw_path().to_owned(),
         ];
 
@@ -739,6 +791,7 @@ fn make_test_snapshot(
         chunk_store,
         execution_snapshot,
         NumBytes::from(0),
+        false,
     )
 }
 

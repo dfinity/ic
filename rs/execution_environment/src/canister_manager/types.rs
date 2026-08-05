@@ -328,6 +328,10 @@ pub(crate) struct CanisterManagerResponse {
     /// Stop canister request contexts (for requests other than the current request)
     /// that must be rejected (because the canister was restarted by the current request).
     pub stop_contexts_to_reject: Vec<StopCanisterContext>,
+    /// A snapshot that must be marked as immutable (because it was loaded onto
+    /// a canister by the current request). The snapshot may belong to a canister
+    /// other than the target canister of the current request.
+    pub snapshot_to_make_immutable: Option<SnapshotId>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -680,7 +684,7 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "not-enough-cycles".to_string(),
             },
             CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
-                suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                suggestion: "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister.".to_string(),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
@@ -1082,7 +1086,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,
-                "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister.".to_string(),
             ),
             CanisterSnapshotNotController {
                 sender,

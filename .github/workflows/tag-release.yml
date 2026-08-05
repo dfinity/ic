@@ -72,6 +72,7 @@ jobs:
             "ledger-canister_notify-method.wasm"
             "lifeline_canister.wasm"
             "nns-ui-canister.wasm"
+            "node-rewards-canister.wasm"
             "registry-canister.wasm"
             "root-canister.wasm"
             "sns-governance-canister.wasm"
