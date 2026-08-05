@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS", "NNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -158,17 +158,27 @@ system_test(
     ],
 )
 
-system_test_nns(
+system_test(
     name = "standard_engine_replica_version_test",
+    # Why: This test needs an API Boundary Node, and those do not work
+    # when you do `bazel test //rs/tests:widget_test_local`. This test
+    # only works, when run in Farm. This blocks `_local`.
+    #
+    # Ok, but why is API BN needed: Cloud Engines.
+    #
+    # Ok, but why do Cloud Engines need API BNs? They are not allowed
+    # to talk NATIVELY to canisters that live in other subnets, but
+    # they need to talk to the Registry canister, which lives in the NNS
+    # subnet.
+    #
+    # To satisfy these conflicting requirements, Cloud Engines talk to
+    # Registry via API BNs.
+    backend = "farm",
     # 1 System + 4 Cloud Engine = 5 IC Node VMs * 6 vCPUs.
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,
-    # The feature being exercised here is not yet in production.
-    # When it is, this can be removed. In the meantime, run this
-    # test by appending _head_nns to the name when passing it to
-    # bazel test.
-    enable_mainnet_nns_variant = False,
     # This is needed so that the test can elect a second Guestos/Replica version.
     guestos_update = "test",
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/canister_client",

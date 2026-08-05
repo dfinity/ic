@@ -27,6 +27,21 @@ fn test_valid_update_standard_engine_replica_version() {
     assert_eq!(VALID_UPDATE.validate(), Ok(()));
 }
 
+/// Version IDs like this (i.e. not a 40-character hexadecimal string) are used
+/// by system tests, and must remain valid here, since ReplicaVersion itself
+/// accepts them.
+#[test]
+fn test_test_suffix_replica_version_id_is_valid() {
+    assert_eq!(
+        UpdateStandardEngineReplicaVersion {
+            new_replica_version_id: "0".repeat(40) + "-test",
+            ..VALID_UPDATE.clone()
+        }
+        .validate(),
+        Ok(())
+    );
+}
+
 #[track_caller]
 fn assert_invalid_update(update: UpdateStandardEngineReplicaVersion, keywords: &[&str]) {
     let error = update.validate().unwrap_err();
@@ -43,20 +58,21 @@ fn assert_invalid_update(update: UpdateStandardEngineReplicaVersion, keywords: &
 
 #[test]
 fn test_invalid_update_standard_engine_replica_version() {
-    // Reject garbage replica version IDs.
+    // Reject replica version IDs with characters that ReplicaVersion itself
+    // would reject.
     assert_invalid_update(
         UpdateStandardEngineReplicaVersion {
             new_replica_version_id: "g@rbage".to_string(),
             ..VALID_UPDATE.clone()
         },
-        &["new_replica_version_id", "40", "hexadecimal"],
+        &["new_replica_version_id", "invalid"],
     );
     assert_invalid_update(
         UpdateStandardEngineReplicaVersion {
-            old_replica_version_id: "not_a_git_commit_id".to_string(),
+            old_replica_version_id: "g@rbage".to_string(),
             ..VALID_UPDATE.clone()
         },
-        &["old_replica_version_id", "40", "hexadecimal"],
+        &["old_replica_version_id", "invalid"],
     );
 
     // Replica versions must differ.
