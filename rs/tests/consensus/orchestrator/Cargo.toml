@@ -8,10 +8,15 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
+ic-canister-client = { path = "../../../canister_client" }
+ic-engine-controller = { path = "../../../engine_controller" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }
@@ -41,6 +46,10 @@ path = "cup_compatibility_test.rs"
 [[bin]]
 name = "ic-systest-cloud-engine-ic-gateway-test"
 path = "cloud_engine_ic_gateway_test.rs"
+
+[[bin]]
+name = "ic-systest-standard-engine-replica-version-test"
+path = "standard_engine_replica_version_test.rs"
 
 [[bin]]
 name = "ic-systest-node-reassignment-test"
