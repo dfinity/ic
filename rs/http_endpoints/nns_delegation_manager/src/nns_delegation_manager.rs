@@ -176,9 +176,9 @@ impl DelegationManager {
     }
 
     async fn fetch(&self) -> Option<NNSDelegationBuilder> {
-        let _timer = self.metrics.update_duration.start_timer();
+        let _timer = self.metrics.fetch_duration.start_timer();
 
-        let delegation = load_root_delegation(
+        load_root_delegation(
             &self.config,
             &self.log,
             &self.rt_handle,
@@ -189,11 +189,7 @@ impl DelegationManager {
             self.tls_config.as_ref(),
             &self.metrics,
         )
-        .await;
-
-        self.metrics.updates.inc();
-
-        delegation
+        .await
     }
 
     /// Fetches a delegation from the NNS subnet proactively, i.e. without checking if the current
@@ -261,6 +257,7 @@ impl DelegationManager {
             sender.send_if_modified(|old_delegation: &mut Option<NNSDelegationBuilder>| {
                 let modified = if &new_delegation != old_delegation {
                     old_delegation.clone_from(&new_delegation);
+                    self.metrics.updates.inc();
                     true
                 } else {
                     false
