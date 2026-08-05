@@ -66,7 +66,6 @@ pub struct ReplicatedStateMetrics {
     consumed_cycles_by_use_case_as_counters: CounterVec,
     input_queue_messages: IntGaugeVec,
     input_queues_size_bytes: IntGaugeVec,
-    output_queue_messages: IntGauge,
     subnet_input_queue_messages: IntGaugeVec,
     subnet_output_queue_messages: IntGauge,
     queues_response_bytes: IntGauge,
@@ -193,10 +192,6 @@ impl ReplicatedStateMetrics {
                 "execution_input_queue_size_bytes",
                 "Byte size of input queues, by message kind.",
                 &[LABEL_MESSAGE_KIND],
-            ),
-            output_queue_messages: metrics_registry.int_gauge(
-                "execution_output_queue_messages",
-                "Count of messages currently enqueued in canister output queues.",
             ),
             subnet_input_queue_messages: metrics_registry.int_gauge_vec(
                 "execution_subnet_input_queue_messages",
@@ -472,7 +467,6 @@ impl ReplicatedStateMetrics {
         let mut ingress_queue_size_bytes = 0;
         let mut input_queues_message_count = 0;
         let mut input_queues_size_bytes = 0;
-        let mut output_queues_message_count = 0;
         let mut queues_response_bytes = 0;
         let mut queues_memory_reservations = 0;
         let mut queues_oversized_requests_extra_bytes = 0;
@@ -554,7 +548,6 @@ impl ReplicatedStateMetrics {
             ingress_queue_size_bytes += queues.ingress_queue_size_bytes();
             input_queues_message_count += queues.input_queues_message_count();
             input_queues_size_bytes += queues.input_queues_size_bytes();
-            output_queues_message_count += queues.output_queues_message_count();
             queues_response_bytes += queues.guaranteed_responses_size_bytes();
             queues_memory_reservations += queues.guaranteed_response_memory_reservations();
             queues_oversized_requests_extra_bytes +=
@@ -735,8 +728,6 @@ impl ReplicatedStateMetrics {
         self.observe_input_queues_size_bytes(MESSAGE_KIND_INGRESS, ingress_queue_size_bytes);
         self.observe_input_messages(MESSAGE_KIND_CANISTER, input_queues_message_count);
         self.observe_input_queues_size_bytes(MESSAGE_KIND_CANISTER, input_queues_size_bytes);
-        self.output_queue_messages
-            .set(output_queues_message_count as i64);
 
         let subnet_queues = state.subnet_queues();
         self.subnet_input_queue_messages

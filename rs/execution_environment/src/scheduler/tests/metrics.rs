@@ -757,48 +757,6 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
 }
 
 #[test]
-fn replicated_state_metrics_output_queue_messages() {
-    const NAME: &str = "execution_output_queue_messages";
-    let local_canister = canister_test_id(0);
-    let remote_canister = canister_test_id(10);
-
-    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-    state.put_canister_state(get_running_canister(local_canister));
-    assert_gauge(0, &state, NAME);
-
-    // Inducting a request reserves a slot for its response; enqueueing the response
-    // bumps the count to 1.
-    let mut subnet_available_guaranteed_response_memory = i64::MAX / 2;
-    state
-        .push_input(
-            RequestBuilder::new()
-                .sender(remote_canister)
-                .receiver(local_canister)
-                .sender_reply_callback(CallbackId::from(1))
-                .build()
-                .into(),
-            &mut subnet_available_guaranteed_response_memory,
-        )
-        .unwrap();
-    state
-        .canister_state_make_mut(&local_canister)
-        .unwrap()
-        .system_state
-        .push_output_response(Arc::new(
-            ResponseBuilder::new()
-                .originator(remote_canister)
-                .respondent(local_canister)
-                .originator_reply_callback(CallbackId::from(1))
-                .build(),
-        ));
-    assert_gauge(1, &state, NAME);
-
-    // Popping the response drops it back to 0.
-    assert_eq!(1, state.output_into_iter().count());
-    assert_gauge(0, &state, NAME);
-}
-
-#[test]
 fn replicated_state_metrics_subnet_queue_messages() {
     const INPUT: &str = "execution_subnet_input_queue_messages";
     const OUTPUT: &str = "execution_subnet_output_queue_messages";
