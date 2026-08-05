@@ -112,7 +112,6 @@ fn setup(env: TestEnv) {
     for _ in 0..ENGINE_NODE_COUNT {
         ic = ic.with_unassigned_node(
             Node::new()
-                .with_boot_image(BootImage::GroupDefault)
                 // This is required for Cloud Engines.
                 .with_node_reward_type(NodeRewardType::Type4),
         );
