@@ -15,7 +15,7 @@ use ic_config::state_manager::LsmtConfig;
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
 use ic_protobuf::state::{
     stats::v1::Stats,
-    system_metadata::v1::{SplitFrom, SystemMetadata},
+    system_metadata::v1::{SplitFrom, SubnetMerged, SystemMetadata},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshot;
@@ -1196,6 +1196,14 @@ fn serialize_protos_to_checkpoint_readwrite(
             checkpoint_readwrite.split_marker().try_remove_file()?;
         }
     }
+
+    // Like the split marker, the "subnet was merged" marker is serialized
+    // separately from `SystemMetadata`.
+    checkpoint_readwrite
+        .subnet_merged_marker()
+        .serialize(SubnetMerged {
+            merged: state.system_metadata().subnet_merged,
+        })?;
 
     checkpoint_readwrite
         .subnet_queues()
