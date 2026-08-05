@@ -25,6 +25,24 @@ done
 
 TMP_DIR=$(mktemp -d --tmpdir="/tmp/containers" build-image-XXXXXXXXXXXX)
 
+# Materialize podman's SHM lock segment under a lock, exactly as
+# toolchains/sysimage/proc_wrapper.sh does -- see the long comment there. This
+# script drives podman outside that wrapper, so without this it can be part of
+# the same first burst of ic-os actions that race to create the segment.
+if [ "$EUID" -eq 0 ]; then
+    PODMAN_LOCK_SEGMENT="/dev/shm/libpod_lock"
+else
+    PODMAN_LOCK_SEGMENT="/dev/shm/libpod_rootless_lock_$EUID"
+fi
+if [ -w /dev/shm ] && [ ! -e "$PODMAN_LOCK_SEGMENT" ]; then
+    (
+        flock 9
+        if [ ! -e "$PODMAN_LOCK_SEGMENT" ]; then
+            podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" info >/dev/null 2>&1 || true
+        fi
+    ) 9>"/dev/shm/icos-podman-lock-init.$EUID.lck"
+fi
+
 BASE_IMAGE="$(cat ${BASE_IMAGE_FILE})"
 
 podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "${TMP_DIR}/iidfile" - <<<"
