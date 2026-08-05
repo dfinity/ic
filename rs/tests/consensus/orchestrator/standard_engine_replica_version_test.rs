@@ -98,12 +98,15 @@ use ic_system_test_driver::{
 };
 use registry_canister::init::RegistryCanisterInitPayload;
 use slog::info;
+use std::time::Duration;
 
 // 4 is the smallest value allowed by the Engine Controller.
 const ENGINE_NODE_COUNT: usize = 4;
 
 fn setup(env: TestEnv) {
-    let mut ic = InternetComputer::new().add_fast_single_node_subnet(SubnetType::System);
+    let mut ic = InternetComputer::new()
+        .with_api_boundary_nodes_playnet(1)
+        .add_fast_single_node_subnet(SubnetType::System);
 
     // Add nodes that can be used to form a Cloud Engine.
     for _ in 0..ENGINE_NODE_COUNT {
@@ -289,6 +292,9 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        // Give this test more time, because one successful run was observed
+        // to take a little more than 10 minutes.
+        .with_timeout_per_test(Duration::from_secs(30 * 60))
         .execute_from_args()?;
     Ok(())
 }
