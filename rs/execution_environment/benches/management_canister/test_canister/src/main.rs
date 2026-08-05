@@ -309,4 +309,32 @@ async fn list_canisters() -> u64 {
     result.canisters.len() as u64
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub struct SubnetMetricsArgs {
+    pub subnet_id: Principal,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub struct SubnetMetricsResult {
+    pub block_height: candid::Nat,
+    pub num_canisters: candid::Nat,
+    pub canister_state_bytes: candid::Nat,
+    pub consumed_cycles_total: candid::Nat,
+    pub update_transactions_total: candid::Nat,
+}
+
+/// Calls the management canister's `subnet_metrics` method for the given subnet
+/// and returns the reported number of canisters.
+#[update]
+async fn subnet_metrics(subnet_id: Principal) -> u64 {
+    let result: SubnetMetricsResult =
+        Call::unbounded_wait(Principal::management_canister(), "subnet_metrics")
+            .with_arg(SubnetMetricsArgs { subnet_id })
+            .await
+            .expect("subnet_metrics call failed")
+            .candid()
+            .expect("failed to decode subnet_metrics response");
+    u64::try_from(result.num_canisters.0).expect("num_canisters does not fit into u64")
+}
+
 fn main() {}

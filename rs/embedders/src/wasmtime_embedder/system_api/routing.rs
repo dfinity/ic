@@ -14,9 +14,9 @@ use ic_management_canister_types_private::{
     NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, ReshareChainKeyArgs,
     SchnorrPublicKeyArgs, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
+    StoredChunksArgs, SubnetInfoArgs, SubnetMetricsArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -201,6 +201,28 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::NodeMetricsHistory) => {
             Ok(NodeMetricsHistoryArgs::decode(payload)?.subnet_id)
+        }
+        Ok(Ic00Method::SubnetMetrics) => {
+            // Rejected explicitly, mirroring `FetchCanisterLogs` below, rather than
+            // relying on the composite-query path failing later in
+            // `QueryContext::handle_request` (where `get_active_canister` cannot
+            // resolve a subnet principal). That indirect guarantee holds today, but
+            // it would evaporate the moment `subnet_metrics` were added to
+            // `QueryMethod`: the query path has no round-instruction accounting, so
+            // the `O(|hot canisters|)` fold would run unmetered on query threads
+            // against a different state snapshot. Keeping the rejection here makes
+            // that a compile-time-visible decision rather than an accident.
+            if is_composite_query {
+                Err(ResolveDestinationError::UserError(UserError::new(
+                    ic_error_types::ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "{} API cannot be called from a composite query",
+                        Ic00Method::SubnetMetrics
+                    ),
+                )))
+            } else {
+                Ok(SubnetMetricsArgs::decode(payload)?.subnet_id)
+            }
         }
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
@@ -1202,6 +1224,69 @@ mod tests {
                 ),
                 _ => panic!("Unexpected result."),
             };
+        }
+    }
+
+    /// `subnet_metrics` names its target subnet in the payload, so an ordinary
+    /// (non-composite-query) call routes there.
+    #[test]
+    fn resolve_subnet_metrics_routes_to_named_subnet() {
+        let logger = no_op_logger();
+        let target_subnet = subnet_test_id(1);
+        assert_eq!(
+            resolve_destination(
+                &network_with_ecdsa_subnets(),
+                &Ic00Method::SubnetMetrics.to_string(),
+                &Encode!(&SubnetMetricsArgs {
+                    subnet_id: target_subnet.get()
+                })
+                .unwrap(),
+                subnet_test_id(2),
+                canister_test_id(1),
+                false,
+                &logger,
+            )
+            .unwrap(),
+            target_subnet.get()
+        );
+    }
+
+    /// ...but a composite query is rejected outright, mirroring
+    /// `fetch_canister_logs`.
+    ///
+    /// The composite-query path has no round-instruction accounting, so the
+    /// `O(|hot canisters|)` fold that `subnet_metrics` performs must never run on
+    /// query threads. This is the in-process guard for that arm; the system test
+    /// `subnet_metrics_composite_query_fails` asserts the same thing end to end but
+    /// is Linux-only.
+    #[test]
+    fn resolve_subnet_metrics_rejects_composite_query() {
+        let logger = no_op_logger();
+        let err = resolve_destination(
+            &network_with_ecdsa_subnets(),
+            &Ic00Method::SubnetMetrics.to_string(),
+            &Encode!(&SubnetMetricsArgs {
+                subnet_id: subnet_test_id(1).get()
+            })
+            .unwrap(),
+            subnet_test_id(2),
+            canister_test_id(1),
+            true,
+            &logger,
+        )
+        .unwrap_err();
+        match err {
+            ResolveDestinationError::UserError(err) => {
+                assert_eq!(
+                    err.code(),
+                    ic_error_types::ErrorCode::CanisterRejectedMessage
+                );
+                assert_eq!(
+                    err.description(),
+                    "subnet_metrics API cannot be called from a composite query"
+                );
+            }
+            other => panic!("Unexpected error: {other:?}"),
         }
     }
 }

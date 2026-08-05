@@ -901,6 +901,111 @@ fn total_consumed_cycles_combines_hot_and_cold() {
     assert_eq!(states.total_consumed_cycles(), NominalCycles::new(135));
 }
 
+/// Consumes `amount` cycles on `canister`, as storage / instruction charging
+/// does. Consuming cycles does not create work, so a cold canister stays cold.
+fn consume_cycles(canister: &mut Arc<CanisterState>, amount: u128) {
+    use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Instructions};
+
+    Arc::make_mut(canister)
+        .system_state
+        .consume_cycles(CompoundCycles::<Instructions>::new(
+            Cycles::new(amount),
+            CanisterCyclesCostSchedule::Normal,
+        ));
+}
+
+/// Folds `consumed_cycles` over every canister, hot and cold, without going
+/// through the `cold_stats` aggregate.
+fn direct_consumed_cycles_fold(states: &CanisterStates) -> ic_types_cycles::NominalCycles {
+    use ic_types_cycles::NominalCycles;
+
+    states
+        .all_values()
+        .fold(NominalCycles::zero(), |acc, canister| {
+            acc + canister.system_state.canister_metrics().consumed_cycles()
+        })
+}
+
+#[test]
+fn total_consumed_cycles_equals_direct_fold() {
+    let mut states = CanisterStates::default();
+    for id in 1..=4 {
+        let mut cold = cold_canister(id);
+        consume_cycles(&mut cold, 100 * id as u128);
+        states.insert(cold);
+    }
+    for id in 5..=7 {
+        let mut hot = hot_canister(id);
+        consume_cycles(&mut hot, 7 * id as u128);
+        states.insert(hot);
+    }
+
+    assert_eq!(states.cold.len(), 4);
+    assert_eq!(states.hot.len(), 3);
+    assert_eq!(
+        states.total_consumed_cycles(),
+        direct_consumed_cycles_fold(&states)
+    );
+}
+
+#[test]
+fn validate_cold_stats_accepts_consistent_stats() {
+    let mut states = CanisterStates::default();
+    states.insert(cold_canister(1));
+    states.insert(hot_canister(2));
+    states.insert(cold_canister(3));
+
+    assert_eq!(states.validate_cold_stats(), Ok(()));
+}
+
+#[test]
+fn validate_cold_stats_rejects_stale_stats() {
+    use ic_types_cycles::{NominalCycles, NominalCyclesTesting};
+
+    let mut states = CanisterStates::default();
+    let c = cold_canister(1);
+    states.insert(Arc::clone(&c));
+    assert_eq!(states.validate_cold_stats(), Ok(()));
+
+    // Bypass the public mutation entry points: mutate a cold canister's consumed
+    // cycles directly, behind the aggregate's back, simulating missing
+    // sub-before / add-after bracketing.
+    consume_cycles(states.cold.get_mut(&c.canister_id()).unwrap(), 42);
+    assert_eq!(states.hot.len(), 0);
+    assert_eq!(states.cold.len(), 1);
+
+    let err = states.validate_cold_stats().unwrap_err();
+    assert!(
+        err.contains("cold_stats out of sync with the cold pool"),
+        "unexpected error: {err}",
+    );
+    // The aggregate is stale, so the reported total is now wrong.
+    assert_eq!(states.cold_stats.consumed_cycles, NominalCycles::new(0));
+    assert_ne!(
+        states.total_consumed_cycles(),
+        direct_consumed_cycles_fold(&states)
+    );
+}
+
+#[test]
+fn for_each_mut_keeps_cold_stats_consumed_cycles_in_sync() {
+    let mut states = CanisterStates::default();
+    states.insert(cold_canister(1));
+    states.insert(cold_canister(2));
+    states.insert(hot_canister(3));
+    assert_eq!(states.cold.len(), 2);
+
+    // The path that storage charging takes: mutate every canister in place,
+    // including the cold ones.
+    states.for_each_mut(|_id, canister| consume_cycles(canister, 11));
+
+    assert_eq!(states.validate_cold_stats(), Ok(()));
+    assert_eq!(
+        states.total_consumed_cycles(),
+        direct_consumed_cycles_fold(&states)
+    );
+}
+
 #[test]
 fn validate_strict_split_accepts_canonical_partition() {
     let mut states = CanisterStates::default();

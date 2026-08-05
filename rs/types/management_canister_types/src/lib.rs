@@ -117,6 +117,7 @@ pub enum Method {
 
     // Subnet information
     NodeMetricsHistory,
+    SubnetMetrics,
     SubnetInfo,
 
     FetchCanisterLogs,
@@ -3785,6 +3786,40 @@ pub struct SubnetInfoResponse {
 }
 
 impl Payload<'_> for SubnetInfoResponse {}
+
+/// `CandidType` for `SubnetMetricsArgs`
+/// ```text
+/// record {
+///   subnet_id : principal;
+/// }
+/// ```
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct SubnetMetricsArgs {
+    pub subnet_id: PrincipalId,
+}
+
+impl Payload<'_> for SubnetMetricsArgs {}
+
+/// `CandidType` for `SubnetMetricsResponse`
+/// ```text
+/// record {
+///     block_height : nat;
+///     num_canisters : nat;
+///     canister_state_bytes : nat;
+///     consumed_cycles_total : nat;
+///     update_transactions_total : nat;
+/// }
+/// ```
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct SubnetMetricsResponse {
+    pub block_height: candid::Nat,
+    pub num_canisters: candid::Nat,
+    pub canister_state_bytes: candid::Nat,
+    pub consumed_cycles_total: candid::Nat,
+    pub update_transactions_total: candid::Nat,
+}
+
+impl Payload<'_> for SubnetMetricsResponse {}
 
 /// `CandidType` for `NodeMetricsHistoryArgs`
 /// ```text

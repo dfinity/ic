@@ -59,6 +59,10 @@ impl Ic00MethodPermissions {
             | Ic00Method::BitcoinSendTransactionInternal
             | Ic00Method::BitcoinGetSuccessors
             | Ic00Method::NodeMetricsHistory
+            // `counts_toward_round_limit` is never consulted for `SubnetMetrics`:
+            // the method has no effective canister ID, so it is handled by the
+            // special case in `Scheduler::can_execute_subnet_msg` instead.
+            | Ic00Method::SubnetMetrics
             | Ic00Method::SubnetInfo
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister

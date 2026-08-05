@@ -160,6 +160,11 @@ impl ColdStats {
 /// 2. every canister in the `cold` pool satisfies `CanisterState::is_cold()`;
 /// 3. `cold_stats` matches a fresh recomputation over the `cold` pool.
 ///
+/// Invariant (3) is *additionally checked* in release builds during checkpoint
+/// validation, by [`Self::validate_cold_stats`]. That check is advisory: it logs
+/// a critical error and increments a counter, and does not abort or otherwise
+/// alter the checkpoint.
+///
 /// Additionally, the **strict** partition invariant — that every canister in
 /// the `hot` pool does *not* satisfy `is_cold()` — holds after
 /// [`Self::try_cool_all`] /
@@ -640,6 +645,43 @@ impl CanisterStates {
         if let Some((id, _)) = self.cold.iter().find(|(_, c)| !c.is_cold()) {
             return Err(format!(
                 "canister {id} in `cold` pool does not satisfy `is_cold()`"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validates that `cold_stats` matches a fresh recomputation over the `cold`
+    /// pool, i.e. that the sub-before / add-after bracketing around every
+    /// cold-pool mutation has been respected.
+    ///
+    /// Unlike the `debug_assert` in `debug_assert_invariants`, this is intended to
+    /// run in release builds during checkpoint validation, because the aggregates
+    /// are read into hashed replicated state
+    /// (`SubnetMetrics::canister_state_bytes`, which has no other check) and
+    /// returned to canisters (`subnet_metrics`).
+    ///
+    /// It runs only for a *locally produced* checkpoint, i.e. on the branch of
+    /// `validate_and_finalize_checkpoint_and_remove_unverified_marker` that has a
+    /// reference state, and not on the state-sync path. That is the only branch
+    /// where it could find anything: a `CanisterStates` freshly loaded from disk has
+    /// `cold_stats` recomputed by `CanisterStates::new`, so it is consistent by
+    /// construction; only the in-memory reference state can have drifted.
+    ///
+    /// Note that the caller's failure mode is **advisory**: `validate_eq_checkpoint`
+    /// logs a critical error and increments a counter, then finalizes the
+    /// checkpoint regardless. This detects and attributes a stale aggregate; it
+    /// does not prevent one from being used. The caller runs it *after* the
+    /// per-canister comparison and combines the two errors, so that an advisory
+    /// failure here does not mask the diagnostics that identify which canister
+    /// drifted.
+    ///
+    /// Complexity: `O(|cold canisters|)`.
+    pub fn validate_cold_stats(&self) -> Result<(), String> {
+        let recomputed = ColdStats::recompute(self.cold.values());
+        if recomputed != self.cold_stats {
+            return Err(format!(
+                "cold_stats out of sync with the cold pool: stored {:?}, recomputed {:?}",
+                self.cold_stats, recomputed
             ));
         }
         Ok(())

@@ -1372,6 +1372,42 @@ pub struct SubnetInfoResult {
     pub registry_version: u64,
 }
 
+/// # Subnet Metrics Args.
+///
+/// Argument type of [`subnet_metrics`](https://docs.internetcomputer.org/references/management-canister/#subnet_metrics).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct SubnetMetricsArgs {
+    /// Subnet ID.
+    pub subnet_id: Principal,
+}
+
+/// # Subnet Metrics Result.
+///
+/// Result type of [`subnet_metrics`](https://docs.internetcomputer.org/references/management-canister/#subnet_metrics).
+///
+/// This API is EXPERIMENTAL and may evolve in a non-backward-compatible way.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct SubnetMetricsResult {
+    /// Current block height of the subnet, i.e. the height of the block in whose
+    /// execution the call is processed. Monotonically non-decreasing for a given
+    /// subnet; heights of different subnets are unrelated.
+    pub block_height: Nat,
+    /// Current number of canisters on the subnet.
+    pub num_canisters: Nat,
+    /// Current total size in bytes of the state taken by canisters on the subnet.
+    pub canister_state_bytes: Nat,
+    /// Total cycles removed from circulation on the subnet by all current and
+    /// deleted canisters.
+    pub consumed_cycles_total: Nat,
+    /// Total number of transactions processed on the subnet, i.e. the total
+    /// number of messages executed in replicated mode.
+    pub update_transactions_total: Nat,
+}
+
 /// # Canister ID Range.
 ///
 /// A closed range of canister IDs, both endpoints inclusive.

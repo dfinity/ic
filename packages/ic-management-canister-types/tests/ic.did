@@ -439,6 +439,25 @@ type node_metrics_history_result = vec record {
     node_metrics : vec node_metrics;
 };
 
+type subnet_metrics_args = record {
+    subnet_id : principal;
+};
+
+type subnet_metrics_result = record {
+    // Current block height of the subnet, i.e. the height of the block in
+    // whose execution this call is processed.
+    block_height : nat;
+    // Current number of canisters on the subnet.
+    num_canisters : nat;
+    // Current total size in bytes of the state taken by canisters on the subnet.
+    canister_state_bytes : nat;
+    // Total cycles removed from circulation on the subnet by all current and
+    // deleted canisters.
+    consumed_cycles_total : nat;
+    // Total number of transactions processed on the subnet.
+    update_transactions_total : nat;
+};
+
 type subnet_info_args = record {
     subnet_id : principal;
 };
@@ -701,6 +720,7 @@ service ic : {
 
     // metrics interface
     node_metrics_history : (node_metrics_history_args) -> (node_metrics_history_result);
+    subnet_metrics : (subnet_metrics_args) -> (subnet_metrics_result);
 
     // subnet info
     subnet_info : (subnet_info_args) -> (subnet_info_result);

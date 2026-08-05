@@ -661,6 +661,16 @@ impl ExecutionTest {
         self.time += duration;
     }
 
+    pub fn current_round(&self) -> ExecutionRound {
+        self.current_round
+    }
+
+    /// Sets the round number passed to `execute_subnet_message` and friends,
+    /// i.e. the block height as seen by the execution environment.
+    pub fn set_current_round(&mut self, round: u64) {
+        self.current_round = ExecutionRound::new(round);
+    }
+
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
         self.state().get_ingress_status(message_id).clone()
     }
@@ -1680,7 +1690,8 @@ impl ExecutionTest {
         };
         let maybe_canister_id = get_effective_canister_id(message.clone());
         let is_install_code = check_is_install_code(message.clone());
-        let is_list_canisters = check_is_list_canisters(message.clone());
+        let consumes_round_instructions_without_effective_canister_id =
+            check_consumes_round_instructions_without_effective_canister_id(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1765,9 +1776,10 @@ impl ExecutionTest {
                         .insert(canister_id, paused_subnet_message);
                 }
             }
-        } else if !is_list_canisters {
-            // `list_canisters` has no effective canister ID but still consumes
-            // round instructions, so it is exempt from this assertion.
+        } else if !consumes_round_instructions_without_effective_canister_id {
+            // `list_canisters` and `subnet_metrics` have no effective canister ID
+            // but still consume round instructions, so they are exempt from this
+            // assertion.
             assert_eq!(slice_instructions_used.get(), 0);
         }
         self.check_invariants();
@@ -2776,6 +2788,13 @@ impl ExecutionTestBuilder {
         self
     }
 
+    /// Sets the initial round number, i.e. the block height as seen by the
+    /// execution environment.
+    pub fn with_current_round(mut self, round: u64) -> Self {
+        self.current_round = ExecutionRound::new(round);
+        self
+    }
+
     pub fn with_resource_saturation_scaling(mut self, scaling: usize) -> Self {
         self.subnet_config.scheduler_config.scheduler_cores = scaling;
         // If scaling == 1, i.e. a single core is requested in the test, DTS must
@@ -3243,13 +3262,17 @@ fn check_is_install_code(message: SubnetMessage) -> bool {
     message.method_name() == "install_code" || message.method_name() == "install_chunked_code"
 }
 
-fn check_is_list_canisters(message: SubnetMessage) -> bool {
+/// Whether the message is one of the management methods that consume round
+/// instructions even though they have no effective canister ID (and therefore
+/// cannot use `Ic00MethodPermissions::counts_toward_round_limit`). Keep in sync
+/// with the special case in `Scheduler::can_execute_subnet_msg`.
+fn check_consumes_round_instructions_without_effective_canister_id(message: SubnetMessage) -> bool {
     let message = match message {
         SubnetMessage::Response(_) => return false,
         SubnetMessage::Request(request) => CanisterCall::Request(request),
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
-    message.method_name() == "list_canisters"
+    matches!(message.method_name(), "list_canisters" | "subnet_metrics")
 }
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
