@@ -27,6 +27,7 @@ use ic_types::{
     CanisterLog, CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall,
 };
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
+use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -103,6 +104,8 @@ pub(crate) enum InstallCodeStep {
 pub(crate) struct PausedInstallCodeHelper {
     steps: Vec<InstallCodeStep>,
     instructions_left: NumInstructions,
+    initial_cycles_balance: Cycles,
+    executed_wasm_instructions: NumInstructions,
 }
 
 /// A helper that implements and keeps track of `install_code` steps.
@@ -124,12 +127,21 @@ pub(crate) struct InstallCodeHelper {
     deallocated_wasm_custom_sections_bytes: NumBytes,
     // The total heap delta of all steps.
     total_heap_delta: NumBytes,
+    // The cycles balance of the clean canister state this helper was built from.
+    initial_cycles_balance: Cycles,
+    // Instructions already executed by a Wasm execution that has been paused and
+    // has not finished yet. Such instructions are not reflected in
+    // `execution_parameters` because the instruction limits are updated only
+    // when the Wasm execution finishes, so they are tracked here in order to be
+    // charged if the execution fails before the Wasm execution finishes.
+    executed_wasm_instructions: NumInstructions,
 }
 
 impl InstallCodeHelper {
     pub fn new(clean_canister: &CanisterState, original: &OriginalContext) -> Self {
         Self {
             steps: vec![],
+            initial_cycles_balance: clean_canister.system_state.balance(),
             canister: clean_canister.clone(),
             message_instruction_limit: original.execution_parameters.instruction_limits.message(),
             execution_parameters: original.execution_parameters.clone(),
@@ -139,6 +151,7 @@ impl InstallCodeHelper {
             deallocated_bytes: NumBytes::new(0),
             deallocated_wasm_custom_sections_bytes: NumBytes::new(0),
             total_heap_delta: NumBytes::new(0),
+            executed_wasm_instructions: NumInstructions::new(0),
         }
     }
 
@@ -233,16 +246,23 @@ impl InstallCodeHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// performed `install_code` steps in subsequent rounds.
-    pub fn pause(self) -> PausedInstallCodeHelper {
+    /// The given `executed_wasm_instructions` are the instructions executed by
+    /// the Wasm slice that is being paused.
+    pub fn pause(self, executed_wasm_instructions: NumInstructions) -> PausedInstallCodeHelper {
         PausedInstallCodeHelper {
             instructions_left: self.instructions_left(),
             steps: self.steps,
+            initial_cycles_balance: self.initial_cycles_balance,
+            executed_wasm_instructions: self.executed_wasm_instructions
+                + executed_wasm_instructions,
         }
     }
 
     /// Replays the previous `install_code` steps on the given clean canister.
-    /// Returns an error if any step fails. Otherwise, it returns an instance of
-    /// the helper that can be used to continue the `install_code` execution.
+    /// Returns an error if the cycles balance of the clean canister differs from
+    /// the cycles balance at the start of the DTS execution or if any step
+    /// fails. Otherwise, it returns an instance of the helper that can be used
+    /// to continue the `install_code` execution.
     #[allow(clippy::result_large_err)]
     pub fn resume(
         clean_canister: &CanisterState,
@@ -259,12 +279,36 @@ impl InstallCodeHelper {
     > {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
+        let executed_wasm_instructions = paused.executed_wasm_instructions;
+        // If resuming fails, then the instructions already executed by the paused
+        // Wasm execution are charged in addition to the instructions accounted
+        // for in `paused_instructions_left`: they have been executed and hence
+        // consumed round instructions, but the instruction limits of the helper
+        // are updated only when the Wasm execution finishes.
+        let instructions_left_on_error = NumInstructions::new(
+            paused_instructions_left
+                .get()
+                .saturating_sub(executed_wasm_instructions.get()),
+        );
+
+        // The cycles balance of the clean canister must not change during the
+        // DTS execution.
+        if helper.initial_cycles_balance != paused.initial_cycles_balance {
+            let msg = "Mismatch in cycles balance when resuming an install code".to_string();
+            let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
+            let err = (clean_canister.canister_id(), err).into();
+            return Err((err, instructions_left_on_error, helper.take_canister_log()));
+        }
+
         for state_change in paused.steps.into_iter() {
             helper
                 .replay_step(state_change, original, round)
-                .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
+                .map_err(|err| (err, instructions_left_on_error, helper.take_canister_log()))?;
         }
         debug_assert_eq!(paused_instructions_left, helper.instructions_left());
+        // Replaying the steps of a Wasm execution that has already finished resets
+        // this counter, so it is restored after replaying all the steps.
+        helper.executed_wasm_instructions = executed_wasm_instructions;
         Ok(helper)
     }
 
@@ -654,6 +698,9 @@ impl InstallCodeHelper {
         self.execution_parameters
             .instruction_limits
             .update(output.num_instructions_left);
+        // The instructions of all the slices of this Wasm execution are now
+        // reflected in the instruction limits above.
+        self.executed_wasm_instructions = NumInstructions::new(0);
 
         debug_assert!(
             output

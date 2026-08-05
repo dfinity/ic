@@ -125,6 +125,62 @@ fn dts_resume_works_in_install_code() {
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
+/// Analogously to `dts_resume_fails_due_to_cycles_decrease` for calls,
+/// replicated queries, callbacks, and tasks, resuming a paused `install_code`
+/// whose canister lost cycles while it was paused fails instead of replaying the
+/// recorded steps on a balance that can no longer cover them.
+#[test]
+fn dts_install_code_resume_fails_due_to_cycles_decrease() {
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(132_000)
+        .with_create_execution_state_base_cost(0)
+        .with_manual_execution()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        sender_canister_version: None,
+    };
+    let ingress_id = test.dts_install_code(payload);
+
+    // The first slice has been executed and the execution is paused.
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    assert!(test.canister_state(canister_id).has_paused_install_code());
+
+    // Decrease the cycles balance of the clean canister.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(Cycles::new(1));
+
+    // The next slice detects the cycles balance mismatch and fails the execution.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterWasmEngineError,
+        &format!(
+            "Error from Canister {canister_id}: Canister encountered a Wasm engine error: \
+             Failed to apply system changes: Mismatch in cycles \
+             balance when resuming an install code"
+        ),
+    );
+
+    // The canister has no code installed.
+    assert!(test.canister_state(canister_id).execution_state.is_none());
+}
+
 #[test]
 fn dts_abort_works_in_install_code() {
     const INSTRUCTION_LIMIT: u64 = 50_000_000;
