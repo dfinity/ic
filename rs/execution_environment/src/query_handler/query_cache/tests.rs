@@ -26,7 +26,6 @@ use ic_types::{
     time,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Memory};
-use ic_types_test_utils::ids::subnet_test_id;
 use ic_universal_canister::call_args;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -1533,7 +1532,7 @@ fn query_cache_never_caches_calls_to_management_canister() {
 }
 
 #[test]
-fn composite_query_cache_never_caches_calls_to_management_canister() {
+fn composite_query_cache_never_caches_rejected_calls_to_management_canister() {
     let mut test = builder_with_query_cache_expiry_times().build();
     let a_id = test.universal_canister().unwrap();
     let q = wasm()
@@ -1545,23 +1544,26 @@ fn composite_query_cache_never_caches_calls_to_management_canister() {
         .build();
 
     let res_1 = test.non_replicated_query(a_id, "composite_query", q.clone());
-    assert_eq!(query_cache_metrics(&test).hits.get(), 0);
-    assert_eq!(query_cache_metrics(&test).misses.get(), 1);
-    // There should be no route to the management canister.
-    let message = format!("Canister {} not found", subnet_test_id(1));
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 1);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 1);
+    // `raw_rand` is not a management canister query method.
+    let message = "Query method raw_rand not found.";
     assert_eq!(Ok(WasmResult::Reply(message.as_bytes().to_owned())), res_1);
 
+    // Do not change balance or time: the result must still not be cached.
     let res_2 = test.non_replicated_query(a_id, "composite_query", q.clone());
-    assert_eq!(query_cache_metrics(&test).hits.get(), 0);
-    assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 2);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 2);
     assert_eq!(res_1, res_2);
 }
 
 #[test]
 fn composite_query_cache_never_caches_successful_calls_to_management_canister() {
-    let mut test = builder_with_query_cache_expiry_times()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let a_id = test.universal_canister().unwrap();
     // A canister is always allowed to request its own status.
     let q = wasm()
@@ -1592,9 +1594,7 @@ fn composite_query_cache_never_caches_successful_calls_to_management_canister() 
 
 #[test]
 fn composite_query_cache_never_caches_calls_to_management_canister_from_callback() {
-    let mut test = builder_with_query_cache_expiry_times()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     // Canister A calls the management canister in the reply callback of a nested
@@ -1638,9 +1638,7 @@ fn composite_query_cache_never_caches_calls_to_management_canister_from_callback
 
 #[test]
 fn composite_query_cache_never_caches_calls_to_management_canister_from_nested_call() {
-    let mut test = builder_with_query_cache_expiry_times()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     // Canister B, called by canister A in a nested composite query call, calls

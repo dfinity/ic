@@ -107,8 +107,6 @@ pub(super) struct QueryContext<'a> {
     // The number of concurrent calls / callbacks that is guaranteed to a canister.
     canister_guaranteed_callback_quota: u64,
     composite_queries: FlagStatus,
-    // Whether composite queries may call the management canister.
-    composite_query_ic00_calls: FlagStatus,
     // Walltime at which the query has started to execute.
     query_context_time_start: Instant,
     query_context_time_limit: Duration,
@@ -148,7 +146,6 @@ impl<'a> QueryContext<'a> {
         max_query_call_walltime: Duration,
         instruction_overhead_per_query_call: NumInstructions,
         composite_queries: FlagStatus,
-        composite_query_ic00_calls: FlagStatus,
         canister_id: CanisterId,
         metrics: &'a QueryHandlerMetrics,
         local_query_execution_stats: Option<&'a QueryStatsCollector>,
@@ -181,7 +178,6 @@ impl<'a> QueryContext<'a> {
             round_limits,
             canister_guaranteed_callback_quota,
             composite_queries,
-            composite_query_ic00_calls,
             query_context_time_start: Instant::now(),
             query_context_time_limit: max_query_call_walltime,
             metrics,
@@ -833,9 +829,7 @@ impl<'a> QueryContext<'a> {
         // Requests to the management canister made by a composite query are routed
         // to the own subnet, so the own subnet ID as the receiver means that this
         // is a call to the management canister.
-        if canister_id.get() == self.hypervisor.subnet_id().get()
-            && self.composite_query_ic00_calls == FlagStatus::Enabled
-        {
+        if canister_id.get() == self.hypervisor.subnet_id().get() {
             return self.handle_ic00_request(&request, to_query_result);
         }
 

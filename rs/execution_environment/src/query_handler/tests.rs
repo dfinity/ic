@@ -12,7 +12,7 @@ use ic_management_canister_types_private::{
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_state::CanisterStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_types::{
     NumInstructions,
     ingress::WasmResult,
@@ -1381,9 +1381,7 @@ fn ic00_composite_query(method_name: &str, payload: Vec<u8>) -> Vec<u8> {
 
 #[test]
 fn composite_query_call_to_management_canister_canister_status() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     // A canister is always allowed to request its own status.
@@ -1411,9 +1409,7 @@ fn composite_query_call_to_management_canister_canister_status() {
 
 #[test]
 fn composite_query_call_to_management_canister_fetch_canister_logs() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();
@@ -1448,9 +1444,7 @@ fn composite_query_call_to_management_canister_fetch_canister_logs() {
 
 #[test]
 fn composite_query_call_to_management_canister_canister_metrics() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     // Both canister A and the test user are controllers of canister B.
@@ -1495,7 +1489,6 @@ fn composite_query_call_to_management_canister_list_canisters() {
     // and the canister ID of the caller must hence be known upfront.
     let canister_id = canister_test_id(0);
     let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
         .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_subnet_admins(vec![canister_id.get()])
         .build();
@@ -1522,9 +1515,7 @@ fn composite_query_call_to_management_canister_list_canisters() {
 
 #[test]
 fn composite_query_call_to_management_canister_respects_permissions() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     // Canister B is controlled by the test user, not by canister A.
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
@@ -1551,9 +1542,7 @@ fn composite_query_call_to_management_canister_respects_permissions() {
 
 #[test]
 fn composite_query_call_to_management_canister_for_unknown_canister() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let unknown = canister_test_id(42);
 
@@ -1573,9 +1562,7 @@ fn composite_query_call_to_management_canister_for_unknown_canister() {
 
 #[test]
 fn composite_query_call_to_management_canister_rejects_non_query_methods() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let reply = test
@@ -1596,9 +1583,7 @@ fn composite_query_call_to_management_canister_rejects_non_query_methods() {
 
 #[test]
 fn composite_query_call_to_management_canister_rejects_unknown_methods() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let err = test
@@ -1617,30 +1602,6 @@ fn composite_query_call_to_management_canister_rejects_unknown_methods() {
 }
 
 #[test]
-fn composite_query_call_to_management_canister_fails_if_disabled() {
-    // The feature is disabled by default.
-    let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
-
-    let reply = test
-        .non_replicated_query(
-            canister_id,
-            "composite_query",
-            ic00_composite_query(
-                "canister_status",
-                CanisterIdRecord::from(canister_id).encode(),
-            ),
-        )
-        .unwrap();
-
-    // There is no route to the management canister.
-    assert_eq!(
-        reply,
-        WasmResult::Reply(format!("Canister {} not found", subnet_test_id(1)).into_bytes())
-    );
-}
-
-#[test]
 fn composite_query_call_to_management_canister_charges_instructions() {
     // The number of `list_canisters` calls the instruction limit is set up for.
     const NUM_SUCCESSFUL_CALLS: u64 = 2;
@@ -1654,7 +1615,6 @@ fn composite_query_call_to_management_canister_charges_instructions() {
     // and the canister ID of the caller must hence be known upfront.
     let canister_id = canister_test_id(0);
     let mut test = ExecutionTestBuilder::new()
-        .with_composite_query_ic00_calls()
         .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_subnet_admins(vec![canister_id.get()])
         .with_max_query_call_graph_instructions(NumInstructions::from(

@@ -2635,11 +2635,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_composite_query_ic00_calls(mut self) -> Self {
-        self.execution_config.composite_query_ic00_calls = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_query_caching_disabled(mut self) -> Self {
         self.execution_config.query_caching = FlagStatus::Disabled;
         self

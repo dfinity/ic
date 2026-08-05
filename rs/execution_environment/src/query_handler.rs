@@ -270,7 +270,6 @@ impl InternalHttpQueryHandler {
             self.config.max_query_call_walltime,
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
-            self.config.composite_query_ic00_calls,
             query.receiver,
             &self.metrics,
             query_stats_collector,
