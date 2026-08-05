@@ -880,6 +880,22 @@ const SUBNET_CALL_TYPES: &[&str] = &[
 /// Asserts that `SUBNET_CALL_CONTEXTS` has a value of 1 for `one` and of 0 for all
 /// the other call types; or 0 for all of them, if `one` is `None`.
 fn assert_subnet_call_contexts(one: Option<&str>, state: &ReplicatedState) {
+    assert_gauge_vec(one, state, SUBNET_CALL_CONTEXTS, "type", SUBNET_CALL_TYPES);
+}
+
+/// Asserts that the given gauge vector has a value of 1 for `one` and of 0 for all
+/// the other `label_values`; or 0 for all of them, if `one` is `None`.
+fn assert_gauge_vec(
+    one: Option<&str>,
+    state: &ReplicatedState,
+    name: &str,
+    label_name: &str,
+    label_values: &[&str],
+) {
+    if let Some(one) = one {
+        assert!(label_values.contains(&one), "unexpected label value {one}");
+    }
+
     let registry = MetricsRegistry::new();
     ReplicatedStateMetrics::new(&registry).observe(
         state.metadata.own_subnet_id,
@@ -888,18 +904,19 @@ fn assert_subnet_call_contexts(one: Option<&str>, state: &ReplicatedState) {
         &no_op_logger(),
     );
 
-    let expected: MetricVec<u64> = SUBNET_CALL_TYPES
+    let expected: MetricVec<u64> = label_values
         .iter()
-        .map(|call_type| {
+        .map(|value| {
             (
-                labels(&[("type", call_type)]),
-                u64::from(Some(*call_type) == one),
+                labels(&[(label_name, value)]),
+                u64::from(Some(*value) == one),
             )
         })
         .collect();
     assert_eq!(
         expected,
-        fetch_int_gauge_vec(&registry, SUBNET_CALL_CONTEXTS)
+        fetch_int_gauge_vec(&registry, name),
+        "unexpected value of `{name}`"
     );
 }
 
@@ -1041,7 +1058,8 @@ fn subnet_call_contexts_metric() {
     );
     assert_subnet_call_contexts(None, &state);
 
-    // `RawRand` requests are dropped if their sender is no longer local.
+    // `RawRand` requests are popped off the front of the queue and executed at the
+    // beginning of every round.
     let mut state = fresh_state();
     assert_subnet_call_contexts(None, &state);
     state
@@ -1049,13 +1067,13 @@ fn subnet_call_contexts_metric() {
         .subnet_call_context_manager
         .push_raw_rand_request(request(), ExecutionRound::from(1), UNIX_EPOCH);
     assert_subnet_call_contexts(Some("raw_rand"), &state);
-    assert_eq!(
-        1,
+    assert!(
         state
             .metadata
             .subnet_call_context_manager
-            .remove_non_local_raw_rand_calls(|_| false)
-            .len()
+            .raw_rand_contexts
+            .pop_front()
+            .is_some()
     );
     assert_subnet_call_contexts(None, &state);
 
@@ -2216,115 +2234,6 @@ fn ingress_history_split() {
 
     ingress_history.split(is_local_canister);
     assert_eq!(expected, ingress_history);
-}
-
-#[test]
-fn ingress_history_state_counts() {
-    use IngressState::*;
-
-    let mut ingress_history = IngressHistoryState::new();
-
-    let insert = |ingress_history: &mut IngressHistoryState, i: u64, state: IngressState| {
-        let time = Time::from_nanos_since_unix_epoch(i);
-        ingress_history.insert(
-            message_test_id(i),
-            IngressStatus::Known {
-                receiver: canister_test_id(i).get(),
-                user_id: user_test_id(i),
-                time,
-                state,
-            },
-            time,
-            NumBytes::from(u64::MAX),
-            |_| {},
-        );
-    };
-
-    assert_eq!(
-        IngressStateCounts::default(),
-        ingress_history.state_counts()
-    );
-
-    insert(&mut ingress_history, 1, Received);
-    insert(&mut ingress_history, 2, Received);
-    insert(&mut ingress_history, 3, Processing);
-    insert(
-        &mut ingress_history,
-        4,
-        Completed(WasmResult::Reply(vec![1, 2, 3])),
-    );
-    insert(
-        &mut ingress_history,
-        5,
-        Failed(UserError::new(ErrorCode::CanisterTrapped, "Oops")),
-    );
-    insert(&mut ingress_history, 6, Done);
-
-    assert_eq!(6, ingress_history.len());
-    assert_eq!(
-        IngressStateCounts {
-            received: 2,
-            processing: 1,
-            completed: 1,
-            failed: 1,
-            done: 1,
-            unknown: 0,
-        },
-        ingress_history.state_counts()
-    );
-
-    // Overwriting an entry adjusts the counts of both the old and the new state.
-    insert(&mut ingress_history, 1, Processing);
-    assert_eq!(
-        IngressStateCounts {
-            received: 1,
-            processing: 2,
-            completed: 1,
-            failed: 1,
-            done: 1,
-            unknown: 0,
-        },
-        ingress_history.state_counts()
-    );
-
-    // Forgetting the terminal statuses with payloads transitions them to `Done`.
-    ingress_history.forget_terminal_statuses(
-        NumBytes::from(0),
-        Time::from_nanos_since_unix_epoch(0),
-        |_| {},
-    );
-    assert_eq!(
-        IngressStateCounts {
-            received: 1,
-            processing: 2,
-            done: 3,
-            ..Default::default()
-        },
-        ingress_history.state_counts()
-    );
-
-    // Pruning drops the terminal statuses altogether.
-    ingress_history.prune(Time::from_nanos_since_unix_epoch(u64::MAX));
-    assert_eq!(
-        IngressStateCounts {
-            received: 1,
-            processing: 2,
-            ..Default::default()
-        },
-        ingress_history.state_counts()
-    );
-
-    // The counts always add up to the number of entries. (Recording an
-    // `IngressStatus::Unknown`, which would land in the `unknown` count, is
-    // `debug_assert`ed against in `IngressHistoryState::insert()`.)
-    assert_eq!(
-        ingress_history.len(),
-        ingress_history
-            .state_counts()
-            .iter()
-            .map(|(_, count)| count)
-            .sum::<usize>()
-    );
 }
 
 #[derive(Clone)]

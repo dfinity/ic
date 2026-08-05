@@ -685,6 +685,7 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
         );
 
         // Recording an ingress message in the given state bumps its count to 1.
+        let is_terminal = ingress_state.is_terminal();
         state.set_ingress_status(
             message_test_id(1),
             known_status(ingress_state),
@@ -699,13 +700,18 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
             INGRESS_STATES,
         );
 
-        // Making it terminal and pruning it drops the count back to 0.
-        state.set_ingress_status(
-            message_test_id(1),
-            known_status(IngressState::Completed(WasmResult::Reply(vec![]))),
-            NumBytes::new(u64::MAX),
-            |_| {},
-        );
+        // Making it terminal and pruning it drops the count back to 0. Only a
+        // non-terminal status is transitioned to `Completed`: `Completed` and
+        // `Failed` are already terminal and overwriting them would be an invalid
+        // state transition.
+        if !is_terminal {
+            state.set_ingress_status(
+                message_test_id(1),
+                known_status(IngressState::Completed(WasmResult::Reply(vec![]))),
+                NumBytes::new(u64::MAX),
+                |_| {},
+            );
+        }
         state
             .metadata
             .ingress_history
@@ -953,7 +959,10 @@ fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
 
         // Responding to it drops the count back to 0. A downstream call is made
         // first, so that the call context survives being responded to and the count
-        // drops because of the response, not because the call context is gone.
+        // drops because of the response, not because the call context is gone: the
+        // downstream call registers a callback against the call context, so the
+        // latter still has an outstanding call when it is responded to and is thus
+        // retained (a responded call context with no outstanding calls is dropped).
         let system_state = &mut state
             .canister_state_make_mut(&local_canister)
             .unwrap()
