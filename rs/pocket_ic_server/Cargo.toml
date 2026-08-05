@@ -61,6 +61,7 @@ ic-nns-delegation-manager = { path = "../http_endpoints/nns_delegation_manager" 
 ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-nns-governance-init = { path = "../nns/governance/init" }
 ic-nns-handler-root = { path = "../nns/handlers/root/impl" }
+ic-protobuf = { path = "../protobuf" }
 ic-registry-canister-api = { path = "../registry/canister/api" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }

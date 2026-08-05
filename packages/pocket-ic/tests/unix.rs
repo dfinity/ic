@@ -20,12 +20,12 @@ use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use maplit::btreemap;
 use pocket_ic::common::rest::{
     CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
-    IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig, RawSenderInfo,
+    IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig, RawSenderInfo, SubnetKind,
 };
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
-    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, SubnetBlockmakers, TickConfigs,
-    Time, start_server, update_candid_as,
+    CreateCanisterParams, CreateCanisterPlacement, PocketIc, PocketIcBuilder, PocketIcState,
+    StartServerParams, SubnetBlockmakers, TickConfigs, Time, start_server, update_candid_as,
 };
 use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
@@ -749,14 +749,22 @@ fn create_subnet_in_registry_canister() {
     .unwrap()
     .0;
 
+    // Initially, the PocketIC topology only consists of the NNS and application subnet.
+    let topology = pic.topology();
+    assert_eq!(topology.subnet_configs.len(), 2);
+    let mut expected_num_subnets = 2;
+
     // Create two subnets, each with one node.
     for node_id in [node_id_1, node_id_2] {
         let create_subnet_payload = CreateSubnetPayload {
             node_ids: vec![NodeId::new(PrincipalId(node_id))],
             replica_version_id: ReplicaVersion::default().to_string(),
+            // A setting that PocketIC does not need to own and thus must be preserved
+            // in the subnet record when the subnet is created in PocketIC.
+            max_number_of_canisters: 1,
             ..Default::default()
         };
-        update_candid_as::<_, (Result<NewSubnet, String>,)>(
+        let new_subnet_id = update_candid_as::<_, (Result<NewSubnet, String>,)>(
             &pic,
             registry_canister_id,
             governance_canister_id,
@@ -765,7 +773,53 @@ fn create_subnet_in_registry_canister() {
         )
         .unwrap()
         .0
+        .unwrap()
+        .new_subnet_id
         .unwrap();
+
+        // The subnet created in the registry canister is also created in PocketIC
+        // when syncing the registry from the registry canister.
+        expected_num_subnets += 1;
+        let topology = pic.topology();
+        assert_eq!(topology.subnet_configs.len(), expected_num_subnets);
+        let subnet_config = topology
+            .subnet_configs
+            .get(&new_subnet_id.get().0)
+            .unwrap_or_else(|| panic!("Subnet {new_subnet_id} not found in the topology"));
+        // `CreateSubnetPayload::default()` uses the subnet type `application`.
+        assert_eq!(subnet_config.subnet_kind, SubnetKind::Application);
+
+        // The newly created subnet is fully functional.
+        let canister_id = pic.create_canister_on_subnet(None, None, new_subnet_id.get().0);
+        assert_eq!(pic.get_subnet(canister_id), Some(new_subnet_id.get().0));
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        pic.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
+        let res = pic
+            .update_call(
+                canister_id,
+                Principal::anonymous(),
+                "update",
+                wasm().reply_data(b"Hello, world!").build(),
+            )
+            .unwrap();
+        assert_eq!(res, b"Hello, world!");
+
+        // The `max_number_of_canisters` setting from the subnet record created by the
+        // registry canister is preserved and thus no more canisters can be created
+        // on the newly created subnet.
+        let err = pic
+            .create_canister_with_params(
+                None,
+                CreateCanisterParams {
+                    placement: Some(CreateCanisterPlacement::SubnetId(new_subnet_id.get().0)),
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        assert!(
+            err.contains("has reached the allowed canister limit of 1 canisters"),
+            "Unexpected error: {err}"
+        );
     }
 }
 
