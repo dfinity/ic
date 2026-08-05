@@ -567,10 +567,10 @@ impl BlockMaker {
                         "Failed to get subnet splitting status at registry version {version}: {err}"
                     );
 
-                    // If we can't get the status, we fall back to the parent's version. If the
+                    // If we can't get the status, we continue trying a lower version. After having
+                    // tried all of them, we will return the parent's version, if available. If the
                     // failure is replicated across all nodes, this will cause the subnet to stay
                     // stuck at a registry version until the failure is resolved.
-                    return Some(parents_version);
                 }
                 Ok(subnet_splitting::Status::NotScheduled) => {
                     return Some(version);
@@ -1534,29 +1534,31 @@ mod tests {
         // If the subnet splitting status cannot be determined, we fall back to the parent's registry
         // version, keeping the subnet running at a stuck version until the status is available
         // again.
-        #[case::status_unavailable_1(TestCase {
+        #[case::status_unavailable(TestCase {
             splitting_registry_version: None,
-            unreadable_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION)),
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
             last_summary_block_registry_version: RegistryVersion::new(1),
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(1),
-            expected_stable_registry_version: RegistryVersion::new(1),
+            expected_stable_registry_version: RegistryVersion::new(4),
         })]
-        #[case::status_unavailable_2(TestCase {
+        // Should not happen in practice since the parent should not have been validated at a
+        // version that is unreadable by validators
+        #[case::status_unavailable_but_parent_has_it(TestCase {
             splitting_registry_version: None,
-            unreadable_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION)),
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
             last_summary_block_registry_version: RegistryVersion::new(1),
             is_summary_block: false,
-            parent_registry_version: RegistryVersion::new(2),
-            expected_stable_registry_version: RegistryVersion::new(2),
+            parent_registry_version: RegistryVersion::new(6),
+            expected_stable_registry_version: RegistryVersion::new(6),
         })]
         #[case::status_unavailable_summary(TestCase {
             splitting_registry_version: None,
-            unreadable_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION)),
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
             last_summary_block_registry_version: RegistryVersion::new(1),
             is_summary_block: true,
             parent_registry_version: RegistryVersion::new(3),
-            expected_stable_registry_version: RegistryVersion::new(3),
+            expected_stable_registry_version: RegistryVersion::new(4),
         })]
         #[case::status_unavailable_but_was_later_patched(TestCase {
             splitting_registry_version: Some(RegistryVersion::new(6)),
