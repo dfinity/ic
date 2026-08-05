@@ -464,12 +464,12 @@ impl SystemStateModifications {
                         // Update the receiver to the appropriate subnet.
                         let destination = if is_composite_query {
                             // Requests to the management canister made by a composite
-                            // query are not routed based on the method and the payload:
-                            // they are executed by the query handler against the state
-                            // of the own subnet (or rejected by it if the method cannot
-                            // be executed in the non-replicated mode). Note that
-                            // composite queries are always executed in the
-                            // non-replicated mode.
+                            // query (including from its callbacks) are not routed
+                            // based on the method and the payload: they are
+                            // executed by the query handler against the state of the own
+                            // subnet (or rejected by it if the method cannot be executed
+                            // in the non-replicated mode). Note that composite queries
+                            // are always executed in the non-replicated mode.
                             Ok(own_subnet_id.get())
                         } else {
                             routing::resolve_destination(
