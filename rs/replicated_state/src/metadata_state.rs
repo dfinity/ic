@@ -1804,6 +1804,16 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
+        // `IngressStatus::Unknown` stands for the absence of an entry, so it must
+        // never be recorded as the status of a message. Note that
+        // `IngressStatus::is_valid_state_transition()` (checked by the callers) can
+        // only catch this if there already is an entry, as it allows any transition
+        // away from `Unknown`, i.e. from "no entry".
+        debug_assert!(
+            !matches!(status, IngressStatus::Unknown),
+            "Attempted to record `IngressStatus::Unknown` for message {message_id}"
+        );
+
         // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.

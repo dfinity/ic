@@ -1495,6 +1495,21 @@ fn test_status_done(i: u64) -> IngressStatus {
 }
 
 #[test]
+#[should_panic(expected = "Attempted to record `IngressStatus::Unknown`")]
+fn ingress_history_insert_unknown_status_panics() {
+    let mut ingress_history = IngressHistoryState::new();
+    // `IngressStatus::Unknown` stands for the absence of an entry, so recording one
+    // is a bug.
+    ingress_history.insert(
+        message_test_id(1),
+        IngressStatus::Unknown,
+        UNIX_EPOCH,
+        NumBytes::from(u64::MAX),
+        |_| {},
+    );
+}
+
+#[test]
 fn ingress_history_insert_beyond_limit_will_succeed() {
     let mut ingress_history = IngressHistoryState::default();
 
@@ -1594,7 +1609,6 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
             state: IngressState::Received,
         },
         test_status_done(4),
-        IngressStatus::Unknown,
     ];
     statuses.into_iter().enumerate().for_each(|(i, status)| {
         ingress_history_limit.insert(

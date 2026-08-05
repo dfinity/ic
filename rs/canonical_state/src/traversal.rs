@@ -716,12 +716,6 @@ mod tests {
         let time = UNIX_EPOCH;
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.set_ingress_status(
-            message_test_id(1),
-            IngressStatus::Unknown,
-            NumBytes::from(u64::MAX),
-            |_| {},
-        );
-        state.set_ingress_status(
             message_test_id(2),
             IngressStatus::Known {
                 receiver: canister_id.get(),
@@ -801,12 +795,6 @@ mod tests {
                     E::StartSubtree,
                     edge("request_status"),
                     E::StartSubtree,
-                    //
-                    edge(message_test_id(1)),
-                    E::StartSubtree,
-                    edge("status"),
-                    E::VisitBlob(b"unknown".to_vec()),
-                    E::EndSubtree,
                     //
                     edge(message_test_id(2)),
                     E::StartSubtree,
