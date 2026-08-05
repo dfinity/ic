@@ -86,6 +86,61 @@ impl SweeperFundingAccounting {
     }
 }
 
+/// The sweeper address' ETH balance as last observed on chain: the prepaid sweep gas, cached because
+/// reading it costs an outcall.
+///
+/// Not CBOR-serializable, and deliberately absent after an upgrade: an observation from before one
+/// should not authorise spending after it, and [`check_prepaid_sweep_gas`] refuses on absent.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct ObservedSweeperBalance {
+    pub balance: Wei,
+    /// IC time of the reading, in nanoseconds.
+    pub observed_at_nanos: u64,
+}
+
+/// How long an observation is trusted for a spending decision.
+///
+/// Two days against a 24-hour [`crate::SWEEPER_FUNDING_INTERVAL`] leaves exactly one tick of slack:
+/// one missed refresh is tolerated, two consecutive misses stop sweeping.
+pub const MAX_SWEEPER_BALANCE_AGE_NANOS: u64 = 2 * 24 * 60 * 60 * 1_000_000_000;
+
+/// Why sweeping is not currently allowed to spend gas.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum PrepaidGasUnavailable {
+    NeverObserved,
+    Stale { age_nanos: u64 },
+    Insufficient { available: Wei, required: Wei },
+}
+
+impl ObservedSweeperBalance {
+    fn age_nanos(&self, now_nanos: u64) -> u64 {
+        now_nanos.saturating_sub(self.observed_at_nanos)
+    }
+}
+
+/// Whether sweeping may spend `required` wei of prepaid gas.
+///
+/// Fails closed: an unknown or stale balance is an error, since spending ETH no burn has covered is
+/// what must not happen, and a wrongly withheld sweep costs only delay.
+pub fn check_prepaid_sweep_gas(
+    observed: Option<ObservedSweeperBalance>,
+    required: Wei,
+    now_nanos: u64,
+) -> Result<Wei, PrepaidGasUnavailable> {
+    let observed = observed.ok_or(PrepaidGasUnavailable::NeverObserved)?;
+    let age_nanos = observed.age_nanos(now_nanos);
+    if age_nanos > MAX_SWEEPER_BALANCE_AGE_NANOS {
+        return Err(PrepaidGasUnavailable::Stale { age_nanos });
+    }
+    if observed.balance < required {
+        return Err(PrepaidGasUnavailable::Insufficient {
+            available: observed.balance,
+            required,
+        });
+    }
+    Ok(observed.balance)
+}
+
 /// When to top the sweeper address up, and to what. Derived from the minimum withdrawal amount, so
 /// that the gap between the two — the smallest amount a funding moves — clears the ledger minimum by
 /// construction.
