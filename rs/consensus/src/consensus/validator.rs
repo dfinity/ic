@@ -2015,7 +2015,8 @@ pub mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::{
-        SubnetSplittingArgs as SubnetSplittingArgsProto, catch_up_package_contents::CupType,
+        CatchUpPackageContents, SubnetSplittingArgs as SubnetSplittingArgsProto,
+        catch_up_package_contents::CupType,
     };
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -3410,6 +3411,67 @@ pub mod test {
                         && expected_registry_version == SUBNET_SPLIT_REGISTRY_VERSION
                 );
             }
+        })
+    }
+
+    /// When the subnet splitting status cannot be determined, blocks that don't move the registry
+    /// version forward are still validated — letting the subnet keep running with a stuck registry
+    /// version — while blocks bumping it are held back until the status becomes available again.
+    #[test]
+    fn test_block_validation_when_subnet_splitting_status_is_unavailable() {
+        /// The registry version at which the subnet splitting status cannot be determined.
+        const UNREADABLE_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                state_manager,
+                data_provider,
+                registry_client,
+                pool,
+                time_source,
+                replica_config,
+                ..
+            } = setup_dependencies_with_dkg_interval_length(
+                pool_config,
+                &committee,
+                DKG_INTERVAL_LENGTH,
+            );
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+
+            // Delete the subnet's CUP contents record at `UNREADABLE_REGISTRY_VERSION`, so that the
+            // subnet splitting status can no longer be determined at that version.
+            data_provider
+                .add::<CatchUpPackageContents>(
+                    &make_catch_up_package_contents_key(replica_config.subnet_id),
+                    UNREADABLE_REGISTRY_VERSION,
+                    None,
+                )
+                .expect("Failed to delete the CUP contents");
+            registry_client.update_to_latest_version();
+
+            let test_block = make_next_block(&pool);
+            let context = test_block.content.as_ref().context.clone();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(context.certified_height);
+            time_source.set_time(context.time).unwrap();
+
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(
+                result,
+                Err(ValidationError::ValidationFailed(
+                    ValidationFailure::SubnetSplittingStatusError(
+                        subnet_splitting::StatusError::CatchUpContentsMissingInRegistry(version)
+                    )
+                )) if version == UNREADABLE_REGISTRY_VERSION
+            );
         })
     }
 

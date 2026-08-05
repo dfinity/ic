@@ -554,30 +554,28 @@ impl BlockMaker {
                 continue;
             }
 
-            let subnet_splitting_status = subnet_splitting::get_status(
+            match subnet_splitting::get_status(
                 self.registry_client.as_ref(),
                 self.replica_config.subnet_id,
                 last_summary_block_registry_version,
                 version,
-            )
-            .inspect_err(|err| {
-                warn!(
-                    self.log,
-                    "Failed to get subnet splitting status at registry version {version}: {err}"
-                )
-            })
-            .ok()?;
-
-            match subnet_splitting_status {
-                subnet_splitting::Status::NotScheduled => return Some(version),
-                subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
-                    info!(
-                        every_n_seconds => 30,
+            ) {
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => 5,
                         self.log,
-                        "Subnet splitting scheduled at registry version {scheduled_at} \
-                        and height {next_summary_block_height}. Freezing registry version."
+                        "Failed to get subnet splitting status at registry version {version}: {err}"
                     );
 
+                    // If we can't get the status, we fall back to the parent's version. If the
+                    // failure is replicated across all nodes, this will cause the subnet to stay
+                    // stuck at a registry version until the failure is resolved.
+                    return Some(parents_version);
+                }
+                Ok(subnet_splitting::Status::NotScheduled) => {
+                    return Some(version);
+                }
+                Ok(subnet_splitting::Status::Scheduled { scheduled_at, .. }) => {
                     // Bump the registry version to the scheduled version of the split right when
                     // we reach the height of the next summary block.
                     if parents_height.increment() == next_summary_block_height {
@@ -587,6 +585,12 @@ impl BlockMaker {
                     // *does not* contain the scheduled split. I.e., we "freeze" the registry
                     // version at the last version that does not contain the split, until we reach
                     // the next summary block.
+                    info!(
+                        every_n_seconds => 5,
+                        self.log,
+                        "Subnet splitting scheduled at registry version {scheduled_at} \
+                        and height {next_summary_block_height}. Freezing registry version."
+                    );
                 }
             }
         }
@@ -1446,6 +1450,9 @@ mod tests {
         #[derive(Debug)]
         struct TestCase {
             splitting_registry_version: Option<RegistryVersion>,
+            /// The registry version at which the subnet's CUP contents record is deleted, making
+            /// the subnet splitting status impossible to determine from that version onwards.
+            unreadable_registry_version: Option<RegistryVersion>,
             last_summary_block_registry_version: RegistryVersion,
             next_summary_block_height: Height,
             parent_height: Height,
@@ -1455,6 +1462,7 @@ mod tests {
         #[rstest]
         #[case::no_splitting(TestCase {
             splitting_registry_version: None,
+            unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
             next_summary_block_height: Height::new(4),
             parent_height: Height::new(1),
@@ -1462,6 +1470,7 @@ mod tests {
         })]
         #[case::version_frozen_before_splitting(TestCase {
             splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 1)),
+            unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
             next_summary_block_height: Height::new(4),
             parent_height: Height::new(1),
@@ -1469,6 +1478,7 @@ mod tests {
         })]
         #[case::version_frozen_before_splitting(TestCase {
             splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 2)),
+            unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
             next_summary_block_height: Height::new(4),
             parent_height: Height::new(1),
@@ -1476,10 +1486,22 @@ mod tests {
         })]
         #[case::exact_version_during_splitting(TestCase {
             splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 1)),
+            unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
             next_summary_block_height: Height::new(4),
             parent_height: Height::new(3),
             expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION - 1),
+        })]
+        // If the subnet splitting status cannot be determined, we fall back to the parent's registry
+        // version, keeping the subnet running at a stuck version until the status is available
+        // again.
+        #[case::status_unavailable(TestCase {
+            splitting_registry_version: None,
+            unreadable_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION)),
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            next_summary_block_height: Height::new(4),
+            parent_height: Height::new(1),
+            expected_stable_registry_version: RegistryVersion::new(1),
         })]
         fn test_stable_registry_version_with_subnet_splitting(#[case] test_case: TestCase) {
             const SOURCE_SUBNET_ID: SubnetId = SUBNET_0;
@@ -1551,6 +1573,17 @@ mod tests {
                                 })),
                                 ..Default::default()
                             }),
+                        )
+                        .unwrap();
+                }
+                if let Some(unreadable_registry_version) = test_case.unreadable_registry_version {
+                    // Delete the CUP contents record, so that the subnet splitting status can no
+                    // longer be determined at this version.
+                    registry_data_provider
+                        .add::<CatchUpPackageContents>(
+                            &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
+                            unreadable_registry_version,
+                            None,
                         )
                         .unwrap();
                 }
