@@ -122,8 +122,8 @@ enum InvalidArtifactReason {
     ReplicaVersionMismatch,
     NotABlockmaker,
     RegistryVersionNotFrozenDuringSubnetSplitting {
-        subnet_split_scheduled_at: RegistryVersion,
         context_registry_version: RegistryVersion,
+        subnet_split_scheduled_at: RegistryVersion,
     },
     WrongRegistryVersionAtSubnetSplittingSummary {
         context_registry_version: RegistryVersion,
@@ -1293,7 +1293,7 @@ impl Validator {
             subnet_splitting::Status::NotScheduled => {}
             subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
                 // If a subnet splitting is scheduled, then this means that
-                // `last_summary_block_registry_version < scheduled_at <= proposal.context.registry_version`
+                // `scheduled_at <= proposal.context.registry_version`
                 // (see `subnet_splitting::get_status`).
                 // This should not happen for a data block, because the registry version should be
                 // frozen to a version lower than `scheduled_at` until reaching a summary.
