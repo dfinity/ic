@@ -551,6 +551,7 @@ fn upload_and_load_snapshot_with_wasm_memory() {
 // Once a metadata-upload snapshot has been loaded onto a canister it becomes
 // immutable and rejects further `upload_canister_snapshot_data`, no matter
 // whether it was loaded onto the canister owning it or onto another one.
+// Being immutable does not prevent it from being loaded again, though.
 fn upload_snapshot_data_rejected_after_load(load_onto_other_canister: bool) {
     let env = StateMachineBuilder::new().build();
 
@@ -610,6 +611,14 @@ fn upload_snapshot_data_rejected_after_load(load_onto_other_canister: bool) {
     env.checkpointed_tick();
     let err = write_memory(&env).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterSnapshotImmutable);
+
+    // The snapshot can still be loaded again, onto the canister it was already
+    // loaded onto as well as onto a canister that has never seen it.
+    let another_canister_id = env.create_canister(None);
+    for target_canister_id in [target_canister_id, another_canister_id] {
+        let load_args = LoadCanisterSnapshotArgs::new(target_canister_id, snapshot_id, None);
+        env.load_canister_snapshot(load_args).unwrap();
+    }
 }
 
 #[test]
