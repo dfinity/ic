@@ -569,7 +569,7 @@ mod tests {
         //                                                          = 31_551_000
         //   per replica = 3 * (650_002 + 50*500*13)                =  2_925_006
         //   consensus   = 9_490 * 3 * (181 + 500)                  = 19_388_070
-        //   extra resp. = 13 * (2_000*13 + 100_000)                =  1_638_000
+        //   extra resp. = (3 - 2) * 13 * (2_000*13 + 100_000)      =  1_638_000
         let fee = total_fee_of(ReplicationKind::Flexible {
             total_requests: 3,
             min_responses: 2,
