@@ -739,6 +739,7 @@ fn make_test_snapshot(
         chunk_store,
         execution_snapshot,
         NumBytes::from(0),
+        false,
     )
 }
 

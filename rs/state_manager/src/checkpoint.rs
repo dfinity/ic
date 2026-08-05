@@ -1025,6 +1025,7 @@ pub fn load_snapshot(
         wasm_chunk_store,
         execution_snapshot,
         canister_snapshot_bits.total_size,
+        canister_snapshot_bits.restored,
     );
 
     let metrics = LoadCanisterMetrics { durations };
