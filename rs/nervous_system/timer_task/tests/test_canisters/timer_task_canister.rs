@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use async_trait::async_trait;
 use ic_cdk::{api::canister_self, init, query};
 use ic_metrics_encoder::MetricsEncoder;
@@ -86,7 +85,7 @@ fn get_metrics() -> String {
 fn __self_call() {}
 
 async fn invoke_self_call() {
-    let () = ic_cdk::call(canister_self(), "__self_call", ())
+    ic_cdk::call::Call::unbounded_wait(canister_self(), "__self_call")
         .await
         .unwrap();
 }

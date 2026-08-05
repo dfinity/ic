@@ -375,6 +375,13 @@ fn system_metadata_roundtrip_encoding() {
     std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
     };
+    std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).resource_limits =
+        ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(1 << 30)),
+            maximum_state_delta: Some(NumBytes::new(1 << 20)),
+            maximum_query_instructions: Some(ic_types::NumInstructions::new(7_000_000_000)),
+            maximum_query_walltime_seconds: Some(15),
+        };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
@@ -1728,6 +1735,21 @@ fn test_status_done(i: u64) -> IngressStatus {
         time: Time::from_nanos_since_unix_epoch(i),
         state: IngressState::Done,
     }
+}
+
+#[test]
+#[should_panic(expected = "Attempted to record `IngressStatus::Unknown`")]
+fn ingress_history_insert_unknown_status_panics() {
+    let mut ingress_history = IngressHistoryState::new();
+    // `IngressStatus::Unknown` stands for the absence of an entry, so recording one
+    // is a bug.
+    ingress_history.insert(
+        message_test_id(1),
+        IngressStatus::Unknown,
+        UNIX_EPOCH,
+        NumBytes::from(u64::MAX),
+        |_| {},
+    );
 }
 
 #[test]
