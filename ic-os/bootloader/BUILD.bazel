@@ -20,10 +20,11 @@ genrule(
     outs = [
         "bootloader-tree.tar",
     ],
-    # Run under proc_wrapper like the other ic-os build steps: it sets up (and
-    # tears down) the temporary directories this script builds in, and pre-warms
+    # Run under proc_wrapper like the other ic-os build steps: it pre-warms
     # podman's SHM lock segment so this action cannot race concurrent ic-os
-    # actions to create it.
+    # actions to create it, and it creates the /tmp/containers directory that this
+    # script expects to already exist. The script manages (and cleans up) its own
+    # build directory under there.
     cmd = "$(location //toolchains/sysimage:proc_wrapper) " +
           "$(location build-bootloader-tree.sh) -b $< -o $@",
     # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)

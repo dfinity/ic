@@ -35,13 +35,23 @@ if [ "$EUID" -eq 0 ]; then
 else
     podman_lock_segment="/dev/shm/libpod_rootless_lock_$EUID"
 fi
-# The whole block is best-effort, hence the trailing `|| true`: opening the lock
-# file can fail (/dev/shm is world-writable, so another uid can be squatting our
-# fixed path), and `set -e` would otherwise turn that into a failed build. If any
-# of this does not work out we simply build unprotected, exactly as before.
-if [ -w /dev/shm ] && [ ! -e "$podman_lock_segment" ]; then
+# Our own lock file goes in a private directory rather than straight into
+# /dev/shm: that is world-writable, so a fixed path in it could be pre-created by
+# another uid -- as a symlink, whereupon opening it would truncate whatever it
+# points at, or hang if it points at a fifo. Nobody can plant anything inside a
+# 0700 directory we own, so check that we do own it and skip the pre-warm if not.
+#
+# The whole block is best-effort, hence the trailing `|| true`: `set -e` would
+# otherwise turn any hiccup here into a failed build. If any of it does not work
+# out we simply build unprotected, exactly as before.
+podman_lock_dir="/dev/shm/icos-podman-$EUID"
+if [ -w /dev/shm ] && [ ! -e "$podman_lock_segment" ] \
+    && { mkdir -m 700 "$podman_lock_dir" 2>/dev/null || [ -d "$podman_lock_dir" ]; } \
+    && [ ! -L "$podman_lock_dir" ] && [ -O "$podman_lock_dir" ]; then
     (
-        flock 9
+        # Bounded wait: if a sibling action wedges while holding this lock, build
+        # unprotected instead of hanging here forever.
+        flock -w 30 9 || exit 0
         # Re-check under the lock: whoever got here first already created it.
         if [ ! -e "$podman_lock_segment" ]; then
             # Any podman command initializes the lock manager; `info` is the
@@ -49,7 +59,7 @@ if [ -w /dev/shm ] && [ ! -e "$podman_lock_segment" ]; then
             podman --root "$podman_storage_dir/root" --runroot "$podman_storage_dir/runroot" \
                 info >/dev/null 2>&1 || true
         fi
-    ) 9>"/dev/shm/icos-podman-lock-init.$EUID.lck" || true
+    ) 9>>"$podman_lock_dir/init.lck" || true
 fi
 
 tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
