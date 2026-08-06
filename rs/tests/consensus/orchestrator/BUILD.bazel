@@ -158,7 +158,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "standard_engine_replica_version_test",
     # Why: This test needs an API Boundary Node, and those do not work
     # when you do `bazel test //rs/tests:widget_test_local`. This test
@@ -174,6 +174,8 @@ system_test(
     # To satisfy these conflicting requirements, Cloud Engines talk to
     # Registry via API BNs.
     backend = "farm",
+    # This feature isn't in mainnet NNS yet.
+    enable_mainnet_nns_variant = False,
     # 1 API BN + 1 System + 4 Cloud Engine = 6 IC Node VMs * 6 vCPUs.
     cpus = MIN_LOCAL_CPUS + 6 * DEFAULT_VCPUS_PER_VM,
     # This is needed so that the test can elect a second Guestos/Replica version.
@@ -181,7 +183,6 @@ system_test(
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/canister_client",
