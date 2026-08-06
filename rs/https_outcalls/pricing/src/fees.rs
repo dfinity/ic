@@ -76,11 +76,11 @@ pub fn base_fee(
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> CompoundCycles<HTTPOutcalls> {
     CompoundCycles::new(
-        Cycles::new(base_fee_amount(
+        base_fee_amount(
             request_size,
             replication.kind(),
             subnet_size_of(subnet_cycles_config),
-        )),
+        ),
         subnet_cycles_config.cost_schedule,
     )
 }
@@ -90,7 +90,7 @@ fn base_fee_amount(
     request_size: NumBytes,
     replication_kind: ReplicationKind,
     subnet_size: NumberOfNodes,
-) -> u128 {
+) -> Cycles {
     let n = subnet_size.get() as u128;
     let request_bytes = request_size.get() as u128;
     let per_replica = match replication_kind {
@@ -107,7 +107,7 @@ fn base_fee_amount(
         }
     };
 
-    n * per_replica
+    Cycles::new(n * per_replica)
 }
 
 /// The per-replica part of the base fee of a gossiping (flexible or
@@ -177,11 +177,15 @@ fn flexible_extra_response_fee(extra_responses: u128, subnet_size: NumberOfNodes
 
 // ================================= Total fee =================================
 
-/// The total fee for an HTTP outcall of the given `replication_kind` that consumed
-/// the given resources, i.e. the sum of all three parts of its price: the up-front
-/// [`base_fee`], the per-replica fees of every replica attempting it, and the
-/// consensus fee of putting the responses that are delivered into a block.
-/// Used by canisters to estimate the cost of an outcall.
+/// The total fee for an HTTP outcall of the given `replication_kind` where every
+/// participating replica consumed the given resources, i.e. the sum of all three
+/// parts of its price: the up-front [`base_fee`], the per-replica fees of every
+/// replica attempting it, and the consensus fee of putting the responses that are
+/// delivered into a block. Used by canisters to estimate the cost of an outcall.
+///
+/// Since how many replicas will respond is not known ahead of time, this is the most
+/// such an outcall can cost: every replica of the (flexible) committee is assumed to
+/// attempt it and `max_responses` of their responses to be delivered.
 pub fn total_fee(
     request_size: NumBytes,
     http_roundtrip_time: Duration,
@@ -192,7 +196,7 @@ pub fn total_fee(
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> CompoundCycles<HTTPOutcalls> {
     let subnet_size = subnet_size_of(subnet_cycles_config);
-    let amount = Cycles::new(base_fee_amount(request_size, replication_kind, subnet_size))
+    let amount = base_fee_amount(request_size, replication_kind, subnet_size)
         + usage_fee(
             replication_kind,
             http_roundtrip_time,
@@ -231,7 +235,8 @@ fn usage_fee(
             consensus_fee(transformed_bytes, subnet_size),
         ),
         // Every replica gossips its own response, and up to `max_responses` of them
-        // are delivered — those beyond `min_responses` at an extra fee.
+        // are delivered — those beyond `min_responses` at an extra fee. How many
+        // actually will be is not known here, so all `max_responses` are priced.
         ReplicationKind::Flexible {
             min_responses,
             max_responses,
