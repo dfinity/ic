@@ -1105,6 +1105,17 @@ impl ReplicatedState {
         Ok(())
     }
 
+    /// Pools `amount` cycles to be refunded to `receiver`, wherever it is hosted.
+    ///
+    /// Message Routing routes the pooled refunds (via the loopback stream, if the
+    /// recipient is local) and credits them on induction; accounting for them as
+    /// lost if the recipient no longer exists.
+    ///
+    /// No-op if `amount` is zero.
+    pub fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
+        self.refunds.add(receiver, amount);
+    }
+
     /// Credits the cycles in `refund` to the recipient canister's balance.
     ///
     /// Returns `true` if the recipient canister exists and was credited, `false`
@@ -1806,7 +1817,6 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 
 pub mod testing {
     use super::*;
-    use ic_types_cycles::Cycles;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1830,9 +1840,6 @@ pub mod testing {
         /// Testing only: Returns the number of messages across all canister and
         /// subnet output queues.
         fn output_message_count(&self) -> usize;
-
-        /// Testing only: Adds the given refund to the subnet-wide refund pool.
-        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles);
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
@@ -1864,10 +1871,6 @@ pub mod testing {
                 .map(|canister| canister.system_state.queues().output_queues_message_count())
                 .sum::<usize>()
                 + self.subnet_queues.output_queues_message_count()
-        }
-
-        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
-            self.refunds.add(receiver, amount);
         }
     }
 
