@@ -94,7 +94,8 @@ pub struct ReviseElectedGuestosVersionsPayload {
     /// package that corresponds to this version
     pub release_package_urls: Vec<String>,
 
-    /// The SEV-SNP measurements that belong to this release
+    /// The SEV-SNP measurements that belong to this release. Required (and must
+    /// be valid) whenever a version is elected.
     pub guest_launch_measurements: Option<GuestLaunchMeasurements>,
 
     /// Version IDs. These can be anything, they have no semantics.
@@ -104,20 +105,44 @@ pub struct ReviseElectedGuestosVersionsPayload {
 impl ReviseElectedGuestosVersionsPayload {
     pub fn is_electing_a_version(&self) -> Result<bool, String> {
         let elect_params = [
-            self.replica_version_to_elect.as_ref(),
-            self.release_package_sha256_hex.as_ref(),
-            self.release_package_urls.first(),
+            (
+                "replica_version_to_elect",
+                self.replica_version_to_elect.is_some(),
+            ),
+            (
+                "release_package_sha256_hex",
+                self.release_package_sha256_hex.is_some(),
+            ),
+            (
+                "release_package_urls",
+                !self.release_package_urls.is_empty(),
+            ),
+            (
+                "guest_launch_measurements",
+                self.guest_launch_measurements.is_some(),
+            ),
         ];
 
-        if elect_params.iter().all(|p| p.is_some()) {
+        if elect_params.iter().all(|(_, is_set)| *is_set) {
             return Ok(true);
         }
 
-        if elect_params.iter().all(|p| p.is_none()) {
+        if elect_params.iter().all(|(_, is_set)| !is_set) {
             return Ok(false);
         }
 
-        Err("All parameters to elect a version have to be either set or unset.".into())
+        // Leave breadcrumbs: which parameters were missing.
+        let mut unset_params = Vec::new();
+        for (name, is_set) in elect_params {
+            if !is_set {
+                unset_params.push(name);
+            }
+        }
+
+        Err(format!(
+            "All parameters to elect a version have to be either set or unset. \
+             Missing parameters: {unset_params:?}."
+        ))
     }
 
     pub fn is_unelecting_a_version(&self) -> bool {
@@ -125,10 +150,23 @@ impl ReviseElectedGuestosVersionsPayload {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.is_electing_a_version()? || self.is_unelecting_a_version() {
-            Ok(())
-        } else {
-            Err("At least one version has to be elected or unelected.".into())
+        if !self.is_electing_a_version()? && !self.is_unelecting_a_version() {
+            return Err("At least one version has to be elected or unelected.".into());
         }
+
+        // The ReplicaVersionRecord invariant checks this as well.
+        // Deliberately checking it here too, as ic-admin calls validate before
+        // submitting a proposal: that way, malformed measurements are caught while the
+        // proposal is being composed, rather than when an adopted proposal is executed.
+        if let Some(guest_launch_measurements) = self.guest_launch_measurements.as_ref() {
+            guest_launch_measurements.validate().map_err(|defects| {
+                format!("The provided guest_launch_measurements are invalid: {defects:?}")
+            })?;
+        }
+
+        Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;
