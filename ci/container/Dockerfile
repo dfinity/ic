@@ -96,6 +96,9 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
 
+# Install the `nsc` Namespace.so CLI tool:
+curl -fsSL https://get.namespace.so/cloud/install.sh | sh
+
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY ./ci/container/files/zshrc /etc/zsh/zshrc
 
