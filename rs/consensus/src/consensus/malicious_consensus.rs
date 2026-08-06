@@ -148,7 +148,7 @@ impl ConsensusImpl {
         // Get the subnet records that are relevant to making a block
         let stable_registry_version = self
             .block_maker
-            .get_stable_registry_version(parent.as_ref())?;
+            .get_stable_registry_version(parent.as_ref(), &last_summary_block)?;
         let subnet_records = block_maker::subnet_records_for_registry_version(
             &self.block_maker,
             registry_version,
