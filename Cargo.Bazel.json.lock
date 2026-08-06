@@ -1,5 +1,5 @@
 {
-  "checksum": "0ab74b113c84c2d02a55dcfc84f5926dc0476e40464e5202318783ea53e65207",
+  "checksum": "8a58e6629043436f0afe8615a2313a77fc84aee00398ade2eb20df0ce1903423",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -11209,14 +11209,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench-rs 0.6.0": {
+    "canbench-rs 0.7.0": {
       "name": "canbench-rs",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.6.0/download",
-          "sha256": "11eef0544778ff515f65fbe5427807009a9cf44eb898404380f6f13c9af20025"
+          "url": "https://static.crates.io/crates/canbench-rs/0.7.0/download",
+          "sha256": "f219d11b441f13b811b48f3500e16193e5ff2478f2af1f444b825c723bd8f880"
         }
       },
       "targets": [
@@ -11259,13 +11259,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.6.0",
+              "id": "canbench-rs-macros 0.7.0",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.6.0"
+        "version": "0.7.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11273,14 +11273,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.6.0": {
+    "canbench-rs-macros 0.7.0": {
       "name": "canbench-rs-macros",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.6.0/download",
-          "sha256": "94a1c524c43e000e22c24816ead2fcf79d57aca4bae6747835dc088d57682f11"
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.7.0/download",
+          "sha256": "57f3091003ebefb0685c8c06cd4f165ea3ef28bca5e321e99de035229c624fda"
         }
       },
       "targets": [
@@ -11313,14 +11313,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.0"
+        "version": "0.7.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -20529,7 +20529,7 @@
               "target": "cached"
             },
             {
-              "id": "canbench-rs 0.6.0",
+              "id": "canbench-rs 0.7.0",
               "target": "canbench_rs"
             },
             {
@@ -95681,7 +95681,7 @@
     "byteorder 1.5.0",
     "bytes 1.11.1",
     "cached 0.49.2",
-    "canbench-rs 0.6.0",
+    "canbench-rs 0.7.0",
     "candid 0.10.34",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
