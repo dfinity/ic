@@ -328,7 +328,7 @@ pub fn active_high_threshold_committee(
     })
 }
 
-/// Return the current high transcript for the given height if it was found.
+/// Return the subnet splitting status for the given height if it was found.
 pub fn subnet_splitting_status_at_height(
     reader: &dyn ConsensusPoolCache,
     height: Height,
