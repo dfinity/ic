@@ -7884,6 +7884,7 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
+ "ic-registry-keys",
  "ic-replicated-state",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
@@ -7895,7 +7896,9 @@ dependencies = [
  "ic-types-cycles",
  "prometheus",
  "rand 0.8.6",
+ "rstest",
  "slog",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
