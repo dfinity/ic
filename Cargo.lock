@@ -3814,6 +3814,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
+ "tempfile",
  "thiserror 2.0.18",
  "url",
 ]
@@ -6112,6 +6113,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "candid",
+ "canister-test",
  "chrono",
  "clap",
  "cycles-minting-canister",
@@ -6176,6 +6178,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "wat",
 ]
 
 [[package]]

@@ -159,8 +159,8 @@ pub fn flexible_initial_spent<'a>(
     spent_sum + consensus_cost + extra_cost
 }
 
-/// The fee charged for delivering `extra_responses` responses beyond the
-/// `min_responses` needed to reach consensus.
+/// The fee charged for `extra_responses` many responses delivered beyond the
+/// `min_responses` the caller already paid for up front.
 fn extra_response_fee(subnet_size: NumberOfNodes, extra_responses: u128) -> Cycles {
     let n = subnet_size.get() as u128;
     Cycles::from(

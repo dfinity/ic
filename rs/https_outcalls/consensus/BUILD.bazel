@@ -99,6 +99,10 @@ rust_bench(
     testonly = True,
     srcs = ["benches/payload_validation.rs"],
     pin_cpu = True,
+    # The benchmark asserts that the payload it builds actually validates, so
+    # running it once (criterion's test mode) guards against the payload drifting
+    # out of sync with the validation rules.
+    test_name = "payload_validation_bench_test",
     deps = [
         # Keep sorted.
         ":consensus",

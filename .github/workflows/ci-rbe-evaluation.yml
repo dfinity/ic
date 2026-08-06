@@ -44,7 +44,7 @@ jobs:
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
-          protected_branches=("^master$" "^feat-ai-on-engines$" "^rc--" "^hotfix-" "^public-hotfix-")
+          protected_branches=("^master$" "^rc--" "^hotfix-")
           for pattern in "${protected_branches[@]}"; do
               if [[ "$BRANCH_NAME" =~ $pattern ]]; then
                   is_protected_branch="true"
@@ -195,7 +195,7 @@ jobs:
       - uses: namespacelabs/nscloud-setup@v0
       - name: Set up Bazel Remote Execution
         run: |
-          nsc bazel execution setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
+          nsc bazel setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -210,7 +210,7 @@ jobs:
           bazel_args=( --config=flaky_retry ) # auto retry eg systests
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
-          elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
+          elif [[ $BRANCH_NAME =~ ^hotfix- ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate )
           else
               bazel_args+=( --keep_going )

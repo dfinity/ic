@@ -5378,8 +5378,7 @@ fn add_flexible_shares(
     content: CanisterHttpResponseContent,
     spent: Cycles,
 ) {
-    let (response, metadata) =
-        test_response_and_metadata_with_content(callback_id.get(), content.clone());
+    let (response, metadata) = test_response_and_metadata_with_content(callback_id.get(), content);
     let mut pool_access = pool.write().unwrap();
     for node in nodes {
         let share = metadata_to_share_with_spent(node, &metadata, spent);
@@ -5387,8 +5386,11 @@ fn add_flexible_shares(
     }
 }
 
+/// A replica may only contribute its allowance once: the group shrinks from
+/// `max_responses` until it is covered, and the shares funding it must exclude
+/// whichever signers end up delivering a response.
 #[test]
-fn flexible_response_group_never_repeats_a_share_it_grew_past() {
+fn flexible_response_group_is_not_funded_by_a_delivering_replica() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -5422,14 +5424,12 @@ fn flexible_response_group_never_repeats_a_share_it_grew_past() {
     };
 
     let allowance = Cycles::new(600_000);
-    // Delivering the smallest response alone takes one extra share, which is the
-    // replica that spent the least — the one delivered next, below.
-    assert!(spend_of(&[0], &[]) > allowance * 1_usize);
-    assert!(spend_of(&[0], &[1]) <= allowance * 2_usize);
-    // Two responses are covered by the whole committee, three are not, so the
-    // group grows to exactly two and is funded by the other two replicas.
-    assert!(spend_of(&[0, 1], &[2, 3]) <= allowance * 4_usize);
+    // Three responses are not covered even by the whole committee, two are, so the
+    // group shrinks to exactly two and is funded by the other two replicas — never
+    // by replica 1, which delivers the second response.
     assert!(spend_of(&[0, 1, 2], &[3]) > allowance * 4_usize);
+    let group_spend = spend_of(&[0, 1], &[2, 3]);
+    assert!(group_spend <= allowance * 4_usize);
 
     setup_test_with_contexts(
         num_nodes,
@@ -5453,9 +5453,10 @@ fn flexible_response_group_never_repeats_a_share_it_grew_past() {
             let group = &payload.flexible_responses[0];
             assert_eq!(group.responses.len(), 2);
             assert_eq!(group.extra_shares.len(), 2);
+            assert_eq!(group.initial_spent, group_spend);
 
-            // No replica contributes its allowance twice: the one that funded the
-            // smaller group is now delivering a response instead.
+            // No replica contributes its allowance twice: replica 1, the cheapest
+            // extra share, delivers a response instead of funding one.
             let delivering: BTreeSet<_> = group
                 .responses
                 .iter()
@@ -5714,8 +5715,7 @@ fn flexible_response_group_is_topped_up_with_extra_shares() {
             assert_eq!(group.extra_shares.len(), 2);
             assert_eq!(group.initial_spent, group_spend);
 
-            // Each contributing replica is counted exactly once, and together
-            // they cover the collective spend.
+            // Each contributing replica is counted exactly once.
             let signers: BTreeSet<_> = group
                 .responses
                 .iter()
@@ -5723,7 +5723,6 @@ fn flexible_response_group_is_topped_up_with_extra_shares() {
                 .chain(group.extra_shares.iter().map(|s| s.signature.signer))
                 .collect();
             assert_eq!(signers.len(), 3);
-            assert!(group.initial_spent <= allowance * signers.len());
 
             // The spend report covers all three of them, so the caller is
             // refunded their three allowances minus the collective spend.
@@ -5771,10 +5770,9 @@ fn flexible_response_group_delivers_only_as_many_responses_as_are_covered() {
     );
     let one_response = flexible_group_spend(num_nodes, min, &metadata, 1);
     let two_responses = flexible_group_spend(num_nodes, min, &metadata, 2);
-    // An allowance that the whole committee together covers one response with,
-    // but never two.
+    // The smallest allowance that the whole committee together still covers one
+    // response with; two must be out of reach even then.
     let allowance = Cycles::new(one_response.get().div_ceil(num_nodes as u128));
-    assert!(one_response <= allowance * num_nodes);
     assert!(two_responses > allowance * num_nodes);
 
     setup_test_with_contexts(
@@ -5891,6 +5889,64 @@ fn flexible_response_group_delivers_only_as_many_responses_as_fit() {
     );
 }
 
+/// The extra shares funding a group take up block space too, so a group that only
+/// fits once they are left out is shrunk rather than emitted oversized.
+#[test]
+fn flexible_response_group_counts_extra_shares_against_the_block_space() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    let (min, max) = (1, 4);
+
+    let content = vec![0xAB_u8; 4096];
+    let (response, metadata) = test_response_and_metadata_with_content(
+        callback_id.get(),
+        CanisterHttpResponseContent::Success(content.clone()),
+    );
+    let share = metadata_to_share(0, &metadata);
+    let entry_size = FlexibleCanisterHttpResponseWithProof::count_bytes(&response, &share);
+    let base = FlexibleCanisterHttpResponses::base_count_bytes();
+
+    // An allowance so tight that a single response needs all three remaining
+    // replicas as extra shares to be covered.
+    let one_response = flexible_group_spend(num_nodes, min, &metadata, 1);
+    let allowance = Cycles::new(one_response.get().div_ceil(num_nodes as u128));
+    assert!(flexible_group_spend(num_nodes, min, &metadata, 2) > allowance * num_nodes);
+    let num_extra_shares = num_nodes - 1;
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            callback_id,
+            flexible_request_context_with_allowance(committee, min, max, allowance),
+        )],
+        |payload_builder, pool| {
+            add_flexible_ok_shares(&pool, callback_id, 0..num_nodes as u64, &content);
+
+            // With room for the one response the allowance affords and all of the
+            // extra shares funding it, the group is delivered.
+            let roomy = NumBytes::new(
+                (base + entry_size + num_extra_shares * share.count_bytes() + 1) as u64,
+            );
+            let payload =
+                build_and_validate_and_parse_payload_with_max_size(&payload_builder, roomy);
+            assert_eq!(payload.flexible_responses.len(), 1, "{payload:?}");
+            let group = &payload.flexible_responses[0];
+            assert_eq!(group.responses.len(), 1);
+            assert_eq!(group.extra_shares.len(), num_extra_shares);
+
+            // One extra share less, and the funded group no longer fits. There is no
+            // smaller group to fall back on, so nothing is delivered.
+            let tight = NumBytes::new(
+                (base + entry_size + (num_extra_shares - 1) * share.count_bytes() + 1) as u64,
+            );
+            let payload =
+                build_and_validate_and_parse_payload_with_max_size(&payload_builder, tight);
+            assert_eq!(payload.num_responses(), 0, "{payload:?}");
+        },
+    );
+}
+
 /// The smallest responses are delivered first, so that both the block space and
 /// the allowance a group takes go as far as they can.
 #[test]
@@ -5951,10 +6007,9 @@ fn too_many_rejects_delivers_only_as_many_rejects_as_are_covered() {
     );
     let proving_rejects = flexible_group_spend(num_nodes, min, &reject_metadata, min_rejects);
     let all_rejects = flexible_group_spend(num_nodes, min, &reject_metadata, num_nodes);
-    // An allowance that the whole committee together covers the proving rejects
-    // with, but never all of them.
+    // The smallest allowance that the whole committee together still covers the
+    // proving rejects with; all of them must be out of reach even then.
     let allowance = Cycles::new(proving_rejects.get().div_ceil(num_nodes as u128));
-    assert!(proving_rejects <= allowance * num_nodes);
     assert!(all_rejects > allowance * num_nodes);
 
     setup_test_with_contexts(
@@ -6270,7 +6325,6 @@ fn validate_payload_fails_for_out_of_cycles_with_a_duplicate_share() {
     );
 }
 
-/// A `TooManyRejects` error delivers reject bodies, so it is topped up with
 /// extra shares just like a group of successful responses.
 #[test]
 fn too_many_rejects_is_topped_up_with_extra_shares() {
@@ -6303,8 +6357,6 @@ fn too_many_rejects_is_topped_up_with_extra_shares() {
     // together just cover, while the three rejecting ones alone do not.
     let allowance = Cycles::new(error_spend.get() / 4 + 1);
     assert!(allowance * num_rejects < error_spend);
-    assert!(error_spend <= allowance * (num_rejects + 1));
-
     setup_test_with_contexts(
         num_nodes,
         vec![(
@@ -6332,7 +6384,16 @@ fn too_many_rejects_is_topped_up_with_extra_shares() {
             assert_eq!(reject_responses.len(), num_rejects);
             assert_eq!(extra_shares.len(), 1);
             assert_eq!(*initial_spent, error_spend);
-            assert!(*initial_spent <= allowance * (num_rejects + extra_shares.len()));
+            // The extra share's signer is reported as a contributor too, so the
+            // caller's refund is derived from all four allowances.
+            let (_, spent, _) = CanisterHttpPayloadBuilderImpl::into_messages(
+                &payload_to_bytes_max_4mb(payload.clone()),
+            );
+            assert_eq!(spent.initial.len(), 1);
+            assert_eq!(spent.initial[0].callback, callback_id);
+            assert_eq!(spent.initial[0].amount, error_spend);
+            let contributors: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+            assert_eq!(spent.initial[0].nodes, contributors);
         },
     );
 }
@@ -6676,6 +6737,101 @@ fn validate_payload_fails_for_extra_share_outside_the_committee() {
                 InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee { signer, .. },
             ),
         )) if signer == outsider
+    );
+}
+
+/// As for a group of OK responses, the extra shares' claimed spends are part of a
+/// `TooManyRejects` error's collective initial spend, so one that leaves them out
+/// is rejected.
+#[test]
+fn validate_payload_fails_for_too_many_rejects_initial_spent_ignoring_extra_shares() {
+    let num_nodes = 4;
+    let min_responses = 2;
+    let callback_id = CallbackId::from(42);
+    let extra_spent = Cycles::new(7);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    // The one committee member that does not reject contributes its allowance.
+    let extra_share = metadata_to_share_with_spent(3, &metadata, extra_spent);
+    let reject_responses = (0..3)
+        .map(|node| flexible_reject_response(callback_id.get(), node))
+        .collect();
+
+    // The `initial_spent` is computed without the extra share's spend...
+    let mut error = too_many_rejects(
+        callback_id,
+        num_nodes as u32,
+        min_responses,
+        reject_responses,
+    );
+    let FlexibleCanisterHttpError::TooManyRejects {
+        extra_shares,
+        initial_spent,
+        ..
+    } = &mut error
+    else {
+        panic!("expected TooManyRejects");
+    };
+    let claimed = *initial_spent;
+    // ...while the error does carry it.
+    *extra_shares = vec![extra_share];
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            min_responses,
+            TEST_PER_REPLICA_ALLOWANCE,
+            CanisterHttpPayload {
+                flexible_errors: vec![error],
+                ..Default::default()
+            },
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                    received,
+                    expected,
+                    ..
+                },
+            ),
+        )) if received == claimed && expected == claimed + extra_spent
+    );
+}
+
+/// A replica may only contribute its allowance once, so an extra share signed by a
+/// replica that already delivers one of the rejects is rejected.
+#[test]
+fn validate_payload_fails_for_too_many_rejects_extra_share_of_a_rejecting_signer() {
+    let num_nodes = 4;
+    let min_responses = 2;
+    let callback_id = CallbackId::from(42);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let error = too_many_rejects_with_extra_shares(
+        callback_id,
+        num_nodes as u32,
+        min_responses,
+        (0..3)
+            .map(|node| flexible_reject_response(callback_id.get(), node))
+            .collect(),
+        vec![metadata_to_share(0, &metadata)],
+    );
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            min_responses,
+            TEST_PER_REPLICA_ALLOWANCE,
+            CanisterHttpPayload {
+                flexible_errors: vec![error],
+                ..Default::default()
+            },
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { signer, .. },
+            ),
+        )) if signer == node_test_id(0)
     );
 }
 

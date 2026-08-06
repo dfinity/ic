@@ -694,7 +694,10 @@ pub struct FlexibleCanisterHttpOutOfCycles {
 pub struct FlexibleCanisterHttpError {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
-    #[prost(oneof = "flexible_canister_http_error::ErrorDetails", tags = "2, 3, 4")]
+    #[prost(
+        oneof = "flexible_canister_http_error::ErrorDetails",
+        tags = "2, 3, 4, 5"
+    )]
     pub error_details: ::core::option::Option<flexible_canister_http_error::ErrorDetails>,
 }
 /// Nested message and enum types in `FlexibleCanisterHttpError`.

@@ -770,9 +770,9 @@ impl CanisterHttpPayloadBuilderImpl {
             };
             let min_responses = *min_responses as usize;
 
-            // Every error but a timeout carries signed receipts without a
-            // response body. Validate their metadata.
-            let shares_without_response = error.shares_without_response();
+            // Every error but a timeout carries signed receipts whose response body
+            // is not delivered. Validate their metadata.
+            let shares_without_response = error.shares_without_delivered_response();
             let mut seen_signers = HashSet::new();
             for share in shares_without_response {
                 validate_response_share(

@@ -48,6 +48,9 @@ use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 /// the node signing keys and the responses' metadata all use this version.
 const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
+/// `min_responses` of the benchmark's flexible requests.
+const FLEXIBLE_MIN_RESPONSES: u32 = 1;
+
 /// A single benchmark configuration. Adjust the counts and `response_size` to
 /// benchmark different payload shapes.
 #[derive(Clone, Copy)]
@@ -328,6 +331,7 @@ impl<'a> PayloadAssembler<'a> {
 
     fn assemble(&mut self, signer: &Signer) -> CanisterHttpPayload {
         let subnet_size = self.config.subnet_size;
+        let subnet_nodes = NumberOfNodes::from(subnet_size as u32);
         let threshold = subnet_size - get_faults_tolerated(subnet_size);
         let faults_tolerated = get_faults_tolerated(subnet_size);
         // A divergence proof needs enough distinctly-signed shares that even
@@ -363,15 +367,12 @@ impl<'a> PayloadAssembler<'a> {
             };
             responses.push(CanisterHttpResponseWithConsensus {
                 content: response,
-                initial_spent: non_flexible_initial_spent(
-                    &proof,
-                    NumberOfNodes::from(subnet_size as u32),
-                ),
+                initial_spent: non_flexible_initial_spent(&proof, subnet_nodes),
                 proof,
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
-                request_context(Replication::FullyReplicated),
+                request_context(Replication::FullyReplicated, subnet_nodes),
             ));
         }
 
@@ -391,15 +392,15 @@ impl<'a> PayloadAssembler<'a> {
             };
             responses.push(CanisterHttpResponseWithConsensus {
                 content: response,
-                initial_spent: non_flexible_initial_spent(
-                    &proof,
-                    NumberOfNodes::from(subnet_size as u32),
-                ),
+                initial_spent: non_flexible_initial_spent(&proof, subnet_nodes),
                 proof,
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
-                request_context(Replication::NonReplicated(self.committee[designated])),
+                request_context(
+                    Replication::NonReplicated(self.committee[designated]),
+                    subnet_nodes,
+                ),
             ));
         }
 
@@ -421,7 +422,7 @@ impl<'a> PayloadAssembler<'a> {
             divergence_responses.push(CanisterHttpResponseDivergence { shares });
             self.contexts.push((
                 CallbackId::new(callback_id),
-                request_context(Replication::FullyReplicated),
+                request_context(Replication::FullyReplicated, subnet_nodes),
             ));
         }
 
@@ -444,15 +445,20 @@ impl<'a> PayloadAssembler<'a> {
                 initial_spent: flexible_initial_spent(
                     entries.iter().map(|entry| &entry.proof),
                     std::iter::empty(),
-                    NumberOfNodes::from(subnet_size as u32),
-                    1,
+                    subnet_nodes,
+                    FLEXIBLE_MIN_RESPONSES,
                 ),
                 responses: entries,
                 extra_shares: vec![],
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
-                flexible_request_context(committee_set.clone(), 1, subnet_size as u32),
+                flexible_request_context(
+                    committee_set.clone(),
+                    FLEXIBLE_MIN_RESPONSES,
+                    subnet_size as u32,
+                    subnet_nodes,
+                ),
             ));
         }
 
@@ -494,7 +500,10 @@ fn response_and_metadata(
     (response, metadata)
 }
 
-fn request_context(replication: Replication) -> CanisterHttpRequestContext {
+fn request_context(
+    replication: Replication,
+    subnet_size: NumberOfNodes,
+) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
         request: RequestBuilder::default().build(),
         url: "https://example.com".to_string(),
@@ -507,8 +516,8 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         replication,
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
-        registry_version: RegistryVersion::from(1),
-        subnet_size: NumberOfNodes::from(13),
+        registry_version: REGISTRY_VERSION,
+        subnet_size,
         cost_schedule: CanisterCyclesCostSchedule::Normal,
     }
 }
@@ -517,12 +526,16 @@ fn flexible_request_context(
     committee: BTreeSet<NodeId>,
     min_responses: u32,
     max_responses: u32,
+    subnet_size: NumberOfNodes,
 ) -> CanisterHttpRequestContext {
-    let mut context = request_context(Replication::Flexible {
-        committee,
-        min_responses,
-        max_responses,
-    });
+    let mut context = request_context(
+        Replication::Flexible {
+            committee,
+            min_responses,
+            max_responses,
+        },
+        subnet_size,
+    );
     context.pricing_version = PricingVersion::PayAsYouGo;
     // Generous enough that the collective allowance of the responding replicas
     // always covers the consensus cost of the response group.
