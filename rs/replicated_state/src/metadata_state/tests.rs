@@ -43,7 +43,9 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript};
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
+use ic_types::messages::{
+    CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata, RequestOrResponse,
+};
 use ic_types::time::{CoarseTime, current_time};
 use ic_types::{ExecutionRound, Height, NumberOfNodes, RegistryVersion};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCyclesTesting};
@@ -609,7 +611,11 @@ fn system_metadata_split() {
     // Technically some parts of the `SystemMetadata` (such as `prev_state_hash` and
     // `own_subnet_type`) would be replaced during loading. However, we only care
     // that `after_split()` does not touch them.
-    metadata_a.after_split(is_canister_on_subnet_a, &mut subnet_queues);
+    metadata_a.after_split(
+        is_canister_on_subnet_a,
+        &mut subnet_queues,
+        &mut RefundPool::default(),
+    );
 
     // Expect same metadata, but with pruned ingress history and no split marker.
     expected.ingress_history.split(is_receiver_on_subnet_a);
@@ -632,7 +638,11 @@ fn system_metadata_split() {
     // Technically some parts of the `SystemMetadata` (such as `prev_state_hash` and
     // `own_subnet_type`) would be replaced during loading. However, we only care
     // that `after_split()` does not touch them.
-    metadata_b.after_split(is_canister_on_subnet_b, &mut subnet_queues);
+    metadata_b.after_split(
+        is_canister_on_subnet_b,
+        &mut subnet_queues,
+        &mut RefundPool::default(),
+    );
 
     // Expect pruned ingress history and no split marker.
     expected.split_from = None;
@@ -798,7 +808,7 @@ fn system_metadata_online_split() {
     // Split off subnet A'.
     let metadata_a = system_metadata
         .clone()
-        .online_split(SUBNET_A, &mut subnet_queues)
+        .online_split(SUBNET_A, &mut subnet_queues, &mut RefundPool::default())
         .unwrap();
 
     // Expect a pruned ingress history.
@@ -831,7 +841,7 @@ fn system_metadata_online_split() {
     // Split off subnet B.
     let metadata_b = system_metadata
         .clone()
-        .online_split(SUBNET_B, &mut subnet_queues)
+        .online_split(SUBNET_B, &mut subnet_queues, &mut RefundPool::default())
         .unwrap();
 
     // Start off with the original metadata state.
@@ -1099,6 +1109,312 @@ fn time_out_delivered_canister_http_request_contexts() {
         manager.time_out_delivered_canister_http_request_contexts(at_second_timeout)
     );
     assert!(manager.delivered_canister_http_request_contexts.is_empty());
+}
+
+/// Cycles that had already been refunded for each of the HTTP outcalls below. A
+/// refund produced by a subnet split must not hand them out a second time.
+const ALREADY_REFUNDED: Cycles = Cycles::new(3_000);
+
+/// An HTTP outcall context from `sender` to the management canister of `subnet_id`,
+/// with `payment` cycles left on the request and `unrefunded` refundable cycles not
+/// refunded yet (on top of the [`ALREADY_REFUNDED`] ones that were).
+fn canister_http_context_for_split(
+    sender: CanisterId,
+    subnet_id: SubnetId,
+    callback_id: CallbackId,
+    pricing_version: PricingVersion,
+    payment: Cycles,
+    unrefunded: Cycles,
+) -> CanisterHttpRequestContext {
+    let mut context = canister_http_request_context(pricing_version, UNIX_EPOCH);
+    context.request = RequestBuilder::default()
+        .sender(sender)
+        .receiver(subnet_id.into())
+        .sender_reply_callback(callback_id)
+        .payment(payment)
+        .build();
+    context.refund_status.refundable_cycles = unrefunded + ALREADY_REFUNDED;
+    context.refund_status.refunded_cycles = ALREADY_REFUNDED;
+    context
+}
+
+/// Pushes `context` as an in-flight HTTP outcall, also reserving a slot for its
+/// response in `subnet_queues`, as inducting the request would have.
+fn push_in_flight_canister_http_call(
+    system_metadata: &mut SystemMetadata,
+    subnet_queues: &mut CanisterQueues,
+    context: CanisterHttpRequestContext,
+) {
+    subnet_queues
+        .push_input(context.request.clone().into(), InputQueueType::LocalSubnet)
+        .unwrap();
+    subnet_queues.pop_input().unwrap();
+    system_metadata
+        .subnet_call_context_manager
+        .push_context(SubnetCallContext::CanisterHttpRequest(context));
+}
+
+/// Pushes `context` as an HTTP outcall whose response has already been delivered.
+/// The delivered context is created when retrieving the one that was pushed.
+fn push_delivered_canister_http_call(
+    system_metadata: &mut SystemMetadata,
+    context: CanisterHttpRequestContext,
+) {
+    let callback_id = system_metadata
+        .subnet_call_context_manager
+        .push_context(SubnetCallContext::CanisterHttpRequest(context));
+    system_metadata
+        .subnet_call_context_manager
+        .retrieve_context(callback_id, &no_op_logger())
+        .unwrap();
+}
+
+/// Splitting off subnet A' settles the HTTP outcalls of the canisters that have
+/// migrated to subnet B, without losing any of the cycles still owed to them:
+/// In-progress outcalls are rejected, refunding the cycles left on the request plus
+/// anyoutstanding refund in the context.
+/// Already delivered outcalls (only retained in order to account for late refunds)
+/// are dropped, with the cycles they still owe pooled as refunds. The outcalls of
+/// canisters that stay behind are left untouched.
+#[test]
+fn online_split_settles_canister_http_calls_of_migrated_canisters() {
+    // We will be splitting subnet A into A' and B.
+    const SUBNET_A: SubnetId = SUBNET_0;
+    const SUBNET_B: SubnetId = SUBNET_1;
+
+    // `LOCAL` is retained on subnet A', `MIGRATED` is split off to subnet B.
+    const LOCAL: CanisterId = CanisterId::from_u64(1);
+    const MIGRATED_U64: u64 = 2;
+    const MIGRATED: CanisterId = CanisterId::from_u64(MIGRATED_U64);
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: CanisterId::from_u64(0), end: CanisterId::from_u64(MIGRATED_U64 - 1)} => SUBNET_A,
+        CanisterIdRange {start: MIGRATED, end: MIGRATED} => SUBNET_B,
+        CanisterIdRange {start: CanisterId::from_u64(MIGRATED_U64 + 1), end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
+    })
+    .unwrap();
+
+    let mut system_metadata = SystemMetadata::new(SUBNET_A, SubnetType::Application);
+    system_metadata.modify_network_topology(|network_topology| {
+        network_topology.routing_table = Arc::new(routing_table);
+    });
+    let mut subnet_queues = CanisterQueues::default();
+
+    // Two in-progress outcalls of the migrated canister. Under pay-as-you-go pricing
+    // the payment was taken out up front, and moved into the context.
+    const PAYG_CALLBACK: CallbackId = CallbackId::new(1);
+    const PAYG_UNREFUNDED: Cycles = Cycles::new(12_000);
+    push_in_flight_canister_http_call(
+        &mut system_metadata,
+        &mut subnet_queues,
+        canister_http_context_for_split(
+            MIGRATED,
+            SUBNET_A,
+            PAYG_CALLBACK,
+            PricingVersion::PayAsYouGo,
+            Cycles::zero(),
+            PAYG_UNREFUNDED,
+        ),
+    );
+    // Under legacy pricing the caller is refunded through the payment left
+    // on the request, `refund_status` being populated for observability only. Refunding
+    // it as well would hand out the same cycles twice.
+    const LEGACY_CALLBACK: CallbackId = CallbackId::new(2);
+    const LEGACY_PAYMENT: Cycles = Cycles::new(7_000);
+    push_in_flight_canister_http_call(
+        &mut system_metadata,
+        &mut subnet_queues,
+        canister_http_context_for_split(
+            MIGRATED,
+            SUBNET_A,
+            LEGACY_CALLBACK,
+            PricingVersion::Legacy,
+            LEGACY_PAYMENT,
+            Cycles::new(10_000),
+        ),
+    );
+    // And one of the canister that stays behind.
+    let local_in_flight = canister_http_context_for_split(
+        LOCAL,
+        SUBNET_A,
+        CallbackId::new(3),
+        PricingVersion::PayAsYouGo,
+        Cycles::zero(),
+        Cycles::new(10_000),
+    );
+    push_in_flight_canister_http_call(
+        &mut system_metadata,
+        &mut subnet_queues,
+        local_in_flight.clone(),
+    );
+
+    // Two already delivered outcalls of the migrated canister, so that their refunds
+    // are expected to accumulate...
+    const DELIVERED_UNREFUNDED_1: Cycles = Cycles::new(11_000);
+    const DELIVERED_UNREFUNDED_2: Cycles = Cycles::new(2_000);
+    for (callback_id, unrefunded) in [
+        (CallbackId::new(4), DELIVERED_UNREFUNDED_1),
+        (CallbackId::new(5), DELIVERED_UNREFUNDED_2),
+    ] {
+        push_delivered_canister_http_call(
+            &mut system_metadata,
+            canister_http_context_for_split(
+                MIGRATED,
+                SUBNET_A,
+                callback_id,
+                PricingVersion::PayAsYouGo,
+                Cycles::zero(),
+                unrefunded,
+            ),
+        );
+    }
+    // ...and one of the canister that stays behind.
+    let local_delivered = canister_http_context_for_split(
+        LOCAL,
+        SUBNET_A,
+        CallbackId::new(6),
+        PricingVersion::PayAsYouGo,
+        Cycles::zero(),
+        Cycles::new(10_000),
+    );
+    push_delivered_canister_http_call(&mut system_metadata, local_delivered.clone());
+
+    // Split off subnet A'.
+    let mut refunds = RefundPool::default();
+    let metadata_a = system_metadata
+        .online_split(SUBNET_A, &mut subnet_queues, &mut refunds)
+        .unwrap();
+
+    // Only the local canister's outcalls are retained, unchanged, of either kind.
+    let contexts = &metadata_a.subnet_call_context_manager;
+    assert_eq!(
+        vec![&local_in_flight],
+        contexts
+            .canister_http_request_contexts
+            .values()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        vec![&local_delivered],
+        contexts
+            .delivered_canister_http_request_contexts
+            .values()
+            .collect::<Vec<_>>()
+    );
+
+    // The migrated canister is pooled the cycles owed by its delivered outcalls.
+    assert_eq!(
+        vec![(MIGRATED, DELIVERED_UNREFUNDED_1 + DELIVERED_UNREFUNDED_2)],
+        refunds
+            .iter()
+            .map(|refund| (refund.recipient(), refund.amount()))
+            .collect::<Vec<_>>()
+    );
+
+    // And its in-progress outcalls were rejected, refunding the rest.
+    let expected_reject = |callback_id: CallbackId, refund: Cycles| {
+        RequestOrResponse::Response(Arc::new(Response {
+            originator: MIGRATED,
+            respondent: SUBNET_A.into(),
+            originator_reply_callback: callback_id,
+            refund,
+            response_payload: Payload::Reject(RejectContext::new(
+                RejectCode::SysTransient,
+                format!("Canister {MIGRATED} migrated during a subnet split"),
+            )),
+            deadline: CoarseTime::from_secs_since_unix_epoch(0),
+        }))
+    };
+    let mut rejects = Vec::new();
+    while let Some(msg) = subnet_queues.pop_canister_output(&MIGRATED) {
+        rejects.push(msg);
+    }
+    assert_eq!(
+        vec![
+            expected_reject(PAYG_CALLBACK, PAYG_UNREFUNDED),
+            expected_reject(LEGACY_CALLBACK, LEGACY_PAYMENT),
+        ],
+        rejects
+    );
+
+    // Nothing was enqueued for the canister that stayed behind.
+    assert_eq!(None, subnet_queues.pop_canister_output(&LOCAL));
+}
+
+/// Same as above, but for the legacy `split()` + `after_split()` code path: the
+/// second phase must settle the migrated canisters' outcalls just the same.
+#[test]
+fn after_split_settles_canister_http_calls_of_migrated_canisters() {
+    const SUBNET_A: SubnetId = SUBNET_0;
+
+    const LOCAL: CanisterId = CanisterId::from_u64(1);
+    const MIGRATED: CanisterId = CanisterId::from_u64(2);
+    let is_local_canister = |canister_id: CanisterId| canister_id == LOCAL;
+
+    const IN_FLIGHT_CALLBACK: CallbackId = CallbackId::new(1);
+    const IN_FLIGHT_UNREFUNDED: Cycles = Cycles::new(10_000);
+    const DELIVERED_UNREFUNDED: Cycles = Cycles::new(2_000);
+
+    let mut system_metadata = SystemMetadata::new(SUBNET_A, SubnetType::Application);
+    let mut subnet_queues = CanisterQueues::default();
+    push_in_flight_canister_http_call(
+        &mut system_metadata,
+        &mut subnet_queues,
+        canister_http_context_for_split(
+            MIGRATED,
+            SUBNET_A,
+            IN_FLIGHT_CALLBACK,
+            PricingVersion::PayAsYouGo,
+            Cycles::zero(),
+            IN_FLIGHT_UNREFUNDED,
+        ),
+    );
+    push_delivered_canister_http_call(
+        &mut system_metadata,
+        canister_http_context_for_split(
+            MIGRATED,
+            SUBNET_A,
+            CallbackId::new(2),
+            PricingVersion::PayAsYouGo,
+            Cycles::zero(),
+            DELIVERED_UNREFUNDED,
+        ),
+    );
+
+    // Split off subnet A', phase 1 (which retains all subnet call contexts), then
+    // phase 2.
+    let mut metadata_a = system_metadata.split(SUBNET_A, None).unwrap();
+    let mut refunds = RefundPool::default();
+    metadata_a.after_split(is_local_canister, &mut subnet_queues, &mut refunds);
+
+    // Both contexts are gone.
+    let contexts = &metadata_a.subnet_call_context_manager;
+    assert!(contexts.canister_http_request_contexts.is_empty());
+    assert!(contexts.delivered_canister_http_request_contexts.is_empty());
+
+    // The delivered outcall's refund was pooled.
+    assert_eq!(
+        vec![(MIGRATED, DELIVERED_UNREFUNDED)],
+        refunds
+            .iter()
+            .map(|refund| (refund.recipient(), refund.amount()))
+            .collect::<Vec<_>>()
+    );
+
+    // And the in-progress one was rejected, refunding what it owed.
+    assert_eq!(
+        Some(RequestOrResponse::Response(Arc::new(Response {
+            originator: MIGRATED,
+            respondent: SUBNET_A.into(),
+            originator_reply_callback: IN_FLIGHT_CALLBACK,
+            refund: IN_FLIGHT_UNREFUNDED,
+            response_payload: Payload::Reject(RejectContext::new(
+                RejectCode::SysTransient,
+                format!("Canister {MIGRATED} migrated during a subnet split"),
+            )),
+            deadline: CoarseTime::from_secs_since_unix_epoch(0),
+        }))),
+        subnet_queues.pop_canister_output(&MIGRATED)
+    );
 }
 
 pub fn generate_pre_signature(

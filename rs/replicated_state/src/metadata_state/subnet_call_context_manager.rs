@@ -385,6 +385,47 @@ impl SubnetCallContextManager {
             .collect()
     }
 
+    /// Removes and returns all in-flight `CanisterHttpRequestContext`s made by
+    /// canisters that are not local.
+    ///
+    /// Used for rejecting the outcalls of migrated canisters after a subnet split.
+    pub fn remove_non_local_canister_http_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<CanisterHttpRequestContext> {
+        Self::remove_non_local_contexts(&mut self.canister_http_request_contexts, is_local_canister)
+    }
+
+    /// Removes and returns all delivered `CanisterHttpRequestContext`s made by
+    /// canisters that are not local.
+    ///
+    /// Used for settling the outcalls of migrated canisters after a subnet split: no
+    /// further spend report for them can be applied on this subnet and any refund
+    /// resulting from one could not be credited to the migrated canister anyway.
+    pub fn remove_non_local_delivered_canister_http_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<CanisterHttpRequestContext> {
+        Self::remove_non_local_contexts(
+            &mut self.delivered_canister_http_request_contexts,
+            is_local_canister,
+        )
+    }
+
+    /// Removes and returns all `CanisterHttpRequestContext`s in `contexts` whose
+    /// calling canister is not local.
+    fn remove_non_local_canister_http_contexts(
+        contexts: &mut BTreeMap<CallbackId, CanisterHttpRequestContext>,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<CanisterHttpRequestContext> {
+        contexts
+            .extract_if(.., |_callback_id, context| {
+                !is_local_canister(context.request.sender)
+            })
+            .map(|(_callback_id, context)| context)
+            .collect()
+    }
+
     pub fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
         self.canister_management_calls.push_install_code_call(call)
     }
