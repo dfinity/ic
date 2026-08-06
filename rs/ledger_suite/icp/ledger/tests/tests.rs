@@ -1963,9 +1963,9 @@ fn test_notify_caller_logging() {
     );
 
     // Verify that the ledger logged the caller of the notify method.
-    let log = env.canister_log(canister_id);
+    let log = env.canister_log_records(canister_id);
     let expected_log_entry = format!("notify method called by [{user1}]");
-    for record in log.records().iter() {
+    for record in log.iter() {
         let entry =
             String::from_utf8(record.content.clone()).expect("log entry should be a string");
         if entry.contains(&expected_log_entry) {
