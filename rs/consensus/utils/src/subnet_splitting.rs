@@ -104,10 +104,9 @@ mod tests {
     fn set_up_registry(cup_type: Option<CupType>) -> Arc<dyn RegistryClient> {
         let (registry_data_provider, registry) = setup_registry_non_final(
             SOURCE_SUBNET_ID,
-            vec![(
-                1,
-                SubnetRecordBuilder::new().with_committee(&[NODE_1]).build(),
-            )],
+            (1..=REGISTRY_CUP_REGISTRY_VERSION.increment().get())
+                .map(|version| (version, SubnetRecordBuilder::from(&[NODE_1]).build()))
+                .collect(),
         );
         registry_data_provider
             .add(

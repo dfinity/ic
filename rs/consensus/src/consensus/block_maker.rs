@@ -1581,9 +1581,6 @@ mod tests {
             const SOURCE_SUBNET_ID: SubnetId = SUBNET_0;
             const DESTINATION_SUBNET_ID: SubnetId = SUBNET_1;
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                let record = SubnetRecordBuilder::from(&[NODE_1])
-                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                    .build();
                 let Dependencies {
                     registry,
                     crypto,
@@ -1598,7 +1595,16 @@ mod tests {
                 } = dependencies_with_subnet_params(
                     pool_config,
                     SOURCE_SUBNET_ID,
-                    vec![(1, record.clone())],
+                    (1..=MAX_REGISTRY_VERSION)
+                        .map(|version| {
+                            (
+                                version,
+                                SubnetRecordBuilder::from(&[NODE_1])
+                                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                    .build(),
+                            )
+                        })
+                        .collect(),
                 );
 
                 let mut payload_builder = MockPayloadBuilder::new();
@@ -1626,14 +1632,6 @@ mod tests {
                     no_op_logger(),
                 );
 
-                for version in 2..=MAX_REGISTRY_VERSION {
-                    add_subnet_record(
-                        &registry_data_provider,
-                        version,
-                        SOURCE_SUBNET_ID,
-                        record.clone(),
-                    );
-                }
                 if let Some(splitting_registry_version) = test_case.splitting_registry_version {
                     registry_data_provider
                         .add(
@@ -1662,7 +1660,7 @@ mod tests {
                         .unwrap();
                 }
 
-                registry.update_to_latest_version();
+                registry.reload();
 
                 if test_case.is_summary_block {
                     pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
