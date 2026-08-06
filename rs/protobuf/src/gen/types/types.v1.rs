@@ -662,6 +662,8 @@ pub struct FlexibleCanisterHttpResponses {
     pub responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
     #[prost(message, optional, tag = "3")]
     pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "4")]
+    pub extra_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FlexibleCanisterHttpTimeout {}
@@ -680,6 +682,8 @@ pub struct FlexibleCanisterHttpTooManyRejects {
     pub reject_responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
     #[prost(message, optional, tag = "2")]
     pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "3")]
+    pub extra_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpError {
