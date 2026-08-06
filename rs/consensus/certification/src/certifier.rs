@@ -502,7 +502,7 @@ impl CertifierImpl {
                 info!(
                     every_n_seconds => 30,
                     self.log,
-                    "Skipping the validation of a certification at height {} because a \
+                    "Skipping the validation of a certification at height {} because a \
                     subnet splitting is taking place",
                     certification.height
                 );
