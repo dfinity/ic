@@ -9,7 +9,7 @@ thread_local! {
     static IS_SUBNET_SPLITTING_ENABLED: Cell<bool> = const { Cell::new(false) };
     static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(true) };
     static IS_NODE_SWAPPING_ENABLED: Cell<bool> = const { Cell::new(true) };
-    static IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED: Cell<bool> = const { Cell::new(false) };
+    static IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     // Temporary flags related to the node swapping feature.
     //

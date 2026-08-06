@@ -429,6 +429,17 @@ pub struct ResourceLimits {
     pub maximum_state_size: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "2")]
     pub maximum_state_delta: ::core::option::Option<u64>,
+    /// The maximum number of instructions a query may consume. This applies both to a single
+    /// (non-composite) query method execution and to the total across an entire composite query
+    /// call graph.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[prost(uint64, optional, tag = "3")]
+    pub maximum_query_instructions: ::core::option::Option<u64>,
+    /// The maximum wall-clock time, in seconds, that a query (including a composite query call
+    /// graph) is allowed to run.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[prost(uint64, optional, tag = "4")]
+    pub maximum_query_walltime_seconds: ::core::option::Option<u64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

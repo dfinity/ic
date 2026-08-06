@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - master
-      - feat-ai-on-engines # special protected long-lived feature branch for experimenting with AI on cloud engines.
       - 'dev-gh-*'
       - 'public-hotfix-*'
   pull_request:
@@ -61,10 +60,8 @@ jobs:
   ci-rbe-evaluation:
     name: CI RBE Evaluation
     # for dfinity/ic: run on all events except for forked PRs
-    # NOTE: currently disabled due to the following error:
-    #
-    # > No available targets are compatible with triple “x86_64-unknown-linux5.10.0-gnu2.31.0”
-    if: false
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     uses: ./.github/workflows/ci-rbe-evaluation.yml
     secrets: inherit
     with:
