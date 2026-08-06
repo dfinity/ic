@@ -288,17 +288,17 @@ fn apply_capped(
     applied
 }
 
-/// Pools the accumulated per-canister `refund` to be delivered to the corresponding
-/// canisters and reports the accumulated `consumed` cycles in their cost metrics as
-/// well as in the subnet's.
+/// Pools the accumulated per-canister `refund`, for Message Routing to deliver to
+/// the corresponding canisters; and reports the accumulated `consumed` cycles in
+/// their cost metrics as well as in the subnet's.
 ///
 /// Refunds are pooled rather than credited to the caller's balance directly, because
 /// the caller need not be hosted here anymore: an HTTP outcall's refundable cycles
 /// are only settled once its spend reports have been applied (or it has timed out),
 /// by which time a subnet split may have migrated the caller to another subnet.
-/// Message Routing delivers a pooled refund wherever the caller lives, via the
-/// loopback stream if that is still this subnet; and accounts for the cycles as lost
-/// if the caller no longer exists at all.
+/// Message Routing delivers a pooled refund wherever the caller lives (via the
+/// loopback stream, if that is still this subnet) and accounts for the cycles as
+/// lost if the caller no longer exists at all.
 ///
 /// The `consumed` cycles are reported on the caller only if it is still local. The
 /// subnet-wide metrics are updated either way: the spend was consumed by the subnet
@@ -309,9 +309,6 @@ fn apply_accounting(
 ) {
     let mut subnet_consumed = NominalCycles::zero();
     for (sender, accounting) in accounting {
-        if accounting.refund.is_zero() && accounting.consumed.is_zero() {
-            continue;
-        }
         subnet_consumed += accounting.consumed;
         state.add_refund(sender, accounting.refund);
         if !accounting.consumed.is_zero()
@@ -520,6 +517,16 @@ mod tests {
             .map_or_else(Cycles::zero, |refund| refund.amount())
     }
 
+    /// The whole refund pool, by recipient. As opposed to [`refunded()`], this also
+    /// pins down which canisters have a pooled refund at all.
+    fn pooled_refunds(state: &ReplicatedState) -> BTreeMap<CanisterId, Cycles> {
+        state
+            .refunds()
+            .iter()
+            .map(|refund| (refund.recipient(), refund.amount()))
+            .collect()
+    }
+
     fn balance(state: &ReplicatedState, caller: CanisterId) -> Cycles {
         state
             .canister_state(&caller)
@@ -622,10 +629,10 @@ mod tests {
         );
     }
 
-    /// An initial report on a normal subnet credits the collective refund
+    /// An initial report on a normal subnet pools the collective refund
     /// (`allowance * nodes − spent`) and reports the spent cycles as consumed.
     #[test]
-    fn initial_report_credits_refund_and_reports_consumed() {
+    fn initial_report_pools_refund_and_reports_consumed() {
         let allowance = Cycles::new(1_000);
         let spent = Cycles::new(9_500);
         let refundable = allowance * SUBNET_SIZE; // 13_000
@@ -656,11 +663,11 @@ mod tests {
         assert_errors(&[], &metrics_registry);
     }
 
-    /// An asynchronous report on a normal subnet credits `allowance − spent` for
+    /// An asynchronous report on a normal subnet pools `allowance − spent` for
     /// each reporting node and reports the per-node spend as consumed. Only the
     /// reporting nodes are accounted; the rest are refunded on timeout.
     #[test]
-    fn asynchronous_report_credits_refund_and_reports_consumed() {
+    fn asynchronous_report_pools_refund_and_reports_consumed() {
         let allowance = Cycles::new(1_000);
         let refundable = allowance * SUBNET_SIZE; // 13_000
         let (mut state, caller) = setup(Some((Replication::FullyReplicated, refundable)));
@@ -839,7 +846,7 @@ mod tests {
         assert_errors(&[], &metrics_registry);
     }
 
-    /// Asynchronous reports credit `allowance − spent` per node and report the
+    /// Asynchronous reports refund `allowance − spent` per node and report the
     /// per-node spend; a node that has already been accounted is ignored, making
     /// repeated reports idempotent.
     #[test]
@@ -1035,7 +1042,7 @@ mod tests {
         assert_errors(&[], &metrics_registry);
     }
 
-    /// The credited refund is capped so that `refunded_cycles` never exceeds
+    /// The refund is capped so that `refunded_cycles` never exceeds
     /// `refundable_cycles`, even if the reported allowances would sum to more.
     #[test]
     fn refund_is_capped_at_refundable() {
@@ -1074,7 +1081,7 @@ mod tests {
         assert_errors(&[(ERROR_REFUND_CAPPED, 1)], &metrics_registry);
     }
 
-    /// A report for an unknown callback is dropped without crediting anything.
+    /// A report for an unknown callback is dropped without refunding anything.
     /// This is not an error: contexts of requests that were priced with
     /// [`PricingVersion::Legacy`] are not retained after they were responded to,
     /// but their responses still carry a spend report.
@@ -1191,15 +1198,63 @@ mod tests {
         assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         // ...the refund is in the pool, addressed to the caller...
         assert_eq!(
-            vec![(caller, Cycles::new(3_500))],
-            state
-                .refunds()
-                .iter()
-                .map(|refund| (refund.recipient(), refund.amount()))
-                .collect::<Vec<_>>()
+            pooled_refunds(&state),
+            BTreeMap::from([(caller, Cycles::new(3_500))])
         );
         // ...and the consumed cycles are still reported on the caller itself.
         assert_eq!(consumed(&state, caller), 9_500);
+        assert_errors(&[], &metrics_registry);
+    }
+
+    /// Refunds are pooled per recipient, so reports for different callers result in
+    /// one pool entry each, rather than in a single merged refund.
+    #[test]
+    fn refunds_are_pooled_per_recipient() {
+        const OTHER_CALLBACK: CallbackId = CallbackId::new(43);
+        // A second caller, which need not be hosted here for its refund to be
+        // pooled (see `report_for_missing_canister_is_pooled_for_message_routing`).
+        let other_caller = canister_test_id(2);
+
+        let allowance = Cycles::new(1_000);
+        let refundable = allowance * SUBNET_SIZE;
+        let (mut state, caller) = setup(Some((Replication::FullyReplicated, refundable)));
+        let other_replication = Replication::FullyReplicated;
+        let other_refund_status = refund_status(refundable, &other_replication);
+        insert_context(
+            &mut state,
+            OTHER_CALLBACK,
+            other_caller,
+            other_replication,
+            other_refund_status,
+            CanisterCyclesCostSchedule::Normal,
+        );
+        let (metrics_registry, metrics) = metrics();
+
+        let report = CanisterHttpSpent {
+            initial: vec![
+                CanisterHttpInitialSpent {
+                    callback: CALLBACK,
+                    amount: Cycles::new(9_500),
+                    nodes: all_nodes(),
+                },
+                CanisterHttpInitialSpent {
+                    callback: OTHER_CALLBACK,
+                    amount: Cycles::new(12_000),
+                    nodes: all_nodes(),
+                },
+            ],
+            asynchronous: vec![],
+        };
+        deliver_canister_http_spent(&mut state, &report, &no_op_logger(), &metrics);
+
+        // One pool entry per caller: 13_000 − 9_500 and 13_000 − 12_000.
+        assert_eq!(
+            pooled_refunds(&state),
+            BTreeMap::from([
+                (caller, Cycles::new(3_500)),
+                (other_caller, Cycles::new(1_000)),
+            ])
+        );
         assert_errors(&[], &metrics_registry);
     }
 
@@ -1219,6 +1274,9 @@ mod tests {
 
         // No node responded, so all 13 allowances are returned.
         assert_eq!(refunded(&state, caller), refundable);
+        // Pooled, rather than credited to the caller's balance, just like the
+        // refunds applied from spend reports.
+        assert_eq!(balance(&state, caller), INITIAL_BALANCE);
         assert_eq!(consumed(&state, caller), 0);
         assert_eq!(subnet_consumed(&state), SUBNET_CONSUMED_BEFORE);
         // The context has been removed.

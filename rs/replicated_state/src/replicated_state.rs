@@ -1108,7 +1108,7 @@ impl ReplicatedState {
     /// Pools `amount` cycles to be refunded to `receiver`, wherever it is hosted.
     ///
     /// Message Routing routes the pooled refunds (via the loopback stream, if the
-    /// recipient is local) and credits them on induction; accounting for them as
+    /// recipient is local) and credits them on induction, accounting for them as
     /// lost if the recipient no longer exists.
     ///
     /// No-op if `amount` is zero.
