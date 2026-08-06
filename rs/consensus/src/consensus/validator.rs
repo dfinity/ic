@@ -3215,17 +3215,12 @@ pub mod test {
 
     /// Schedules a subnet split at [`SUBNET_SPLIT_REGISTRY_VERSION`] by overwriting the subnet's
     /// CUP contents record with one carrying a [`CupType::SubnetSplitting`], the way the NNS would.
-    /// Registry versions up to (and including) `latest_registry_version` are populated with subnet
-    /// records, so that blocks can reference versions above the scheduled split as well.
     fn schedule_subnet_split(
         data_provider: &Arc<ProtoRegistryDataProvider>,
         registry_client: &FakeRegistryClient,
         subnet_id: SubnetId,
         committee: &[NodeId],
-        latest_registry_version: RegistryVersion,
     ) {
-        assert!(latest_registry_version >= SUBNET_SPLIT_REGISTRY_VERSION);
-
         // Keep everything but the CUP type as it is at genesis, so that the scheduled split is the
         // only difference between the two records.
         let mut cup_contents = registry_client
@@ -3237,16 +3232,6 @@ pub mod test {
             destination_subnet_id: Some(subnet_id_into_protobuf(subnet_test_id(1))),
         }));
 
-        for version in 2..=latest_registry_version.get() {
-            add_subnet_record(
-                data_provider,
-                version,
-                subnet_id,
-                SubnetRecordBuilder::from(committee)
-                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                    .build(),
-            );
-        }
         data_provider
             .add(
                 &make_catch_up_package_contents_key(subnet_id),
@@ -3254,7 +3239,7 @@ pub mod test {
                 Some(cup_contents),
             )
             .expect("Failed to add the CUP contents");
-        registry_client.update_to_latest_version();
+        registry_client.reload();
     }
 
     /// Until the summary block starting the split is reached, data blocks must keep their registry
@@ -3277,11 +3262,20 @@ pub mod test {
                 time_source,
                 replica_config,
                 ..
-            } = setup_dependencies_with_dkg_interval_length(
+            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
                 pool_config,
-                &committee,
-                DKG_INTERVAL_LENGTH,
-            );
+                subnet_test_id(0),
+                (1..=block_registry_version.get())
+                    .map(|version| {
+                        (
+                            version,
+                            SubnetRecordBuilder::from(&committee)
+                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                .build(),
+                        )
+                    })
+                    .collect(),
+            ));
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -3291,7 +3285,6 @@ pub mod test {
                 &registry_client,
                 replica_config.subnet_id,
                 &committee,
-                SUBNET_SPLIT_REGISTRY_VERSION.increment(),
             );
 
             let mut test_block = make_next_block(&pool);
@@ -3347,11 +3340,20 @@ pub mod test {
                 time_source,
                 replica_config,
                 ..
-            } = setup_dependencies_with_dkg_interval_length(
+            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
                 pool_config,
-                &committee,
-                DKG_INTERVAL_LENGTH,
-            );
+                subnet_test_id(0),
+                (1..=block_registry_version.get())
+                    .map(|version| {
+                        (
+                            version,
+                            SubnetRecordBuilder::from(&committee)
+                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                .build(),
+                        )
+                    })
+                    .collect(),
+            ));
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -3361,15 +3363,6 @@ pub mod test {
             // split, so that all parents keep referencing the initial registry version and the
             // summary block below is the first one that could adopt the scheduled version.
             pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
-            if block_registry_version >= SUBNET_SPLIT_REGISTRY_VERSION {
-                schedule_subnet_split(
-                    &data_provider,
-                    &registry_client,
-                    replica_config.subnet_id,
-                    &committee,
-                    block_registry_version,
-                );
-            }
 
             // The proposal picks up the latest registry version, and its payload is built for that
             // very version, so the only thing under test is the version itself.
@@ -3378,23 +3371,23 @@ pub mod test {
                 summary_proposal.content.as_ref().payload.is_summary(),
                 "expected a summary block at the DKG boundary",
             );
-
             let context = summary_proposal.content.as_ref().context.clone();
+            assert_eq!(
+                context.registry_version, block_registry_version,
+                "expected the summary block to reference the registry version under test",
+            );
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(context.certified_height);
             time_source.set_time(context.time).unwrap();
 
-            if block_registry_version < SUBNET_SPLIT_REGISTRY_VERSION {
-                schedule_subnet_split(
-                    &data_provider,
-                    &registry_client,
-                    replica_config.subnet_id,
-                    &committee,
-                    SUBNET_SPLIT_REGISTRY_VERSION,
-                );
-            }
+            schedule_subnet_split(
+                &data_provider,
+                &registry_client,
+                replica_config.subnet_id,
+                &committee,
+            );
 
             let result = validator.check_block_validity(&PoolReader::new(&pool), &summary_proposal);
             if block_registry_version <= SUBNET_SPLIT_REGISTRY_VERSION {
