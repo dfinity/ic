@@ -3314,7 +3314,7 @@ pub mod test {
                 assert_matches!(result, Ok(()));
             } else {
                 assert_matches!(
-                    validator.check_block_validity(&PoolReader::new(&pool), &test_block),
+                    result,
                     Err(ValidationError::InvalidArtifact(
                         InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
                             context_registry_version,
