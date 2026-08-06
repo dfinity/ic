@@ -393,7 +393,10 @@ impl SubnetCallContextManager {
         &mut self,
         is_local_canister: impl Fn(CanisterId) -> bool,
     ) -> Vec<CanisterHttpRequestContext> {
-        Self::remove_non_local_contexts(&mut self.canister_http_request_contexts, is_local_canister)
+        Self::remove_non_local_canister_http_contexts(
+            &mut self.canister_http_request_contexts,
+            is_local_canister,
+        )
     }
 
     /// Removes and returns all delivered `CanisterHttpRequestContext`s made by
@@ -406,7 +409,7 @@ impl SubnetCallContextManager {
         &mut self,
         is_local_canister: impl Fn(CanisterId) -> bool,
     ) -> Vec<CanisterHttpRequestContext> {
-        Self::remove_non_local_contexts(
+        Self::remove_non_local_canister_http_contexts(
             &mut self.delivered_canister_http_request_contexts,
             is_local_canister,
         )
