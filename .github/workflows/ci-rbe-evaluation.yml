@@ -44,7 +44,7 @@ jobs:
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
-          protected_branches=("^master$" "^rc--" "^hotfix-" "^public-hotfix-")
+          protected_branches=("^master$" "^rc--" "^hotfix-")
           for pattern in "${protected_branches[@]}"; do
               if [[ "$BRANCH_NAME" =~ $pattern ]]; then
                   is_protected_branch="true"
@@ -210,7 +210,7 @@ jobs:
           bazel_args=( --config=flaky_retry ) # auto retry eg systests
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
-          elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
+          elif [[ $BRANCH_NAME =~ ^hotfix- ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate )
           else
               bazel_args+=( --keep_going )
