@@ -13,8 +13,12 @@ message ReplicaVersionRecord {
   // The SEV-SNP measurements that belong to this release
   GuestLaunchMeasurements guest_launch_measurements = 9;
 
-  // The ID used to reference this version.
-  optional string version_id = 10;
+  // Replica version IDs are generally git commit IDs in the ic git repository,
+  // pointing to the sources from which the Replica was built. Currently this
+  // matches the suffix of the key for this record in the registry, and is
+  // included here to make it easier to work with the generated Rust types. A
+  // ReplicaVersionRecord almost always travels with its ID String.
+  optional string replica_version_id = 10;
 
   reserved 1, 2, 3, 4, 5, 8;
   reserved "binary_url";

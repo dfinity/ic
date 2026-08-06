@@ -99,12 +99,12 @@ mod tests {
     use std::sync::Arc;
 
     fn create_replica_record(
-        version_id: &str,
+        replica_version_id: &str,
         package_hash: &str,
         measurements: &[impl AsRef<[u8]>],
     ) -> ReplicaVersionRecord {
         ReplicaVersionRecord {
-            version_id: Some(version_id.to_string()),
+            replica_version_id: Some(replica_version_id.to_string()),
             release_package_sha256_hex: package_hash.to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -120,11 +120,11 @@ mod tests {
     }
 
     fn create_replica_record_without_measurements(
-        version_id: &str,
+        replica_version_id: &str,
         package_hash: &str,
     ) -> ReplicaVersionRecord {
         ReplicaVersionRecord {
-            version_id: Some(version_id.to_string()),
+            replica_version_id: Some(replica_version_id.to_string()),
             release_package_sha256_hex: package_hash.to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: None,
@@ -163,10 +163,10 @@ mod tests {
         let data_provider = ProtoRegistryDataProvider::new();
 
         // Add replica version records
-        for (version_id, record) in &replica_versions_and_records {
+        for (replica_version_id, record) in &replica_versions_and_records {
             data_provider
                 .add(
-                    &make_replica_version_key(version_id),
+                    &make_replica_version_key(replica_version_id),
                     registry_version,
                     Some(record.clone()),
                 )

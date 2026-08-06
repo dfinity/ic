@@ -375,7 +375,7 @@ fn convert_type1dot1_nodes_to_type4dot5(registry: &Registry) -> Vec<RegistryMuta
     mutations
 }
 
-/// Backfill a new `version_id` field on `ReplicaVersionRecord`s.
+/// Backfill a new `replica_version_id` field on `ReplicaVersionRecord`s.
 /// This ID is also used in the registry key. Adding it to the record is more
 /// convenient, as only a `ReplicaVersionRecord` needs to be passed around.
 fn add_version_id_to_replica_versions(registry: &Registry) -> Vec<RegistryMutation> {
@@ -384,13 +384,22 @@ fn add_version_id_to_replica_versions(registry: &Registry) -> Vec<RegistryMutati
     for (id, mut version) in
         get_key_family_iter::<ReplicaVersionRecord>(registry, REPLICA_VERSION_KEY_PREFIX)
     {
-        if version.version_id.is_none() {
-            version.version_id = Some(id.clone());
-            mutations.push(update(
-                make_replica_version_key(id),
-                version.encode_to_vec(),
-            ))
+        if version.replica_version_id.is_some() {
+            continue;
         }
+
+        version.replica_version_id = Some(id.clone());
+        mutations.push(update(
+            make_replica_version_key(id),
+            version.encode_to_vec(),
+        ))
+    }
+
+    if mutations.len() > 10 {
+        ic_cdk::println!(
+            "Trying to update ReplicaVersionRecords generated too many mutations. Truncating to 10."
+        );
+        mutations.truncate(10);
     }
 
     mutations

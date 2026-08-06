@@ -12,9 +12,13 @@ pub struct ReplicaVersionRecord {
     /// The SEV-SNP measurements that belong to this release
     #[prost(message, optional, tag = "9")]
     pub guest_launch_measurements: ::core::option::Option<GuestLaunchMeasurements>,
-    /// The ID used to reference this version.
+    /// Replica version IDs are generally git commit IDs in the ic git repository,
+    /// pointing to the sources from which the Replica was built. Currently this
+    /// matches the suffix of the key for this record in the registry, and is
+    /// included here to make it easier to work with the generated Rust types. A
+    /// ReplicaVersionRecord almost always travels with its ID String.
     #[prost(string, optional, tag = "10")]
-    pub version_id: ::core::option::Option<::prost::alloc::string::String>,
+    pub replica_version_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
     serde::Serialize,
