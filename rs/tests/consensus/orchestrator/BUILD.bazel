@@ -178,6 +178,9 @@ system_test(
     cpus = MIN_LOCAL_CPUS + 6 * DEFAULT_VCPUS_PER_VM,
     # This is needed so that the test can elect a second Guestos/Replica version.
     guestos_update = "test",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
