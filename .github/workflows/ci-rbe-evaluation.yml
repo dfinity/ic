@@ -170,6 +170,8 @@ jobs:
     name: Bazel Test All on RBE
     continue-on-error: true
     needs: [config, infer-bazel-targets]
+    environment:
+      name: ${{ case(needs.config.outputs.release-build == 'true', 'release-remote-build-execution-cluster', '') }}
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
     container:
       image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:4f5db2c7a9349a5e656c8b72499ebeacb1c3d177a352f2b1a6d9b2aa48147e9d
@@ -194,8 +196,29 @@ jobs:
     steps:
       - uses: namespacelabs/nscloud-setup@v0
       - name: Set up Bazel Remote Execution
+        # For release builds we use a different RBE cluster than the one used for PRs to reduce cache poisoning attacks.
+        # We select this cluster by passing a secret --key which is provided by the environment release-remote-build-execution-cluster
+        # which is only accessible on protected branches.
+        env:
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
+          RBE_CLUSTER_KEY: ${{ secrets.SECRET_RBE_CLUSTER_KEY }}
+        shell: bash
         run: |
-          nsc bazel execution setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
+          set -euo pipefail
+
+          args=(--enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc)
+
+          if [[ "$RELEASE_BUILD" == 'true' ]]; then
+            # Fail loudly rather than passing an empty --key: nsc would then fall back to the
+            # default cluster, silently running the release build on the same cluster as PRs.
+            if [[ -z "$RBE_CLUSTER_KEY" ]]; then
+              echo "::error::release build but SECRET_RBE_CLUSTER_KEY is empty; refusing to fall back to the shared PR cluster"
+              exit 1
+            fi
+            args+=(--key="$RBE_CLUSTER_KEY")
+          fi
+
+          nsc bazel execution setup "${args[@]}"
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
