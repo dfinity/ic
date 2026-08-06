@@ -3414,9 +3414,8 @@ pub mod test {
         })
     }
 
-    /// When the subnet splitting status cannot be determined, blocks that don't move the registry
-    /// version forward are still validated — letting the subnet keep running with a stuck registry
-    /// version — while blocks bumping it are held back until the status becomes available again.
+    /// When the subnet splitting status cannot be determined, block validation must fail with a
+    /// [`ValidationFailure::SubnetSplittingStatusError`].
     #[test]
     fn test_block_validation_when_subnet_splitting_status_is_unavailable() {
         /// The registry version at which the subnet splitting status cannot be determined.
