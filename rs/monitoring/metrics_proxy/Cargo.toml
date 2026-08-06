@@ -8,7 +8,7 @@ name = "metrics-proxy"
 path = "src/main.rs"
 
 [dependencies]
-axum = { workspace = true, features = ["macros"] }
+axum = { workspace = true }
 axum-otel-metrics = { workspace = true }
 clap = { workspace = true }
 duration-string = { workspace = true }

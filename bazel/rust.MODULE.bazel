@@ -120,10 +120,7 @@ crate.spec(
     version = "^0.1.89",
 )
 crate.spec(
-    features = [
-        "macros",
-        "ws",
-    ],
+    features = ["ws"],
     package = "axum",
     version = "^0.8.4",
 )
