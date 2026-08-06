@@ -1810,11 +1810,10 @@ mod tests {
     }
 
     /// An incoming share at a height inside a `Scheduled` or `Done` with different subnet ID
-    /// splitting interval should be ignored and not validated, as it could be from the other
-    /// subnet.
+    /// should be ignored and not validated, as it could be from the other subnet.
     /// In a `Done` interval with same subnet ID, shares should be validated as normal.
     #[test]
-    fn test_validate_share_handles_invalid_during_scheduled_subnet_splitting() {
+    fn test_validate_share_handles_invalid_during_subnet_splitting() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
@@ -1884,9 +1883,10 @@ mod tests {
     }
 
     /// Full certifications received during a `Scheduled` or `Done` with different subnet ID
-    /// splitting interval should be ignored and not validated, as they could be from the other
+    /// should be ignored and not validated, as they could be from the other subnet.
+    /// In a `Done` interval with same subnet ID, certifications should be validated as normal
     #[test]
-    fn test_validate_certification_validates_despite_scheduled_subnet_splitting() {
+    fn test_validate_certification_handles_invalid_during_subnet_splitting() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
