@@ -8,10 +8,7 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
-use crate::fees::{
-    FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE, PER_DOWNLOADED_BYTE_FEE, PER_RESPONSE_MS_FEE,
-    TRANSFORM_INSTRUCTION_DIVISOR,
-};
+use crate::fees::{gossip_usage_fee, network_usage_fee, transform_usage_fee};
 use crate::{AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError};
 
 /// This tracker implements the per-replica part of pay-as-you-go pricing. The formula
@@ -97,10 +94,7 @@ impl BudgetTracker for PayAsYouGoTracker {
             response_size,
             response_time,
         } = network_usage;
-        let cost = PER_DOWNLOADED_BYTE_FEE
-            .saturating_mul(response_size.get() as u128)
-            .saturating_add(PER_RESPONSE_MS_FEE.saturating_mul(response_time.as_millis()));
-        self.charge(cost)
+        self.charge(network_usage_fee(response_size, response_time))
     }
 
     fn get_transform_limit(&self) -> NumInstructions {
@@ -109,8 +103,7 @@ impl BudgetTracker for PayAsYouGoTracker {
     }
 
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError> {
-        let cost = (usage.get() as u128) / TRANSFORM_INSTRUCTION_DIVISOR;
-        self.charge(cost)
+        self.charge(transform_usage_fee(usage))
     }
 
     fn subtract_gossip_usage(
@@ -123,10 +116,10 @@ impl BudgetTracker for PayAsYouGoTracker {
         if !self.is_gossiping {
             return Ok(());
         }
-        let cost = FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
-            .saturating_mul(transformed_response_size.get() as u128)
-            .saturating_mul(self.subnet_size.get() as u128);
-        self.charge(cost)
+        self.charge(gossip_usage_fee(
+            transformed_response_size,
+            self.subnet_size,
+        ))
     }
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
@@ -149,6 +142,10 @@ impl BudgetTracker for PayAsYouGoTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fees::{
+        FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE, PER_DOWNLOADED_BYTE_FEE, PER_RESPONSE_MS_FEE,
+        TRANSFORM_INSTRUCTION_DIVISOR, max_usage_fee,
+    };
     use ic_types::{
         CanisterId, NodeId, PrincipalId, RegistryVersion,
         canister_http::{CanisterHttpMethod, PricingVersion, RefundStatus},
@@ -380,5 +377,60 @@ mod tests {
             tracker.create_payment_receipt().spent,
             MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET
         );
+    }
+
+    #[test]
+    fn allowance_derived_from_max_usage_fee_covers_the_largest_possible_spend() {
+        // `max_usage_fee` bounds how much of a request's payment is withheld as
+        // per-replica allowances, so it has to cover everything this tracker can
+        // charge a replica: the largest response the adapter may return, taking the
+        // longest it may take, transformed with the whole instruction limit into a
+        // maximally large response. If it didn't, a request paying for the worst case
+        // could still run out of cycles.
+        let node = NodeId::from(PrincipalId::new_node_test_id(0));
+        for replication in [
+            Replication::FullyReplicated,
+            Replication::NonReplicated(node),
+            flexible(4),
+        ] {
+            for max_response_bytes in [None, Some(NumBytes::from(1_000))] {
+                let subnet_size = NumberOfNodes::from(13);
+                let node_count = replication.node_count(subnet_size);
+                let allowance =
+                    max_usage_fee(&replication, max_response_bytes, subnet_size) / node_count;
+                let ctx = CanisterHttpRequestContext {
+                    max_response_bytes,
+                    ..context(replication.clone(), allowance.get())
+                };
+                assert_eq!(ctx.subnet_size, subnet_size);
+                let mut tracker = PayAsYouGoTracker::new(&ctx);
+
+                let limits = tracker.get_adapter_limits();
+                assert_eq!(
+                    tracker.subtract_network_usage(NetworkUsage {
+                        response_size: limits.max_response_size,
+                        response_time: limits.max_response_time,
+                    }),
+                    Ok(()),
+                    "{replication:?}, {max_response_bytes:?}"
+                );
+                let transform_limit = tracker.get_transform_limit();
+                assert_eq!(
+                    tracker.subtract_transform_usage(transform_limit),
+                    Ok(()),
+                    "{replication:?}, {max_response_bytes:?}"
+                );
+                assert_eq!(
+                    tracker.subtract_gossip_usage(NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)),
+                    Ok(()),
+                    "{replication:?}, {max_response_bytes:?}"
+                );
+                // There should still be allowance left for the consensus cost.
+                assert!(
+                    tracker.spent < allowance.get(),
+                    "{replication:?}, {max_response_bytes:?}"
+                );
+            }
+        }
     }
 }

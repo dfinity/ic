@@ -12,8 +12,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
+    EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, ReplicationCounts, SchnorrAlgorithm,
+    SchnorrKeyId, VetKdCurve, VetKdKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
@@ -22,7 +22,8 @@ use ic_replicated_state::{
 };
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
-    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
+    NumInstructions, NumOsPages, NumberOfNodes, PrincipalId, SubnetId, Time,
+    canister_http::ReplicationKind,
     ingress::WasmResult,
     messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, SenderInfo},
     methods::{SystemMethod, WasmClosure},
@@ -1974,6 +1975,25 @@ impl SystemApiImpl {
 
 /// Parameters of `ic0.cost_http_request_v2`, mirrors the
 /// management canister's HTTP-request cost arguments.
+///
+/// ```text
+/// record {
+///   request_bytes : nat64;
+///   http_roundtrip_time_ms : nat64;
+///   raw_response_bytes : nat64;
+///   transformed_response_bytes : nat64;
+///   transform_instructions : nat64;
+///   outcall_type : opt variant {
+///     fully_replicated : reserved;
+///     non_replicated : reserved;
+///     flexible : opt record {
+///       total_requests : nat32;
+///       min_responses : nat32;
+///       max_responses : nat32;
+///     };
+///   };
+/// }
+/// ```
 #[derive(CandidType, Deserialize)]
 struct CostHttpRequestV2Params {
     request_bytes: u64,
@@ -1981,9 +2001,48 @@ struct CostHttpRequestV2Params {
     raw_response_bytes: u64,
     transformed_response_bytes: u64,
     transform_instructions: u64,
+    /// The replication of the outcall being priced. Absent means fully replicated,
+    /// so that params encoded before this field existed keep their meaning.
+    outcall_type: Option<CostHttpRequestOutcallType>,
 }
 
-const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 79;
+/// The replication of the HTTP outcall to be priced.
+#[derive(CandidType, Deserialize)]
+enum CostHttpRequestOutcallType {
+    #[serde(rename = "fully_replicated")]
+    FullyReplicated(candid::Reserved),
+    #[serde(rename = "non_replicated")]
+    NonReplicated(candid::Reserved),
+    /// `None` defaults to n, floor(2/3 * N) + 1, n
+    #[serde(rename = "flexible")]
+    Flexible(Option<ReplicationCounts>),
+}
+
+impl CostHttpRequestV2Params {
+    fn replication_kind(&self, subnet_size: NumberOfNodes) -> ReplicationKind {
+        match &self.outcall_type {
+            None | Some(CostHttpRequestOutcallType::FullyReplicated(_)) => {
+                ReplicationKind::FullyReplicated
+            }
+            Some(CostHttpRequestOutcallType::NonReplicated(_)) => ReplicationKind::NonReplicated,
+            Some(CostHttpRequestOutcallType::Flexible(None)) => {
+                ReplicationKind::default_flexible(subnet_size)
+            }
+            // Note that the counts are not validated here (unlike the ones of an
+            // actual request): a caller asking for the price of an impossible
+            // outcall simply gets a price that no outcall will ever cost.
+            Some(CostHttpRequestOutcallType::Flexible(Some(counts))) => {
+                ReplicationKind::from(counts)
+            }
+        }
+    }
+}
+
+const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 144;
+
+/// How much work decoding [`CostHttpRequestV2Params`] may spend skipping values it
+/// has no type for — i.e. the `reserved` payload of an `outcall_type` variant.
+const MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA: usize = 1;
 
 impl SystemApi for SystemApiImpl {
     fn set_execution_error(&mut self, error: HypervisorError) {
@@ -4380,7 +4439,7 @@ impl SystemApi for SystemApiImpl {
         }
 
         let mut decoder_config = DecoderConfig::new();
-        decoder_config.set_skipping_quota(0);
+        decoder_config.set_skipping_quota(MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA);
 
         let cost_params_v2: CostHttpRequestV2Params =
             decode_one_with_config(params_bytes, &decoder_config).map_err(|e| {
@@ -4393,6 +4452,8 @@ impl SystemApi for SystemApiImpl {
             })?;
 
         let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
+        let replication_kind = cost_params_v2
+            .replication_kind(NumberOfNodes::from(subnet_cycles_config.subnet_size as u32));
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
@@ -4402,6 +4463,7 @@ impl SystemApi for SystemApiImpl {
                 cost_params_v2.raw_response_bytes.into(),
                 cost_params_v2.transform_instructions.into(),
                 cost_params_v2.transformed_response_bytes.into(),
+                replication_kind,
                 subnet_cycles_config,
             );
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request_v2")?;
@@ -4703,6 +4765,50 @@ pub(crate) fn valid_subslice<'a>(
 mod test {
     use super::*;
 
+    /// Encodes params carrying `payload` in the `reserved` slot of a
+    /// `fully_replicated` outcall type, and decodes them the way
+    /// `ic0.cost_http_request_v2` does.
+    fn decode_params_with_reserved_payload<T: CandidType>(payload: T) -> Result<(), candid::Error> {
+        #[derive(CandidType, Deserialize)]
+        enum OutcallType<T> {
+            #[serde(rename = "fully_replicated")]
+            FullyReplicated(T),
+        }
+        #[derive(CandidType)]
+        struct Params<T> {
+            request_bytes: u64,
+            http_roundtrip_time_ms: u64,
+            raw_response_bytes: u64,
+            transformed_response_bytes: u64,
+            transform_instructions: u64,
+            outcall_type: Option<OutcallType<T>>,
+        }
+        let blob = candid::encode_one(&Params {
+            request_bytes: 1,
+            http_roundtrip_time_ms: 1,
+            raw_response_bytes: 1,
+            transformed_response_bytes: 1,
+            transform_instructions: 1,
+            outcall_type: Some(OutcallType::FullyReplicated(payload)),
+        })
+        .unwrap();
+
+        let mut decoder_config = DecoderConfig::new();
+        decoder_config.set_skipping_quota(MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA);
+        decode_one_with_config::<CostHttpRequestV2Params>(&blob, &decoder_config).map(|_| ())
+    }
+
+    #[test]
+    fn test_cost_http_request_v2_skipping_quota_admits_null_and_stops_amplification() {
+        // The empty payload an actual caller sends in the `reserved` slot is skipped ...
+        assert!(decode_params_with_reserved_payload(()).is_ok());
+        assert!(decode_params_with_reserved_payload(candid::Reserved).is_ok());
+        // ... while anything larger is rejected, including a payload that is cheap to
+        // encode but expensive to skip.
+        assert!(decode_params_with_reserved_payload(vec![(); 1000]).is_err());
+        assert!(decode_params_with_reserved_payload("0123456789".to_string()).is_err());
+    }
+
     #[test]
     fn test_cost_http_request_v2_params_size_is_constant() {
         let max = CostHttpRequestV2Params {
@@ -4711,9 +4817,38 @@ mod test {
             raw_response_bytes: u64::MAX,
             transformed_response_bytes: u64::MAX,
             transform_instructions: u64::MAX,
+            outcall_type: Some(CostHttpRequestOutcallType::Flexible(Some(
+                ReplicationCounts {
+                    total_requests: u32::MAX,
+                    min_responses: u32::MAX,
+                    max_responses: u32::MAX,
+                },
+            ))),
         };
         let encoded = candid::encode_one(&max).unwrap();
         assert_eq!(MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE, encoded.len());
+
+        // No other `outcall_type` encodes larger.
+        for outcall_type in [
+            None,
+            Some(CostHttpRequestOutcallType::FullyReplicated(
+                candid::Reserved,
+            )),
+            Some(CostHttpRequestOutcallType::NonReplicated(candid::Reserved)),
+            Some(CostHttpRequestOutcallType::Flexible(None)),
+        ] {
+            let params = CostHttpRequestV2Params {
+                request_bytes: u64::MAX,
+                http_roundtrip_time_ms: u64::MAX,
+                raw_response_bytes: u64::MAX,
+                transformed_response_bytes: u64::MAX,
+                transform_instructions: u64::MAX,
+                outcall_type,
+            };
+            assert!(
+                candid::encode_one(&params).unwrap().len() <= MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE
+            );
+        }
     }
 
     #[test]

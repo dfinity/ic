@@ -10,9 +10,9 @@ use ic_replicated_state::{
     CanisterState, SystemState, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SubnetId,
-    canister_http::{MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication},
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, NumberOfNodes,
+    PrincipalId, SubnetId,
+    canister_http::{MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication, ReplicationKind},
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, SignedIngress},
 };
 use ic_types_cycles::{
@@ -1285,6 +1285,8 @@ impl CyclesAccountManager {
         CompoundCycles::new(amount, subnet_cycles_config.cost_schedule)
     }
 
+    /// Returns the base fee for an HTTP outcall, which is charged for every
+    /// request upfront.
     pub fn http_request_base_fee(
         &self,
         request_size: NumBytes,
@@ -1294,6 +1296,20 @@ impl CyclesAccountManager {
         ic_https_outcalls_pricing::fees::base_fee(request_size, replication, subnet_cycles_config)
     }
 
+    /// Returns the most an HTTP outcall with the given `replication` and
+    /// `max_response_bytes` can ever spend, i.e. its worst-case cost beyond the base
+    /// fee, including the consensus cost of delivering the response.
+    pub fn max_http_request_usage_fee(
+        &self,
+        replication: &Replication,
+        max_response_bytes: Option<NumBytes>,
+        subnet_size: NumberOfNodes,
+    ) -> Cycles {
+        ic_https_outcalls_pricing::fees::max_usage_fee(replication, max_response_bytes, subnet_size)
+    }
+
+    /// Returns the estimated total fee for an HTTP outcall with the given parameters,
+    /// including both the base fee and the usage fee.
     pub fn http_request_fee_v2(
         &self,
         request_size: NumBytes,
@@ -1301,20 +1317,18 @@ impl CyclesAccountManager {
         raw_response_size: NumBytes,
         transform: NumInstructions,
         transformed_response_size: NumBytes,
+        replication_kind: ReplicationKind,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> CompoundCycles<HTTPOutcalls> {
-        let n = subnet_cycles_config.subnet_size as u64;
-        let amount = (Cycles::new(1_000_000)
-            + Cycles::new(50) * request_size.get()
-            + Cycles::new(140_000) * n
-            + Cycles::new(800) * n * n
-            + Cycles::new(50) * raw_response_size.get()
-            + Cycles::new(300) * http_roundtrip_time.as_millis() as u64
-            + Cycles::new(transform.get() as u128 / 13)
-            + (Cycles::new(10) * n + Cycles::new(650)) * transformed_response_size.get())
-            * n;
-
-        CompoundCycles::new(amount, subnet_cycles_config.cost_schedule)
+        ic_https_outcalls_pricing::fees::total_fee(
+            request_size,
+            http_roundtrip_time,
+            raw_response_size,
+            transform,
+            transformed_response_size,
+            replication_kind,
+            subnet_cycles_config,
+        )
     }
 
     pub fn http_request_fee_beta(
