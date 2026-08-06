@@ -20,10 +20,8 @@ impl DelegationManagerMetrics {
                 "How many times has the nns delegation been updated",
             ),
             fetch_duration: metrics_registry.histogram(
-                // Metric name kept as `update_duration` for backwards compatibility, even though it
-                // measures the fetch duration.
-                "nns_delegation_manager_update_duration_seconds",
-                "How long it took to update the nns delegation, in seconds",
+                "nns_delegation_manager_fetch_duration_seconds",
+                "How long it took to fetch the nns delegation, in seconds",
                 // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
                 decimal_buckets(-3, 1),
             ),
@@ -35,7 +33,7 @@ impl DelegationManagerMetrics {
                 &["delegation_format"],
             ),
             fetch_errors: metrics_registry.int_counter(
-                "nns_delegation_manager_errors_total",
+                "nns_delegation_manager_fetch_errors_total",
                 "Number of errors encountered while fetching nns delegations",
             ),
             state_comparison_errors: metrics_registry.int_counter(
