@@ -6357,6 +6357,7 @@ fn too_many_rejects_is_topped_up_with_extra_shares() {
     // together just cover, while the three rejecting ones alone do not.
     let allowance = Cycles::new(error_spend.get() / 4 + 1);
     assert!(allowance * num_rejects < error_spend);
+
     setup_test_with_contexts(
         num_nodes,
         vec![(
@@ -6386,6 +6387,7 @@ fn too_many_rejects_is_topped_up_with_extra_shares() {
             assert_eq!(*initial_spent, error_spend);
             // The extra share's signer is reported as a contributor too, so the
             // caller's refund is derived from all four allowances.
+
             let (_, spent, _) = CanisterHttpPayloadBuilderImpl::into_messages(
                 &payload_to_bytes_max_4mb(payload.clone()),
             );
