@@ -22,6 +22,13 @@ on the process that this file is part of, see
 * Cloud Engines are now allowed to have blank `replica_version_id` (in their
   `SubnetRecord`). In this case, `StandardEngineReplicaVersionRecord` is used to
   determine the Cloud Engine's replica version.
+* `revise_elected_guestos_versions` now treats `guest_launch_measurements` as one of the parameters
+  that electing a GuestOS version requires, alongside `replica_version_to_elect`,
+  `release_package_sha256_hex` and `release_package_urls`: those parameters all have to be either
+  set or unset. Consequently, a proposal that elects a version without measurements is now
+  rejected, and so is one that provides measurements without electing a version (they would have
+  been dropped silently). The corresponding error message now also names the parameters that are
+  missing. Unelecting versions on its own is unaffected.
 
 ## Deprecated
 

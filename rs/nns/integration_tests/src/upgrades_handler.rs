@@ -14,7 +14,10 @@ use ic_nns_test_utils::{
     itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::get_value,
 };
-use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
+    ReplicaVersionRecord,
+};
 use ic_registry_keys::make_replica_version_key;
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::{
@@ -48,6 +51,18 @@ async fn assert_failed_with_reason(gov: &Canister<'_>, proposal_id: ProposalId, 
     );
 }
 
+fn guest_launch_measurements_for_test() -> GuestLaunchMeasurements {
+    GuestLaunchMeasurements {
+        guest_launch_measurements: vec![GuestLaunchMeasurement {
+            measurement: vec![0x42; 48],
+            metadata: Some(GuestLaunchMeasurementMetadata {
+                kernel_cmdline: Some("foo=bar".to_string()),
+                vcpu_type: None,
+            }),
+        }],
+    }
+}
+
 async fn is_elected_version(registry: &Canister<'_>, replica_version_id: &str) -> bool {
     get_value::<ReplicaVersionRecord>(
         registry,
@@ -77,8 +92,10 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                     .as_ref()
                     .map(|_| vec!["http://release_package.tar.zst".to_string()])
                     .unwrap_or_default(),
+                guest_launch_measurements: elect
+                    .as_ref()
+                    .map(|_| guest_launch_measurements_for_test()),
                 replica_version_to_elect: elect,
-                guest_launch_measurements: None,
                 replica_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
             };
         let elect_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {
@@ -167,6 +184,25 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                     ..Default::default()
                 },
                 Some("All parameters to elect a version have to be either set or unset"),
+            ),
+            (
+                ReviseElectedGuestosVersionsPayload {
+                    guest_launch_measurements: None,
+                    ..update_versions_payload(Some("version_without_measurements".into()), vec![])
+                },
+                Some("Missing parameters: [\"guest_launch_measurements\"]"),
+            ),
+            (
+                ReviseElectedGuestosVersionsPayload {
+                    guest_launch_measurements: Some(GuestLaunchMeasurements {
+                        guest_launch_measurements: vec![],
+                    }),
+                    ..update_versions_payload(
+                        Some("version_with_empty_measurements".into()),
+                        vec![],
+                    )
+                },
+                Some("guest_launch_measurements are invalid"),
             ),
             (
                 elect_version_payload(""),
