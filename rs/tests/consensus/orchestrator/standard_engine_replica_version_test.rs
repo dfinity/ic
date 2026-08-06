@@ -157,20 +157,7 @@ fn test(env: TestEnv) {
     );
 
     // [Step 2] Elect another replica version.
-    let new_replica_version = get_guestos_update_img_version();
-    info!(
-        logger,
-        "Electing another replica version: {new_replica_version}"
-    );
-    block_on(elect_replica_version_with_urls(
-        &nns_node,
-        &topology_snapshot,
-        &new_replica_version,
-        vec![get_guestos_update_img_url(&env).to_string()],
-        get_guestos_update_img_sha256(),
-        Some(get_guestos_update_launch_measurements()),
-        &logger,
-    ));
+    let new_replica_version = elect_target_version(&env, &nns_node);
 
     // [Step 3] Upsert StandardEngineReplicaVersionRecord to
     // {old: original_replica_version, new: new_replica_version,
