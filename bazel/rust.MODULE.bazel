@@ -246,7 +246,7 @@ crate.spec(
 )
 crate.spec(
     package = "canbench-rs",
-    version = "0.6.0",
+    version = "0.7.0",
 )
 crate.spec(
     package = "candid",
