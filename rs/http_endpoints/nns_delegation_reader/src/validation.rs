@@ -20,7 +20,7 @@
 //! still carries the old key.
 
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
-use ic_registry_routing_table::CanisterIdRanges;
+use ic_registry_routing_table::RoutingTable;
 use ic_types::{PrincipalId, SubnetId};
 use std::fmt;
 
@@ -103,8 +103,7 @@ impl std::error::Error for DelegationVerificationError {}
 /// * the threshold public key certified in `tree` (at `/subnet/<subnet_id>/public_key`)
 ///   matches `expected_subnet_public_key`; and
 /// * the canister ranges certified in `tree` pass the check specified by
-///   `ranges_check`, against `expected_subnet_ranges`, the ranges which the state assigns to the
-///   delegated subnet (see [`CanisterRangesCheck`]).
+///   `ranges_check`, against the state's `routing_table` (see [`CanisterRangesCheck`]).
 ///
 /// Returns `Ok(false)` if either of those does not match. Any error that
 /// prevents the comparison (malformed canister ranges, missing public key,
@@ -113,7 +112,7 @@ pub(crate) fn is_tree_consistent_with(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
     expected_subnet_public_key: &[u8],
-    expected_subnet_ranges: &CanisterIdRanges,
+    routing_table: &RoutingTable,
     ranges_check: CanisterRangesCheck,
 ) -> Result<bool, DelegationValidationError> {
     if !does_public_key_match(tree, subnet_id, expected_subnet_public_key)? {
@@ -122,7 +121,7 @@ pub(crate) fn is_tree_consistent_with(
 
     match ranges_check {
         CanisterRangesCheck::AllSubnetRanges => {
-            do_all_subnet_ranges_match(tree, subnet_id, expected_subnet_ranges)
+            do_all_subnet_ranges_match(tree, subnet_id, routing_table)
         }
     }
 }
@@ -144,14 +143,16 @@ fn does_public_key_match(
     }
 }
 
-/// Returns whether the canister ranges certified in `tree` exactly match `subnet_ranges` at
-/// `/subnet/<subnet_id>/canister_ranges`.
+/// Returns whether the canister ranges certified in `tree` at
+/// `/subnet/<subnet_id>/canister_ranges` exactly match the ranges which `routing_table`
+/// assigns to the subnet.
 fn do_all_subnet_ranges_match(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
-    subnet_ranges: &CanisterIdRanges,
+    routing_table: &RoutingTable,
 ) -> Result<bool, DelegationValidationError> {
-    let subnet_ranges: Vec<(PrincipalId, PrincipalId)> = subnet_ranges
+    let subnet_ranges: Vec<(PrincipalId, PrincipalId)> = routing_table
+        .ranges(subnet_id)
         .iter()
         .map(|range| (range.start.get(), range.end.get()))
         .collect();
@@ -204,23 +205,29 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_canonical_state::encoding::encode_subnet_canister_ranges;
     use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, flatmap};
-    use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
+    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
     use ic_types::{CanisterId, PrincipalId, SubnetId};
     use rstest::rstest;
 
-    /// Checks the tree against the given state view with the `AllSubnetRanges` check.
+    /// Checks the tree against the given state view with the `AllSubnetRanges` check,
+    /// where the state's routing table assigns `subnet_ranges` to the subnet.
     fn validate_all_subnet_ranges(
         tree: &LabeledTree<Vec<u8>>,
         subnet_id: SubnetId,
         expected_public_key: &[u8],
         subnet_ranges: &[CanisterIdRange],
     ) -> Result<bool, DelegationValidationError> {
+        let mut routing_table = RoutingTable::default();
+        for range in subnet_ranges {
+            routing_table.insert(*range, subnet_id).unwrap();
+        }
+
         is_tree_consistent_with(
             tree,
             subnet_id,
             expected_public_key,
-            &CanisterIdRanges::try_from(subnet_ranges.to_vec()).unwrap(),
+            &routing_table,
             CanisterRangesCheck::AllSubnetRanges,
         )
     }

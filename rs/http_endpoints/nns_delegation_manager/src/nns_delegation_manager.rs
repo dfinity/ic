@@ -153,18 +153,16 @@ impl DelegationManager {
         let state = self.state_reader.get_latest_certified_state()?;
         let network_topology = &state.get_ref().metadata.network_topology;
         delegation
-            .is_consistent_with(CanisterRangesCheck::AllSubnetRanges, |subnet_id| {
-                let subnet_topology = network_topology
-                    .subnets_for_certification()
-                    .get(&subnet_id)?;
-
-                Some((
-                    subnet_topology.public_key.clone(),
+            .is_consistent_with(
+                CanisterRangesCheck::AllSubnetRanges,
+                network_topology.routing_table_for_certification(),
+                |subnet_id| {
                     network_topology
-                        .routing_table_for_certification()
-                        .ranges(subnet_id),
-                ))
-            })
+                        .subnets_for_certification()
+                        .get(&subnet_id)
+                        .map(|subnet_topology| subnet_topology.public_key.clone())
+                },
+            )
             .inspect_err(|err| {
                 warn!(
                     self.log,
