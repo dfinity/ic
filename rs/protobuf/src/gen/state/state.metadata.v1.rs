@@ -652,6 +652,14 @@ pub struct SplitFrom {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubnetMerged {
+    /// Whether the subnet is the result of a subnet merge. Because `false` is
+    /// encoded as an empty message, the enclosing file is not written at all in
+    /// that case.
+    #[prost(bool, tag = "1")]
+    pub merged: bool,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum HttpMethod {

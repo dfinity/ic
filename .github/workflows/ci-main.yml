@@ -33,7 +33,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:dd11ad77c455bd491169af8c271a8557cdcca6e7f163a39ebf75aedea0214bf2
+      image: ghcr.io/dfinity/ic-build@sha256:2a4aed7210bdf3522219410bc14c0ca8161206c02c3cc9f24409f2cb5233f9b5
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -330,13 +330,10 @@ jobs:
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --enable_remote_asset_api --bazelrc=/tmp/bazel-cache.bazelrc
-          cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
       - name: Build and Test
         run: |
-          mkdir -p /tmp/zig-cache
-
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \

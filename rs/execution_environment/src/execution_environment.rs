@@ -347,7 +347,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
     ) {
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
-        let res = self.cycles_account_manager.consume_cycles(
+        let res = self.cycles_account_manager.consume_cycles_for_final_instructions(
             &mut canister.system_state,
             memory_usage,
             message_memory_usage,
@@ -2156,6 +2156,13 @@ impl ExecutionEnvironment {
                         .metadata
                         .unflushed_checkpoint_ops
                         .push(unflushed_checkpoint_op);
+                }
+                if let Some(snapshot_id) = response.snapshot_to_make_immutable
+                    && let Some(canister) =
+                        state.canister_state_make_mut(&snapshot_id.get_canister_id())
+                    && let Some(snapshot) = canister.canister_snapshots.get_mut(snapshot_id)
+                {
+                    Arc::make_mut(snapshot).set_restored();
                 }
                 crate::util::process_responses(
                     response.deleted_call_context_responses,

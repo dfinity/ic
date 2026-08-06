@@ -5865,6 +5865,62 @@ fn upload_chunk_charges_canister_cycles() {
     );
 }
 
+/// Returns the `Instructions` entries of the canister's consumed-cycles gauge
+/// and monotonic counter maps, in that order.
+fn consumed_instruction_cycles(
+    test: &ExecutionTest,
+    canister_id: CanisterId,
+) -> (NominalCycles, NominalCycles) {
+    let canister_metrics = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics();
+    let instructions = |use_cases: &BTreeMap<CyclesUseCase, NominalCycles>| {
+        use_cases
+            .get(&CyclesUseCase::Instructions)
+            .cloned()
+            .unwrap_or_default()
+    };
+    (
+        instructions(canister_metrics.consumed_cycles_by_use_cases()),
+        instructions(canister_metrics.consumed_cycles_by_use_cases_as_counters()),
+    )
+}
+
+// The management-canister instruction cost of `upload_chunk` is a direct, final
+// charge: it is consumed without a subsequent refund. Since the monotonic
+// per-use-case counter defers `Instructions` accounting to refund time, such a
+// charge only reaches the counter if the consuming code observes a zero refund
+// for it. Regression test that it does, i.e. that the counter tracks the gauge.
+#[test]
+fn upload_chunk_records_charge_on_consumed_cycles_counter() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(CYCLES);
+
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(instructions, test.get_own_subnet_cycles_config())
+        .nominal();
+    assert_ne!(expected_charge, NominalCycles::zero());
+
+    let (gauge_before, counter_before) = consumed_instruction_cycles(&test, canister_id);
+
+    let payload = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    }
+    .encode();
+    let _hash = test.subnet_message("upload_chunk", payload).unwrap();
+
+    let (gauge_after, counter_after) = consumed_instruction_cycles(&test, canister_id);
+
+    assert_eq!(gauge_after - gauge_before, expected_charge);
+    assert_eq!(counter_after - counter_before, expected_charge);
+}
+
 #[test]
 fn upload_chunk_charges_if_failing() {
     const SCHEDULER_CORES: usize = 2;

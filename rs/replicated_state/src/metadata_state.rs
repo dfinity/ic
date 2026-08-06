@@ -111,6 +111,14 @@ pub struct SystemMetadata {
     /// exported.
     pub subnet_split_from: Option<SubnetId>,
 
+    /// "Subnet was merged" marker: `true` if this subnet is the result of a subnet
+    /// merge.
+    ///
+    /// Like `split_from`, persisted in its own `subnet_merged.pbuf` file rather than
+    /// as a `SystemMetadata` proto field. A `false` flag encodes to an empty message,
+    /// so the file is absent in that case.
+    pub subnet_merged: bool,
+
     /// Asynchronously handled subnet messages.
     pub subnet_call_context_manager: SubnetCallContextManager,
 
@@ -760,6 +768,7 @@ impl SystemMetadata {
             own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
+            subnet_merged: false,
 
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -990,6 +999,7 @@ impl SystemMetadata {
     ) -> Result<Self, String> {
         assert_eq!(None, self.split_from);
         assert_eq!(None, self.subnet_split_from);
+        assert!(!self.subnet_merged);
         assert_eq!(0, self.heap_delta_estimate.get());
         assert!(self.expected_compiled_wasms.is_empty());
 
@@ -1093,6 +1103,7 @@ impl SystemMetadata {
             own_subnet_info: _,
             ref mut split_from,
             subnet_split_from,
+            subnet_merged,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
             state_sync_version: _,
@@ -1110,6 +1121,7 @@ impl SystemMetadata {
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
         assert_eq!(None, subnet_split_from);
+        assert!(!subnet_merged);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -1197,6 +1209,7 @@ impl SystemMetadata {
             own_subnet_info,
             split_from,
             mut subnet_split_from,
+            subnet_merged,
             mut subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -1211,6 +1224,7 @@ impl SystemMetadata {
 
         assert_eq!(None, split_from);
         assert_eq!(None, subnet_split_from);
+        assert!(!subnet_merged);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -1300,6 +1314,8 @@ impl SystemMetadata {
             own_subnet_info,
             split_from,
             subnet_split_from,
+            // Just asserted to be `false`; a subnet split does not set it.
+            subnet_merged,
             subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -1826,6 +1842,16 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
+        // `IngressStatus::Unknown` stands for the absence of an entry, so it must
+        // never be recorded as the status of a message. Note that
+        // `IngressStatus::is_valid_state_transition()` (checked by the callers) can
+        // only catch this if there already is an entry, as it allows any transition
+        // away from `Unknown`, i.e. from "no entry".
+        debug_assert!(
+            !matches!(status, IngressStatus::Unknown),
+            "Attempted to record `IngressStatus::Unknown` for message {message_id}"
+        );
+
         // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
@@ -2431,6 +2457,7 @@ pub mod testing {
             own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
+            subnet_merged: false,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,

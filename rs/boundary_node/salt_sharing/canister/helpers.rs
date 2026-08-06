@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use std::{collections::HashSet, time::Duration};
 
 use crate::{
@@ -9,7 +8,8 @@ use crate::{
 };
 use candid::Principal;
 use ic_canister_log::log;
-use ic_cdk::{api::time, call};
+use ic_cdk::api::time;
+use ic_cdk::call::Call;
 use ic_cdk_timers::{set_timer, set_timer_interval};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use salt_sharing_api::{
@@ -53,15 +53,11 @@ pub fn is_salt_init() -> bool {
 // Regenerate salt and store it in the stable memory
 // Can only fail, if the call to management canister fails.
 pub async fn try_regenerate_salt() -> Result<(), String> {
-    let (salt,): ([u8; SALT_SIZE],) =
-        ic_cdk::call(Principal::management_canister(), "raw_rand", ())
-            .await
-            .map_err(|err| {
-                format!(
-                    "Call to `raw_rand` of management canister failed: code={:?}, err={}",
-                    err.0, err.1
-                )
-            })?;
+    let salt: [u8; SALT_SIZE] = Call::unbounded_wait(Principal::management_canister(), "raw_rand")
+        .await
+        .map_err(|err| format!("Call to `raw_rand` of management canister failed: {err}"))?
+        .candid()
+        .map_err(|err| format!("Could not decode the `raw_rand` response: {err}"))?;
 
     let stored_salt = StorableSalt {
         salt: salt.to_vec(),
@@ -78,14 +74,18 @@ pub async fn try_regenerate_salt() -> Result<(), String> {
 pub async fn poll_api_boundary_nodes() {
     let canister_id = Principal::from(REGISTRY_CANISTER_ID);
 
-    let (call_status, message) = match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
-        canister_id,
-        REGISTRY_CANISTER_METHOD,
-        (&GetApiBoundaryNodeIdsRequest {},),
-    )
-    .await
-    {
-        Ok((Ok(api_bn_records),)) => {
+    let response = Call::unbounded_wait(canister_id, REGISTRY_CANISTER_METHOD)
+        .with_arg(GetApiBoundaryNodeIdsRequest {})
+        .await
+        .map_err(|err| err.to_string())
+        .and_then(|response| {
+            response
+                .candid::<Result<Vec<ApiBoundaryNodeIdRecord>, String>>()
+                .map_err(|err| err.to_string())
+        });
+
+    let (call_status, message) = match response {
+        Ok(Ok(api_bn_records)) => {
             // Set authorized readers of salt.
             let principals: HashSet<_> = api_bn_records.into_iter().filter_map(|n| n.id).collect();
             API_BOUNDARY_NODE_PRINCIPALS.with(|cell| *cell.borrow_mut() = principals);
@@ -98,7 +98,7 @@ pub async fn poll_api_boundary_nodes() {
             });
             ("success", "")
         }
-        Ok((Err(err),)) => {
+        Ok(Err(err)) => {
             log!(
                 P0,
                 "[poll_api_boundary_nodes]: failed to fetch nodes from registry {err:?}",

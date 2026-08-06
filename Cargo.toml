@@ -915,7 +915,9 @@ systemd = "0.10"
 tar = "0.4.39"
 tempfile = "3.20"
 textplots = "^0.8"
-thiserror = "2.0.18"
+# DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
+# codebase uses syn 2.
+thiserror = "=2.0.18"
 thousands = "^0.2.0"
 threadpool = "1.8.1"
 tikv-jemalloc-ctl = { version = "0.7", features = ["stats"] }
@@ -987,4 +989,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.10.0"
+version = "^0.11.1"
