@@ -2579,9 +2579,35 @@ pub struct InstallCode {
 
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub arg_hash: Option<Vec<u8>>,
+
+    /// Options that only apply when install_mode is Upgrade.
+    pub canister_upgrade_options: Option<install_code::CanisterUpgradeOptions>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        Default,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook.
+        pub skip_pre_upgrade: Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. When the previous WASM had a custom
+        /// section named "icp:private enhanced-orthogonal-persistence", then
+        /// upgrading gets blocked if this is not set. The integer value
+        /// corresponds to `ic_protobuf::types::v1::WasmMemoryPersistence`.
+        pub wasm_memory_persistence: Option<i32>,
+    }
+
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2640,6 +2666,8 @@ pub struct InstallCodeRequest {
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+    /// Options that only apply when install_mode is Upgrade.
+    pub canister_upgrade_options: ::core::option::Option<install_code::CanisterUpgradeOptions>,
 }
 
 #[derive(

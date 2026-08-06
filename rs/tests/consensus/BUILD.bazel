@@ -299,6 +299,7 @@ system_test_nns(
 system_test(
     name = "guestos_recovery_engine_smoke_test",
     cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM + 1 UVM (upstreams), 6 vCPUs each.
+    enable_uvm = True,
     guestos = "recovery_dev",
     tags = [
         "long_test",  # the P90 duration of this test is over 6 minutes in the week starting on 2025-08-25.
@@ -418,6 +419,7 @@ system_test_nns(
     cpus = MIN_LOCAL_CPUS + 14 * 64,  # 14 IC Node VMs (1 System + 13 Application) @ 64 vCPUs each.
     enable_head_nns_variant = False,
     enable_metrics = True,
+    enable_uvm = True,  # only when SHOULD_SPAWN_JAEGER_VM is flipped on in consensus_performance.rs.
     env = {
         "MAX_INGRESS_BYTES_PER_BLOCK": "4194304",
     },
@@ -450,6 +452,7 @@ system_test_nns(
     cpus = MIN_LOCAL_CPUS + 14 * 64,  # 14 IC Node VMs (1 System + 13 Application) @ 64 vCPUs each.
     enable_head_nns_variant = False,
     enable_metrics = True,
+    enable_uvm = True,  # only when SHOULD_SPAWN_JAEGER_VM is flipped on in consensus_performance.rs.
     env = {
         "MAX_INGRESS_BYTES_PER_BLOCK": "8388608",
     },

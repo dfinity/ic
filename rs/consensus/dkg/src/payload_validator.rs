@@ -45,8 +45,8 @@ pub fn validate_payload(
     let registry_version = pool_reader
         .registry_version(current_height)
         .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
-    let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
 
+    let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
     let is_dkg_start_height = last_dkg_summary.get_next_start_height() == current_height;
 
     match payload {
@@ -71,8 +71,8 @@ pub fn validate_payload(
             )?;
             if summary_payload.dkg != expected_summary {
                 return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
-                    expected_summary,
-                    summary_payload.dkg.clone(),
+                    Box::new(expected_summary),
+                    Box::new(summary_payload.dkg.clone()),
                 )
                 .into());
             }
@@ -330,6 +330,7 @@ mod tests {
             // This will be a regular block, since we are not at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
             let block_payload = block.payload.as_ref();
+
             let last_summary_block = PoolReader::new(&pool)
                 .dkg_summary_block(&parent_block)
                 .unwrap();
@@ -361,6 +362,9 @@ mod tests {
                 .dkg_summary_block(&parent_block)
                 .unwrap();
 
+            let last_summary_block = PoolReader::new(&pool)
+                .dkg_summary_block(&parent_block)
+                .unwrap();
             assert!(
                 validate_payload(
                     subnet_test_id(0),
@@ -583,7 +587,6 @@ mod tests {
             });
 
             let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
-
             assert_eq!(
                 validate_payload(
                     SUBNET_1,
@@ -660,7 +663,6 @@ mod tests {
             });
 
             let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
-
             validate_payload(
                 subnet_id,
                 registry.as_ref(),
@@ -850,7 +852,6 @@ mod tests {
             });
 
             let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
-
             let result = validate_payload(
                 subnet_id,
                 registry.as_ref(),

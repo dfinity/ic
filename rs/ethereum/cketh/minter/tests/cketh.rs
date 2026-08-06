@@ -19,7 +19,7 @@ use ic_cketh_test_utils::flow::{
     DepositCkEthParams, DepositCkEthWithSubaccountParams, DepositParams, ProcessWithdrawalParams,
     double_and_increment_base_fee_per_gas,
 };
-use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
+use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders, debug_http_outcalls};
 use ic_cketh_test_utils::response::{
     block_response, decode_transaction, default_signed_eip_1559_transaction, empty_logs,
     hash_transaction, multi_logs_for_single_transaction,
@@ -836,14 +836,23 @@ fn should_be_able_to_stop_canister_during_scraping() {
     const UNSCRAPED_BLOCKS: u64 = 5_000;
     const MAX_BLOCK: u64 = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + UNSCRAPED_BLOCKS;
 
+    fn mock_eth_get_block_by_number(cketh: &CkEthSetup, block: u64) {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .with_request_params(json!(["finalized", false]))
+            .respond_for_all_with(block_response(block))
+            .build()
+            .expect_rpc_calls(cketh);
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .with_request_params(json!(["latest", false]))
+            .respond_for_all_with(block_response(block))
+            .build()
+            .expect_rpc_calls(cketh);
+    }
+
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
-
-    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
-        .respond_for_all_with(block_response(MAX_BLOCK))
-        .build()
-        .expect_rpc_calls(&cketh);
+    mock_eth_get_block_by_number(&cketh, MAX_BLOCK);
 
     // Starts scraping to create open call contexts.
     let mut from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
@@ -867,7 +876,8 @@ fn should_be_able_to_stop_canister_during_scraping() {
     assert_eq!(
         cketh.env.canister_http_request_contexts().len(),
         4,
-        "Expected HTTPS outcalls since scraping is still in progress."
+        "Expected HTTPS outcalls since scraping is still in progress: {}",
+        debug_http_outcalls(&cketh.env)
     );
 
     // At this point:
@@ -906,10 +916,7 @@ fn should_be_able_to_stop_canister_during_scraping() {
     cketh.start_minter();
     cketh.tick_until_minter_canister_status(CanisterStatusType::Running);
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
-    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
-        .respond_for_all_with(block_response(MAX_BLOCK))
-        .build()
-        .expect_rpc_calls(&cketh);
+    mock_eth_get_block_by_number(&cketh, MAX_BLOCK);
 
     from_block = to_block.checked_increment().unwrap();
     to_block = from_block

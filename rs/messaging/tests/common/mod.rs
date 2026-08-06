@@ -250,6 +250,7 @@ impl TestSubnetConfig {
             maximum_state_delta: Some(heap_delta_capacity_for_message_memory(NumBytes::from(
                 self.guaranteed_response_message_memory_capacity,
             ))),
+            ..Default::default()
         })
     }
 }

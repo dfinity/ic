@@ -153,7 +153,7 @@ fn dkg_payload_builder_fn(
 ) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload> {
     Box::new(move |cons_pool, parent, validation_context| {
         let pool = PoolReader::new(cons_pool);
-        let last_summary_block = pool.dkg_summary_block(&parent).expect("No dkg summary");
+        let last_summary_block = pool.dkg_summary_block(&parent).expect("No DKG summary");
         ic_consensus_dkg::create_payload(
             subnet_id,
             &*registry_client,

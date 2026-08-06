@@ -2100,9 +2100,9 @@ impl PocketIcSubnets {
             //         max_cache_age_secs = opt (3_600 : nat64);
             //         allowed_domains = vec { "gmail.com"; "googlemail.com"; "outlook.com"; "hotmail.com"; "msn.com"; "live.com"; "icloud.com"; "me.com"; "mac.com"; "yahoo.com"; "ymail.com"; "aol.com"; "zoho.com"; "fastmail.com"; "fastmail.fm"; "hey.com"; "yandex.com"; "yandex.ru"; "mail.ru"; "qq.com"; "163.com"; "126.com"; "naver.com"; "daum.net";};
             //       };
-            //       sso_allow_any_domain = opt true;
             //       sso_credential_migration = null;
             //       is_production = opt true;
+            //       mcp_config_migration = null;
             //       backend_canister_id = opt principal "rdmx6-jaaaa-aaaaa-aaadq-cai";
             //       enable_dapps_explorer = opt false;
             //       assigned_user_number_range = opt record {
@@ -2126,11 +2126,10 @@ impl PocketIcSubnets {
             //           };
             //         };
             //       };
-            //       sso_discoverable_domains = opt vec { "dfinity.org" };
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
-            //         module_hash = blob "\1f\53\98\01\89\f4\a4\66\51\b9\96\08\dd\59\a6\37\c0\79\54\40\3b\ed\21\a7\74\b0\7b\19\88\a4\65\be";
+            //         module_hash = blob "\8b\35\b8\b2\d2\0d\fb\60\5a\86\eb\d9\a9\c9\9b\ce\75\9b\b2\cd\0c\fc\bc\f0\8d\ab\fd\f8\f7\05\74\a2";
             //         entries_fetch_limit = 1_000 : nat16;
             //       };
             //       canister_creation_cycles_cost = opt (0 : nat64);
@@ -2193,7 +2192,9 @@ impl PocketIcSubnets {
             //         max_unsolved_captchas = 500 : nat64;
             //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
             //       };
+            //       mcp_official_url = opt opt "https://mcp.internetcomputer.org/mcp";
             //       dummy_auth = opt null;
+            //       sso_allow_insecure_discovery = null;
             //       register_rate_limit = opt record {
             //         max_tokens = 25_000 : nat64;
             //         time_per_token_ns = 1_000_000_000 : nat64;
@@ -2236,11 +2237,10 @@ impl PocketIcSubnets {
                     max_unsolved_captchas: 500,
                     captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
                 }),
-                related_origins: None,          // DIFFERENT FROM ICP MAINNET
-                new_flow_origins: None,         // DIFFERENT FROM ICP MAINNET
-                openid_configs: openid_google,  // DIFFERENT FROM ICP MAINNET
-                sso_discoverable_domains: None, // DIFFERENT FROM ICP MAINNET
-                sso_allow_any_domain: None,     // DIFFERENT FROM ICP MAINNET
+                related_origins: None,         // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
+                openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
+                sso_allow_insecure_discovery: None,
                 sso_credential_migration: None,
                 analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
@@ -2251,6 +2251,8 @@ impl PocketIcSubnets {
                 enable_dnssec_email_recovery: None, // DIFFERENT FROM ICP MAINNET
                 dnssec_config: None,                // DIFFERENT FROM ICP MAINNET
                 doh_config: None,                   // DIFFERENT FROM ICP MAINNET
+                mcp_official_url: None,             // DIFFERENT FROM ICP MAINNET
+                mcp_config_migration: None,
             });
             ii_subnet
                 .state_machine

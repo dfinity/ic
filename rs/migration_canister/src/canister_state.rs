@@ -30,6 +30,15 @@ thread_local! {
     static REQUESTS: RefCell<BTreeMap<RequestState, (), Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)))));
 
+    /// Records for every request in `REQUESTS` the time (IC time in nanos since epoch)
+    /// at which it entered `REQUESTS`, i.e., when it was accepted.
+    /// An entry is added when a request is first inserted into `REQUESTS` and is
+    /// retained across state transitions (which remove and re-insert the request).
+    /// It is removed once the request leaves `REQUESTS` for good, i.e., when the
+    /// corresponding event is recorded in `HISTORY`.
+    static ACCEPTED_TIME: RefCell<BTreeMap<CanisterMigrationArgs, u64, Memory>> =
+        RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(5)))));
+
     /// Stores timestamps of all successful events in `HISTORY`
     /// that are within the last 24 hours.
     /// It can also store timestamps beyond the last 24 hours
@@ -51,6 +60,20 @@ thread_local! {
     // This way we see if a request never makes progress which would
     // indicate a bug in this canister or a problem with a subnet.
     // BTreeMap<(Request, Reqstate: String), (Counter: u64, FirstTs: Time, LastTs: Time)>
+}
+
+/// Returns the current IC time in nanos since epoch.
+///
+/// Unit tests do not run inside a canister, where `ic_cdk::api::time` traps,
+/// so we fall back to zero there.
+#[cfg(not(test))]
+fn now() -> u64 {
+    ic_cdk::api::time()
+}
+
+#[cfg(test)]
+fn now() -> u64 {
+    0
 }
 
 pub fn migrations_disabled() -> bool {
@@ -86,14 +109,34 @@ pub mod privileged {
 pub mod requests {
     use candid::Principal;
 
-    use crate::{RequestState, canister_state::REQUESTS};
+    use crate::{
+        CanisterMigrationArgs, RequestState,
+        canister_state::{ACCEPTED_TIME, REQUESTS, now},
+    };
 
     pub fn num_requests() -> u64 {
         REQUESTS.with_borrow(|req| req.len())
     }
 
     pub fn insert_request(request: RequestState) {
+        let args = CanisterMigrationArgs::from(request.request());
+        // State transitions remove and re-insert a request, so we must only
+        // record the time at which the request was accepted, i.e., first inserted.
+        // Requests that were already in flight before this bookkeeping was
+        // introduced are backfilled upon their next state transition.
+        ACCEPTED_TIME.with_borrow_mut(|a| {
+            if !a.contains_key(&args) {
+                a.insert(args, now());
+            }
+        });
         REQUESTS.with_borrow_mut(|r| r.insert(request, ()));
+    }
+
+    /// Returns the age in nanos of the request that has been in flight the longest,
+    /// or `None` if there is no request in flight.
+    pub fn oldest_request_age_nanos() -> Option<u64> {
+        let now = now();
+        ACCEPTED_TIME.with_borrow(|a| a.values().map(|time| now.saturating_sub(time)).max())
     }
 
     pub fn remove_request(request: &RequestState) {
@@ -134,12 +177,15 @@ pub mod requests {
 pub mod events {
     use crate::{
         CanisterMigrationArgs, Event, EventType,
-        canister_state::{HISTORY, LAST_EVENT, LIMITER},
+        canister_state::{ACCEPTED_TIME, HISTORY, LAST_EVENT, LIMITER},
     };
     use candid::Principal;
     use ic_cdk::api::time;
 
     pub fn insert_event(event: EventType) {
+        // Recording an event is the terminal step of a request, i.e., the request
+        // has just left `REQUESTS` and thus is not in flight anymore.
+        ACCEPTED_TIME.with_borrow_mut(|a| a.remove(&CanisterMigrationArgs::from(event.request())));
         let time = time();
         if let EventType::Succeeded { .. } = event {
             LIMITER.with_borrow_mut(|l| {

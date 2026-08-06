@@ -19,6 +19,7 @@ use ic_consensus_utils::{
     membership::{CanisterHttpCommittee, Membership},
 };
 use ic_error_types::RejectCode;
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
@@ -43,9 +44,9 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
-        CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpError,
-        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        CanisterHttpInitialSpent, CanisterHttpPayload, CanisterHttpSpent, ConsensusResponse,
+        FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
+        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
@@ -57,7 +58,7 @@ use ic_types::{
     signature::BasicSigBatchEntry,
 };
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     sync::{Arc, RwLock},
 };
 
@@ -236,9 +237,9 @@ impl CanisterHttpPayloadBuilderImpl {
                 };
                 match &request.replication {
                     Replication::FullyReplicated => {
-                        // Committee threshold/faults_tolerated for this request
-                        // are derived from the registry version pinned in its
-                        // context.
+                        // Committee threshold and faults_tolerated for this
+                        // request are derived from the registry version pinned in
+                        // its context.
                         let CanisterHttpCommittee {
                             threshold,
                             faults_tolerated,
@@ -253,9 +254,14 @@ impl CanisterHttpPayloadBuilderImpl {
                                 continue;
                             }
                         };
-                        if let Some(response) =
-                            find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
-                        {
+                        if let Some(response) = find_fully_replicated_response(
+                            grouped_shares,
+                            threshold,
+                            request,
+                            &*pool_access,
+                            &self.log,
+                            &self.metrics,
+                        ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
@@ -287,7 +293,10 @@ impl CanisterHttpPayloadBuilderImpl {
                         if let Some(response) = find_non_replicated_response(
                             grouped_shares,
                             designated_node_id,
+                            request,
                             &*pool_access,
+                            &self.log,
+                            &self.metrics,
                         ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
@@ -310,6 +319,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         *max_responses,
                         accumulated_size,
                         max_payload_size,
+                        request,
                         &*pool_access,
                     ) {
                         FlexibleFindResult::OkResponses(group, group_size) => {
@@ -435,6 +445,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
 
+            let subnet_size = request_context.subnet_size;
             let (effective_committee, effective_threshold) = match request_context.replication {
                 Replication::NonReplicated(node_id) => (vec![node_id], 1),
                 Replication::FullyReplicated => {
@@ -489,6 +500,27 @@ impl CanisterHttpPayloadBuilderImpl {
                 utils::check_spent_within_limit(&sig.payment_receipt, request_context)
                     .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
             }
+
+            // The collective initial spend must match the value recomputed from
+            // the request context's subnet size and the signed per-replica
+            // receipts, and must stay within the signers' collective allowance.
+            let expected = non_flexible_initial_spent(&response.proof, subnet_size);
+            if response.initial_spent != expected {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                    callback_id,
+                    received: response.initial_spent,
+                    expected,
+                });
+            }
+            utils::check_initial_spent_within_limit(
+                response.initial_spent,
+                response.proof.signatures.len(),
+                callback_id,
+                request_context,
+                None,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+
             // Reconstruct the per-signer shares from the response proof.
             reconstructed_shares.extend(
                 utils::reconstruct_individual_shares(&response.proof)
@@ -516,6 +548,20 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
                 );
             }
+
+            let mut seen_signers = HashSet::new();
+            for share in &response.shares {
+                let signer = share.signature.signer;
+                if !seen_signers.insert(signer) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::DivergenceDuplicateSigner {
+                            callback_id: share.content.id(),
+                            signer,
+                        },
+                    );
+                }
+            }
+
             for (callback_id, grouped_shares) in grouped_shares {
                 if !delivered_ids.insert(callback_id) {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
@@ -598,6 +644,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
                 ),
             )?;
+            let subnet_size = context.subnet_size;
             let Replication::Flexible {
                 committee: flex_committee,
                 min_responses,
@@ -644,9 +691,51 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
             }
 
+            // Validate `extra_shares` metadata.
+            for share in &group.extra_shares {
+                validate_response_share(
+                    share,
+                    callback_id,
+                    flex_committee,
+                    &mut seen_signers,
+                    context,
+                )
+                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            }
+
+            // The collective initial spend must match the value recomputed from
+            // the request context's subnet size and the signed receipts, and must
+            // stay within the collective allowance of all contributing replicas,
+            // i.e. of the responses' signers and the extra shares' signers.
+            let expected = flexible_initial_spent(
+                group.responses.iter().map(|r| &r.proof),
+                group.extra_shares.iter(),
+                subnet_size,
+                min_responses,
+            );
+            if group.initial_spent != expected {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                    callback_id,
+                    received: group.initial_spent,
+                    expected,
+                });
+            }
+            utils::check_initial_spent_within_limit(
+                group.initial_spent,
+                group.responses.len() + group.extra_shares.len(),
+                callback_id,
+                context,
+                None,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+
             // Defer signature verification.
             sig_inputs.extend(response_share_sig_inputs(
-                group.responses.iter().map(|r| &r.proof),
+                group
+                    .responses
+                    .iter()
+                    .map(|r| &r.proof)
+                    .chain(group.extra_shares.iter()),
                 context.registry_version,
             ));
         }
@@ -667,6 +756,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
                 ),
             )?;
+            let subnet_size = context.subnet_size;
             let Replication::Flexible {
                 committee: flex_committee,
                 min_responses,
@@ -679,6 +769,26 @@ impl CanisterHttpPayloadBuilderImpl {
             };
             let min_responses = *min_responses as usize;
 
+            // Every error but a timeout carries signed receipts whose response body
+            // is not delivered. Validate their metadata.
+            let shares_without_response = error.shares_without_delivered_response();
+            let mut seen_signers = HashSet::new();
+            for share in shares_without_response {
+                validate_response_share(
+                    share,
+                    callback_id,
+                    flex_committee,
+                    &mut seen_signers,
+                    context,
+                )
+                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            }
+            // Defer signature verification.
+            sig_inputs.extend(response_share_sig_inputs(
+                shares_without_response,
+                context.registry_version,
+            ));
+
             match error {
                 FlexibleCanisterHttpError::Timeout { .. } => {
                     if context.time + CANISTER_HTTP_TIMEOUT_INTERVAL >= validation_context.time {
@@ -688,10 +798,11 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
                 FlexibleCanisterHttpError::TooManyRejects {
-                    reject_responses, ..
+                    reject_responses,
+                    extra_shares,
+                    initial_spent,
+                    ..
                 } => {
-                    let mut seen_signers = HashSet::new();
-
                     for response_with_proof in reject_responses {
                         validate_flexible_response_with_proof(
                             response_with_proof,
@@ -711,6 +822,34 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
 
+                    // The collective initial spend must match the value recomputed
+                    // from the request context's subnet size and the signed
+                    // receipts, and must stay within the collective allowance of
+                    // all contributing replicas.
+                    let expected = flexible_initial_spent(
+                        reject_responses.iter().map(|r| &r.proof),
+                        extra_shares.iter(),
+                        subnet_size,
+                        min_responses as u32,
+                    );
+                    if *initial_spent != expected {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                                callback_id,
+                                received: *initial_spent,
+                                expected,
+                            },
+                        );
+                    }
+                    utils::check_initial_spent_within_limit(
+                        *initial_spent,
+                        reject_responses.len() + extra_shares.len(),
+                        callback_id,
+                        context,
+                        None,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+
                     let max_allowed_rejects = flex_committee.len().saturating_sub(min_responses);
                     if reject_responses.len() <= max_allowed_rejects {
                         return invalid_artifact(
@@ -722,7 +861,8 @@ impl CanisterHttpPayloadBuilderImpl {
                         );
                     }
 
-                    // Defer signature verification.
+                    // Defer signature verification of the reject responses; the
+                    // extra shares' signatures are already deferred above.
                     sig_inputs.extend(response_share_sig_inputs(
                         reject_responses.iter().map(|r| &r.proof),
                         context.registry_version,
@@ -754,25 +894,6 @@ impl CanisterHttpPayloadBuilderImpl {
                             },
                         );
                     }
-
-                    let mut seen_signers = HashSet::new();
-
-                    for share in all_seen_shares {
-                        validate_response_share(
-                            share,
-                            callback_id,
-                            flex_committee,
-                            &mut seen_signers,
-                            context,
-                        )
-                        .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
-                    }
-
-                    // Defer signature verification.
-                    sig_inputs.extend(response_share_sig_inputs(
-                        all_seen_shares,
-                        context.registry_version,
-                    ));
 
                     let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
                     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
@@ -905,77 +1026,182 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
     }
 }
 
-impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
-    for CanisterHttpPayloadBuilderImpl
+impl
+    IntoMessages<(
+        Vec<ConsensusResponse>,
+        CanisterHttpSpent,
+        CanisterHttpBatchStats,
+    )> for CanisterHttpPayloadBuilderImpl
 {
-    fn into_messages(payload: &[u8]) -> (Vec<ConsensusResponse>, CanisterHttpBatchStats) {
+    fn into_messages(
+        payload: &[u8],
+    ) -> (
+        Vec<ConsensusResponse>,
+        CanisterHttpSpent,
+        CanisterHttpBatchStats,
+    ) {
         let mut stats = CanisterHttpBatchStats::default();
 
         let messages = bytes_to_payload(payload)
             .expect("Failed to parse a payload that was already validated");
 
-        let responses = messages.responses.into_iter().map(|response| {
+        let mut consensus_responses = Vec::new();
+        let mut spent = CanisterHttpSpent::default();
+
+        // Fully-replicated (and non-replicated) responses: emit the collective
+        // initial spend that was computed during payload building and validated
+        // during payload validation. Divergence and timeout responses carry no
+        // spend report.
+        for response in messages.responses {
             if response.proof.signatures.len() == 1 {
                 stats.single_signature_responses += 1;
             }
             stats.responses += 1;
-            ConsensusResponse::new(
-                response.content.id,
+
+            let callback = response.content.id;
+            let nodes: BTreeSet<NodeId> = response.proof.signatures.keys().copied().collect();
+            let amount = response.initial_spent;
+
+            consensus_responses.push(ConsensusResponse::new(
+                callback,
                 match response.content.content {
                     CanisterHttpResponseContent::Success(data) => Payload::Data(data),
                     CanisterHttpResponseContent::Reject(canister_http_reject) => {
                         Payload::Reject(RejectContext::from(&canister_http_reject))
                     }
                 },
-            )
-        });
+            ));
+            spent.initial.push(CanisterHttpInitialSpent {
+                callback,
+                amount,
+                nodes,
+            });
+        }
 
-        let timeouts = messages.timeouts.iter().map(|callback| {
-            // Map timeouts to a rejected response
+        // Timeouts: map to a rejected response. A timed-out request has no
+        // signed shares, hence no spend report.
+        for callback in &messages.timeouts {
             stats.timeouts += 1;
-            ConsensusResponse::new(
+            consensus_responses.push(ConsensusResponse::new(
                 *callback,
                 Payload::Reject(RejectContext::new(
                     RejectCode::SysTransient,
                     "Canister http request timed out",
                 )),
-            )
-        });
+            ));
+        }
 
-        let divergence_responses = messages
-            .divergence_responses
-            .into_iter()
-            .filter_map(divergence_response_into_reject)
-            .inspect(|_| stats.divergence_responses += 1);
+        // Divergences deliver no response body, so their consensus cost is zero:
+        // the initial spend is just the per-replica cost each diverging signer
+        // incurred, summed on the fly from the shares.
+        for divergence_response in messages.divergence_responses {
+            let nodes: BTreeSet<NodeId> = divergence_response
+                .shares
+                .iter()
+                .map(|share| share.signature.signer)
+                .collect();
+            let amount = divergence_response
+                .shares
+                .iter()
+                .map(|share| share.content.spent())
+                .sum();
+            if let Some(consensus_response) = divergence_response_into_reject(divergence_response) {
+                stats.divergence_responses += 1;
+                spent.initial.push(CanisterHttpInitialSpent {
+                    callback: consensus_response.callback,
+                    amount,
+                    nodes,
+                });
+                consensus_responses.push(consensus_response);
+            }
+        }
 
-        let flexible_ok_responses = messages
-            .flexible_responses
-            .into_iter()
-            .map(flexible_ok_responses_into_consensus_response)
-            .inspect(|result| match result {
-                Some(_) => stats.flexible_ok_responses += 1,
+        // The collective initial spend was computed during payload building
+        // and validated during payload validation.
+        for response_group in messages.flexible_responses {
+            let callback = response_group.callback_id;
+            let amount = response_group.initial_spent;
+            let nodes: BTreeSet<NodeId> = response_group
+                .responses
+                .iter()
+                .map(|r| r.proof.signature.signer)
+                .chain(
+                    response_group
+                        .extra_shares
+                        .iter()
+                        .map(|share| share.signature.signer),
+                )
+                .collect();
+            match flexible_ok_responses_into_consensus_response(response_group) {
+                Some(consensus_response) => {
+                    stats.flexible_ok_responses += 1;
+                    consensus_responses.push(consensus_response);
+                    spent.initial.push(CanisterHttpInitialSpent {
+                        callback,
+                        amount,
+                        nodes,
+                    });
+                }
                 None => stats.flexible_ok_responses_candid_failures += 1,
-            })
-            .flatten();
+            }
+        }
 
-        let flexible_errors = messages
-            .flexible_errors
-            .into_iter()
-            .map(flexible_error_into_consensus_response)
-            .inspect(|result| match result {
-                Some(_) => stats.flexible_errors += 1,
+        for error in messages.flexible_errors {
+            let report = match &error {
+                // `TooManyRejects` delivers reject bodies, so its spend (including the
+                // consensus term) was computed during payload building and validated.
+                FlexibleCanisterHttpError::TooManyRejects {
+                    reject_responses,
+                    extra_shares,
+                    initial_spent,
+                    ..
+                } => {
+                    let nodes: BTreeSet<NodeId> = reject_responses
+                        .iter()
+                        .map(|r| r.proof.signature.signer)
+                        .chain(extra_shares.iter().map(|share| share.signature.signer))
+                        .collect();
+                    Some(CanisterHttpInitialSpent {
+                        callback: error.callback_id(),
+                        amount: *initial_spent,
+                        nodes,
+                    })
+                }
+                // `ResponsesTooLarge` delivers no body, so its consensus cost is
+                // zero and its spend is summed on the fly from the seen shares.
+                FlexibleCanisterHttpError::ResponsesTooLarge {
+                    all_seen_shares, ..
+                } => {
+                    let nodes: BTreeSet<NodeId> = all_seen_shares
+                        .iter()
+                        .map(|share| share.signature.signer)
+                        .collect();
+                    let amount = all_seen_shares
+                        .iter()
+                        .map(|share| share.content.spent())
+                        .sum();
+                    Some(CanisterHttpInitialSpent {
+                        callback: error.callback_id(),
+                        amount,
+                        nodes,
+                    })
+                }
+                // Timeouts carry no shares and produce no spend report.
+                FlexibleCanisterHttpError::Timeout { .. } => None,
+            };
+            match flexible_error_into_consensus_response(error) {
+                Some(consensus_response) => {
+                    stats.flexible_errors += 1;
+                    consensus_responses.push(consensus_response);
+                    if let Some(report) = report {
+                        spent.initial.push(report);
+                    }
+                }
                 None => stats.flexible_errors_candid_failures += 1,
-            })
-            .flatten();
+            }
+        }
 
-        let responses = responses
-            .chain(timeouts)
-            .chain(divergence_responses)
-            .chain(flexible_ok_responses)
-            .chain(flexible_errors)
-            .collect();
-
-        (responses, stats)
+        (consensus_responses, spent, stats)
     }
 }
 

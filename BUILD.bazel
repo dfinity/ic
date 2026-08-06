@@ -231,7 +231,7 @@ alias(
     }),
 )
 
-### mkfs.ext4, statically-linked, used to build ext4 filesystem images
+### mkfs.ext4, used to build ext4 filesystem images
 
 # mke2fs is the underlying binary; mkfs.ext4 is upstream's symlink name for it.
 alias(
@@ -359,6 +359,17 @@ platform(
         "@platforms//os:osx",
         "@platforms//cpu:x86_64",
     ],
+)
+
+# Host platform + a pinned glibc for the hermetic-llvm toolchain.
+# Without this constraint hermetic-llvm defaults to glibc 2.28, which lacks symbols we use
+# (e.g. gettid, glibc 2.30). Set on Linux via bazelrc (build:linux --platforms/--host_platform);
+# one definition covers both x86_64 and aarch64 hosts because it inherits the autodetected host constraints.
+# Note that an explicit --platforms=... on the command line overrides this default and silently reverts to glibc 2.28.
+platform(
+    name = "linux-glibc-2.31",
+    constraint_values = ["@llvm//constraints/libc:gnu.2.31"],
+    parents = ["@platforms//host"],
 )
 
 ## Extract ovmf firmware from the `ovmf-generic-hwe` `.deb`.

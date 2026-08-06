@@ -22,6 +22,7 @@ use ic_ethereum_types::Address;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, CanisterStatusType};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{
     PayloadBuilder, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };
@@ -36,10 +37,12 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+pub mod anvil;
 pub mod ckerc20;
 pub mod events;
 mod evm_rpc_provider;
 pub mod flow;
+pub mod live_scan;
 pub mod mock;
 pub mod response;
 
@@ -119,6 +122,14 @@ impl Default for CkEthSetup {
 impl AsRef<CkEthSetup> for CkEthSetup {
     fn as_ref(&self) -> &CkEthSetup {
         self
+    }
+}
+
+impl CanisterHttpQuery<UserError> for &CkEthSetup {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.env
+            .query(self.minter_id, "http_request", request)
+            .map(assert_reply)
     }
 }
 
@@ -432,6 +443,10 @@ impl CkEthSetup {
 
     pub fn check_events(self) -> MinterEventAssert<Self> {
         MinterEventAssert::from_fetching_all_events(self)
+    }
+
+    pub fn check_minter_metrics(&self) -> MetricsAssert<&Self> {
+        MetricsAssert::from_http_query(self)
     }
 
     pub fn assert_has_unique_events_in_order(self, expected_events: &[EventPayload]) -> Self {

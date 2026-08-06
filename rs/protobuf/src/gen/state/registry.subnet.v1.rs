@@ -16,7 +16,21 @@ pub struct SubnetRecord {
     /// propagation.
     #[prost(uint64, tag = "8")]
     pub initial_notary_delay_millis: u64,
-    /// ID of the Replica version to run
+    /// Replica version IDs are generally git commit IDs in the ic git repository,
+    /// pointing to the sources from which the Replica was built.
+    ///
+    /// Must refer to an "elected" Replica version. Concretely, this means that
+    /// there is a Registry record (of type ReplicaVersionRecord) with
+    /// replica_version\_${replica_version_id} as its key.
+    ///
+    /// Exception: For Cloud Engines, this is typically blank. When blank, the
+    /// Cloud Engine's replica version is determined by
+    /// StandardEngineReplicaVersionRecord (see
+    /// registry/standard_engine_replica_version/v1/standard_engine_replica_version.proto).
+    /// This means that Registry must have a StandardEngineReplicaVersionRecord in
+    /// order for Cloud Engines to have a blank replica_version_id. But since
+    /// StandardEngineReplicaVersionRecord generally exists, this is a minor
+    /// technicality.
     #[prost(string, tag = "9")]
     pub replica_version_id: ::prost::alloc::string::String,
     /// The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
@@ -415,6 +429,17 @@ pub struct ResourceLimits {
     pub maximum_state_size: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "2")]
     pub maximum_state_delta: ::core::option::Option<u64>,
+    /// The maximum number of instructions a query may consume. This applies both to a single
+    /// (non-composite) query method execution and to the total across an entire composite query
+    /// call graph.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[prost(uint64, optional, tag = "3")]
+    pub maximum_query_instructions: ::core::option::Option<u64>,
+    /// The maximum wall-clock time, in seconds, that a query (including a composite query call
+    /// graph) is allowed to run.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[prost(uint64, optional, tag = "4")]
+    pub maximum_query_walltime_seconds: ::core::option::Option<u64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

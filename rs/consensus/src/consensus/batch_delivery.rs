@@ -26,8 +26,8 @@ use ic_protobuf::{
 use ic_types::{
     Height, NodeId, PrincipalId, SubnetId,
     batch::{
-        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
-        ConsensusResponse,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
+        ChainKeyData, ConsensusResponse,
     },
     consensus::{Block, BlockPayload, HasVersion, dkg::RemoteTranscriptResult, idkg},
     crypto::{
@@ -104,9 +104,11 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 30,
                 log,
-                "Do not deliver height {height} because no finalized block was found. \
+                "Do not deliver height {} because no finalized block was found. \
                 This should indicate we are waiting for state sync. \
-                Finalized height: {finalized_height}"
+                Finalized height: {}",
+                height,
+                finalized_height
             );
             break;
         };
@@ -115,7 +117,8 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 30,
                 log,
-                "Do not deliver height {height} because RandomTape is not ready. Will re-try later"
+                "Do not deliver height {} because RandomTape is not ready. Will re-try later",
+                height
             );
             break;
         };
@@ -137,15 +140,19 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 30,
                 log,
-                "Do not deliver height {height} because no summary block was found. \
-                Finalized height: {finalized_height}"
+                "Do not deliver height {} because no summary block was found. \
+                Finalized height: {}",
+                height,
+                finalized_height
             );
             break;
         };
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
         if block.payload.is_summary() {
-            info!(log, "Delivering finalized batch at CUP height of {height}");
+            info!(
+                log,
+                "Delivering finalized batch at CUP height of {}", height
         }
         // When we are not delivering CUP block, we must check if the subnet is halted.
         else {
@@ -197,7 +204,7 @@ pub(crate) fn deliver_batches_with_result_processor(
         if !chain_key_subnet_public_keys.is_empty() && block.payload.is_summary() {
             info!(
                 log,
-                "Subnet {subnet_id} contains chain keys: {chain_key_subnet_public_keys:?}"
+                "Subnet {} contains chain keys: {:?}", subnet_id, chain_key_subnet_public_keys
             );
         }
 
@@ -208,7 +215,8 @@ pub(crate) fn deliver_batches_with_result_processor(
             idkg_pre_signatures,
             nidkg_ids,
         };
-        let consensus_responses = generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
+        let (consensus_responses, canister_http_spent) =
+            generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
         // This flag can only be true, if we've called deliver_batches with a height
         // limit.  In this case we also want to have a checkpoint for that last height.
         let persist_batch = Some(height) == max_batch_height_to_deliver;
@@ -232,7 +240,8 @@ pub(crate) fn deliver_batches_with_result_processor(
                             warn!(
                                 every_n_seconds => 30,
                                 log,
-                                "Error getting new subnet assignment: {err}"
+                                "Error getting new subnet assignment: {}",
+                                err
                             );
                             break;
                         }
@@ -240,7 +249,8 @@ pub(crate) fn deliver_batches_with_result_processor(
 
                     info!(
                         log,
-                        "Delivering splitting block. New subnet assignment: {new_subnet_id}"
+                        "Delivering splitting block. New subnet assignment: {}",
+                        new_subnet_id
                     );
 
                     BatchContent::Splitting {
@@ -252,6 +262,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                         batch_messages: BatchMessages::default(),
                         chain_key_data,
                         consensus_responses,
+                        canister_http_spent,
                         requires_full_state_hash,
                     }
                 }
@@ -269,6 +280,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                         .unwrap_or_default(),
                     chain_key_data,
                     consensus_responses,
+                    canister_http_spent,
                     requires_full_state_hash,
                 }
             }
@@ -342,9 +354,9 @@ fn generate_responses_to_subnet_calls(
     block: &Block,
     stats: &mut BatchStats,
     log: &ReplicaLogger,
-) -> Vec<ConsensusResponse> {
+) -> (Vec<ConsensusResponse>, CanisterHttpSpent) {
     let mut consensus_responses = Vec::new();
-    match block.payload.as_ref() {
+    let canister_http_spent = match block.payload.as_ref() {
         BlockPayload::Summary(summary_payload) => {
             info!(
                 log,
@@ -354,7 +366,8 @@ fn generate_responses_to_subnet_calls(
             consensus_responses.append(&mut generate_responses_to_remote_dkgs(
                 &summary_payload.dkg.transcripts_for_remote_subnets,
                 log,
-            ))
+            ));
+            CanisterHttpSpent::default()
         }
         BlockPayload::Data(data_payload) => {
             consensus_responses.append(&mut generate_responses_to_remote_dkgs(
@@ -367,7 +380,7 @@ fn generate_responses_to_subnet_calls(
                     .append(&mut generate_responses_to_initial_dealings_calls(payload));
             }
 
-            let (mut http_responses, http_stats) =
+            let (mut http_responses, http_spent, http_stats) =
                 CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
             consensus_responses.append(&mut http_responses);
             stats.canister_http = http_stats;
@@ -375,9 +388,10 @@ fn generate_responses_to_subnet_calls(
             let mut chain_key_responses =
                 ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
             consensus_responses.append(&mut chain_key_responses);
+            http_spent
         }
-    }
-    consensus_responses
+    };
+    (consensus_responses, canister_http_spent)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -774,7 +788,7 @@ mod tests {
         );
 
         let mut batch_stats = BatchStats::new(Height::from(1));
-        let responses =
+        let (responses, _canister_http_spent) =
             generate_responses_to_subnet_calls(&block, &mut batch_stats, &no_op_logger());
 
         assert_eq!(

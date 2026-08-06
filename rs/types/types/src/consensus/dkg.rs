@@ -216,6 +216,8 @@ impl std::hash::Hash for RemoteDkgAttempts {
     }
 }
 
+/// The subnet-splitting-related information available when the subnet is splitting at the summary
+/// block.
 #[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SplittingArgs {
@@ -223,24 +225,22 @@ pub struct SplittingArgs {
     pub source_subnet_id: SubnetId,
 }
 
-/// The subnet-splitting-related information available once the subnet has been
-/// split at the previous summary block.
+/// The subnet-splitting-related information available once the subnet has been split at the
+/// previous summary block.
 #[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PostSplitArgs {
-    /// The new subnet the replica belongs to after the split.
     pub new_subnet_id: SubnetId,
 }
 
+/// Represents the status of subnet splitting at the given summary height.
 #[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug, Default)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-/// Represents the status of subnet splitting at the given summary height.
 pub enum SubnetSplittingStatus {
     /// The subnet hasn't been requested to be split.
     #[default]
     NotScheduled,
     /// The subnet is requested to be split at the height of the summary block.
-    /// Contains all the information necessary to determine the new subnet of the replica
     Scheduled(SplittingArgs),
     /// The subnet was split at the previous summary block.
     PostSplit(PostSplitArgs),
@@ -308,7 +308,6 @@ impl DkgSummary {
             next_interval_length,
             height,
             remote_dkg_attempts,
-            // subnet_splitting_status: BackwardsCompatible::default(),
             subnet_splitting_status: BackwardsCompatible::new_for_test_only(Some(
                 subnet_splitting_status,
             )),
@@ -454,33 +453,25 @@ fn build_remote_dkg_attempts_vec(
 }
 
 impl From<&DkgSummary> for pb::Summary {
-    fn from(
-        DkgSummary {
-            registry_version,
-            configs,
-            current_transcripts,
-            next_transcripts,
-            transcripts_for_remote_subnets,
-            interval_length,
-            next_interval_length,
-            height,
-            remote_dkg_attempts,
-            subnet_splitting_status,
-        }: &DkgSummary,
-    ) -> Self {
+    fn from(summary: &DkgSummary) -> Self {
         Self {
-            registry_version: registry_version.get(),
-            configs: configs.values().map(pb::NiDkgConfig::from).collect(),
-            current_transcripts: build_transcripts_vec(current_transcripts),
-            next_transcripts: build_transcripts_vec(next_transcripts),
-            interval_length: interval_length.get(),
-            next_interval_length: next_interval_length.get(),
-            height: height.get(),
+            registry_version: summary.registry_version.get(),
+            configs: summary
+                .configs
+                .values()
+                .map(pb::NiDkgConfig::from)
+                .collect(),
+            current_transcripts: build_transcripts_vec(&summary.current_transcripts),
+            next_transcripts: build_transcripts_vec(&summary.next_transcripts),
+            interval_length: summary.interval_length.get(),
+            next_interval_length: summary.next_interval_length.get(),
+            height: summary.height.get(),
             transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
-                transcripts_for_remote_subnets,
+                summary.transcripts_for_remote_subnets.as_slice(),
             ),
-            remote_dkg_attempts: build_remote_dkg_attempts_vec(remote_dkg_attempts),
-            subnet_splitting_status: subnet_splitting_status
+            remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
+            subnet_splitting_status: summary
+                .subnet_splitting_status
                 .as_ref()
                 .map(pb::summary::SubnetSplittingStatus::from),
         }
@@ -563,53 +554,6 @@ fn build_transcript_result(
     }
 }
 
-impl From<SplittingArgs> for pb::SplittingArgs {
-    fn from(args: SplittingArgs) -> Self {
-        Self {
-            destination_subnet_id: Some(subnet_id_into_protobuf(args.destination_subnet_id)),
-            source_subnet_id: Some(subnet_id_into_protobuf(args.source_subnet_id)),
-        }
-    }
-}
-
-impl TryFrom<pb::SplittingArgs> for SplittingArgs {
-    type Error = ProxyDecodeError;
-
-    fn try_from(args: pb::SplittingArgs) -> Result<Self, Self::Error> {
-        Ok(Self {
-            destination_subnet_id: subnet_id_try_from_option(
-                args.destination_subnet_id,
-                "SplittingArgs::destination_subnet_id",
-            )?,
-            source_subnet_id: subnet_id_try_from_option(
-                args.source_subnet_id,
-                "SplittingArgs::source_subnet_id",
-            )?,
-        })
-    }
-}
-
-impl From<PostSplitArgs> for pb::PostSplitArgs {
-    fn from(args: PostSplitArgs) -> Self {
-        Self {
-            new_subnet_id: Some(subnet_id_into_protobuf(args.new_subnet_id)),
-        }
-    }
-}
-
-impl TryFrom<pb::PostSplitArgs> for PostSplitArgs {
-    type Error = ProxyDecodeError;
-
-    fn try_from(args: pb::PostSplitArgs) -> Result<Self, Self::Error> {
-        Ok(Self {
-            new_subnet_id: subnet_id_try_from_option(
-                args.new_subnet_id,
-                "PostSplitArgs::new_subnet_id",
-            )?,
-        })
-    }
-}
-
 impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
     fn from(status: &SubnetSplittingStatus) -> Self {
         match status {
@@ -617,14 +561,19 @@ impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
                 pb::summary::SubnetSplittingStatus::NotScheduled(())
             }
             SubnetSplittingStatus::Scheduled(splitting_args) => {
-                pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs::from(
-                    *splitting_args,
-                ))
+                pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs {
+                    destination_subnet_id: Some(subnet_id_into_protobuf(
+                        splitting_args.destination_subnet_id,
+                    )),
+                    source_subnet_id: Some(subnet_id_into_protobuf(
+                        splitting_args.source_subnet_id,
+                    )),
+                })
             }
             SubnetSplittingStatus::PostSplit(post_split_args) => {
-                pb::summary::SubnetSplittingStatus::PostSplit(pb::PostSplitArgs::from(
-                    *post_split_args,
-                ))
+                pb::summary::SubnetSplittingStatus::PostSplit(pb::PostSplitArgs {
+                    new_subnet_id: Some(subnet_id_into_protobuf(post_split_args.new_subnet_id)),
+                })
             }
         }
     }
@@ -639,11 +588,25 @@ impl TryFrom<pb::summary::SubnetSplittingStatus> for SubnetSplittingStatus {
                 Ok(SubnetSplittingStatus::NotScheduled)
             }
             pb::summary::SubnetSplittingStatus::Scheduled(splitting_args) => {
-                Ok(SubnetSplittingStatus::Scheduled(splitting_args.try_into()?))
+                Ok(SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    destination_subnet_id: subnet_id_try_from_option(
+                        splitting_args.destination_subnet_id,
+                        "SplittingArgs::destination_subnet_id",
+                    )?,
+                    source_subnet_id: subnet_id_try_from_option(
+                        splitting_args.source_subnet_id,
+                        "SplittingArgs::source_subnet_id",
+                    )?,
+                }))
             }
-            pb::summary::SubnetSplittingStatus::PostSplit(post_split_args) => Ok(
-                SubnetSplittingStatus::PostSplit(post_split_args.try_into()?),
-            ),
+            pb::summary::SubnetSplittingStatus::PostSplit(post_split_args) => {
+                Ok(SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                    new_subnet_id: subnet_id_try_from_option(
+                        post_split_args.new_subnet_id,
+                        "PostSplitArgs::new_subnet_id",
+                    )?,
+                }))
+            }
         }
     }
 }
@@ -831,12 +794,11 @@ pub enum DkgPayloadCreationError {
 }
 
 /// Reasons for why a dkg payload might be invalid.
-#[allow(clippy::large_enum_variant)]
 #[derive(PartialEq, Debug)]
 pub enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(DkgSummary, DkgSummary),
+    MismatchedDkgSummary(Box<DkgSummary>, Box<DkgSummary>),
     MissingDkgConfigForDealing,
     DkgStartHeightDoesNotMatchParentBlock,
     DkgSummaryAtNonStartHeight(Height),

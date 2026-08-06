@@ -28,11 +28,12 @@ pub(crate) enum Status {
 /// Note: If 'height' is smaller than the height of the last CUP, this will return [None].
 ///
 /// Returns
-/// * [Status::Halting] when there is a pending upgrade or the registry instructs the subnet to halt
-/// * [Status::Halted] when a CUP height has been finalized and either an upgrade is in progress or
-///   the registry instructs the subnet to halt;
-/// * [Status::Running] when there is no upgrade and the registry doesn't instruct the subnet to
-///   halt.
+/// * [Status::Halting] when there is a pending upgrade, subnet split or the registry instructs the
+///   subnet to halt
+/// * [Status::Halted] when  the validation context's certified height reached the CUP height and
+///   either an upgrade/subnet split is in progress or the registry instructs the subnet to halt;
+/// * [Status::Running] when there is no upgrade, no split, and the registry doesn't instruct the
+///   subnet to halt.
 pub(crate) fn get_status(
     height: Height,
     last_summary_block: &Block,
@@ -100,11 +101,11 @@ pub(crate) fn should_halt(
             .subnet_splitting_status()
         {
             SubnetSplittingStatus::NotScheduled => false,
+            SubnetSplittingStatus::Scheduled(..) => height >= summary_block.height,
             // After the split, don't produce any blocks until we are on the right subnet.
             SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) => {
                 subnet_id != new_subnet_id
             }
-            SubnetSplittingStatus::Scheduled(..) => height >= summary_block.height,
         }
     });
 
@@ -133,7 +134,9 @@ pub(crate) fn should_halt(
     ])
 }
 
-/// Returns `true` if any of the provided values is known to be `true`.
+/// Returns `Some(true)` if any of the provided values is known to be `true`.
+/// Returns `Some(false)` if all of the provided values are known to be `false`.
+/// Returns `None` if at least one of the provided values is otherwise unknown.
 fn any(values: &[Option<bool>]) -> Option<bool> {
     if values.contains(&Some(true)) {
         Some(true)
@@ -216,7 +219,7 @@ mod tests {
             ],
         );
 
-        pool.advance_round_normal_operation_no_cup_n(CUP_HEIGHT.get());
+        pool.advance_round_normal_operation_n(CUP_HEIGHT.get());
         Round::new(&mut pool)
             .with_certified_height(certified_height)
             .advance();
@@ -259,7 +262,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 })),
+        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_1, source_subnet_id: SUBNET_0 })),
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Halted),
     })]
@@ -268,26 +271,26 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 })),
+        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_1, source_subnet_id: SUBNET_0 })),
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Halting),
     })]
     #[case::post_subnet_splitting_old_subnet_id(TestCase{
-        certified_height: CUP_HEIGHT.decrement(),
+        certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_0 })),
-        subnet_id: SUBNET_1,
+        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_1 })),
+        subnet_id: SUBNET_0,
         expected_status: Some(Status::Halted),
     })]
     #[case::post_subnet_splitting_new_subnet_id(TestCase{
-        certified_height: CUP_HEIGHT.decrement(),
+        certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_0 })),
-        subnet_id: SUBNET_0,
+        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_1 })),
+        subnet_id: SUBNET_1,
         expected_status: Some(Status::Running),
     })]
     #[case::halt_at_cup_height(TestCase{
