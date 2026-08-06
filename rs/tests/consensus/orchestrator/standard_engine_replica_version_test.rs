@@ -120,35 +120,27 @@ fn setup(env: TestEnv) {
     ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCustomizations {
+            registry_canister_init_payload: RegistryCanisterInitPayload {
+                is_blank_replica_version_id_for_cloud_engines_enabled: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    );
 }
 
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    // [Step 1] Install NNS. Blank `replica_version_id` for Cloud Engines
-    // is enabled (in Registry).
     let nns_node = env
         .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
         .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .with_customizations(NnsCustomizations {
-            registry_canister_init_payload: RegistryCanisterInitPayload {
-                is_blank_replica_version_id_for_cloud_engines_enabled: Some(true),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .install(&nns_node, &env)
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters installed");
 
     // Prepare to make various NNS proposals.
     let topology_snapshot = env.topology_snapshot();
