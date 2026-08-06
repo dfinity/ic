@@ -3219,7 +3219,6 @@ pub mod test {
         data_provider: &Arc<ProtoRegistryDataProvider>,
         registry_client: &FakeRegistryClient,
         subnet_id: SubnetId,
-        committee: &[NodeId],
     ) {
         // Keep everything but the CUP type as it is at genesis, so that the scheduled split is the
         // only difference between the two records.
@@ -3280,12 +3279,7 @@ pub mod test {
                 .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| Ok(()));
-            schedule_subnet_split(
-                &data_provider,
-                &registry_client,
-                replica_config.subnet_id,
-                &committee,
-            );
+            schedule_subnet_split(&data_provider, &registry_client, replica_config.subnet_id);
 
             let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.registry_version = block_registry_version;
@@ -3382,12 +3376,7 @@ pub mod test {
                 .return_const(context.certified_height);
             time_source.set_time(context.time).unwrap();
 
-            schedule_subnet_split(
-                &data_provider,
-                &registry_client,
-                replica_config.subnet_id,
-                &committee,
-            );
+            schedule_subnet_split(&data_provider, &registry_client, replica_config.subnet_id);
 
             let result = validator.check_block_validity(&PoolReader::new(&pool), &summary_proposal);
             if block_registry_version <= SUBNET_SPLIT_REGISTRY_VERSION {
