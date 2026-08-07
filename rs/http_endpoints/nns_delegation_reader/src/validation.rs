@@ -31,7 +31,8 @@ use std::fmt;
 pub enum CanisterRangesCheck {
     /// Check that the certified canister ranges at `/subnet/<subnet_id>/canister_ranges`
     /// exactly match all the ranges which the state assigns to the delegated subnet. Ranges
-    /// certified at `/canister_ranges/<subnet_id>` are ignored.
+    /// certified at `/canister_ranges/<subnet_id>` are ignored because if the delegation is built
+    /// correctly, the two locations should always match.
     AllSubnetRanges,
     // TODO: Add more variants to check for the existence of a specific canister
 }
