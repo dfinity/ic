@@ -474,7 +474,6 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::p2p::consensus::MutablePool;
-    use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::message_routing::FakeMessageRouting;
@@ -492,6 +491,7 @@ mod tests {
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
             } = DependenciesBuilder::new(pool_config, 1).build();
 
@@ -537,17 +537,17 @@ mod tests {
                 .withf(move |height| *height == *checkpoint_purge_height_clone.read().unwrap())
                 .return_const(());
 
-            let mut message_routing = MockMessageRouting::new();
             let expected_batch_height = Arc::new(RwLock::new(Height::from(0)));
             let expected_batch_height_clone = Arc::clone(&expected_batch_height);
             message_routing
+                .get_mut()
                 .expect_expected_batch_height()
                 .returning(move || *expected_batch_height_clone.read().unwrap());
 
             let purger = Purger::new(
                 replica_config,
                 state_manager,
-                Arc::new(message_routing),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
@@ -737,6 +737,7 @@ mod tests {
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
             } = DependenciesBuilder::new(pool_config, 10).build();
 
@@ -759,7 +760,7 @@ mod tests {
             let purger = Purger::new(
                 replica_config,
                 state_manager.clone(),
-                Arc::new(MockMessageRouting::new()),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
@@ -822,20 +823,21 @@ mod tests {
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
             } = DependenciesBuilder::new(pool_config, 10).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
                 .returning(|| Height::new(0));
-            let mut message_routing = MockMessageRouting::new();
             message_routing
+                .get_mut()
                 .expect_expected_batch_height()
                 .returning(|| Height::new(0));
             let purger = Purger::new(
                 replica_config,
                 state_manager,
-                Arc::new(message_routing),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
