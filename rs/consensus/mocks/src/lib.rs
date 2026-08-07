@@ -33,7 +33,7 @@ use ic_types::{
 use mockall::predicate::*;
 use mockall::*;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     sync::{Arc, RwLock},
 };
 
@@ -217,22 +217,39 @@ impl DependenciesBuilder {
             )
             .unwrap();
 
-        let mut all_subnet_ids: BTreeSet<SubnetId> = BTreeSet::default();
-        let mut subnet_ids_at_version: BTreeMap<u64, BTreeSet<SubnetId>> = BTreeMap::default();
+        let mut subnet_ids: BTreeSet<SubnetId> = BTreeSet::default();
+        let mut last_version = None;
         for (version, subnet_id, record) in self.sorted_subnet_records {
-            if all_subnet_ids.insert(subnet_id) {
+            // Update the subnet list record for the previous version when the version changes.
+            // This ensures that the subnet list record is updated only once per version, even if
+            // there are multiple subnet records for that version (we assume the records are
+            // sorted).
+            if let Some(last_version) = last_version
+                && last_version != version
+            {
+                add_subnet_list_record(
+                    &registry_data_provider,
+                    last_version,
+                    Vec::from_iter(subnet_ids.clone()),
+                );
+            }
+
+            if subnet_ids.insert(subnet_id) {
                 insert_initial_dkg_transcript(version, subnet_id, &record, &registry_data_provider);
             }
 
             add_single_subnet_record(&registry_data_provider, version, subnet_id, record);
 
-            subnet_ids_at_version
-                .entry(version)
-                .or_default()
-                .insert(subnet_id);
+            last_version = Some(version);
         }
-        for (version, subnet_ids) in subnet_ids_at_version {
-            add_subnet_list_record(&registry_data_provider, version, Vec::from_iter(subnet_ids));
+        // The last iterated version never had its subnet list record updated, so we need to do it
+        // here.
+        if let Some(last_version) = last_version {
+            add_subnet_list_record(
+                &registry_data_provider,
+                last_version,
+                Vec::from_iter(subnet_ids),
+            );
         }
 
         let registry = Arc::new(FakeRegistryClient::new(
