@@ -9,9 +9,9 @@
 //! compared.
 //!
 //! The first consumer is the sweeper address' ETH balance, which *is* the prepaid-sweep-gas
-//! counter (`docs/deposit_from_cex.md`, "Fund the transaction fees without touching the ckETH
-//! backing"): sweeping may only spend ETH that has already been covered by a ckETH burn, and the
-//! sweeper's on-chain balance is what makes that reconcilable.
+//! counter (`rs/ethereum/cketh/docs/deposit_from_cex.md`, "Fund the transaction fees without
+//! touching the ckETH backing"): sweeping may only spend ETH that has already been covered by a
+//! ckETH burn, and the sweeper's on-chain balance is what makes that reconcilable.
 
 use crate::eth_rpc_client::{
     MIN_ATTACHED_CYCLES, MultiCallError, StrictMajorityByKey, ToReducedWithStrategy, rpc_client,
@@ -87,8 +87,8 @@ pub fn decode_balance(result: &str) -> Result<Wei, DecodeBalanceError> {
         return Err(DecodeBalanceError::NotAQuantity(result.to_string()));
     }
     Wei::from_str_hex(quantity).map_err(|_| {
-        // `from_str_hex` rejects both non-hex digits and values wider than 32 bytes; only the
-        // latter is possible here, since the digits were already accepted above.
+        // `from_str_hex` rejects both non-hex digits and values wider than 32 bytes, and the
+        // check above established only the `0x` prefix — so tell the two apart here.
         if quantity[2..].chars().all(|c| c.is_ascii_hexdigit()) {
             DecodeBalanceError::TooLarge(result.to_string())
         } else {
