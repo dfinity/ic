@@ -1,20 +1,3 @@
-//! Pins the ledger contract that `LedgerClient::burn_from_own_subaccount` relies on: the minter
-//! can burn ckETH out of a subaccount it owns itself — in production its fee subaccount
-//! `CKETH_FEE_SUBACCOUNT` (`0x…0fee`, the ledger's fee collector) — without holding an ICRC-2
-//! allowance, provided it names that same subaccount as the spender.
-//!
-//! This matters because the ledger's allowance bypass compares the **full account**, not just the
-//! owner (`Operation::Burn` in `rs/ledger_suite/icrc1/src/lib.rs`:
-//! `spender.is_some() && from != &spender.unwrap()`). Spending the minter's default subaccount —
-//! what the allowance-based `burn_from` used for user withdrawals does — yields `{minter, None}`,
-//! which is a *different account* from `{minter, 0fee}` and is therefore rejected. Both directions
-//! are asserted below, since silently taking the wrong branch would make sweeper funding fail at
-//! runtime with a confusing `InsufficientAllowance`.
-//!
-//! The ledger is driven directly, with the minter canister impersonated as the caller, exactly as
-//! the funding task will call it. `LedgerClient` itself is canister-side code (it reads
-//! `canister_self()`), so it is exercised end to end only once a task calls it.
-
 use candid::{Decode, Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_cketh_minter::CKETH_FEE_SUBACCOUNT;
@@ -25,7 +8,6 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use std::sync::Arc;
 
-/// Minted into the fee account, then partly burned: 1 ETH in wei.
 const FUNDING_AMOUNT: u64 = 1_000_000_000_000_000_000;
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {
@@ -58,8 +40,6 @@ impl Setup {
         }
     }
 
-    /// The ckETH minting account: the minter's default subaccount. A transfer *to* it burns, a
-    /// transfer *from* it mints.
     fn minting_account(&self) -> Account {
         Account {
             owner: self.minter_id.get().0,
@@ -121,8 +101,6 @@ impl Setup {
         .expect("minting into the fee account must succeed");
     }
 
-    /// Burns from the fee account with the minter as caller, letting the test choose the spender
-    /// subaccount so both branches of the ledger's allowance bypass can be exercised.
     fn burn_from_fee_account(
         &self,
         amount: u64,
@@ -154,7 +132,6 @@ impl Setup {
     }
 }
 
-/// What `burn_from_own_subaccount` does: spender subaccount == `from` subaccount.
 #[test]
 fn should_burn_from_fee_account_without_an_allowance() {
     let setup = Setup::new();
@@ -186,7 +163,6 @@ fn should_burn_from_fee_account_without_an_allowance() {
     );
 }
 
-/// What plain `burn_from` would do, and why sweeper funding cannot use it.
 #[test]
 fn should_reject_burning_from_fee_account_with_the_default_spender_subaccount() {
     let setup = Setup::new();

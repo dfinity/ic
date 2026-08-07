@@ -46,12 +46,6 @@ pub const EVM_RPC_ID_PRODUCTION: Principal =
 pub const EVM_RPC_ID_STAGING: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 161, 1, 1]);
 pub const CKETH_LEDGER_MEMO_SIZE: u16 = 80;
 
-/// The minter's fee subaccount on the ckETH ledger — `0x…0fee`, the subaccount configured as the
-/// ledger's fee collector, where ckETH transaction fees accrue.
-///
-/// Sweep gas is funded exclusively out of this account, never out of the ETH backing ckETH 1:1.
-/// Burning from it needs [`crate::ledger_client::LedgerClient::burn_from_own_subaccount`] rather
-/// than the allowance-based `burn_from` used for user withdrawals.
 pub const CKETH_FEE_SUBACCOUNT: [u8; 32] = {
     let mut subaccount = [0_u8; 32];
     subaccount[30] = 0x0f;
