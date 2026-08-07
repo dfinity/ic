@@ -597,19 +597,9 @@ pub mod test {
     fn test_get_dkg_summary_block() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
-            let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(
-                        (0..1).map(node_test_id).collect::<Vec<_>>().as_slice(),
-                    )
-                    .with_dkg_interval_length(interval_length)
-                    .build(),
-                )],
-            )
-            .build();
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
+                .with_dkg_interval_length(interval_length)
+                .build();
 
             // Get the finalized block after skipping exactly one DKG interval.
             let height = pool.advance_round_normal_operation_n(interval_length + 1);
@@ -719,19 +709,10 @@ pub mod test {
     #[test]
     fn test_get_notarized_finalized_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee = vec![node_test_id(0)];
             let interval_length = 4;
-            let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                )],
-            )
-            .build();
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
+                .with_dkg_interval_length(interval_length)
+                .build();
             pool.advance_round_normal_operation_n(4);
             pool.prepare_round().dont_add_catch_up_package().advance();
             let block = pool.latest_notarized_blocks().next().unwrap();
