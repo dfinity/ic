@@ -27,6 +27,7 @@ hex-literal = { workspace = true }
 ic-canister-log = { workspace = true }
 ic-canister-runtime = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }

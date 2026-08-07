@@ -14,6 +14,7 @@ evm_rpc_types = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-cketh-minter = { path = "../minter" }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }

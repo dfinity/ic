@@ -32,6 +32,7 @@ ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-btc-interface = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-config = { path = "../config" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
