@@ -304,7 +304,7 @@ dependencies = [
  "once_cell",
  "serde",
  "version_check",
- "zerocopy",
+ "zerocopy 0.7.32",
 ]
 
 [[package]]
@@ -1563,61 +1563,55 @@ checksum = "1522ac6ee801a11bf9ef3f80403f4ede6eb41291fac3dde3de09989679305f25"
 
 [[package]]
 name = "build-info"
-version = "0.0.27"
-source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df162fbbc1ccef96f27c9d7#701a696844fba5c87df162fbbc1ccef96f27c9d7"
+version = "0.0.45"
+source = "git+https://github.com/dfinity-lab/build-info?rev=27ba16a68aa312de66f2ebd0f16665f1429eee36#27ba16a68aa312de66f2ebd0f16665f1429eee36"
 dependencies = [
  "build-info-common",
  "build-info-proc",
- "lazy_static",
- "proc-macro-hack",
+ "ciborium",
 ]
 
 [[package]]
 name = "build-info-build"
-version = "0.0.27"
-source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df162fbbc1ccef96f27c9d7#701a696844fba5c87df162fbbc1ccef96f27c9d7"
+version = "0.0.45"
+source = "git+https://github.com/dfinity-lab/build-info?rev=27ba16a68aa312de66f2ebd0f16665f1429eee36#27ba16a68aa312de66f2ebd0f16665f1429eee36"
 dependencies = [
  "anyhow",
- "base64 0.13.1",
- "bincode",
  "build-info-common",
- "cargo_metadata",
+ "ciborium",
  "glob",
- "lazy_static",
- "pretty_assertions",
  "rustc_version",
  "serde_json",
- "xz2",
+ "z85",
+ "zstd 0.13.2",
 ]
 
 [[package]]
 name = "build-info-common"
-version = "0.0.27"
-source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df162fbbc1ccef96f27c9d7#701a696844fba5c87df162fbbc1ccef96f27c9d7"
+version = "0.0.45"
+source = "git+https://github.com/dfinity-lab/build-info?rev=27ba16a68aa312de66f2ebd0f16665f1429eee36#27ba16a68aa312de66f2ebd0f16665f1429eee36"
 dependencies = [
- "derive_more 0.99.17",
+ "derive_more 2.1.1",
  "semver",
  "serde",
 ]
 
 [[package]]
 name = "build-info-proc"
-version = "0.0.27"
-source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df162fbbc1ccef96f27c9d7#701a696844fba5c87df162fbbc1ccef96f27c9d7"
+version = "0.0.45"
+source = "git+https://github.com/dfinity-lab/build-info?rev=27ba16a68aa312de66f2ebd0f16665f1429eee36#27ba16a68aa312de66f2ebd0f16665f1429eee36"
 dependencies = [
- "anyhow",
- "base64 0.13.1",
- "bincode",
  "build-info-common",
- "num-bigint 0.4.6",
+ "ciborium",
+ "manyhow",
+ "num-bigint 0.5.1",
  "num-traits",
- "proc-macro-error",
- "proc-macro-hack",
  "proc-macro2",
  "quote",
  "serde_json",
- "syn 1.0.109",
- "xz2",
+ "syn 2.0.119",
+ "z85",
+ "zstd 0.13.2",
 ]
 
 [[package]]
@@ -2083,9 +2077,9 @@ dependencies = [
 
 [[package]]
 name = "ciborium"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "effd91f6c78e5a4ace8a5d3c0b6bfaec9e2baaef55f3efc00e45fb2e477ee926"
+checksum = "42e69ffd6f0917f5c029256a24d0161db17cea3997d185db0d35926308770f0e"
 dependencies = [
  "ciborium-io",
  "ciborium-ll",
@@ -2094,18 +2088,18 @@ dependencies = [
 
 [[package]]
 name = "ciborium-io"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdf919175532b369853f5d5e20b26b43112613fd6fe7aee757e35f7a44642656"
+checksum = "05afea1e0a06c9be33d539b876f1ce3692f4afea2cb41f740e7743225ed1c757"
 
 [[package]]
 name = "ciborium-ll"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "defaa24ecc093c77630e6c15e17c51f5e187bf35ee514f4e2d67baaa96dae22b"
+checksum = "57663b653d948a338bfb3eeba9bb2fd5fcfaecb9e199e87e1eda4d9e8b240fd9"
 dependencies = [
  "ciborium-io",
- "half",
+ "half 2.7.1",
 ]
 
 [[package]]
@@ -4957,6 +4951,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
+name = "half"
+version = "2.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
+dependencies = [
+ "cfg-if",
+ "crunchy",
+ "zerocopy 0.8.56",
+]
+
+[[package]]
 name = "handlebars"
 version = "6.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7669,6 +7674,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
+name = "manyhow"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b33efb3ca6d3b07393750d4030418d594ab1139cee518f0dc88db70fec873587"
+dependencies = [
+ "manyhow-macros",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "manyhow-macros"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46fce34d199b78b6e6073abf984c9cf5fd3e9330145a93ee0738a7443e371495"
+dependencies = [
+ "proc-macro-utils",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
 name = "maplit"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8236,6 +8264,16 @@ dependencies = [
  "num-integer",
  "num-traits",
  "serde",
+]
+
+[[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
+dependencies = [
+ "num-integer",
+ "num-traits",
 ]
 
 [[package]]
@@ -9482,10 +9520,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-hack"
-version = "0.5.20+deprecated"
+name = "proc-macro-utils"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
+checksum = "eeaf08a13de400bc215877b5bdc088f241b12eb42f0a548d3390dc1c56bb7071"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "smallvec",
+]
 
 [[package]]
 name = "proc-macro2"
@@ -11199,7 +11242,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bef2ebfde456fb76bbcf9f59315333decc4fda0b2b44b420243c11e0f5ec1f5"
 dependencies = [
- "half",
+ "half 1.8.2",
  "serde",
 ]
 
@@ -15153,12 +15196,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "z85"
+version = "3.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6e61e59a957b7ccee15d2049f86e8bfd6f66968fcd88f018950662d9b86e675"
+
+[[package]]
 name = "zerocopy"
 version = "0.7.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74d4d3961e53fa4c9a25a8637fc2bfaf2595b3d3ae34875568a5cf64787716be"
 dependencies = [
- "zerocopy-derive",
+ "zerocopy-derive 0.7.32",
+]
+
+[[package]]
+name = "zerocopy"
+version = "0.8.56"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "556764e583adb45a9f8d413c2a147fa7e8d821e48e12b14fd560b607998b75eb"
+dependencies = [
+ "zerocopy-derive 0.8.56",
 ]
 
 [[package]]
@@ -15166,6 +15224,17 @@ name = "zerocopy-derive"
 version = "0.7.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.8.56"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2ab42fc20575779bd240faa45f94a74256f755c0fa9e89f0ede20d91d0cdfc1"
 dependencies = [
  "proc-macro2",
  "quote",
