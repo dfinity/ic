@@ -6,11 +6,15 @@ Verify the following
 
 1. A Cloud Engine subnet created with a blank `replica_version_id`
    determines what replica version to run based on
-   `StandardEngineReplicaVersionRecord`. (This is done via
-   `engine_controller.create_engine`, with no NNS proposal.)
+   `StandardEngineReplicaVersionRecord`. (Cloud Engines are created
+   via `engine_controller.create_engine`, not via proposal)
 
-2. Passing a `UpdateStandardEngineReplicaVersion` NNS proposal
-   causes the Cloud Engine to upgrade.
+2. Passing a `UpdateStandardEngineReplicaVersion` NNS proposal that
+   decreases `deployment_progress` causes some Cloud Engines to
+   roll back.
+
+3. Increasing `deployment_progress` causes Cloud Engines to roll
+   forward.
 
 Background::
 Cloud Engines are a special kind of subnet. One thing special about them
@@ -22,9 +26,14 @@ via `UpdateStandardEngineReplicaVersion` NNS proposals.
 A non-blank `replica_version_id` behaves like other subnets, overriding
 `StandardEngineReplicaVersionRecord`.
 
+Each Cloud Engine has an upgrade priority (a pseudo-random number in
+[0.0, 1.0], derived from the engine's subnet ID and the candidate new
+replica version). An engine takes the new replica version once its
+priority is <= `deployment_progress`; otherwise, it keeps the old one.
+
 Runbook::
 0. Set up an IC with an NNS subnet, plus a pool of unassigned nodes to
-   form a Cloud Engine.
+   form 2 Cloud Engines.
 
 1. Install NNS. Blank replica_version_id is enabled in Registry.
    This requires using registry-canister-test, not the regular/release
@@ -34,31 +43,47 @@ Runbook::
 2. Elect a second GuestOS/replica version.
 
 3. Submit (and vote through) a `UpdateStandardEngineReplicaVersion`
-   proposal where deployment progress is 100% to control that the Cloud
-   Engine will initially have the replica version that was elected in
-   the previous step.
+   proposal that tells all Cloud Engines to run the newly elected
+   replica version. To achieve this, the following parameters are
+   used:
+    - new: The newly elected replica version.
+    - deployment_progress: 1.0 aka 100%.
+    - old: The original replica version (the one that the NNS subnet
+      is running at this point).
 
-4. Create the Cloud Engine by calling `engine_controller.create_engine`
+4. Create 2 Cloud Engines by calling `engine_controller.create_engine`
    with `replica_version_id: ""`.
 
-5. Wait for the new Cloud Engine subnet to appear, and for its nodes to
-   become healthy, then assert that they're running the replica version
-   elected in step 2, demonstrating that
-   `StandardEngineReplicaVersionRecord` is being used.
+5. Wait for the new Cloud Engines to run the replica version elected
+   in step 2. This is a strong signal that
+   `StandardEngineReplicaVersionRecord` is controlling Cloud Engines
+   (at least when they are first created), because that replica
+   version has never been deployed before, because it was only made
+   available for deployment just now.
 
-6. Submit (and vote through) a second `UpdateStandardEngineReplicaVersion`
-   proposal, this time reversing direction (old: the version elected in
-   step 2, new: the original replica version), again with deployment
-   progress at 100%.
+6. Roll back only ONE of the Cloud Engines to the original replica
+   version, by submitting a second `UpdateStandardEngineReplicaVersion`
+   proposal that decreases `deployment_progress` so that it falls
+   (strictly) between the upgrade priorities of the two Cloud Engines.
 
-7. Wait for the Cloud Engine's nodes to actually upgrade back to the
-   original replica version, demonstrating that
-   `StandardEngineReplicaVersionRecord` drives real upgrades, not just
-   the replica version at creation time.
+7. Wait for the higher-priority engine to roll back to the original
+   replica version. Furthermore, assert that the lower-priority engine
+   stays on the newly elected replica version, does NOT roll back.
+
+8. Increase `deployment_progress` back to 1.0 using a third
+   `UpdateStandardEngineReplicaVersion` proposal (same version pair as
+   steps 3 and 6).
+
+9. Wait for the higher-priority engine (rolled back in step 7) to roll
+   FORWARD again, back to the replica version elected in step 2. The
+   lower-priority engine, which never left that version, is unaffected.
 
 Success::
-Every Cloud Engine node is running the elected replica version, and later
-upgrades back to the original replica version.
+Both Cloud Engines start out on the replica version elected in step 2.
+Exactly one rolls back to the original replica version at partial
+deployment progress (the one with the higher upgrade priority), and it
+rolls forward again, back to the replica version elected in step 2, once
+deployment progress returns to 1.0.
 
 end::catalog[] */
 
@@ -66,27 +91,28 @@ use anyhow::Result;
 use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
+use ic_base_types::SubnetId;
 use ic_canister_client::Sender;
+use ic_consensus_system_test_upgrade_common::elect_target_version;
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, elect_replica_version_with_urls, get_assigned_replica_version,
+    assert_assigned_replica_version, get_assigned_replica_version,
 };
 use ic_engine_controller::{CreateEngineArgs, NewSubnet};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 use ic_protobuf::registry::node::v1::NodeRewardType;
+use ic_registry_client_helpers::subnet::engine_upgrade_priority;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Node},
-        resource::BootImage,
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsCustomizations, NnsInstallationBuilder, SubnetSnapshot,
-            get_guestos_update_img_sha256, get_guestos_update_img_url,
-            get_guestos_update_img_version, get_guestos_update_launch_measurements,
+            NnsCustomizations, TopologySnapshot,
         },
     },
     nns::{
@@ -96,20 +122,25 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, runtime_from_url},
 };
+use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayload;
-use slog::info;
+use slog::{Logger, info};
 use std::time::Duration;
 
 // 4 is the smallest value allowed by the Engine Controller.
 const ENGINE_NODE_COUNT: usize = 4;
+
+// More than 1 so that a `deployment_progress` between the two engines'
+// upgrade priorities can upgrade one, but not the other.
+const NUM_ENGINES: usize = 2;
 
 fn setup(env: TestEnv) {
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes_playnet(1)
         .add_fast_single_node_subnet(SubnetType::System);
 
-    // Add nodes that can be used to form a Cloud Engine.
-    for _ in 0..ENGINE_NODE_COUNT {
+    // Nodes that will be used to form Cloud Engines.
+    for _ in 0..(NUM_ENGINES * ENGINE_NODE_COUNT) {
         ic = ic.with_unassigned_node(
             Node::new()
                 // This is required for Cloud Engines.
@@ -128,8 +159,47 @@ fn setup(env: TestEnv) {
                 ..Default::default()
             },
             ..Default::default()
-        }
+        },
     );
+}
+
+/// Creates a Cloud Engine with a blank `replica_version_id` out of
+/// `node_ids`, and returns its (new) subnet ID.
+fn create_engine(
+    engine_controller: &Canister<'_>,
+    sender: &Sender,
+    node_ids: Vec<Principal>,
+) -> SubnetId {
+    let create_engine_result: Result<NewSubnet, String> =
+        block_on(engine_controller.update_from_sender(
+            "create_engine",
+            candid_one,
+            CreateEngineArgs {
+                node_ids,
+                subnet_admins: vec![],
+                replica_version_id: "".to_string(),
+            },
+            sender,
+        ))
+        .expect("create_engine call failed");
+    create_engine_result
+        .expect("create_engine returned an error")
+        .new_subnet_id
+        .expect("create_engine did not return a new_subnet_id")
+}
+
+/// Finds the nodes of the (already-created) Cloud Engine `subnet_id`.
+fn get_engine_nodes(
+    topology_snapshot: &TopologySnapshot,
+    subnet_id: SubnetId,
+) -> Vec<IcNodeSnapshot> {
+    let engine_subnet = topology_snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_id == subnet_id)
+        .expect("Cloud Engine subnet not found in topology");
+    let nodes: Vec<IcNodeSnapshot> = engine_subnet.nodes().collect();
+    assert_eq!(nodes.len(), ENGINE_NODE_COUNT);
+    nodes
 }
 
 fn test(env: TestEnv) {
@@ -143,7 +213,6 @@ fn test(env: TestEnv) {
         .expect("there is no NNS node");
 
     // Prepare to make various NNS proposals.
-    let topology_snapshot = env.topology_snapshot();
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = get_governance_canister(&nns_runtime);
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
@@ -162,108 +231,173 @@ fn test(env: TestEnv) {
     // [Step 3] Upsert StandardEngineReplicaVersionRecord to
     // {old: original_replica_version, new: new_replica_version,
     // deployment_progress: 1.0}.
-    info!(
-        logger,
-        "Updating StandardEngineReplicaVersionRecord: {original_replica_version} \
-         -> {new_replica_version}"
-    );
-    let proposal_id = block_on(submit_update_standard_engine_replica_version_proposal(
+    update_standard_engine_replica_version(
         &governance,
         proposal_sender.clone(),
         test_neuron_id,
-        new_replica_version.to_string(),
-        original_replica_version.to_string(),
-        1.0,
-    ));
-    block_on(vote_execute_proposal_assert_executed(
-        &governance,
-        proposal_id,
-    ));
+        &new_replica_version,
+        &original_replica_version,
+        1.0, // deployment_progress. 100%
+        &logger,
+    );
 
-    // [Step 4] Create the Cloud Engine with a blank replica_version_id
-    // via the Engine Controller.
-    let node_ids: Vec<Principal> = topology_snapshot
+    // [Step 4] Create 2 Cloud Engines, both with a blank replica_version_id.
+    let topology_snapshot = env.topology_snapshot();
+    let unassigned_node_ids: Vec<Principal> = topology_snapshot
         .unassigned_nodes()
         .map(|node| node.node_id.get().0)
         .collect();
-    assert_eq!(node_ids.len(), ENGINE_NODE_COUNT);
+    assert_eq!(unassigned_node_ids.len(), NUM_ENGINES * ENGINE_NODE_COUNT);
 
+    let engine_controller = Canister::new(&nns_runtime, ENGINE_CONTROLLER_CANISTER_ID);
     info!(
         logger,
-        "Creating a Cloud Engine with blank `replica_version_id`..."
+        "Creating 2 Cloud Engines with blank `replica_version_id`..."
     );
-    let engine_controller = Canister::new(&nns_runtime, ENGINE_CONTROLLER_CANISTER_ID);
-    let create_engine_result: Result<NewSubnet, String> =
-        block_on(engine_controller.update_from_sender(
-            "create_engine",
-            candid_one,
-            CreateEngineArgs {
-                node_ids,
-                subnet_admins: vec![],
-                replica_version_id: "".to_string(),
-            },
-            &proposal_sender,
-        ))
-        .expect("create_engine call failed");
-    let new_subnet = create_engine_result.expect("create_engine returned an error");
-    let engine_subnet_id = new_subnet
-        .new_subnet_id
-        .expect("create_engine did not return a new_subnet_id");
-    info!(logger, "Created Cloud Engine: subnet {engine_subnet_id}");
+    let engine_subnet_ids: Vec<SubnetId> = unassigned_node_ids
+        .chunks(ENGINE_NODE_COUNT)
+        .map(|node_ids| create_engine(&engine_controller, &proposal_sender, node_ids.to_vec()))
+        .collect();
+    let [engine_a_id, engine_b_id]: [SubnetId; NUM_ENGINES] = engine_subnet_ids
+        .try_into()
+        .expect("expected exactly 2 Cloud Engine subnet IDs");
+    info!(
+        logger,
+        "Created Cloud Engines: subnets {engine_a_id} and {engine_b_id}"
+    );
 
-    // [Step 5] Verify that the Cloud Engine is running new_replica_version,
-    // per StandardEngineReplicaVersionRecord.
+    // [Step 5] Verify that both Cloud Engines are running
+    // new_replica_version.
     let topology_snapshot = block_on(topology_snapshot.block_for_newer_registry_version())
-        .expect("failed to observe the newly-created Cloud Engine subnet in the topology");
-    let engine_subnet: SubnetSnapshot = topology_snapshot
-        .subnets()
-        .find(|subnet| subnet.subnet_id == engine_subnet_id)
-        .expect("newly-created Cloud Engine subnet not found in topology");
-    let engine_nodes: Vec<IcNodeSnapshot> = engine_subnet.nodes().collect();
-    assert_eq!(engine_nodes.len(), ENGINE_NODE_COUNT);
-    for node in &engine_nodes {
+        .expect("failed to observe the newly-created Cloud Engine subnets in the topology");
+    let engine_a_nodes = get_engine_nodes(&topology_snapshot, engine_a_id);
+    let engine_b_nodes = get_engine_nodes(&topology_snapshot, engine_b_id);
+    for node in engine_a_nodes.iter().chain(engine_b_nodes.iter()) {
         assert_assigned_replica_version(node, &new_replica_version, logger.clone());
     }
     info!(
         logger,
-        "All Cloud Engine nodes are healthy, running {new_replica_version}, \
-         confirming that they are taking orders from \
-         StandardEngineReplicaVersionRecord."
+        "Both Cloud Engines have been created and are running the new \
+         replica version ({new_replica_version})."
     );
 
-    // [Step 6] Upsert StandardEngineReplicaVersionRecord to
-    // {old: new_replica_version, new: original_replica_version,
-    // deployment_progress: 1.0}, i.e. reverse direction from step 3.
+    // [Step 6] Compute each Cloud Engines upgrade priority. Then, choose
+    // `deployment_progress` between them. That way, only one of them will be
+    // rolled back.
+
+    // Calculate upgrade priorities.
+    let upgrade_priority_a = engine_upgrade_priority(engine_a_id, new_replica_version.as_ref());
+    let upgrade_priority_b = engine_upgrade_priority(engine_b_id, new_replica_version.as_ref());
+    assert_ne!(
+        upgrade_priority_a, upgrade_priority_b,
+        "The two Cloud Engines have the same upgrade priority!?!? Either we found a \
+        SHA-256 collision, or we have a bug! In any case, this test needs them to \
+        differ.",
+    );
+
+    // Decrease deployment_progress to intermediate value.
+    let deployment_progress = (upgrade_priority_a + upgrade_priority_b) / 2.0;
     info!(
         logger,
-        "Updating StandardEngineReplicaVersionRecord: {new_replica_version} \
-         -> {original_replica_version}"
+        "Decreased deployment_progress to {deployment_progress} so that one \
+         Cloud Engine rolls back. Upgrade priorities: {engine_a_id}: {upgrade_priority_a}, \
+         {engine_b_id}: {upgrade_priority_b}"
     );
-    let proposal_id = block_on(submit_update_standard_engine_replica_version_proposal(
+    update_standard_engine_replica_version(
         &governance,
-        proposal_sender,
+        proposal_sender.clone(),
         test_neuron_id,
-        original_replica_version.to_string(),
-        new_replica_version.to_string(),
-        1.0,
-    ));
-    block_on(vote_execute_proposal_assert_executed(
-        &governance,
-        proposal_id,
-    ));
+        &new_replica_version,
+        &original_replica_version,
+        deployment_progress,
+        &logger,
+    );
 
-    // [Step 7] Verify that the Cloud Engine upgrades to
-    // original_replica_version, per the updated
-    // StandardEngineReplicaVersionRecord.
-    for node in &engine_nodes {
+    // Identify which Cloud Engine has the (lower|higher) upgrade priority.
+    let (
+        (low_priority_engine_id, low_priority_nodes), // Low priority
+        (high_priority_engine_id, high_priority_nodes), // High priority
+    ) = if upgrade_priority_a < upgrade_priority_b {
+        (
+            (engine_a_id, engine_a_nodes), // Low priority
+            (engine_b_id, engine_b_nodes), // High priority
+        )
+    } else {
+        (
+            (engine_b_id, engine_b_nodes), // Low priority
+            (engine_a_id, engine_a_nodes), // High priority
+        )
+    };
+
+    // [Step 7] Verify that ONLY the higher-priority engine rolled back.
+    for node in &high_priority_nodes {
         assert_assigned_replica_version(node, &original_replica_version, logger.clone());
+    }
+    for node in &low_priority_nodes {
+        assert_assigned_replica_version(node, &new_replica_version, logger.clone());
     }
     info!(
         logger,
-        "All Cloud Engine nodes upgraded back to {original_replica_version}, \
-         confirming that StandardEngineReplicaVersionRecord drives real \
-         upgrades, not just the replica version at creation time."
+        "Cloud Engine {high_priority_engine_id} rolled back to {original_replica_version}, while \
+         {low_priority_engine_id} stayed on {new_replica_version}."
     );
+
+    // [Step 8] Increase deployment_progress back to 1.0, so that we can verify
+    // that rolling forward also works (not just rolling back).
+    update_standard_engine_replica_version(
+        &governance,
+        proposal_sender,
+        test_neuron_id,
+        &new_replica_version,
+        &original_replica_version,
+        1.0, // deployment_progress. 100%
+        &logger,
+    );
+
+    // [Step 9] Verify that the high priority Cloud Engine rolled FORWARD, back
+    // to new_replica_version. Similarly, verify that the low priority Cloud Engine
+    // has continued on new_replica_version.
+    for node in &high_priority_nodes {
+        assert_assigned_replica_version(node, &new_replica_version, logger.clone());
+    }
+    for node in &low_priority_nodes {
+        assert_assigned_replica_version(node, &new_replica_version, logger.clone());
+    }
+    info!(
+        logger,
+        "Cloud Engine {high_priority_engine_id} rolled FORWARD again (back to \
+         {new_replica_version}) after deployment_progress was increased back \
+         to 1.0."
+    );
+}
+
+/// Submits and votes through an `UpdateStandardEngineReplicaVersion` proposal.
+fn update_standard_engine_replica_version(
+    governance: &Canister<'_>,
+    proposal_sender: Sender,
+    test_neuron_id: NeuronId,
+    new_replica_version: &ReplicaVersion,
+    old_replica_version: &ReplicaVersion,
+    deployment_progress: f64,
+    logger: &Logger,
+) {
+    info!(
+        logger,
+        "Updating StandardEngineReplicaVersionRecord: old: {old_replica_version}, new: \
+         {new_replica_version}, deployment_progress: {deployment_progress}"
+    );
+    let proposal_id = block_on(submit_update_standard_engine_replica_version_proposal(
+        governance,
+        proposal_sender,
+        test_neuron_id,
+        new_replica_version.to_string(),
+        old_replica_version.to_string(),
+        deployment_progress,
+    ));
+    block_on(vote_execute_proposal_assert_executed(
+        governance,
+        proposal_id,
+    ));
 }
 
 fn main() -> Result<()> {
@@ -271,7 +405,7 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_test(systest!(test))
         // Give this test more time, because one successful run was observed
-        // to take a little more than 10 minutes.
+        // to take about 20 minutes.
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .execute_from_args()?;
     Ok(())

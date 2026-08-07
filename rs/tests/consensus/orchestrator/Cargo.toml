@@ -22,6 +22,7 @@ ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-recovery = { path = "../../../recovery" }
+ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
@@ -29,6 +30,7 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_node_registration_test_common = { path = "../node_registration_test_common" }
+ic_consensus_system_test_upgrade_common = { path = "../upgrade", package = "consensus-upgrade-system-tests" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 registry-canister = { path = "../../../registry/canister" }
