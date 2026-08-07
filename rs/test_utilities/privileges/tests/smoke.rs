@@ -159,9 +159,16 @@ fn should_not_affect_other_threads() {
         move || {
             entered.wait();
             let bypasses = bypasses_file_permissions();
-            // ... and check it behaves accordingly, not just that the bit is set.
-            let (_dir, path) = file_with_mode(0o400);
-            let denied = std::fs::write(&path, b"after").is_err();
+            // ... and check it behaves accordingly, not just that the bit is
+            // set. This has to be a mode 000 *read*, which either capability
+            // bypasses, so that it matches what `bypasses_file_permissions`
+            // reports. A write to a mode 0400 file would not: only
+            // `CAP_DAC_OVERRIDE` bypasses that, so a process holding just
+            // `CAP_DAC_READ_SEARCH` would be denied the write while still
+            // reporting `true`, and this test would fail despite the thread
+            // isolation it checks working perfectly.
+            let (_dir, path) = file_with_mode(0o000);
+            let denied = std::fs::read(&path).is_err();
             observed.wait();
             (bypasses, denied)
         }
@@ -179,8 +186,44 @@ fn should_not_affect_other_threads() {
     );
     assert_eq!(
         denied, !before,
-        "a pre-existing thread should still write a read-only file it owns iff it \
-         holds the DAC bypass"
+        "a pre-existing thread should still read a mode 000 file it owns iff it \
+         holds a DAC bypass capability"
+    );
+}
+
+#[test]
+fn should_leave_a_thread_that_outlives_the_action_deprivileged() {
+    // The flip side of inheritance, and the reason the crate docs tell callers
+    // to join whatever they spawn before the closure returns: the guard
+    // restores only the thread it was created on, so a thread spawned inside
+    // that outlives the closure keeps the reduced sets for good. Harmless for a
+    // thread that just exits, but a pool stashed somewhere global would go on
+    // to deny later, unrelated work. Pinned here so the documented hazard is
+    // real behaviour rather than speculation.
+    let before = bypasses_file_permissions();
+    let (send, recv) = std::sync::mpsc::channel();
+    let (answer_send, answer_recv) = std::sync::mpsc::channel();
+
+    run_with_file_permissions_enforced(|| {
+        std::thread::spawn(move || {
+            // Outlives the closure: it keeps answering after the guard is gone.
+            while recv.recv().is_ok() {
+                let _ = answer_send.send(bypasses_file_permissions());
+            }
+        });
+    });
+
+    assert_eq!(
+        bypasses_file_permissions(),
+        before,
+        "this thread should have been restored"
+    );
+    send.send(()).expect("the outliving thread is gone");
+    assert!(
+        !answer_recv
+            .recv()
+            .expect("the outliving thread did not answer"),
+        "a thread spawned inside the action keeps the reduced sets after it returns"
     );
 }
 

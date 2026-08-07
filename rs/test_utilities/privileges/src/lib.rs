@@ -29,7 +29,12 @@
 //! * Only the calling thread and threads it goes on to create are affected;
 //!   capabilities are copied at thread creation. Work handed to a thread that
 //!   *already* existed — a global runtime, a `OnceLock` thread pool — runs with
-//!   the full sets. Create such pools inside the closure.
+//!   the full sets. Create such pools inside the closure, and make sure they
+//!   have terminated by the time it returns: the guard restores only the
+//!   thread it was created on, so a thread spawned inside that outlives the
+//!   closure keeps the reduced sets for the rest of its life. That is harmless
+//!   for one that simply exits, but a pool stashed somewhere global would go
+//!   on to deny later, unrelated work.
 //! * `execve` as uid 0 restores the full capability sets, so a subprocess
 //!   spawned inside the closure regains `CAP_DAC_OVERRIDE`.
 
