@@ -38,7 +38,8 @@ use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_types::time::Time;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
 use ic_types::{
-    CanisterId, ExecutionRound, NodeId, NumBytes, PrincipalId, Randomness, ReplicaVersion,
+    CanisterId, ExecutionRound, NodeId, NumBytes, NumInstructions, PrincipalId, Randomness,
+    ReplicaVersion,
 };
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
@@ -714,6 +715,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         let own_subnet_id = subnet_test_id(13);
         let own_maximum_state_size = NumBytes::new(1 << 30);
         let own_maximum_state_delta = NumBytes::new(1 << 20);
+        let own_maximum_query_instructions = NumInstructions::new(7_000_000_000);
+        let own_maximum_query_walltime_seconds = 15;
         let own_subnet_record = SubnetRecord {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,
@@ -749,6 +752,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             resource_limits: ResourceLimits {
                 maximum_state_size: Some(own_maximum_state_size),
                 maximum_state_delta: Some(own_maximum_state_delta),
+                maximum_query_instructions: Some(own_maximum_query_instructions),
+                maximum_query_walltime_seconds: Some(own_maximum_query_walltime_seconds),
             },
 
             ..Default::default()
@@ -1057,6 +1062,16 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(
             latest_state.resource_limits().maximum_state_delta,
             Some(own_maximum_state_delta)
+        );
+        assert_eq!(
+            latest_state.resource_limits().maximum_query_instructions,
+            Some(own_maximum_query_instructions)
+        );
+        assert_eq!(
+            latest_state
+                .resource_limits()
+                .maximum_query_walltime_seconds,
+            Some(own_maximum_query_walltime_seconds)
         );
         assert_eq!(
             *registry_settings.lock().unwrap(),

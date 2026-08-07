@@ -523,9 +523,12 @@ impl BlockMaker {
         }
     }
 
-    /// Returns the registry version received from the NNS some specified amount of
-    /// time ago. If the parent's context references higher version which is already
-    /// available locally, we use that version.
+    /// Returns the registry version received from the NNS some specified amount of time ago. If the
+    /// parent's context references higher version which is already available locally, we use that
+    /// version.
+    /// If a subnet split is in progress, we "freeze" the registry version at the last version that
+    /// does not contain the split, until we reach the next summary block, at which point we bump
+    /// the registry version to the scheduled version of the split.
     pub(crate) fn get_stable_registry_version(
         &self,
         parent: &Block,
@@ -551,30 +554,28 @@ impl BlockMaker {
                 continue;
             }
 
-            let subnet_splitting_status = subnet_splitting::get_status(
+            match subnet_splitting::get_status(
                 self.registry_client.as_ref(),
                 self.replica_config.subnet_id,
                 last_summary_block_registry_version,
                 version,
-            )
-            .inspect_err(|err| {
-                warn!(
-                    self.log,
-                    "Failed to get subnet splitting status at registry version {version}: {err}"
-                )
-            })
-            .ok()?;
-
-            match subnet_splitting_status {
-                subnet_splitting::Status::NotScheduled => return Some(version),
-                subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
-                    info!(
-                        every_n_seconds => 30,
+            ) {
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => 5,
                         self.log,
-                        "Subnet splitting scheduled at registry version {scheduled_at} \
-                        and height {next_summary_block_height}. Freezing registry version."
+                        "Failed to get subnet splitting status at registry version {version}: {err}"
                     );
 
+                    // If we can't get the status, we continue trying a lower version. After having
+                    // tried all of them, we will return the parent's version, if available. If the
+                    // failure is replicated across all nodes, this will cause the subnet to stay
+                    // stuck at a registry version until the failure is resolved.
+                }
+                Ok(subnet_splitting::Status::NotScheduled) => {
+                    return Some(version);
+                }
+                Ok(subnet_splitting::Status::Scheduled { scheduled_at, .. }) => {
                     // Bump the registry version to the scheduled version of the split right when
                     // we reach the height of the next summary block.
                     if parents_height.increment() == next_summary_block_height {
@@ -584,6 +585,12 @@ impl BlockMaker {
                     // *does not* contain the scheduled split. I.e., we "freeze" the registry
                     // version at the last version that does not contain the split, until we reach
                     // the next summary block.
+                    info!(
+                        every_n_seconds => 5,
+                        self.log,
+                        "Subnet splitting scheduled at registry version {scheduled_at} \
+                        and height {next_summary_block_height}. Freezing registry version."
+                    );
                 }
             }
         }
@@ -1319,6 +1326,13 @@ mod tests {
                     .unwrap(),
                 RegistryVersion::from(2)
             );
+            // Now let's test that we do not propose a block if the parent's version is higher than
+            // our current latest version
+            parent.context.registry_version = RegistryVersion::from(5);
+            assert_eq!(
+                block_maker.get_stable_registry_version(&parent, &last_summary),
+                None
+            );
         })
     }
 
@@ -1438,57 +1452,139 @@ mod tests {
     mod subnet_splitting {
         use super::*;
 
-        const MAX_REGISTRY_VERSION: u64 = 4;
+        const MAX_REGISTRY_VERSION: u64 = 10;
 
         #[derive(Debug)]
         struct TestCase {
             splitting_registry_version: Option<RegistryVersion>,
+            /// The registry version at which the subnet's CUP contents record is deleted, making
+            /// the subnet splitting status impossible to determine from that version onwards.
+            unreadable_registry_version: Option<RegistryVersion>,
             last_summary_block_registry_version: RegistryVersion,
-            next_summary_block_height: Height,
-            parent_height: Height,
+            is_summary_block: bool,
+            parent_registry_version: RegistryVersion,
             expected_stable_registry_version: RegistryVersion,
         }
 
         #[rstest]
         #[case::no_splitting(TestCase {
             splitting_registry_version: None,
+            unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
-            next_summary_block_height: Height::new(4),
-            parent_height: Height::new(1),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(1),
             expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
         })]
-        #[case::version_frozen_before_splitting(TestCase {
-            splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 1)),
+        #[case::no_splitting_summary(TestCase {
+            splitting_registry_version: None,
+            unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
-            next_summary_block_height: Height::new(4),
-            parent_height: Height::new(1),
-            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION - 2),
+            is_summary_block: true,
+            parent_registry_version: RegistryVersion::new(1),
+            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
         })]
-        #[case::version_frozen_before_splitting(TestCase {
-            splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 2)),
-            last_summary_block_registry_version: RegistryVersion::new(1),
-            next_summary_block_height: Height::new(4),
-            parent_height: Height::new(1),
-            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION - 3),
+        #[case::past_splitting_1(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(3)),
+            unreadable_registry_version: None,
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(5),
+            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
         })]
-        #[case::exact_version_during_splitting(TestCase {
-            splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 1)),
+        #[case::past_splitting_2(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(4)),
+            unreadable_registry_version: None,
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(4),
+            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
+        })]
+        #[case::past_splitting_summary(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(4)),
+            unreadable_registry_version: None,
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            is_summary_block: true,
+            parent_registry_version: RegistryVersion::new(5),
+            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
+        })]
+        #[case::version_frozen_before_splitting_1(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(4)),
+            unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
-            next_summary_block_height: Height::new(4),
-            parent_height: Height::new(3),
-            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION - 1),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(1),
+            expected_stable_registry_version: RegistryVersion::new(3),
+        })]
+        #[case::version_frozen_before_splitting_2(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(4)),
+            unreadable_registry_version: None,
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(3),
+            expected_stable_registry_version: RegistryVersion::new(3),
+        })]
+        #[case::exact_version_in_summary_during_splitting(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(4)),
+            unreadable_registry_version: None,
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            is_summary_block: true,
+            parent_registry_version: RegistryVersion::new(1),
+            expected_stable_registry_version: RegistryVersion::new(4),
+        })]
+        // If the subnet splitting status cannot be determined, we fall back to the parent's registry
+        // version, keeping the subnet running at a stuck version until the status is available
+        // again.
+        #[case::status_unavailable(TestCase {
+            splitting_registry_version: None,
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(1),
+            expected_stable_registry_version: RegistryVersion::new(4),
+        })]
+        // Should not happen in practice since the parent should not have been validated at a
+        // version that is unreadable by validators
+        #[case::status_unavailable_but_parent_has_it(TestCase {
+            splitting_registry_version: None,
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(6),
+            expected_stable_registry_version: RegistryVersion::new(6),
+        })]
+        #[case::status_unavailable_summary(TestCase {
+            splitting_registry_version: None,
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            is_summary_block: true,
+            parent_registry_version: RegistryVersion::new(3),
+            expected_stable_registry_version: RegistryVersion::new(4),
+        })]
+        #[case::status_unavailable_but_was_later_patched(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(6)),
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(4),
+            expected_stable_registry_version: RegistryVersion::new(4),
+        })]
+        #[case::status_unavailable_but_was_later_patched_summary(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(6)),
+            unreadable_registry_version: Some(RegistryVersion::new(5)),
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            is_summary_block: true,
+            parent_registry_version: RegistryVersion::new(4),
+            expected_stable_registry_version: RegistryVersion::new(6),
         })]
         fn test_stable_registry_version_with_subnet_splitting(#[case] test_case: TestCase) {
+            const DKG_INTERVAL_LENGTH: u64 = 4;
             const SOURCE_SUBNET_ID: SubnetId = SUBNET_0;
             const DESTINATION_SUBNET_ID: SubnetId = SUBNET_1;
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                let record = SubnetRecordBuilder::from(&[NODE_1])
-                    .with_dkg_interval_length(4)
-                    .build();
                 let Dependencies {
                     registry,
                     crypto,
-                    pool,
+                    mut pool,
                     time_source,
                     replica_config,
                     state_manager,
@@ -1499,7 +1595,16 @@ mod tests {
                 } = dependencies_with_subnet_params(
                     pool_config,
                     SOURCE_SUBNET_ID,
-                    vec![(1, record.clone())],
+                    (1..=MAX_REGISTRY_VERSION)
+                        .map(|version| {
+                            (
+                                version,
+                                SubnetRecordBuilder::from(&[NODE_1])
+                                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                    .build(),
+                            )
+                        })
+                        .collect(),
                 );
 
                 let mut payload_builder = MockPayloadBuilder::new();
@@ -1527,14 +1632,6 @@ mod tests {
                     no_op_logger(),
                 );
 
-                for version in 2..=MAX_REGISTRY_VERSION {
-                    add_subnet_record(
-                        &registry_data_provider,
-                        version,
-                        SOURCE_SUBNET_ID,
-                        record.clone(),
-                    );
-                }
                 if let Some(splitting_registry_version) = test_case.splitting_registry_version {
                     registry_data_provider
                         .add(
@@ -1551,26 +1648,31 @@ mod tests {
                         )
                         .unwrap();
                 }
+                if let Some(unreadable_registry_version) = test_case.unreadable_registry_version {
+                    // Delete the CUP contents record, so that the subnet splitting status can no
+                    // longer be determined at this version.
+                    registry_data_provider
+                        .add::<CatchUpPackageContents>(
+                            &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
+                            unreadable_registry_version,
+                            None,
+                        )
+                        .unwrap();
+                }
 
-                registry.update_to_latest_version();
+                registry.reload();
 
+                if test_case.is_summary_block {
+                    pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+                    assert!(pool.make_next_block().content.as_ref().payload.is_summary());
+                } else {
+                    assert!(!pool.make_next_block().content.as_ref().payload.is_summary());
+                }
                 let mut parent = pool.get_cache().finalized_block();
-                parent.height = test_case.parent_height;
-                parent.context.registry_version = RegistryVersion::from(1);
+                parent.context.registry_version = test_case.parent_registry_version;
                 let mut last_summary = pool.get_cache().summary_block();
                 last_summary.context.registry_version =
                     test_case.last_summary_block_registry_version;
-                let mut summary_payload = last_summary.payload.as_ref().as_summary().clone();
-                // Set the interval length such that the next summary block is created at
-                // `test_case.next_summary_block_height`.
-                summary_payload.dkg.interval_length = test_case
-                    .next_summary_block_height
-                    .saturating_sub(&summary_payload.dkg.height)
-                    - Height::from(1);
-                last_summary.payload = Payload::new(
-                    ic_types::crypto::crypto_hash,
-                    BlockPayload::Summary(summary_payload),
-                );
 
                 assert_eq!(
                     block_maker

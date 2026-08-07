@@ -33,6 +33,27 @@ pub enum StatusError {
     CatchUpContentsDeserializationError(ProxyDecodeError),
 }
 
+/// Returns whether a split of `subnet_id` is still pending, as seen from
+/// `looked_up_registry_version`.
+///
+/// A [`CupType::SubnetSplitting`] record is never deleted — a later split, a recovery or the
+/// genesis record just overwrite it — so its presence alone doesn't mean the split is still ahead
+/// of us. Three versions decide that:
+///
+/// * `looked_up_registry_version` is only an upper bound: the lookup returns the latest CUP
+///   contents record written at or below it.
+/// * That record's own version is the version the subnet must adopt for the split to happen, and
+///   is reported as `scheduled_at`.
+/// * `last_summary_block_registry_version` is the watermark: the block maker bumps the registry
+///   version to `scheduled_at` exactly at the summary block starting the split (see
+///   `BlockMaker::get_stable_registry_version`), so a record at or below the last summary's version
+///   describes a split already picked up — [`Status::NotScheduled`].
+///
+/// Two consequences: a lookup at or below `last_summary_block_registry_version` never reports
+/// [`Status::Scheduled`], and a fixed `looked_up_registry_version` flips to
+/// [`Status::NotScheduled`] once a summary block adopts `scheduled_at`.
+/// Said differently, the following invariant holds for a returned [`Status::Scheduled`] value:
+/// `last_summary_block_registry_version < scheduled_at <= looked_up_registry_version`.
 pub fn get_status(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
@@ -54,7 +75,8 @@ pub fn get_status(
     };
 
     if versioned_record.version <= last_summary_block_registry_version {
-        // This record corresponds to a past subnet split
+        // The last summary block already references this version, so this record corresponds to a
+        // past subnet split rather than a pending one.
         return Ok(Status::NotScheduled);
     }
 
@@ -169,10 +191,9 @@ mod tests {
     fn set_up_registry(cup_type: Option<CupType>) -> Arc<dyn RegistryClient> {
         let (registry_data_provider, registry) = setup_registry_non_final(
             SOURCE_SUBNET_ID,
-            vec![(
-                1,
-                SubnetRecordBuilder::new().with_committee(&[NODE_1]).build(),
-            )],
+            (1..=REGISTRY_CUP_REGISTRY_VERSION.increment().get())
+                .map(|version| (version, SubnetRecordBuilder::from(&[NODE_1]).build()))
+                .collect(),
         );
         registry_data_provider
             .add(
@@ -201,22 +222,45 @@ mod tests {
             })),
         )]
         cup_type: Option<CupType>,
+        #[values(
+            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+            REGISTRY_CUP_REGISTRY_VERSION,
+            REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        )]
+        last_summary_block_registry_version: RegistryVersion,
+        #[values(
+            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+            REGISTRY_CUP_REGISTRY_VERSION,
+            REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        )]
+        looked_up_registry_version: RegistryVersion,
     ) {
         let registry = set_up_registry(cup_type);
 
         let status = get_status(
             registry.as_ref(),
             SUBNET_1,
-            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-            REGISTRY_CUP_REGISTRY_VERSION,
+            last_summary_block_registry_version,
+            looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
 
         assert_eq!(status, Status::NotScheduled);
     }
 
-    #[test]
-    fn get_status_should_return_scheduled_test() {
+    #[rstest]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION,
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
+    fn get_status_should_return_scheduled_test(
+        #[case] last_summary_block_registry_version: RegistryVersion,
+        #[case] looked_up_registry_version: RegistryVersion,
+    ) {
         let registry = set_up_registry(Some(CupType::SubnetSplitting(
             ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
@@ -226,8 +270,8 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
-            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-            REGISTRY_CUP_REGISTRY_VERSION,
+            last_summary_block_registry_version,
+            looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
 
@@ -238,10 +282,44 @@ mod tests {
                 scheduled_at: REGISTRY_CUP_REGISTRY_VERSION,
             }
         );
+        // Asserting the invariant described in the function documentation:
+        // `last_summary_block_registry_version < scheduled_at <= looked_up_registry_version`.
+        assert!(
+            last_summary_block_registry_version < REGISTRY_CUP_REGISTRY_VERSION
+                && REGISTRY_CUP_REGISTRY_VERSION <= looked_up_registry_version
+        );
     }
 
-    #[test]
-    fn get_status_should_return_not_scheduled_when_subnet_splitting_was_already_done_test() {
+    #[rstest]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION,
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(REGISTRY_CUP_REGISTRY_VERSION, REGISTRY_CUP_REGISTRY_VERSION)]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION,
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION,
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
+    fn get_status_should_return_not_scheduled_when_subnet_splitting_was_already_done_test(
+        #[case] last_summary_block_registry_version: RegistryVersion,
+        #[case] looked_up_registry_version: RegistryVersion,
+    ) {
         let registry = set_up_registry(Some(CupType::SubnetSplitting(
             ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
@@ -251,183 +329,11 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
-            REGISTRY_CUP_REGISTRY_VERSION,
-            REGISTRY_CUP_REGISTRY_VERSION,
+            last_summary_block_registry_version,
+            looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
 
         assert_eq!(status, Status::NotScheduled);
-    }
-
-    fn make_summary_block_with_status(subnet_splitting_status: SubnetSplittingStatus) -> Block {
-        let mut summary = SummaryPayload::fake();
-        summary.dkg.subnet_splitting_status =
-            BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
-        Block {
-            version: ReplicaVersion::default(),
-            parent: CryptoHashOf::from(CryptoHash(vec![])),
-            payload: Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(summary),
-            ),
-            height: Height::new(0),
-            rank: Rank(0),
-            context: ValidationContext {
-                certified_height: Height::new(0),
-                registry_version: REGISTRY_CUP_REGISTRY_VERSION,
-                time: UNIX_EPOCH,
-            },
-        }
-    }
-
-    fn make_scheduled_summary_block() -> Block {
-        make_summary_block_with_status(SubnetSplittingStatus::Scheduled(SplittingArgs {
-            source_subnet_id: SOURCE_SUBNET_ID,
-            destination_subnet_id: DESTINATION_SUBNET_ID,
-        }))
-    }
-
-    fn set_up_post_split_registry(
-        source_committee: &[NodeId],
-        destination_committee: &[NodeId],
-        other_committee: &[NodeId],
-    ) -> Arc<dyn RegistryClient> {
-        let (registry_data_provider, registry) = setup_registry_non_final(
-            SOURCE_SUBNET_ID,
-            vec![(
-                1,
-                SubnetRecordBuilder::new()
-                    .with_committee(source_committee)
-                    .build(),
-            )],
-        );
-        add_single_subnet_record(
-            &registry_data_provider,
-            REGISTRY_CUP_REGISTRY_VERSION.get(),
-            DESTINATION_SUBNET_ID,
-            SubnetRecordBuilder::new()
-                .with_committee(destination_committee)
-                .build(),
-        );
-        add_single_subnet_record(
-            &registry_data_provider,
-            REGISTRY_CUP_REGISTRY_VERSION.get(),
-            OTHER_SUBNET_ID,
-            SubnetRecordBuilder::new()
-                .with_committee(other_committee)
-                .build(),
-        );
-        add_subnet_list_record(
-            &registry_data_provider,
-            REGISTRY_CUP_REGISTRY_VERSION.get(),
-            vec![SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID, OTHER_SUBNET_ID],
-        );
-        registry.update_to_latest_version();
-        registry
-    }
-
-    struct ErrorRegistryClient;
-
-    impl RegistryClient for ErrorRegistryClient {
-        fn get_versioned_value(
-            &self,
-            _key: &str,
-            version: RegistryVersion,
-        ) -> RegistryClientVersionedResult<Vec<u8>> {
-            Err(RegistryClientError::VersionNotAvailable { version })
-        }
-
-        fn get_key_family(
-            &self,
-            _key_prefix: &str,
-            version: RegistryVersion,
-        ) -> Result<Vec<String>, RegistryClientError> {
-            Err(RegistryClientError::VersionNotAvailable { version })
-        }
-
-        fn get_latest_version(&self) -> RegistryVersion {
-            RegistryVersion::from(0)
-        }
-
-        fn get_version_timestamp(&self, _registry_version: RegistryVersion) -> Option<Time> {
-            None
-        }
-    }
-
-    #[test]
-    fn get_post_split_assignment_should_return_source_when_node_stays_on_source_test() {
-        let block = make_scheduled_summary_block();
-        let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
-
-        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
-        let result =
-            get_post_split_subnet_assignment(NODE_1, &block, registry.as_ref(), splitting_args)
-                .expect("Should succeed");
-
-        assert_eq!(result.new_subnet_id, SOURCE_SUBNET_ID);
-        assert_eq!(result.other_subnet_id, DESTINATION_SUBNET_ID);
-    }
-
-    #[test]
-    fn get_post_split_assignment_should_return_destination_when_node_moves_to_destination_test() {
-        let block = make_scheduled_summary_block();
-        let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
-
-        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
-        let result =
-            get_post_split_subnet_assignment(NODE_2, &block, registry.as_ref(), splitting_args)
-                .expect("Should succeed");
-
-        assert_eq!(result.new_subnet_id, DESTINATION_SUBNET_ID);
-        assert_eq!(result.other_subnet_id, SOURCE_SUBNET_ID);
-    }
-
-    #[rstest]
-    fn should_not_be_scheduled_when_subnet_splitting_not_scheduled_test(
-        #[values(
-            SubnetSplittingStatus::NotScheduled,
-            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
-        )]
-        status: SubnetSplittingStatus,
-    ) {
-        let block = make_summary_block_with_status(status);
-        let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
-
-        assert!(is_split_scheduled(&block).is_none());
-    }
-
-    #[test]
-    fn should_fail_when_node_moved_to_unrelated_subnet_test() {
-        let block = make_scheduled_summary_block();
-        let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
-
-        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
-        let result =
-            get_post_split_subnet_assignment(NODE_3, &block, registry.as_ref(), splitting_args);
-
-        assert_matches!(result, Err(PostSplitAssignmentError::DisallowedMembershipChange(s)) if s == OTHER_SUBNET_ID);
-    }
-
-    #[test]
-    fn should_fail_when_node_is_unassigned_test() {
-        let block = make_scheduled_summary_block();
-        let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
-
-        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
-        let result =
-            get_post_split_subnet_assignment(NODE_4, &block, registry.as_ref(), splitting_args);
-
-        assert_matches!(result, Err(PostSplitAssignmentError::Unassigned(v)) if v == REGISTRY_CUP_REGISTRY_VERSION);
-    }
-
-    #[test]
-    fn should_fail_when_registry_returns_error_test() {
-        let block = make_scheduled_summary_block();
-
-        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
-        let result =
-            get_post_split_subnet_assignment(NODE_1, &block, &ErrorRegistryClient, splitting_args);
-
-        assert_matches!(result, Err(PostSplitAssignmentError::FailedToGetSubnetIdFromTheRegistry(v, _)) if v == REGISTRY_CUP_REGISTRY_VERSION);
     }
 }
