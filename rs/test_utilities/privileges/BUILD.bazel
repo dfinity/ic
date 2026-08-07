@@ -25,5 +25,6 @@ rust_test(
         # Keep sorted.
         ":privileges",
         "@crate_index//:tempfile",
+        "@crate_index//:tokio",
     ],
 )

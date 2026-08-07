@@ -45,11 +45,14 @@ pub fn enforce_file_permissions(attr: TokenStream, item: TokenStream) -> TokenSt
         return Error::new_spanned(
             asyncness,
             "#[enforce_file_permissions] does not support async functions: capabilities \
-             are a per-thread property, so a future resumed on another runtime worker \
-             thread would still hold CAP_DAC_OVERRIDE. Wrap the blocking assertion in \
-             `ic_test_utilities_privileges::run_with_file_permissions_enforced` instead, \
-             or place this attribute above `#[tokio::test]` (whose default current_thread \
-             flavour polls on the calling thread)",
+             are a per-thread property, and there is no synchronous scope to drop them \
+             for. Put this attribute *below* `#[tokio::test]` instead — attribute macros \
+             expand top-down, so `#[tokio::test]` then expands first and this one wraps \
+             the synchronous `block_on` wrapper it produces (which also builds the \
+             runtime inside the guarded scope, so its worker threads inherit the drop). \
+             Alternatively call \
+             `ic_test_utilities_privileges::run_with_file_permissions_enforced` directly \
+             around the blocking assertion",
         )
         .to_compile_error()
         .into();

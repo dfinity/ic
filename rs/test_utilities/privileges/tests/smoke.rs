@@ -255,3 +255,40 @@ mod attribute_form {
         Ok(())
     }
 }
+
+/// The attribute rejects `async fn`, and its error message tells the reader to
+/// place it *below* `#[tokio::test]` instead. Attribute macros expand top-down,
+/// so that ordering — and only that ordering — lets `#[tokio::test]` expand
+/// first and produce the synchronous `block_on` wrapper that this attribute can
+/// then wrap. Getting it backwards reproduces the very error the message is
+/// trying to help the reader escape, so the advice is pinned here rather than
+/// left to prose.
+mod below_tokio_test {
+    use super::*;
+
+    #[tokio::test]
+    #[ic_test_utilities_privileges::enforce_file_permissions]
+    async fn should_enforce_permissions_across_await_points() {
+        assert!(!bypasses_file_permissions());
+
+        let (_dir, path) = file_with_mode(0o400);
+        tokio::task::yield_now().await;
+
+        let err = std::fs::write(&path, b"after").expect_err("write should be denied");
+        assert_eq!(err.kind(), ErrorKind::PermissionDenied);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ic_test_utilities_privileges::enforce_file_permissions]
+    async fn should_enforce_permissions_in_spawned_tasks() {
+        // The runtime is built by the wrapper `#[tokio::test]` generates, which
+        // this attribute wraps — so it is constructed inside the guarded scope
+        // and its worker threads inherit the drop, multi-threaded flavour and
+        // all.
+        let bypasses_in_task = tokio::spawn(async { bypasses_file_permissions() })
+            .await
+            .expect("the spawned task panicked");
+
+        assert!(!bypasses_in_task);
+    }
+}

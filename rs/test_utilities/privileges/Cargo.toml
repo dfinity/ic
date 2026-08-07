@@ -11,3 +11,6 @@ ic-test-utilities-privileges-macros = { path = "macros" }
 libc = { workspace = true }
 static_assertions = { workspace = true }
 tempfile = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
