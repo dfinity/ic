@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use url::Url;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
-const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
+const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(4 * 1024 * 1024); // 4GiB
 const DEFAULT_VM_RESOURCES: VmResources = VmResources {
     vcpus: DEFAULT_VCPUS_PER_VM,
     memory_kibibytes: DEFAULT_MEMORY_KIB_PER_VM,
