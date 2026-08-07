@@ -381,16 +381,28 @@ impl BlockMaker {
                         pool,
                         &self.log,
                     )? {
-                        // Don't propose any block if the replica is halted.
                         Status::Halted => {
+                            info!(
+                              every_n_seconds => 30,
+                              self.log,
+                              "Not proposing any block at height {height} \
+                              because the replica is halted"
+                            );
                             return None;
                         }
-                        // Use empty payload and empty DKG dealings if the replica is halting.
-                        Status::Halting => (
-                            BatchPayload::default(),
-                            DkgDataPayload::new_empty(dkg.start_height),
-                            /*idkg_data=*/ None,
-                        ),
+                        Status::Halting => {
+                            info!(
+                              every_n_seconds => 30,
+                              self.log,
+                              "Proposing an empty block at height {height} \
+                              because the replica is halting"
+                            );
+                            (
+                                BatchPayload::default(),
+                                DkgDataPayload::new_empty(dkg.start_height),
+                                /*idkg_data=*/ None,
+                            )
+                        }
                         Status::Running => {
                             let batch_payload = self.build_batch_payload(
                                 pool,

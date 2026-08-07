@@ -283,6 +283,7 @@ mod tests {
         },
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         messages::CallbackId,
+        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
     use std::{
@@ -357,6 +358,9 @@ mod tests {
             // This will be a summary block, since we are at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
             let summary = block.payload.as_ref();
+            let last_summary_block = PoolReader::new(&pool)
+                .dkg_summary_block(&parent_block)
+                .unwrap();
 
             let last_summary_block = PoolReader::new(&pool)
                 .dkg_summary_block(&parent_block)
@@ -792,6 +796,8 @@ mod tests {
                 crypto.clone(),
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry.clone(),
+                ReplicaConfig { node_id, subnet_id },
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(

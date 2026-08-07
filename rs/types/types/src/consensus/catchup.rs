@@ -401,6 +401,47 @@ impl SignedBytesWithoutDomainSeparator for CatchUpContentProtobufBytes {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub enum RegistryCupType {
+    Genesis,
+    Recovery,
+    SubnetSplitting,
+}
+
+impl From<&subnet_pb::CatchUpPackageContents> for RegistryCupType {
+    fn from(value: &subnet_pb::CatchUpPackageContents) -> Self {
+        match value.cup_type {
+            Some(subnet_pb::catch_up_package_contents::CupType::Genesis(..)) => {
+                RegistryCupType::Genesis
+            }
+            Some(subnet_pb::catch_up_package_contents::CupType::Recovery(..)) => {
+                RegistryCupType::Recovery
+            }
+            Some(subnet_pb::catch_up_package_contents::CupType::SubnetSplitting(..)) => {
+                RegistryCupType::SubnetSplitting
+            }
+            None => {
+                if value.state_hash.is_empty() {
+                    RegistryCupType::Genesis
+                } else {
+                    RegistryCupType::Recovery
+                }
+            }
+        }
+    }
+}
+
+pub struct RegistryCUP {
+    pub cup: CatchUpPackage,
+    pub cup_type: RegistryCupType,
+}
+
+impl From<RegistryCUP> for pb::CatchUpPackage {
+    fn from(RegistryCUP { cup, cup_type: _ }: RegistryCUP) -> Self {
+        cup.into()
+    }
+}
+
 pub struct SubnetSplittingArgs {
     pub destination_subnet_id: SubnetId,
 }

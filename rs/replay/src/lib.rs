@@ -268,7 +268,8 @@ fn cmd_get_recovery_cup(
         registry_version,
         &player.log,
     )
-    .ok_or_else(|| "couldn't create a registry CUP".to_string())?;
+    .map_err(|err| format!("couldn't create a registry CUP: {err}"))?
+    .cup;
 
     println!(
         "height: {}, time: {}, state_hash: {:?}",

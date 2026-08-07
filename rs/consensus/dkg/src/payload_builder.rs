@@ -6,7 +6,7 @@ use crate::{
     },
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader, subnet_splitting};
 use ic_interfaces::{
     crypto::{ErrorReproducibility, NiDkgAlgorithm},
     dkg::DkgPool,
@@ -28,7 +28,7 @@ use ic_types::{
         Block,
         dkg::{
             DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary, Message,
-            RemoteTranscriptResult,
+            PostSplitArgs, RemoteTranscriptResult, SplittingArgs, SubnetSplittingStatus,
         },
         get_faults_tolerated,
     },
@@ -526,6 +526,24 @@ pub(super) fn create_summary_payload(
         subnet_id,
     )?;
 
+    let subnet_splitting_status = match subnet_splitting::get_status(
+        registry_client,
+        subnet_id,
+        registry_version,
+        validation_context.registry_version,
+    )
+    .map_err(|err| DkgPayloadCreationError::SubnetSplittingStatusError(err.to_string()))?
+    {
+        subnet_splitting::Status::NotScheduled => SubnetSplittingStatus::NotScheduled,
+        subnet_splitting::Status::Scheduled {
+            destination_subnet_id,
+            scheduled_at: _,
+        } => SubnetSplittingStatus::Scheduled(SplittingArgs {
+            destination_subnet_id,
+            source_subnet_id: subnet_id,
+        }),
+    };
+
     // New configs are created using the new stable registry version proposed by this
     // block, which determines receivers of the dealings.
     let local_configs = get_configs_for_local_transcripts(
@@ -550,6 +568,7 @@ pub(super) fn create_summary_payload(
         next_interval_length,
         height,
         remote_dkg_attempts,
+        subnet_splitting_status,
     ))
 }
 
@@ -576,6 +595,22 @@ pub fn get_dkg_summary_from_cup_contents(
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
+) -> Result<DkgSummary, String> {
+    get_dkg_summary_from_cup_contents_with_subnet_splitting(
+        cup_contents,
+        subnet_id,
+        registry,
+        registry_version,
+        SubnetSplittingStatus::default(),
+    )
+}
+
+fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
+    cup_contents: CatchUpPackageContents,
+    subnet_id: SubnetId,
+    registry: &dyn RegistryClient,
+    registry_version: RegistryVersion,
+    subnet_splitting_status: SubnetSplittingStatus,
 ) -> Result<DkgSummary, String> {
     // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
     // NNS we're recovering.
@@ -677,6 +712,7 @@ pub fn get_dkg_summary_from_cup_contents(
         next_interval_length,
         height,
         BTreeMap::new(), // remote_dkg_attempts
+        subnet_splitting_status,
     ))
 }
 
@@ -868,6 +904,40 @@ pub(crate) fn create_remote_dkg_config(
         registry_version: *registry_version,
         resharing_transcript,
     })
+}
+
+/// Creates a DKG summary for the summary block right after the subnet has been split.
+pub fn get_post_split_dkg_summary(
+    new_subnet_id: SubnetId,
+    registry: &dyn RegistryClient,
+    last_summary_block: &Block,
+) -> Result<DkgSummary, String> {
+    let last_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
+    debug_assert!(matches!(
+        last_summary.subnet_splitting_status(),
+        SubnetSplittingStatus::Scheduled(..)
+    ));
+    let registry_version = last_summary_block.context.registry_version;
+
+    let mut cup_contents = registry
+        .get_cup_contents(new_subnet_id, registry_version)
+        .map_err(|err| {
+            format!("Failed to get the cup contents at registry version {registry_version}: {err}")
+        })?
+        .value
+        .ok_or_else(|| format!("Empty cup contents at registry version {registry_version}"))?;
+
+    // During subnet splitting we skip one DKG interval
+    cup_contents.height = last_summary.get_next_start_height().get();
+
+    get_dkg_summary_from_cup_contents_with_subnet_splitting(
+        cup_contents,
+        new_subnet_id,
+        registry,
+        registry_version,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }),
+    )
+    .map_err(|err| format!("Failed to create post-split dkg summary from contents: {err}"))
 }
 
 #[cfg(test)]
