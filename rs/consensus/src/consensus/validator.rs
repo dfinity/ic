@@ -2244,7 +2244,7 @@ pub mod test {
         let expected_oldest_registry_version = RegistryVersion::from(2);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dependencies = DependenciesBuilder::new(pool_config, 4)
-                .with_dkg_interval_length(9)
+                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                 .without_mocked_state_manager()
                 .build();
             let validator = make_validator(&dependencies);
@@ -2810,7 +2810,6 @@ pub mod test {
     #[test]
     fn test_summary_block_is_validated_while_halted() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let dkg_interval_length = 9;
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let dependencies = DependenciesBuilder::single_subnet(
                 pool_config,
@@ -2822,7 +2821,7 @@ pub mod test {
                         .build(),
                 )],
             )
-            .with_dkg_interval_length(dkg_interval_length)
+            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
             .build();
             let validator = make_validator(&dependencies);
             let Dependencies {
@@ -2850,7 +2849,7 @@ pub mod test {
 
             // Advance to the block right before the *next* summary height and build the summary
             // block proposal at the DKG boundary.
-            pool.advance_round_normal_operation_n(dkg_interval_length);
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
             let summary_proposal = pool.make_next_block();
             assert!(
                 summary_proposal.content.as_ref().payload.is_summary(),
@@ -3337,20 +3336,19 @@ pub mod test {
         const UNREADABLE_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let dependencies = DependenciesBuilder::new(pool_config, 4)
-                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                .build();
-            let validator = make_validator(&dependencies);
-            let Dependencies {
-                payload_builder,
-                state_manager,
-                registry_data_provider,
-                registry,
-                pool,
-                time_source,
-                replica_config,
-                ..
-            } = dependencies;
+            let (
+                validator,
+                Dependencies {
+                    payload_builder,
+                    state_manager,
+                    registry_data_provider,
+                    registry,
+                    pool,
+                    time_source,
+                    replica_config,
+                    ..
+                },
+            ) = make_default_validator_and_deps(pool_config);
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -4455,7 +4453,6 @@ pub mod test {
     fn test_cannot_disqualify_with_proposal_from_different_version() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let dkg_interval = 9;
             let dependencies = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
@@ -4469,7 +4466,7 @@ pub mod test {
                     ),
                 ],
             )
-            .with_dkg_interval_length(9)
+            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
             .build();
             let validator = make_validator(&dependencies);
             let Dependencies {
@@ -4479,7 +4476,7 @@ pub mod test {
             } = dependencies;
 
             // Move to the end of the DKG interval where we switch versions
-            pool.advance_round_normal_operation_n(dkg_interval + 1);
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH + 1);
             assert!(pool.get_cache().finalized_block().payload.is_summary());
 
             // An empty block created before the update
@@ -4510,7 +4507,7 @@ pub mod test {
     fn test_ignore_disqualified_ranks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dependencies = DependenciesBuilder::new(pool_config, 7)
-                .with_dkg_interval_length(9)
+                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                 .build();
             let validator = make_validator(&dependencies);
             let Dependencies {
@@ -4755,7 +4752,7 @@ pub mod test {
                     subnet_test_id(0),
                     vec![(1, SubnetRecordBuilder::from(&[NODE_1, NODE_2]).build())],
                 )
-                .with_dkg_interval_length(9)
+                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                 .build();
                 let mut validator = make_validator(&dependencies);
                 let Dependencies {
