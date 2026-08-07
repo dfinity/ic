@@ -72,7 +72,7 @@ mod imp {
     /// The `libc` crate does not expose the capability get/set structs, so
     /// declare them here to match the kernel's stable `capget(2)`/`capset(2)`
     /// ABI for `_LINUX_CAPABILITY_VERSION_3`: a header plus an array of two
-    /// 32-bit data words (covering capabilities 0..64).
+    /// 32-bit data words (covering capability numbers 0 to 63).
     ///
     /// `pid: 0` designates the *calling thread*. Capabilities are a per-thread
     /// property, and `capset` compares a non-zero `pid` against the caller's
@@ -121,12 +121,12 @@ mod imp {
         Ok(data)
     }
 
-    /// Sets the calling thread's *effective* capability word for capabilities
-    /// 0..32.
+    /// Sets the calling thread's *effective* capability word for capability
+    /// numbers 0 to 31.
     ///
     /// `capset` always writes all three sets at once, so the current ones are
     /// read back first and the permitted and inheritable sets — and the second
-    /// data word, for capabilities 32..64 — are handed back verbatim. Leaving
+    /// data word, for capability numbers 32 to 63 — are handed back verbatim. Leaving
     /// the permitted set alone is what makes restoring infallible: the kernel
     /// only requires `effective ⊆ permitted`, so re-raising a capability that
     /// was effective a moment ago is always accepted.
