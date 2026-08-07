@@ -339,9 +339,36 @@ mod tests {
 
         assert_matches!(
             validate_all_subnet_ranges(&tree, SUBNET_1, &[1, 2, 3], &ranges),
-            Err(DelegationValidationError::UnexpectedTreeShape(_)),
-            "validating a delegation without a public key for the subnet should fail with \
-             UnexpectedTreeShape"
+            Err(DelegationValidationError::UnexpectedTreeShape(err)) if err.contains("public_key leaf"),
+            "a delegation without a public key for the subnet should fail with UnexpectedTreeShape"
+        );
+    }
+
+    /// A subtree where the `/subnet/<subnet_id>/public_key` leaf is expected is an error.
+    #[test]
+    fn delegation_with_subtree_instead_of_public_key_leaf_is_an_error() {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        let ranges = [range(10, 20)];
+        let tree = LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(&ranges),
+            ]),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => ranges_leaf(&ranges),
+                    Label::from("public_key") => LabeledTree::SubTree(flatmap![
+                        Label::from("unexpected") => LabeledTree::Leaf(public_key.clone()),
+                    ]),
+                ]),
+            ]),
+        ]);
+
+        assert_matches!(
+            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &ranges),
+            Err(DelegationValidationError::UnexpectedTreeShape(err)) if err.contains("unexpected subtree"),
+            "a subtree at /subnet/{subnet_id}/public_key (where a leaf is expected) should \
+             fail with UnexpectedTreeShape"
         );
     }
 
@@ -390,6 +417,59 @@ mod tests {
             "a delegation certifying no ranges should be valid if and only \
              if the state assigns no ranges to the subnet, but the state assigns \
              {state_ranges:?}"
+        );
+    }
+
+    /// A missing `/subnet/<subnet_id>/canister_ranges` leaf is an error.
+    #[test]
+    fn missing_flat_ranges_is_an_error() {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        let ranges = [range(10, 20)];
+        let tree = LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(&ranges),
+            ]),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("public_key") => LabeledTree::Leaf(public_key.clone()),
+                ]),
+            ]),
+        ]);
+
+        assert_matches!(
+            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &ranges),
+            Err(DelegationValidationError::UnexpectedTreeShape(err)) if err.contains("canister_ranges leaf"),
+            "a delegation without flat canister ranges should fail with UnexpectedTreeShape"
+        );
+    }
+
+    /// A subtree where the `/subnet/<subnet_id>/canister_ranges` leaf is expected is an
+    /// error.
+    #[test]
+    fn subtree_instead_of_flat_ranges_leaf_is_an_error() {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        let ranges = [range(10, 20)];
+        let tree = LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(&ranges),
+            ]),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                        Label::from("unexpected") => ranges_leaf(&ranges),
+                    ]),
+                    Label::from("public_key") => LabeledTree::Leaf(public_key.clone()),
+                ]),
+            ]),
+        ]);
+
+        assert_matches!(
+            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &ranges),
+            Err(DelegationValidationError::UnexpectedTreeShape(err)) if err.contains("unexpected subtree"),
+            "a subtree at /subnet/{subnet_id}/canister_ranges (where a leaf is expected) \
+             should fail with UnexpectedTreeShape"
         );
     }
 
