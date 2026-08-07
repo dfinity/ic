@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
