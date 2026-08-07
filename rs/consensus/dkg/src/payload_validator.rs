@@ -302,6 +302,7 @@ mod tests {
                 crypto,
                 mut pool,
                 registry,
+                replica_config,
                 state_manager,
                 dkg_pool,
                 ..
@@ -327,7 +328,7 @@ mod tests {
                 .unwrap();
             assert!(
                 validate_payload(
-                    subnet_test_id(0),
+                    replica_config.subnet_id,
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
@@ -355,7 +356,7 @@ mod tests {
                 .unwrap();
             assert!(
                 validate_payload(
-                    subnet_test_id(0),
+                    replica_config.subnet_id,
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),

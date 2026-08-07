@@ -883,7 +883,7 @@ mod tests {
                 registry.clone(),
                 membership,
                 Arc::clone(&crypto) as Arc<_>,
-                payload_builder.clone(),
+                payload_builder,
                 dkg_pool,
                 idkg_pool,
                 state_manager,
