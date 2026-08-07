@@ -511,11 +511,11 @@ mod tests {
                     vec![(
                         initial_registry_version,
                         SubnetRecordBuilder::from(&nodes)
+                            .with_dkg_interval_length(dkg_interval_len)
                             .with_chain_key_config(test_vet_key_config())
                             .build(),
                     )],
                 )
-                .with_dkg_interval_length(dkg_interval_len)
                 .build();
                 state_manager
                     .get_mut()
@@ -781,9 +781,13 @@ mod tests {
                 } = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_id,
-                    vec![(10, SubnetRecordBuilder::from(&node_ids).build())],
+                    vec![(
+                        10,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    )],
                 )
-                .with_dkg_interval_length(dkg_interval_length)
                 .without_mocked_state_manager()
                 .build();
 
@@ -942,9 +946,13 @@ mod tests {
             } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
-                vec![(10, SubnetRecordBuilder::from(&node_ids).build())],
+                vec![(
+                    10,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
             )
-            .with_dkg_interval_length(dkg_interval_length)
             .without_mocked_state_manager()
             .build();
 
@@ -1510,17 +1518,25 @@ mod tests {
                     let dependencies_1 = DependenciesBuilder::single_subnet(
                         pool_config_1,
                         subnet_id,
-                        vec![(10, SubnetRecordBuilder::from(&node_ids).build())],
+                        vec![(
+                            10,
+                            SubnetRecordBuilder::from(&node_ids)
+                                .with_dkg_interval_length(dkg_interval_length)
+                                .build(),
+                        )],
                     )
-                    .with_dkg_interval_length(dkg_interval_length)
                     .without_mocked_state_manager()
                     .build();
                     let dependencies_2 = DependenciesBuilder::single_subnet(
                         pool_config_2,
                         subnet_id,
-                        vec![(10, SubnetRecordBuilder::from(&node_ids).build())],
+                        vec![(
+                            10,
+                            SubnetRecordBuilder::from(&node_ids)
+                                .with_dkg_interval_length(dkg_interval_length)
+                                .build(),
+                        )],
                     )
-                    .with_dkg_interval_length(dkg_interval_length)
                     .without_mocked_state_manager()
                     .build();
 
@@ -1709,9 +1725,13 @@ mod tests {
         let mut deps = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
-            vec![(10, SubnetRecordBuilder::from(&node_ids).build())],
+            vec![(
+                10,
+                SubnetRecordBuilder::from(&node_ids)
+                    .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
+                    .build(),
+            )],
         )
-        .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
         .without_mocked_state_manager()
         .build();
 
@@ -2092,9 +2112,13 @@ mod tests {
                 let mut deps = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_id,
-                    vec![(10, SubnetRecordBuilder::from(&node_ids).build())],
+                    vec![(
+                        10,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    )],
                 )
-                .with_dkg_interval_length(dkg_interval_length)
                 .without_mocked_state_manager()
                 .build();
 
@@ -2216,6 +2240,7 @@ mod tests {
                 vec![(
                     10,
                     SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
                         .with_chain_key_config(ChainKeyConfig {
                             key_configs: vec![KeyConfig {
                                 key_id: MasterPublicKeyId::VetKd(key_id.clone()),
@@ -2229,7 +2254,6 @@ mod tests {
                         .build(),
                 )],
             )
-            .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
             .without_mocked_state_manager()
             .build();
 
@@ -2327,6 +2351,7 @@ mod tests {
                     vec![(
                         10,
                         SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
                             .with_chain_key_config(ChainKeyConfig {
                                 key_configs: vec![KeyConfig {
                                     key_id: MasterPublicKeyId::VetKd(key_id.clone()),
@@ -2340,7 +2365,6 @@ mod tests {
                             .build(),
                     )],
                 )
-                .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
                 .without_mocked_state_manager()
                 .build();
 
@@ -2554,11 +2578,11 @@ mod tests {
                 vec![(
                     5,
                     SubnetRecordBuilder::from(&committee1)
+                        .with_dkg_interval_length(dkg_interval_length)
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             )
-            .with_dkg_interval_length(dkg_interval_length)
             .build();
 
             // Get the latest summary block, which is the genesis block

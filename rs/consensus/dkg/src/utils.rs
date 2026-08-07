@@ -320,9 +320,13 @@ mod tests {
             let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
-                vec![(1, SubnetRecordBuilder::from(&nodes).build())],
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&nodes)
+                        .with_dkg_interval_length(dkg_interval_len)
+                        .build(),
+                )],
             )
-            .with_dkg_interval_length(dkg_interval_len)
             .build();
 
             pool.advance_round_normal_operation_n(dkg_interval_len);

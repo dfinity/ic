@@ -309,9 +309,13 @@ mod tests {
             } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
-                vec![(5, SubnetRecordBuilder::from(&committee).build())],
+                vec![(
+                    5,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
             )
-            .with_dkg_interval_length(dkg_interval_length)
             .build();
 
             let context = ValidationContext {
@@ -732,10 +736,11 @@ mod tests {
                 subnet_id,
                 vec![(
                     registry_version_start.get(),
-                    SubnetRecordBuilder::from(&committee).build(),
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
                 )],
             )
-            .with_dkg_interval_length(dkg_interval_length)
             .build();
             state_manager
                 .get_mut()
