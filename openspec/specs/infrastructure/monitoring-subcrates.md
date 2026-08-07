@@ -2,7 +2,7 @@
 
 ## Overview
 
-This specification covers the adapter metrics client/server/service crates and the tracing logging layer, which together provide the monitoring infrastructure for IC replica process adapters.
+This specification covers the adapter metrics client/server/service crates, the tracing logging layer, and the standalone metrics-proxy binary, which together provide the monitoring infrastructure for IC replica process adapters and IC-OS hosts.
 
 ---
 
@@ -220,3 +220,47 @@ enum InnerFormat {
     Json(fmt::format::Format<Json, UtcTime<Rfc3339>>),
 }
 ```
+
+---
+
+## Crate: `metrics-proxy`
+
+**Path:** `rs/monitoring/metrics_proxy`
+
+### Purpose
+
+A standalone HTTP/HTTPS reverse proxy binary that sits in front of one or more Prometheus-format metrics endpoints, filtering, caching, and re-serving their output. It is configured via a YAML file passed as the sole CLI argument.
+
+### Configuration (`config.rs`)
+
+- Each proxy entry (`HttpProxy`) has a `listen_on` (HTTP or HTTPS, the latter requiring a certificate and key file), a `connect_to` backend target, an optional label-based sample filter, and an optional response cache TTL.
+- HTTPS listeners load their certificate chain and private key via `rustls_pemfile`; missing files or an empty certificate chain are rejected with a typed `ListenOnParseError`.
+- An optional top-level `metrics` listener exposes the proxy's own OpenTelemetry/Prometheus instrumentation.
+
+### Proxying (`proxy.rs`)
+
+- Forwards requests to the configured backend using `reqwest`, relaying only a safe allow-list of client headers (e.g. `accept`) and stripping hop-by-hop headers (`keep-alive`, `transfer-encoding`, `te`, `connection`, `trailer`, `upgrade`, `proxy-authorization`, `proxy-authenticate`) and `content-length` from the backend response before returning it to the client.
+- Parses the backend's Prometheus text-format body and can filter samples down to a configured label allow-list before re-serializing the response.
+
+### Caching (`cache.rs`)
+
+- Provides a `tower` `Layer`/`Service` that coalesces concurrent identical backend fetches: the first caller acquires a write lock and performs the fetch while later concurrent callers await the same in-flight result rather than issuing duplicate backend requests.
+- Cached entries expire after a configurable TTL; samples are keyed by an `OrderedLabelSet` derived from each Prometheus sample's metric name and label set.
+
+### Serving (`server.rs`, `main.rs`)
+
+- `Server::from(HttpProxy)` builds one HTTP or HTTPS listener per configured proxy entry; `Server::for_service_metrics` builds the optional self-metrics listener.
+- `run()` installs the process-wide `rustls` crypto provider, builds an OpenTelemetry `SdkMeterProvider` backed by a `prometheus::Registry` when a `metrics` listener is configured, spawns one Tokio task per proxy/metrics server via a `JoinSet`, and awaits them all.
+
+#### Scenario: Backend response is proxied with hop-by-hop headers stripped
+- **WHEN** a client request is forwarded to the configured backend
+- **THEN** the backend's response headers are relayed to the client except for hop-by-hop headers and `content-length`
+
+#### Scenario: Concurrent requests during a cache miss are coalesced
+- **WHEN** multiple concurrent requests arrive for the same cache key while no cached entry exists
+- **THEN** only one backend fetch is issued, and all callers receive its result once it completes
+
+#### Scenario: HTTPS listener requires both certificate and key
+- **WHEN** a `listen_on` URL uses the `https` scheme
+- **AND** either `certificate_file` or `key_file` is missing
+- **THEN** configuration parsing fails with `ListenOnParseError::CertificateFileRequired` or `KeyFileRequired`
