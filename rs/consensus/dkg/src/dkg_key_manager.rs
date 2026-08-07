@@ -561,26 +561,15 @@ mod tests {
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
     #[test]
     fn test_transcripts_get_loaded_and_retained() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let nodes: Vec<_> = (0..1).map(node_test_id).collect();
                 let dkg_interval_len = 3;
-                let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
-                    pool_config,
-                    subnet_test_id(222),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&nodes)
-                            .with_dkg_interval_length(dkg_interval_len)
-                            .build(),
-                    )],
-                )
-                .build();
+                let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
+                    .with_dkg_interval_length(dkg_interval_len)
+                    .build();
                 let csp = Arc::new(CryptoReturningOk::default());
                 let mut key_manager = DkgKeyManager::new(
                     MetricsRegistry::new(),

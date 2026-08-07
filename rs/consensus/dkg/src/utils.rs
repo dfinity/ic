@@ -314,20 +314,11 @@ mod tests {
     #[test]
     fn test_get_dkg_dealings_included_and_excluded_by_transcript() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_id = subnet_test_id(1);
-            let nodes: Vec<_> = (0..4).map(node_test_id).collect();
+            let subnet_id = subnet_test_id(0);
             let dkg_interval_len = 10;
-            let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_id,
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&nodes)
-                        .with_dkg_interval_length(dkg_interval_len)
-                        .build(),
-                )],
-            )
-            .build();
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(dkg_interval_len)
+                .build();
 
             pool.advance_round_normal_operation_n(dkg_interval_len);
             let pool_reader = PoolReader::new(&pool);

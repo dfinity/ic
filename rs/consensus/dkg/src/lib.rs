@@ -768,28 +768,19 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             use ic_types::crypto::threshold_sig::ni_dkg::*;
             with_test_replica_logger(|logger| {
-                let node_ids = vec![node_test_id(0), node_test_id(1)];
                 let dkg_interval_length = 99;
-                let subnet_id = subnet_test_id(0);
                 let Dependencies {
                     mut pool,
                     crypto,
                     registry,
+                    replica_config,
                     state_manager,
                     dkg_pool,
                     ..
-                } = DependenciesBuilder::single_subnet(
-                    pool_config,
-                    subnet_id,
-                    vec![(
-                        10,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .build(),
-                    )],
-                )
-                .without_mocked_state_manager()
-                .build();
+                } = DependenciesBuilder::new(pool_config, 2)
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .without_mocked_state_manager()
+                    .build();
 
                 let target_id = NiDkgTargetId::new([0_u8; 32]);
                 complement_state_manager_with_setup_initial_dkg_request(
@@ -804,8 +795,8 @@ mod tests {
                 let dkg_key_manager =
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
-                    node_test_id(1),
-                    subnet_id,
+                    replica_config.node_id,
+                    replica_config.subnet_id,
                     registry.clone(),
                     state_manager.clone(),
                     crypto,
@@ -935,26 +926,16 @@ mod tests {
     fn test_config_generation_failures_are_added_to_data_blocks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             use ic_types::crypto::threshold_sig::ni_dkg::*;
-            let node_ids = vec![node_test_id(0), node_test_id(1)];
             let dkg_interval_length = 99;
-            let subnet_id = subnet_test_id(0);
             let Dependencies {
                 mut pool,
                 registry,
                 state_manager,
                 ..
-            } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_id,
-                vec![(
-                    10,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            )
-            .without_mocked_state_manager()
-            .build();
+            } = DependenciesBuilder::new(pool_config, 2)
+                .with_dkg_interval_length(dkg_interval_length)
+                .without_mocked_state_manager()
+                .build();
 
             let target_id = NiDkgTargetId::new([0_u8; 32]);
             complement_state_manager_with_setup_initial_dkg_request(
@@ -1510,35 +1491,17 @@ mod tests {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_2| {
                 use ic_types::crypto::threshold_sig::ni_dkg::*;
                 with_test_replica_logger(|logger| {
-                    let node_ids = vec![node_test_id(0), node_test_id(1)];
                     let dkg_interval_length = 99;
-                    let subnet_id = subnet_test_id(0);
 
                     // Set pool_1 and pool_2
-                    let dependencies_1 = DependenciesBuilder::single_subnet(
-                        pool_config_1,
-                        subnet_id,
-                        vec![(
-                            10,
-                            SubnetRecordBuilder::from(&node_ids)
-                                .with_dkg_interval_length(dkg_interval_length)
-                                .build(),
-                        )],
-                    )
-                    .without_mocked_state_manager()
-                    .build();
-                    let dependencies_2 = DependenciesBuilder::single_subnet(
-                        pool_config_2,
-                        subnet_id,
-                        vec![(
-                            10,
-                            SubnetRecordBuilder::from(&node_ids)
-                                .with_dkg_interval_length(dkg_interval_length)
-                                .build(),
-                        )],
-                    )
-                    .without_mocked_state_manager()
-                    .build();
+                    let dependencies_1 = DependenciesBuilder::new(pool_config_1, 2)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .without_mocked_state_manager()
+                        .build();
+                    let dependencies_2 = DependenciesBuilder::new(pool_config_2, 2)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .without_mocked_state_manager()
+                        .build();
 
                     // Return an empty call context when we create the first summary,
                     // so that we later test the case where remote dealing has a different
@@ -2104,23 +2067,13 @@ mod tests {
     fn test_remote_dealing_validation_is_deferred_until_context_exists() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let node_ids = vec![node_test_id(0), node_test_id(1)];
                 let dkg_interval_length = 99;
-                let subnet_id = subnet_test_id(0);
                 let target_id = NiDkgTargetId::new([9_u8; 32]);
 
-                let mut deps = DependenciesBuilder::single_subnet(
-                    pool_config,
-                    subnet_id,
-                    vec![(
-                        10,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .build(),
-                    )],
-                )
-                .without_mocked_state_manager()
-                .build();
+                let mut deps = DependenciesBuilder::new(pool_config, 2)
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .without_mocked_state_manager()
+                    .build();
 
                 // Start without context so remote dealing validation is deferred.
                 complement_state_manager_with_dkg_contexts(
@@ -2154,7 +2107,7 @@ mod tests {
                     DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), start_height);
                 let remote_dkg_id = NiDkgId {
                     start_block_height: start_height,
-                    dealer_subnet: subnet_id,
+                    dealer_subnet: deps.replica_config.subnet_id,
                     dkg_tag: NiDkgTag::LowThreshold,
                     target_subnet: NiDkgTargetSubnet::Remote(target_id),
                 };
@@ -2162,7 +2115,7 @@ mod tests {
                 let other_target_id = NiDkgTargetId::new([10_u8; 32]);
                 let deferred_remote_dkg_id = NiDkgId {
                     start_block_height: start_height,
-                    dealer_subnet: subnet_id,
+                    dealer_subnet: deps.replica_config.subnet_id,
                     dkg_tag: NiDkgTag::LowThreshold,
                     target_subnet: NiDkgTargetSubnet::Remote(other_target_id),
                 };
