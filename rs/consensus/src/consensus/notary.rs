@@ -400,7 +400,6 @@ mod tests {
     #[test]
     fn test_notary_behavior() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee = vec![node_test_id(0)];
             let dkg_interval_length = 30;
             let Dependencies {
                 mut pool,
@@ -410,17 +409,9 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            )
-            .build();
+            } = DependenciesBuilder::new(pool_config, 1)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -602,7 +593,6 @@ mod tests {
     #[test]
     fn test_out_of_sync_notarization() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee = vec![node_test_id(0)];
             let dkg_interval_length = 30;
             let Dependencies {
                 mut pool,
@@ -612,17 +602,9 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            )
-            .build();
+            } = DependenciesBuilder::new(pool_config, 1)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -679,23 +661,15 @@ mod tests {
                 unit_delay: Duration::from_secs(1),
                 initial_notary_delay: Duration::from_secs(0),
             };
-            let committee = (0..3).map(node_test_id).collect::<Vec<_>>();
-            /* use large enough DKG interval to trigger notarization/CUP gap limit */
-            let record = SubnetRecordBuilder::from(&committee)
-                .with_dkg_interval_length(ACCEPTABLE_NOTARIZATION_CUP_GAP + 30)
-                .build();
-
             let Dependencies {
                 mut pool,
                 state_manager,
                 membership,
                 ..
-            } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(1, record)],
-            )
-            .build();
+            } = DependenciesBuilder::new(pool_config, 3)
+                /* use large enough DKG interval to trigger notarization/CUP gap limit */
+                .with_dkg_interval_length(ACCEPTABLE_NOTARIZATION_CUP_GAP + 30)
+                .build();
             let last_cup_dkg_info = PoolReader::new(&pool)
                 .get_highest_catch_up_package()
                 .content
@@ -809,22 +783,14 @@ mod tests {
                 unit_delay: Duration::from_secs(1),
                 initial_notary_delay,
             };
-            let committee = (0..3).map(node_test_id).collect::<Vec<_>>();
-            let record = SubnetRecordBuilder::from(&committee)
-                .with_dkg_interval_length(dkg_interval)
-                .build();
-
             let Dependencies {
                 mut pool,
                 state_manager,
                 membership,
                 ..
-            } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(1, record)],
-            )
-            .build();
+            } = DependenciesBuilder::new(pool_config, 3)
+                .with_dkg_interval_length(dkg_interval)
+                .build();
 
             let certified_height = Arc::new(RwLock::new(Height::from(0)));
             let certified_height_clone = Arc::clone(&certified_height);
@@ -933,21 +899,16 @@ mod tests {
                 pool_config,
                 subnet_test_id(0),
                 vec![
-                    (
-                        1,
-                        SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(dkg_interval)
-                            .build(),
-                    ),
+                    (1, SubnetRecordBuilder::from(&committee).build()),
                     (
                         10,
                         SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(dkg_interval)
                             .with_replica_version("new_version")
                             .build(),
                     ),
                 ],
             )
+            .with_dkg_interval_length(dkg_interval)
             .build();
 
             let certified_height = Arc::new(RwLock::new(Height::from(0)));

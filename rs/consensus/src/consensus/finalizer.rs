@@ -361,19 +361,18 @@ mod tests {
                     (
                         1,
                         SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(dkg_interval_length)
                             .with_replica_version("1")
                             .build(),
                     ),
                     (
                         10,
                         SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(dkg_interval_length)
                             .with_replica_version("2")
                             .build(),
                     ),
                 ],
             )
+            .with_dkg_interval_length(dkg_interval_length)
             .build();
             let metrics_registry = MetricsRegistry::new();
             let message_routing = Arc::new(FakeMessageRouting::new());

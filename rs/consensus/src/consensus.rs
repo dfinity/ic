@@ -651,20 +651,12 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{CryptoHashOfState, Height, SubnetId, crypto::CryptoHash};
+    use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash};
     use std::sync::Arc;
 
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
         pool_config: ArtifactPoolConfig,
-    ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
-        set_up_consensus_with_subnet_record_and_subnet_id(record, pool_config, subnet_test_id(0))
-    }
-
-    fn set_up_consensus_with_subnet_record_and_subnet_id(
-        record: SubnetRecord,
-        pool_config: ArtifactPoolConfig,
-        subnet_id: SubnetId,
     ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
         let Dependencies {
             pool,
@@ -676,7 +668,8 @@ mod tests {
             dkg_pool,
             idkg_pool,
             ..
-        } = DependenciesBuilder::single_subnet(pool_config, subnet_id, vec![(1, record)]).build();
+        } = DependenciesBuilder::single_subnet(pool_config, subnet_test_id(0), vec![(1, record)])
+            .build();
         state_manager
             .get_mut()
             .expect_latest_certified_height()
