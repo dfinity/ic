@@ -1,5 +1,5 @@
 {
-  "checksum": "647170affacac693377b15401dd1ebc9e641c21437d8afe01196df78bff56371",
+  "checksum": "9bf700a58913118e76b809bdcbc1d2a4cda0c328ae5b83b9b15f74f7733ae498",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20432,7 +20432,7 @@
               "target": "ic_canister_log"
             },
             {
-              "id": "ic-canister-runtime 0.2.0",
+              "id": "ic-canister-runtime 0.2.3",
               "target": "ic_canister_runtime"
             },
             {
@@ -24778,7 +24778,7 @@
               "target": "evm_rpc_types"
             },
             {
-              "id": "ic-canister-runtime 0.2.0",
+              "id": "ic-canister-runtime 0.2.3",
               "target": "ic_canister_runtime"
             },
             {
@@ -33534,14 +33534,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-canister-runtime 0.2.0": {
+    "ic-canister-runtime 0.2.3": {
       "name": "ic-canister-runtime",
-      "version": "0.2.0",
+      "version": "0.2.3",
       "package_url": "https://github.com/dfinity/canhttp",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-canister-runtime/0.2.0/download",
-          "sha256": "03ed95be893b8d9b7309dcfd34aac7af9414f18ea8f14f71a065f89f5b94583c"
+          "url": "https://static.crates.io/crates/ic-canister-runtime/0.2.3/download",
+          "sha256": "da5bf7cb1426e5485da0e2b0b8da4f11b7b24a2a56cb127b53720ecf8495c2e0"
         }
       },
       "targets": [
@@ -33570,8 +33570,12 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.19.0",
+              "id": "ic-cdk 0.20.2",
               "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk-management-canister 0.1.1",
+              "target": "ic_cdk_management_canister"
             },
             {
               "id": "ic-error-types 0.2.0",
@@ -33598,7 +33602,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.0"
+        "version": "0.2.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -93653,7 +93657,7 @@
     "ic-bn-lib 0.5.0",
     "ic-btc-interface 0.4.0",
     "ic-canister-log 0.2.0",
-    "ic-canister-runtime 0.2.0",
+    "ic-canister-runtime 0.2.3",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.1.0",
     "ic-cdk 0.19.0",
