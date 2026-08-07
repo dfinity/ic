@@ -1,5 +1,5 @@
 [package]
-name = "ic-nns-delegation-manager-test-utils"
+name = "ic-nns-delegation-reader-test-utils"
 version.workspace = true
 authors.workspace = true
 description.workspace = true

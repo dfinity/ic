@@ -10448,6 +10448,7 @@ dependencies = [
  "ic-error-types 0.2.0",
  "ic-heap-bytes",
  "ic-management-canister-types-private",
+ "ic-nns-delegation-reader",
  "ic-protobuf",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
@@ -11738,7 +11739,6 @@ dependencies = [
  "assert_matches",
  "axum",
  "axum-server",
- "criterion",
  "futures",
  "hickory-resolver",
  "http-body-util",
@@ -11752,24 +11752,27 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
- "ic-nns-delegation-manager-test-utils",
+ "ic-nns-delegation-reader",
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
+ "ic-registry-routing-table",
  "ic-registry-subnet-type",
+ "ic-replicated-state",
  "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
- "pprof",
  "prometheus",
  "rand 0.8.6",
  "rcgen 0.13.2",
+ "rstest",
  "rustls 0.23.37",
- "serde",
  "serde_cbor",
  "slog",
  "tokio",
@@ -11780,7 +11783,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-nns-delegation-manager-test-utils"
+name = "ic-nns-delegation-reader"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "criterion",
+ "ic-canonical-state",
+ "ic-certification 0.9.0",
+ "ic-crypto-tree-hash",
+ "ic-logger",
+ "ic-nns-delegation-reader-test-utils",
+ "ic-registry-routing-table",
+ "ic-test-utilities-types",
+ "ic-types",
+ "pprof",
+ "rstest",
+ "serde",
+ "serde_cbor",
+ "slog",
+ "tokio",
+]
+
+[[package]]
+name = "ic-nns-delegation-reader-test-utils"
 version = "0.9.0"
 dependencies = [
  "ic-certification-test-utils",

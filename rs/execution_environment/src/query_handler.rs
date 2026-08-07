@@ -21,8 +21,9 @@ use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
-    TransformExecutionInput, TransformExecutionService,
+    CanisterRangesCheck, CanisterRangesFilter, NNSDelegationBuilder, QueryExecutionError,
+    QueryExecutionInput, QueryExecutionResponse, QueryExecutionService, TransformExecutionInput,
+    TransformExecutionService,
 };
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
@@ -36,7 +37,7 @@ use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
     CanisterId, NumInstructions,
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation, Query},
+    messages::{Blob, Certificate, Query},
 };
 use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
@@ -67,11 +68,29 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
     ser.into_inner()
 }
 
+/// The result of [`get_latest_certified_state_and_data_certificate`]: the certified
+/// state together with the data certificate built from it (with the NNS delegation
+/// embedded) and the metadata of the embedded delegation, if any.
+struct CertifiedStateWithDataCertificate {
+    state: Labeled<Arc<ReplicatedState>>,
+    data_certificate: Vec<u8>,
+    certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+}
+
+/// Reads the latest certified state and builds the data certificate for the canister
+/// from it, with the NNS delegation (built with `canister_ranges_filter`) embedded.
+/// Also returns the metadata of the embedded delegation, if any.
+///
+/// The delegation is only embedded after having been verified (according to
+/// `canister_ranges_check`) to be consistent with the exact certified state which the
+/// data certificate is built from.
 fn get_latest_certified_state_and_data_certificate(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    certificate_delegation: Option<CertificateDelegation>,
+    nns_delegation_builder: Option<Arc<NNSDelegationBuilder>>,
+    canister_ranges_filter: CanisterRangesFilter,
+    canister_ranges_check: CanisterRangesCheck,
     canister_id: CanisterId,
-) -> Option<(Labeled<Arc<ReplicatedState>>, Vec<u8>)> {
+) -> Result<CertifiedStateWithDataCertificate, QueryExecutionError> {
     // The path to fetch the data certificate for the canister.
     let path = SubTree(flatmap! {
         label("canister") => SubTree(
@@ -84,18 +103,44 @@ fn get_latest_certified_state_and_data_certificate(
         label("time") => LabeledTree::Leaf(())
     });
 
-    state_reader
-        .read_certified_state(&path)
-        .map(|(state, tree, cert)| {
-            (
-                Labeled::new(cert.height, state),
-                into_cbor(&Certificate {
-                    tree,
-                    signature: Blob(cert.signed.signature.signature.get().0),
-                    delegation: certificate_delegation,
-                }),
-            )
-        })
+    let Some((state, tree, cert)) = state_reader.read_certified_state(&path) else {
+        return Err(QueryExecutionError::CertifiedStateUnavailable);
+    };
+
+    // Only embed a delegation which is consistent with the certified state which the
+    // data certificate is built from.
+    let (certificate_delegation, certificate_delegation_metadata) = match nns_delegation_builder {
+        None => (None, None),
+        Some(builder) => {
+            let network_topology = &state.metadata.network_topology;
+            let (delegation, metadata) = builder
+                .build_verified(canister_ranges_filter, canister_ranges_check, |subnet_id| {
+                    network_topology
+                        .subnets_for_certification()
+                        .get(&subnet_id)
+                        .map(|subnet_topology| {
+                            (
+                                subnet_topology.public_key.clone(),
+                                network_topology
+                                    .routing_table_for_certification()
+                                    .ranges(subnet_id),
+                            )
+                        })
+                })
+                .map_err(|_err| QueryExecutionError::DelegationInconsistentWithState)?;
+            (Some(delegation), Some(metadata))
+        }
+    };
+
+    Ok(CertifiedStateWithDataCertificate {
+        state: Labeled::new(cert.height, state),
+        data_certificate: into_cbor(&Certificate {
+            tree,
+            signature: Blob(cert.signed.signature.signature.get().0),
+            delegation: certificate_delegation,
+        }),
+        certificate_delegation_metadata,
+    })
 }
 
 fn label<T: Into<Label>>(t: T) -> Label {
@@ -378,7 +423,9 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         &mut self,
         QueryExecutionInput {
             query,
-            certificate_delegation_with_metadata,
+            nns_delegation_builder,
+            canister_ranges_filter,
+            canister_ranges_check,
         }: QueryExecutionInput,
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
@@ -399,18 +446,18 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                 // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
                 // with a reference to older states which can cause out-of-memory crashes.
 
-                let (certificate_delegation, certificate_delegation_metadata) =
-                    match certificate_delegation_with_metadata {
-                        Some((delegation, metadata)) => (Some(delegation), Some(metadata)),
-                        None => (None, None),
-                    };
-
                 let result = match get_latest_certified_state_and_data_certificate(
                     state_reader,
-                    certificate_delegation,
+                    nns_delegation_builder,
+                    canister_ranges_filter,
+                    canister_ranges_check,
                     query.receiver,
                 ) {
-                    Some((state, cert)) => {
+                    Ok(CertifiedStateWithDataCertificate {
+                        state,
+                        data_certificate,
+                        certificate_delegation_metadata,
+                    }) => {
                         let time = state.get_ref().metadata.batch_time;
 
                         let certified_height_used_for_execution = state.height();
@@ -423,7 +470,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
 
                         let data_certificate_with_delegation_metadata =
                             DataCertificateWithDelegationMetadata {
-                                data_certificate: cert,
+                                data_certificate,
                                 certificate_delegation_metadata,
                             };
 
@@ -438,7 +485,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
 
                         Ok((response, time))
                     }
-                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
+                    Err(err) => Err(err),
                 };
 
                 let _ = tx.send(Ok(result));
