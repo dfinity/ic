@@ -48,6 +48,9 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
 [target.'cfg(windows)'.dependencies]
 wslpath = "0.0.2"
 
