@@ -102,11 +102,7 @@ impl NNSDelegationReader {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NNSDelegationBuilder {
-    full_certificate: Certificate,
-    full_labeled_tree: LabeledTree<Vec<u8>>,
-    full_filter_builder: FilterBuilder,
-    subnet_id: SubnetId,
-    original_delegation: CertificateDelegation,
+    builder: NNSDelegationBuilderInner,
     precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
     precomputed_delegation_without_canister_ranges: CertificateDelegation,
 }
@@ -139,27 +135,22 @@ impl NNSDelegationBuilder {
         subnet_id: SubnetId,
         logger: &ReplicaLogger,
     ) -> Self {
-        let original_delegation = CertificateDelegation {
-            subnet_id: Blob(subnet_id.get().to_vec()),
-            certificate: raw_certificate,
-        };
-        let mut builder = Self {
-            full_filter_builder: full_certificate.tree.filter_builder(),
+        let builder = NNSDelegationBuilderInner::new(
             full_certificate,
             full_labeled_tree,
+            raw_certificate,
             subnet_id,
-            // Placeholders, replaced right below (`build_uncached_or_original` needs the
-            // other fields to be initialized).
-            precomputed_delegation_with_flat_canister_ranges: original_delegation.clone(),
-            precomputed_delegation_without_canister_ranges: original_delegation.clone(),
-            original_delegation,
-        };
-        builder.precomputed_delegation_without_canister_ranges =
+        );
+        let precomputed_delegation_without_canister_ranges =
             builder.build_uncached_or_original(CanisterRangesFilter::None, logger);
-        builder.precomputed_delegation_with_flat_canister_ranges =
+        let precomputed_delegation_with_flat_canister_ranges =
             builder.build_uncached_or_original(CanisterRangesFilter::Flat, logger);
 
-        builder
+        Self {
+            builder,
+            precomputed_delegation_with_flat_canister_ranges,
+            precomputed_delegation_without_canister_ranges,
+        }
     }
 
     /// Verifies that the delegation is consistent with the given view of the subnet
@@ -211,37 +202,17 @@ impl NNSDelegationBuilder {
         routing_table: &RoutingTable,
         public_key_for_subnet: impl FnOnce(SubnetId) -> Option<&'a [u8]>,
     ) -> Result<bool, DelegationValidationError> {
-        let subnet_public_key = public_key_for_subnet(self.subnet_id)
-            .ok_or(DelegationValidationError::UnknownSubnet(self.subnet_id))?;
+        let subnet_public_key = public_key_for_subnet(self.builder.subnet_id).ok_or(
+            DelegationValidationError::UnknownSubnet(self.builder.subnet_id),
+        )?;
 
         is_tree_consistent_with(
-            &self.full_labeled_tree,
-            self.subnet_id,
+            &self.builder.full_labeled_tree,
+            self.builder.subnet_id,
             subnet_public_key,
             routing_table,
             ranges_check,
         )
-    }
-
-    /// The size, in bytes, of the certificate as received from the NNS, which contains
-    /// the canister ranges in both locations.
-    pub fn original_certificate_size_bytes(&self) -> usize {
-        self.original_delegation.certificate.len()
-    }
-
-    /// The size, in bytes, of the certificate with the canister ranges in the
-    /// `/subnet/<subnet_id>/canister_ranges` leaf only.
-    pub fn flat_certificate_size_bytes(&self) -> usize {
-        self.precomputed_delegation_with_flat_canister_ranges
-            .certificate
-            .len()
-    }
-
-    /// The size, in bytes, of the certificate with the canister ranges pruned out.
-    pub fn pruned_certificate_size_bytes(&self) -> usize {
-        self.precomputed_delegation_without_canister_ranges
-            .certificate
-            .len()
     }
 
     /// Builds an NNS delegation with the given canister ranges filter, WITHOUT checking
@@ -265,14 +236,63 @@ impl NNSDelegationBuilder {
             CanisterRangesFilter::None => {
                 self.precomputed_delegation_without_canister_ranges.clone()
             }
-            CanisterRangesFilter::Tree(_canister_id) => {
-                self.build_uncached_or_original(canister_ranges_filter, logger)
-            }
+            CanisterRangesFilter::Tree(_canister_id) => self
+                .builder
+                .build_uncached_or_original(canister_ranges_filter, logger),
         }
     }
 
-    /// Like [`Self::build_unverified`], but always builds the delegation from scratch
-    /// instead of consulting the precomputed delegations.
+    /// The size, in bytes, of the certificate as received from the NNS, which contains
+    /// the canister ranges in both locations.
+    pub fn original_certificate_size_bytes(&self) -> usize {
+        self.builder.original_delegation.certificate.len()
+    }
+
+    /// The size, in bytes, of the certificate with the canister ranges in the
+    /// `/subnet/<subnet_id>/canister_ranges` leaf only.
+    pub fn flat_certificate_size_bytes(&self) -> usize {
+        self.precomputed_delegation_with_flat_canister_ranges
+            .certificate
+            .len()
+    }
+
+    /// The size, in bytes, of the certificate with the canister ranges pruned out.
+    pub fn pruned_certificate_size_bytes(&self) -> usize {
+        self.precomputed_delegation_without_canister_ranges
+            .certificate
+            .len()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+struct NNSDelegationBuilderInner {
+    full_certificate: Certificate,
+    full_labeled_tree: LabeledTree<Vec<u8>>,
+    full_filter_builder: FilterBuilder,
+    subnet_id: SubnetId,
+    original_delegation: CertificateDelegation,
+}
+
+impl NNSDelegationBuilderInner {
+    fn new(
+        full_certificate: Certificate,
+        full_labeled_tree: LabeledTree<Vec<u8>>,
+        raw_certificate: Blob,
+        subnet_id: SubnetId,
+    ) -> Self {
+        Self {
+            full_filter_builder: full_certificate.tree.filter_builder(),
+            full_certificate,
+            full_labeled_tree,
+            subnet_id,
+            original_delegation: CertificateDelegation {
+                subnet_id: Blob(subnet_id.get().to_vec()),
+                certificate: raw_certificate,
+            },
+        }
+    }
+
+    /// Builds the delegation from scratch instead of consulting the precomputed delegations.
     fn build_uncached_or_original(
         &self,
         filter: CanisterRangesFilter,
@@ -626,7 +646,7 @@ mod tests {
         // Extract the public key certified in the delegation so that the consistency
         // check on it can succeed.
         let certified_public_key = match lookup_path(
-            &builder.full_labeled_tree,
+            &builder.builder.full_labeled_tree,
             &[b"subnet", SUBNET_0.get().as_ref(), b"public_key"],
         ) {
             Some(LabeledTree::Leaf(public_key)) => public_key.clone(),
