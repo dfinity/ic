@@ -138,7 +138,10 @@ fn does_public_key_match(
         &[b"subnet", subnet_id.get_ref().as_slice(), b"public_key"],
     ) {
         Some(LabeledTree::Leaf(public_key)) => Ok(public_key.as_slice() == expected_public_key),
-        _ => Err(DelegationValidationError::UnexpectedTreeShape(format!(
+        Some(LabeledTree::SubTree(_)) => Err(DelegationValidationError::UnexpectedTreeShape(
+            format!("unexpected subtree at /subnet/{subnet_id}/public_key"),
+        )),
+        None => Err(DelegationValidationError::UnexpectedTreeShape(format!(
             "missing /subnet/{subnet_id}/public_key leaf"
         ))),
     }
