@@ -2208,15 +2208,19 @@ crate.annotation(
 )
 crate.annotation(
     crate = "devicemapper-sys",
-    deps = ["@@//third_party:devmapper"],
+    link_deps = ["@@//third_party:devmapper"],
 )
 crate.annotation(
     crate = "libcryptsetup-rs-sys",
-    deps = ["@@//third_party:cryptsetup"],
+    link_deps = ["@@//third_party:cryptsetup"],
 )
 crate.annotation(
     crate = "libsystemd-sys",
-    deps = ["@@//third_party:systemd"],
+    link_deps = ["@@//third_party:systemd"],
+)
+crate.annotation(
+    crate = "virt-sys",
+    link_deps = ["@@//third_party:libvirt"],
 )
 crate.annotation(
     crate = "p256",

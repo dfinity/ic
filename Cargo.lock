@@ -14928,8 +14928,10 @@ name = "ic-test-utilities-privileges"
 version = "0.9.0"
 dependencies = [
  "ic-test-utilities-privileges-macros",
- "nix 0.31.3",
+ "libc",
+ "static_assertions",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
