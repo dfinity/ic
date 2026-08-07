@@ -196,17 +196,22 @@ mod tests {
             pool_config,
             subnet_id,
             vec![
-                (1, SubnetRecordBuilder::from(&node_ids).build()),
+                (
+                    1,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(DKG_LENGTH)
+                        .build(),
+                ),
                 (
                     10,
                     SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(DKG_LENGTH)
                         .with_replica_version(replica_version.as_ref())
                         .with_halt_at_cup_height(halt_at_cup_height)
                         .build(),
                 ),
             ],
         )
-        .with_dkg_interval_length(DKG_LENGTH)
         .build();
 
         pool.advance_round_normal_operation_n(CUP_HEIGHT.get());

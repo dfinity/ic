@@ -2817,11 +2817,11 @@ pub mod test {
                 vec![(
                     1,
                     SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                         .with_halt_at_cup_height(true)
                         .build(),
                 )],
             )
-            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
             .build();
             let validator = make_validator(&dependencies);
             let Dependencies {
@@ -3195,10 +3195,16 @@ pub mod test {
                 pool_config,
                 subnet_test_id(0),
                 (1..=block_registry_version.get())
-                    .map(|version| (version, SubnetRecordBuilder::from(&committee).build()))
+                    .map(|version| {
+                        (
+                            version,
+                            SubnetRecordBuilder::from(&committee)
+                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                .build(),
+                        )
+                    })
                     .collect(),
             )
-            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
             .build();
             let validator = make_validator(&dependencies);
             let Dependencies {
@@ -3264,10 +3270,16 @@ pub mod test {
                 pool_config,
                 subnet_test_id(0),
                 (1..=block_registry_version.get())
-                    .map(|version| (version, SubnetRecordBuilder::from(&committee).build()))
+                    .map(|version| {
+                        (
+                            version,
+                            SubnetRecordBuilder::from(&committee)
+                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                .build(),
+                        )
+                    })
                     .collect(),
             )
-            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
             .build();
             let validator = make_validator(&dependencies);
             let Dependencies {
@@ -4457,16 +4469,21 @@ pub mod test {
                 pool_config,
                 subnet_test_id(0),
                 vec![
-                    (1, SubnetRecordBuilder::from(&subnet_members).build()),
+                    (
+                        1,
+                        SubnetRecordBuilder::from(&subnet_members)
+                            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                            .build(),
+                    ),
                     (
                         10,
                         SubnetRecordBuilder::from(&subnet_members)
+                            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                             .with_replica_version("new_version")
                             .build(),
                     ),
                 ],
             )
-            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
             .build();
             let validator = make_validator(&dependencies);
             let Dependencies {
@@ -4750,9 +4767,13 @@ pub mod test {
                 let dependencies = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_test_id(0),
-                    vec![(1, SubnetRecordBuilder::from(&[NODE_1, NODE_2]).build())],
+                    vec![(
+                        1,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_2])
+                            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                            .build(),
+                    )],
                 )
-                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                 .build();
                 let mut validator = make_validator(&dependencies);
                 let Dependencies {

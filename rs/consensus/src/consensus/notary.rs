@@ -899,16 +899,21 @@ mod tests {
                 pool_config,
                 subnet_test_id(0),
                 vec![
-                    (1, SubnetRecordBuilder::from(&committee).build()),
+                    (
+                        1,
+                        SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval)
+                            .build(),
+                    ),
                     (
                         10,
                         SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval)
                             .with_replica_version("new_version")
                             .build(),
                     ),
                 ],
             )
-            .with_dkg_interval_length(dkg_interval)
             .build();
 
             let certified_height = Arc::new(RwLock::new(Height::from(0)));

@@ -770,11 +770,20 @@ mod tests {
                 pool_config,
                 subnet_id,
                 vec![
-                    (1, SubnetRecordBuilder::from(&node_ids).build()),
-                    (10, SubnetRecordBuilder::from(&node_ids).build()),
+                    (
+                        1,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    ),
+                    (
+                        10,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    ),
                 ],
             )
-            .with_dkg_interval_length(dkg_interval_length)
             .build();
 
             pool.advance_round_normal_operation_n(4);
@@ -931,9 +940,13 @@ mod tests {
             } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
-                vec![(1, SubnetRecordBuilder::from(&node_ids).build())],
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
             )
-            .with_dkg_interval_length(dkg_interval_length)
             .build();
 
             pool.advance_round_normal_operation_n(8);
@@ -1083,17 +1096,22 @@ mod tests {
                 pool_config.clone(),
                 subnet_test_id(0),
                 vec![
-                    (1, SubnetRecordBuilder::from(&node_ids).build()),
+                    (
+                        1,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    ),
                     (
                         10,
                         SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(dkg_interval_length)
                             .with_replica_version(replica_version.as_ref())
                             .with_halt_at_cup_height(halt_at_cup_height)
                             .build(),
                     ),
                 ],
             )
-            .with_dkg_interval_length(dkg_interval_length)
             .build();
 
             state_manager
@@ -1587,10 +1605,16 @@ mod tests {
                     pool_config,
                     SOURCE_SUBNET_ID,
                     (1..=MAX_REGISTRY_VERSION)
-                        .map(|version| (version, SubnetRecordBuilder::from(&[NODE_1]).build()))
+                        .map(|version| {
+                            (
+                                version,
+                                SubnetRecordBuilder::from(&[NODE_1])
+                                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                    .build(),
+                            )
+                        })
                         .collect(),
                 )
-                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                 .build();
 
                 let mut payload_builder = MockPayloadBuilder::new();

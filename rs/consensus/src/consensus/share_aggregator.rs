@@ -332,10 +332,11 @@ mod tests {
                 subnet_test_id(0),
                 vec![(
                     INITIAL_REGISTRY_VERSION,
-                    SubnetRecordBuilder::from(&node_ids).build(),
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(interval_length)
+                        .build(),
                 )],
             )
-            .with_dkg_interval_length(interval_length)
             .build();
             let message_routing = Arc::new(FakeMessageRouting::new());
             let aggregator =
