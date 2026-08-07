@@ -35,6 +35,7 @@ use crate::{
             nervous_system_function::FunctionType,
             neuron::{FolloweesForTopic, TopicFollowees},
             proposal::Action,
+            upgrade_sns_controlled_canister::CanisterUpgradeOptions as CanisterUpgradeOptionsPb,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -48,7 +49,9 @@ use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
+    CanisterIdRecord, CanisterInstallModeError,
+    CanisterUpgradeOptions as RootCanisterUpgradeOptions, StoredChunksReply,
+    WasmMemoryPersistence as RootWasmMemoryPersistence,
 };
 use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -1864,6 +1867,7 @@ impl UpgradeSnsControlledCanister {
                 .map(|blob| summarize_blob_field(blob)),
             mode: self.mode,
             chunked_canister_wasm: self.chunked_canister_wasm.clone(),
+            canister_upgrade_options: self.canister_upgrade_options,
         }
     }
 
@@ -1875,6 +1879,7 @@ impl UpgradeSnsControlledCanister {
             mode: self.mode,
             new_canister_wasm: Vec::new(),
             chunked_canister_wasm: self.chunked_canister_wasm.clone(),
+            canister_upgrade_options: self.canister_upgrade_options,
         }
     }
 }
@@ -3015,6 +3020,55 @@ impl UpgradeSnsControlledCanister {
             .and_then(|mode| ic_protobuf::types::v1::CanisterInstallMode::try_from(mode).ok())
             .unwrap_or(ic_protobuf::types::v1::CanisterInstallMode::Upgrade)
     }
+
+    /// Validates and converts `canister_upgrade_options` into the type
+    /// required by the Root canister (and the Management canister).
+    ///
+    /// Returns Err in the following cases:
+    ///
+    /// 1. canister_upgrade_options is Some, but mode is not Upgrade.
+    /// 2. wasm_memory_persistence is set to an unrecognized value.
+    pub fn upgrade_options(&self) -> Result<Option<RootCanisterUpgradeOptions>, String> {
+        let Some(canister_upgrade_options) = self.canister_upgrade_options else {
+            return Ok(None);
+        };
+
+        if self.mode_or_upgrade() != ic_protobuf::types::v1::CanisterInstallMode::Upgrade {
+            return Err(
+                "UpgradeSnsControlledCanister.canister_upgrade_options can only be set \
+                 when mode is upgrade."
+                    .to_string(),
+            );
+        }
+
+        let CanisterUpgradeOptionsPb {
+            skip_pre_upgrade,
+            wasm_memory_persistence,
+        } = canister_upgrade_options;
+
+        let wasm_memory_persistence = wasm_memory_persistence
+            .map(convert_i32_to_wasm_memory_persistence)
+            .transpose()?;
+
+        Ok(Some(RootCanisterUpgradeOptions {
+            skip_pre_upgrade,
+            wasm_memory_persistence,
+        }))
+    }
+}
+
+/// Converts from the integer code (used in the proto/candid representation of
+/// `wasm_memory_persistence`) to the enum type required by the Root canister
+/// (and the Management canister).
+///
+/// Ok values are Keep and Replace.
+fn convert_i32_to_wasm_memory_persistence(code: i32) -> Result<RootWasmMemoryPersistence, String> {
+    let new_error = || format!("Unrecognized wasm_memory_persistence code: {code}");
+
+    let proto =
+        ic_protobuf::types::v1::WasmMemoryPersistence::try_from(code).map_err(|_| new_error())?;
+
+    RootWasmMemoryPersistence::try_from(proto).map_err(|_| new_error())
 }
 
 impl From<Vec<NeuronRecipe>> for NeuronRecipes {

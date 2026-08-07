@@ -1681,3 +1681,118 @@ fn test_validate_additional_critical_native_action_ids() {
     });
     assert!(params.validate().is_ok());
 }
+
+fn basic_upgrade_sns_controlled_canister() -> UpgradeSnsControlledCanister {
+    UpgradeSnsControlledCanister {
+        canister_id: Some(PrincipalId::new_user_test_id(1)),
+        new_canister_wasm: vec![1, 2, 3],
+        canister_upgrade_arg: Some(vec![4, 5, 6]),
+        mode: Some(ic_protobuf::types::v1::CanisterInstallMode::Upgrade as i32),
+        chunked_canister_wasm: None,
+        canister_upgrade_options: None,
+    }
+}
+
+#[test]
+fn test_upgrade_options_is_none_when_canister_upgrade_options_is_none() {
+    let upgrade = basic_upgrade_sns_controlled_canister();
+
+    assert_eq!(upgrade.upgrade_options(), Ok(None));
+}
+
+#[test]
+fn test_upgrade_options_rejected_when_mode_is_not_upgrade() {
+    let upgrade = UpgradeSnsControlledCanister {
+        // Since mode is Install, it makes no sense for canister_upgrade_options
+        // to be Some.
+        mode: Some(ic_protobuf::types::v1::CanisterInstallMode::Install as i32),
+        canister_upgrade_options: Some(CanisterUpgradeOptionsPb {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(
+                ic_protobuf::types::v1::WasmMemoryPersistence::Keep as i32,
+            ),
+        }),
+        ..basic_upgrade_sns_controlled_canister()
+    };
+
+    let error = upgrade
+        .upgrade_options()
+        .expect_err("Expected an Err, but got Ok(_)");
+
+    for keyword in ["canister_upgrade_options", "mode is upgrade"] {
+        assert!(
+            error.to_lowercase().contains(keyword),
+            "{keyword} not found in {error:?}"
+        );
+    }
+}
+
+#[test]
+fn test_upgrade_options_rejected_when_wasm_memory_persistence_is_unspecified() {
+    let upgrade = UpgradeSnsControlledCanister {
+        mode: Some(ic_protobuf::types::v1::CanisterInstallMode::Upgrade as i32),
+        canister_upgrade_options: Some(CanisterUpgradeOptionsPb {
+            skip_pre_upgrade: None,
+            // 0 (Unspecified) is not an allowed value here.
+            wasm_memory_persistence: Some(
+                ic_protobuf::types::v1::WasmMemoryPersistence::Unspecified as i32,
+            ),
+        }),
+        ..basic_upgrade_sns_controlled_canister()
+    };
+
+    let error = upgrade
+        .upgrade_options()
+        .expect_err("Expected an Err, but got Ok(_)");
+
+    for keyword in ["unrecognized", "wasm_memory_persistence"] {
+        assert!(
+            error.to_lowercase().contains(keyword),
+            "{keyword} not found in {error:?}"
+        );
+    }
+}
+
+#[test]
+fn test_upgrade_options_accepted_when_mode_is_upgrade() {
+    let upgrade = UpgradeSnsControlledCanister {
+        mode: Some(ic_protobuf::types::v1::CanisterInstallMode::Upgrade as i32),
+        canister_upgrade_options: Some(CanisterUpgradeOptionsPb {
+            skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: Some(
+                ic_protobuf::types::v1::WasmMemoryPersistence::Keep as i32,
+            ),
+        }),
+        ..basic_upgrade_sns_controlled_canister()
+    };
+
+    assert_eq!(
+        upgrade.upgrade_options(),
+        Ok(Some(RootCanisterUpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: Some(RootWasmMemoryPersistence::Keep),
+        })),
+    );
+}
+
+#[test]
+fn test_upgrade_options_accepted_when_wasm_memory_persistence_is_replace() {
+    let upgrade = UpgradeSnsControlledCanister {
+        mode: Some(ic_protobuf::types::v1::CanisterInstallMode::Upgrade as i32),
+        canister_upgrade_options: Some(CanisterUpgradeOptionsPb {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(
+                ic_protobuf::types::v1::WasmMemoryPersistence::Replace as i32,
+            ),
+        }),
+        ..basic_upgrade_sns_controlled_canister()
+    };
+
+    assert_eq!(
+        upgrade.upgrade_options(),
+        Ok(Some(RootCanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(RootWasmMemoryPersistence::Replace),
+        })),
+    );
+}
