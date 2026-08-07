@@ -1225,7 +1225,7 @@ fn injections(
     // The function itself is a re-entrant code block.
     // Start with at least one fuel being consumed because even empty
     // functions should consume at least some fuel.
-    // Also charge the cost for allocating locals at the very beginning.
+    // Also charge the cost for many locals at the very beginning.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1 + locals_cost);
     for (position, i) in code.iter().enumerate() {
         curr.cost_detail
@@ -1308,12 +1308,19 @@ fn inject_metering(
     metering_type: MeteringType,
     mem_type: WasmMemoryType,
 ) {
-    // Calculate instructions for allocating Wasm locals when creating call frame.
-    let locals_cost = body
-        .locals
-        .iter()
-        .map(|(num, typ)| *num as u64 * local_cost(typ, mem_type))
-        .sum();
+    // Calculate instructions for many Wasm locals. If locals spill onto the stack
+    // and their lifetimes overlap, stack probing can become expensive, so we charge
+    // with a heuristic: If the locals exceed two pages, we charge for them, even though
+    // it is unpredictable from the Wasm code whether they will actually end up on the stack.
+    let locals_cost = {
+        let locals_cost = body
+            .locals
+            .iter()
+            .map(|(num, typ)| *num as u64 * local_cost(typ, mem_type))
+            .sum();
+        if locals_cost < 4096 { 0 } else { locals_cost }
+    };
+
     let points = match metering_type {
         MeteringType::None => Vec::new(),
         MeteringType::New => injections(body.instructions.get_ops(), mem_type, locals_cost),
