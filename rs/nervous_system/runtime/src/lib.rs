@@ -1,7 +1,7 @@
-#![allow(deprecated)]
 use async_trait::async_trait;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::call::{Call, Error as IcCdkCallError, RejectCode};
 use std::future::Future;
 
 // A trait to help parameterize the switch from dfn_core to ic_cdk. It should
@@ -106,6 +106,23 @@ impl Runtime for DfnRuntime {
 
 pub struct CdkRuntime;
 
+/// Translates a failed call into the `(reject code, message)` pair that
+/// [`Runtime`] reports to its callers.
+fn map_call_error(err: IcCdkCallError) -> (i32, String) {
+    match err {
+        IcCdkCallError::CallRejected(rejected) => (
+            rejected.raw_reject_code() as i32,
+            rejected.reject_message().to_string(),
+        ),
+        // A response that cannot be decoded means the callee misbehaved.
+        IcCdkCallError::CandidDecodeFailed(err) => {
+            (RejectCode::CanisterError as i32, err.to_string())
+        }
+        // The call never left this canister, so it may well succeed if retried.
+        err => (RejectCode::SysTransient as i32, err.to_string()),
+    }
+}
+
 #[async_trait]
 impl Runtime for CdkRuntime {
     // This method does not do clean up.
@@ -131,9 +148,12 @@ impl Runtime for CdkRuntime {
         Out: for<'a> ArgumentDecoder<'a>,
     {
         let principal_id = PrincipalId::from(id);
-        ic_cdk::api::call::call(principal_id.into(), method, args)
+        Call::unbounded_wait(principal_id.into(), method)
+            .with_args(&args)
             .await
-            .map_err(|(code, msg)| (code as i32, msg))
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| response.candid_tuple().map_err(IcCdkCallError::from))
+            .map_err(map_call_error)
     }
 
     async fn call_bytes_with_cleanup(
@@ -142,9 +162,11 @@ impl Runtime for CdkRuntime {
         args: &[u8],
     ) -> Result<Vec<u8>, (i32, String)> {
         let principal_id = PrincipalId::from(id);
-        ic_cdk::api::call::call_raw(principal_id.into(), method, args, 0)
+        Call::unbounded_wait(principal_id.into(), method)
+            .with_raw_args(args)
             .await
-            .map_err(|(code, msg)| (code as i32, msg))
+            .map(|response| response.into_bytes())
+            .map_err(|err| map_call_error(err.into()))
     }
 
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F) {
