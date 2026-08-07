@@ -419,10 +419,7 @@ mod tests {
     };
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
-    use ic_consensus_mocks::{
-        Dependencies, dependencies, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_ni_dkg::dummy_dealing;
@@ -508,7 +505,7 @@ mod tests {
                     registry,
                     state_manager,
                     ..
-                } = dependencies_with_subnet_params(
+                } = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_id,
                     vec![(
@@ -518,7 +515,8 @@ mod tests {
                             .with_chain_key_config(test_vet_key_config())
                             .build(),
                     )],
-                );
+                )
+                .build();
                 state_manager
                     .get_mut()
                     .expect_get_latest_certified_state()
@@ -676,7 +674,7 @@ mod tests {
                     state_manager,
                     replica_config,
                     ..
-                } = dependencies(pool_config.clone(), 2);
+                } = DependenciesBuilder::new(pool_config.clone(), 2).build();
                 state_manager
                     .get_mut()
                     .expect_get_latest_certified_state()
@@ -780,7 +778,7 @@ mod tests {
                     state_manager,
                     dkg_pool,
                     ..
-                } = dependencies_with_subnet_records_with_raw_state_manager(
+                } = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_id,
                     vec![(
@@ -789,7 +787,9 @@ mod tests {
                             .with_dkg_interval_length(dkg_interval_length)
                             .build(),
                     )],
-                );
+                )
+                .without_mocked_state_manager()
+                .build();
 
                 let target_id = NiDkgTargetId::new([0_u8; 32]);
                 complement_state_manager_with_setup_initial_dkg_request(
@@ -943,7 +943,7 @@ mod tests {
                 registry,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_records_with_raw_state_manager(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -952,7 +952,9 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .without_mocked_state_manager()
+            .build();
 
             let target_id = NiDkgTargetId::new([0_u8; 32]);
             complement_state_manager_with_setup_initial_dkg_request(
@@ -1065,14 +1067,14 @@ mod tests {
                     state_manager: state_manager_1,
                     replica_config: replica_config_1,
                     ..
-                } = dependencies(pool_config_1, 2);
+                } = DependenciesBuilder::new(pool_config_1, 2).build();
                 let Dependencies {
                     pool: consensus_pool_2,
                     registry: registry_2,
                     state_manager: state_manager_2,
                     replica_config: replica_config_2,
                     ..
-                } = dependencies(pool_config_2, 2);
+                } = DependenciesBuilder::new(pool_config_2, 2).build();
                 for state_manager in [&state_manager_1, &state_manager_2] {
                     state_manager
                         .get_mut()
@@ -1513,7 +1515,7 @@ mod tests {
                     let subnet_id = subnet_test_id(0);
 
                     // Set pool_1 and pool_2
-                    let dependencies_1 = dependencies_with_subnet_records_with_raw_state_manager(
+                    let dependencies_1 = DependenciesBuilder::single_subnet(
                         pool_config_1,
                         subnet_id,
                         vec![(
@@ -1522,8 +1524,10 @@ mod tests {
                                 .with_dkg_interval_length(dkg_interval_length)
                                 .build(),
                         )],
-                    );
-                    let dependencies_2 = dependencies_with_subnet_records_with_raw_state_manager(
+                    )
+                    .without_mocked_state_manager()
+                    .build();
+                    let dependencies_2 = DependenciesBuilder::single_subnet(
                         pool_config_2,
                         subnet_id,
                         vec![(
@@ -1532,7 +1536,9 @@ mod tests {
                                 .with_dkg_interval_length(dkg_interval_length)
                                 .build(),
                         )],
-                    );
+                    )
+                    .without_mocked_state_manager()
+                    .build();
 
                     // Return an empty call context when we create the first summary,
                     // so that we later test the case where remote dealing has a different
@@ -1716,7 +1722,7 @@ mod tests {
     ) -> (Dependencies, NiDkgTargetId, Vec<NiDkgId>) {
         let node_ids = (1..8).map(node_test_id).collect::<Vec<_>>();
 
-        let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+        let mut deps = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(
@@ -1725,7 +1731,9 @@ mod tests {
                     .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
                     .build(),
             )],
-        );
+        )
+        .without_mocked_state_manager()
+        .build();
 
         let target_id = NiDkgTargetId::new([0_u8; 32]);
         complement_state_manager_with_setup_initial_dkg_request(
@@ -2101,7 +2109,7 @@ mod tests {
                 let subnet_id = subnet_test_id(0);
                 let target_id = NiDkgTargetId::new([9_u8; 32]);
 
-                let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+                let mut deps = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_id,
                     vec![(
@@ -2110,7 +2118,9 @@ mod tests {
                             .with_dkg_interval_length(dkg_interval_length)
                             .build(),
                     )],
-                );
+                )
+                .without_mocked_state_manager()
+                .build();
 
                 // Start without context so remote dealing validation is deferred.
                 complement_state_manager_with_dkg_contexts(
@@ -2224,7 +2234,7 @@ mod tests {
             };
             let target_id = NiDkgTargetId::new([0_u8; 32]);
 
-            let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+            let mut deps = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -2243,7 +2253,9 @@ mod tests {
                         })
                         .build(),
                 )],
-            );
+            )
+            .without_mocked_state_manager()
+            .build();
 
             // No contexts at the beginning
             complement_state_manager_with_dkg_contexts(deps.state_manager.clone(), vec![], None);
@@ -2333,7 +2345,7 @@ mod tests {
                 let setup_target_id = NiDkgTargetId::new([1_u8; 32]);
                 let reshare_target_id = NiDkgTargetId::new([2_u8; 32]);
 
-                let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+                let mut deps = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_test_id(0),
                     vec![(
@@ -2352,7 +2364,9 @@ mod tests {
                             })
                             .build(),
                     )],
-                );
+                )
+                .without_mocked_state_manager()
+                .build();
 
                 let registry_version = deps.registry.get_latest_version();
                 let mut contexts = vec![
@@ -2558,7 +2572,7 @@ mod tests {
                 registry,
                 replica_config,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -2568,7 +2582,8 @@ mod tests {
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             // Get the latest summary block, which is the genesis block
             let cup = PoolReader::new(&pool).get_highest_catch_up_package();

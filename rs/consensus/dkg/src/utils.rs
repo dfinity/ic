@@ -189,7 +189,7 @@ mod tests {
     use super::{get_dealers_from_chain, get_dkg_dealings};
     use crate::test_utils::create_dealing;
     use crate::utils::vetkd_key_ids_for_subnet;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_interfaces_registry::RegistryValue;
@@ -317,7 +317,7 @@ mod tests {
             let subnet_id = subnet_test_id(1);
             let nodes: Vec<_> = (0..4).map(node_test_id).collect();
             let dkg_interval_len = 10;
-            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+            let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -326,7 +326,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_len)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             pool.advance_round_normal_operation_n(dkg_interval_len);
             let pool_reader = PoolReader::new(&pool);

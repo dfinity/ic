@@ -557,7 +557,7 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -570,7 +570,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let nodes: Vec<_> = (0..1).map(node_test_id).collect();
                 let dkg_interval_len = 3;
-                let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+                let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_test_id(222),
                     vec![(
@@ -579,7 +579,8 @@ mod tests {
                             .with_dkg_interval_length(dkg_interval_len)
                             .build(),
                     )],
-                );
+                )
+                .build();
                 let csp = Arc::new(CryptoReturningOk::default());
                 let mut key_manager = DkgKeyManager::new(
                     MetricsRegistry::new(),
