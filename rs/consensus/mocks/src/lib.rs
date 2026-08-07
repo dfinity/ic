@@ -116,8 +116,6 @@ pub struct DependenciesBuilder {
     sorted_subnet_records: Vec<(u64, SubnetId, SubnetRecord)>,
     replica_config: ReplicaConfig,
     mocked_state_manager: bool,
-    #[allow(clippy::type_complexity)]
-    additional_registry_mutations: Vec<Box<dyn FnOnce(&Arc<ProtoRegistryDataProvider>)>>,
 }
 
 impl DependenciesBuilder {
@@ -179,7 +177,6 @@ impl DependenciesBuilder {
             },
             sorted_subnet_records: subnet_records,
             mocked_state_manager: true,
-            additional_registry_mutations: Vec::new(),
         }
     }
 
@@ -192,14 +189,6 @@ impl DependenciesBuilder {
     /// that the test can set up its own `get_state_at` behavior.
     pub fn without_mocked_state_manager(mut self) -> Self {
         self.mocked_state_manager = false;
-        self
-    }
-
-    pub fn add_additional_registry_mutation(
-        mut self,
-        mutation: impl FnOnce(&Arc<ProtoRegistryDataProvider>) + 'static,
-    ) -> Self {
-        self.additional_registry_mutations.push(Box::new(mutation));
         self
     }
 
@@ -231,10 +220,6 @@ impl DependenciesBuilder {
         }
         for (version, subnet_ids) in subnet_ids_at_version {
             add_subnet_list_record(&registry_data_provider, version, Vec::from_iter(subnet_ids));
-        }
-
-        for registry_mutation in self.additional_registry_mutations {
-            registry_mutation(&registry_data_provider);
         }
 
         let registry = Arc::new(FakeRegistryClient::new(
