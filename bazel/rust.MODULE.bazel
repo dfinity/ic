@@ -703,7 +703,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.2.0",
+    version = "^0.2.3",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
