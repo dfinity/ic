@@ -98,6 +98,7 @@ impl PayloadBuilder for RefMockPayloadBuilder {
     }
 }
 
+#[non_exhaustive]
 pub struct Dependencies {
     pub crypto: Arc<CryptoReturningOk>,
     pub registry: Arc<FakeRegistryClient>,
