@@ -149,7 +149,9 @@ fn get_all_api_boundary_node_versions(snapshot: &RegistrySnapshot) -> BTreeSet<S
 /// Returns the replica versions referenced by the
 /// StandardEngineReplicaVersionRecord (i.e. new_replica_version_id and
 /// old_replica_version_id).
-fn get_all_standard_engine_replica_versions(snapshot: &RegistrySnapshot) -> BTreeSet<String> {
+pub(crate) fn get_all_standard_engine_replica_versions(
+    snapshot: &RegistrySnapshot,
+) -> BTreeSet<String> {
     snapshot
         .get(make_standard_engine_replica_version_record_key().as_bytes())
         .map(|bytes| {

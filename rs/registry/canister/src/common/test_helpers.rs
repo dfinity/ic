@@ -11,10 +11,14 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::node::v1::{IPv4InterfaceConfig, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
+};
 use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule, SubnetListRecord, SubnetRecord,
 };
 use ic_registry_keys::make_node_operator_record_key;
+use ic_registry_keys::make_replica_version_key;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
@@ -32,6 +36,36 @@ pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
     let mutations = invariant_compliant_mutation(mutation_id);
     registry.maybe_apply_mutation_internal(mutations);
     registry
+}
+
+/// Gives the already elected GuestOS version launch measurements.
+///
+/// Call this when a test builds a SEV-enabled subnet: such a subnet may only run
+/// a version that has launch measurements (see the SEV subnet invariants).
+/// Versions elected by `invariant_compliant_registry` have none, because that is
+/// what versions elected before launch measurements existed look like.
+pub fn add_guest_launch_measurements_to_replica_version(
+    registry: &mut Registry,
+    replica_version_id: &str,
+) {
+    let key = make_replica_version_key(replica_version_id);
+    let registry_value = registry
+        .get(key.as_bytes(), registry.latest_version())
+        .unwrap_or_else(|| panic!("Version {replica_version_id} is not elected"));
+    let mut replica_version_record =
+        ReplicaVersionRecord::decode(registry_value.value.as_slice()).unwrap();
+
+    replica_version_record.guest_launch_measurements = Some(GuestLaunchMeasurements {
+        guest_launch_measurements: vec![GuestLaunchMeasurement {
+            measurement: vec![0x42; 48],
+            metadata: None,
+        }],
+    });
+
+    registry.maybe_apply_mutation_internal(vec![upsert(
+        make_replica_version_key(replica_version_id).as_bytes(),
+        replica_version_record.encode_to_vec(),
+    )]);
 }
 
 pub fn empty_mutation() -> Vec<u8> {
