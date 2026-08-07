@@ -102,14 +102,13 @@ mod decode {
         assert_eq!(decode_balance(&max), Ok(Wei::MAX));
     }
 
+    /// Case is the one rendering difference that is not a protocol violation, so it stays valid.
     #[test]
-    fn should_decode_uppercase_and_quoted_forms() {
+    fn should_decode_an_uppercase_quantity() {
         assert_eq!(
             decode_balance("0xDE0B6B3A7640000"),
             Ok(Wei::new(1_000_000_000_000_000_000))
         );
-        assert_eq!(decode_balance("\"0x1\""), Ok(Wei::new(1)));
-        assert_eq!(decode_balance("  0x1  "), Ok(Wei::new(1)));
     }
 
     #[test]
@@ -124,6 +123,10 @@ mod decode {
             "0x 1",     // embedded space
             "null",     // a JSON null passed through verbatim
             "-0x1",     // negative
+            "+0x1",     // signed; the integer parser would otherwise accept the sign
+            "0x+1",     // sign after the prefix
+            "\"0x1\"",  // quoted: the canister hands back contents, so quotes are the provider's
+            "  0x1  ",  // padded, for the same reason
         ] {
             assert_eq!(
                 decode_balance(result),

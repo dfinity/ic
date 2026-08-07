@@ -1,12 +1,14 @@
 //! Reading a native ETH balance through the EVM RPC canister.
 //!
 //! The EVM RPC canister exposes no `eth_getBalance` endpoint and `evm_rpc_client` offers no
-//! balance getter, so the balance is read with the canister's generic `multi_request`: it
-//! forwards an arbitrary JSON-RPC payload to every provider, parses each response's `result`
-//! field, and reduces those under the configured consensus strategy. Because the reduction
-//! happens on the parsed `result` — not on the raw response body — differences in how
-//! providers format the surrounding JSON envelope are irrelevant; only the hex quantity is
-//! compared.
+//! balance getter, so the balance is read with the canister's generic `multi_request`: it forwards
+//! an arbitrary JSON-RPC payload to every provider, deserializes each response's `result` field
+//! into a string, and agrees on one under the configured consensus strategy — a threshold of the
+//! providers, which is the only agreement this module accepts.
+//!
+//! Because the canister deserializes `result`, what arrives here is the quantity itself rather than
+//! any surrounding JSON, so it is decoded exactly: quotes or padding would be the provider's own
+//! and are rejected rather than trimmed away.
 //!
 //! The first consumer is the sweeper address' ETH balance, which *is* the prepaid-sweep-gas
 //! counter (`rs/ethereum/cketh/docs/deposit_from_cex.md`, "Fund the transaction fees without
@@ -86,31 +88,26 @@ pub fn eth_get_balance_request(address: &Address, block: &BlockTag) -> serde_jso
 
 /// Reads an `eth_getBalance` result — a hex quantity such as `0x1bc16d674ec80000` — as wei.
 pub fn decode_balance(result: &str) -> Result<Wei, DecodeBalanceError> {
-    let trimmed = result.trim();
-    // `multi_request` hands back the JSON string's *contents*, but tolerate a quoted form too so a
-    // caller passing a raw JSON value through does not silently fail. Unquoted by parsing as JSON
-    // rather than by stripping quote characters: stripping also accepts one-sided and repeated
-    // quotes, so `"0x0` would read as a balance of zero.
-    let quantity = serde_json::from_str::<String>(trimmed).unwrap_or_else(|_| trimmed.to_string());
-    let digits = match quantity.strip_prefix("0x") {
-        Some(digits) if !digits.is_empty() => digits,
-        _ => return Err(DecodeBalanceError::NotAQuantity(result.to_string())),
+    // Decoded exactly as received. `multi_request` yields the JSON string's *contents* — the EVM
+    // RPC canister deserializes the `result` field into a `String` — so a provider speaking the
+    // protocol gives a bare quantity: no envelope, no quotes, no surrounding whitespace. Repairing
+    // anything else would defeat the point of the check, since the value most easily manufactured
+    // that way is zero, and zero reads as "the sweeper is empty" and buys a burn that was never
+    // needed.
+    let Some(digits) = result.strip_prefix("0x") else {
+        return Err(DecodeBalanceError::NotAQuantity(result.to_string()));
     };
-    // A JSON-RPC quantity is minimal-length, so a leading zero means the provider is not speaking
-    // the protocol. Rejecting rather than accepting matters because `0x00` would otherwise read as
-    // an empty sweeper and buy a burn that was never needed.
-    if digits.len() > 1 && digits.starts_with('0') {
+    // A JSON-RPC quantity is minimal-length hex: at least one digit, no leading zero unless the
+    // value *is* zero. Checking the digits here rather than inferring them from a parse failure
+    // also keeps `Wei::from_str_hex`'s tolerance for a leading `+` out of reach.
+    if digits.is_empty()
+        || !digits.chars().all(|c| c.is_ascii_hexdigit())
+        || (digits.len() > 1 && digits.starts_with('0'))
+    {
         return Err(DecodeBalanceError::NotAQuantity(result.to_string()));
     }
-    Wei::from_str_hex(&quantity).map_err(|_| {
-        // `from_str_hex` rejects both non-hex digits and values wider than 32 bytes, and the
-        // checks above established only the shape of the quantity — so tell the two apart here.
-        if digits.chars().all(|c| c.is_ascii_hexdigit()) {
-            DecodeBalanceError::TooLarge(result.to_string())
-        } else {
-            DecodeBalanceError::NotAQuantity(result.to_string())
-        }
-    })
+    // The digits are known good, so the only rejection left is a value too wide for 32 bytes.
+    Wei::from_str_hex(result).map_err(|_| DecodeBalanceError::TooLarge(result.to_string()))
 }
 
 /// Renders a block tag the way the JSON-RPC `eth_getBalance` parameter expects it: a named tag,
