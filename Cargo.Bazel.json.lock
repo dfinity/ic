@@ -1,5 +1,5 @@
 {
-  "checksum": "647170affacac693377b15401dd1ebc9e641c21437d8afe01196df78bff56371",
+  "checksum": "0f17f4cd43f4bc4637280b8f3c8a6c297e4c0e266413471687c9acccedffcb61",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -19570,13 +19570,13 @@
           ],
           "selects": {}
         },
-        "extra_deps": {
+        "edition": "2021",
+        "extra_link_deps": {
           "common": [
             "@@//third_party:devmapper"
           ],
           "selects": {}
         },
-        "edition": "2021",
         "version": "0.3.1"
       },
       "build_script_attrs": {
@@ -41925,13 +41925,13 @@
           ],
           "selects": {}
         },
-        "extra_deps": {
+        "edition": "2021",
+        "extra_link_deps": {
           "common": [
             "@@//third_party:cryptsetup"
           ],
           "selects": {}
         },
-        "edition": "2021",
         "version": "0.6.0"
       },
       "build_script_attrs": {
@@ -43019,13 +43019,13 @@
           ],
           "selects": {}
         },
-        "extra_deps": {
+        "edition": "2018",
+        "extra_link_deps": {
           "common": [
             "@@//third_party:systemd"
           ],
           "selects": {}
         },
-        "edition": "2018",
         "version": "0.9.3"
       },
       "build_script_attrs": {
@@ -82432,6 +82432,12 @@
           "selects": {}
         },
         "edition": "2018",
+        "extra_link_deps": {
+          "common": [
+            "@@//third_party:libvirt"
+          ],
+          "selects": {}
+        },
         "version": "0.3.0"
       },
       "build_script_attrs": {
