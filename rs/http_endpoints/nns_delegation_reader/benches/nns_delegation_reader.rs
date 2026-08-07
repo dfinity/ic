@@ -3,8 +3,8 @@ use std::hint::black_box;
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_crypto_tree_hash::LabeledTree;
 use ic_logger::no_op_logger;
-use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader};
-use ic_nns_delegation_manager_test_utils::create_fake_certificate_delegation;
+use ic_nns_delegation_reader::{CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader};
+use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
 use ic_test_utilities_types::ids::SUBNET_0;
 use ic_types::{
     CanisterId,
