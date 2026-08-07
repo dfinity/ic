@@ -12,6 +12,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:libc",
+        "@crate_index//:static_assertions",
         "@crate_index//:tempfile",
     ],
 )

@@ -165,10 +165,16 @@ mod imp {
         /// and therefore has to be raised again.
         dropped: u32,
         /// Capabilities are per-thread, so the guard has to be dropped on the
-        /// thread that created it. Making it `!Send` lets the compiler enforce
-        /// that rather than leaving it to a comment.
+        /// thread that created it: moving it elsewhere would raise capabilities
+        /// on a thread that never dropped them and leave this one deprivileged.
+        /// A `PhantomData` over a raw pointer opts the whole struct out of
+        /// `Send`/`Sync` — raw pointers implement neither — so the compiler
+        /// enforces that rather than leaving it to a comment. The assertion
+        /// below keeps it that way.
         _not_send: PhantomData<*const ()>,
     }
+
+    static_assertions::assert_not_impl_any!(RestoreDacBypass: Send, Sync);
 
     impl Drop for RestoreDacBypass {
         fn drop(&mut self) {
@@ -219,8 +225,8 @@ mod imp {
     /// Drops the DAC-bypass capabilities from the calling thread, returning the
     /// guard that restores them, or `None` if they were not held anyway.
     fn drop_dac_bypass() -> Option<RestoreDacBypass> {
-        let before = capget().unwrap_or_else(|err| panic!("capget failed: {err}"))[0];
-        let dropped = before.effective & DAC_BYPASS_MASK;
+        let before = capget().unwrap_or_else(|err| panic!("capget failed: {err}"));
+        let dropped = before[0].effective & DAC_BYPASS_MASK;
         if dropped == 0 {
             // The ordinary unprivileged case: the permission bits are already
             // enforced against us and no `capset` is issued at all. Note this
@@ -229,7 +235,7 @@ mod imp {
             // nor sufficient (uid 0 in a user namespace with an empty set).
             return None;
         }
-        set_effective_low_word(before.effective & !DAC_BYPASS_MASK).unwrap_or_else(|err| {
+        set_effective_low_word(before[0].effective & !DAC_BYPASS_MASK).unwrap_or_else(|err| {
             // Lowering effective capabilities is unconditionally permitted, so
             // this cannot legitimately fail — and carrying on would run the
             // action privileged, i.e. decide the assertions it guards for the
@@ -237,7 +243,7 @@ mod imp {
             panic!(
                 "capset failed while dropping CAP_DAC_OVERRIDE/CAP_DAC_READ_SEARCH \
                  (effective 0x{:08x}): {err}",
-                before.effective
+                before[0].effective
             )
         });
         // Construct the guard *before* the checks below, so that a failing check
@@ -247,36 +253,49 @@ mod imp {
             dropped,
             _not_send: PhantomData,
         };
-        assert_dac_bypass_cleared(before.permitted);
+        assert_dac_bypass_cleared(&before);
         assert_permission_bits_enforced();
         Some(guard)
     }
 
     /// Reads the capability sets back and panics unless the DAC-bypass bits are
-    /// really gone and the permitted set is untouched.
+    /// really gone and nothing but the effective set changed.
     ///
     /// This is what keeps a mistake here — a wrong bit number, a wrong
     /// capability version, a `capset` that reported success without taking
     /// effect — from quietly reverting every caller to running fully privileged,
     /// where the assertions they exist for would no longer mean anything.
-    fn assert_dac_bypass_cleared(permitted_before: u32) {
-        let after = capget().unwrap_or_else(|err| panic!("capget failed: {err}"))[0];
+    ///
+    /// Both capability words are compared, not just the low one holding the two
+    /// bits of interest. That is what catches a `capset` issued with
+    /// `_LINUX_CAPABILITY_VERSION_1`, whose single-word ABI modern kernels still
+    /// accept while silently zeroing the *upper* word of the permitted and
+    /// inheritable sets — discarding `CAP_AUDIT_READ` and everything above it.
+    fn assert_dac_bypass_cleared(before: &[CapData; 2]) {
+        let after = capget().unwrap_or_else(|err| panic!("capget failed: {err}"));
         assert_eq!(
-            after.effective & DAC_BYPASS_MASK,
+            after[0].effective & DAC_BYPASS_MASK,
             0,
             "CAP_DAC_OVERRIDE/CAP_DAC_READ_SEARCH are still effective after capset \
              (effective 0x{:08x}, permitted 0x{:08x}); the file permission bits would \
              not be enforced, so the assertions guarded by this helper would be \
              decided for the wrong reason",
-            after.effective,
-            after.permitted,
+            after[0].effective,
+            after[0].permitted,
         );
-        assert_eq!(
-            after.permitted, permitted_before,
-            "capset changed the permitted set (0x{:08x} -> 0x{:08x}); restoring the \
-             effective set afterwards may no longer be possible",
-            permitted_before, after.permitted,
-        );
+        for (word, (before, after)) in before.iter().zip(after.iter()).enumerate() {
+            assert_eq!(
+                (after.permitted, after.inheritable),
+                (before.permitted, before.inheritable),
+                "capset changed more than the effective set in capability word {word} \
+                 (permitted 0x{:08x} -> 0x{:08x}, inheritable 0x{:08x} -> 0x{:08x}); \
+                 restoring the effective set afterwards may no longer be possible",
+                before.permitted,
+                after.permitted,
+                before.inheritable,
+                after.inheritable,
+            );
+        }
     }
 
     /// Confirms behaviourally, once per process, that the permission bits are

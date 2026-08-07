@@ -16,9 +16,10 @@ use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::{Arc, Barrier};
 
-/// Creates a file and makes it inaccessible, returning the temp dir holding it
-/// (the caller keeps it alive) and the path.
-fn unreadable_file(mode: u32) -> (tempfile::TempDir, std::path::PathBuf) {
+/// Creates a file with the given permission bits, returning the temp dir
+/// holding it (which the caller must keep alive, since dropping it deletes the
+/// file) and the path to it.
+fn file_with_mode(mode: u32) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().expect("failed to create a temp dir");
     let path = dir.path().join("file");
     std::fs::write(&path, b"before").expect("failed to create the file");
@@ -46,7 +47,7 @@ fn should_propagate_panic_message() {
 #[test]
 fn should_deny_write_to_read_only_file() {
     run_with_file_permissions_enforced(|| {
-        let (_dir, path) = unreadable_file(0o400);
+        let (_dir, path) = file_with_mode(0o400);
 
         let err = std::fs::write(&path, b"after").expect_err("write should be denied");
 
@@ -57,7 +58,7 @@ fn should_deny_write_to_read_only_file() {
 #[test]
 fn should_deny_read_of_mode_000_file() {
     run_with_file_permissions_enforced(|| {
-        let (_dir, path) = unreadable_file(0o000);
+        let (_dir, path) = file_with_mode(0o000);
 
         let err = std::fs::read(&path).expect_err("read should be denied");
 
@@ -131,7 +132,7 @@ fn should_drop_the_bypass_in_threads_spawned_by_the_action() {
                 !bypasses_file_permissions(),
                 "a thread spawned inside the action should inherit the drop"
             );
-            let (_dir, path) = unreadable_file(0o400);
+            let (_dir, path) = file_with_mode(0o400);
             let err = std::fs::write(&path, b"after").expect_err("write should be denied");
             assert_eq!(err.kind(), ErrorKind::PermissionDenied);
         })
@@ -159,7 +160,7 @@ fn should_not_affect_other_threads() {
             entered.wait();
             let bypasses = bypasses_file_permissions();
             // ... and check it behaves accordingly, not just that the bit is set.
-            let (_dir, path) = unreadable_file(0o400);
+            let (_dir, path) = file_with_mode(0o400);
             let denied = std::fs::write(&path, b"after").is_err();
             observed.wait();
             (bypasses, denied)
@@ -224,7 +225,7 @@ mod attribute_form {
     #[test]
     #[ic_test_utilities_privileges::enforce_file_permissions]
     fn should_deny_write_to_read_only_file() {
-        let (_dir, path) = unreadable_file(0o400);
+        let (_dir, path) = file_with_mode(0o400);
 
         let err = std::fs::write(&path, b"after").expect_err("write should be denied");
 
@@ -234,7 +235,7 @@ mod attribute_form {
     #[test]
     #[ic_test_utilities_privileges::enforce_file_permissions]
     fn should_deny_read_of_mode_000_file() {
-        let (_dir, path) = unreadable_file(0o000);
+        let (_dir, path) = file_with_mode(0o000);
 
         let err = std::fs::read(&path).expect_err("read should be denied");
 
@@ -244,7 +245,7 @@ mod attribute_form {
     #[test]
     #[ic_test_utilities_privileges::enforce_file_permissions]
     fn should_support_a_return_type() -> std::io::Result<()> {
-        let (_dir, path) = unreadable_file(0o000);
+        let (_dir, path) = file_with_mode(0o000);
         assert_eq!(
             std::fs::read(&path)
                 .expect_err("read should be denied")
