@@ -303,29 +303,3 @@ impl DependenciesBuilder {
         }
     }
 }
-
-/// Deprecated: use `DependenciesBuilder::single_subnet(...)
-/// .without_mocked_state_manager().build()` instead.
-pub fn dependencies_with_subnet_records_with_raw_state_manager(
-    pool_config: ArtifactPoolConfig,
-    subnet_id: SubnetId,
-    records: Vec<(u64, SubnetRecord)>,
-) -> Dependencies {
-    DependenciesBuilder::single_subnet(pool_config, subnet_id, records)
-        .without_mocked_state_manager()
-        .build()
-}
-
-/// Deprecated: use `DependenciesBuilder::single_subnet(...).build()` instead.
-pub fn dependencies_with_subnet_params(
-    pool_config: ArtifactPoolConfig,
-    subnet_id: SubnetId,
-    records: Vec<(u64, SubnetRecord)>,
-) -> Dependencies {
-    DependenciesBuilder::single_subnet(pool_config, subnet_id, records).build()
-}
-
-/// Deprecated: use `DependenciesBuilder::new(...).build()` instead.
-pub fn dependencies(pool_config: ArtifactPoolConfig, nodes: u64) -> Dependencies {
-    DependenciesBuilder::new(pool_config, nodes).build()
-}
