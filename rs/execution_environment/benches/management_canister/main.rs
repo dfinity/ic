@@ -6,6 +6,7 @@ mod ecdsa;
 mod http_request;
 mod install_code;
 mod list_canisters;
+mod subnet_metrics;
 mod update_settings;
 mod utils;
 
@@ -20,6 +21,7 @@ fn all_benchmarks(c: &mut Criterion) {
     http_request::http_request_benchmark(c);
     install_code::install_code_benchmark(c);
     list_canisters::list_canisters_benchmark(c);
+    subnet_metrics::subnet_metrics_benchmark(c);
     update_settings::update_settings_benchmark(c);
 }
 
