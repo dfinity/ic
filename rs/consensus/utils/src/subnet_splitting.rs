@@ -2,9 +2,14 @@ use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{
     proxy::ProxyDecodeError, registry::subnet::v1::catch_up_package_contents::CupType,
 };
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{
-    RegistryVersion, SubnetId, consensus::SubnetSplittingArgs, registry::RegistryClientError,
+    NodeId, RegistryVersion, SubnetId,
+    consensus::{
+        Block, SubnetSplittingArgs,
+        dkg::{SplittingArgs, SubnetSplittingStatus},
+    },
+    registry::RegistryClientError,
 };
 use thiserror::Error;
 
@@ -84,19 +89,101 @@ pub fn get_status(
     })
 }
 
+pub fn is_split_scheduled(summary_block: &Block) -> Option<SplittingArgs> {
+    match summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .subnet_splitting_status()
+    {
+        SubnetSplittingStatus::Scheduled(splitting_args) => Some(splitting_args),
+        SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit(..) => None,
+    }
+}
+
+#[derive(Debug)]
+pub struct PostSplitAssignment {
+    pub new_subnet_id: SubnetId,
+    pub other_subnet_id: SubnetId,
+}
+
+#[derive(Debug, Error)]
+pub enum PostSplitAssignmentError {
+    #[error("Error while getting the subnet id from the registry at version {0}: {1}")]
+    FailedToGetSubnetIdFromTheRegistry(RegistryVersion, RegistryClientError),
+    #[error("The node is unassigned at registry version {0}")]
+    Unassigned(RegistryVersion),
+    #[error("The node changed subnets during subnet splitting")]
+    DisallowedMembershipChange(SubnetId),
+}
+
+pub fn get_post_split_subnet_assignment(
+    node_id: NodeId,
+    summary_block: &Block,
+    registry_client: &dyn RegistryClient,
+    SplittingArgs {
+        destination_subnet_id,
+        source_subnet_id,
+    }: SplittingArgs,
+) -> Result<PostSplitAssignment, PostSplitAssignmentError> {
+    let new_subnet_id = registry_client
+        .get_subnet_id_from_node_id(node_id, summary_block.context.registry_version)
+        .map_err(|err| {
+            PostSplitAssignmentError::FailedToGetSubnetIdFromTheRegistry(
+                summary_block.context.registry_version,
+                err,
+            )
+        })?
+        .ok_or(PostSplitAssignmentError::Unassigned(
+            summary_block.context.registry_version,
+        ))?;
+
+    let other_subnet_id = if new_subnet_id == destination_subnet_id {
+        source_subnet_id
+    } else if new_subnet_id == source_subnet_id {
+        destination_subnet_id
+    } else {
+        return Err(PostSplitAssignmentError::DisallowedMembershipChange(
+            new_subnet_id,
+        ));
+    };
+
+    Ok(PostSplitAssignment {
+        new_subnet_id,
+        other_subnet_id,
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
+    use ic_interfaces_registry::RegistryClientVersionedResult;
     use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
     use ic_protobuf::registry::subnet::v1::{GenesisArgs, RecoveryArgs};
-    use ic_registry_keys::make_catch_up_package_contents_key;
-    use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry_non_final};
-    use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, SUBNET_2};
-    use ic_types::subnet_id_into_protobuf;
+    use ic_test_utilities_consensus::fake::Fake;
+    use ic_test_utilities_registry::{
+        SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
+        setup_registry_non_final,
+    };
+    use ic_test_utilities_types::ids::{
+        NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2, SUBNET_3,
+    };
+    use ic_types::{
+        Height, ReplicaVersion, Time,
+        backwards_compatibility::BackwardsCompatible,
+        batch::ValidationContext,
+        consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::PostSplitArgs},
+        crypto::{CryptoHash, CryptoHashOf},
+        subnet_id_into_protobuf,
+        time::UNIX_EPOCH,
+    };
     use rstest::rstest;
     use std::sync::Arc;
 
     const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
     const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
+    const OTHER_SUBNET_ID: SubnetId = SUBNET_3;
     const REGISTRY_CUP_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
 
     use super::*;

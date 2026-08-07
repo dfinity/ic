@@ -792,6 +792,8 @@ mod tests {
                 crypto.clone(),
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry.clone(),
+                ReplicaConfig { node_id, subnet_id },
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(

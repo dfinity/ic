@@ -20,6 +20,12 @@ pub trait NodeRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<(SubnetId, SubnetType)>;
 
+    fn get_subnet_id_from_node_id(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetId>;
+
     /// Returns a list of node ids that contains the id of each node that exists
     /// at version `version`.
     fn get_node_ids(&self, version: RegistryVersion) -> Result<Vec<NodeId>, RegistryClientError>;
@@ -58,6 +64,16 @@ impl<T: RegistryClient + ?Sized> NodeRegistry for T {
         }
 
         Ok(None)
+    }
+
+    fn get_subnet_id_from_node_id(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetId> {
+        Ok(self
+            .get_subnet_id_and_type_from_node_id(node_id, version)?
+            .map(|(subnet_id, _)| subnet_id))
     }
 
     fn get_node_ids(&self, version: RegistryVersion) -> Result<Vec<NodeId>, RegistryClientError> {
