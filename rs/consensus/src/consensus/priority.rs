@@ -121,7 +121,6 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_test_utilities_consensus::fake::FakeContent;
-
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         consensus::{
