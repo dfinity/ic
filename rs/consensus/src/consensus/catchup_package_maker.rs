@@ -293,10 +293,7 @@ impl CatchUpPackageMaker {
 mod tests {
     //! CatchUpPackageMaker unit tests
     use super::*;
-    use ic_consensus_mocks::{
-        Dependencies, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -345,7 +342,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 5;
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let mut deps = dependencies_with_subnet_params(
+            let mut deps = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -354,7 +351,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             // Ignore state sync and state divergence
             deps.state_manager
@@ -607,7 +605,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_records_with_raw_state_manager(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -616,7 +614,9 @@ mod tests {
                         .with_dkg_interval_length(interval_length)
                         .build(),
                 )],
-            );
+            )
+            .without_mocked_state_manager()
+            .build();
 
             let height = Height::from(0);
             state_manager
@@ -702,7 +702,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -711,7 +711,8 @@ mod tests {
                         .with_dkg_interval_length(interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             pool.advance_round_normal_operation_n(5);
             let cup_height = PoolReader::new(&pool).get_catch_up_height();
@@ -761,7 +762,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -770,7 +771,8 @@ mod tests {
                         .with_dkg_interval_length(interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             state_manager
                 .get_mut()

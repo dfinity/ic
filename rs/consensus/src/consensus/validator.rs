@@ -2002,10 +2002,7 @@ pub mod test {
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{
-        Dependencies, RefMockPayloadBuilder, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder, RefMockPayloadBuilder};
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
@@ -2144,32 +2141,39 @@ pub mod test {
         node_ids: &[NodeId],
         dkg_interval_length: u64,
     ) -> ValidatorAndDependencies {
-        ValidatorAndDependencies::new(dependencies_with_subnet_params(
-            pool_config,
-            subnet_test_id(0),
-            vec![(
-                1,
-                SubnetRecordBuilder::from(node_ids)
-                    .with_dkg_interval_length(dkg_interval_length)
-                    .build(),
-            )],
-        ))
+        ValidatorAndDependencies::new(
+            DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(node_ids)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            )
+            .build(),
+        )
     }
 
     fn setup_dependencies_with_raw_state_manager(
         pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
         node_ids: &[NodeId],
     ) -> ValidatorAndDependencies {
-        ValidatorAndDependencies::new(dependencies_with_subnet_records_with_raw_state_manager(
-            pool_config,
-            subnet_test_id(0),
-            vec![(
-                1,
-                SubnetRecordBuilder::from(node_ids)
-                    .with_dkg_interval_length(9)
-                    .build(),
-            )],
-        ))
+        ValidatorAndDependencies::new(
+            DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(node_ids)
+                        .with_dkg_interval_length(9)
+                        .build(),
+                )],
+            )
+            .without_mocked_state_manager()
+            .build(),
+        )
     }
 
     #[test]
@@ -2882,17 +2886,20 @@ pub mod test {
                 mut pool,
                 time_source,
                 ..
-            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .with_halt_at_cup_height(true)
-                        .build(),
-                )],
-            ));
+            } = ValidatorAndDependencies::new(
+                DependenciesBuilder::single_subnet(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![(
+                        1,
+                        SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .with_halt_at_cup_height(true)
+                            .build(),
+                    )],
+                )
+                .build(),
+            );
 
             // Any payload validation fails, so we can observe whether validation was attempted.
             payload_builder
@@ -3261,20 +3268,23 @@ pub mod test {
                 time_source,
                 replica_config,
                 ..
-            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                (1..=block_registry_version.get())
-                    .map(|version| {
-                        (
-                            version,
-                            SubnetRecordBuilder::from(&committee)
-                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                                .build(),
-                        )
-                    })
-                    .collect(),
-            ));
+            } = ValidatorAndDependencies::new(
+                DependenciesBuilder::single_subnet(
+                    pool_config,
+                    subnet_test_id(0),
+                    (1..=block_registry_version.get())
+                        .map(|version| {
+                            (
+                                version,
+                                SubnetRecordBuilder::from(&committee)
+                                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                    .build(),
+                            )
+                        })
+                        .collect(),
+                )
+                .build(),
+            );
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -3334,20 +3344,23 @@ pub mod test {
                 time_source,
                 replica_config,
                 ..
-            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                (1..=block_registry_version.get())
-                    .map(|version| {
-                        (
-                            version,
-                            SubnetRecordBuilder::from(&committee)
-                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                                .build(),
-                        )
-                    })
-                    .collect(),
-            ));
+            } = ValidatorAndDependencies::new(
+                DependenciesBuilder::single_subnet(
+                    pool_config,
+                    subnet_test_id(0),
+                    (1..=block_registry_version.get())
+                        .map(|version| {
+                            (
+                                version,
+                                SubnetRecordBuilder::from(&committee)
+                                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                    .build(),
+                            )
+                        })
+                        .collect(),
+                )
+                .build(),
+            );
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -4540,25 +4553,28 @@ pub mod test {
                 mut pool,
                 replica_config,
                 ..
-            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![
-                    (
-                        1,
-                        SubnetRecordBuilder::from(&subnet_members)
-                            .with_dkg_interval_length(9)
-                            .build(),
-                    ),
-                    (
-                        10,
-                        SubnetRecordBuilder::from(&subnet_members)
-                            .with_dkg_interval_length(9)
-                            .with_replica_version("new_version")
-                            .build(),
-                    ),
-                ],
-            ));
+            } = ValidatorAndDependencies::new(
+                DependenciesBuilder::single_subnet(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![
+                        (
+                            1,
+                            SubnetRecordBuilder::from(&subnet_members)
+                                .with_dkg_interval_length(9)
+                                .build(),
+                        ),
+                        (
+                            10,
+                            SubnetRecordBuilder::from(&subnet_members)
+                                .with_dkg_interval_length(9)
+                                .with_replica_version("new_version")
+                                .build(),
+                        ),
+                    ],
+                )
+                .build(),
+            );
 
             // Move to the end of the DKG interval where we switch versions
             pool.advance_round_normal_operation_n(dkg_interval + 1);

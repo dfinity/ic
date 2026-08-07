@@ -725,7 +725,7 @@ pub(super) fn is_time_to_make_block(
 mod tests {
 
     use super::*;
-    use ic_consensus_mocks::{Dependencies, MockPayloadBuilder, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder, MockPayloadBuilder};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -766,7 +766,7 @@ mod tests {
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![
@@ -783,7 +783,8 @@ mod tests {
                             .build(),
                     ),
                 ],
-            );
+            )
+            .build();
 
             pool.advance_round_normal_operation_n(4);
 
@@ -936,7 +937,7 @@ mod tests {
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -945,7 +946,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             pool.advance_round_normal_operation_n(8);
 
@@ -1090,7 +1092,7 @@ mod tests {
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config.clone(),
                 subnet_test_id(0),
                 vec![
@@ -1109,7 +1111,8 @@ mod tests {
                             .build(),
                     ),
                 ],
-            );
+            )
+            .build();
 
             state_manager
                 .get_mut()
@@ -1238,7 +1241,12 @@ mod tests {
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record.clone())]);
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_id,
+                vec![(1, record.clone())],
+            )
+            .build();
 
             let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
@@ -1417,7 +1425,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool, registry, ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -1426,7 +1434,8 @@ mod tests {
                         .with_unit_delay(unit_delay)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             for rank in past_block_ranks {
                 pool.advance_round_with_block(&pool.make_next_block_with_rank(*rank));
@@ -1592,7 +1601,7 @@ mod tests {
                     dkg_pool,
                     idkg_pool,
                     ..
-                } = dependencies_with_subnet_params(
+                } = DependenciesBuilder::single_subnet(
                     pool_config,
                     SOURCE_SUBNET_ID,
                     (1..=MAX_REGISTRY_VERSION)
@@ -1605,7 +1614,8 @@ mod tests {
                             )
                         })
                         .collect(),
-                );
+                )
+                .build();
 
                 let mut payload_builder = MockPayloadBuilder::new();
                 payload_builder

@@ -119,7 +119,7 @@ fn compute_bouncer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_test_utilities_consensus::fake::FakeContent;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -136,7 +136,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval = 499;
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+            let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -145,7 +145,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             // Advance pool *without* producing CUP to the maximum height beyond
             // which we don't validate non-CUP artifacts anymore.
@@ -197,7 +198,7 @@ mod tests {
     #[test]
     fn test_bouncer_function() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             pool.advance_round_normal_operation_n(2);
 
             let expected_batch_height = Height::from(1);

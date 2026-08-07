@@ -384,7 +384,7 @@ mod tests {
     //! Notary unit tests
     use super::*;
     use assert_matches::assert_matches;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::{consensus_pool::ConsensusPool, time_source::TimeSource};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -410,7 +410,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -419,7 +419,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -611,7 +612,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -620,7 +621,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -688,7 +690,12 @@ mod tests {
                 state_manager,
                 membership,
                 ..
-            } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, record)],
+            )
+            .build();
             let last_cup_dkg_info = PoolReader::new(&pool)
                 .get_highest_catch_up_package()
                 .content
@@ -812,7 +819,12 @@ mod tests {
                 state_manager,
                 membership,
                 ..
-            } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, record)],
+            )
+            .build();
 
             let certified_height = Arc::new(RwLock::new(Height::from(0)));
             let certified_height_clone = Arc::clone(&certified_height);
@@ -917,7 +929,7 @@ mod tests {
                 state_manager,
                 membership,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![
@@ -935,7 +947,8 @@ mod tests {
                             .build(),
                     ),
                 ],
-            );
+            )
+            .build();
 
             let certified_height = Arc::new(RwLock::new(Height::from(0)));
             let certified_height_clone = Arc::clone(&certified_height);

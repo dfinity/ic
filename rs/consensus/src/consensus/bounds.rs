@@ -186,7 +186,7 @@ pub fn validated_pool_within_bounds(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
@@ -221,7 +221,12 @@ mod tests {
                 registry,
                 replica_config,
                 ..
-            } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, record)],
+            )
+            .build();
 
             // Still within bounds.
             pool.advance_round_normal_operation_n(max_counts.finalization as u64);

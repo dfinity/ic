@@ -472,7 +472,7 @@ fn get_pending_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
@@ -493,7 +493,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
 
             state_manager
                 .get_mut()
@@ -631,7 +631,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 3);
+            } = DependenciesBuilder::new(pool_config, 3).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -667,7 +667,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 3);
+            } = DependenciesBuilder::new(pool_config, 3).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -706,7 +706,7 @@ mod tests {
     #[test]
     fn test_get_purge_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
 
             // Initial purge height is None.
             assert_eq!(get_purge_height(&PoolReader::new(&pool)), None);
@@ -738,7 +738,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 10);
+            } = DependenciesBuilder::new(pool_config, 10).build();
 
             let expected_extra_heights = Arc::new(RwLock::new(BTreeSet::new()));
             let extra_heights_clone = Arc::clone(&expected_extra_heights);
@@ -823,7 +823,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 10);
+            } = DependenciesBuilder::new(pool_config, 10).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
