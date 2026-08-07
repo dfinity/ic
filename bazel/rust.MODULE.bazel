@@ -130,6 +130,10 @@ crate.spec(
     version = "^0.10.1",
 )
 crate.spec(
+    package = "axum-otel-metrics",
+    version = "^0.14.1",
+)
+crate.spec(
     features = [
         "tls-rustls-no-provider",
     ],
@@ -397,6 +401,13 @@ crate.spec(
     version = "^2.0.0",
 )
 crate.spec(
+    features = [
+        "serde",
+    ],
+    package = "duration-string",
+    version = "^0.3.0",
+)
+crate.spec(
     package = "dyn-clone",
     version = "^1.0.14",
 )
@@ -429,6 +440,10 @@ crate.spec(
 crate.spec(
     package = "erased-serde",
     version = "^0.3.11",
+)
+crate.spec(
+    package = "exitcode",
+    version = "^1.1.2",
 )
 crate.spec(
     features = ["print"],
@@ -923,6 +938,10 @@ crate.spec(
     version = "^0.2.158",
 )
 crate.spec(
+    package = "log",
+    version = "^0.4",
+)
+crate.spec(
     features = [
         "mutex",
     ],
@@ -996,24 +1015,6 @@ crate.spec(
 crate.spec(
     package = "memchr",
     version = "2.7",
-)
-crate.spec(
-    # When updating this, please make sure that the built
-    # binary exports metrics http_cache_* after one
-    # successful request to the proxy.  The OpenTelemetry
-    # package version pinned by this software must equal
-    # the OpenTelemetry version pinned by the
-    # axum-otel-metrics version pinned by this software,
-    # due to technical idiosyncrasies of the OpenTelemetry
-    # crate.  When these do not match, custom metrics are
-    # not exported.
-    default_features = False,
-    features = [
-        "rustls-tls-webpki-roots",
-    ],
-    git = "https://github.com/dfinity/metrics-proxy.git",
-    package = "metrics-proxy",
-    rev = "b6933ed79ac07baee7f3fbc0793bed95e614d27c",
 )
 crate.spec(
     features = [
@@ -1119,7 +1120,12 @@ crate.spec(
     version = "^0.32.0",
 )
 crate.spec(
+    package = "opentelemetry-prometheus",
+    version = "^0.32.0",
+)
+crate.spec(
     features = [
+        "metrics",
         "trace",
     ],
     package = "opentelemetry_sdk",
@@ -1602,6 +1608,10 @@ crate.spec(
     version = "^2.7.0",
 )
 crate.spec(
+    package = "simple_logger",
+    version = "^4.3.0",
+)
+crate.spec(
     features = [
         "nested-values",
     ],
@@ -1846,6 +1856,7 @@ crate.spec(
         "request-id",
         "util",
         "compression-full",
+        "timeout",
         "tracing",
     ],
     package = "tower-http",
@@ -2295,10 +2306,6 @@ crate.annotation(
         "PROTOC_NO_VENDOR": "1",
     },
     crate = "prost-build",
-)
-crate.annotation(
-    crate = "metrics-proxy",
-    gen_binaries = ["metrics-proxy"],
 )
 crate.annotation(
     crate = "ic-gateway",

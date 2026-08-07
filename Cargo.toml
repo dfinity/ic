@@ -242,6 +242,7 @@ members = [
     "rs/monitoring/adapter_metrics/service",
     "rs/monitoring/logger",
     "rs/monitoring/metrics",
+    "rs/monitoring/metrics_proxy",
     "rs/monitoring/pprof",
     "rs/monitoring/tracing",
     "rs/monitoring/tracing/jaeger_exporter",
@@ -612,6 +613,7 @@ async-stream = "0.3.6"
 async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
+axum-otel-metrics = "0.14.1"
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backon = { version = "1.6.0", default-features = false, features = ["std"] }
 base64 = { version = "0.13.1" }
@@ -667,7 +669,9 @@ ed25519-dalek = { version = "2.2.0", features = [
     "pem",
     "hazmat",
 ] }
+duration-string = { version = "0.3.0", features = ["serde"] }
 escargot = "0.5.7"
+exitcode = "1.1.2"
 ethers-core = "^2.0.7"
 ethnum = { version = "1.5.3", features = ["serde"] }
 evm_rpc_client = "0.4.0"
@@ -759,6 +763,7 @@ k256 = { version = "0.13.4", default-features = false, features = [
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
+log = "0.4"
 libcryptsetup-rs = "0.15"
 libflate = "2.1.0"
 libfuzzer-sys = "0.4.7"
@@ -789,7 +794,8 @@ opentelemetry-otlp = { version = "0.32.0", default-features = false, features = 
     "grpc-tonic",
     "trace",
 ] }
-opentelemetry_sdk = { version = "0.32.1", features = ["trace"] }
+opentelemetry-prometheus = "0.32.0"
+opentelemetry_sdk = { version = "0.32.1", features = ["metrics", "trace"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "alloc",
     "arithmetic",
@@ -892,6 +898,7 @@ sha3 = "0.10.8"
 shell-escape = { version = "^0.1.5" }
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
+simple_logger = "4.3.0"
 slog = { version = "2.7.0", features = [
     "max_level_trace",
     "nested-values",
