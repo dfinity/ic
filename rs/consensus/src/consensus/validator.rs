@@ -2145,7 +2145,7 @@ pub mod test {
             };
 
             // Skip to two heights before Summary height
-            pool.advance_round_normal_operation_no_cup_n(8);
+            pool.advance_round_normal_operation_no_cup_n(DKG_INTERVAL_LENGTH - 1);
 
             let cup_share_data_height = make_next_cup_share(&pool);
             pool.advance_round_normal_operation_no_cup_n(1);
@@ -2295,7 +2295,7 @@ pub mod test {
             };
 
             // Skip to Summary height
-            pool.advance_round_normal_operation_no_cup_n(9);
+            pool.advance_round_normal_operation_no_cup_n(DKG_INTERVAL_LENGTH);
 
             let mut proposal = pool.make_next_block();
             let block = proposal.content.as_mut();
@@ -3004,18 +3004,18 @@ pub mod test {
                     Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
                 )));
 
-            pool.advance_round_normal_operation_n(8);
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH - 1);
 
-            // Make block at height 9
+            // Make block at height `DKG_INTERVAL_LENGTH`
             let next_proposal = pool.make_next_block();
-            assert_eq!(next_proposal.height().get(), 9);
-            // Make and insert beacon at height 9
+            assert_eq!(next_proposal.height().get(), DKG_INTERVAL_LENGTH);
+            // Make and insert beacon at height `DKG_INTERVAL_LENGTH`
             let next_beacon = pool.make_next_beacon();
             pool.insert_validated(next_beacon.clone());
-            // Make and insert beacon at height 10
+            // Make and insert beacon at height `DKG_INTERVAL_LENGTH + 1`
             let summary_beacon = RandomBeacon::from_parent(&next_beacon);
             pool.insert_validated(summary_beacon.clone());
-            // Make summary at height 10
+            // Make summary at height `DKG_INTERVAL_LENGTH + 1`
             let summary =
                 pool.make_next_block_from_parent(next_proposal.content.get_value(), Rank(0));
             let cup = CatchUpPackage {
@@ -3039,13 +3039,13 @@ pub mod test {
             pool.insert_validated(summary);
 
             let test_block = pool.make_next_block();
-            assert_eq!(test_block.height().get(), 11);
+            assert_eq!(test_block.height().get(), DKG_INTERVAL_LENGTH + 2);
             // Forward time correctly
             time_source
                 .set_time(test_block.content.as_ref().context.time)
                 .unwrap();
 
-            // Validation should fail, since the payload at height 9 is missing
+            // Validation should fail, since the payload at height `DKG_INTERVAL_LENGTH` is missing
             let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
             assert_matches!(
                 result,
@@ -3054,12 +3054,12 @@ pub mod test {
                 ))
             );
 
-            // Insert the missing proposal at height 9, the payload should be validated as expected
+            // Insert the missing proposal at height `DKG_INTERVAL_LENGTH`, the payload should be validated as expected
             pool.insert_validated(next_proposal);
             let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
             assert_matches!(result, Ok(()));
 
-            // Insert the cup at height 10, the payload validation should fail
+            // Insert the cup at height `DKG_INTERVAL_LENGTH + 1`, the payload validation should fail
             // Since payloads below the CUP are not returned
             pool.insert_validated(cup);
             let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
@@ -3900,7 +3900,7 @@ pub mod test {
                 },
             ) = make_default_validator_and_deps(pool_config);
 
-            pool.advance_round_normal_operation_n(9);
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
             // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
             pool.prepare_round().dont_add_catch_up_package().advance();
 
@@ -4333,7 +4333,7 @@ pub mod test {
             let (validator, Dependencies { mut pool, .. }) =
                 make_default_validator_and_deps(pool_config);
 
-            pool.advance_round_normal_operation_n(9);
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
 
             let mut block = pool.make_next_block();
 
