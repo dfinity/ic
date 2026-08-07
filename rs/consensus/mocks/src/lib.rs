@@ -10,6 +10,7 @@ use ic_interfaces::{
     consensus::{PayloadBuilder, PayloadValidationError},
     validation::ValidationResult,
 };
+use ic_interfaces_mocks::messaging::RefMockMessageRouting;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
@@ -61,7 +62,7 @@ mock! {
 /// Sync wrapper to allow shared modification. See [`RefMockStateManager`].
 #[derive(Default)]
 pub struct RefMockPayloadBuilder {
-    pub mock: RwLock<MockPayloadBuilder>,
+    mock: RwLock<MockPayloadBuilder>,
 }
 
 impl RefMockPayloadBuilder {
@@ -106,6 +107,8 @@ pub struct Dependencies {
     pub pool: TestConsensusPool,
     pub replica_config: ReplicaConfig,
     pub state_manager: Arc<RefMockStateManager>,
+    pub payload_builder: Arc<RefMockPayloadBuilder>,
+    pub message_routing: Arc<RefMockMessageRouting>,
     pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
@@ -182,6 +185,15 @@ impl DependenciesBuilder {
 
     pub fn with_replica_config(mut self, replica_config: ReplicaConfig) -> Self {
         self.replica_config = replica_config;
+        self
+    }
+
+    /// Sets the DKG interval length on every subnet record passed to the
+    /// builder.
+    pub fn with_dkg_interval_length(mut self, length: u64) -> Self {
+        for (_, _, record) in self.sorted_subnet_records.iter_mut() {
+            record.dkg_interval_length = length;
+        }
         self
     }
 
@@ -282,6 +294,8 @@ impl DependenciesBuilder {
             pool,
             replica_config: self.replica_config,
             state_manager,
+            payload_builder: Arc::new(RefMockPayloadBuilder::default()),
+            message_routing: Arc::new(RefMockMessageRouting::default()),
             dkg_pool,
             idkg_pool,
             canister_http_pool,
