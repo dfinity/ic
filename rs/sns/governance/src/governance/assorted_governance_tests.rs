@@ -3049,6 +3049,7 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         });
 
         // Upgrade Proposal

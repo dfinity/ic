@@ -74,6 +74,11 @@ type CanisterStatusResultV2 = record {
   query_stats : opt QueryStats;
 };
 
+type CanisterUpgradeOptions = record {
+  skip_pre_upgrade : opt bool;
+  wasm_memory_persistence : opt int32;
+};
+
 type CanisterStatusType = variant {
   stopped;
   stopping;
@@ -912,6 +917,7 @@ type UpgradeSnsControlledCanister = record {
   mode : opt int32;
   canister_id : opt principal;
   canister_upgrade_arg : opt blob;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type Valuation = record {
