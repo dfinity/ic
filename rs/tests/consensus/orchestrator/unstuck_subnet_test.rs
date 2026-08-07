@@ -28,10 +28,9 @@ use ic_consensus_system_test_utils::{
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
-    ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides},
+    ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::*,
-    test_setup::SystemTestBackend,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{JournalStreamer, block_on};

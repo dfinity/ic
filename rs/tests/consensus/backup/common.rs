@@ -46,10 +46,9 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides},
+        ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
-        test_setup::SystemTestBackend,
     },
     util::{MessageCanister, block_on, get_nns_node},
 };

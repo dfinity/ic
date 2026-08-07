@@ -19,15 +19,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides,
-};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     SubnetSnapshot, get_guestos_img_version,
 };
-use ic_system_test_driver::driver::test_setup::SystemTestBackend;
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
     LoadTestMetricsProvider, RequestOutcome,

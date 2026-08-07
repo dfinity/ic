@@ -8,15 +8,12 @@ use ic_consensus_system_test_utils::rw_message::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides,
-};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot, get_guestos_img_version,
 };
-use ic_system_test_driver::driver::test_setup::SystemTestBackend;
 use ic_system_test_driver::systest;
 use ic_types::Height;
 use slog::info;
