@@ -1318,7 +1318,11 @@ fn inject_metering(
             .iter()
             .map(|(num, typ)| *num as u64 * local_cost(typ, mem_type))
             .sum();
-        if locals_cost < 4096 { 0 } else { locals_cost }
+        if locals_cost < 2 * PAGE_SIZE as u64 {
+            0
+        } else {
+            locals_cost
+        }
     };
 
     let points = match metering_type {
