@@ -11,7 +11,7 @@ use crate::payload_builder::{
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{
     consensus_cost_coefficient, flexible_initial_spent, non_flexible_initial_spent,
@@ -2066,11 +2066,12 @@ pub(crate) fn test_config_with_http_feature<T>(
             canister_http_pool,
             state_manager,
             ..
-        } = dependencies_with_subnet_params(
+        } = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(1, subnet_record)],
-        );
+        )
+        .build();
 
         let payload_builder = CanisterHttpPayloadBuilderImpl::new(
             canister_http_pool.clone(),
