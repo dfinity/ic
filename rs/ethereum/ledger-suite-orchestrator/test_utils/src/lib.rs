@@ -2,7 +2,7 @@ use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::management_canister::CanisterStatusResult;
+use ic_cdk_management_canister::CanisterStatusResult;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledCanister, InstalledLedgerSuite,
     LedgerInitArg, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,

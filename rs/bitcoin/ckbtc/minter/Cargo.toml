@@ -24,6 +24,8 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-btc-checker = { path = "../../checker" }
 ic-cdk = { workspace = true }
+ic-cdk-bitcoin-canister = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
