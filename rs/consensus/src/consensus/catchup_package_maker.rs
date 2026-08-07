@@ -293,10 +293,7 @@ impl CatchUpPackageMaker {
 mod tests {
     //! CatchUpPackageMaker unit tests
     use super::*;
-    use ic_consensus_mocks::{
-        Dependencies, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -312,8 +309,8 @@ mod tests {
             fake_signature_request_context_with_registry_version,
         },
     };
-    use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         CryptoHashOfState, Height, RegistryVersion,
         consensus::{BlockPayload, BlockProposal, Payload, SummaryPayload, idkg::PreSigId},
@@ -344,17 +341,9 @@ mod tests {
     fn with_cup_maker_setup<T>(run: impl FnOnce(CatchUpPackageMaker, u64, Dependencies) -> T) -> T {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 5;
-            let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let mut deps = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
+            let mut deps = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
 
             // Ignore state sync and state divergence
             deps.state_manager
@@ -599,7 +588,6 @@ mod tests {
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 5;
-            let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let Dependencies {
                 mut pool,
                 membership,
@@ -607,16 +595,10 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_records_with_raw_state_manager(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(interval_length)
+                .without_mocked_state_manager()
+                .build();
 
             let height = Height::from(0);
             state_manager
@@ -694,7 +676,6 @@ mod tests {
     fn test_invoke_state_sync() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
-            let committee: Vec<_> = (0..5).map(node_test_id).collect();
             let Dependencies {
                 mut pool,
                 membership,
@@ -702,16 +683,9 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 5)
+                .with_dkg_interval_length(interval_length)
+                .build();
 
             pool.advance_round_normal_operation_n(5);
             let cup_height = PoolReader::new(&pool).get_catch_up_height();
@@ -753,7 +727,6 @@ mod tests {
     fn test_state_divergence_report() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
-            let committee: Vec<_> = (0..5).map(node_test_id).collect();
             let Dependencies {
                 mut pool,
                 membership,
@@ -761,16 +734,9 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 5)
+                .with_dkg_interval_length(interval_length)
+                .build();
 
             state_manager
                 .get_mut()

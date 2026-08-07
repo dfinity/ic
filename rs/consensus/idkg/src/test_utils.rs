@@ -7,7 +7,7 @@ use crate::{
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_mocks::{Dependencies, dependencies};
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -398,7 +398,8 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto_and_threads(
     threads: usize,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies { pool, crypto, .. } =
+        DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     // need to make sure subnet matches the transcript
     let pre_signer = IDkgPreSignerImpl::new(
@@ -420,7 +421,8 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies { pool, crypto, .. } =
+        DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     let pre_signer = IDkgPreSignerImpl::new(
         NODE_1,
@@ -464,7 +466,7 @@ pub(crate) fn create_signer_dependencies_with_crypto_and_threads(
         crypto,
         state_manager,
         ..
-    } = dependencies(pool_config.clone(), 1);
+    } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     let signer = ThresholdSignerImpl::new(
         NODE_1,
@@ -517,7 +519,7 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
         crypto,
         state_manager,
         ..
-    } = dependencies(pool_config.clone(), 1);
+    } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     let signer = ThresholdSignerImpl::new(
         NODE_1,
@@ -545,7 +547,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
         crypto,
         state_manager,
         ..
-    } = dependencies(pool_config.clone(), 1);
+    } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         node_id,
@@ -571,7 +573,7 @@ pub(crate) fn create_complaint_dependencies_and_pool(
         crypto,
         state_manager,
         ..
-    } = dependencies(pool_config.clone(), 1);
+    } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     state_manager
         .get_mut()
