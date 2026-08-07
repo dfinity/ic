@@ -616,7 +616,7 @@ mod tests {
     use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
     use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
     use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize_partial;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_tree_hash::{Digest, Witness, sparse_labeled_tree_from_paths};
     use ic_interfaces::{
         certification::CertificationPool,
@@ -747,7 +747,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 1);
+                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -783,7 +783,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
                 pool.advance_round_normal_operation();
                 add_expectations(state_manager.clone(), 1, 4);
                 let metrics_registry = MetricsRegistry::new();
@@ -849,7 +849,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 pool.advance_round_normal_operation_n(6);
                 add_expectations(state_manager.clone(), 1, 4);
@@ -986,7 +986,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 6);
+            } = DependenciesBuilder::new(pool_config.clone(), 6).build();
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
             let metrics_registry = MetricsRegistry::new();
@@ -1066,7 +1066,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 7);
+            } = DependenciesBuilder::new(pool_config.clone(), 7).build();
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(10));
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
@@ -1139,7 +1139,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 4);
+            } = DependenciesBuilder::new(pool_config.clone(), 4).build();
             pool.advance_round_normal_operation_n(10);
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
@@ -1211,7 +1211,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 1);
+                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
                 pool.advance_round_normal_operation_n(10);
                 // make the mock state manager return empty hashes for heights 3, 4 and 5
                 add_expectations(state_manager.clone(), 3, 5);
@@ -1384,7 +1384,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 4);
+            } = DependenciesBuilder::new(pool_config.clone(), 4).build();
             // make the mock state manager return empty hashes for heights 4 and 5
             add_expectations(state_manager.clone(), 4, 5);
             let metrics_registry = MetricsRegistry::new();
@@ -1482,7 +1482,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 let metrics_registry = MetricsRegistry::new();
                 let cert_pool = CertificationPoolImpl::new(
