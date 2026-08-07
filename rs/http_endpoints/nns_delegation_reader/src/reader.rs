@@ -171,11 +171,11 @@ impl NNSDelegationBuilder {
     /// `ranges_check` specifies what to check the certified canister ranges against
     /// (see [`CanisterRangesCheck`]). For the meaning of `routing_table` and
     /// `public_key_for_subnet`, see [`Self::is_consistent_with`].
-    pub fn build_verified(
+    pub fn build_verified<'a>(
         &self,
         ranges_check: CanisterRangesCheck,
         routing_table: &RoutingTable,
-        public_key_for_subnet: impl FnOnce(SubnetId) -> Option<Vec<u8>>,
+        public_key_for_subnet: impl FnOnce(SubnetId) -> Option<&'a [u8]>,
         logger: &ReplicaLogger,
     ) -> Result<CertificateDelegation, DelegationVerificationError> {
         match self.is_consistent_with(ranges_check, routing_table, public_key_for_subnet) {
@@ -197,7 +197,7 @@ impl NNSDelegationBuilder {
     ///     network_topology
     ///         .subnets_for_certification()
     ///         .get(&subnet_id)
-    ///         .map(|topology| topology.public_key.clone())
+    ///         .map(|topology| topology.public_key.as_slice())
     /// }
     /// ```
     /// Resolving to `None` maps to [`DelegationValidationError::UnknownSubnet`].
@@ -205,11 +205,11 @@ impl NNSDelegationBuilder {
     /// (see [`CanisterRangesCheck`]).
     ///
     /// See [`is_tree_consistent_with`] for the exact semantics.
-    pub fn is_consistent_with(
+    pub fn is_consistent_with<'a>(
         &self,
         ranges_check: CanisterRangesCheck,
         routing_table: &RoutingTable,
-        public_key_for_subnet: impl FnOnce(SubnetId) -> Option<Vec<u8>>,
+        public_key_for_subnet: impl FnOnce(SubnetId) -> Option<&'a [u8]>,
     ) -> Result<bool, DelegationValidationError> {
         let subnet_public_key = public_key_for_subnet(self.subnet_id)
             .ok_or(DelegationValidationError::UnknownSubnet(self.subnet_id))?;
@@ -217,7 +217,7 @@ impl NNSDelegationBuilder {
         is_tree_consistent_with(
             &self.full_labeled_tree,
             self.subnet_id,
-            &subnet_public_key,
+            subnet_public_key,
             routing_table,
             ranges_check,
         )
@@ -644,7 +644,7 @@ mod tests {
             builder.is_consistent_with(
                 CanisterRangesCheck::AllSubnetRanges,
                 &routing_table_with(RANGES),
-                |_subnet_id| Some(public_key.clone()),
+                |_subnet_id| Some(&public_key),
             ),
             Ok(true)
         );
@@ -654,11 +654,12 @@ mod tests {
     fn delegation_with_mismatching_public_key_is_inconsistent_with_state() {
         let (builder, _public_key) = create_consistency_check_fixture();
 
+        let different_public_key = vec![9, 9, 9];
         assert_matches!(
             builder.is_consistent_with(
                 CanisterRangesCheck::AllSubnetRanges,
                 &routing_table_with(RANGES),
-                |_subnet_id| Some(vec![9, 9, 9]),
+                |_subnet_id| Some(&different_public_key),
             ),
             Ok(false)
         );
@@ -674,7 +675,7 @@ mod tests {
                 // The state assigns an extra range to the subnet which is not certified
                 // in the delegation.
                 &routing_table_with(&[(0, 10), (100, 200), (300, 400)]),
-                |_subnet_id| Some(public_key.clone()),
+                |_subnet_id| Some(&public_key),
             ),
             Ok(false)
         );
@@ -702,7 +703,7 @@ mod tests {
             .build_verified(
                 CanisterRangesCheck::AllSubnetRanges,
                 &routing_table_with(RANGES),
-                |_subnet_id| Some(public_key.clone()),
+                |_subnet_id| Some(&public_key),
                 &no_op_logger(),
             )
             .expect("the delegation should be consistent with the state view");
@@ -725,12 +726,13 @@ mod tests {
     fn build_verified_on_an_inconsistent_delegation_is_an_error() {
         let (builder, _public_key) = create_consistency_check_fixture();
 
+        // A public key which does not match the certified one.
+        let different_public_key = vec![9, 9, 9];
         assert_matches!(
             builder.build_verified(
                 CanisterRangesCheck::AllSubnetRanges,
                 &routing_table_with(RANGES),
-                // A public key which does not match the certified one.
-                |_subnet_id| Some(vec![9, 9, 9]),
+                |_subnet_id| Some(&different_public_key),
                 &no_op_logger(),
             ),
             Err(DelegationVerificationError::Inconsistent)

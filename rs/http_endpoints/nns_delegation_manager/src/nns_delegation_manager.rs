@@ -160,7 +160,7 @@ impl DelegationManager {
                     network_topology
                         .subnets_for_certification()
                         .get(&subnet_id)
-                        .map(|subnet_topology| subnet_topology.public_key.clone())
+                        .map(|subnet_topology| subnet_topology.public_key.as_slice())
                 },
             )
             .inspect_err(|err| {
