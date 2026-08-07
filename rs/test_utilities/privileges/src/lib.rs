@@ -1,275 +1,346 @@
-//! A test helper for running permission-sensitive assertions as an
-//! unprivileged user.
+//! A test helper for asserting that filesystem permission bits are enforced.
 //!
 //! Many tests assert that a filesystem operation fails with
-//! [`std::io::ErrorKind::PermissionDenied`]. Such assertions only hold for a
-//! non-root user: root holds `CAP_DAC_OVERRIDE` and therefore bypasses the
-//! `rwx` permission bits. When the test process runs as root (for example under
-//! some remote-execution setups) those tests instead observe the operation
-//! *succeeding* and fail.
+//! [`std::io::ErrorKind::PermissionDenied`]. Such an assertion only holds for a
+//! process that does *not* hold `CAP_DAC_OVERRIDE`/`CAP_DAC_READ_SEARCH`: those
+//! two capabilities let their holder (in practice, root) bypass the `rwx`
+//! permission bits. Under remote-execution setups that run Bazel test actions as
+//! uid 0 the operation therefore *succeeds*, and the test fails.
 //!
-//! [`run_as_nobody_if_root`] runs a closure as the unprivileged `nobody` user
-//! when the current process is root, and unchanged (in-process) otherwise.
-//! The [`as_nobody_when_root`] attribute is sugar wrapping a whole test body
-//! in [`run_as_nobody_if_root`], avoiding the closure and its indentation.
+//! [`run_with_file_permissions_enforced`] drops exactly those two capabilities
+//! from the effective set of the *calling thread*, runs a closure, and restores
+//! them afterwards — including while unwinding from a panic. The
+//! [`enforce_file_permissions`] attribute is sugar wrapping a whole test body in
+//! it, avoiding the closure and its indentation.
+//!
+//! # Limitations
+//!
+//! The helper makes the kernel enforce the permission bits against the calling
+//! thread. It is not a sandbox, and three things are deliberately outside what
+//! it can express. None is reachable from the current call sites, and each one
+//! fails loudly (the guarded assertion expects a denial, so a bypass makes the
+//! test fail rather than pass):
+//!
+//! * `access(2)`/`faccessat(2)` re-raise the effective set from the permitted
+//!   set whenever the *real* uid is 0, so they keep reporting access as granted
+//!   no matter what this helper does. Assert on a real operation
+//!   ([`std::fs::File::open`], [`std::fs::write`], ...) rather than on an
+//!   access check.
+//! * Only the calling thread and threads it goes on to create are affected;
+//!   capabilities are copied at thread creation. Work handed to a thread that
+//!   *already* existed — a global runtime, a `OnceLock` thread pool — runs with
+//!   the full sets. Create such pools inside the closure.
+//! * `execve` as uid 0 restores the full capability sets, so a subprocess
+//!   spawned inside the closure regains `CAP_DAC_OVERRIDE`.
 
-/// Attribute form of [`run_as_nobody_if_root`]; see its documentation.
-pub use ic_test_utilities_privileges_macros::as_nobody_when_root;
+/// Attribute form of [`run_with_file_permissions_enforced`]; see its documentation.
+pub use ic_test_utilities_privileges_macros::enforce_file_permissions;
 
 #[cfg(target_os = "linux")]
 mod imp {
-    use nix::libc;
-    use nix::sys::wait::{WaitStatus, waitpid};
-    use nix::unistd::{ForkResult, Gid, Uid, fork, geteuid, setgid, setgroups, setuid};
-    use std::ffi::CString;
-    use std::io::{PipeWriter, Read, Write};
-    use std::os::unix::fs::{PermissionsExt, chown};
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::io;
+    use std::marker::PhantomData;
 
-    /// The conventional uid/gid of the unprivileged `nobody`/`nogroup` user.
-    /// Using the numeric id directly means no `/etc/passwd` entry is required.
-    const NOBODY: u32 = 65534;
+    /// Capability bit numbers (see `<linux/capability.h>`); both are < 32 so
+    /// they live in the first of the two 32-bit capability words.
+    const CAP_DAC_OVERRIDE: u32 = 1;
+    const CAP_DAC_READ_SEARCH: u32 = 2;
 
-    /// The exit code a child uses to signal that `action` panicked. Matches the
-    /// exit code the standard test harness uses for a failing test.
-    const PANIC_EXIT_CODE: i32 = 101;
-
-    /// Runs `action`, first dropping to the unprivileged `nobody` user if the
-    /// current process is running as root.
+    /// The capabilities that let their holder bypass the `rwx` permission bits:
+    /// `CAP_DAC_OVERRIDE` (read, write, and — for files with at least one
+    /// execute bit — execute) and `CAP_DAC_READ_SEARCH` (read, and search on
+    /// directories). These two are exactly what the kernel consults in
+    /// `generic_permission()`, so dropping both, and only both, is the minimal
+    /// change that makes it enforce the permission bits against us.
     ///
-    /// When the effective uid is not `0`, `action` simply runs in-process, so
-    /// behavior is unchanged for the common (non-root) case. When it is `0`,
-    /// `action` runs in a forked child that redirects the temporary directory to
-    /// a `nobody`-owned location and then drops its supplementary groups, group,
-    /// and user to `nobody` (which also clears `CAP_DAC_OVERRIDE`), so that
-    /// filesystem permission bits are enforced.
+    /// `CAP_FOWNER` is deliberately *not* dropped: it is not consulted by that
+    /// path, so keeping it weakens no assertion, and tests routinely `chmod`
+    /// back the files they made inaccessible in order to clean up.
+    const DAC_BYPASS_MASK: u32 = (1 << CAP_DAC_OVERRIDE) | (1 << CAP_DAC_READ_SEARCH);
+
+    /// `_LINUX_CAPABILITY_VERSION_3`: 64-bit capabilities, i.e. two data words.
+    /// The version matters — `_LINUX_CAPABILITY_VERSION_1` is still accepted by
+    /// modern kernels but silently truncates the capability sets to their lower
+    /// 32 bits, permanently discarding everything above `CAP_AUDIT_READ`.
+    const CAP_VERSION_3: u32 = 0x2008_0522;
+
+    /// The `libc` crate does not expose the capability get/set structs, so
+    /// declare them here to match the kernel's stable `capget(2)`/`capset(2)`
+    /// ABI for `_LINUX_CAPABILITY_VERSION_3`: a header plus an array of two
+    /// 32-bit data words (covering capabilities 0..64).
     ///
-    /// The child's outcome is mirrored in the caller: if `action` panics, the
-    /// caller panics with the same message (so `#[should_panic]`, including
-    /// `expected = "..."`, keeps working); if it returns, the caller returns.
+    /// `pid: 0` designates the *calling thread*. Capabilities are a per-thread
+    /// property, and `capset` compares a non-zero `pid` against the caller's
+    /// thread id, so `0` is also the only value that works from a thread other
+    /// than the main one.
+    #[repr(C)]
+    struct CapHeader {
+        version: u32,
+        pid: libc::c_int,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct CapData {
+        effective: u32,
+        permitted: u32,
+        inheritable: u32,
+    }
+
+    fn header() -> CapHeader {
+        CapHeader {
+            version: CAP_VERSION_3,
+            pid: 0,
+        }
+    }
+
+    /// Reads the calling thread's capability sets.
+    fn capget() -> io::Result<[CapData; 2]> {
+        let mut header = header();
+        let mut data = [CapData::default(); 2];
+        // SAFETY: `capget` reads `header` and writes exactly the two `CapData`
+        // words that `_LINUX_CAPABILITY_VERSION_3` prescribes. Both pointers
+        // are derived from live, correctly aligned `#[repr(C)]` locals that
+        // outlive the call, and the syscall has no effect beyond writing
+        // through them.
+        let rc = unsafe {
+            libc::syscall(
+                libc::SYS_capget,
+                &mut header as *mut CapHeader,
+                data.as_mut_ptr(),
+            )
+        };
+        if rc != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(data)
+    }
+
+    /// Sets the calling thread's *effective* capability word for capabilities
+    /// 0..32.
     ///
-    /// # Notes
-    /// * The *whole* closure runs in the child, so any temporary files it
-    ///   creates are owned by `nobody`; restricting their permissions therefore
-    ///   denies `nobody` exactly as it would a normal non-root owner. Threads
-    ///   spawned by `action` also run as `nobody`.
-    /// * Temporary directories must be derived from `TMPDIR`/`TEST_TMPDIR` (as
-    ///   `tempfile` and `ic_test_utilities_tmpdir::tmpdir` are); the child points
-    ///   both at a `nobody`-owned base with mode `0700`, prepared by the parent.
-    ///   The parent also grants others-execute on the base's ancestor
-    ///   directories where missing, so `nobody` can traverse into it even when
-    ///   the temp root is not world-traversable (as under some sandboxed
-    ///   remote-execution setups); see `TmpDirRedirect::prepare`.
-    /// * The parent test process may be multi-threaded, and after `fork` the
-    ///   child must not wait on locks that another parent thread held at fork
-    ///   time. The temp base and the `putenv(3)` strings are therefore prepared
-    ///   in the parent before forking, and the child avoids `std::env::set_var`
-    ///   (and with it `std`'s global environment lock), using only direct
-    ///   syscalls to drop privileges and `_exit(2)` to terminate.
-    pub fn run_as_nobody_if_root<F: FnOnce()>(action: F) {
-        if geteuid().as_raw() != 0 {
-            action();
-            return;
+    /// `capset` always writes all three sets at once, so the current ones are
+    /// read back first and the permitted and inheritable sets — and the second
+    /// data word, for capabilities 32..64 — are handed back verbatim. Leaving
+    /// the permitted set alone is what makes restoring infallible: the kernel
+    /// only requires `effective ⊆ permitted`, so re-raising a capability that
+    /// was effective a moment ago is always accepted.
+    fn set_effective_low_word(effective: u32) -> io::Result<()> {
+        let mut header = header();
+        let mut data = capget()?;
+        data[0].effective = effective;
+        // SAFETY: `capset` reads `header` and the two `CapData` words; both
+        // pointers are derived from live, correctly aligned `#[repr(C)]` locals
+        // that outlive the call, and the syscall writes through neither.
+        let rc = unsafe {
+            libc::syscall(
+                libc::SYS_capset,
+                &mut header as *mut CapHeader,
+                data.as_ptr(),
+            )
+        };
+        if rc != 0 {
+            return Err(io::Error::last_os_error());
         }
-        run_forked(action);
-    }
-
-    /// The temp-dir redirection for the child, prepared in the parent (where
-    /// allocating and taking locks is safe, since no fork has happened yet).
-    struct TmpDirRedirect {
-        /// The `nobody`-owned (mode `0700`) base directory for the child's
-        /// temporary files, removed by the parent once the child has exited.
-        base: PathBuf,
-        /// `putenv`-style `NAME=VALUE` strings. After `putenv(3)` the child's
-        /// `environ` references them directly, so they must stay allocated for
-        /// the child's whole lifetime. This holds because the child `_exit`s
-        /// inside `run_forked`, while this struct is still live in its frame.
-        env_entries: [CString; 2],
-    }
-
-    impl TmpDirRedirect {
-        /// Creates the base directory (as root, in the parent) and hands it
-        /// over to `nobody` with mode `0700`, so the unprivileged child owns
-        /// everything beneath it and no world-writable directory is created.
-        fn prepare() -> Self {
-            // Distinguishes concurrently prepared bases within one process.
-            static SEQ: AtomicUsize = AtomicUsize::new(0);
-            let temp_root = std::env::temp_dir();
-            let base = temp_root.join(format!(
-                "ic-nobody-{}-{}",
-                std::process::id(),
-                SEQ.fetch_add(1, Ordering::Relaxed)
-            ));
-            // `create_dir` rather than `create_dir_all`: fail instead of
-            // silently adopting a pre-existing directory of unknown ownership.
-            std::fs::create_dir(&base).expect("failed to create the nobody temp base");
-            chown(&base, Some(NOBODY), Some(NOBODY)).expect("failed to chown the nobody temp base");
-            std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700))
-                .expect("failed to chmod the nobody temp base");
-            // The child creates its temporary files under `base` as `nobody`,
-            // which requires *search* (execute) permission on every ancestor
-            // directory. Some sandboxed remote-execution setups leave the temp
-            // root not world-traversable: Namespace's
-            // `namespace_action_isolation=sandboxed` runs the action as uid 0
-            // with `TMPDIR` unset, so `std::env::temp_dir()` is a root-owned,
-            // non-traversable `/tmp` that `nobody` cannot descend into. As root
-            // (in the parent) grant others-execute on each ancestor that lacks
-            // it — the minimal relaxation permitting traversal, without exposing
-            // directory listings or write access (the base itself stays `0700`
-            // `nobody`). The sandbox is ephemeral and per-action, so this has no
-            // effect beyond the running test.
-            //
-            // Confine this to the default temp root (`/tmp`, used precisely
-            // because `TMPDIR` is unset). An explicitly-configured `TMPDIR` is
-            // left untouched, so running tests as root *outside* the sandbox
-            // cannot be steered into world-traversing a sensitive directory
-            // (e.g. `TMPDIR=/root/tmp` must not relax `/root`).
-            if temp_root == std::path::Path::new("/tmp") {
-                grant_ancestor_traversal(&base);
-            }
-            let entry = |name: &str| {
-                CString::new(format!("{name}={}", base.display()))
-                    .expect("temp base path contains an interior NUL byte")
-            };
-            Self {
-                env_entries: [entry("TMPDIR"), entry("TEST_TMPDIR")],
-                base,
-            }
-        }
-
-        /// Points `TMPDIR`/`TEST_TMPDIR` at the prepared base; runs in the
-        /// forked child.
-        ///
-        /// Uses `putenv(3)` with the pre-allocated strings instead of
-        /// `std::env::set_var`, because the latter takes `std`'s global
-        /// environment lock: if another thread of the parent held it at `fork`
-        /// time, it would never be released in the child.
-        fn apply_in_child(&self) -> nix::Result<()> {
-            for entry in &self.env_entries {
-                // SAFETY: `entry` points to a valid, NUL-terminated string that
-                // stays allocated for the child's whole lifetime (see the
-                // `env_entries` field documentation).
-                if unsafe { libc::putenv(entry.as_ptr() as *mut libc::c_char) } != 0 {
-                    return Err(nix::errno::Errno::last());
-                }
-            }
-            Ok(())
-        }
-    }
-
-    /// Adds others-execute (search) permission to every ancestor directory of
-    /// `dir`, so the unprivileged `nobody` child can traverse the path down to
-    /// it. Only the execute bit is added, and only to directories that lack it,
-    /// so no directory becomes listable or writable by others. Runs as root in
-    /// the parent; see the call site in `TmpDirRedirect::prepare` for why this
-    /// is needed under sandboxed remote execution.
-    fn grant_ancestor_traversal(dir: &std::path::Path) {
-        // `ancestors()` yields `dir` first; skip it (it is already owned by
-        // `nobody`) and walk its parent, grandparent, ... up to the root.
-        for ancestor in dir.ancestors().skip(1) {
-            let Ok(metadata) = std::fs::metadata(ancestor) else {
-                // Unreadable ancestor (e.g. we walked above the mount root):
-                // nothing to relax here.
-                continue;
-            };
-            let mode = metadata.permissions().mode();
-            if mode & 0o001 == 0 {
-                std::fs::set_permissions(ancestor, std::fs::Permissions::from_mode(mode | 0o001))
-                    .unwrap_or_else(|err| {
-                        panic!(
-                            "failed to make {} traversable for nobody: {err}",
-                            ancestor.display()
-                        )
-                    });
-            }
-        }
-    }
-
-    fn run_forked<F: FnOnce()>(action: F) {
-        // Prepared before forking; see `TmpDirRedirect`.
-        let redirect = TmpDirRedirect::prepare();
-        // Pipe used to forward the child's panic message to the parent.
-        let (mut reader, writer) = std::io::pipe().expect("failed to create pipe");
-
-        match unsafe { fork() }.expect("fork failed") {
-            ForkResult::Child => {
-                drop(reader);
-                let mut writer = writer;
-                let code = run_child(action, &redirect, &mut writer);
-                // `_exit(2)` rather than `exit(3)`: skip the `atexit(3)`
-                // handlers and stdio flushing inherited from the parent, which
-                // must not run in the forked child of a (potentially
-                // multi-threaded) test process.
-                unsafe { libc::_exit(code) }
-            }
-            ForkResult::Parent { child } => {
-                drop(writer);
-                let mut message = String::new();
-                let _ = reader.read_to_string(&mut message);
-                let status = waitpid(child, None).expect("waitpid failed");
-                let _ = std::fs::remove_dir_all(&redirect.base);
-                match status {
-                    WaitStatus::Exited(_, 0) => {}
-                    WaitStatus::Exited(_, code) if code == PANIC_EXIT_CODE => {
-                        // Re-raise the child's panic (with its message) so that
-                        // `#[should_panic]` matches and the failure is visible.
-                        panic!("{message}");
-                    }
-                    other => panic!("unprivileged child process did not exit cleanly: {other:?}"),
-                }
-            }
-        }
-    }
-
-    /// Runs `action` in the forked child as `nobody`, returning the process exit
-    /// code: `0` on success, [`PANIC_EXIT_CODE`] on panic.
-    fn run_child<F: FnOnce()>(
-        action: F,
-        redirect: &TmpDirRedirect,
-        writer: &mut PipeWriter,
-    ) -> i32 {
-        if let Err(err) = redirect_tmp_and_drop_privileges(redirect) {
-            let _ = write!(writer, "failed to drop privileges to nobody: {err}");
-            return PANIC_EXIT_CODE;
-        }
-        match catch_unwind(AssertUnwindSafe(action)) {
-            Ok(()) => 0,
-            Err(payload) => {
-                let _ = write!(writer, "{}", panic_message(payload.as_ref()));
-                PANIC_EXIT_CODE
-            }
-        }
-    }
-
-    fn redirect_tmp_and_drop_privileges(redirect: &TmpDirRedirect) -> nix::Result<()> {
-        redirect.apply_in_child()?;
-
-        // Order matters: drop the supplementary groups and gid while we still
-        // hold `CAP_SETGID` (i.e. before dropping the uid).
-        setgroups(&[])?;
-        setgid(Gid::from_raw(NOBODY))?;
-        setuid(Uid::from_raw(NOBODY))?;
         Ok(())
     }
 
-    fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
-        if let Some(s) = payload.downcast_ref::<&str>() {
-            (*s).to_string()
-        } else if let Some(s) = payload.downcast_ref::<String>() {
-            s.clone()
-        } else {
-            "unprivileged action panicked with a non-string payload".to_string()
+    /// Whether the calling thread currently holds a capability that lets it
+    /// bypass the file permission bits.
+    ///
+    /// Outside [`run_with_file_permissions_enforced`] this answers "am I running
+    /// privileged", which is `true` on a remote-execution worker running test
+    /// actions as uid 0 and `false` for an ordinary user; inside it, it is
+    /// `false` either way.
+    pub fn bypasses_file_permissions() -> bool {
+        let data = capget().unwrap_or_else(|err| panic!("capget failed: {err}"));
+        data[0].effective & DAC_BYPASS_MASK != 0
+    }
+
+    /// Restores the capabilities that [`drop_dac_bypass`] took away when it goes
+    /// out of scope, including while unwinding from a panic in the action —
+    /// which is why this is a guard and not a pair of calls around it.
+    struct RestoreDacBypass {
+        /// The subset of [`DAC_BYPASS_MASK`] that was effective before the drop
+        /// and therefore has to be raised again.
+        dropped: u32,
+        /// Capabilities are per-thread, so the guard has to be dropped on the
+        /// thread that created it. Making it `!Send` lets the compiler enforce
+        /// that rather than leaving it to a comment.
+        _not_send: PhantomData<*const ()>,
+    }
+
+    impl Drop for RestoreDacBypass {
+        fn drop(&mut self) {
+            let restore = || -> io::Result<()> {
+                let effective = capget()?[0].effective;
+                set_effective_low_word(effective | self.dropped)
+            };
+            if let Err(err) = restore() {
+                // Unreachable in practice: the permitted set was left untouched
+                // and `self.dropped` was effective moments ago, so the kernel
+                // has no grounds to refuse. Should it happen anyway, the thread
+                // is left permanently deprivileged — and the test harness runs
+                // later tests on this same thread when it is not parallel — so
+                // failing quietly is not an option. `abort` rather than `panic!`
+                // because panicking here while already unwinding would abort
+                // anyway, having first destroyed the original failure message.
+                eprintln!(
+                    "failed to restore CAP_DAC_OVERRIDE/CAP_DAC_READ_SEARCH \
+                     (0x{:08x}) after the action, aborting to avoid running \
+                     later tests on a deprivileged thread: {err}",
+                    self.dropped
+                );
+                std::process::abort();
+            }
         }
+    }
+
+    /// Runs `action` with the file permission bits enforced against the caller,
+    /// and returns its result.
+    ///
+    /// `CAP_DAC_OVERRIDE` and `CAP_DAC_READ_SEARCH` are removed from the
+    /// effective capability set of the calling thread for the duration of
+    /// `action`, so a test asserting [`std::io::ErrorKind::PermissionDenied`]
+    /// observes the denial even when the test process runs as root (as under
+    /// some remote-execution setups). For an ordinary unprivileged process the
+    /// two capabilities are not held in the first place, and this costs a single
+    /// `capget(2)`.
+    ///
+    /// The caller keeps its uid and its ownership of everything it creates, so
+    /// `chmod`-based teardown inside `action` keeps working.
+    ///
+    /// See the crate documentation for what this does *not* cover.
+    pub fn run_with_file_permissions_enforced<T>(action: impl FnOnce() -> T) -> T {
+        let _guard = drop_dac_bypass();
+        action()
+    }
+
+    /// Drops the DAC-bypass capabilities from the calling thread, returning the
+    /// guard that restores them, or `None` if they were not held anyway.
+    fn drop_dac_bypass() -> Option<RestoreDacBypass> {
+        let before = capget().unwrap_or_else(|err| panic!("capget failed: {err}"))[0];
+        let dropped = before.effective & DAC_BYPASS_MASK;
+        if dropped == 0 {
+            // The ordinary unprivileged case: the permission bits are already
+            // enforced against us and no `capset` is issued at all. Note this
+            // deliberately keys off the capabilities rather than off
+            // `geteuid() == 0`, which is neither necessary (file capabilities)
+            // nor sufficient (uid 0 in a user namespace with an empty set).
+            return None;
+        }
+        set_effective_low_word(before.effective & !DAC_BYPASS_MASK).unwrap_or_else(|err| {
+            // Lowering effective capabilities is unconditionally permitted, so
+            // this cannot legitimately fail — and carrying on would run the
+            // action privileged, i.e. decide the assertions it guards for the
+            // wrong reason.
+            panic!(
+                "capset failed while dropping CAP_DAC_OVERRIDE/CAP_DAC_READ_SEARCH \
+                 (effective 0x{:08x}): {err}",
+                before.effective
+            )
+        });
+        // Construct the guard *before* the checks below, so that a failing check
+        // unwinds through it and restores the capabilities rather than leaving
+        // the thread deprivileged.
+        let guard = RestoreDacBypass {
+            dropped,
+            _not_send: PhantomData,
+        };
+        assert_dac_bypass_cleared(before.permitted);
+        assert_permission_bits_enforced();
+        Some(guard)
+    }
+
+    /// Reads the capability sets back and panics unless the DAC-bypass bits are
+    /// really gone and the permitted set is untouched.
+    ///
+    /// This is what keeps a mistake here — a wrong bit number, a wrong
+    /// capability version, a `capset` that reported success without taking
+    /// effect — from quietly reverting every caller to running fully privileged,
+    /// where the assertions they exist for would no longer mean anything.
+    fn assert_dac_bypass_cleared(permitted_before: u32) {
+        let after = capget().unwrap_or_else(|err| panic!("capget failed: {err}"))[0];
+        assert_eq!(
+            after.effective & DAC_BYPASS_MASK,
+            0,
+            "CAP_DAC_OVERRIDE/CAP_DAC_READ_SEARCH are still effective after capset \
+             (effective 0x{:08x}, permitted 0x{:08x}); the file permission bits would \
+             not be enforced, so the assertions guarded by this helper would be \
+             decided for the wrong reason",
+            after.effective,
+            after.permitted,
+        );
+        assert_eq!(
+            after.permitted, permitted_before,
+            "capset changed the permitted set (0x{:08x} -> 0x{:08x}); restoring the \
+             effective set afterwards may no longer be possible",
+            permitted_before, after.permitted,
+        );
+    }
+
+    /// Confirms behaviourally, once per process, that the permission bits are
+    /// now enforced: creates a mode `0000` file and checks that reading it is
+    /// denied.
+    ///
+    /// [`assert_dac_bypass_cleared`] proves the capability bits are clear; this
+    /// proves the kernel acts on that in the environment the tests really run
+    /// in, which is the whole reason this crate exists. It runs only when
+    /// capabilities were in fact dropped, and at most once per test binary.
+    ///
+    /// Note the probe has to be a real read: `access(2)` restores the effective
+    /// set from the permitted set whenever the real uid is 0, so it would report
+    /// success here regardless and defeat the check.
+    fn assert_permission_bits_enforced() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::OnceLock;
+
+        static PROBED: OnceLock<()> = OnceLock::new();
+        PROBED.get_or_init(|| {
+            let Ok(dir) = tempfile::tempdir() else {
+                // A temp directory we cannot create is not evidence of
+                // anything, so a failure to *set up* the probe skips it rather
+                // than failing the test that happened to run it first.
+                return;
+            };
+            let path = dir.path().join("unreadable");
+            let setup = std::fs::write(&path, b"probe").and_then(|()| {
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000))
+            });
+            if setup.is_err() {
+                return;
+            }
+            let denied = std::fs::read(&path)
+                .err()
+                .map(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
+                .unwrap_or(false);
+            // Make the file removable again before asserting, so a failure here
+            // does not also leave `dir` undeletable.
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            assert!(
+                denied,
+                "reading a mode 0000 file succeeded even though \
+                 CAP_DAC_OVERRIDE/CAP_DAC_READ_SEARCH were dropped; the file permission \
+                 bits are not being enforced against this process, so the assertions \
+                 guarded by this helper are meaningless"
+            );
+        });
     }
 }
 
 #[cfg(target_os = "linux")]
-pub use imp::run_as_nobody_if_root;
+pub use imp::{bypasses_file_permissions, run_with_file_permissions_enforced};
 
-/// On non-Linux platforms, dropping privileges is a no-op: `action` runs directly.
+/// On non-Linux platforms there are no capabilities to drop, so `action` runs
+/// directly. The affected tests are Linux-only in practice: this crate exists
+/// for Linux remote-execution workers that run test actions as uid 0.
 #[cfg(not(target_os = "linux"))]
-pub fn run_as_nobody_if_root<F: FnOnce()>(action: F) {
-    action();
+pub fn run_with_file_permissions_enforced<T>(action: impl FnOnce() -> T) -> T {
+    action()
+}
+
+/// See the Linux implementation; there is no equivalent notion elsewhere.
+#[cfg(not(target_os = "linux"))]
+pub fn bypasses_file_permissions() -> bool {
+    false
 }
