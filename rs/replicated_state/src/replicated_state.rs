@@ -800,6 +800,17 @@ impl ReplicatedState {
         }
     }
 
+    /// Returns whether this subnet is cooling down. Defaults to `false` if the
+    /// network topology is not populated.
+    ///
+    /// See [`ic_replicated_state::SubnetTopology::cooling_down`] for the exact
+    /// semantics.
+    pub fn is_own_subnet_cooling_down(&self) -> bool {
+        self.metadata
+            .network_topology
+            .is_cooling_down(&self.metadata.own_subnet_id)
+    }
+
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history

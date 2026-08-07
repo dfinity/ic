@@ -335,6 +335,16 @@ impl NetworkTopology {
             .map(|subnet_topology| subnet_topology.nodes.len())
     }
 
+    /// Returns whether the given subnet is cooling down. Unknown subnets are
+    /// not considered to be cooling down.
+    ///
+    /// See [`SubnetTopology::cooling_down`] for the exact semantics.
+    pub fn is_cooling_down(&self, subnet_id: &SubnetId) -> bool {
+        self.subnets
+            .get(subnet_id)
+            .is_some_and(|subnet_topology| subnet_topology.cooling_down)
+    }
+
     /// Returns the cycles cost schedule of the given subnet.
     pub fn get_cost_schedule(&self, subnet_id: &SubnetId) -> Option<CanisterCyclesCostSchedule> {
         self.subnets
@@ -416,6 +426,32 @@ pub struct SubnetTopology {
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
+    /// Whether the subnet is "cooling down", i.e. quiescing: it stops accepting new
+    /// messages and lets the subnet messages already in flight drain. While a subnet
+    /// is cooling down:
+    ///
+    ///  * Ingress messages addressed to it are rejected with
+    ///    `ErrorCode::SubnetCoolingDown` (`RejectCode::SysTransient`) by the ingress
+    ///    filter on the receiving nodes; they are excluded when building a block
+    ///    payload; and a block containing one is invalid. The filter reads the
+    ///    latest certified state, so it lags by the certification delay — payload
+    ///    building and validation are what make this binding.
+    ///  * Inter-canister requests addressed to it are rejected with
+    ///    `RejectCode::SysTransient` by the sending subnet, before they are routed
+    ///    into a stream (including the loopback stream, i.e. the subnet rejects
+    ///    requests to itself). Responses and anonymous refunds addressed to it are
+    ///    instead retained by the sender (in canister output queues and the refund
+    ///    pool, respectively) until it stops cooling down; retaining a response
+    ///    also holds back whatever is queued behind it, so a request behind one
+    ///    stays put rather than being rejected. A message that must never cross an
+    ///    engine boundary is still handled by the engine boundary check instead, as
+    ///    it is illegal there permanently rather than transiently.
+    ///  * It executes no canister messages: the inner round only drains its
+    ///    subnet queues, and no `Heartbeat` or `GlobalTimer` tasks are enqueued.
+    ///    Note that `install_code` is a subnet message, so it is still executed
+    ///    (and resumed, if long-running) and does run the canister's `start` /
+    ///    `pre_upgrade` / `post_upgrade` hooks.
+    pub cooling_down: bool,
 }
 
 /// Only rented subnets, i.e., application subnets on a "free" cost schedule,

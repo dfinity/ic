@@ -3440,6 +3440,20 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
+        // While the subnet is cooling down it accepts no ingress messages at all, so
+        // that they never make it into a block. The same check is applied during
+        // block validation (see `IngressSelector::validate_ingress_payload()`), which
+        // is what actually guarantees it.
+        if state.is_own_subnet_cooling_down() {
+            return Err(UserError::new(
+                ErrorCode::SubnetCoolingDown,
+                format!(
+                    "Subnet {} is cooling down and does not accept ingress messages",
+                    state.metadata.own_subnet_id
+                ),
+            ));
+        }
+
         let canister = |canister_id: CanisterId| -> Result<&CanisterState, UserError> {
             match state.canister_state(&canister_id) {
                 Some(canister) => Ok(canister),
@@ -4732,13 +4746,15 @@ impl ExecutionEnvironment {
         }
     }
 
-    /// Checks for stopping canisters and performs the following:
-    ///   1. If there are stop contexts that have timed out, respond to them.
-    ///   2. If any stopping canisters are ready to stop, transition them to
-    ///      be fully stopped and reply to the corresponding stop contexts.
+    /// Iterates over all `Stopping` canisters and, for each one:
+    ///   1. If it is ready to stop, transitions it to `Stopped` and replies to all
+    ///      of its stop contexts with a success.
+    ///   2. Otherwise, rejects those of its stop contexts that have timed out (i.e.
+    ///      are older than `stop_canister_timeout_duration`), retaining the rest.
     ///
-    /// Responses to the pending stop messages are written to ingress history
-    /// or returned to the calling canisters respectively.
+    /// Replying to a stop context also removes the corresponding call from the
+    /// subnet call context manager. Replies are written to ingress history or
+    /// returned to the calling canisters respectively.
     pub fn process_stopping_canisters(
         &self,
         mut state: ReplicatedState,
@@ -4756,6 +4772,7 @@ impl ExecutionEnvironment {
             let canister = Arc::make_mut(canister);
             let (stopped, stop_contexts) =
                 canister.system_state.try_stop_canister(|stop_context| {
+                    // Reject the stop context iff it has timed out.
                     match stop_context.call_id() {
                         Some(call_id) => {
                             let sc_time = state

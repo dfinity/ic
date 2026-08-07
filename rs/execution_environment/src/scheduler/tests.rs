@@ -1,4 +1,6 @@
-use super::test_utilities::{SchedulerTestBuilder, ingress, on_response, other_side};
+use super::test_utilities::{
+    SchedulerTest, SchedulerTestBuilder, ingress, instructions, on_response, other_side,
+};
 use super::*;
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -19,6 +21,7 @@ use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{CallbackId, Payload, RejectContext};
+use ic_types::methods::SystemMethod;
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
 use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
@@ -203,6 +206,104 @@ fn consensus_queue_is_emptied() {
 
     // After the round, the signature request contexts should have completed.
     assert!(test.state().signature_request_contexts().is_empty());
+}
+
+/// Sets the `cooling_down` flag of the subnet that `test` runs on.
+fn set_cooling_down(test: &mut SchedulerTest, cooling_down: bool) {
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .subnets_mut()
+                .get_mut(&own_subnet_id)
+                .unwrap()
+                .cooling_down = cooling_down;
+        });
+    assert_eq!(cooling_down, test.state().is_own_subnet_cooling_down());
+}
+
+/// Marks the subnet that `test` runs on as cooling down.
+fn set_own_subnet_cooling_down(test: &mut SchedulerTest) {
+    set_cooling_down(test, true);
+}
+
+/// Marks the subnet that `test` runs on as no longer cooling down.
+fn clear_own_subnet_cooling_down(test: &mut SchedulerTest) {
+    set_cooling_down(test, false);
+}
+
+/// Tests that a cooling down subnet executes no canister messages, while still
+/// draining its subnet queues.
+#[test]
+fn cooling_down_subnet_only_drains_subnet_queues() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    let canister_id = test.create_canister();
+    set_own_subnet_cooling_down(&mut test);
+
+    // One message for the canister and one for the subnet (management canister).
+    test.send_ingress(canister_id, ingress(1000));
+    let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+    test.inject_call_to_ic00(
+        Method::CanisterStatus,
+        payload,
+        Cycles::zero(),
+        test.xnet_canister_id(),
+        InputQueueType::RemoteSubnet,
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The subnet message was executed, the canister message was not.
+    assert!(!test.state().subnet_queues().has_input());
+    assert_eq!(1, test.ingress_queue_size(canister_id));
+    assert_eq!(
+        1,
+        fetch_counter(
+            test.metrics_registry(),
+            "scheduler_round_inner_iteration_skipped_cooling_down",
+        )
+        .unwrap() as u64
+    );
+
+    // And the canister message is executed as soon as the subnet stops cooling down.
+    clear_own_subnet_cooling_down(&mut test);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(0, test.ingress_queue_size(canister_id));
+}
+
+/// Tests that a cooling down subnet enqueues no `Heartbeat` or `GlobalTimer`
+/// tasks, so that no canister message of any kind is executed (not just no
+/// ingress and inter-canister messages).
+///
+/// Note that this does not mean that no canister code runs at all: `install_code`
+/// is a subnet message, so it is still executed (and resumed, if long-running),
+/// and it runs the canister's `start` / `pre_upgrade` / `post_upgrade` hooks.
+#[test]
+fn cooling_down_subnet_runs_no_heartbeats_or_global_timers() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    let canister_id = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        Some(SystemMethod::CanisterHeartbeat),
+        None,
+        None,
+    );
+    set_own_subnet_cooling_down(&mut test);
+
+    test.expect_heartbeat(canister_id, instructions(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The heartbeat was not executed.
+    assert_eq!(1, test.system_task_count(&canister_id));
+
+    // It is executed as soon as the subnet stops cooling down.
+    clear_own_subnet_cooling_down(&mut test);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(0, test.system_task_count(&canister_id));
 }
 
 #[test]
