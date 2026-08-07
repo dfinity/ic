@@ -6287,10 +6287,7 @@ fn flexible_outcall_is_not_out_of_cycles_while_the_cheapest_result_is_affordable
     let callback_id = CallbackId::from(42);
     // One replica has rejected and three have yet to answer, so one successful
     // response would settle the outcall, while proving `TooManyRejects` would take
-    // all four — much the more expensive of the two, and not the one that counts.
-    // What that successful response costs at cheapest: one empty body, nothing
-    // spent. Derived from `flexible_initial_spent` rather than from the bound under
-    // test, so that the bound cannot satisfy this by picking the other result.
+    // all four.
     let empty_ok = metadata_share_with_content_size(callback_id.get(), 1, 0);
     let ok_cost = flexible_initial_spent(
         std::iter::once(&empty_ok),
@@ -6463,6 +6460,7 @@ fn validate_payload_fails_for_out_of_cycles_with_a_duplicate_share() {
     );
 }
 
+/// A `TooManyRejects` error delivers reject bodies, so it is topped up with
 /// extra shares just like a group of successful responses.
 #[test]
 fn too_many_rejects_is_topped_up_with_extra_shares() {
@@ -6523,9 +6521,9 @@ fn too_many_rejects_is_topped_up_with_extra_shares() {
             assert_eq!(reject_responses.len(), num_rejects);
             assert_eq!(extra_shares.len(), 1);
             assert_eq!(*initial_spent, error_spend);
+
             // The extra share's signer is reported as a contributor too, so the
             // caller's refund is derived from all four allowances.
-
             let (_, spent, _) = CanisterHttpPayloadBuilderImpl::into_messages(
                 &payload_to_bytes_max_4mb(payload.clone()),
             );
