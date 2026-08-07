@@ -174,7 +174,9 @@ pub(crate) fn check_initial_spent_within_limit(
 }
 
 pub(crate) struct OutOfCyclesProof {
+    /// The least it can cost to deliver a response.
     pub min_cost: Cycles,
+    /// What is left of the committee's collective allowance.
     pub unspent_allowance: Cycles,
 }
 
@@ -213,8 +215,7 @@ pub(crate) fn check_out_of_cycles<'a>(
     let mut unspent_allowance = Cycles::zero();
     let mut seen = 0;
     for share in seen_shares {
-        // `Cycles::sub` saturates at zero.
-        unspent_allowance += allowance - share.content.payment_receipt.spent;
+        unspent_allowance += allowance - share.content.spent();
         seen += 1;
     }
     unspent_allowance += allowance * committee_size.saturating_sub(seen);
@@ -562,7 +563,8 @@ fn assemble_non_flexible_response(
 pub(crate) enum FlexibleFindResult {
     /// Collected enough OK responses for consensus.
     OkResponses(FlexibleCanisterHttpResponses, usize),
-    /// Detected an error condition (too many rejects or responses too large).
+    /// Detected an error condition (too many rejects, responses too large, or out
+    /// of cycles).
     Error(FlexibleCanisterHttpError, usize),
     /// Not enough data to decide yet; more shares may arrive.
     Pending,

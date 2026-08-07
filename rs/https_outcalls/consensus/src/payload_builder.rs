@@ -1420,9 +1420,10 @@ fn flexible_error_into_consensus_response(
                 .map(|share| share.content.spent())
                 .sum();
             let message = format!(
-                "Out of cycles: {} of the assigned replicas have collectively spent {} cycles, \
-                 leaving {} cycles of the attached payment (after base fee deduction). \
-                 Delivering a response would cost at least {} cycles.",
+                "Out of cycles: the {} assigned replicas that reported so far have \
+                 collectively spent {} cycles, leaving {} cycles of the committee's \
+                 collective allowance (counting a full allowance for every replica yet to \
+                 report). Delivering a response would cost at least {} cycles of it.",
                 all_seen_shares.len(),
                 total_spent,
                 unspent_allowance,

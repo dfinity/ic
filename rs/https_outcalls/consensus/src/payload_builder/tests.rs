@@ -6187,7 +6187,7 @@ fn flexible_outcall_is_out_of_cycles_when_allowances_are_exhausted() {
             assert_eq!(all_seen_shares.len(), num_nodes);
             assert_eq!(*unspent_allowance, Cycles::zero());
             assert!(!min_cost.is_zero());
-            let (min_cost, unspent_allowance) = (*min_cost, *unspent_allowance);
+            let min_cost = *min_cost;
 
             let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(
                 &payload_to_bytes_max_4mb(payload.clone()),
@@ -6207,10 +6207,12 @@ fn flexible_outcall_is_out_of_cycles_when_allowances_are_exhausted() {
                 Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved))
             );
             assert_eq!(err.node_details.len(), num_nodes);
-            // The caller is told both figures, so that it can tell how much more
-            // it would have had to pay.
+            // The caller is told what the committee spent and what a response would
+            // have cost, so that it can tell how much more it would have had to pay.
+            // (The unspent allowance is zero here, which no assertion could tell
+            // apart from any other digit in the message.)
             assert!(
-                err.message.contains(&format!("{unspent_allowance}"))
+                err.message.contains(&format!("{}", allowance * num_nodes))
                     && err.message.contains(&format!("{min_cost}")),
                 "figures missing from {}",
                 err.message
@@ -6234,7 +6236,8 @@ fn validate_payload_fails_for_out_of_cycles_with_a_wrong_figure() {
     let (_, metadata) = test_response_and_metadata(callback_id.get());
     let share = metadata_to_share(0, &metadata);
     // With a zero allowance the error itself is justified, so validation gets as
-    // far as comparing the figures.
+    // far as comparing the figures: nothing of the allowance is left, against a
+    // nonzero cost of delivering a response.
     let expected_min_cost = min_flexible_consensus_cost(
         std::iter::once(&share),
         NumberOfNodes::from(num_nodes as u32),
@@ -6243,37 +6246,55 @@ fn validate_payload_fails_for_out_of_cycles_with_a_wrong_figure() {
     )
     .expect("a bound exists");
     assert!(!expected_min_cost.is_zero());
-    let payload = CanisterHttpPayload {
+    let expected_unspent = Cycles::zero();
+    let out_of_cycles = |min_cost, unspent_allowance| CanisterHttpPayload {
         flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
             callback_id,
-            all_seen_shares: vec![share],
-            min_cost: expected_min_cost + Cycles::new(1),
-            unspent_allowance: Cycles::zero(),
+            all_seen_shares: vec![share.clone()],
+            min_cost,
+            unspent_allowance,
         }],
         ..Default::default()
     };
+    let off_by_one = Cycles::new(1);
 
-    assert_matches!(
-        validate_flexible_payload_with_allowance(
-            num_nodes,
-            callback_id,
-            1,
-            Cycles::zero(),
-            payload
+    // Either figure being off on its own has to be caught, reported as the field it
+    // is, and with both the figure received and the one it should have been.
+    for (field, payload, received, expected) in [
+        (
+            "min_cost",
+            out_of_cycles(expected_min_cost + off_by_one, expected_unspent),
+            expected_min_cost + off_by_one,
+            expected_min_cost,
         ),
-        Err(ValidationError::InvalidArtifact(
-            InvalidPayloadReason::InvalidCanisterHttpPayload(
-                InvalidCanisterHttpPayloadReason::FlexibleOutOfCyclesFigureMismatch {
-                    field,
-                    received,
-                    expected,
-                    ..
-                },
+        (
+            "unspent_allowance",
+            out_of_cycles(expected_min_cost, expected_unspent + off_by_one),
+            expected_unspent + off_by_one,
+            expected_unspent,
+        ),
+    ] {
+        assert_matches!(
+            validate_flexible_payload_with_allowance(
+                num_nodes,
+                callback_id,
+                1,
+                Cycles::zero(),
+                payload
             ),
-        )) if field == "min_cost"
-            && received == expected_min_cost + Cycles::new(1)
-            && expected == expected_min_cost
-    );
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleOutOfCyclesFigureMismatch {
+                        field: mismatched_field,
+                        received: reported,
+                        expected: recomputed,
+                        ..
+                    },
+                ),
+            )) if mismatched_field == field && reported == received && recomputed == expected,
+            "expected a {field} mismatch"
+        );
+    }
 }
 
 /// An outcall is out of cycles only once it can pay for none of the results that
@@ -6381,47 +6402,66 @@ fn validate_payload_fails_for_out_of_cycles_without_a_refundable_allowance() {
     let callback_id = CallbackId::from(42);
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let (_, metadata) = test_response_and_metadata(callback_id.get());
-    let payload = CanisterHttpPayload {
-        flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
-            callback_id,
-            all_seen_shares: vec![metadata_to_share(0, &metadata)],
-            min_cost: Cycles::zero(),
-            unspent_allowance: Cycles::zero(),
-        }],
-        ..Default::default()
-    };
 
-    // A zero allowance would be exhausted under pay-as-you-go pricing, but this
-    // request is priced with legacy pricing.
-    let mut context =
-        flexible_request_context_with_allowance(committee, 1, num_nodes as u32, Cycles::zero());
-    context.pricing_version = ic_types::canister_http::PricingVersion::Legacy;
+    // A zero allowance would be exhausted under pay-as-you-go pricing on a charging
+    // subnet. Legacy pricing refunds the unspent payment instead, and free subnets
+    // refund nothing at all, so neither has an allowance to run out of.
+    for (pricing_version, cost_schedule) in [
+        (
+            ic_types::canister_http::PricingVersion::Legacy,
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        (
+            ic_types::canister_http::PricingVersion::PayAsYouGo,
+            CanisterCyclesCostSchedule::Free,
+        ),
+    ] {
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
+                callback_id,
+                all_seen_shares: vec![metadata_to_share(0, &metadata)],
+                min_cost: Cycles::zero(),
+                unspent_allowance: Cycles::zero(),
+            }],
+            ..Default::default()
+        };
+        let mut context = flexible_request_context_with_allowance(
+            committee.clone(),
+            1,
+            num_nodes as u32,
+            Cycles::zero(),
+        );
+        context.pricing_version = pricing_version.clone();
+        context.cost_schedule = cost_schedule;
 
-    let mut result = None;
-    setup_test_with_contexts(
-        num_nodes,
-        vec![(callback_id, context)],
-        |payload_builder, _pool| {
-            result = Some(payload_builder.validate_payload(
-                Height::new(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload_to_bytes_max_4mb(payload),
-                &[],
-            ));
-        },
-    );
-    assert_matches!(
-        result.expect("validation did not run"),
-        Err(ValidationError::InvalidArtifact(
-            InvalidPayloadReason::InvalidCanisterHttpPayload(
-                InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
-                    unspent_allowance,
-                    ..
-                },
-            ),
-        // There is no per-replica allowance here at all, rather than an exhausted one.
-        )) if unspent_allowance.is_none()
-    );
+        let mut result = None;
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(callback_id, context)],
+            |payload_builder, _pool| {
+                result = Some(payload_builder.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&default_validation_context()),
+                    &payload_to_bytes_max_4mb(payload),
+                    &[],
+                ));
+            },
+        );
+        assert_matches!(
+            result.expect("validation did not run"),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+                        unspent_allowance,
+                        ..
+                    },
+                ),
+            // There is no per-replica allowance here at all, rather than an exhausted one.
+            )) if unspent_allowance.is_none(),
+            "expected no refundable allowance for {pricing_version:?} pricing on a \
+             {cost_schedule:?} cost schedule"
+        );
+    }
 }
 
 /// An `OutOfCycles` error may only rest on shares from distinct committee

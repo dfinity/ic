@@ -84,10 +84,11 @@ impl FlexibleCanisterHttpError {
     }
 
     /// The signed receipts this error carries whose response body is *not* part of
-    /// the payload: all of the evidence behind [`Self::ResponsesTooLarge`], and the
-    /// extra shares funding a [`Self::TooManyRejects`] (whose reject bodies *are*
-    /// delivered, so their proofs are not included here). Empty for
-    /// [`Self::Timeout`], which carries no shares at all.
+    /// the payload: all of the evidence behind [`Self::ResponsesTooLarge`] and
+    /// [`Self::OutOfCycles`], and the extra shares funding a
+    /// [`Self::TooManyRejects`] (whose reject bodies *are* delivered, so their
+    /// proofs are not included here). Empty for [`Self::Timeout`], which carries no
+    /// shares at all.
     pub fn shares_without_delivered_response(&self) -> &[CanisterHttpResponseShare] {
         match self {
             Self::Timeout { .. } => &[],
