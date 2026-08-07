@@ -2000,15 +2000,12 @@ pub mod test {
         MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
     };
     use assert_matches::assert_matches;
-    use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{Dependencies, DependenciesBuilder, RefMockPayloadBuilder};
-    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
     };
-    use ic_interfaces_mocks::messaging::RefMockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::{
@@ -2023,7 +2020,6 @@ pub mod test {
         SetupInitialDkgContext, SignWithThresholdContext,
     };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::{
         assert_changeset_matches_pattern,
         dkg::fake_setup_initial_dkg_context,
@@ -2035,7 +2031,6 @@ pub mod test {
         },
     };
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
         ids::{node_test_id, subnet_test_id},
         messages::SignedIngressBuilder,
@@ -2053,7 +2048,6 @@ pub mod test {
             BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
             CombinedThresholdSigOf, CryptoHash,
         },
-        replica_config::ReplicaConfig,
         signature::ThresholdSignature,
         subnet_id_into_protobuf,
     };
@@ -2079,112 +2073,35 @@ pub mod test {
         };
     }
 
-    pub struct ValidatorAndDependencies {
-        pub validator: Validator,
-        pub payload_builder: Arc<RefMockPayloadBuilder>,
-        pub membership: Arc<Membership>,
-        pub state_manager: Arc<RefMockStateManager>,
-        pub message_routing: Arc<RefMockMessageRouting>,
-        pub crypto: Arc<CryptoReturningOk>,
-        pub data_provider: Arc<ProtoRegistryDataProvider>,
-        pub registry_client: Arc<FakeRegistryClient>,
-        pub pool: TestConsensusPool,
-        pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
-        pub time_source: Arc<FastForwardTimeSource>,
-        pub replica_config: ReplicaConfig,
-    }
-
-    impl ValidatorAndDependencies {
-        fn new(dependencies: Dependencies) -> Self {
-            let payload_builder = Arc::new(RefMockPayloadBuilder::default());
-            let message_routing = Arc::new(RefMockMessageRouting::default());
-            let validator = Validator::new(
-                dependencies.replica_config.clone(),
-                dependencies.membership.clone(),
-                dependencies.registry.clone(),
-                dependencies.crypto.clone(),
-                payload_builder.clone(),
-                dependencies.state_manager.clone(),
-                message_routing.clone(),
-                dependencies.dkg_pool.clone(),
-                build_thread_pool(MAX_CONSENSUS_THREADS),
-                no_op_logger(),
-                &MetricsRegistry::new(),
-                Arc::clone(&dependencies.time_source) as Arc<_>,
-            );
-            Self {
-                validator,
-                payload_builder,
-                membership: dependencies.membership,
-                state_manager: dependencies.state_manager,
-                message_routing,
-                crypto: dependencies.crypto,
-                data_provider: dependencies.registry_data_provider,
-                registry_client: dependencies.registry,
-                pool: dependencies.pool,
-                dkg_pool: dependencies.dkg_pool,
-                time_source: dependencies.time_source,
-                replica_config: dependencies.replica_config,
-            }
-        }
-    }
-
-    fn setup_dependencies(
-        pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
-        node_ids: &[NodeId],
-    ) -> ValidatorAndDependencies {
-        setup_dependencies_with_dkg_interval_length(pool_config, node_ids, 9)
-    }
-
-    fn setup_dependencies_with_dkg_interval_length(
-        pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
-        node_ids: &[NodeId],
-        dkg_interval_length: u64,
-    ) -> ValidatorAndDependencies {
-        ValidatorAndDependencies::new(
-            DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(node_ids)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            )
-            .build(),
-        )
-    }
-
-    fn setup_dependencies_with_raw_state_manager(
-        pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
-        node_ids: &[NodeId],
-    ) -> ValidatorAndDependencies {
-        ValidatorAndDependencies::new(
-            DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(node_ids)
-                        .with_dkg_interval_length(9)
-                        .build(),
-                )],
-            )
-            .without_mocked_state_manager()
-            .build(),
+    fn make_validator(dependencies: &Dependencies) -> Validator {
+        Validator::new(
+            dependencies.replica_config.clone(),
+            dependencies.membership.clone(),
+            dependencies.registry.clone(),
+            dependencies.crypto.clone(),
+            dependencies.payload_builder.clone(),
+            dependencies.state_manager.clone(),
+            dependencies.message_routing.clone(),
+            dependencies.dkg_pool.clone(),
+            build_thread_pool(MAX_CONSENSUS_THREADS),
+            no_op_logger(),
+            &MetricsRegistry::new(),
+            dependencies.time_source.clone(),
         )
     }
 
     #[test]
     fn test_validate_catch_up_package_shares() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 state_manager,
                 mut pool,
                 ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            } = dependencies;
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
@@ -2312,15 +2229,16 @@ pub mod test {
     ) {
         let expected_oldest_registry_version = RegistryVersion::from(2);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .without_mocked_state_manager()
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 state_manager,
                 mut pool,
                 ..
-            } = setup_dependencies_with_raw_state_manager(
-                pool_config,
-                &(0..4).map(node_test_id).collect::<Vec<_>>(),
-            );
+            } = dependencies;
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
@@ -2449,11 +2367,11 @@ pub mod test {
     #[test]
     fn test_finalization_requires_notarization() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies { mut pool, .. } = dependencies;
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             // Insert a Finalization for `block` in the unvalidated pool
@@ -2530,12 +2448,15 @@ pub mod test {
     #[test]
     fn test_random_beacon_validation() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 mut pool,
                 replica_config,
                 ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            } = dependencies;
             pool.advance_round_normal_operation();
 
             // Put a random tape share in the unvalidated pool
@@ -2585,14 +2506,17 @@ pub mod test {
     #[test]
     fn test_random_tape_validation() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 state_manager,
                 message_routing,
                 mut pool,
                 replica_config,
                 ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            } = dependencies;
 
             let mut round = pool.prepare_round().dont_finalize().dont_add_random_tape();
             round.advance();
@@ -2702,17 +2626,24 @@ pub mod test {
             let prior_height = Height::from(5);
             let certified_height = Height::from(1);
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&committee).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                data_provider,
-                registry_client,
+                registry_data_provider,
+                registry,
                 mut pool,
                 time_source,
                 replica_config,
                 ..
-            } = setup_dependencies(pool_config, &committee);
+            } = dependencies;
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -2728,12 +2659,12 @@ pub mod test {
                 .return_const(certified_height);
 
             add_subnet_record(
-                &data_provider,
+                &registry_data_provider,
                 11,
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&[]).build(),
             );
-            registry_client.update_to_latest_version();
+            registry.update_to_latest_version();
 
             // Create a block chain with some length that will not be finalized
             pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
@@ -2769,7 +2700,7 @@ pub mod test {
             );
 
             // Time between blocks increases by at least initial_notary_delay + 1ns
-            let monotonic_block_increment = registry_client
+            let monotonic_block_increment = registry
                 .get_notarization_delay_settings(
                     replica_config.subnet_id,
                     test_block.context.registry_version,
@@ -2785,7 +2716,7 @@ pub mod test {
             let delay = monotonic_block_increment
                 + get_block_maker_delay(
                     &no_op_logger(),
-                    registry_client.as_ref(),
+                    registry.as_ref(),
                     replica_config.subnet_id,
                     &pool_reader,
                     parent.clone(),
@@ -2806,16 +2737,23 @@ pub mod test {
             let prior_height = Height::from(5);
             let certified_height = Height::from(1);
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&committee).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                data_provider,
-                registry_client,
+                registry_data_provider,
+                registry,
                 mut pool,
                 replica_config,
                 ..
-            } = setup_dependencies(pool_config, &committee);
+            } = dependencies;
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -2831,12 +2769,12 @@ pub mod test {
                 .return_const(certified_height);
 
             add_subnet_record(
-                &data_provider,
+                &registry_data_provider,
                 11,
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&[]).build(),
             );
-            registry_client.update_to_latest_version();
+            registry.update_to_latest_version();
 
             // Create a block chain with some length that will not be finalized
             pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
@@ -2877,29 +2815,28 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 9;
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_halt_at_cup_height(true)
+                        .build(),
+                )],
+            )
+            .with_dkg_interval_length(dkg_interval_length)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                registry_client,
+                registry,
                 replica_config,
                 mut pool,
                 time_source,
                 ..
-            } = ValidatorAndDependencies::new(
-                DependenciesBuilder::single_subnet(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .with_halt_at_cup_height(true)
-                            .build(),
-                    )],
-                )
-                .build(),
-            );
+            } = dependencies;
 
             // Any payload validation fails, so we can observe whether validation was attempted.
             payload_builder
@@ -2928,7 +2865,7 @@ pub mod test {
                 status::get_status(
                     summary_proposal.height(),
                     &PoolReader::new(&pool).get_highest_finalized_summary_block(),
-                    registry_client.as_ref(),
+                    registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
                     &no_op_logger(),
@@ -2963,17 +2900,24 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&committee).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                data_provider,
-                registry_client,
+                registry_data_provider,
+                registry,
                 mut pool,
                 time_source,
                 replica_config,
                 ..
-            } = setup_dependencies(pool_config, &committee);
+            } = dependencies;
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -2991,13 +2935,13 @@ pub mod test {
                 )));
 
             add_subnet_record(
-                &data_provider,
+                &registry_data_provider,
                 11,
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&[]).build(),
             );
 
-            registry_client.update_to_latest_version();
+            registry.update_to_latest_version();
 
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(3));
 
@@ -3045,14 +2989,21 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&committee).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
                 mut pool,
                 time_source,
                 ..
-            } = setup_dependencies(pool_config, &committee);
+            } = dependencies;
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -3142,16 +3093,23 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                data_provider,
-                registry_client,
+                registry_data_provider,
+                registry,
                 mut pool,
                 replica_config,
                 ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            } = dependencies;
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -3162,20 +3120,20 @@ pub mod test {
                 .return_const(certified_height);
 
             add_subnet_record(
-                &data_provider,
+                &registry_data_provider,
                 11,
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&[]).build(),
             );
 
             add_subnet_record(
-                &data_provider,
+                &registry_data_provider,
                 12,
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&[]).build(),
             );
 
-            registry_client.update_to_latest_version();
+            registry.update_to_latest_version();
 
             let mut parent_block = make_next_block(&pool);
             parent_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
@@ -3223,14 +3181,14 @@ pub mod test {
     /// Schedules a subnet split at [`SUBNET_SPLIT_REGISTRY_VERSION`] by overwriting the subnet's
     /// CUP contents record with one carrying a [`CupType::SubnetSplitting`], the way the NNS would.
     fn schedule_subnet_split(
-        data_provider: &Arc<ProtoRegistryDataProvider>,
-        registry_client: &FakeRegistryClient,
+        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry: &FakeRegistryClient,
         subnet_id: SubnetId,
     ) {
         // Keep everything but the CUP type as it is at genesis, so that the scheduled split is the
         // only difference between the two records.
-        let mut cup_contents = registry_client
-            .get_cup_contents(subnet_id, registry_client.get_latest_version())
+        let mut cup_contents = registry
+            .get_cup_contents(subnet_id, registry.get_latest_version())
             .expect("Failed to get the CUP contents")
             .value
             .expect("The CUP contents should be in the registry");
@@ -3238,14 +3196,14 @@ pub mod test {
             destination_subnet_id: Some(subnet_id_into_protobuf(subnet_test_id(1))),
         }));
 
-        data_provider
+        registry_data_provider
             .add(
                 &make_catch_up_package_contents_key(subnet_id),
                 SUBNET_SPLIT_REGISTRY_VERSION,
                 Some(cup_contents),
             )
             .expect("Failed to add the CUP contents");
-        registry_client.reload();
+        registry.reload();
     }
 
     /// Until the summary block starting the split is reached, data blocks must keep their registry
@@ -3258,38 +3216,31 @@ pub mod test {
     fn test_data_block_during_subnet_splitting(#[case] block_registry_version: RegistryVersion) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                (1..=block_registry_version.get())
+                    .map(|version| (version, SubnetRecordBuilder::from(&committee).build()))
+                    .collect(),
+            )
+            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                data_provider,
-                registry_client,
+                registry_data_provider,
+                registry,
                 pool,
                 time_source,
                 replica_config,
                 ..
-            } = ValidatorAndDependencies::new(
-                DependenciesBuilder::single_subnet(
-                    pool_config,
-                    subnet_test_id(0),
-                    (1..=block_registry_version.get())
-                        .map(|version| {
-                            (
-                                version,
-                                SubnetRecordBuilder::from(&committee)
-                                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                                    .build(),
-                            )
-                        })
-                        .collect(),
-                )
-                .build(),
-            );
+            } = dependencies;
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| Ok(()));
-            schedule_subnet_split(&data_provider, &registry_client, replica_config.subnet_id);
+            schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
 
             let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.registry_version = block_registry_version;
@@ -3334,33 +3285,26 @@ pub mod test {
     fn test_summary_block_during_subnet_splitting(#[case] block_registry_version: RegistryVersion) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                (1..=block_registry_version.get())
+                    .map(|version| (version, SubnetRecordBuilder::from(&committee).build()))
+                    .collect(),
+            )
+            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                data_provider,
-                registry_client,
+                registry_data_provider,
+                registry,
                 mut pool,
                 time_source,
                 replica_config,
                 ..
-            } = ValidatorAndDependencies::new(
-                DependenciesBuilder::single_subnet(
-                    pool_config,
-                    subnet_test_id(0),
-                    (1..=block_registry_version.get())
-                        .map(|version| {
-                            (
-                                version,
-                                SubnetRecordBuilder::from(&committee)
-                                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                                    .build(),
-                            )
-                        })
-                        .collect(),
-                )
-                .build(),
-            );
+            } = dependencies;
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -3389,7 +3333,7 @@ pub mod test {
                 .return_const(context.certified_height);
             time_source.set_time(context.time).unwrap();
 
-            schedule_subnet_split(&data_provider, &registry_client, replica_config.subnet_id);
+            schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
 
             let result = validator.check_block_validity(&PoolReader::new(&pool), &summary_proposal);
             if block_registry_version <= SUBNET_SPLIT_REGISTRY_VERSION {
@@ -3418,21 +3362,24 @@ pub mod test {
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&committee).build())],
+            )
+            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                data_provider,
-                registry_client,
+                registry_data_provider,
+                registry,
                 pool,
                 time_source,
                 replica_config,
                 ..
-            } = setup_dependencies_with_dkg_interval_length(
-                pool_config,
-                &committee,
-                DKG_INTERVAL_LENGTH,
-            );
+            } = dependencies;
             payload_builder
                 .get_mut()
                 .expect_validate_payload()
@@ -3440,14 +3387,14 @@ pub mod test {
 
             // Delete the subnet's CUP contents record at `UNREADABLE_REGISTRY_VERSION`, so that the
             // subnet splitting status can no longer be determined at that version.
-            data_provider
+            registry_data_provider
                 .add::<CatchUpPackageContents>(
                     &make_catch_up_package_contents_key(replica_config.subnet_id),
                     UNREADABLE_REGISTRY_VERSION,
                     None,
                 )
                 .expect("Failed to delete the CUP contents");
-            registry_client.update_to_latest_version();
+            registry.update_to_latest_version();
 
             let test_block = make_next_block(&pool);
             let context = test_block.content.as_ref().context.clone();
@@ -3474,14 +3421,21 @@ pub mod test {
     fn test_certified_height_change() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
                 mut pool,
                 time_source,
                 ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            } = dependencies;
 
             payload_builder
                 .get_mut()
@@ -3535,14 +3489,21 @@ pub mod test {
     fn test_block_context_time() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
                 mut pool,
                 time_source,
                 ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            } = dependencies;
 
             payload_builder
                 .get_mut()
@@ -3604,11 +3565,11 @@ pub mod test {
     #[test]
     fn test_notarization_requires_at_least_threshold_signatures() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies { mut pool, .. } = dependencies;
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
 
@@ -3655,11 +3616,11 @@ pub mod test {
     fn test_notarization_deduped_by_content() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies { mut pool, .. } = dependencies;
 
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
@@ -3710,11 +3671,11 @@ pub mod test {
     fn test_finalization_deduped_by_content() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies { mut pool, .. } = dependencies;
 
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
@@ -3892,17 +3853,16 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let cup_height = Height::from(60);
             // Setup validator dependencies.
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(cup_height.get() - 1)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 state_manager,
                 mut pool,
                 time_source,
                 ..
-            } = setup_dependencies_with_dkg_interval_length(
-                pool_config,
-                &(0..4).map(node_test_id).collect::<Vec<_>>(),
-                cup_height.get() - 1,
-            );
+            } = dependencies;
 
             pool.advance_round_normal_operation_no_cup_n(finalized_height.get());
 
@@ -3971,12 +3931,15 @@ pub mod test {
     fn test_should_not_validate_catch_up_package_when_wrong_version() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(9)
+                .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 state_manager,
                 mut pool,
                 ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            } = dependencies;
 
             pool.advance_round_normal_operation_n(9);
             // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
@@ -4012,16 +3975,23 @@ pub mod test {
     fn test_out_of_sync_validation() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
-                registry_client,
+                registry,
                 mut pool,
                 time_source,
                 replica_config,
                 ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            } = dependencies;
 
             payload_builder
                 .get_mut()
@@ -4058,7 +4028,7 @@ pub mod test {
             let pool_reader = PoolReader::new(&pool);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
-                registry_client.as_ref(),
+                registry.as_ref(),
                 replica_config.subnet_id,
                 &pool_reader,
                 parent.clone(),
@@ -4111,7 +4081,7 @@ pub mod test {
             let pool_reader = PoolReader::new(&pool);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
-                registry_client.as_ref(),
+                registry.as_ref(),
                 replica_config.subnet_id,
                 &pool_reader,
                 parent.clone(),
@@ -4147,13 +4117,20 @@ pub mod test {
     fn test_block_validated_through_notarization() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 payload_builder,
                 state_manager,
                 mut pool,
                 ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            } = dependencies;
             pool.advance_round_normal_operation();
 
             payload_builder
@@ -4215,12 +4192,19 @@ pub mod test {
         pool_config: ArtifactPoolConfig,
     ) -> (TestConsensusPool, Validator, EquivocationProof) {
         let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-        let ValidatorAndDependencies {
-            validator,
+        let dependencies = DependenciesBuilder::single_subnet(
+            pool_config,
+            subnet_test_id(0),
+            vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+        )
+        .with_dkg_interval_length(9)
+        .build();
+        let validator = make_validator(&dependencies);
+        let Dependencies {
             mut pool,
             replica_config,
             ..
-        } = setup_dependencies(pool_config, &subnet_members);
+        } = dependencies;
 
         pool.advance_round_normal_operation();
         pool.insert_validated(pool.make_next_beacon());
@@ -4406,11 +4390,15 @@ pub mod test {
     fn test_validator_rejects_incorrect_signature_in_notarization_fast_path() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies { mut pool, .. } = dependencies;
 
             pool.advance_round_normal_operation_n(9);
 
@@ -4448,14 +4436,21 @@ pub mod test {
     fn test_create_equivocation_proof() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 state_manager,
                 time_source,
                 payload_builder,
                 mut pool,
                 ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            } = dependencies;
 
             payload_builder
                 .get_mut()
@@ -4513,11 +4508,15 @@ pub mod test {
     fn test_cannot_disqualify_with_incorrect_rank() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies { mut pool, .. } = dependencies;
 
             let block = pool.make_next_block();
             let mut block_with_malicious_signer = block.clone();
@@ -4548,33 +4547,27 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let dkg_interval = 9;
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![
+                    (1, SubnetRecordBuilder::from(&subnet_members).build()),
+                    (
+                        10,
+                        SubnetRecordBuilder::from(&subnet_members)
+                            .with_replica_version("new_version")
+                            .build(),
+                    ),
+                ],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 mut pool,
                 replica_config,
                 ..
-            } = ValidatorAndDependencies::new(
-                DependenciesBuilder::single_subnet(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![
-                        (
-                            1,
-                            SubnetRecordBuilder::from(&subnet_members)
-                                .with_dkg_interval_length(9)
-                                .build(),
-                        ),
-                        (
-                            10,
-                            SubnetRecordBuilder::from(&subnet_members)
-                                .with_dkg_interval_length(9)
-                                .with_replica_version("new_version")
-                                .build(),
-                        ),
-                    ],
-                )
-                .build(),
-            );
+            } = dependencies;
 
             // Move to the end of the DKG interval where we switch versions
             pool.advance_round_normal_operation_n(dkg_interval + 1);
@@ -4608,14 +4601,21 @@ pub mod test {
     fn test_ignore_disqualified_ranks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..7).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
+            let dependencies = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![(1, SubnetRecordBuilder::from(&subnet_members).build())],
+            )
+            .with_dkg_interval_length(9)
+            .build();
+            let validator = make_validator(&dependencies);
+            let Dependencies {
                 mut pool,
                 time_source,
                 payload_builder,
                 state_manager,
                 ..
-            } = setup_dependencies(pool_config, &subnet_members);
+            } = dependencies;
 
             payload_builder
                 .get_mut()
@@ -4846,14 +4846,21 @@ pub mod test {
     fn equivocation_proofs_test(#[case] test_case: EquivocationProofTestCase) {
         ic_test_utilities_logger::with_test_replica_logger(|logger| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                let ValidatorAndDependencies {
-                    mut validator,
+                let dependencies = DependenciesBuilder::single_subnet(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![(1, SubnetRecordBuilder::from(&[NODE_1, NODE_2]).build())],
+                )
+                .with_dkg_interval_length(9)
+                .build();
+                let mut validator = make_validator(&dependencies);
+                let Dependencies {
                     state_manager,
                     time_source,
                     payload_builder,
                     mut pool,
                     ..
-                } = setup_dependencies(pool_config, &[NODE_1, NODE_2]);
+                } = dependencies;
                 validator.log = logger;
 
                 payload_builder
