@@ -4,7 +4,8 @@
 //! balance getter, so the balance is read with the canister's generic `multi_request`: it forwards
 //! an arbitrary JSON-RPC payload to every provider, deserializes each response's `result` field
 //! into a string, and agrees on one under the configured consensus strategy — a threshold of the
-//! providers, which is the only agreement this module accepts.
+//! providers (3 of 4 on mainnet, 2 of 4 on Sepolia), which is the only agreement this module
+//! accepts.
 //!
 //! Because the canister deserializes `result`, what arrives here is the quantity itself rather than
 //! any surrounding JSON, so it is decoded exactly: quotes or padding would be the provider's own
@@ -60,6 +61,12 @@ pub async fn eth_get_balance(address: &Address, block: BlockTag) -> Result<Wei, 
         .await
         // No client-side reduction: the answer is whatever the EVM RPC canister's own consensus
         // strategy agreed on, and an inconsistent result stays an error.
+        //
+        // That threshold is [`rpc_client`]'s and is network-dependent — 3 of 4 providers on
+        // mainnet, 2 of 4 on Sepolia — so this is "the configured threshold agreed", not "a
+        // majority agreed". Deliberately the same threshold as every other read the minter makes:
+        // holding this one call to a stricter bar would need its own client, and would buy nothing
+        // on the network where the difference applies, since ckSepoliaETH is not worth anything.
         //
         // Deliberately *not* `StrictMajorityByKey`, despite the name. That strategy returns the
         // largest ballot whenever it beats the runner-up, so a 2/1/1 split across four providers
