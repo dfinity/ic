@@ -1,17 +1,17 @@
 # NNS Delegation Manager Specification
 
-**Crate:** `ic-nns-delegation-manager`
-**Path:** `rs/http_endpoints/nns_delegation_manager/`
+**Crates:** `ic-nns-delegation-manager`, `ic-nns-delegation-reader`, `ic-nns-delegation-reader-test-utils`
+**Paths:** `rs/http_endpoints/nns_delegation_manager/`, `rs/http_endpoints/nns_delegation_reader/`
 
 ## Overview
 
-The NNS Delegation Manager is responsible for periodically fetching NNS delegation certificates from the NNS subnet and making them available to non-NNS subnets. These delegations allow non-NNS subnets to issue certified responses on behalf of the NNS. The module provides:
+Delegation fetching and delegation reading/building live in two separate crates:
 
-1. **NNSDelegationManager** -- A background task that periodically fetches delegations from the NNS subnet over TLS-secured HTTP connections.
-2. **NNSDelegationReader** -- A reader (backed by a `tokio::sync::watch` channel) that provides the latest delegation to callers with configurable canister range filtering.
-3. **NNSDelegationBuilder** -- A builder that parses raw NNS certificates, precomputes filtered variants, and constructs `CertificateDelegation` values on demand.
-4. **CanisterRangesFilter** -- An enum controlling which canister range data is included in the returned delegation.
-5. **DelegationManagerMetrics** -- Prometheus metrics tracking update counts, durations, delegation sizes, and errors.
+- **`ic-nns-delegation-manager`** (`nns_delegation_manager.rs`) -- A background task that fetches delegations from the NNS subnet over TLS-secured HTTP connections, both proactively (on a fixed interval) and reactively (whenever the currently held delegation no longer matches the replica's latest certified state), and publishes them via a `tokio::sync::watch` channel.
+- **`ic-nns-delegation-reader`** (`reader.rs`, `validation.rs`) -- Provides `NNSDelegationReader` (a reader wrapping the `watch::Receiver` side of the channel), `NNSDelegationBuilder` (parses raw NNS certificates, precomputes filtered variants, and constructs `CertificateDelegation` values on demand), `CanisterRangesFilter` (controls which canister range data is included in a *returned* delegation), and the certificate-tree validation/consistency-checking logic (`CanisterRangesCheck`, `is_tree_consistent_with`, `DelegationValidationError`, `DelegationVerificationError`) used to decide whether a held delegation is still consistent with the current certified state.
+- **`ic-nns-delegation-reader-test-utils`** -- Shared test helpers for constructing `NNSDelegationReader`/`NNSDelegationBuilder` instances in tests of downstream crates.
+
+`DelegationManagerMetrics` (in the manager crate) tracks update counts, fetch durations, delegation sizes, fetch errors, state-comparison errors, held-back delegations, and reactive fetches.
 
 ## Requirements
 
@@ -31,16 +31,52 @@ The delegation manager spawns a background task that periodically fetches the NN
 - **AND** `NNSDelegationReader::get_delegation` returns `None`
 - **AND** the reader is still marked as initialized (notifying waiters)
 
-#### Scenario: Periodic refresh after interval
+#### Scenario: Proactive refresh after interval
 - **WHEN** the delegation manager has fetched an initial delegation
-- **THEN** it waits for `DELEGATION_UPDATE_INTERVAL` (5 minutes in production, 5 seconds in tests) before fetching a new delegation
-- **AND** a new fetch is not triggered before that interval elapses
-- **AND** after the interval, a fresh delegation replaces the previous one if different
+- **THEN** it waits for `DELEGATION_PROACTIVE_UPDATE_INTERVAL` (5 minutes in production, 5 seconds in tests) before proactively fetching a new delegation
+- **AND** a new proactive fetch is not triggered before that interval elapses
+- **AND** after the interval, a fresh delegation replaces the previous one if different, unless it is held back (see Reactive Fetching)
 
 #### Scenario: Delegation is unchanged
 - **WHEN** the delegation manager fetches a new delegation identical to the current one
 - **THEN** the `watch::Sender` does not notify receivers of a change
 - **AND** the existing delegation remains available
+
+### Requirement: Reactive Fetching on State Mismatch
+
+In addition to the proactive interval, the manager reactively fetches a new delegation whenever the currently held delegation is no longer consistent with the replica's latest certified state (e.g. the state's routing table or subnet public keys have advanced past what the delegation reflects).
+
+#### Scenario: Proactively fetched delegation held back
+- **WHEN** a proactively fetched delegation is checked against the latest certified state via `is_delegation_valid_with_respect_to_state`
+- **AND** the check returns `false` (the delegation is inconsistent with the state)
+- **THEN** the new delegation is held back (not published)
+- **AND** the `nns_delegation_manager_held_back_delegations_total` counter is incremented
+- **AND** the previously published delegation (if any) remains available to readers
+
+#### Scenario: Reactive fetch triggered by stale delegation
+- **WHEN** the reactive interval (`DELEGATION_REACTIVE_UPDATE_INTERVAL`: 10 seconds in production, 1 second in tests) elapses
+- **AND** the currently held delegation is inconsistent with the latest certified state
+- **THEN** the manager fetches a new delegation immediately
+- **AND** the `nns_delegation_manager_reactive_fetches_total` counter is incremented
+
+#### Scenario: Reactive fetch skipped when delegation still valid
+- **WHEN** the reactive interval elapses
+- **AND** the currently held delegation is still consistent with the latest certified state
+- **THEN** no fetch is performed on that tick
+
+#### Scenario: No delegation yet, or on the NNS subnet
+- **WHEN** there is no currently held delegation (startup, or the replica is on the NNS subnet where delegations are always `None`)
+- **THEN** `is_delegation_valid_with_respect_to_state` returns `Some(true)`, so a proactive fetch is never held back in this case
+
+#### Scenario: Certified state unavailable
+- **WHEN** the latest certified state cannot be obtained
+- **THEN** `is_delegation_valid_with_respect_to_state` returns `None`
+- **AND** the caller (`proactive_fetch`/`reactive_fetch`) treats this as "not provably invalid", so proactive fetches are accepted and reactive fetches are skipped
+
+#### Scenario: State comparison error
+- **WHEN** comparing the held delegation's certificate tree against the certified state's routing table and subnet public keys fails
+- **THEN** a warning is logged
+- **AND** the `nns_delegation_manager_state_comparison_errors_total` counter is incremented
 
 ### Requirement: Delegation Validation
 
@@ -198,6 +234,10 @@ The delegation manager exposes Prometheus metrics for observability.
   - `both_canister_ranges` (original full delegation)
   - `no_canister_ranges` (None-filtered delegation)
   - `flat_canister_ranges` (Flat-filtered delegation)
+
+#### Scenario: Reactive-fetch and held-back-delegation metrics
+- **WHEN** the manager performs a reactive fetch or holds back a proactively fetched delegation
+- **THEN** `nns_delegation_manager_reactive_fetches_total` or `nns_delegation_manager_held_back_delegations_total` is incremented respectively, as described under Reactive Fetching on State Mismatch
 
 ### Requirement: Initialization Awaiting
 
