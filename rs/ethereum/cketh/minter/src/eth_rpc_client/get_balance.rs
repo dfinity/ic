@@ -14,7 +14,7 @@
 //! ckETH burn, and the sweeper's on-chain balance is what makes that reconcilable.
 
 use crate::eth_rpc_client::{
-    MIN_ATTACHED_CYCLES, MultiCallError, StrictMajorityByKey, ToReducedWithStrategy, rpc_client,
+    MIN_ATTACHED_CYCLES, MultiCallError, NoReduction, ToReducedWithStrategy, rpc_client,
 };
 use crate::numeric::Wei;
 use crate::state::read_state;
@@ -56,24 +56,18 @@ pub async fn eth_get_balance(address: &Address, block: BlockTag) -> Result<Wei, 
         .with_cycles(MIN_ATTACHED_CYCLES)
         .try_send()
         .await
-        // Providers must agree on the balance: at a finalized block every honest one returns the
-        // same quantity, so a disagreement is worth surfacing rather than papering over by picking
-        // an answer.
-        .reduce_with_strategy(StrictMajorityByKey::new(|balance: &String| {
-            balance_key(balance)
-        }))
+        // No client-side reduction: the answer is whatever the EVM RPC canister's own consensus
+        // strategy agreed on, and an inconsistent result stays an error.
+        //
+        // Deliberately *not* `StrictMajorityByKey`, despite the name. That strategy returns the
+        // largest ballot whenever it beats the runner-up, so a 2/1/1 split across four providers
+        // wins on two votes — and it only ever runs on results the canister has already declared
+        // inconsistent, i.e. precisely when the configured threshold was not met. Picking a winner
+        // there would quietly settle for fewer providers than the threshold demands, on the number
+        // that decides whether ckETH gets burned.
+        .reduce_with_strategy(NoReduction)
         .map_err(GetBalanceError::Rpc)?;
     decode_balance(&result).map_err(GetBalanceError::Decode)
-}
-
-/// What a provider's answer is compared on when reducing to a strict majority.
-///
-/// The decoded amount, not the raw string, so two providers reporting the same balance in different
-/// renderings — `0xDE0B6B3A7640000` against `0xde0b6b3a7640000` — count as agreeing rather than as
-/// a stalemate that fails the read. An answer that does not decode keeps its raw form as the key,
-/// so distinct garbage still disagrees instead of collapsing into a false majority.
-fn balance_key(result: &str) -> Result<Wei, String> {
-    decode_balance(result).map_err(|_| result.to_string())
 }
 
 /// The JSON-RPC payload asking for `address`' balance at `block`.
@@ -92,16 +86,26 @@ pub fn eth_get_balance_request(address: &Address, block: &BlockTag) -> serde_jso
 
 /// Reads an `eth_getBalance` result — a hex quantity such as `0x1bc16d674ec80000` — as wei.
 pub fn decode_balance(result: &str) -> Result<Wei, DecodeBalanceError> {
-    // `multi_request` hands back the JSON string's *contents*, but tolerate a quoted form too so
-    // a caller passing a raw JSON value through does not silently fail.
-    let quantity = result.trim().trim_matches('"');
-    if !quantity.starts_with("0x") || quantity.len() <= 2 {
+    let trimmed = result.trim();
+    // `multi_request` hands back the JSON string's *contents*, but tolerate a quoted form too so a
+    // caller passing a raw JSON value through does not silently fail. Unquoted by parsing as JSON
+    // rather than by stripping quote characters: stripping also accepts one-sided and repeated
+    // quotes, so `"0x0` would read as a balance of zero.
+    let quantity = serde_json::from_str::<String>(trimmed).unwrap_or_else(|_| trimmed.to_string());
+    let digits = match quantity.strip_prefix("0x") {
+        Some(digits) if !digits.is_empty() => digits,
+        _ => return Err(DecodeBalanceError::NotAQuantity(result.to_string())),
+    };
+    // A JSON-RPC quantity is minimal-length, so a leading zero means the provider is not speaking
+    // the protocol. Rejecting rather than accepting matters because `0x00` would otherwise read as
+    // an empty sweeper and buy a burn that was never needed.
+    if digits.len() > 1 && digits.starts_with('0') {
         return Err(DecodeBalanceError::NotAQuantity(result.to_string()));
     }
-    Wei::from_str_hex(quantity).map_err(|_| {
+    Wei::from_str_hex(&quantity).map_err(|_| {
         // `from_str_hex` rejects both non-hex digits and values wider than 32 bytes, and the
-        // check above established only the `0x` prefix — so tell the two apart here.
-        if quantity[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        // checks above established only the shape of the quantity — so tell the two apart here.
+        if digits.chars().all(|c| c.is_ascii_hexdigit()) {
             DecodeBalanceError::TooLarge(result.to_string())
         } else {
             DecodeBalanceError::NotAQuantity(result.to_string())

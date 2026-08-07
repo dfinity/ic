@@ -1,5 +1,5 @@
 use crate::eth_rpc_client::get_balance::{
-    DecodeBalanceError, balance_key, decode_balance, eth_get_balance_request,
+    DecodeBalanceError, decode_balance, eth_get_balance_request,
 };
 use crate::numeric::Wei;
 use evm_rpc_types::{BlockTag, Nat256};
@@ -134,6 +134,22 @@ mod decode {
     }
 
     #[test]
+    fn should_reject_a_quantity_with_a_leading_zero() {
+        assert_eq!(
+            decode_balance("0x0de0b6b3a7640000"),
+            Err(DecodeBalanceError::NotAQuantity(
+                "0x0de0b6b3a7640000".to_string()
+            )),
+            "a non-minimal quantity is a provider not speaking the protocol"
+        );
+        assert_eq!(
+            decode_balance("0x0"),
+            Ok(Wei::ZERO),
+            "but zero itself is 0x0"
+        );
+    }
+
+    #[test]
     fn should_reject_a_balance_wider_than_32_bytes() {
         // 33 bytes of 0xff: a valid hex quantity that cannot be a balance.
         let too_large = format!("0x{}", "f".repeat(66));
@@ -147,48 +163,24 @@ mod decode {
     fn should_never_read_an_error_as_a_zero_balance() {
         // Guards the property the funding task depends on: "could not read the balance" must
         // never be mistaken for "the sweeper has no gas left", which would trigger a burn.
-        for result in ["", "0x", "null", "latest"] {
+        for result in [
+            "",
+            "0x",
+            "null",
+            "latest",
+            // One-sided and repeated quotes: stripping quote characters would turn these into a
+            // zero, which is exactly the confusion this guards.
+            "\"0x0",
+            "0x0\"",
+            "\"\"0x0\"\"",
+            // Non-minimal quantities are not the protocol's, so they are provider errors too.
+            "0x00",
+            "0x0000000000000000",
+        ] {
             assert!(
                 decode_balance(result).is_err(),
                 "{result:?} must not decode to a balance"
             );
         }
-    }
-}
-
-/// Providers agree on a *balance*, not on a spelling of one. Keying the majority on the raw string
-/// would let two providers reporting the same amount in different renderings fail the read, which
-/// stalls funding for no reason.
-mod consensus_key {
-    use super::*;
-
-    #[test]
-    fn should_treat_equal_balances_as_agreeing_however_they_are_rendered() {
-        let canonical = balance_key("0xde0b6b3a7640000");
-
-        for equivalent in [
-            "0xDE0B6B3A7640000",
-            "0xDe0B6b3A7640000",
-            "\"0xde0b6b3a7640000\"",
-        ] {
-            assert_eq!(
-                balance_key(equivalent),
-                canonical,
-                "{equivalent} is the same balance and must not read as a disagreement"
-            );
-        }
-    }
-
-    #[test]
-    fn should_keep_different_balances_apart() {
-        assert_ne!(balance_key("0x1"), balance_key("0x2"));
-    }
-
-    #[test]
-    fn should_not_let_undecodable_answers_form_a_majority() {
-        // Distinct garbage must stay distinct: collapsing it to one key would let two broken
-        // providers out-vote a working one.
-        assert_ne!(balance_key("not a quantity"), balance_key("also not one"));
-        assert_eq!(balance_key("not a quantity"), balance_key("not a quantity"));
     }
 }
