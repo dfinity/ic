@@ -493,7 +493,7 @@ mod tests {
     };
 
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         SetupInitialDkgContext, SignWithThresholdContext,
@@ -834,7 +834,8 @@ mod tests {
     fn test_ignore_disqualified_ranks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             const SUBNET_SIZE: u64 = 10;
-            let Dependencies { mut pool, .. } = dependencies(pool_config, SUBNET_SIZE);
+            let Dependencies { mut pool, .. } =
+                DependenciesBuilder::new(pool_config, SUBNET_SIZE).build();
 
             let height = Height::new(1);
 
