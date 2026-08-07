@@ -19,6 +19,7 @@ trait InternetComputer: Send + Sync {
         &mut self,
         canister_id: Principal,
         controllers: Vec<Principal>,
+        memory_allocation: Option<u64>,
     ) -> ProcessingResult<(), ()>;
 }
 
@@ -41,8 +42,15 @@ impl InternetComputer for ProductionInternetComputer {
         &mut self,
         canister_id: Principal,
         controllers: Vec<Principal>,
+        memory_allocation: Option<u64>,
     ) -> ProcessingResult<(), ()> {
-        set_controllers(canister_id, controllers, Principal::management_canister()).await
+        set_controllers(
+            canister_id,
+            controllers,
+            memory_allocation,
+            Principal::management_canister(),
+        )
+        .await
     }
 }
 
@@ -62,16 +70,30 @@ pub enum ControllerRecoveryState {
     Done,
 }
 
+/// Restores the given controllers of the given canister and, if `memory_allocation`
+/// is not `None`, also its memory allocation (in the same call).
+///
+/// Nothing is done at all if `exclusive_controller` is `Some(false)`, i.e., if the migration
+/// canister never made itself the exclusive controller of the given canister and thus it
+/// cannot have changed the canister's controllers or memory allocation. If
+/// `exclusive_controller` is `None` (which only happens for requests validated by a version
+/// of the migration canister that did not track this yet), then the recovery is performed
+/// unless the canister history reveals that the migration canister is not the exclusive
+/// controller of the given canister.
 pub async fn controller_recovery(
     state: ControllerRecoveryState,
     canister_id: Principal,
     controllers: Vec<Principal>,
+    memory_allocation: Option<u64>,
+    exclusive_controller: Option<bool>,
 ) -> ControllerRecoveryState {
     controller_recovery_internal(
         &mut ProductionInternetComputer,
         state,
         canister_id,
         controllers,
+        memory_allocation,
+        exclusive_controller,
     )
     .await
 }
@@ -81,7 +103,15 @@ async fn controller_recovery_internal<IC: InternetComputer>(
     state: ControllerRecoveryState,
     canister_id: Principal,
     controllers: Vec<Principal>,
+    memory_allocation: Option<u64>,
+    exclusive_controller: Option<bool>,
 ) -> ControllerRecoveryState {
+    // Controller recovery is only performed if a call making the migration canister
+    // the exclusive controller of the given canister succeeded (or if it is unknown
+    // whether such a call has been made at all).
+    if exclusive_controller == Some(false) {
+        return ControllerRecoveryState::Done;
+    }
     match state {
         ControllerRecoveryState::NoProgress => match ic00.get_canister_info(canister_id).await {
             ProcessingResult::Success(canister_info) => {
@@ -106,7 +136,9 @@ async fn controller_recovery_internal<IC: InternetComputer>(
                         // a past update call to restore controllers must have succeeded.
                         ControllerRecoveryState::Done
                     } else {
-                        let res = ic00.set_controllers(canister_id, controllers.clone()).await;
+                        let res = ic00
+                            .set_controllers(canister_id, controllers.clone(), memory_allocation)
+                            .await;
                         match res {
                             ProcessingResult::Success(_) => ControllerRecoveryState::Done,
                             ProcessingResult::NoProgress => state,
@@ -143,10 +175,15 @@ mod test {
     /// The canister ID to test recovery of.
     const CANISTER_ID: Principal =
         Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x01]);
+    /// The memory allocation of `CANISTER_ID` before recovery.
+    const INITIAL_MEMORY_ALLOCATION: u64 = 42;
+    /// The memory allocation of `CANISTER_ID` to be restored by recovery.
+    const RESTORED_MEMORY_ALLOCATION: u64 = 23;
 
     struct MockInternetComputer {
         rng: StdRng,
         controllers: BTreeMap<Principal, Vec<Principal>>,
+        memory_allocation: BTreeMap<Principal, u64>,
         total_num_changes: BTreeMap<Principal, u64>,
     }
 
@@ -163,17 +200,21 @@ mod test {
                 Some(initial_controllers) => {
                     let mut controllers = BTreeMap::new();
                     controllers.insert(canister_id, initial_controllers);
+                    let mut memory_allocation = BTreeMap::new();
+                    memory_allocation.insert(canister_id, INITIAL_MEMORY_ALLOCATION);
                     let mut total_num_changes = BTreeMap::new();
                     total_num_changes.insert(canister_id, 0);
                     Self {
                         rng,
                         controllers,
+                        memory_allocation,
                         total_num_changes,
                     }
                 }
                 None => Self {
                     rng,
                     controllers: BTreeMap::new(),
+                    memory_allocation: BTreeMap::new(),
                     total_num_changes: BTreeMap::new(),
                 },
             }
@@ -211,6 +252,7 @@ mod test {
             &mut self,
             canister_id: Principal,
             new_controllers: Vec<Principal>,
+            new_memory_allocation: Option<u64>,
         ) -> ProcessingResult<(), ()> {
             if self.rng.r#gen() {
                 return ProcessingResult::NoProgress;
@@ -218,6 +260,10 @@ mod test {
             match self.controllers.get_mut(&canister_id) {
                 Some(controllers) => {
                     *controllers = new_controllers;
+                    if let Some(new_memory_allocation) = new_memory_allocation {
+                        self.memory_allocation
+                            .insert(canister_id, new_memory_allocation);
+                    }
                     *self.total_num_changes.get_mut(&canister_id).unwrap() += 1;
                     if self.rng.r#gen() {
                         return ProcessingResult::NoProgress;
@@ -231,7 +277,11 @@ mod test {
 
     #[tokio::test]
     async fn controller_recovery_happy_path() {
-        for seed in 0..1_000_000 {
+        // `None` is the legacy value for requests validated before the outcome of the call
+        // making the migration canister the exclusive controller was tracked.
+        for (seed, exclusive_controller) in
+            (0..1_000_000).zip([Some(true), None].into_iter().cycle())
+        {
             let mut state = ControllerRecoveryState::NoProgress;
             let canister_id = CANISTER_ID;
             let new_controllers = vec![Principal::anonymous()];
@@ -245,6 +295,8 @@ mod test {
                     state,
                     canister_id,
                     new_controllers.clone(),
+                    Some(RESTORED_MEMORY_ALLOCATION),
+                    exclusive_controller,
                 )
                 .await;
             }
@@ -252,6 +304,10 @@ mod test {
             assert_eq!(
                 *ic00.controllers.get(&canister_id).unwrap(),
                 new_controllers
+            );
+            assert_eq!(
+                *ic00.memory_allocation.get(&canister_id).unwrap(),
+                RESTORED_MEMORY_ALLOCATION
             );
         }
     }
@@ -271,10 +327,56 @@ mod test {
                     state,
                     canister_id,
                     new_controllers.clone(),
+                    Some(RESTORED_MEMORY_ALLOCATION),
+                    Some(true),
                 )
                 .await;
             }
+
+            // Neither the controllers nor the memory allocation are restored
+            // if the migration canister is not the exclusive controller.
+            assert_eq!(
+                *ic00.controllers.get(&canister_id).unwrap(),
+                vec![CANISTER_ID]
+            );
+            assert_eq!(
+                *ic00.memory_allocation.get(&canister_id).unwrap(),
+                INITIAL_MEMORY_ALLOCATION
+            );
         }
+    }
+
+    /// Controller recovery must not be performed at all if the migration canister never made
+    /// itself the exclusive controller of the canister (even if it happens to be its exclusive
+    /// controller, e.g., because the canister's controllers were changed by someone else).
+    #[tokio::test]
+    async fn controller_recovery_not_performed() {
+        let canister_id = CANISTER_ID;
+        let new_controllers = vec![Principal::anonymous()];
+
+        let mut ic00 = MockInternetComputer::new(0, Some(vec![MIGRATION_CANISTER_ID.get().0]));
+
+        let state = controller_recovery_internal(
+            &mut ic00,
+            ControllerRecoveryState::NoProgress,
+            canister_id,
+            new_controllers,
+            Some(RESTORED_MEMORY_ALLOCATION),
+            Some(false),
+        )
+        .await;
+
+        // Recovery is done without making a single call.
+        assert_eq!(state, ControllerRecoveryState::Done);
+        assert_eq!(
+            *ic00.controllers.get(&canister_id).unwrap(),
+            vec![MIGRATION_CANISTER_ID.get().0]
+        );
+        assert_eq!(
+            *ic00.memory_allocation.get(&canister_id).unwrap(),
+            INITIAL_MEMORY_ALLOCATION
+        );
+        assert_eq!(*ic00.total_num_changes.get(&canister_id).unwrap(), 0);
     }
 
     #[tokio::test]
@@ -292,6 +394,8 @@ mod test {
                     state,
                     canister_id,
                     new_controllers.clone(),
+                    Some(RESTORED_MEMORY_ALLOCATION),
+                    Some(true),
                 )
                 .await;
             }
