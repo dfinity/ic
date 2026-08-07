@@ -2532,7 +2532,6 @@ pub mod test {
                 replica_config,
                 ..
             } = ValidatorAndDependenciesBuilder::new(pool_config, 4).build();
-
             pool.advance_round_normal_operation();
 
             // Put a random tape share in the unvalidated pool
