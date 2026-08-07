@@ -56,12 +56,24 @@ pub async fn eth_get_balance(address: &Address, block: BlockTag) -> Result<Wei, 
         .with_cycles(MIN_ATTACHED_CYCLES)
         .try_send()
         .await
-        // A balance is compared for exact equality across providers: at a finalized block every
-        // honest provider must return the same quantity, so anything else is a disagreement
-        // worth surfacing rather than papering over by picking one answer.
-        .reduce_with_strategy(StrictMajorityByKey::new(|balance: &String| balance.clone()))
+        // Providers must agree on the balance: at a finalized block every honest one returns the
+        // same quantity, so a disagreement is worth surfacing rather than papering over by picking
+        // an answer.
+        .reduce_with_strategy(StrictMajorityByKey::new(|balance: &String| {
+            balance_key(balance)
+        }))
         .map_err(GetBalanceError::Rpc)?;
     decode_balance(&result).map_err(GetBalanceError::Decode)
+}
+
+/// What a provider's answer is compared on when reducing to a strict majority.
+///
+/// The decoded amount, not the raw string, so two providers reporting the same balance in different
+/// renderings — `0xDE0B6B3A7640000` against `0xde0b6b3a7640000` — count as agreeing rather than as
+/// a stalemate that fails the read. An answer that does not decode keeps its raw form as the key,
+/// so distinct garbage still disagrees instead of collapsing into a false majority.
+fn balance_key(result: &str) -> Result<Wei, String> {
+    decode_balance(result).map_err(|_| result.to_string())
 }
 
 /// The JSON-RPC payload asking for `address`' balance at `block`.

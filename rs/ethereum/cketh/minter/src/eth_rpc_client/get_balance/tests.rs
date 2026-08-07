@@ -1,5 +1,5 @@
 use crate::eth_rpc_client::get_balance::{
-    DecodeBalanceError, decode_balance, eth_get_balance_request,
+    DecodeBalanceError, balance_key, decode_balance, eth_get_balance_request,
 };
 use crate::numeric::Wei;
 use evm_rpc_types::{BlockTag, Nat256};
@@ -153,5 +153,42 @@ mod decode {
                 "{result:?} must not decode to a balance"
             );
         }
+    }
+}
+
+/// Providers agree on a *balance*, not on a spelling of one. Keying the majority on the raw string
+/// would let two providers reporting the same amount in different renderings fail the read, which
+/// stalls funding for no reason.
+mod consensus_key {
+    use super::*;
+
+    #[test]
+    fn should_treat_equal_balances_as_agreeing_however_they_are_rendered() {
+        let canonical = balance_key("0xde0b6b3a7640000");
+
+        for equivalent in [
+            "0xDE0B6B3A7640000",
+            "0xDe0B6b3A7640000",
+            "\"0xde0b6b3a7640000\"",
+        ] {
+            assert_eq!(
+                balance_key(equivalent),
+                canonical,
+                "{equivalent} is the same balance and must not read as a disagreement"
+            );
+        }
+    }
+
+    #[test]
+    fn should_keep_different_balances_apart() {
+        assert_ne!(balance_key("0x1"), balance_key("0x2"));
+    }
+
+    #[test]
+    fn should_not_let_undecodable_answers_form_a_majority() {
+        // Distinct garbage must stay distinct: collapsing it to one key would let two broken
+        // providers out-vote a working one.
+        assert_ne!(balance_key("not a quantity"), balance_key("also not one"));
+        assert_eq!(balance_key("not a quantity"), balance_key("not a quantity"));
     }
 }
