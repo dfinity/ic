@@ -5,7 +5,7 @@ use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest,
+    ReimbursementRequest, SweeperFundingRequest,
 };
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
@@ -176,6 +176,9 @@ pub enum EventType {
     /// Emitted at pre-upgrade and replayed to restore the in-heap registry.
     #[n(25)]
     RegisteredDepositAddresses(#[n(0)] DepositAddressRegistry),
+    /// The minter burned ckETH from its fee subaccount to top up the sweeper address with gas.
+    #[n(26)]
+    AcceptedSweeperFundingRequest(#[n(0)] SweeperFundingRequest),
 }
 
 /// Full snapshot of the ckERC20 deposit address registry. Carries the limits in

@@ -74,6 +74,11 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 .eth_transactions
                 .record_withdrawal_request(request.clone());
         }
+        EventType::AcceptedSweeperFundingRequest(request) => {
+            state
+                .eth_transactions
+                .record_withdrawal_request(request.clone());
+        }
         EventType::CreatedTransaction {
             withdrawal_id,
             transaction,
