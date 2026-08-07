@@ -182,10 +182,10 @@ fn can_make_a_checkpoint() {
 }
 
 // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
-// permission denial this test expects, run as `nobody` when root
-// (e.g. under Bazel remote execution).
+// permission denial this test expects, drop that capability for the duration
+// of the test (test actions run as root under Bazel remote execution).
 #[test]
-#[ic_test_utilities_privileges::as_nobody_when_root]
+#[ic_test_utilities_privileges::enforce_file_permissions]
 fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
@@ -372,10 +372,10 @@ fn returns_not_found_for_missing_checkpoints() {
 }
 
 // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
-// permission denial this test expects, run as `nobody` when root
-// (e.g. under Bazel remote execution).
+// permission denial this test expects, drop that capability for the duration
+// of the test (test actions run as root under Bazel remote execution).
 #[test]
-#[ic_test_utilities_privileges::as_nobody_when_root]
+#[ic_test_utilities_privileges::enforce_file_permissions]
 fn reports_an_error_on_misconfiguration() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint_reports_an_error_on_misconfiguration");
