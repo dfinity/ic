@@ -371,10 +371,6 @@ impl State {
                 .checked_sub(tx.transaction().amount)
                 .expect("BUG: withdrawal amount MUST always be at least the transaction amount"),
             WithdrawalRequest::CkErc20(req) => req.max_transaction_fee,
-            // As for ckETH, the fee was carved out of the burned amount. The accounting below then
-            // debits `eth_balance` by only the effective fee when the transaction failed, which is
-            // exactly right for funding too: the ETH stayed at the main address while the ckETH was
-            // burned, leaving ckETH over-backed rather than under-backed.
             WithdrawalRequest::SweeperFunding(req) => req
                 .withdrawal_amount
                 .checked_sub(tx.transaction().amount)
