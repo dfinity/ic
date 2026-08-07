@@ -1,5 +1,5 @@
 {
-  "checksum": "0ab74b113c84c2d02a55dcfc84f5926dc0476e40464e5202318783ea53e65207",
+  "checksum": "dcbacf411fab38d140aba3e5715934934061e2c7a1101ba217c4933275b29d9a",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20830,8 +20830,12 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.19.0",
+              "id": "ic-cdk 0.20.2",
               "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk-bitcoin-canister 0.2.0",
+              "target": "ic_cdk_bitcoin_canister"
             },
             {
               "id": "ic-cdk-executor 2.0.0",
@@ -34334,6 +34338,61 @@
           "selects": {}
         },
         "version": "0.20.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-bitcoin-canister 0.2.0": {
+      "name": "ic-cdk-bitcoin-canister",
+      "version": "0.2.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-bitcoin-canister/0.2.0/download",
+          "sha256": "0e8bf6dd432d5750428b8658bbe6fb0cbc26f6ad634e20d48994f48d7bf84da9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk_bitcoin_canister",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_bitcoin_canister",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.34",
+              "target": "candid"
+            },
+            {
+              "id": "ic-btc-interface 0.4.0",
+              "target": "ic_btc_interface"
+            },
+            {
+              "id": "ic-cdk 0.20.2",
+              "target": "ic_cdk"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -95759,7 +95818,8 @@
     "ic-canister-runtime 0.2.0",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.1.0",
-    "ic-cdk 0.19.0",
+    "ic-cdk 0.20.2",
+    "ic-cdk-bitcoin-canister 0.2.0",
     "ic-cdk-executor 2.0.0",
     "ic-cdk-management-canister 0.1.1",
     "ic-cdk-timers 1.0.0",
