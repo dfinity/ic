@@ -158,11 +158,7 @@ fn do_all_subnet_ranges_match(
         .map(|range| (range.start.get(), range.end.get()))
         .collect();
 
-    do_flat_ranges_match(tree, subnet_id, &subnet_ranges)?.ok_or_else(|| {
-        DelegationValidationError::UnexpectedTreeShape(format!(
-            "missing /subnet/{subnet_id}/canister_ranges leaf"
-        ))
-    })
+    do_flat_ranges_match(tree, subnet_id, &subnet_ranges)
 }
 
 /// Returns whether the ranges certified in the `/subnet/<subnet_id>/canister_ranges`
@@ -171,7 +167,7 @@ fn do_flat_ranges_match(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
     state_ranges: &[(PrincipalId, PrincipalId)],
-) -> Result<Option<bool>, DelegationValidationError> {
+) -> Result<bool, DelegationValidationError> {
     match lookup_path(
         tree,
         &[
@@ -180,13 +176,13 @@ fn do_flat_ranges_match(
             b"canister_ranges",
         ],
     ) {
-        Some(LabeledTree::Leaf(bytes)) => {
-            Ok(Some(decode_ranges(bytes)?.as_slice() == state_ranges))
-        }
+        Some(LabeledTree::Leaf(bytes)) => Ok(decode_ranges(bytes)?.as_slice() == state_ranges),
         Some(LabeledTree::SubTree(_)) => Err(DelegationValidationError::UnexpectedTreeShape(
             format!("unexpected subtree at /subnet/{subnet_id}/canister_ranges"),
         )),
-        None => Ok(None),
+        None => Err(DelegationValidationError::UnexpectedTreeShape(format!(
+            "missing /subnet/{subnet_id}/canister_ranges leaf"
+        ))),
     }
 }
 
