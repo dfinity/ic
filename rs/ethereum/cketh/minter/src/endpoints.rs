@@ -489,8 +489,6 @@ pub mod events {
             from_subaccount: Option<[u8; 32]>,
             created_at: Option<u64>,
         },
-        /// The minter burned ckETH from its fee subaccount to prepay gas for sweeping, and is
-        /// sending that ETH to its dedicated sweeper address.
         AcceptedSweeperFundingRequest {
             withdrawal_amount: Nat,
             destination: String,
