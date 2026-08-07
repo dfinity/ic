@@ -17,7 +17,10 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::IDkgStatsNoOp;
-use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry_non_final};
+use ic_test_utilities_registry::{
+    SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
+    insert_initial_dkg_transcript,
+};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
@@ -28,7 +31,10 @@ use ic_types::{
 };
 use mockall::predicate::*;
 use mockall::*;
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, RwLock},
+};
 
 mock! {
     pub PayloadBuilder {}
@@ -105,135 +111,221 @@ pub struct Dependencies {
     pub canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
-/// Creates most common consensus components used for testing. All components
-/// share the same mocked registry with the provided records, so they refer to
-/// the identical registry content at any time. The MockStateManager instance
-/// that is returned contains no expectations.
+pub struct DependenciesBuilder {
+    pool_config: ArtifactPoolConfig,
+    sorted_subnet_records: Vec<(u64, SubnetId, SubnetRecord)>,
+    replica_config: ReplicaConfig,
+    mocked_state_manager: bool,
+    #[allow(clippy::type_complexity)]
+    additional_registry_mutations: Vec<Box<dyn FnOnce(&Arc<ProtoRegistryDataProvider>)>>,
+}
+
+impl DependenciesBuilder {
+    /// Creates a builder for the most common consensus components used for
+    /// testing. All components share the same mocked registry with one
+    /// registry version holding the subnet record for the specified number of
+    /// nodes with all other parameters set to their default values.
+    pub fn new(pool_config: ArtifactPoolConfig, nodes: u64) -> Self {
+        let committee = (0..nodes).map(node_test_id).collect::<Vec<_>>();
+        Self::single_subnet(
+            pool_config,
+            subnet_test_id(0),
+            vec![(1, SubnetRecordBuilder::from(&committee).build())],
+        )
+    }
+
+    /// Creates a builder for the most common consensus components used for
+    /// testing. All components share the same mocked registry with the
+    /// provided records, so they refer to the identical registry content at
+    /// any time. This constructor should be used, if specific subnet
+    /// parameters are required.
+    pub fn single_subnet(
+        pool_config: ArtifactPoolConfig,
+        subnet_id: SubnetId,
+        subnet_records: Vec<(u64, SubnetRecord)>,
+    ) -> Self {
+        Self::multiple_subnets(
+            pool_config,
+            subnet_records
+                .into_iter()
+                .map(|(version, record)| (version, subnet_id, record))
+                .collect(),
+        )
+    }
+
+    /// Creates a builder for the most common consensus components used for
+    /// testing. All components share the same mocked registry with the
+    /// provided records, so they refer to the identical registry content at
+    /// any time. This constructor should be used, if records for multiple
+    /// subnets are required.
+    pub fn multiple_subnets(
+        pool_config: ArtifactPoolConfig,
+        mut subnet_records: Vec<(u64, SubnetId, SubnetRecord)>,
+    ) -> Self {
+        assert!(
+            !subnet_records.is_empty(),
+            "Cannot setup a registry without records."
+        );
+
+        // Sort the records by registry version to ensure we are iterating on them in the correct
+        // order when inserting them into the registry.
+        subnet_records.sort_by_key(|(version, _, _)| *version);
+
+        Self {
+            pool_config,
+            replica_config: ReplicaConfig {
+                node_id: node_test_id(0),
+                subnet_id: subnet_records[0].1,
+            },
+            sorted_subnet_records: subnet_records,
+            mocked_state_manager: true,
+            additional_registry_mutations: Vec::new(),
+        }
+    }
+
+    pub fn with_replica_config(mut self, replica_config: ReplicaConfig) -> Self {
+        self.replica_config = replica_config;
+        self
+    }
+
+    /// Leaves the returned `RefMockStateManager` without any expectations, so
+    /// that the test can set up its own `get_state_at` behavior.
+    pub fn without_mocked_state_manager(mut self) -> Self {
+        self.mocked_state_manager = false;
+        self
+    }
+
+    pub fn add_additional_registry_mutation(
+        mut self,
+        mutation: impl FnOnce(&Arc<ProtoRegistryDataProvider>) + 'static,
+    ) -> Self {
+        self.additional_registry_mutations.push(Box::new(mutation));
+        self
+    }
+
+    pub fn build(self) -> Dependencies {
+        let time_source = FastForwardTimeSource::new();
+        let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+        registry_data_provider
+            .add(
+                ROOT_SUBNET_ID_KEY,
+                RegistryVersion::from(self.sorted_subnet_records[0].0),
+                Some(ic_types::subnet_id_into_protobuf(subnet_test_id(0))),
+            )
+            .unwrap();
+
+        let mut all_subnet_ids: BTreeSet<SubnetId> = BTreeSet::default();
+        let mut subnet_ids_at_version: BTreeMap<u64, BTreeSet<SubnetId>> = BTreeMap::default();
+        for (version, subnet_id, record) in self.sorted_subnet_records {
+            if all_subnet_ids.insert(subnet_id) {
+                insert_initial_dkg_transcript(version, subnet_id, &record, &registry_data_provider);
+            }
+
+            add_single_subnet_record(&registry_data_provider, version, subnet_id, record);
+
+            subnet_ids_at_version
+                .entry(version)
+                .or_default()
+                .insert(subnet_id);
+        }
+        for (version, subnet_ids) in subnet_ids_at_version {
+            add_subnet_list_record(&registry_data_provider, version, Vec::from_iter(subnet_ids));
+        }
+
+        for registry_mutation in self.additional_registry_mutations {
+            registry_mutation(&registry_data_provider);
+        }
+
+        let registry = Arc::new(FakeRegistryClient::new(
+            Arc::clone(&registry_data_provider) as Arc<_>
+        ));
+
+        registry.update_to_latest_version();
+
+        let crypto = Arc::new(CryptoReturningOk::default());
+        let state_manager = Arc::new(RefMockStateManager::default());
+        let log = ic_logger::replica_logger::no_op_logger();
+        let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(
+            ic_metrics::MetricsRegistry::new(),
+            log.clone(),
+            Height::from(0),
+        )));
+        let idkg_pool = Arc::new(RwLock::new(IDkgPoolImpl::new(
+            self.replica_config.node_id,
+            self.pool_config.clone(),
+            log.clone(),
+            ic_metrics::MetricsRegistry::new(),
+            Box::new(IDkgStatsNoOp {}),
+        )));
+        let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
+            ic_metrics::MetricsRegistry::new(),
+            log,
+        )));
+        let pool = TestConsensusPool::new(
+            self.replica_config.node_id,
+            self.replica_config.subnet_id,
+            self.pool_config,
+            time_source.clone(),
+            registry.clone(),
+            crypto.clone(),
+            state_manager.clone(),
+            Some(dkg_pool.clone()),
+        );
+        let membership = Arc::new(Membership::new(
+            pool.get_cache(),
+            registry.clone(),
+            self.replica_config.subnet_id,
+        ));
+
+        if self.mocked_state_manager {
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
+        }
+
+        Dependencies {
+            crypto,
+            registry,
+            registry_data_provider,
+            membership,
+            time_source,
+            pool,
+            replica_config: self.replica_config,
+            state_manager,
+            dkg_pool,
+            idkg_pool,
+            canister_http_pool,
+        }
+    }
+}
+
+/// Deprecated: use `DependenciesBuilder::single_subnet(...)
+/// .without_mocked_state_manager().build()` instead.
 pub fn dependencies_with_subnet_records_with_raw_state_manager(
     pool_config: ArtifactPoolConfig,
     subnet_id: SubnetId,
     records: Vec<(u64, SubnetRecord)>,
 ) -> Dependencies {
-    let time_source = FastForwardTimeSource::new();
-    let registry_version = RegistryVersion::from(records[0].clone().0);
-    let (registry_data_provider, registry) = setup_registry_non_final(subnet_id, records);
-    registry_data_provider
-        .add(
-            ROOT_SUBNET_ID_KEY,
-            registry_version,
-            Some(ic_types::subnet_id_into_protobuf(subnet_test_id(0))),
-        )
-        .unwrap();
-    registry.update_to_latest_version();
-    let replica_config = ReplicaConfig {
-        subnet_id,
-        node_id: node_test_id(0),
-    };
-    let crypto = Arc::new(CryptoReturningOk::default());
-    let state_manager = Arc::new(RefMockStateManager::default());
-    let log = ic_logger::replica_logger::no_op_logger();
-    let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(
-        ic_metrics::MetricsRegistry::new(),
-        log.clone(),
-        Height::from(0),
-    )));
-    let idkg_pool = Arc::new(RwLock::new(IDkgPoolImpl::new(
-        replica_config.node_id,
-        pool_config.clone(),
-        log.clone(),
-        ic_metrics::MetricsRegistry::new(),
-        Box::new(IDkgStatsNoOp {}),
-    )));
-    let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
-        ic_metrics::MetricsRegistry::new(),
-        log,
-    )));
-    let pool = TestConsensusPool::new(
-        replica_config.node_id,
-        subnet_id,
-        pool_config,
-        time_source.clone(),
-        registry.clone(),
-        crypto.clone(),
-        state_manager.clone(),
-        Some(dkg_pool.clone()),
-    );
-    let membership = Arc::new(Membership::new(
-        pool.get_cache(),
-        registry.clone(),
-        subnet_id,
-    ));
-    Dependencies {
-        crypto,
-        registry,
-        registry_data_provider,
-        membership,
-        time_source,
-        pool,
-        replica_config,
-        state_manager,
-        dkg_pool,
-        idkg_pool,
-        canister_http_pool,
-    }
+    DependenciesBuilder::single_subnet(pool_config, subnet_id, records)
+        .without_mocked_state_manager()
+        .build()
 }
 
-/// Creates most common consensus components used for testing. All components
-/// share the same mocked registry with the provided records, so they refer to
-/// the identical registry content at any time. This constructor should be used,
-/// if specific subnet parameters are required.
+/// Deprecated: use `DependenciesBuilder::single_subnet(...).build()` instead.
 pub fn dependencies_with_subnet_params(
     pool_config: ArtifactPoolConfig,
     subnet_id: SubnetId,
     records: Vec<(u64, SubnetRecord)>,
 ) -> Dependencies {
-    let Dependencies {
-        time_source,
-        registry_data_provider,
-        registry,
-        membership,
-        crypto,
-        pool,
-        replica_config,
-        state_manager,
-        dkg_pool,
-        idkg_pool,
-        canister_http_pool,
-        ..
-    } = dependencies_with_subnet_records_with_raw_state_manager(pool_config, subnet_id, records);
-
-    state_manager
-        .get_mut()
-        .expect_get_state_at()
-        .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-            Height::new(0),
-            Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
-        )));
-
-    Dependencies {
-        crypto,
-        registry,
-        registry_data_provider,
-        membership,
-        time_source,
-        pool,
-        replica_config,
-        state_manager,
-        dkg_pool,
-        idkg_pool,
-        canister_http_pool,
-    }
+    DependenciesBuilder::single_subnet(pool_config, subnet_id, records).build()
 }
 
-/// Creates most common consensus components used for testing. All components
-/// share the same mocked registry with one registry version holding the subnet
-/// record for the specified number of nodes with all other parameters set to
-/// their default values.
+/// Deprecated: use `DependenciesBuilder::new(...).build()` instead.
 pub fn dependencies(pool_config: ArtifactPoolConfig, nodes: u64) -> Dependencies {
-    let committee = (0..nodes).map(node_test_id).collect::<Vec<_>>();
-    dependencies_with_subnet_params(
-        pool_config,
-        subnet_test_id(0),
-        vec![(1, SubnetRecordBuilder::from(&committee).build())],
-    )
+    DependenciesBuilder::new(pool_config, nodes).build()
 }
