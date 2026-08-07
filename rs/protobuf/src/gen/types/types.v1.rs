@@ -689,6 +689,10 @@ pub struct FlexibleCanisterHttpTooManyRejects {
 pub struct FlexibleCanisterHttpOutOfCycles {
     #[prost(message, repeated, tag = "1")]
     pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(message, optional, tag = "2")]
+    pub min_cost: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "3")]
+    pub unspent_allowance: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpError {

@@ -106,6 +106,8 @@ message FlexibleCanisterHttpTooManyRejects {
 
 message FlexibleCanisterHttpOutOfCycles {
   repeated CanisterHttpShare all_seen_shares = 1;
+  state.queues.v1.Cycles min_cost = 2;
+  state.queues.v1.Cycles unspent_allowance = 3;
 }
 
 message FlexibleCanisterHttpError {

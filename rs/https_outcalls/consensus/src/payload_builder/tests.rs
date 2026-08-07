@@ -14,7 +14,8 @@ use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{
-    consensus_cost_coefficient, flexible_initial_spent, non_flexible_initial_spent,
+    consensus_cost_coefficient, flexible_initial_spent, min_flexible_consensus_cost,
+    non_flexible_initial_spent,
 };
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
@@ -6172,13 +6173,21 @@ fn flexible_outcall_is_out_of_cycles_when_allowances_are_exhausted() {
             let payload = build_and_validate_and_parse_payload(&payload_builder);
             assert_eq!(payload.flexible_errors.len(), 1);
             let FlexibleCanisterHttpError::OutOfCycles {
-                all_seen_shares, ..
+                all_seen_shares,
+                min_cost,
+                unspent_allowance,
+                ..
             } = &payload.flexible_errors[0]
             else {
                 panic!("expected OutOfCycles, got {:?}", payload.flexible_errors[0]);
             };
-            // Every replica's share is included as evidence.
+            // Every replica's share is included as evidence, and the figures
+            // that prove the error are reported: nothing of the allowance is
+            // left, against a nonzero cost of delivering a response.
             assert_eq!(all_seen_shares.len(), num_nodes);
+            assert_eq!(*unspent_allowance, Cycles::zero());
+            assert!(!min_cost.is_zero());
+            let (min_cost, unspent_allowance) = (*min_cost, *unspent_allowance);
 
             let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(
                 &payload_to_bytes_max_4mb(payload.clone()),
@@ -6198,6 +6207,14 @@ fn flexible_outcall_is_out_of_cycles_when_allowances_are_exhausted() {
                 Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved))
             );
             assert_eq!(err.node_details.len(), num_nodes);
+            // The caller is told both figures, so that it can tell how much more
+            // it would have had to pay.
+            assert!(
+                err.message.contains(&format!("{unspent_allowance}"))
+                    && err.message.contains(&format!("{min_cost}")),
+                "figures missing from {}",
+                err.message
+            );
 
             // The error delivers no body, so its spend is just what the replicas
             // reported: their whole allowances, and nothing is refunded.
@@ -6206,6 +6223,116 @@ fn flexible_outcall_is_out_of_cycles_when_allowances_are_exhausted() {
             assert_eq!(spent.initial[0].nodes.len(), num_nodes);
         },
     );
+}
+
+/// The figures an `OutOfCycles` error reports to the caller have to be the ones it
+/// is proved by, so that a proposer cannot tell the caller an arbitrary cost.
+#[test]
+fn validate_payload_fails_for_out_of_cycles_with_a_wrong_figure() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let share = metadata_to_share(0, &metadata);
+    // With a zero allowance the error itself is justified, so validation gets as
+    // far as comparing the figures.
+    let expected_min_cost = min_flexible_consensus_cost(
+        std::iter::once(&share),
+        NumberOfNodes::from(num_nodes as u32),
+        num_nodes,
+        1,
+    )
+    .expect("a bound exists");
+    assert!(!expected_min_cost.is_zero());
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
+            callback_id,
+            all_seen_shares: vec![share],
+            min_cost: expected_min_cost + Cycles::new(1),
+            unspent_allowance: Cycles::zero(),
+        }],
+        ..Default::default()
+    };
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            Cycles::zero(),
+            payload
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::FlexibleOutOfCyclesFigureMismatch {
+                    field,
+                    received,
+                    expected,
+                    ..
+                },
+            ),
+        )) if field == "min_cost"
+            && received == expected_min_cost + Cycles::new(1)
+            && expected == expected_min_cost
+    );
+}
+
+/// An outcall is out of cycles only once it can pay for none of the results that
+/// are still reachable, so the cheapest one decides. A committee that could not
+/// afford to prove a `TooManyRejects` may well afford the single successful
+/// response it is still waiting for, and must then keep waiting.
+#[test]
+fn flexible_outcall_is_not_out_of_cycles_while_the_cheapest_result_is_affordable() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    // One replica has rejected and three have yet to answer, so one successful
+    // response would settle the outcall, while proving `TooManyRejects` would take
+    // all four — much the more expensive of the two, and not the one that counts.
+    // What that successful response costs at cheapest: one empty body, nothing
+    // spent. Derived from `flexible_initial_spent` rather than from the bound under
+    // test, so that the bound cannot satisfy this by picking the other result.
+    let empty_ok = metadata_share_with_content_size(callback_id.get(), 1, 0);
+    let ok_cost = flexible_initial_spent(
+        std::iter::once(&empty_ok),
+        std::iter::empty(),
+        NumberOfNodes::from(num_nodes as u32),
+        1,
+    );
+    // The smallest per-replica allowance the whole committee covers that with.
+    let affordable = Cycles::new(ok_cost.get().div_ceil(num_nodes as u128));
+    assert!(affordable * num_nodes >= ok_cost);
+    assert!((affordable - Cycles::new(1)) * num_nodes < ok_cost);
+
+    for (allowance, out_of_cycles) in [(affordable, false), (affordable - Cycles::new(1), true)] {
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(
+                callback_id,
+                flexible_request_context_with_allowance(
+                    committee.clone(),
+                    1,
+                    num_nodes as u32,
+                    allowance,
+                ),
+            )],
+            |payload_builder, pool| {
+                add_flexible_reject_shares(&pool, callback_id, [0]);
+                let payload = build_and_validate_and_parse_payload(&payload_builder);
+                if out_of_cycles {
+                    assert_matches!(
+                        payload.flexible_errors.as_slice(),
+                        [FlexibleCanisterHttpError::OutOfCycles { .. }],
+                        "expected out of cycles for allowance {allowance}"
+                    );
+                } else {
+                    assert!(
+                        payload.is_empty(),
+                        "expected to keep waiting for allowance {allowance}"
+                    );
+                }
+            },
+        );
+    }
 }
 
 /// The validator rejects an `OutOfCycles` error while the committee's remaining
@@ -6221,6 +6348,9 @@ fn validate_payload_fails_for_out_of_cycles_that_can_still_be_paid_for() {
             // A single replica that spent nothing; the rest of the committee is
             // credited a full allowance each.
             all_seen_shares: vec![metadata_to_share(0, &metadata)],
+            // Rejected before the figures are compared, so these do not matter.
+            min_cost: Cycles::zero(),
+            unspent_allowance: Cycles::zero(),
         }],
         ..Default::default()
     };
@@ -6241,8 +6371,8 @@ fn validate_payload_fails_for_out_of_cycles_that_can_still_be_paid_for() {
                     ..
                 },
             ),
-        )) if unspent_allowance == TEST_PER_REPLICA_ALLOWANCE * num_nodes
-            && unspent_allowance >= min_cost
+        )) if unspent_allowance == Some(TEST_PER_REPLICA_ALLOWANCE * num_nodes)
+            && min_cost.is_some_and(|min_cost| min_cost <= TEST_PER_REPLICA_ALLOWANCE * num_nodes)
     );
 }
 
@@ -6258,6 +6388,8 @@ fn validate_payload_fails_for_out_of_cycles_without_a_refundable_allowance() {
         flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
             callback_id,
             all_seen_shares: vec![metadata_to_share(0, &metadata)],
+            min_cost: Cycles::zero(),
+            unspent_allowance: Cycles::zero(),
         }],
         ..Default::default()
     };
@@ -6285,9 +6417,13 @@ fn validate_payload_fails_for_out_of_cycles_without_a_refundable_allowance() {
         result.expect("validation did not run"),
         Err(ValidationError::InvalidArtifact(
             InvalidPayloadReason::InvalidCanisterHttpPayload(
-                InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles { .. },
+                InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+                    unspent_allowance,
+                    ..
+                },
             ),
-        ))
+        // There is no per-replica allowance here at all, rather than an exhausted one.
+        )) if unspent_allowance.is_none()
     );
 }
 
@@ -6305,6 +6441,8 @@ fn validate_payload_fails_for_out_of_cycles_with_a_duplicate_share() {
                 metadata_to_share(0, &metadata),
                 metadata_to_share(0, &metadata),
             ],
+            min_cost: Cycles::zero(),
+            unspent_allowance: Cycles::zero(),
         }],
         ..Default::default()
     };

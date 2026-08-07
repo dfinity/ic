@@ -65,6 +65,11 @@ pub enum FlexibleCanisterHttpError {
     OutOfCycles {
         callback_id: CallbackId,
         all_seen_shares: Vec<CanisterHttpResponseShare>,
+        /// The least it can cost to deliver a response.
+        min_cost: Cycles,
+        /// What is left of the committee's collective allowance, counting a full
+        /// allowance for every member not among `all_seen_shares`.
+        unspent_allowance: Cycles,
     },
 }
 
@@ -75,23 +80,6 @@ impl FlexibleCanisterHttpError {
             | Self::ResponsesTooLarge { callback_id, .. }
             | Self::TooManyRejects { callback_id, .. }
             | Self::OutOfCycles { callback_id, .. } => *callback_id,
-        }
-    }
-
-    /// The signed receipts this error carries without a response body: the
-    /// evidence behind [`Self::ResponsesTooLarge`] and [`Self::OutOfCycles`], and
-    /// the extra shares funding a [`Self::TooManyRejects`]. Empty for
-    /// [`Self::Timeout`], which carries no shares at all.
-    pub fn shares_without_response(&self) -> &[CanisterHttpResponseShare] {
-        match self {
-            Self::Timeout { .. } => &[],
-            Self::ResponsesTooLarge {
-                all_seen_shares, ..
-            }
-            | Self::OutOfCycles {
-                all_seen_shares, ..
-            } => all_seen_shares,
-            Self::TooManyRejects { extra_shares, .. } => extra_shares,
         }
     }
 
@@ -226,12 +214,16 @@ impl CountBytes for FlexibleCanisterHttpError {
             Self::OutOfCycles {
                 callback_id,
                 all_seen_shares,
+                min_cost,
+                unspent_allowance,
             } => {
                 callback_id.count_bytes()
                     + all_seen_shares
                         .iter()
                         .map(|s| s.count_bytes())
                         .sum::<usize>()
+                    + std::mem::size_of_val(min_cost)
+                    + std::mem::size_of_val(unspent_allowance)
             }
         }
     }
@@ -620,12 +612,17 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                 initial_spent: Some(initial_spent.into()),
             }),
             FlexibleCanisterHttpError::OutOfCycles {
-                all_seen_shares, ..
+                all_seen_shares,
+                min_cost,
+                unspent_allowance,
+                ..
             } => ErrorDetails::OutOfCycles(pb::FlexibleCanisterHttpOutOfCycles {
                 all_seen_shares: all_seen_shares
                     .into_iter()
                     .map(pb::CanisterHttpShare::from)
                     .collect(),
+                min_cost: Some(min_cost.into()),
+                unspent_allowance: Some(unspent_allowance.into()),
             }),
         };
         pb::FlexibleCanisterHttpError {
@@ -688,6 +685,14 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                 Ok(FlexibleCanisterHttpError::OutOfCycles {
                     callback_id,
                     all_seen_shares,
+                    min_cost: try_from_option_field(
+                        details.min_cost,
+                        "FlexibleCanisterHttpOutOfCycles::min_cost",
+                    )?,
+                    unspent_allowance: try_from_option_field(
+                        details.unspent_allowance,
+                        "FlexibleCanisterHttpOutOfCycles::unspent_allowance",
+                    )?,
                 })
             }
             None => Err(ProxyDecodeError::MissingField(

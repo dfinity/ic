@@ -169,29 +169,18 @@ fn extra_response_fee(subnet_size: NumberOfNodes, extra_responses: u128) -> Cycl
     )
 }
 
-/// A lower bound on the part of the [`flexible_initial_spent`] of a flexible
-/// outcall that is not a per-replica spend, i.e. on the consensus cost and fee
-/// that delivering response bodies adds, given the `seen_shares` the committee of
-/// `committee_size` replicas has produced so far.
+/// A lower bound on the consensus cost of delivering a flexible response, given
+/// the currently `seen_shares`.
 ///
-/// Only two results deliver bodies at all: a group of successful responses, which
-/// delivers `min_responses` of them, and a `TooManyRejects` error, which delivers
-/// the `committee_size - min_responses + 1` rejects that prove it. Each is bounded
-/// by its cheapest form and only while it is still reachable at all — the bound is
-/// the smaller of the two, or zero if neither can happen (in which case nothing
-/// this bounds can be delivered either).
-///
-/// The cheapest form of a result delivers as few bodies as it may, and the
-/// smallest ones: every committee member that has not been seen yet may still
-/// produce an empty body, so only the bodies that must come out of `seen_shares`
-/// are counted at their actual size. Per-replica spends are excluded — the caller
-/// accounts for those against the allowances the same replicas contribute.
+/// The cheapest response delivers as few bodies as it may: every committee member
+/// that has not been seen yet may still produce an empty body, so only the bodies
+/// that must come out of `seen_shares` are counted at their actual size.
 pub fn min_flexible_consensus_cost<'a>(
     seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
     subnet_size: NumberOfNodes,
     committee_size: usize,
     min_responses: u32,
-) -> Cycles {
+) -> Option<Cycles> {
     let mut ok_sizes = Vec::new();
     let mut reject_sizes = Vec::new();
     for share in seen_shares {
@@ -221,33 +210,34 @@ pub fn min_flexible_consensus_cost<'a>(
         )
     });
 
-    ok_cost
-        .into_iter()
-        .chain(reject_cost)
-        .min()
-        .unwrap_or_else(Cycles::zero)
+    ok_cost.into_iter().chain(reject_cost).min()
 }
 
-/// The least it can cost to deliver `bodies` response bodies, of which at most
-/// `unseen` may still turn out to be empty and the rest have to be the smallest of
-/// the already known `sizes`.
+/// The least it can cost to deliver the `required_responses` that a result cannot
+/// deliver fewer than: of those, at most `unseen` may still turn out to have an empty
+/// body and the rest have to have the smallest of the already known `seen_sizes`.
 fn min_delivery_cost(
-    sizes: &[u32],
+    seen_sizes: &[u32],
     unseen: usize,
-    bodies: usize,
+    required_responses: usize,
     subnet_size: NumberOfNodes,
     min_responses: u32,
 ) -> Cycles {
-    let known = bodies.saturating_sub(unseen).min(sizes.len());
-    let size_term: u128 = sizes[..known]
+    // Every replica not seen yet may still produce an empty body, so only the
+    // responses beyond those have to take a body from the seen sizes.
+    let from_seen = required_responses
+        .saturating_sub(unseen)
+        .min(seen_sizes.len());
+    let assumed_empty = required_responses - from_seen;
+    let size_term: u128 = seen_sizes[..from_seen]
         .iter()
         .map(|size| FLEXIBLE_RESPONSE_SIZE_OVERHEAD + *size as u128)
         .sum::<u128>()
-        + FLEXIBLE_RESPONSE_SIZE_OVERHEAD * (bodies - known) as u128;
+        + FLEXIBLE_RESPONSE_SIZE_OVERHEAD * assumed_empty as u128;
     Cycles::from(consensus_cost_coefficient(subnet_size) * size_term)
         + extra_response_fee(
             subnet_size,
-            (bodies as u128).saturating_sub(min_responses as u128),
+            (required_responses as u128).saturating_sub(min_responses as u128),
         )
 }
 
@@ -453,23 +443,26 @@ mod tests {
         // neither is charged a fee for exceeding the 7 it needs.
         assert_eq!(
             min_flexible_consensus_cost(seen(), n, 13, 7),
-            Cycles::new(7 * PER_RESPONSE)
+            Some(Cycles::new(7 * PER_RESPONSE))
         );
         // Needing just one response, a single successful body is the cheapest of
         // the two; the 4 rejects proving the error would cost far more.
         assert_eq!(
             min_flexible_consensus_cost(seen(), n, 4, 1),
-            Cycles::new(PER_RESPONSE)
+            Some(Cycles::new(PER_RESPONSE))
         );
         // Needing all four, a single reject already makes the outcall fail, so one
         // body suffices here too — and it is not an "extra" response, so no fee.
         assert_eq!(
             min_flexible_consensus_cost(seen(), n, 4, 4),
-            Cycles::new(PER_RESPONSE)
+            Some(Cycles::new(PER_RESPONSE))
         );
         // A (degenerate) `min_responses` of zero is delivered by an empty group,
         // which genuinely costs nothing.
-        assert_eq!(min_flexible_consensus_cost(seen(), n, 4, 0), Cycles::zero());
+        assert_eq!(
+            min_flexible_consensus_cost(seen(), n, 4, 0),
+            Some(Cycles::zero())
+        );
     }
 
     #[test]
@@ -485,7 +478,7 @@ mod tests {
         let seen = [share(0, 1_000, 0), share(1, 2_000, 0), share(2, 3_000, 0)];
         assert_eq!(
             min_flexible_consensus_cost(seen.iter(), n, 4, 2),
-            Cycles::new(12_925_380)
+            Some(Cycles::new(12_925_380))
         );
     }
 
@@ -507,8 +500,23 @@ mod tests {
         ];
         assert_eq!(
             min_flexible_consensus_cost(seen.iter(), n, 4, 2),
-            Cycles::new(6_102_070 + 1_638_000)
+            Some(Cycles::new(6_102_070 + 1_638_000))
         );
+    }
+
+    #[test]
+    fn min_flexible_consensus_cost_is_none_when_no_result_can_be_delivered() {
+        // A committee of 4 that has all responded successfully, but needs 10
+        // responses: neither the 10 successes nor a reject can still turn up, so
+        // there is no body left whose cost there would be to bound.
+        let n = NumberOfNodes::from(13);
+        let seen = [
+            share(0, 10, 0),
+            share(1, 10, 0),
+            share(2, 10, 0),
+            share(3, 10, 0),
+        ];
+        assert_eq!(min_flexible_consensus_cost(seen.iter(), n, 4, 10), None);
     }
 
     #[test]
@@ -523,7 +531,7 @@ mod tests {
             share(2, 3_000, 13),
             share(3, 4_000, 17),
         ];
-        let bound = min_flexible_consensus_cost(seen.iter(), n, 4, 2);
+        let bound = min_flexible_consensus_cost(seen.iter(), n, 4, 2).expect("a bound exists");
         // The spends are not part of the bound, so they are subtracted from the
         // group's collective spend before comparing.
         let cheapest = flexible_initial_spent(seen[..2].iter(), std::iter::empty(), n, 2)

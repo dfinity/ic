@@ -931,11 +931,14 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
                 FlexibleCanisterHttpError::OutOfCycles {
-                    all_seen_shares, ..
+                    all_seen_shares,
+                    min_cost,
+                    unspent_allowance,
+                    ..
                 } => {
                     // The shares must prove that the committee's remaining
-                    // allowances can no longer pay for a response.
-                    utils::check_out_of_cycles(
+                    // allowances can no longer pay for a response...
+                    let expected = utils::check_out_of_cycles(
                         all_seen_shares.iter(),
                         flex_committee.len(),
                         min_responses as u32,
@@ -943,6 +946,27 @@ impl CanisterHttpPayloadBuilderImpl {
                         context,
                     )
                     .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                    // ...and the figures reported to the caller must be the ones it
+                    // is proved by.
+                    for (field, received, expected) in [
+                        ("min_cost", *min_cost, expected.min_cost),
+                        (
+                            "unspent_allowance",
+                            *unspent_allowance,
+                            expected.unspent_allowance,
+                        ),
+                    ] {
+                        if received != expected {
+                            return invalid_artifact(
+                                InvalidCanisterHttpPayloadReason::FlexibleOutOfCyclesFigureMismatch {
+                                    callback_id,
+                                    field,
+                                    received,
+                                    expected,
+                                },
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -1370,7 +1394,10 @@ fn flexible_error_into_consensus_response(
             }
         }
         FlexibleCanisterHttpError::OutOfCycles {
-            all_seen_shares, ..
+            all_seen_shares,
+            min_cost,
+            unspent_allowance,
+            ..
         } => {
             let node_details: Vec<_> = all_seen_shares
                 .iter()
@@ -1394,9 +1421,12 @@ fn flexible_error_into_consensus_response(
                 .sum();
             let message = format!(
                 "Out of cycles: {} of the assigned replicas have collectively spent {} cycles, \
-                 leaving too little of the attached payment to pay for delivering a response",
+                 leaving {} cycles of the attached payment (after base fee deduction). \
+                 Delivering a response would cost at least {} cycles.",
                 all_seen_shares.len(),
                 total_spent,
+                unspent_allowance,
+                min_cost,
             );
             FlexibleHttpRequestErr {
                 global_error: Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved)),
