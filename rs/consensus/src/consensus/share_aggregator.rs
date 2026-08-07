@@ -191,8 +191,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
-    use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         NodeId, RegistryVersion,
         consensus::{
@@ -320,24 +320,15 @@ mod tests {
         oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
     ) -> CatchUpPackage {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids: Vec<_> = (0..3).map(node_test_id).collect();
             let interval_length = 3;
             let Dependencies {
                 mut pool,
                 membership,
                 crypto,
                 ..
-            } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    INITIAL_REGISTRY_VERSION,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                )],
-            )
-            .build();
+            } = DependenciesBuilder::new(pool_config, 3)
+                .with_dkg_interval_length(interval_length)
+                .build();
             let message_routing = Arc::new(FakeMessageRouting::new());
             let aggregator =
                 ShareAggregator::new(membership, message_routing, crypto, no_op_logger());

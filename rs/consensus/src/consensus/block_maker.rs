@@ -922,9 +922,7 @@ mod tests {
 
     #[test]
     fn test_build_batch_payload() {
-        let subnet_id = subnet_test_id(0);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids: Vec<_> = (0..13).map(node_test_id).collect();
             let dkg_interval_length = 9;
             let Dependencies {
                 mut pool,
@@ -938,17 +936,9 @@ mod tests {
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = DependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_id,
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            )
-            .build();
+            } = DependenciesBuilder::new(pool_config, 13)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
 
             pool.advance_round_normal_operation_n(8);
 
