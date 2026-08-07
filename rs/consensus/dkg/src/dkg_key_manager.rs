@@ -573,13 +573,9 @@ mod tests {
                 let Dependencies { mut pool, .. } = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_test_id(222),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&nodes)
-                            .with_dkg_interval_length(dkg_interval_len)
-                            .build(),
-                    )],
+                    vec![(1, SubnetRecordBuilder::from(&nodes).build())],
                 )
+                .with_dkg_interval_length(dkg_interval_len)
                 .build();
                 let csp = Arc::new(CryptoReturningOk::default());
                 let mut key_manager = DkgKeyManager::new(

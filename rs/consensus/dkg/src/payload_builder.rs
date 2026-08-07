@@ -1089,11 +1089,11 @@ mod tests {
                     vec![(
                         10,
                         SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
                             .with_chain_key_config(test_vet_key_config())
                             .build(),
                     )],
                 )
+                .with_dkg_interval_length(dkg_interval_length)
                 .without_mocked_state_manager()
                 .build();
                 let registry_version = deps.registry.get_latest_version();
@@ -1283,11 +1283,11 @@ mod tests {
                 vec![(
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
-                        .with_dkg_interval_length(dkg_interval_len)
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             )
+            .with_dkg_interval_length(dkg_interval_len)
             .build();
             let cup_contents = registry
                 .get_cup_contents(subnet_id, registry.get_latest_version())
@@ -1375,11 +1375,11 @@ mod tests {
                 vec![(
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
-                        .with_dkg_interval_length(dkg_interval_len)
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             )
+            .with_dkg_interval_length(dkg_interval_len)
             .build();
 
             let cup_contents = registry
@@ -1477,11 +1477,11 @@ mod tests {
                 vec![(
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
-                        .with_dkg_interval_length(dkg_interval_len)
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             )
+            .with_dkg_interval_length(dkg_interval_len)
             .build();
             let cup_contents = registry
                 .get_cup_contents(subnet_id, registry.get_latest_version())
@@ -1617,13 +1617,9 @@ mod tests {
             } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
-                vec![(
-                    5,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
+                vec![(5, SubnetRecordBuilder::from(&committee).build())],
             )
+            .with_dkg_interval_length(dkg_interval_length)
             .build();
 
             // Get the latest summary block, which is the genesis block
