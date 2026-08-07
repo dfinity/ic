@@ -153,6 +153,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             info!(
                 log,
                 "Delivering finalized batch at CUP height of {}", height
+            );
         }
         // When we are not delivering CUP block, we must check if the subnet is halted.
         else {
@@ -249,8 +250,7 @@ pub(crate) fn deliver_batches_with_result_processor(
 
                     info!(
                         log,
-                        "Delivering splitting block. New subnet assignment: {}",
-                        new_subnet_id
+                        "Delivering splitting block. New subnet assignment: {}", new_subnet_id
                     );
 
                     BatchContent::Splitting {
