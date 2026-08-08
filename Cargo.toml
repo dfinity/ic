@@ -765,7 +765,7 @@ leb128 = "0.2.5"
 libc = "0.2.158"
 log = "0.4"
 libcryptsetup-rs = "0.15"
-libflate = "2.1.0"
+libflate = "2.3.1"
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
