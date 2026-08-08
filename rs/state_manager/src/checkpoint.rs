@@ -563,31 +563,51 @@ impl CheckpointLoader {
                 .or_default()
                 .push(snapshot_id);
         }
-        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |canister_id| {
-            load_canister_state_from_checkpoint(
-                &self.checkpoint_layout,
-                canister_id,
-                snapshot_ids_per_canister
-                    .get(canister_id)
-                    .cloned()
-                    .unwrap_or_default(),
-                Arc::clone(&self.fd_factory),
-                &self.metrics,
-            )
-            .map_err(|err| {
-                format!(
-                    "Failed to load canister state for validation for key #{canister_id}: {err}"
+        let per_canister =
+            maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |canister_id| {
+                load_canister_state_from_checkpoint(
+                    &self.checkpoint_layout,
+                    canister_id,
+                    snapshot_ids_per_canister
+                        .get(canister_id)
+                        .cloned()
+                        .unwrap_or_default(),
+                    Arc::clone(&self.fd_factory),
+                    &self.metrics,
                 )
-            })?
-            .0
-            .validate_eq(
-                ref_canister_states
-                    .get(canister_id)
-                    .expect("Failed to get canister from canister_states"),
-            )
-        })
-        .into_iter()
-        .try_for_each(identity)
+                .map_err(|err| {
+                    format!(
+                        "Failed to load canister state for validation for key #{canister_id}: {err}"
+                    )
+                })?
+                .0
+                .validate_eq(
+                    ref_canister_states
+                        .get(canister_id)
+                        .expect("Failed to get canister from canister_states"),
+                )
+            })
+            .into_iter()
+            .try_for_each(identity);
+
+        // Detect (and attribute) a stale cold-pool aggregate. Like every other
+        // check here, this is advisory: the caller logs a critical error and
+        // increments a counter, then finalizes the checkpoint regardless.
+        //
+        // Deliberately run *after* the per-canister comparison above, and combined
+        // with it rather than short-circuiting it: in the very scenario where this
+        // check fires, the per-canister diagnostics are what tell the operator
+        // *which* canister drifted, and an advisory check must not cost the
+        // operator that information.
+        let cold_stats = ref_canister_states
+            .validate_cold_stats()
+            .map_err(|err| format!("Canister Validation: {err}"));
+
+        match (per_canister, cold_stats) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(err), Ok(())) | (Ok(()), Err(err)) => Err(err),
+            (Err(per_canister), Err(cold_stats)) => Err(format!("{per_canister}; {cold_stats}")),
+        }
     }
 
     fn validate_eq_canister_snapshots_ids(
