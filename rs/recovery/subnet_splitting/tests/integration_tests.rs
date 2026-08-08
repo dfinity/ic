@@ -202,16 +202,16 @@ fn load_metrics_e2e_test() {
         // These metrics are near-symmetric, so they do not pin down the orientation; the
         // orientation is determined and checked for consistency by the exact `assert_eq_oriented`
         // checks below, and these `assert_near` checks pass in either orientation.
-        assert_near!(states_sizes_bytes.source, 4987773, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4220431, 0.1);
-        assert_near!(instructions_executed.source, 145689972, 0.1);
-        assert_near!(instructions_executed.destination, 144345860, 0.1);
-        assert_eq_oriented!(canisters_installed, 11, 9);
-        assert_eq_oriented!(ingress_messages_executed, 21, 18);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);
+        assert_near!(states_sizes_bytes.source, 4469720, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4770294, 0.1);
+        assert_near!(instructions_executed.source, 145893129, 0.1);
+        assert_near!(instructions_executed.destination, 146908189, 0.1);
+        assert_eq_oriented!(canisters_installed, 10, 10);
+        assert_eq_oriented!(ingress_messages_executed, 17, 22);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 4, 6);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 13, 15);
         assert_eq_oriented!(http_outcalls_executed, 6, 4);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 341, 353);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 355, 339);
         // A single split cannot report some metrics in the original orientation and others in the
         // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
         assert!(

@@ -16,7 +16,8 @@ use ic_nns_test_utils::{
 use ic_sns_governance::{
     pb::v1::{
         self as sns_governance_pb, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
-        Proposal, ProposalDecisionStatus, UpgradeSnsToNextVersion,
+        GetUpgradeJournalRequest, GetUpgradeJournalResponse, Proposal, ProposalDecisionStatus,
+        UpgradeSnsToNextVersion,
         governance::{Mode, Version},
         proposal::Action,
     },
@@ -281,6 +282,8 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     let root = CanisterId::unchecked_from_principal(root.unwrap());
     let governance = CanisterId::unchecked_from_principal(governance.unwrap());
 
+    sns_wait_for_cached_upgrade_steps(&machine, governance);
+
     // Validate that upgrading Swap doesn't prevent upgrading other SNS canisters
     let old_version = upgrade_swap(&machine, &wasm_map, governance, &sns_neuron_id);
 
@@ -396,6 +399,43 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 }
 
 /// Publishes a new Swap WASM to SNS-WASM and then submits and executes an SNS upgrade proposal
+/// Ticks until SNS governance has populated its cached upgrade steps.
+///
+/// SNS governance refreshes those steps from SNS-W in a periodic task and, since
+/// `automatically_advance_target_version` defaults to enabled, advances its target version and
+/// starts upgrading itself whenever a refresh turns up a newer version. That races with the
+/// upgrade proposals these tests submit: whoever takes the upgrade lock first wins and the loser
+/// fails with `ResourceExhausted`.
+///
+/// Letting the first refresh complete while SNS-W still only holds the freshly deployed versions
+/// arms the one hour `UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS` backoff. These tests advance
+/// time by far less than that, so no automatic upgrade can be triggered afterwards and the
+/// proposals below are the only thing driving upgrades.
+fn sns_wait_for_cached_upgrade_steps(machine: &StateMachine, governance: CanisterId) {
+    for _ in 0..100 {
+        let response = Decode!(
+            &query(
+                machine,
+                governance,
+                "get_upgrade_journal",
+                Encode!(&GetUpgradeJournalRequest {
+                    offset: None,
+                    limit: None,
+                })
+                .unwrap(),
+            )
+            .unwrap(),
+            GetUpgradeJournalResponse
+        )
+        .unwrap();
+        if response.upgrade_steps.is_some() {
+            return;
+        }
+        machine.tick();
+    }
+    panic!("SNS governance never cached its upgrade steps");
+}
+
 fn upgrade_swap(
     machine: &StateMachine,
     wasm_map: &BTreeMap<SnsCanisterType, SnsWasm>,
