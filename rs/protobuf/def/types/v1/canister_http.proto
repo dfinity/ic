@@ -87,6 +87,7 @@ message FlexibleCanisterHttpResponses {
   uint64 callback_id = 1;
   repeated FlexibleCanisterHttpResponseWithProof responses = 2;
   state.queues.v1.Cycles initial_spent = 3;
+  repeated CanisterHttpShare extra_shares = 4;
 }
 
 message FlexibleCanisterHttpTimeout {}
@@ -100,6 +101,7 @@ message FlexibleCanisterHttpResponsesTooLarge {
 message FlexibleCanisterHttpTooManyRejects {
   repeated FlexibleCanisterHttpResponseWithProof reject_responses = 1;
   state.queues.v1.Cycles initial_spent = 2;
+  repeated CanisterHttpShare extra_shares = 3;
 }
 
 message FlexibleCanisterHttpError {

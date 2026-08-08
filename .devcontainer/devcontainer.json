@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:484507d3a8cbd75d81f4cc2e990efdde7a780fefacd6d47d0362032f1bfd7968",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:55869a1fe673acc67575c794d4a2746ed7e7d543e3d8dafa83fc05c275a37020",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -10,7 +10,12 @@
     "--cgroupns",
     "host",
     "--add-host",
-    "devenv-container:127.0.0.1"
+    "devenv-container:127.0.0.1",
+    // expected by ic-os build (same as ci/container/container-run.sh and the CI
+    // workflows); declared here rather than in "mounts" because the
+    // devcontainer mount schema only covers bind & volume mounts.
+    "--mount",
+    "type=tmpfs,target=/tmp/containers"
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",

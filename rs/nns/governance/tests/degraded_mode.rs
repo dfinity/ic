@@ -225,6 +225,7 @@ async fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
                     skip_stopping_before_installing: None,
                     wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
                     arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
+                    canister_upgrade_options: None,
                 })),
                 ..Default::default()
             },

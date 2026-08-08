@@ -129,9 +129,17 @@ pub fn non_flexible_initial_spent(
 /// `N * (HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * N * (K - min_responses)`
 /// `   + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * (K - min_responses))`
 /// charged for every response beyond the `min_responses` required to reach
-/// consensus, where `K` is the number of shares.
+/// consensus, where `K` is the number of shares in `shares`.
+///
+/// `extra_shares` are shares whose responses are not delivered (see
+/// [`FlexibleCanisterHttpResponses::extra_shares`]). They only add their claimed
+/// per-replica spend: since they carry no response, they neither incur a
+/// consensus cost nor count towards `K`.
+///
+/// [`FlexibleCanisterHttpResponses::extra_shares`]: ic_types::batch::FlexibleCanisterHttpResponses::extra_shares
 pub fn flexible_initial_spent<'a>(
     shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
+    extra_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
     subnet_size: NumberOfNodes,
     min_responses: u32,
 ) -> Cycles {
@@ -143,14 +151,22 @@ pub fn flexible_initial_spent<'a>(
         size_term += FLEXIBLE_RESPONSE_SIZE_OVERHEAD + share.content.content_size() as u128;
         count += 1;
     }
-    let n = subnet_size.get() as u128;
+    for share in extra_shares {
+        spent_sum += share.content.payment_receipt.spent;
+    }
     let consensus_cost = Cycles::from(consensus_cost_coefficient(subnet_size) * size_term);
-    let extra_responses = count.saturating_sub(min_responses) as u128;
-    let extra_cost = Cycles::from(
+    let extra_cost = extra_response_fee(subnet_size, count.saturating_sub(min_responses) as u128);
+    spent_sum + consensus_cost + extra_cost
+}
+
+/// The fee charged for `extra_responses` many responses delivered beyond the
+/// `min_responses` the caller already paid for up front.
+fn extra_response_fee(subnet_size: NumberOfNodes, extra_responses: u128) -> Cycles {
+    let n = subnet_size.get() as u128;
+    Cycles::from(
         n * (HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * extra_responses
             + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * extra_responses),
-    );
-    spent_sum + consensus_cost + extra_cost
+    )
 }
 
 #[cfg(test)]
@@ -262,8 +278,31 @@ mod tests {
         //   consensus_cost = 9_490 * 603                                    = 5_722_470
         //   extra_cost     = 13 * (2_000 * 13 * 2 + 100_000 * 2)            = 3_276_000
         let shares = [share(0, 10, 100), share(1, 20, 200), share(2, 30, 300)];
-        let spent = flexible_initial_spent(shares.iter(), NumberOfNodes::from(13), 1);
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            std::iter::empty(),
+            NumberOfNodes::from(13),
+            1,
+        );
         assert_eq!(spent, Cycles::new(600 + 5_722_470 + 3_276_000));
+    }
+
+    #[test]
+    fn flexible_initial_spent_adds_only_the_spends_of_extra_shares() {
+        // Same K = 3 shares and min_responses = 1 as above, plus two extra
+        // shares. Their responses are not delivered, so despite their sizes they
+        // add neither consensus cost nor extra-response cost — only their
+        // spends:
+        //   extra_spent_sum = 1_000 + 2_000 = 3_000
+        let shares = [share(0, 10, 100), share(1, 20, 200), share(2, 30, 300)];
+        let extra_shares = [share(3, 40, 1_000), share(4, 50, 2_000)];
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            extra_shares.iter(),
+            NumberOfNodes::from(13),
+            1,
+        );
+        assert_eq!(spent, Cycles::new(600 + 5_722_470 + 3_276_000 + 3_000));
     }
 
     #[test]
@@ -273,8 +312,29 @@ mod tests {
         //   size_term      = (181+10) + (181+20)           = 392
         //   consensus_cost = 9_490 * 392                   = 3_720_080
         let shares = [share(0, 10, 100), share(1, 20, 200)];
-        let spent = flexible_initial_spent(shares.iter(), NumberOfNodes::from(13), 2);
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            std::iter::empty(),
+            NumberOfNodes::from(13),
+            2,
+        );
         assert_eq!(spent, Cycles::new(300 + 3_720_080));
+    }
+
+    #[test]
+    fn flexible_initial_spent_does_not_count_extra_shares_as_extra_responses() {
+        // K == min_responses == 2 as above, plus an extra share: the extra share
+        // must not push `K` beyond `min_responses`, so extra_cost stays 0 and
+        // only the extra share's spend of 500 is added.
+        let shares = [share(0, 10, 100), share(1, 20, 200)];
+        let extra_shares = [share(2, 30, 500)];
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            extra_shares.iter(),
+            NumberOfNodes::from(13),
+            2,
+        );
+        assert_eq!(spent, Cycles::new(300 + 3_720_080 + 500));
     }
 
     #[test]
@@ -283,13 +343,23 @@ mod tests {
         // so only the single receipt and its consensus cost are charged.
         //   consensus_cost = 9_490 * (181 + 30) = 9_490 * 211 = 2_002_390
         let shares = [share(0, 30, 500)];
-        let spent = flexible_initial_spent(shares.iter(), NumberOfNodes::from(13), 3);
+        let spent = flexible_initial_spent(
+            shares.iter(),
+            std::iter::empty(),
+            NumberOfNodes::from(13),
+            3,
+        );
         assert_eq!(spent, Cycles::new(500 + 2_002_390));
     }
 
     #[test]
     fn flexible_initial_spent_empty_is_zero() {
-        let spent = flexible_initial_spent(std::iter::empty(), NumberOfNodes::from(13), 0);
+        let spent = flexible_initial_spent(
+            std::iter::empty(),
+            std::iter::empty(),
+            NumberOfNodes::from(13),
+            0,
+        );
         assert_eq!(spent, Cycles::zero());
     }
 }
