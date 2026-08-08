@@ -1,0 +1,72 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:axum",
+    "@crate_index//:axum-otel-metrics",
+    "@crate_index//:duration-string",
+    "@crate_index//:futures-util",
+    "@crate_index//:http",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-util",
+    "@crate_index//:itertools",
+    "@crate_index//:log",
+    "@crate_index//:opentelemetry",
+    "@crate_index//:pin-project-lite",
+    "@crate_index//:prometheus",
+    "@crate_index//:prometheus-parse",
+    "@crate_index//:rand",
+    "@crate_index//:regex",
+    "@crate_index//:reqwest",
+    "@crate_index//:rustls",
+    "@crate_index//:rustls-pemfile",
+    "@crate_index//:serde",
+    "@crate_index//:serde_yaml",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-rustls",
+    "@crate_index//:tower",
+    "@crate_index//:tower-http",
+    "@crate_index//:url",
+]
+
+rust_library(
+    name = "metrics_proxy",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "metrics_proxy",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "metrics-proxy",
+    srcs = ["src/main.rs"],
+    deps = [
+        # Keep sorted.
+        ":metrics_proxy",
+        "@crate_index//:axum-otel-metrics",
+        "@crate_index//:clap",
+        "@crate_index//:exitcode",
+        "@crate_index//:log",
+        "@crate_index//:opentelemetry",
+        "@crate_index//:opentelemetry-prometheus",
+        "@crate_index//:opentelemetry_sdk",
+        "@crate_index//:prometheus",
+        "@crate_index//:rustls",
+        "@crate_index//:simple_logger",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
+    name = "metrics_proxy_test",
+    crate = ":metrics_proxy",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:pretty_assertions",
+    ],
+)

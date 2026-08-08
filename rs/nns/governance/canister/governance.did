@@ -90,6 +90,11 @@ type CanisterSummary = record {
   canister_id : opt principal;
 };
 
+type CanisterUpgradeOptions = record {
+  skip_pre_upgrade : opt bool;
+  wasm_memory_persistence : opt int32;
+};
+
 type Change = variant {
   ToRemove : NodeProvider;
   ToAdd : NodeProvider;
@@ -472,6 +477,7 @@ type InstallCode = record {
   canister_id : opt principal;
   arg_hash : opt blob;
   install_mode : opt int32;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type InstallCodeRequest = record {
@@ -483,6 +489,7 @@ type InstallCodeRequest = record {
   skip_stopping_before_installing : opt bool;
   canister_id : opt principal;
   install_mode : opt int32;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type KnownNeuron = record {
