@@ -9,8 +9,10 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{
     binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
 };
+use ic_types::messages::NO_DEADLINE;
 use ic_types::{
-    Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes, NumInstructions, Time,
+    CanisterId, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes,
+    NumInstructions, Time,
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::{
@@ -22,6 +24,14 @@ use std::time::Duration;
 const LABEL_MESSAGE_KIND: &str = "kind";
 const MESSAGE_KIND_INGRESS: &str = "ingress";
 const MESSAGE_KIND_CANISTER: &str = "canister";
+
+const LABEL_INGRESS_STATE: &str = "state";
+const LABEL_TYPE: &str = "type";
+
+/// Label for the subnet of the sender of an unbounded-wait call.
+const LABEL_SENDER_SUBNET: &str = "sender_subnet";
+/// Label value used for senders that cannot be routed to any subnet.
+const SENDER_SUBNET_UNKNOWN: &str = "unknown";
 
 /// Alert for call contexts older than this cutoff (one day).
 const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
@@ -48,6 +58,7 @@ pub struct ReplicatedStateMetrics {
     canister_history_memory_usage_bytes: IntGauge,
     canister_history_total_num_changes: Histogram,
     ingress_history_length: IntGauge,
+    ingress_history_length_by_state: IntGaugeVec,
     registered_canisters: IntGaugeVec,
     available_canister_ids: IntGauge,
     consumed_cycles: Gauge,
@@ -55,6 +66,8 @@ pub struct ReplicatedStateMetrics {
     consumed_cycles_by_use_case_as_counters: CounterVec,
     input_queue_messages: IntGaugeVec,
     input_queues_size_bytes: IntGaugeVec,
+    subnet_input_queue_messages: IntGaugeVec,
+    subnet_output_queue_messages: IntGauge,
     queues_response_bytes: IntGauge,
     queues_memory_reservations: IntGauge,
     queues_oversized_requests_extra_bytes: IntGauge,
@@ -63,6 +76,9 @@ pub struct ReplicatedStateMetrics {
     canisters_not_in_routing_table: IntGauge,
     old_open_call_contexts: IntGaugeVec,
     canisters_with_old_open_call_contexts: IntGaugeVec,
+    unresponded_unbounded_wait_call_contexts: IntGaugeVec,
+    subnet_call_contexts: IntGaugeVec,
+    pending_refunds: IntGauge,
     total_canister_balance: Gauge,
     total_canister_reserved_balance: Gauge,
     canister_paused_execution: Histogram,
@@ -139,6 +155,11 @@ impl ReplicatedStateMetrics {
                 "replicated_state_ingress_history_length",
                 "Total number of entries kept in the ingress history.",
             ),
+            ingress_history_length_by_state: metrics_registry.int_gauge_vec(
+                "replicated_state_ingress_history_length_by_state",
+                "Number of entries kept in the ingress history, by ingress state.",
+                &[LABEL_INGRESS_STATE],
+            ),
             registered_canisters: metrics_registry.int_gauge_vec(
                 "replicated_state_registered_canisters",
                 "Total number of canisters keyed by their current status.",
@@ -171,6 +192,15 @@ impl ReplicatedStateMetrics {
                 "execution_input_queue_size_bytes",
                 "Byte size of input queues, by message kind.",
                 &[LABEL_MESSAGE_KIND],
+            ),
+            subnet_input_queue_messages: metrics_registry.int_gauge_vec(
+                "execution_subnet_input_queue_messages",
+                "Count of messages currently enqueued in the subnet (i.e. management canister) input queues, by message kind.",
+                &[LABEL_MESSAGE_KIND],
+            ),
+            subnet_output_queue_messages: metrics_registry.int_gauge(
+                "execution_subnet_output_queue_messages",
+                "Count of messages currently enqueued in the subnet (i.e. management canister) output queues.",
             ),
             queues_response_bytes: metrics_registry.int_gauge(
                 "execution_queues_response_size_bytes",
@@ -205,6 +235,20 @@ impl ReplicatedStateMetrics {
                 "scheduler_canisters_with_old_open_call_contexts",
                 "Number of canisters with call contexts that have been open for more than the given age.",
                 &["age"]
+            ),
+            unresponded_unbounded_wait_call_contexts: metrics_registry.int_gauge_vec(
+                "replicated_state_unresponded_unbounded_wait_call_contexts",
+                "Number of unresponded call contexts with a pending unbounded-wait response to the sender canister, by the sender canister's subnet.",
+                &[LABEL_SENDER_SUBNET],
+            ),
+            subnet_call_contexts: metrics_registry.int_gauge_vec(
+                "replicated_state_subnet_call_contexts",
+                "Number of in-progress subnet calls (i.e. call contexts in the subnet call context manager), by call type.",
+                &[LABEL_TYPE],
+            ),
+            pending_refunds: metrics_registry.int_gauge(
+                "replicated_state_pending_refunds",
+                "Number of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
             ),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
@@ -327,6 +371,49 @@ impl ReplicatedStateMetrics {
             .set(message_bytes as i64);
     }
 
+    /// Aggregates the given per-sender counts of unresponded call contexts with a
+    /// pending unbounded-wait response by the sender's subnet and observes them.
+    ///
+    /// All subnets in the network topology are observed (with a zero count if they
+    /// have no such call context), so that the full set of time series is exported.
+    /// And the time series of subnets that are no longer part of the network
+    /// topology are dropped, so no stale values are left behind.
+    fn observe_unresponded_unbounded_wait_call_contexts(
+        &self,
+        state: &ReplicatedState,
+        counts_by_sender: BTreeMap<CanisterId, usize>,
+    ) {
+        let network_topology = &state.metadata.network_topology;
+
+        // `None` stands for a sender that cannot be routed to any subnet.
+        let mut counts_by_subnet: BTreeMap<Option<SubnetId>, usize> = network_topology
+            .subnets()
+            .keys()
+            .map(|subnet_id| (Some(*subnet_id), 0))
+            .chain(std::iter::once((None, 0)))
+            .collect();
+        for (sender, count) in counts_by_sender {
+            *counts_by_subnet
+                .entry(network_topology.route(sender.get()))
+                .or_default() += count;
+        }
+
+        // Drop the time series of all subnets observed so far, as a subnet that is no
+        // longer part of the network topology (e.g. because it was merged into
+        // another one) would otherwise linger at its last observed value forever.
+        self.unresponded_unbounded_wait_call_contexts.reset();
+
+        for (subnet, count) in counts_by_subnet {
+            let label = match subnet {
+                Some(subnet_id) => subnet_id.to_string(),
+                None => SENDER_SUBNET_UNKNOWN.into(),
+            };
+            self.unresponded_unbounded_wait_call_contexts
+                .with_label_values(&[&label])
+                .set(count as i64);
+        }
+    }
+
     pub fn current_heap_delta(&self) -> usize {
         self.current_heap_delta.get() as usize
     }
@@ -393,6 +480,8 @@ impl ReplicatedStateMetrics {
         let mut canisters_not_in_routing_table = 0;
         let mut canisters_with_old_open_call_contexts = 0;
         let mut old_call_contexts_count = 0;
+        let mut unresponded_unbounded_wait_call_contexts_by_sender =
+            BTreeMap::<CanisterId, usize>::new();
         let mut num_stop_canister_calls_without_call_id = 0;
         let mut in_flight_signature_request_contexts_by_key_id =
             BTreeMap::<MasterPublicKeyId, u32>::new();
@@ -505,6 +594,22 @@ impl ReplicatedStateMetrics {
                     old_call_contexts_count += old_call_contexts;
                     canisters_with_old_open_call_contexts += 1;
                 }
+
+                manager.for_each_unresponded_unbounded_wait_originator(|sender| {
+                    *unresponded_unbounded_wait_call_contexts_by_sender
+                        .entry(sender)
+                        .or_default() += 1;
+                });
+            }
+
+            // The call context of a paused or aborted request execution is not part of
+            // the `CallContextManager`, so count it separately.
+            if let Some(request) = canister.system_state.aborted_or_paused_request()
+                && request.deadline == NO_DEADLINE
+            {
+                *unresponded_unbounded_wait_call_contexts_by_sender
+                    .entry(request.sender)
+                    .or_default() += 1;
             }
 
             total_canister_snapshots_memory_taken += canister.canister_snapshots.memory_taken();
@@ -517,6 +622,11 @@ impl ReplicatedStateMetrics {
         self.canisters_with_old_open_call_contexts
             .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
             .set(canisters_with_old_open_call_contexts as i64);
+
+        self.observe_unresponded_unbounded_wait_call_contexts(
+            state,
+            unresponded_unbounded_wait_call_contexts_by_sender,
+        );
 
         self.current_heap_delta
             .set(state.metadata.heap_delta_estimate.get() as i64);
@@ -625,6 +735,16 @@ impl ReplicatedStateMetrics {
         self.observe_input_messages(MESSAGE_KIND_CANISTER, input_queues_message_count);
         self.observe_input_queues_size_bytes(MESSAGE_KIND_CANISTER, input_queues_size_bytes);
 
+        let subnet_queues = state.subnet_queues();
+        self.subnet_input_queue_messages
+            .with_label_values(&[MESSAGE_KIND_INGRESS])
+            .set(subnet_queues.ingress_queue_message_count() as i64);
+        self.subnet_input_queue_messages
+            .with_label_values(&[MESSAGE_KIND_CANISTER])
+            .set(subnet_queues.input_queues_message_count() as i64);
+        self.subnet_output_queue_messages
+            .set(subnet_queues.output_queues_message_count() as i64);
+
         self.queues_response_bytes.set(queues_response_bytes as i64);
         self.queues_memory_reservations
             .set(queues_memory_reservations as i64);
@@ -635,6 +755,20 @@ impl ReplicatedStateMetrics {
 
         self.ingress_history_length
             .set(state.metadata.ingress_history.len() as i64);
+        for (ingress_state, count) in state.metadata.ingress_history.state_counts().iter() {
+            self.ingress_history_length_by_state
+                .with_label_values(&[ingress_state])
+                .set(count as i64);
+        }
+
+        for (call_type, count) in state.metadata.subnet_call_context_manager.context_counts() {
+            self.subnet_call_contexts
+                .with_label_values(&[call_type])
+                .set(count as i64);
+        }
+
+        self.pending_refunds.set(state.refunds().len() as i64);
+
         self.canisters_not_in_routing_table
             .set(canisters_not_in_routing_table);
         self.stop_canister_calls_without_call_id
