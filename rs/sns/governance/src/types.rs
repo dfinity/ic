@@ -15,8 +15,8 @@ use crate::{
             ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
             NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
             NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
-            RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            RewardEvent, SnsVersion, TransferSnsTreasuryFunds, Uint128,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
             claim_swap_neurons_request::{
                 NeuronRecipe, NeuronRecipes,
                 neuron_recipe::{self, Participant},
@@ -2175,6 +2175,21 @@ impl Drop for LedgerUpdateLock {
 impl From<u64> for ProposalId {
     fn from(id: u64) -> Self {
         ProposalId { id }
+    }
+}
+
+impl From<u128> for Uint128 {
+    fn from(value: u128) -> Self {
+        Self {
+            high: (value >> 64) as u64,
+            low: value as u64,
+        }
+    }
+}
+
+impl From<Uint128> for u128 {
+    fn from(value: Uint128) -> Self {
+        (u128::from(value.high) << 64) | u128::from(value.low)
     }
 }
 

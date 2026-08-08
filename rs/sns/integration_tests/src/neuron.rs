@@ -1585,6 +1585,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     );
 
     let rewards_e8s = reward_event.distributed_e8s_equivalent;
+    let reward_event_end_timestamp_seconds = reward_event.end_timestamp_seconds.unwrap();
     assert!(rewards_e8s > 0, "{reward_event:#?}",);
     let observed_reward_rate_per_round = i2d(rewards_e8s) / i2d(TOTAL_SUPPLY);
     let reward_rate_per_round_range = {
@@ -1616,6 +1617,19 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             .neurons
             .get(&neuron.id.as_ref().unwrap().to_string())
             .unwrap();
+        if weight == 0 {
+            assert_eq!(neuron.latest_reward_event_participation, None);
+        } else {
+            let participation = neuron.latest_reward_event_participation.as_ref().unwrap();
+            assert_eq!(
+                participation.reward_event_end_timestamp_seconds,
+                reward_event_end_timestamp_seconds,
+            );
+            assert_eq!(
+                u128::from(participation.reward_shares.unwrap()),
+                u128::from(weight),
+            );
+        }
         let expected_share = i2d(weight) / dec!(5);
         let observed_reward = if weight == 3 {
             // auto-staking neuron

@@ -100,6 +100,16 @@ pub struct DisburseMaturityInProgress {
     pub account_to_disburse_to: Option<Account>,
     pub finalize_disbursement_timestamp_seconds: Option<u64>,
 }
+/// An exact unsigned 128-bit integer.
+#[derive(
+    Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash,
+)]
+pub struct Uint128 {
+    /// The most significant 64 bits.
+    pub high: u64,
+    /// The least significant 64 bits.
+    pub low: u64,
+}
 /// A neuron in the governance system.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct Neuron {
@@ -138,6 +148,12 @@ pub struct Neuron {
     pub followees: BTreeMap<u64, neuron::Followees>,
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
     pub topic_followees: Option<neuron::TopicFollowees>,
+    /// The neuron's positive reward shares from its most recent participating reward event,
+    /// tagged with that event's end timestamp. Consumers must compare this timestamp with
+    /// `latest_reward_event.end_timestamp_seconds`. An absent value or a different timestamp means
+    /// that the neuron had zero shares in the target event. A neuron that did not participate in a
+    /// newer event may retain its older tagged value.
+    pub latest_reward_event_participation: Option<neuron::RewardEventParticipation>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -227,6 +243,15 @@ pub mod neuron {
     )]
     pub struct TopicFollowees {
         pub topic_id_to_followees: BTreeMap<i32, FolloweesForTopic>,
+    }
+
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct RewardEventParticipation {
+        /// The end timestamp of the reward event that calculated these shares.
+        pub reward_event_end_timestamp_seconds: u64,
+        /// The sum of the neuron's canonical ballot voting power over all
+        /// reward-eligible Yes and No ballots in proposals settled by this event.
+        pub reward_shares: Option<super::Uint128>,
     }
 
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
