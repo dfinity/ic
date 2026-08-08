@@ -518,6 +518,7 @@ mod tests {
 
         let replica_version_id = "unassigned_version".to_string();
         let replica_version = ReplicaVersionRecord {
+            replica_version_id: Some(replica_version_id.clone()),
             release_package_sha256_hex: "".to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: None,
@@ -583,6 +584,7 @@ mod tests {
 
         let key = make_replica_version_key(ReplicaVersion::default());
         let value = ReplicaVersionRecord {
+            replica_version_id: Some(ReplicaVersion::default().to_string()),
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -632,6 +634,7 @@ mod tests {
 
         let key = make_replica_version_key(ReplicaVersion::default());
         let value = ReplicaVersionRecord {
+            replica_version_id: Some(ReplicaVersion::default().to_string()),
             release_package_sha256_hex: MOCK_HASH.into(),
             release_package_urls: vec![MOCK_URL.into()],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
