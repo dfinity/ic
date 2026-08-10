@@ -1411,6 +1411,8 @@ fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
             economics: Some(api::NetworkEconomics::with_default_values()),
             node_providers: vec![
                 api::NodeProvider {
+                    // This used to cause a panic in the code under test,
+                    // whereas, now, it is safely skipped.
                     id: None,
                     ..Default::default()
                 },
@@ -1427,7 +1429,7 @@ fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
         Box::new(MockRandomness::new()),
     );
 
-    let make_valid = |principal_id| {
+    let new_valid_assign_node_operator_proposal_action = |principal_id| {
         let payload = Encode!(&AddNodeOperatorPayload {
             node_provider_principal_id: Some(principal_id),
             ..Default::default()
@@ -1441,10 +1443,12 @@ fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
     };
 
     // Step 2: Run the code under test.
-    let result_unregistered =
-        governance.validate_execute_nns_function(&make_valid(PrincipalId::new_node_test_id(99)));
-    let result_registered =
-        governance.validate_execute_nns_function(&make_valid(PrincipalId::new_node_test_id(1)));
+    let result_unregistered = governance.validate_execute_nns_function(
+        &new_valid_assign_node_operator_proposal_action(PrincipalId::new_node_test_id(99)),
+    );
+    let result_registered = governance.validate_execute_nns_function(
+        &new_valid_assign_node_operator_proposal_action(PrincipalId::new_node_test_id(1)),
+    );
 
     // Step 3: Verify result(s).
     // Unregistered provider → clean error, no panic.
