@@ -22,7 +22,7 @@ rust.toolchain(
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
-BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
+BUILD_INFO_REV = "27ba16a68aa312de66f2ebd0f16665f1429eee36"
 
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 
@@ -296,7 +296,7 @@ crate.spec(
 )
 crate.spec(
     package = "ciborium",
-    version = "^0.2.1",
+    version = "^0.2.2",
 )
 crate.spec(
     package = "cidr",
@@ -703,7 +703,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.2.0",
+    version = "^0.2.3",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
@@ -2212,15 +2212,19 @@ crate.annotation(
 )
 crate.annotation(
     crate = "devicemapper-sys",
-    deps = ["@@//third_party:devmapper"],
+    link_deps = ["@@//third_party:devmapper"],
 )
 crate.annotation(
     crate = "libcryptsetup-rs-sys",
-    deps = ["@@//third_party:cryptsetup"],
+    link_deps = ["@@//third_party:cryptsetup"],
 )
 crate.annotation(
     crate = "libsystemd-sys",
-    deps = ["@@//third_party:systemd"],
+    link_deps = ["@@//third_party:systemd"],
+)
+crate.annotation(
+    crate = "virt-sys",
+    link_deps = ["@@//third_party:libvirt"],
 )
 crate.annotation(
     crate = "p256",
