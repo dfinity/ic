@@ -1712,7 +1712,7 @@ mod tests {
 
     fn assert_for_all_subnet_splitting_statuses(
         pool: &mut TestConsensusPool,
-        mut test: impl FnMut(SubnetSplittingStatus, bool, Height),
+        mut test: impl FnMut(Option<SubnetSplittingStatus>, bool, Height),
     ) {
         for (status, should_skip) in [
             (not_scheduled_splitting(), false),
@@ -1720,12 +1720,23 @@ mod tests {
             (done_splitting_different_subnet(), true),
             (done_splitting_same_subnet(), false),
         ] {
-            let splitting_height = advance_to_splitting_interval(pool, status);
-            for test_height in splitting_height.get()..=splitting_height.get() + TEST_DKG_INTERVAL {
+            let splitting_height = advance_to_splitting_interval(pool, status).get();
+            for test_height in splitting_height..=splitting_height + TEST_DKG_INTERVAL {
                 let test_height = Height::from(test_height);
 
-                test(status, should_skip, test_height);
+                test(Some(status), should_skip, test_height);
             }
+        }
+
+        // One more test case: a height that does not have a corresponding finalized summary block.
+        // The certifier should skip for this height, since the subnet splitting status is unknown.
+        let height_too_ahead = advance_to_splitting_interval(pool, not_scheduled_splitting()).get()
+            + TEST_DKG_INTERVAL
+            + 1;
+        for test_height in height_too_ahead..=height_too_ahead + TEST_DKG_INTERVAL {
+            let test_height = Height::from(test_height);
+
+            test(None, /*should_skip=*/ true, test_height);
         }
     }
 
