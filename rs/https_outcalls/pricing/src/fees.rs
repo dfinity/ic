@@ -187,7 +187,6 @@ mod tests {
         signature::BasicSignature,
     };
     use std::collections::BTreeMap;
-    use std::str::FromStr;
 
     fn node(i: u64) -> NodeId {
         NodeId::from(PrincipalId::new_node_test_id(i))

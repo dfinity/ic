@@ -19,7 +19,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_types::{
-    Height, ReplicaVersion, Time,
+    Height, Time,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable, HasHeight,
@@ -39,7 +39,6 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use phantom_newtype::Id;
-use std::str::FromStr;
 use std::{
     fmt::Debug,
     sync::{Arc, RwLock},

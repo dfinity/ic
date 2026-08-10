@@ -269,7 +269,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        CanisterId, ReplicaVersion,
+        CanisterId,
         artifact::IdentifiableArtifact,
         canister_http::{
             CanisterHttpPaymentReceipt, CanisterHttpResponseContent, CanisterHttpResponseMetadata,

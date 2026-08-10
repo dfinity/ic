@@ -293,8 +293,8 @@ mod tests {
     ) -> BlockProposal {
         let replica_version = dkg_payload
             .messages
-            .get(0)
-            .map_or_else(|| test_replica_version(), |m| m.content.version.clone());
+            .first()
+            .map_or_else(test_replica_version, |m| m.content.version.clone());
         let block = Block::new(
             crypto_hash(parent),
             Payload::new(

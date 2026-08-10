@@ -217,7 +217,7 @@ impl TestConsensusPool {
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            replica_version.clone(),
+            &replica_version,
             ic_test_utilities_consensus::make_genesis(summary).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),

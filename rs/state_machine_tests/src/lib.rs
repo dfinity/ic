@@ -144,8 +144,7 @@ use ic_test_utilities_types::ids::test_replica_version;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
     CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
-    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
-    SubnetId, UserId,
+    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, SnapshotId, SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,

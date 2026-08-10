@@ -410,7 +410,6 @@ fn get_transcript_data_at_given_summary<T>(
 ///
 /// # Returns
 ///
-
 /// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
 pub fn get_subnet_record(
     registry_client: &dyn RegistryClient,

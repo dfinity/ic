@@ -36,7 +36,7 @@ where
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),
-            test_replica_version(),
+            &test_replica_version(),
             make_genesis(DkgSummary::fake()).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
@@ -159,7 +159,7 @@ fn add_validated_block(criterion: &mut Criterion) {
                         let mut pool = ConsensusPoolImpl::new(
                             node_test_id(0),
                             subnet_test_id(0),
-                            test_replica_version(),
+                            &test_replica_version(),
                             make_genesis(DkgSummary::fake()).into(),
                             pool_config.clone(),
                             ic_metrics::MetricsRegistry::new(),

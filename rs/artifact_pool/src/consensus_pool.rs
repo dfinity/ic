@@ -1059,7 +1059,7 @@ mod tests {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
-        RegistryVersion, ReplicaVersion,
+        RegistryVersion,
         artifact::IdentifiableArtifact,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon, dkg::DkgSummary},
@@ -1081,7 +1081,7 @@ mod tests {
         ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            test_replica_version(),
+            &test_replica_version(),
             catch_up_package.into(),
             config,
             registry,

@@ -144,7 +144,7 @@ pub fn construct_ic_stack(
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
         subnet_id,
-        replica_version.clone(),
+        &replica_version,
         // Note: it's important to pass the original proto which came from the command line (as
         // opposed to, for example, a proto which was first deserialized and then serialized
         // again). Since the proto file could have been produced and signed by nodes running a

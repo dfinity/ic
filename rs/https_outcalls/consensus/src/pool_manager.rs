@@ -21,8 +21,8 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, NodeId, NumBytes, ReplicaVersion, canister_http::*, crypto::Signed,
-    messages::CallbackId, replica_config::ReplicaConfig,
+    CountBytes, NodeId, NumBytes, canister_http::*, crypto::Signed, messages::CallbackId,
+    replica_config::ReplicaConfig,
 };
 use std::{
     cell::RefCell,
@@ -674,6 +674,7 @@ pub mod test {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::CountBytes;
+    use ic_types::ReplicaVersion;
     use ic_types::crypto::crypto_hash;
     use ic_types::{
         Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,

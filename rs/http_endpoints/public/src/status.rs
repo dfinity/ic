@@ -79,6 +79,7 @@ pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatu
         // USE WITH EXTREME CAUTION.
         root_key: root_key.map(Blob),
         impl_version: Some(state.replica_version.to_string()),
+        impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
         replica_health_status: Some(state.replica_health_status.load()),
         certified_height: Some(state.state_reader.latest_certified_height()),
     };

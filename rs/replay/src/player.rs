@@ -177,7 +177,7 @@ impl Player {
         let artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
         let backup_dir = backup_spool_path
             .join(subnet_id.to_string())
-            .join(replica_version.to_string());
+            .join(replica_version.as_ref());
         // Extract the genesis CUP and instantiate a new pool.
         let cup_file = backup::cup_file_name(&backup_dir, Height::from(start_height));
         let initial_cup_proto = backup::read_cup_proto_file(&cup_file)
@@ -186,7 +186,7 @@ impl Player {
         let pool = ConsensusPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
-            replica_version.clone(),
+            &replica_version,
             // Note: it's important to pass the original proto which came from the command line (as
             // opposed to, for example, a proto which was first deserialized and then serialized
             // again). Since the proto file could have been produced and signed by nodes running a

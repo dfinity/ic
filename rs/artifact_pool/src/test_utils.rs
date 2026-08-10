@@ -15,7 +15,7 @@ use ic_logger::ReplicaLogger;
 use ic_test_utilities_consensus::{fake::*, make_genesis};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
 use ic_types::{
-    Height, ReplicaVersion,
+    Height,
     artifact::ConsensusMessageId,
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
@@ -27,7 +27,6 @@ use ic_types::{
     signature::*,
     time::UNIX_EPOCH,
 };
-use std::str::FromStr;
 use std::{
     collections::HashSet,
     panic,

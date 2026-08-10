@@ -70,7 +70,7 @@ use ic_types_cycles::{
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
-use std::{collections::BTreeSet, str::FromStr, time::Duration};
+use std::{collections::BTreeSet, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 

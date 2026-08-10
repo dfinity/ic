@@ -4,7 +4,7 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     CryptoHashOfPartialState, Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
@@ -363,8 +363,8 @@ impl Verifier for FakeVerifier {
 
 #[cfg(test)]
 mod tests {
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::consensus::HasVersion;
-    use std::str::FromStr;
 
     use super::*;
 

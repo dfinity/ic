@@ -111,7 +111,7 @@ fn consensus_produces_expected_batches() {
         let replica_config = ReplicaConfig {
             node_id,
             subnet_id,
-            replica_version: replica_version.clone(),
+            replica_version,
         };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
@@ -131,7 +131,7 @@ fn consensus_produces_expected_batches() {
                 1,
                 SubnetRecordBuilder::from(&[node_test_id(0)])
                     .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                    .with_replica_version(replica_version.as_ref())
+                    .with_replica_version(replica_config.replica_version.as_ref())
                     .build(),
             )],
         );
@@ -153,7 +153,7 @@ fn consensus_produces_expected_batches() {
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            replica_version,
+            &replica_config.replica_version,
             make_genesis(summary).into(),
             pool_config.clone(),
             MetricsRegistry::new(),

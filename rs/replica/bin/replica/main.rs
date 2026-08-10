@@ -11,7 +11,10 @@ use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
 use ic_tracing_jaeger_exporter::jaeger_exporter;
 use ic_tracing_logging_layer::logging_layer;
-use ic_types::{PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
+use ic_types::{
+    PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
+    replica_version::REPLICA_BINARY_HASH,
+};
 use nix::unistd::{Pid, setpgid};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{SignalKind, signal};
@@ -179,8 +182,9 @@ fn main() -> io::Result<()> {
         .as_ref()
         .map(|proto| CatchUpPackage::try_from(proto).expect("deserializing CUP failed"));
 
+    const UNKNOWN_REPLICA_VERSION: &str = "unknown_replica_version";
     let replica_version = replica_args.as_ref().map_or_else(
-        |_| ReplicaVersion::try_from("unknown").unwrap(),
+        |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
         |args| args.replica_version.clone(),
     );
     // Report replica version metric
@@ -261,6 +265,7 @@ fn main() -> io::Result<()> {
     info!(logger, "Running in subnetwork {:?}", subnet_id);
     if let Ok((path, hash)) = get_replica_binary_hash() {
         info!(logger, "Running replica binary: {:?} {}", path, hash);
+        let _ = REPLICA_BINARY_HASH.set(hash);
     }
 
     let crypto = Arc::new(crypto);

@@ -228,7 +228,7 @@ impl ReplayValidator {
         let mut pool = ConsensusPoolImpl::new(
             self.replica_cfg.node_id,
             self.replica_cfg.subnet_id,
-            self.replica_cfg.replica_version.clone(),
+            &self.replica_cfg.replica_version,
             cup,
             artifact_pool_config,
             MetricsRegistry::new(),

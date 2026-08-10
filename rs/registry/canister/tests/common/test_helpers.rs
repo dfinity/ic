@@ -46,7 +46,6 @@ use registry_canister::mutations::node_management::do_add_node::connection_endpo
 use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
