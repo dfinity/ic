@@ -584,9 +584,7 @@ jobs:
     # uploads them on failure too) and — on release builds — the artifacts
     # were already published to the CDN. Without this condition a single
     # failing/flaky test silently skipped the determinism check while the
-    # artifacts still shipped (e.g. 9e2920593e and f18ab1c843 shipped
-    # unchecked; the pcre2-sys non-reproducibility fixed in #11090 went
-    # unnoticed that way). `build-ic` still has to succeed: it produces the
+    # artifacts still shipped. `build-ic` still has to succeed: it produces the
     # no-cache side of the comparison (and is skipped on merge_group, where
     # there is nothing to compare).
     if: ${{ !cancelled() && needs.build-ic.result == 'success' }}
