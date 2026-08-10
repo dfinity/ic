@@ -4,7 +4,7 @@
 //!
 //! Genuinely waits minutes: the transfer is only sent by the minter's 6-minute withdrawal timer.
 
-use ic_cketh_test_utils::sweeper_funding::{FEE_ACCOUNT_BALANCE, SweeperFundingSetup};
+use ic_cketh_test_utils::sweeper_funding::SweeperFundingSetup;
 use std::time::Duration;
 
 const FUNDING_DEADLINE: Duration = Duration::from_secs(13 * 60);
@@ -14,7 +14,6 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
     let setup = SweeperFundingSetup::new_live();
 
     // Only the fee account is funded: sweep gas must come from there and nowhere else.
-    setup.mint_cketh(setup.fee_account(), FEE_ACCOUNT_BALANCE);
     let supply_before = setup.cketh_total_supply();
     let fee_account_before = setup.cketh_balance_of(setup.fee_account());
     let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());

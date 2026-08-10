@@ -64,7 +64,18 @@ pub struct SweeperFundingSetup {
 }
 
 impl SweeperFundingSetup {
+    /// The fee account is funded before the minter is installed, not after: the funding task starts
+    /// with the minter, so a test seeding it afterwards would race its own arrangement.
     pub fn new_live() -> Self {
+        Self::new_live_with_fee_account_balance(FEE_ACCOUNT_BALANCE)
+    }
+
+    /// As [`Self::new_live`], but leaves the fee account empty.
+    pub fn new_live_with_empty_fee_account() -> Self {
+        Self::new_live_with_fee_account_balance(0)
+    }
+
+    fn new_live_with_fee_account_balance(fee_account_balance: u128) -> Self {
         let anvil = Anvil::start_mainnet_like();
 
         let mut env = PocketIcBuilder::new()
@@ -86,7 +97,7 @@ impl SweeperFundingSetup {
             env.add_cycles(canister, u128::from(u64::MAX));
         }
 
-        install_ledger(&env, ledger_id, minter_id);
+        install_ledger(&env, ledger_id, minter_id, fee_account_balance);
         install_evm_rpc(&env, evm_rpc_id, anvil.url());
 
         // Live before installing the minter: its install-time timers issue outcalls immediately.
@@ -266,21 +277,33 @@ fn nat_to_u128(nat: Nat) -> u128 {
     nat.0.to_u128().expect("balance does not fit into u128")
 }
 
-fn install_ledger(env: &PocketIc, ledger_id: Principal, minter_id: Principal) {
+fn install_ledger(
+    env: &PocketIc,
+    ledger_id: Principal,
+    minter_id: Principal,
+    fee_account_balance: u128,
+) {
     use ic_icrc1_ledger::InitArgsBuilder as LedgerInitArgsBuilder;
 
-    let args = LedgerArgument::Init(
-        LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
-            .with_minting_account(minter_id)
-            .with_transfer_fee(CKETH_TRANSFER_FEE)
-            .with_max_memo_length(80)
-            .with_decimals(18)
-            .with_feature_flags(FeatureFlags {
-                icrc2: true,
-                icrc152: false,
-            })
-            .build(),
-    );
+    let mut builder = LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
+        .with_minting_account(minter_id)
+        .with_transfer_fee(CKETH_TRANSFER_FEE)
+        .with_max_memo_length(80)
+        .with_decimals(18)
+        .with_feature_flags(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        });
+    if fee_account_balance > 0 {
+        builder = builder.with_initial_balance(
+            Account {
+                owner: minter_id,
+                subaccount: Some(ic_cketh_minter::CKETH_FEE_SUBACCOUNT),
+            },
+            fee_account_balance,
+        );
+    }
+    let args = LedgerArgument::Init(builder.build());
     env.install_canister(
         ledger_id,
         ledger_wasm(),
