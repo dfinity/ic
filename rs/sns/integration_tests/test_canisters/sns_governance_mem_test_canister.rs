@@ -136,21 +136,23 @@ fn proposal_action_iterator() -> impl Iterator<Item = u64> {
 fn pretty_bytes(bytes: usize) -> String {
     const UNITS: [&str; 9] = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
 
-    let bytes = bytes as f64;
-    if bytes < 1_f64 {
-        return format!("{} B", bytes);
+    if bytes == 0 {
+        return "0 B".to_string();
     }
+    let bytes = bytes as f64;
 
     let delimiter = 1000_f64;
+    // bytes.ln() / delimiter.ln() is log_1000(bytes), i.e. log10(bytes) / 3.
     let exponent = std::cmp::min(
         (bytes.ln() / delimiter.ln()).floor() as i32,
         (UNITS.len() - 1) as i32,
     );
 
-    // Round to 2 decimals, then re-parse to drop any trailing zeros.
+    // Round to 2 decimals, then trim any trailing zeros and a trailing decimal point.
     let value = format!("{:.2}", bytes / delimiter.powi(exponent))
-        .parse::<f64>()
-        .unwrap();
+        .trim_end_matches('0')
+        .trim_end_matches('.');
+
     let unit = UNITS[exponent as usize];
 
     format!("{} {}", value, unit)
