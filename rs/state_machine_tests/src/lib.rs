@@ -140,6 +140,7 @@ use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::ids::test_replica_version;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
     CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
@@ -353,7 +354,7 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         .unwrap();
 
     // replica version record
-    let replica_version = ReplicaVersion::default();
+    let replica_version = test_replica_version();
     let replica_version_record = ReplicaVersionRecord {
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
@@ -2784,7 +2785,7 @@ impl StateMachine {
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: content.count_bytes() as u32,
                     is_reject: content.is_reject(),
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: test_replica_version(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt::default(),
             };
@@ -3161,7 +3162,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         };
 
         self.message_routing

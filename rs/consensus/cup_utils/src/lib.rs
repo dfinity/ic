@@ -245,6 +245,7 @@ fn bootstrap_idkg_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript;
     use ic_interfaces_registry::{RegistryClient, RegistryVersionedRecord};
@@ -327,7 +328,7 @@ mod tests {
         );
         assert_eq!(
             result.content.version(),
-            &ReplicaVersion::try_from("TestID").unwrap()
+            &ReplicaVersion::from_str("TestID").unwrap()
         );
         assert_eq!(result.signature.signer.dealer_subnet, subnet_test_id(0));
     }

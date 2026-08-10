@@ -52,7 +52,7 @@ use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, subnet_test_id, user_test_id},
+    ids::{canister_test_id, subnet_test_id, test_replica_version, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
@@ -70,7 +70,7 @@ use ic_types_cycles::{
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
-use std::{collections::BTreeSet, time::Duration};
+use std::{collections::BTreeSet, str::FromStr, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
@@ -858,7 +858,7 @@ impl Default for SchedulerTestBuilder {
             master_public_key_ids: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: BTreeSet::new(),
         }

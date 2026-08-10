@@ -27,7 +27,7 @@ use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{node_test_id, subnet_test_id, test_replica_version},
     messages::SignedIngressBuilder,
 };
 use ic_types::{
@@ -107,7 +107,12 @@ fn consensus_produces_expected_batches() {
         let router = Arc::new(router);
         let node_id = node_test_id(0);
         let subnet_id = subnet_test_id(0);
-        let replica_config = ReplicaConfig { node_id, subnet_id };
+        let replica_version = test_replica_version();
+        let replica_config = ReplicaConfig {
+            node_id,
+            subnet_id,
+            replica_version: replica_version.clone(),
+        };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
@@ -126,6 +131,7 @@ fn consensus_produces_expected_batches() {
                 1,
                 SubnetRecordBuilder::from(&[node_test_id(0)])
                     .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                    .with_replica_version(replica_version.as_ref())
                     .build(),
             )],
         );
@@ -147,6 +153,7 @@ fn consensus_produces_expected_batches() {
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
+            replica_version,
             make_genesis(summary).into(),
             pool_config.clone(),
             MetricsRegistry::new(),
@@ -189,6 +196,7 @@ fn consensus_produces_expected_batches() {
         let dkg = ic_consensus_dkg::DkgImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
+            replica_config.replica_version.clone(),
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,

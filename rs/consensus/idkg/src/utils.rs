@@ -532,7 +532,7 @@ mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::{fake::Fake, idkg::*};
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         batch::ValidationContext,
         consensus::{
@@ -924,6 +924,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: UNIX_EPOCH,
             },
+            test_replica_version(),
         )
     }
 

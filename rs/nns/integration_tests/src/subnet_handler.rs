@@ -17,7 +17,6 @@ use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_types::ReplicaVersion;
 use prost::Message;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use std::str::FromStr;
@@ -40,7 +39,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 500,
                 initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: "replica_test_version".to_string(),
                 dkg_interval_length: 0,
                 dkg_dealings_per_block: 1,
                 start_as_nns: false,
@@ -165,7 +164,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     max_block_payload_size: 4 * 1024 * 1024,
                     unit_delay_millis: 500,
                     initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
-                    replica_version_id: ReplicaVersion::default().into(),
+                    replica_version_id: "replica_test_version".to_string(),
                     dkg_interval_length: 10,
                     dkg_dealings_per_block: 1,
                     start_as_nns: false,

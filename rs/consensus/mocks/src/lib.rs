@@ -1,4 +1,5 @@
 //! Contains mocks for traits internal to consensus
+
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
 };
@@ -21,13 +22,13 @@ use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry_non_final};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    Height, RegistryVersion, SubnetId, Time,
+    Height, RegistryVersion, ReplicaVersion, SubnetId, Time,
     batch::{BatchPayload, ValidationContext},
     consensus::{Payload, block_maker::SubnetRecords},
     replica_config::ReplicaConfig,
 };
-use mockall::predicate::*;
 use mockall::*;
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 mock! {
@@ -116,6 +117,8 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
 ) -> Dependencies {
     let time_source = FastForwardTimeSource::new();
     let registry_version = RegistryVersion::from(records[0].clone().0);
+    let replica_version = ReplicaVersion::from_str(&records[0].1.replica_version_id)
+        .expect("Invalid replica_version_id");
     let (registry_data_provider, registry) = setup_registry_non_final(subnet_id, records);
     registry_data_provider
         .add(
@@ -128,6 +131,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
     let replica_config = ReplicaConfig {
         subnet_id,
         node_id: node_test_id(0),
+        replica_version,
     };
     let crypto = Arc::new(CryptoReturningOk::default());
     let state_manager = Arc::new(RefMockStateManager::default());
@@ -151,6 +155,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
     let pool = TestConsensusPool::new(
         replica_config.node_id,
         subnet_id,
+        replica_config.replica_version.clone(),
         pool_config,
         time_source.clone(),
         registry.clone(),

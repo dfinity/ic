@@ -11,10 +11,7 @@ use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
 use ic_tracing_jaeger_exporter::jaeger_exporter;
 use ic_tracing_logging_layer::logging_layer;
-use ic_types::{
-    PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
-    replica_version::REPLICA_BINARY_HASH,
-};
+use ic_types::{PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
 use nix::unistd::{Pid, setpgid};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{SignalKind, signal};
@@ -182,8 +179,11 @@ fn main() -> io::Result<()> {
         .as_ref()
         .map(|proto| CatchUpPackage::try_from(proto).expect("deserializing CUP failed"));
 
-    // Set the replica version and report as metric
-    setup::set_replica_version(&replica_args, &logger);
+    let replica_version = replica_args.as_ref().map_or_else(
+        |_| ReplicaVersion::try_from("unknown").unwrap(),
+        |args| args.replica_version.clone(),
+    );
+    // Report replica version metric
     {
         let g = metrics_registry.int_gauge_vec(
             "ic_replica_info",
@@ -191,7 +191,7 @@ fn main() -> io::Result<()> {
             &["ic_active_version", "ic_replica_binary_hash"],
         );
         g.with_label_values(&[
-            ReplicaVersion::default().as_ref(),
+            replica_version.as_ref(),
             &get_replica_binary_hash()
                 .map(|x| x.1)
                 .unwrap_or_else(|_| "na".to_string()),
@@ -261,7 +261,6 @@ fn main() -> io::Result<()> {
     info!(logger, "Running in subnetwork {:?}", subnet_id);
     if let Ok((path, hash)) = get_replica_binary_hash() {
         info!(logger, "Running replica binary: {:?} {}", path, hash);
-        let _ = REPLICA_BINARY_HASH.set(hash);
     }
 
     let crypto = Arc::new(crypto);
@@ -284,6 +283,7 @@ fn main() -> io::Result<()> {
             config.clone(),
             node_id,
             subnet_id,
+            replica_version,
             registry,
             crypto,
             cup_proto,

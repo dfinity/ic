@@ -201,7 +201,7 @@ mod tests {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         Height, RegistryVersion,
         batch::BatchPayload,
@@ -291,6 +291,10 @@ mod tests {
         parent: &Block,
         dkg_payload: DkgDataPayload,
     ) -> BlockProposal {
+        let replica_version = dkg_payload
+            .messages
+            .get(0)
+            .map_or_else(|| test_replica_version(), |m| m.content.version.clone());
         let block = Block::new(
             crypto_hash(parent),
             Payload::new(
@@ -304,6 +308,7 @@ mod tests {
             parent.height.increment(),
             Rank(0),
             parent.context.clone(),
+            replica_version,
         );
         BlockProposal::fake(
             block,

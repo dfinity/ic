@@ -24,6 +24,7 @@ use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
 use std::net::Ipv6Addr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
@@ -560,7 +561,7 @@ async fn test_replica_version_not_in_registry() {
     let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
     let result = fixture
         .create_server_agent(MockVSockClient::default())
-        .exchange_keys(&ReplicaVersion::try_from("replica_version_missing").unwrap())
+        .exchange_keys(&ReplicaVersion::from_str("replica_version_missing").unwrap())
         .await
         .expect_err("Key exchange should fail when the target replica version is missing");
 

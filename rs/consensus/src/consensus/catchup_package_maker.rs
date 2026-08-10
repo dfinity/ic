@@ -181,6 +181,7 @@ impl CatchUpPackageMaker {
                 self.membership.subnet_id,
                 pool,
                 &self.log,
+                &self.replica_config.replica_version,
             ) == Some(true)
         };
         // Wait for the finalization tip's validation context's certified height to reach the

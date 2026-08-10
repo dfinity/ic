@@ -180,7 +180,7 @@ mod tests {
         GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
     };
     use ic_registry_transport::{delete, insert, pb::v1::RegistryMutation, upsert};
-    use ic_types::ReplicaVersion;
+    use ic_test_utilities_types::ids::test_replica_version;
     use prost::Message;
 
     const MOCK_HASH: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
@@ -506,7 +506,7 @@ mod tests {
         let registry = invariant_compliant_registry(0);
 
         let mutation = vec![delete(
-            make_replica_version_key(ReplicaVersion::default()).as_bytes(),
+            make_replica_version_key(test_replica_version()).as_bytes(),
         )];
         registry.check_global_state_invariants(&mutation);
     }
@@ -581,7 +581,7 @@ mod tests {
     fn check_replica_version(hash: &str, urls: Vec<String>) {
         let registry = invariant_compliant_registry(0);
 
-        let key = make_replica_version_key(ReplicaVersion::default());
+        let key = make_replica_version_key(test_replica_version());
         let value = ReplicaVersionRecord {
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
@@ -630,7 +630,7 @@ mod tests {
     fn panic_when_measurements_are_empty() {
         let registry = invariant_compliant_registry(0);
 
-        let key = make_replica_version_key(ReplicaVersion::default());
+        let key = make_replica_version_key(test_replica_version());
         let value = ReplicaVersionRecord {
             release_package_sha256_hex: MOCK_HASH.into(),
             release_package_urls: vec![MOCK_URL.into()],

@@ -187,6 +187,7 @@ mod tests {
         signature::BasicSignature,
     };
     use std::collections::BTreeMap;
+    use std::str::FromStr;
 
     fn node(i: u64) -> NodeId {
         NodeId::from(PrincipalId::new_node_test_id(i))
@@ -198,7 +199,7 @@ mod tests {
             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
             content_size,
             is_reject: false,
-            replica_version: ReplicaVersion::default(),
+            replica_version: ReplicaVersion::try_from("test_replica_version").unwrap(),
         }
     }
 

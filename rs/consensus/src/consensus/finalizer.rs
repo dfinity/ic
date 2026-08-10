@@ -102,6 +102,7 @@ impl Finalizer {
             &*self.registry_client,
             self.replica_config.subnet_id,
             &self.log,
+            &self.replica_config.replica_version,
             None,
             Some(&|result, block_stats, batch_stats| {
                 self.process_batch_delivery_result(result, block_stats, batch_stats)
@@ -235,6 +236,7 @@ impl Finalizer {
             self.pick_block_to_finality_sign(pool, height)?
                 .get_hash()
                 .clone(),
+            self.replica_config.replica_version.clone(),
         );
         let signature = self
             .crypto

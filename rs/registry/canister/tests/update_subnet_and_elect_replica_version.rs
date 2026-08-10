@@ -10,13 +10,12 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::{replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord};
 use ic_registry_keys::{make_replica_version_key, make_subnet_record_key};
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
 
 use assert_matches::assert_matches;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
 };
-use ic_types::ReplicaVersion;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
@@ -247,7 +246,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Set the subnet to an elected version: it should work
         let set_to_elected_ = DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_test_id(999).get(),
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
         };
         assert!(
             forward_call_via_universal_canister(
@@ -265,7 +264,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await
             .replica_version_id,
-            ReplicaVersion::default().to_string(),
+            test_replica_version().to_string(),
         );
 
         // Try to set the subnet to an unelected version: it should fail
@@ -289,7 +288,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await
             .replica_version_id,
-            ReplicaVersion::default().to_string(),
+            test_replica_version().to_string(),
         );
 
         Ok(())

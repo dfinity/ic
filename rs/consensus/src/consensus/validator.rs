@@ -2,7 +2,7 @@
 //! artifacts.
 #![allow(clippy::result_large_err)]
 use crate::consensus::{
-    ConsensusMessageId, check_protocol_version,
+    ConsensusMessageId,
     metrics::ValidatorMetrics,
     status::{self, Status},
 };
@@ -794,8 +794,11 @@ impl Validator {
         pool_reader: &PoolReader<'_>,
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
-        check_protocol_version(artifact.version())
-            .map_err(|_| InvalidArtifactReason::ReplicaVersionMismatch)?;
+        let version = artifact.version();
+        let expected_version = &self.replica_config.replica_version;
+        if version != expected_version {
+            return Err(InvalidArtifactReason::ReplicaVersionMismatch.into());
+        }
         artifact.verify_signature(
             self.membership.as_ref(),
             self.crypto.as_ref(),
@@ -912,7 +915,9 @@ impl Validator {
         Signed<T, S>: SignatureVerify + ConsensusMessageHashable + Clone,
         T: NotaryIssued + HasVersion,
     {
-        if check_protocol_version(notary_issued.content.version()).is_err() {
+        let version = notary_issued.content.version();
+        let expected_version = &self.replica_config.replica_version;
+        if version != expected_version {
             return Some(ChangeAction::RemoveFromUnvalidated(
                 notary_issued.into_message(),
             ));
@@ -1222,6 +1227,7 @@ impl Validator {
             self.replica_config.subnet_id,
             pool_reader,
             &self.log,
+            &self.replica_config.replica_version,
         ) else {
             return Err(ValidationFailure::FailedToGetConsensusStatus.into());
         };
@@ -2062,6 +2068,7 @@ pub mod test {
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use rstest::rstest;
+    use std::str::FromStr;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
@@ -2223,7 +2230,7 @@ pub mod test {
             pool.insert_unvalidated(cup_share_summary_height.clone());
             let mut cup_from_old_replica_version = cup_share_summary_height.clone();
             cup_from_old_replica_version.content.version =
-                ReplicaVersion::try_from("old_version").unwrap();
+                ReplicaVersion::from_str("old_version").unwrap();
             pool.insert_unvalidated(cup_from_old_replica_version.clone());
             let mut cup_with_registry_version = cup_share_summary_height.clone();
             cup_with_registry_version
@@ -2537,12 +2544,13 @@ pub mod test {
             // Put a random tape share in the unvalidated pool
             let pool_reader = PoolReader::new(&pool);
             let beacon_1 = pool_reader.get_random_beacon(Height::from(1)).unwrap();
-            let beacon_2 = RandomBeacon::from_parent(&beacon_1);
+            let mut beacon_2 = RandomBeacon::from_parent(&beacon_1);
+            beacon_2.content.version = replica_config.replica_version.clone();
             let share_3 = RandomBeaconShare::fake(&beacon_2, replica_config.node_id);
             pool.insert_unvalidated(share_3.clone());
             let mut share_with_old_version = share_3.clone();
             share_with_old_version.content = RandomBeaconContent {
-                version: ReplicaVersion::try_from("old_version").unwrap(),
+                version: ReplicaVersion::from_str("old_version").unwrap(),
                 height: share_3.content.height,
                 parent: share_3.content.parent.clone(),
             };
@@ -2608,7 +2616,13 @@ pub mod test {
                 .returning(move || *expected_batch_height_clone.read().unwrap());
 
             // Put a random tape share in the unvalidated pool
-            let share_1 = RandomTapeShare::fake(Height::from(1), replica_config.node_id);
+            let share_1 = RandomTapeShare::fake(
+                RandomTapeContent {
+                    version: replica_config.replica_version.clone(),
+                    height: Height::from(1),
+                },
+                replica_config.node_id,
+            );
             pool.insert_unvalidated(share_1.clone());
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -2619,7 +2633,13 @@ pub mod test {
             );
 
             // Put another random tape share in the unvalidated pool
-            let share_2 = RandomTapeShare::fake(Height::from(2), replica_config.node_id);
+            let share_2 = RandomTapeShare::fake(
+                RandomTapeContent {
+                    version: replica_config.replica_version.clone(),
+                    height: Height::from(2),
+                },
+                replica_config.node_id,
+            );
             pool.insert_unvalidated(share_2.clone());
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 2);
@@ -2630,12 +2650,15 @@ pub mod test {
 
             // Insert a random tape of height 1 in validated pool, check if only share_2 is
             // validated
-            let tape_1 = RandomTape::fake(RandomTapeContent::new(Height::from(1)));
+            let tape_1 = RandomTape::fake(RandomTapeContent::new(
+                Height::from(1),
+                replica_config.replica_version.clone(),
+            ));
             pool.insert_validated(tape_1);
 
             let mut old_replica_version_share = share_2.clone();
             old_replica_version_share.content.version =
-                ReplicaVersion::try_from("old_version").unwrap();
+                ReplicaVersion::from_str("old_version").unwrap();
             pool.insert_unvalidated(old_replica_version_share.clone());
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -2659,7 +2682,8 @@ pub mod test {
             pool.apply(changeset);
 
             // Insert random tape at height 4, check if it is ignored
-            let content = RandomTapeContent::new(Height::from(4));
+            let content =
+                RandomTapeContent::new(Height::from(4), replica_config.replica_version.clone());
             let signature = ThresholdSignature::fake();
             let tape_4 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_4.clone());
@@ -2682,7 +2706,7 @@ pub mod test {
             pool.apply(changeset);
 
             // Set expected batch height to height 4, check if tape_3 is ignored
-            let content = RandomTapeContent::new(Height::from(3));
+            let content = RandomTapeContent::new(Height::from(3), replica_config.replica_version);
             let signature = ThresholdSignature::fake();
             let tape_3 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_3);
@@ -2846,7 +2870,7 @@ pub mod test {
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
-            test_block.version = ReplicaVersion::try_from("old_version").unwrap();
+            test_block.version = ReplicaVersion::from_str("old_version").unwrap();
 
             let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
             pool.insert_unvalidated(block_proposal.clone());
@@ -2925,6 +2949,7 @@ pub mod test {
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
                     &no_op_logger(),
+                    &replica_config.replica_version
                 ),
                 Some(Status::Halting | Status::Halted)
             );
@@ -3884,6 +3909,7 @@ pub mod test {
                 state_manager,
                 mut pool,
                 time_source,
+                replica_config,
                 ..
             } = setup_dependencies_with_dkg_interval_length(
                 pool_config,
@@ -3906,9 +3932,10 @@ pub mod test {
                     certified_height: Height::from(42),
                     time: ic_types::time::UNIX_EPOCH,
                 },
+                replica_config.replica_version.clone(),
             );
             let fake_beacon = RandomBeacon::fake(RandomBeaconContent {
-                version: ReplicaVersion::default(),
+                version: replica_config.replica_version,
                 height: cup_height,
                 parent: CryptoHashOf::from(CryptoHash(vec![])),
             });
@@ -3971,7 +3998,7 @@ pub mod test {
 
             let finalization = pool.validated().finalization().get_highest().unwrap();
             let mut catch_up_package = pool.make_catch_up_package(finalization.height());
-            catch_up_package.content.version = ReplicaVersion::try_from("old_version").unwrap();
+            catch_up_package.content.version = ReplicaVersion::from_str("old_version").unwrap();
             pool.insert_unvalidated(catch_up_package.clone());
 
             state_manager
@@ -4139,6 +4166,7 @@ pub mod test {
                 payload_builder,
                 state_manager,
                 mut pool,
+                replica_config,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
             pool.advance_round_normal_operation();
@@ -4169,6 +4197,7 @@ pub mod test {
             let content = NotarizationContent::new(
                 block.height(),
                 ic_types::crypto::crypto_hash(block.as_ref()),
+                replica_config.replica_version,
             );
             let mut notarization = Notarization::fake(content);
             notarization.signature.signers =
@@ -4396,6 +4425,7 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 mut pool,
+                replica_config,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
 
@@ -4410,6 +4440,7 @@ pub mod test {
             let mut notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
+                replica_config.replica_version,
             ));
             notarization.signature.signers =
                 vec![node_test_id(1), node_test_id(2), node_test_id(3)];
@@ -4419,6 +4450,13 @@ pub mod test {
             assert_ne!(block.signature.signer, incorrect_signer);
             block.signature.signer = incorrect_signer;
             pool.insert_unvalidated(block);
+
+            dbg!(
+                pool.validated()
+                    .block_proposal()
+                    .get_all()
+                    .collect::<Vec<_>>()
+            );
 
             // Incorrect block proposals should not get validated
             assert_matches!(
@@ -4572,7 +4610,7 @@ pub mod test {
             // A post-upgrade block
             let mut block_with_new_version = block;
             block_with_new_version.content.as_mut().version =
-                ReplicaVersion::try_from("new_version").unwrap();
+                ReplicaVersion::from_str("new_version").unwrap();
             block_with_new_version.update_content();
 
             // Block proposals with replica version mismatches are simply removed
@@ -4836,6 +4874,8 @@ pub mod test {
                     time_source,
                     payload_builder,
                     mut pool,
+                    replica_config,
+                    membership,
                     ..
                 } = setup_dependencies(pool_config, &[NODE_1, NODE_2]);
                 validator.log = logger;
@@ -4856,9 +4896,26 @@ pub mod test {
                         let content = NotarizationContent::new(
                             block.height(),
                             block.content.get_hash().clone(),
+                            replica_config.replica_version.clone(),
                         );
                         let mut notarization = Notarization::fake(content);
-                        notarization.signature.signers = vec![NODE_2];
+                        let random_beacon = PoolReader::new(&pool).get_random_beacon_tip();
+                        // Predict which node will be in the notarization committee and pick that
+                        // node to sign the notarization. Otherwise, the notarization would be
+                        // ignored.
+                        let signer = if membership
+                            .node_belongs_to_notarization_committee(
+                                random_beacon.height().increment(),
+                                &random_beacon,
+                                NODE_1,
+                            )
+                            .unwrap()
+                        {
+                            NODE_1
+                        } else {
+                            NODE_2
+                        };
+                        notarization.signature.signers = vec![signer];
                         Some(notarization)
                     } else {
                         None

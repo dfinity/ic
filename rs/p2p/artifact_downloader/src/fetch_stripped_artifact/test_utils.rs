@@ -10,7 +10,7 @@ use ic_test_utilities_consensus::{
     make_genesis,
 };
 use ic_types::{
-    Height, NodeId, NodeIndex, RegistryVersion,
+    Height, NodeId, NodeIndex, RegistryVersion, ReplicaVersion,
     artifact::ConsensusMessageId,
     batch::{BatchPayload, IngressPayload},
     consensus::{
@@ -36,7 +36,8 @@ use ic_types::{
     signature::BasicSignatureBatch,
     time::UNIX_EPOCH,
 };
-use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id, test_replica_version};
+use std::str::FromStr;
 
 use crate::fetch_stripped_artifact::types::{
     StrippedMessage, StrippedMessageId, stripped::StrippedIDkgDealings,
@@ -150,6 +151,7 @@ pub(crate) fn fake_block_proposal_with_ingresses_and_idkg(
         parent.as_ref().height.increment(),
         Rank(0),
         parent.as_ref().context.clone(),
+        test_replica_version(),
     );
     BlockProposal::fake(block, node_test_id(0))
 }

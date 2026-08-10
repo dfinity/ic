@@ -627,7 +627,7 @@ fn threshold_signature_agreements_metric_is_updated() {
     let schnorr_key_id = make_schnorr_key_id(0);
     let master_schnorr_key_id = MasterPublicKeyId::Schnorr(schnorr_key_id.clone());
     let mut test = SchedulerTestBuilder::new()
-        .with_replica_version(ReplicaVersion::default())
+        .with_replica_version(ReplicaVersion::from_str("foobar").unwrap())
         .with_chain_keys(vec![
             master_ecdsa_key_id.clone(),
             master_schnorr_key_id.clone(),

@@ -380,6 +380,7 @@ impl BlockMaker {
                         self.replica_config.subnet_id,
                         pool,
                         &self.log,
+                        &self.replica_config.replica_version,
                     )? {
                         // Don't propose any block if the replica is halted.
                         Status::Halted => {
@@ -438,7 +439,14 @@ impl BlockMaker {
                 }
             },
         );
-        let block = Block::new(parent.get_hash().clone(), payload, height, rank, context);
+        let block = Block::new(
+            parent.get_hash().clone(),
+            payload,
+            height,
+            rank,
+            context,
+            self.replica_config.replica_version.clone(),
+        );
         let hashed_block = hashed::Hashed::new(ic_types::crypto::crypto_hash, block);
         let metadata = BlockMetadata::from_block(&hashed_block, self.replica_config.subnet_id);
         match self
@@ -761,7 +769,7 @@ mod tests {
                 registry,
                 crypto,
                 time_source,
-                replica_config,
+                mut replica_config,
                 state_manager,
                 dkg_pool,
                 idkg_pool,
@@ -784,6 +792,14 @@ mod tests {
                     ),
                 ],
             );
+
+            // The block-making schedule depends on the random state set up by dependencies.
+            // For this test, we simulate the blockmaker running on node with ID 1.
+
+            // TODO: once we have an easier way to pass parameters to
+            // dependencies_with_subnet_params, pass the NodeID, so it's consistently applied to
+            // all test components.
+            replica_config.node_id = node_test_id(1);
 
             pool.advance_round_normal_operation_n(4);
 
@@ -853,6 +869,7 @@ mod tests {
                 next_height,
                 Rank(4),
                 expected_context.clone(),
+                replica_config.replica_version.clone(),
             );
 
             payload_builder
@@ -874,6 +891,7 @@ mod tests {
                     })
                     .unwrap(),
                 subnet_id: replica_config.subnet_id,
+                replica_version: replica_config.replica_version,
             };
 
             let block_maker = BlockMaker::new(
@@ -1008,6 +1026,7 @@ mod tests {
                     })
                     .unwrap(),
                 subnet_id: replica_config.subnet_id,
+                replica_version: replica_config.replica_version,
             };
 
             let block_maker = BlockMaker::new(
@@ -1064,7 +1083,7 @@ mod tests {
     #[test]
     fn test_halting_due_to_protocol_upgrade() {
         test_halting(
-            ReplicaVersion::try_from("0xBEEF").unwrap(),
+            ic_test_utilities_types::ids::test_replica_version(),
             /*halt_at_cup_height=*/ false,
         )
     }
@@ -1073,7 +1092,10 @@ mod tests {
     // making only empty blocks.
     #[test]
     fn test_halting_due_to_registry_instruction() {
-        test_halting(ReplicaVersion::default(), /*halt_at_cup_height=*/ true)
+        test_halting(
+            ic_test_utilities_types::ids::test_replica_version(),
+            /*halt_at_cup_height=*/ true,
+        )
     }
 
     fn test_halting(replica_version: ReplicaVersion, halt_at_cup_height: bool) {
@@ -1177,7 +1199,7 @@ mod tests {
 
             let block_maker = BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
-                replica_config,
+                replica_config.clone(),
                 Arc::clone(&registry) as Arc<dyn RegistryClient>,
                 membership,
                 crypto,
@@ -1209,7 +1231,7 @@ mod tests {
             let proposal = proposal.unwrap();
             let block = proposal.content.as_ref();
             // blocks still uses default version, not the new version.
-            assert_eq!(block.version(), &ReplicaVersion::default());
+            assert_eq!(block.version(), &replica_config.replica_version);
             // registry version 10 becomes effective.
             assert_eq!(
                 PoolReader::new(&pool).registry_version(proposal.height()),

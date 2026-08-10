@@ -272,6 +272,7 @@ mod tests {
     use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
+        test_replica_version,
     };
     use ic_types::{
         Height, NodeId, RegistryVersion,
@@ -693,6 +694,7 @@ mod tests {
                 target_subnet: NiDkgTargetSubnet::Local,
                 dkg_tag,
             },
+            test_replica_version(),
         );
 
         Message::fake(content, dealer_id)
@@ -797,6 +799,7 @@ mod tests {
             let dkg_impl = DkgImpl::new(
                 node_id,
                 subnet_id,
+                test_replica_version(),
                 registry.clone(),
                 state_manager.clone(),
                 crypto.clone(),

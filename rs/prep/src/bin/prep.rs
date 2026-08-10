@@ -181,7 +181,9 @@ fn main() -> Result<()> {
             Some(fetch_replica_version_sha256(replica_version_id.clone())?);
     }
 
-    let replica_version = valid_args.replica_version_id.unwrap_or_default();
+    let replica_version = valid_args
+        .replica_version_id
+        .unwrap_or_else(|| ReplicaVersion::from_str("unknown").unwrap());
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
     let mut topology_config = TopologyConfig::default();
     for (i, (subnet_id, nodes)) in valid_args.subnets.iter().enumerate() {

@@ -9,11 +9,11 @@ use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{node_test_id, subnet_test_id, test_replica_version},
     messages::RequestBuilder,
 };
 use ic_types::{
-    Height, NumberOfNodes, RegistryVersion,
+    Height, NumberOfNodes, RegistryVersion, ReplicaVersion,
     consensus::{
         BlockPayload,
         dkg::{DealingContent, DealingMessages, Message, RemoteTranscriptResult},
@@ -153,7 +153,21 @@ pub(super) fn extract_dkg_configs_from_highest_block(
 
 /// Create a dealing from the node `node_idx`
 pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> Message {
-    let content = DealingContent::new(dummy_dealing(node_idx as u8), dkg_id);
+    let content = DealingContent::new(
+        dummy_dealing(node_idx as u8),
+        dkg_id,
+        test_replica_version(),
+    );
+    Message::fake(content, node_test_id(node_idx))
+}
+
+/// Create a dealing from the node `node_idx`
+pub(super) fn create_dealing_with_replica_version(
+    node_idx: u64,
+    dkg_id: NiDkgId,
+    replica_version: ReplicaVersion,
+) -> Message {
+    let content = DealingContent::new(dummy_dealing(node_idx as u8), dkg_id, replica_version);
     Message::fake(content, node_test_id(node_idx))
 }
 

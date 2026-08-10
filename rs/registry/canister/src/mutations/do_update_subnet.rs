@@ -672,8 +672,8 @@ mod tests {
     use ic_registry_resource_limits::ResourceLimits;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{NumBytes, NumInstructions, PrincipalId, ReplicaVersion, SubnetId};
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
+    use ic_types::{NumBytes, NumInstructions, PrincipalId, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -724,7 +724,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
@@ -822,7 +822,7 @@ mod tests {
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: test_replica_version().to_string(),
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
                 start_as_nns: true,
@@ -869,7 +869,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
@@ -943,7 +943,7 @@ mod tests {
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: test_replica_version().to_string(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 start_as_nns: false,

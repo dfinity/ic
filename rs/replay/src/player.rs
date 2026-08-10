@@ -73,6 +73,7 @@ use ic_types::{
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
+use std::str::FromStr;
 use std::{
     collections::{HashMap, HashSet},
     convert::Infallible,
@@ -185,6 +186,7 @@ impl Player {
         let pool = ConsensusPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
+            replica_version.clone(),
             // Note: it's important to pass the original proto which came from the command line (as
             // opposed to, for example, a proto which was first deserialized and then serialized
             // again). Since the proto file could have been produced and signed by nodes running a
@@ -243,7 +245,7 @@ impl Player {
             // Use the replica version from the finalized tip in the pool.
             PoolReader::new(pool).get_finalized_tip().version().clone()
         } else {
-            Default::default()
+            ReplicaVersion::from_str("unknown").unwrap()
         };
 
         Player::new_with_params(
@@ -270,9 +272,6 @@ impl Player {
         _async_log_guard: AsyncGuard,
     ) -> Self {
         println!("Setting default replica version {replica_version}");
-        if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
-            println!("Failed to set default replica version");
-        }
 
         let registry_version = registry.get_latest_version();
         let subnet_type = match registry.get_subnet_record(subnet_id, registry_version) {
@@ -342,6 +341,7 @@ impl Player {
             ReplayValidator::new(
                 cfg,
                 subnet_id,
+                replica_version.clone(),
                 crypto.clone(),
                 crypto.clone(),
                 verifier,
@@ -499,6 +499,7 @@ impl Player {
             self.message_routing.as_ref(),
             pool_reader,
             membership,
+            &self.replica_version,
             Some(target_height),
         );
         self.wait_for_state(last_batch_height);
@@ -700,6 +701,7 @@ impl Player {
         message_routing: &dyn MessageRouting,
         pool: &PoolReader<'_>,
         membership: &Membership,
+        replica_version: &ReplicaVersion,
         replay_target_height: Option<Height>,
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
@@ -711,6 +713,7 @@ impl Player {
                 &*self.registry,
                 self.subnet_id,
                 &self.log,
+                replica_version,
                 replay_target_height,
             ) {
                 Ok(h) => break h,
@@ -742,7 +745,7 @@ impl Player {
                 self.registry.get_latest_version(),
                 ic_types::time::current_time(),
                 Randomness::from([0; 32]),
-                ReplicaVersion::default(),
+                self.replica_version.clone(),
             ),
             Some(pool) => {
                 let pool = PoolReader::new(pool);
@@ -1010,6 +1013,7 @@ impl Player {
                 self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
                 self.membership.as_ref().unwrap(),
+                &self.replica_version,
                 replay_target_height,
             );
             self.wait_for_state(last_batch_height);

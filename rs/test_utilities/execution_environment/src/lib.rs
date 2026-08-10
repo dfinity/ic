@@ -65,6 +65,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_test_utilities::state_manager::FakeStateManager;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -2386,7 +2387,7 @@ impl Default for ExecutionTestBuilder {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: UNIX_EPOCH,
             current_round: ExecutionRound::new(1),
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: BTreeSet::new(),

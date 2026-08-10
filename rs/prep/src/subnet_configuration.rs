@@ -51,7 +51,7 @@ pub enum SubnetRunningState {
 
 /// This represents the initial configuration of an NNS subnetwork of an IC
 /// instance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct SubnetConfig {
     /// The subnet id of this subnetwork.
     pub subnet_index: SubnetIndex,
