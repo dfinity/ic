@@ -2,6 +2,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
+use ic_logger::no_op_logger;
 use ic_nns_delegation_reader::{
     CanisterRangesCheck, CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader,
 };
@@ -14,31 +15,31 @@ use ic_types::{
 };
 use tokio::sync::watch;
 
-fn build_delegation_with_flat_canister_ranges(criterion: &mut Criterion) {
-    build_delegation_bench(
+fn get_delegation_with_flat_canister_ranges(criterion: &mut Criterion) {
+    get_delegation_bench(
         criterion,
         CanisterRangesFilter::Flat,
-        "build_delegation_with_flat_canister_ranges",
+        "get_delegation_with_flat_canister_ranges",
     );
 }
 
-fn build_delegation_without_canister_ranges(criterion: &mut Criterion) {
-    build_delegation_bench(
+fn get_delegation_without_canister_ranges(criterion: &mut Criterion) {
+    get_delegation_bench(
         criterion,
         CanisterRangesFilter::None,
-        "build_delegation_without_canister_ranges",
+        "get_delegation_without_canister_ranges",
     );
 }
 
-fn build_delegation_with_tree_canister_ranges(criterion: &mut Criterion) {
-    build_delegation_bench(
+fn get_delegation_with_tree_canister_ranges(criterion: &mut Criterion) {
+    get_delegation_bench(
         criterion,
         CanisterRangesFilter::Tree(CanisterId::from(42)),
-        "build_delegation_with_tree_canister_ranges",
+        "get_delegation_with_tree_canister_ranges",
     );
 }
 
-fn build_delegation_bench(
+fn get_delegation_bench(
     criterion: &mut Criterion,
     canister_ranges_filter: CanisterRangesFilter,
     group_name: &str,
@@ -52,6 +53,7 @@ fn build_delegation_bench(
         let (delegation, _root_public_key) =
             create_fake_certificate_delegation(&canister_id_ranges, SUBNET_0);
         let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate).unwrap();
+        // TODO: Review this file again
         let labeled_tree = LabeledTree::try_from(certificate.tree.clone()).unwrap();
         // Extract the public key certified in the delegation so that the (trivial,
         // `NoCheck`) verification performed by `build_verified` succeeds; the benchmark
@@ -63,8 +65,13 @@ fn build_delegation_bench(
             Some(LabeledTree::Leaf(public_key)) => public_key.clone(),
             _ => panic!("The fake delegation should certify a public key"),
         };
-        let builder =
-            NNSDelegationBuilder::new(certificate.clone(), labeled_tree, Blob(vec![]), SUBNET_0);
+        let builder = NNSDelegationBuilder::new(
+            certificate.clone(),
+            labeled_tree,
+            Blob(vec![]),
+            SUBNET_0,
+            &no_op_logger(),
+        );
 
         let build_verified = || {
             builder
@@ -74,6 +81,7 @@ fn build_delegation_bench(
                     |_subnet_id| {
                         Some((
                             certified_public_key.clone(),
+                            // TODO: especially this line
                             CanisterIdRanges::try_from(vec![]).unwrap(),
                         ))
                     },
@@ -100,24 +108,32 @@ fn build_delegation_bench(
     bench_function(120_000);
 }
 
-fn get_builder_on_nns(criterion: &mut Criterion) {
-    let mut group = criterion.benchmark_group("get_builder_on_nns");
+fn get_delegation_on_nns(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("get_delegation_on_nns");
 
     // On NNS there is no delegation
     let (_, rx) = watch::channel(None);
-    let reader = NNSDelegationReader::new(rx);
+    let reader = NNSDelegationReader::new(rx, no_op_logger());
 
-    group.bench_function("builder", |bencher| {
+    group.bench_function("tree", |bencher| {
+        bencher.iter(|| black_box(reader.builder()));
+    });
+
+    group.bench_function("flat", |bencher| {
+        bencher.iter(|| black_box(reader.builder()));
+    });
+
+    group.bench_function("none", |bencher| {
         bencher.iter(|| black_box(reader.builder()));
     });
 }
 
 criterion_group!(
     benches,
-    build_delegation_with_flat_canister_ranges,
-    build_delegation_without_canister_ranges,
-    build_delegation_with_tree_canister_ranges,
-    get_builder_on_nns,
+    get_delegation_with_flat_canister_ranges,
+    get_delegation_without_canister_ranges,
+    get_delegation_with_tree_canister_ranges,
+    get_delegation_on_nns,
 );
 
 criterion_main!(benches);

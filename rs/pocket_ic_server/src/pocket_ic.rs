@@ -2100,6 +2100,7 @@ impl PocketIcSubnets {
             //       };
             //       sso_credential_migration = null;
             //       is_production = opt true;
+            //       mcp_config_migration = null;
             //       backend_canister_id = opt principal "rdmx6-jaaaa-aaaaa-aaadq-cai";
             //       enable_dapps_explorer = opt false;
             //       assigned_user_number_range = opt record {
@@ -2189,6 +2190,7 @@ impl PocketIcSubnets {
             //         max_unsolved_captchas = 500 : nat64;
             //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
             //       };
+            //       mcp_official_url = opt opt "https://mcp.internetcomputer.org/mcp";
             //       dummy_auth = opt null;
             //       sso_allow_insecure_discovery = null;
             //       register_rate_limit = opt record {
@@ -2247,6 +2249,8 @@ impl PocketIcSubnets {
                 enable_dnssec_email_recovery: None, // DIFFERENT FROM ICP MAINNET
                 dnssec_config: None,                // DIFFERENT FROM ICP MAINNET
                 doh_config: None,                   // DIFFERENT FROM ICP MAINNET
+                mcp_official_url: None,             // DIFFERENT FROM ICP MAINNET
+                mcp_config_migration: None,
             });
             ii_subnet
                 .state_machine

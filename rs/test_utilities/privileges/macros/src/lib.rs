@@ -1,38 +1,39 @@
 //! Proc-macro companion of `ic-test-utilities-privileges`.
 //!
-//! Don't depend on this crate directly: use the [`as_nobody_when_root`]
+//! Don't depend on this crate directly: use the [`enforce_file_permissions`]
 //! attribute re-exported from `ic_test_utilities_privileges`.
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Error, ItemFn, ReturnType, parse_macro_input};
+use syn::{Error, ItemFn, parse_macro_input};
 
-/// Runs the annotated test as the unprivileged `nobody` user when the process
-/// is root, and unchanged otherwise.
+/// Runs the annotated test with the filesystem permission bits enforced against
+/// it, even when the test process is privileged.
 ///
 /// This is attribute sugar for wrapping the whole test body in
-/// `ic_test_utilities_privileges::run_as_nobody_if_root`: root bypasses file
-/// permission bits (`CAP_DAC_OVERRIDE`), so tests asserting `PermissionDenied`
-/// only observe the denial when dropping to `nobody` on root-run workers
-/// (e.g. under Bazel remote execution). See the documentation of
-/// `run_as_nobody_if_root` for the exact semantics.
+/// `ic_test_utilities_privileges::run_with_file_permissions_enforced`: root
+/// bypasses file permission bits via `CAP_DAC_OVERRIDE`/`CAP_DAC_READ_SEARCH`,
+/// so tests asserting `PermissionDenied` only observe the denial once those are
+/// dropped (e.g. under Bazel remote execution, which runs test actions as root).
+/// See the documentation of `run_with_file_permissions_enforced` for the exact
+/// semantics and limitations.
 ///
 /// Place it after `#[test]` (and `#[should_panic]`, which keeps working since
-/// the wrapper re-raises the child's panic message):
+/// the body runs in-process and its panic propagates unchanged):
 ///
 /// ```ignore
 /// #[test]
-/// #[ic_test_utilities_privileges::as_nobody_when_root]
+/// #[ic_test_utilities_privileges::enforce_file_permissions]
 /// fn should_deny_write() {
 ///     // ... assertions relying on file permission bits ...
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn as_nobody_when_root(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn enforce_file_permissions(attr: TokenStream, item: TokenStream) -> TokenStream {
     if !attr.is_empty() {
         return Error::new_spanned(
             proc_macro2::TokenStream::from(attr),
-            "#[as_nobody_when_root] takes no arguments",
+            "#[enforce_file_permissions] takes no arguments",
         )
         .to_compile_error()
         .into();
@@ -43,16 +44,15 @@ pub fn as_nobody_when_root(attr: TokenStream, item: TokenStream) -> TokenStream 
     if let Some(asyncness) = &item_fn.sig.asyncness {
         return Error::new_spanned(
             asyncness,
-            "#[as_nobody_when_root] does not support async functions: \
-             forking around an async runtime does not compose",
-        )
-        .to_compile_error()
-        .into();
-    }
-    if let ReturnType::Type(_, ty) = &item_fn.sig.output {
-        return Error::new_spanned(
-            ty,
-            "#[as_nobody_when_root] only supports functions without a return type",
+            "#[enforce_file_permissions] does not support async functions: capabilities \
+             are a per-thread property, and there is no synchronous scope to drop them \
+             for. Put this attribute *below* `#[tokio::test]` instead — attribute macros \
+             expand top-down, so `#[tokio::test]` then expands first and this one wraps \
+             the synchronous `block_on` wrapper it produces (which also builds the \
+             runtime inside the guarded scope, so its worker threads inherit the drop). \
+             Alternatively call \
+             `ic_test_utilities_privileges::run_with_file_permissions_enforced` directly \
+             around the blocking assertion",
         )
         .to_compile_error()
         .into();
@@ -68,7 +68,7 @@ pub fn as_nobody_when_root(attr: TokenStream, item: TokenStream) -> TokenStream 
     quote! {
         #(#attrs)*
         #vis #sig {
-            ::ic_test_utilities_privileges::run_as_nobody_if_root(|| #block);
+            ::ic_test_utilities_privileges::run_with_file_permissions_enforced(|| #block)
         }
     }
     .into()

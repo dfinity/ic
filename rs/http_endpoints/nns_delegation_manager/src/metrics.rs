@@ -3,7 +3,7 @@ use prometheus::{Histogram, HistogramVec, IntCounter};
 
 #[derive(Clone)]
 pub(crate) struct DelegationManagerMetrics {
-    pub(crate) update_duration: Histogram,
+    pub(crate) fetch_duration: Histogram,
     pub(crate) delegation_size: HistogramVec,
     pub(crate) updates: IntCounter,
     pub(crate) fetch_errors: IntCounter,
@@ -19,9 +19,9 @@ impl DelegationManagerMetrics {
                 "nns_delegation_manager_updates_total",
                 "How many times has the nns delegation been updated",
             ),
-            update_duration: metrics_registry.histogram(
-                "nns_delegation_manager_update_duration_seconds",
-                "How long it took to update the nns delegation, in seconds",
+            fetch_duration: metrics_registry.histogram(
+                "nns_delegation_manager_fetch_duration_seconds",
+                "How long it took to fetch the nns delegation, in seconds",
                 // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
                 decimal_buckets(-3, 1),
             ),
@@ -33,7 +33,7 @@ impl DelegationManagerMetrics {
                 &["delegation_format"],
             ),
             fetch_errors: metrics_registry.int_counter(
-                "nns_delegation_manager_errors_total",
+                "nns_delegation_manager_fetch_errors_total",
                 "Number of errors encountered while fetching nns delegations",
             ),
             state_comparison_errors: metrics_registry.int_counter(

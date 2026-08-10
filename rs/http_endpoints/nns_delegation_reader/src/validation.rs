@@ -20,7 +20,7 @@
 //! still carries the old key.
 
 use ic_crypto_tree_hash::{LabeledTree, LookupLowerBoundStatus, lookup_lower_bound, lookup_path};
-use ic_registry_routing_table::CanisterIdRanges;
+use ic_registry_routing_table::RoutingTable;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use std::fmt;
 
@@ -31,7 +31,8 @@ use std::fmt;
 pub enum CanisterRangesCheck {
     /// Check that the certified canister ranges at `/subnet/<subnet_id>/canister_ranges`
     /// exactly match all the ranges which the state assigns to the delegated subnet. Ranges
-    /// certified at `/canister_ranges/<subnet_id>` are ignored.
+    /// certified at `/canister_ranges/<subnet_id>` are ignored because if the delegation is built
+    /// correctly, the two locations should always match.
     AllSubnetRanges,
     /// Check that the ranges certified at `/subnet/<subnet_id>/canister_ranges` cover the
     /// given canister id if and only if the state assigns it to the delegated subnet.
@@ -116,8 +117,7 @@ impl std::error::Error for DelegationVerificationError {}
 /// * the threshold public key certified in `tree` (at `/subnet/<subnet_id>/public_key`)
 ///   matches `expected_subnet_public_key`; and
 /// * the canister ranges certified in `tree` pass the check specified by
-///   `ranges_check`, against `expected_subnet_ranges`, the ranges which the state assigns to the
-///   delegated subnet (see [`CanisterRangesCheck`]).
+///   `ranges_check`, against the state's `routing_table` (see [`CanisterRangesCheck`]).
 ///
 /// Returns `Ok(false)` if either of those does not match. Any error that
 /// prevents the comparison (malformed canister ranges, missing public key,
@@ -126,7 +126,7 @@ pub(crate) fn is_tree_consistent_with(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
     expected_subnet_public_key: &[u8],
-    expected_subnet_ranges: &CanisterIdRanges,
+    routing_table: &RoutingTable,
     ranges_check: CanisterRangesCheck,
 ) -> Result<bool, DelegationValidationError> {
     if !does_public_key_match(tree, subnet_id, expected_subnet_public_key)? {
@@ -135,37 +135,41 @@ pub(crate) fn is_tree_consistent_with(
 
     match ranges_check {
         CanisterRangesCheck::AllSubnetRanges => {
-            do_all_subnet_ranges_match(tree, subnet_id, expected_subnet_ranges)
+            do_all_subnet_ranges_match(tree, subnet_id, routing_table)
         }
         CanisterRangesCheck::CanisterInFlat(canister_id) => {
-            let state_covers = expected_subnet_ranges.contains(&canister_id);
+            let state_covers = routing_table
+                .lookup_entry(canister_id)
+                .map(|(_, responsible_subnet)| responsible_subnet == subnet_id)
+                .unwrap_or(false);
             Ok(do_flat_ranges_cover_canister(tree, subnet_id, canister_id)? == state_covers)
         }
         CanisterRangesCheck::CanisterInTree(canister_id) => {
-            let state_covers = expected_subnet_ranges.contains(&canister_id);
+            let state_covers = routing_table
+                .lookup_entry(canister_id)
+                .map(|(_, responsible_subnet)| responsible_subnet == subnet_id)
+                .unwrap_or(false);
             Ok(do_tree_ranges_cover_canister(tree, subnet_id, canister_id)? == state_covers)
         }
         CanisterRangesCheck::NoCheck => Ok(true),
     }
 }
 
-/// Returns whether the canister ranges certified in `tree` exactly match `subnet_ranges` at
-/// `/subnet/<subnet_id>/canister_ranges`.
+/// Returns whether the canister ranges certified in `tree` at
+/// `/subnet/<subnet_id>/canister_ranges` exactly match the ranges which `routing_table`
+/// assigns to the subnet.
 fn do_all_subnet_ranges_match(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
-    subnet_ranges: &CanisterIdRanges,
+    routing_table: &RoutingTable,
 ) -> Result<bool, DelegationValidationError> {
-    let subnet_ranges: Vec<(PrincipalId, PrincipalId)> = subnet_ranges
+    let subnet_ranges: Vec<(PrincipalId, PrincipalId)> = routing_table
+        .ranges(subnet_id)
         .iter()
         .map(|range| (range.start.get(), range.end.get()))
         .collect();
 
-    do_flat_ranges_match(tree, subnet_id, &subnet_ranges)?.ok_or_else(|| {
-        DelegationValidationError::UnexpectedTreeShape(format!(
-            "missing /subnet/{subnet_id}/canister_ranges leaf"
-        ))
-    })
+    do_flat_ranges_match(tree, subnet_id, &subnet_ranges)
 }
 
 /// Returns whether the public key certified in `tree` matches `expected_public_key`.
@@ -179,7 +183,10 @@ fn does_public_key_match(
         &[b"subnet", subnet_id.get_ref().as_slice(), b"public_key"],
     ) {
         Some(LabeledTree::Leaf(public_key)) => Ok(public_key.as_slice() == expected_public_key),
-        _ => Err(DelegationValidationError::UnexpectedTreeShape(format!(
+        Some(LabeledTree::SubTree(_)) => Err(DelegationValidationError::UnexpectedTreeShape(
+            format!("unexpected subtree at /subnet/{subnet_id}/public_key"),
+        )),
+        None => Err(DelegationValidationError::UnexpectedTreeShape(format!(
             "missing /subnet/{subnet_id}/public_key leaf"
         ))),
     }
@@ -200,13 +207,13 @@ fn do_flat_ranges_match(
             b"canister_ranges",
         ],
     ) {
-        Some(LabeledTree::Leaf(bytes)) => {
-            Ok(Some(decode_ranges(bytes)?.as_slice() == state_ranges))
-        }
+        Some(LabeledTree::Leaf(bytes)) => Ok(decode_ranges(bytes)?.as_slice() == state_ranges),
         Some(LabeledTree::SubTree(_)) => Err(DelegationValidationError::UnexpectedTreeShape(
             format!("unexpected subtree at /subnet/{subnet_id}/canister_ranges"),
         )),
-        None => Ok(None),
+        None => Err(DelegationValidationError::UnexpectedTreeShape(format!(
+            "missing /subnet/{subnet_id}/canister_ranges leaf"
+        ))),
     }
 }
 
@@ -299,7 +306,7 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_canonical_state::encoding::encode_subnet_canister_ranges;
     use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, flatmap};
-    use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
+    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
     use ic_types::{CanisterId, PrincipalId, SubnetId};
     use rstest::rstest;
@@ -312,16 +319,22 @@ mod tests {
         subnet_ranges: &[CanisterIdRange],
         ranges_check: CanisterRangesCheck,
     ) -> Result<bool, DelegationValidationError> {
+        let mut routing_table = RoutingTable::default();
+        for range in subnet_ranges {
+            routing_table.insert(*range, subnet_id).unwrap();
+        }
+
         is_tree_consistent_with(
             tree,
             subnet_id,
             expected_public_key,
-            &CanisterIdRanges::try_from(subnet_ranges.to_vec()).unwrap(),
+            &routing_table,
             ranges_check,
         )
     }
 
-    /// Checks the tree against the given state view with the `AllSubnetRanges` check.
+    /// Checks the tree against the given state view with the `AllSubnetRanges` check,
+    /// where the state's routing table assigns `subnet_ranges` to the subnet.
     fn validate_all_subnet_ranges(
         tree: &LabeledTree<Vec<u8>>,
         subnet_id: SubnetId,
@@ -335,19 +348,6 @@ mod tests {
             subnet_ranges,
             CanisterRangesCheck::AllSubnetRanges,
         )
-    }
-
-    /// Which canister ranges locations the delegation certificate tree carries.
-    #[derive(Copy, Clone, Debug)]
-    enum Layout {
-        /// Only the `/subnet/<subnet_id>/canister_ranges` leaf.
-        FlatOnly,
-        /// Only the `/canister_ranges/<subnet_id>` subtree.
-        TreeOnly,
-        /// Both locations (the layout of a delegation as received from the NNS).
-        Both,
-        /// Neither location, i.e. only the public key.
-        KeyOnly,
     }
 
     fn range(start: u64, end: u64) -> CanisterIdRange {
@@ -382,139 +382,119 @@ mod tests {
         LabeledTree::SubTree(FlatMap::from_key_values(leaves))
     }
 
-    /// Builds the certificate tree certifying `public_key` for `subnet_id`, with the
-    /// canister ranges in the locations dictated by `layout`: `flat_ranges` in the
-    /// `/subnet/<subnet_id>/canister_ranges` leaf and/or `tree_ranges` in the
-    /// `/canister_ranges/<subnet_id>` subtree.
+    /// Builds the full certificate tree certifying `public_key` for `subnet_id`, as
+    /// received from the NNS: the canister ranges are certified in both locations,
+    /// `flat_ranges` in the `/subnet/<subnet_id>/canister_ranges` leaf and `tree_ranges`
+    /// in the `/canister_ranges/<subnet_id>` subtree.
     fn build_tree_with_distinct_ranges(
-        layout: Layout,
         subnet_id: SubnetId,
         public_key: &[u8],
         flat_ranges: &[CanisterIdRange],
         tree_ranges: &[CanisterIdRange],
     ) -> LabeledTree<Vec<u8>> {
-        let mut subnet_children: Vec<(Label, LabeledTree<Vec<u8>>)> = Vec::new();
-        if matches!(layout, Layout::FlatOnly | Layout::Both) {
-            subnet_children.push((Label::from("canister_ranges"), ranges_leaf(flat_ranges)));
-        }
-        subnet_children.push((
-            Label::from("public_key"),
-            LabeledTree::Leaf(public_key.to_vec()),
-        ));
-
-        let mut root_children: Vec<(Label, LabeledTree<Vec<u8>>)> = Vec::new();
-        if matches!(layout, Layout::TreeOnly | Layout::Both) {
-            root_children.push((
-                Label::from("canister_ranges"),
-                LabeledTree::SubTree(flatmap![
-                    Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(tree_ranges),
-                ]),
-            ));
-        }
-        root_children.push((
-            Label::from("subnet"),
-            LabeledTree::SubTree(flatmap![
-                Label::from(subnet_id.get().to_vec()) =>
-                    LabeledTree::SubTree(FlatMap::from_key_values(subnet_children)),
+        LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(tree_ranges),
             ]),
-        ));
-
-        LabeledTree::SubTree(FlatMap::from_key_values(root_children))
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => ranges_leaf(flat_ranges),
+                    Label::from("public_key") => LabeledTree::Leaf(public_key.to_vec()),
+                ]),
+            ]),
+        ])
     }
 
-    /// Builds the certificate tree certifying `public_key` and `ranges` for `subnet_id`,
-    /// with the ranges in the locations dictated by `layout`.
+    /// Builds the full certificate tree certifying `public_key` and `ranges` (in both
+    /// canister ranges locations) for `subnet_id`.
     fn build_tree(
-        layout: Layout,
         subnet_id: SubnetId,
         public_key: &[u8],
         ranges: &[CanisterIdRange],
     ) -> LabeledTree<Vec<u8>> {
-        build_tree_with_distinct_ranges(layout, subnet_id, public_key, ranges, ranges)
+        build_tree_with_distinct_ranges(subnet_id, public_key, ranges, ranges)
     }
 
-    /// A delegation whose certified public key and canister ranges (in the flat leaf,
-    /// the only location the check considers) agree with the state is consistent with it.
-    #[rstest]
-    #[case::flat_only(Layout::FlatOnly)]
-    #[case::both(Layout::Both)]
-    fn delegation_matching_public_key_and_ranges_is_valid(#[case] layout: Layout) {
+    /// A delegation whose certified public key and canister ranges agree with the state
+    /// is consistent with it.
+    #[test]
+    fn delegation_matching_public_key_and_ranges_is_valid() {
         let subnet_id = SUBNET_1;
         let public_key = vec![1, 2, 3];
         let ranges = [range(10, 20), range(100, 200)];
-        let tree = build_tree(layout, subnet_id, &public_key, &ranges);
+        let tree = build_tree(subnet_id, &public_key, &ranges);
 
         assert_matches!(
             validate_all_subnet_ranges(&tree, subnet_id, &public_key, &ranges),
             Ok(true),
-            "a delegation whose public key and ranges match the state should be valid in the {layout:?} layout"
+            "a delegation whose public key and ranges match the state should be valid"
         );
     }
 
-    /// A mismatching public key makes the delegation invalid in every layout,
-    /// regardless of whether the ranges match.
-    #[rstest]
-    #[case::flat_only(Layout::FlatOnly)]
-    #[case::tree_only(Layout::TreeOnly)]
-    #[case::both(Layout::Both)]
-    #[case::key_only(Layout::KeyOnly)]
-    fn mismatching_public_key_is_invalid(#[case] layout: Layout) {
+    /// A mismatching public key makes the delegation invalid, regardless of whether the
+    /// ranges match.
+    #[test]
+    fn mismatching_public_key_is_invalid() {
         let subnet_id = SUBNET_1;
         let ranges = [range(10, 20)];
         // Same ranges, different public key.
-        let tree = build_tree(layout, subnet_id, &[9, 9, 9], &ranges);
+        let tree = build_tree(subnet_id, &[9, 9, 9], &ranges);
 
         assert_matches!(
             validate_all_subnet_ranges(&tree, subnet_id, &[1, 2, 3], &ranges),
             Ok(false),
-            "a delegation with a mismatching public key should be invalid in the {layout:?} layout"
+            "a delegation with a mismatching public key should be invalid"
         );
     }
 
-    /// A missing public key leaf is an error in every layout.
-    #[rstest]
-    #[case::flat_only(Layout::FlatOnly)]
-    #[case::tree_only(Layout::TreeOnly)]
-    #[case::both(Layout::Both)]
-    #[case::key_only(Layout::KeyOnly)]
-    fn missing_public_key_is_an_error(#[case] layout: Layout) {
+    /// A missing public key leaf is an error.
+    #[test]
+    fn missing_public_key_is_an_error() {
         let ranges = [range(10, 20)];
         // The tree certifies SUBNET_2, so there is no public key (nor any other
         // information) for SUBNET_1.
-        let tree = build_tree(layout, SUBNET_2, &[1, 2, 3], &ranges);
+        let tree = build_tree(SUBNET_2, &[1, 2, 3], &ranges);
 
         assert_matches!(
             validate_all_subnet_ranges(&tree, SUBNET_1, &[1, 2, 3], &ranges),
-            Err(DelegationValidationError::UnexpectedTreeShape(_)),
-            "validating a delegation without a public key for the subnet should fail with \
-             UnexpectedTreeShape in the {layout:?} layout"
+            Err(DelegationValidationError::UnexpectedTreeShape(err)) if err.contains("public_key leaf"),
+            "a delegation without a public key for the subnet should fail with UnexpectedTreeShape"
         );
     }
 
-    /// Certifying a strict subset of the state's ranges is invalid: all ranges which
-    /// the state assigns to the subnet must be certified.
-    #[rstest]
-    #[case::flat_only(Layout::FlatOnly)]
-    #[case::both(Layout::Both)]
-    fn delegation_certifying_a_subset_of_state_ranges_is_invalid(#[case] layout: Layout) {
+    /// A subtree where the `/subnet/<subnet_id>/public_key` leaf is expected is an error.
+    #[test]
+    fn delegation_with_subtree_instead_of_public_key_leaf_is_an_error() {
         let subnet_id = SUBNET_1;
         let public_key = vec![1, 2, 3];
-        let state_ranges = [range(10, 20), range(100, 200), range(300, 400)];
-        // Certify only a subset of the ranges the state assigns to the subnet.
-        let subset = [range(10, 20), range(300, 400)];
-        let tree = build_tree(layout, subnet_id, &public_key, &subset);
+        let ranges = [range(10, 20)];
+        let tree = LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(&ranges),
+            ]),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => ranges_leaf(&ranges),
+                    Label::from("public_key") => LabeledTree::SubTree(flatmap![
+                        Label::from("unexpected") => LabeledTree::Leaf(public_key.clone()),
+                    ]),
+                ]),
+            ]),
+        ]);
 
         assert_matches!(
-            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &state_ranges),
-            Ok(false),
-            "certifying a strict subset of the state's ranges should be invalid in the {layout:?} layout"
+            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &ranges),
+            Err(DelegationValidationError::UnexpectedTreeShape(err)) if err.contains("unexpected subtree"),
+            "a subtree at /subnet/{subnet_id}/public_key (where a leaf is expected) should \
+             fail with UnexpectedTreeShape"
         );
     }
 
-    /// A delegation certifying ranges in the flat leaf which do not exactly match the
-    /// ranges the state assigns to the subnet is invalid.
+    /// A delegation certifying ranges which do not exactly match the ranges the state
+    /// assigns to the subnet is invalid.
     #[rstest]
     #[case::different_end(vec![range(10, 999)])]
+    #[case::missing_range(vec![range(10, 20)])]
     #[case::extra_range(vec![range(10, 20), range(100, 200), range(500, 1000)])]
     #[case::replaced_range(vec![range(10, 20), range(500, 1000)])]
     #[case::disjoint_range(vec![range(30, 40)])]
@@ -522,18 +502,92 @@ mod tests {
     #[case::merged_range(vec![range(10, 200)])]
     fn delegation_with_ranges_not_matching_state_is_invalid(
         #[case] certified_ranges: Vec<CanisterIdRange>,
-        #[values(Layout::FlatOnly, Layout::Both)] layout: Layout,
     ) {
         let subnet_id = SUBNET_1;
         let public_key = vec![1, 2, 3];
         let state_ranges = [range(10, 20), range(100, 200)];
-        let tree = build_tree(layout, subnet_id, &public_key, &certified_ranges);
+        let tree = build_tree(subnet_id, &public_key, &certified_ranges);
 
         assert_matches!(
             validate_all_subnet_ranges(&tree, subnet_id, &public_key, &state_ranges),
             Ok(false),
             "certifying ranges {certified_ranges:?} which the state does not assign to the \
-             subnet should be invalid in the {layout:?} layout"
+             subnet should be invalid"
+        );
+    }
+
+    /// A delegation certifying no ranges at all is valid if and only if the state
+    /// assigns no ranges to the subnet either.
+    #[rstest]
+    #[case::state_with_ranges(vec![range(10, 20)], false)]
+    #[case::state_without_ranges(vec![], true)]
+    fn delegation_with_empty_ranges(
+        #[case] state_ranges: Vec<CanisterIdRange>,
+        #[case] expected_validity: bool,
+    ) {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        let tree = build_tree(subnet_id, &public_key, &[]);
+
+        assert_matches!(
+            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &state_ranges),
+            Ok(is_valid) if is_valid == expected_validity,
+            "a delegation certifying no ranges should be valid if and only \
+             if the state assigns no ranges to the subnet, but the state assigns \
+             {state_ranges:?}"
+        );
+    }
+
+    /// A missing `/subnet/<subnet_id>/canister_ranges` leaf is an error.
+    #[test]
+    fn missing_flat_ranges_is_an_error() {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        let ranges = [range(10, 20)];
+        let tree = LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(&ranges),
+            ]),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("public_key") => LabeledTree::Leaf(public_key.clone()),
+                ]),
+            ]),
+        ]);
+
+        assert_matches!(
+            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &ranges),
+            Err(DelegationValidationError::UnexpectedTreeShape(err)) if err.contains("canister_ranges leaf"),
+            "a delegation without flat canister ranges should fail with UnexpectedTreeShape"
+        );
+    }
+
+    /// A subtree where the `/subnet/<subnet_id>/canister_ranges` leaf is expected is an
+    /// error.
+    #[test]
+    fn subtree_instead_of_flat_ranges_leaf_is_an_error() {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        let ranges = [range(10, 20)];
+        let tree = LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(&ranges),
+            ]),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                        Label::from("unexpected") => ranges_leaf(&ranges),
+                    ]),
+                    Label::from("public_key") => LabeledTree::Leaf(public_key.clone()),
+                ]),
+            ]),
+        ]);
+
+        assert_matches!(
+            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &ranges),
+            Err(DelegationValidationError::UnexpectedTreeShape(err)) if err.contains("unexpected subtree"),
+            "a subtree at /subnet/{subnet_id}/canister_ranges (where a leaf is expected) \
+             should fail with UnexpectedTreeShape"
         );
     }
 
@@ -550,13 +604,8 @@ mod tests {
         let subnet_id = SUBNET_1;
         let public_key = vec![1, 2, 3];
         let state_ranges = [range(10, 20)];
-        let tree = build_tree_with_distinct_ranges(
-            Layout::Both,
-            subnet_id,
-            &public_key,
-            flat_ranges,
-            tree_ranges,
-        );
+        let tree =
+            build_tree_with_distinct_ranges(subnet_id, &public_key, flat_ranges, tree_ranges);
 
         assert_matches!(
             validate_all_subnet_ranges(&tree, subnet_id, &public_key, &state_ranges),
@@ -566,57 +615,16 @@ mod tests {
         );
     }
 
-    /// A missing `/subnet/<subnet_id>/canister_ranges` leaf is an error, regardless of
-    /// whether the state assigns any ranges to the subnet and of any ranges certified
-    /// in the (ignored) `/canister_ranges/<subnet_id>` subtree.
-    #[rstest]
-    fn delegation_without_flat_ranges_leaf_is_an_error(
-        #[values(Layout::TreeOnly, Layout::KeyOnly)] layout: Layout,
-        #[values(true, false)] state_has_ranges: bool,
-    ) {
-        let subnet_id = SUBNET_1;
-        let public_key = vec![1, 2, 3];
-        let ranges = [range(10, 20)];
-        let state_ranges = if state_has_ranges { &ranges[..] } else { &[] };
-        let tree = build_tree(layout, subnet_id, &public_key, &ranges);
-
-        assert_matches!(
-            validate_all_subnet_ranges(&tree, subnet_id, &public_key, state_ranges),
-            Err(DelegationValidationError::UnexpectedTreeShape(_)),
-            "a delegation without the /subnet/{subnet_id}/canister_ranges leaf should fail \
-             with UnexpectedTreeShape in the {layout:?} layout \
-             (state_has_ranges: {state_has_ranges})"
-        );
-    }
-
-    /// An empty `/subnet/<subnet_id>/canister_ranges` leaf (certifying no ranges at all)
-    /// is invalid when the state assigns ranges to the subnet, and valid when it does not.
-    #[rstest]
-    #[case::state_with_ranges(vec![range(10, 20)], false)]
-    #[case::state_without_ranges(vec![], true)]
-    fn delegation_with_empty_flat_ranges_leaf(
-        #[case] state_ranges: Vec<CanisterIdRange>,
-        #[case] expected_validity: bool,
-    ) {
-        let subnet_id = SUBNET_1;
-        let public_key = vec![1, 2, 3];
-        let tree = build_tree(Layout::FlatOnly, subnet_id, &public_key, &[]);
-
-        assert_matches!(
-            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &state_ranges),
-            Ok(is_valid) if is_valid == expected_validity,
-            "a delegation certifying an empty list of ranges should be valid if and only \
-             if the state assigns no ranges to the subnet, but the state assigns \
-             {state_ranges:?}"
-        );
-    }
-
     /// A flat canister ranges leaf which cannot be CBOR-decoded is an error.
     #[test]
     fn delegation_with_malformed_flat_ranges_is_an_error() {
         let subnet_id = SUBNET_1;
         let public_key = vec![1, 2, 3];
+        let ranges = [range(10, 20)];
         let tree = LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(&ranges),
+            ]),
             Label::from("subnet") => LabeledTree::SubTree(flatmap![
                 Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
                     Label::from("canister_ranges") => LabeledTree::Leaf(vec![0xFF, 0xFF]),
@@ -626,7 +634,7 @@ mod tests {
         ]);
 
         assert_matches!(
-            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &[range(10, 20)]),
+            validate_all_subnet_ranges(&tree, subnet_id, &public_key, &ranges),
             Err(DelegationValidationError::MalformedCanisterRanges(_)),
             "a delegation with a malformed /subnet/{subnet_id}/canister_ranges leaf should \
              fail with MalformedCanisterRanges"
@@ -662,6 +670,8 @@ mod tests {
              as the flat leaf matches the state"
         );
     }
+
+    // TODO: review below
 
     /// Which canister ranges location a per-canister check reads.
     #[derive(Copy, Clone, Debug)]

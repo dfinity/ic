@@ -50,8 +50,10 @@ use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
-use crate::metrics::DelegationManagerMetrics;
-use ic_nns_delegation_reader::{CanisterRangesCheck, NNSDelegationBuilder, NNSDelegationReader};
+use crate::{
+    CanisterRangesCheck, NNSDelegationBuilder, NNSDelegationReader,
+    metrics::DelegationManagerMetrics,
+};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -149,22 +151,16 @@ impl DelegationManager {
 
         let state = self.state_reader.get_latest_certified_state()?;
         let network_topology = &state.get_ref().metadata.network_topology;
-
         delegation
             .is_consistent_with(
-                |subnet_id| {
-                    let subnet_topology = network_topology
-                        .subnets_for_certification()
-                        .get(&subnet_id)?;
-
-                    Some((
-                        subnet_topology.public_key.clone(),
-                        network_topology
-                            .routing_table_for_certification()
-                            .ranges(subnet_id),
-                    ))
-                },
                 CanisterRangesCheck::AllSubnetRanges,
+                network_topology.routing_table_for_certification(),
+                |subnet_id| {
+                    network_topology
+                        .subnets_for_certification()
+                        .get(&subnet_id)
+                        .map(|subnet_topology| subnet_topology.public_key.as_slice())
+                },
             )
             .inspect_err(|err| {
                 warn!(
@@ -177,24 +173,22 @@ impl DelegationManager {
     }
 
     async fn fetch(&self) -> Option<Arc<NNSDelegationBuilder>> {
-        let _timer = self.metrics.update_duration.start_timer();
+        let _timer = self.metrics.fetch_duration.start_timer();
 
-        let delegation = load_root_delegation(
-            &self.config,
-            &self.log,
-            &self.rt_handle,
-            self.subnet_id,
-            self.subnet_type,
-            self.nns_subnet_id,
-            self.registry_client.as_ref(),
-            self.tls_config.as_ref(),
-            &self.metrics,
+        Arc::new(
+            load_root_delegation(
+                &self.config,
+                &self.log,
+                &self.rt_handle,
+                self.subnet_id,
+                self.subnet_type,
+                self.nns_subnet_id,
+                self.registry_client.as_ref(),
+                self.tls_config.as_ref(),
+                &self.metrics,
+            )
+            .await,
         )
-        .await;
-
-        self.metrics.updates.inc();
-
-        delegation.map(Arc::new)
     }
 
     /// Fetches a delegation from the NNS subnet proactively, i.e. without checking if the current
@@ -232,7 +226,7 @@ impl DelegationManager {
         None
     }
 
-    async fn run(self, sender: watch::Sender<Option<Arc<NNSDelegationBuilder>>>) {
+    async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
         let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
         let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
         // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
@@ -260,9 +254,11 @@ impl DelegationManager {
                 continue;
             };
 
+            // TODO: consider always sending (cloning is now cheap)
             sender.send_if_modified(|old_delegation: &mut Option<Arc<NNSDelegationBuilder>>| {
                 let modified = if &new_delegation != old_delegation {
                     old_delegation.clone_from(&new_delegation);
+                    self.metrics.updates.inc();
                     true
                 } else {
                     false
@@ -1473,7 +1469,7 @@ mod tests {
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(
                 &builder
-                    .build_unverified(CanisterRangesFilter::Flat)
+                    .build_unverified(CanisterRangesFilter::Flat, &no_op_logger())
                     .certificate,
             )
             .expect("Should return a certificate which can be deserialized");
@@ -1886,6 +1882,7 @@ mod tests {
             }
         ]
     )]
+    #[tokio::test]
     async fn manager_run_reactively_refreshes_when_canister_ranges_changed_test(
         #[case] new_canister_ranges: Vec<CanisterIdRange>,
     ) {

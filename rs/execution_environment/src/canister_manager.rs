@@ -778,6 +778,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1043,6 +1044,7 @@ impl CanisterManager {
             deleted_call_context_responses: rejects,
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1087,6 +1089,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1120,6 +1123,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject,
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1659,6 +1663,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1690,6 +1695,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         }
     }
 
@@ -1804,6 +1810,7 @@ impl CanisterManager {
                     deleted_call_context_responses: vec![],
                     stop_call_id_to_remove: None,
                     stop_contexts_to_reject: vec![],
+                    snapshot_to_make_immutable: None,
                 });
             }
             ChunkValidationResult::ValidationError(err) => {
@@ -1851,6 +1858,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1892,6 +1900,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1991,18 +2000,14 @@ impl CanisterManager {
         // Consume cycles for instructions.
         let cycles_for_instructions = self
             .cycles_account_manager
-            .management_canister_cost(instructions, subnet_cycles_config)
-            .real();
+            .management_canister_cost(instructions, subnet_cycles_config);
         let message_memory_usage = canister.message_memory_usage();
         self.cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut canister.system_state,
                 new_memory_usage,
                 message_memory_usage,
-                CompoundCycles::<Instructions>::new(
-                    cycles_for_instructions,
-                    subnet_cycles_config.cost_schedule,
-                ),
+                cycles_for_instructions,
                 subnet_cycles_config,
                 reveal_top_up,
             )
@@ -2175,6 +2180,7 @@ impl CanisterManager {
             deleted_call_context_responses,
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2530,6 +2536,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: Some(snapshot_id),
         })
     }
 
@@ -2602,6 +2609,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2731,6 +2739,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2852,6 +2861,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2876,8 +2886,11 @@ impl CanisterManager {
 
         let snapshot = self.get_snapshot(canister, snapshot_id)?;
 
-        // Ensure the snapshot was created via metadata upload, not from the canister.
-        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
+        // Ensure the snapshot was created via metadata upload, not from the
+        // canister, and has not been restored onto a canister.
+        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved)
+            || snapshot.restored()
+        {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
         }
 
@@ -2970,6 +2983,7 @@ impl CanisterManager {
                             deleted_call_context_responses: vec![],
                             stop_call_id_to_remove: None,
                             stop_contexts_to_reject: vec![],
+                            snapshot_to_make_immutable: None,
                         });
                     }
                     ChunkValidationResult::ValidationError(err) => {
@@ -3012,6 +3026,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
