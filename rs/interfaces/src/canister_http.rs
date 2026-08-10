@@ -163,7 +163,7 @@ pub enum InvalidCanisterHttpPayloadReason {
     FlexibleResponsesNotTooLarge(CallbackId),
     /// A figure an OutOfCycles error reports to the caller does not match the value
     /// recomputed from the request context and the signed receipts.
-    FlexibleOutOfCyclesFigureMismatch {
+    OutOfCyclesFigureMismatch {
         callback_id: CallbackId,
         field: &'static str,
         /// The figure received in the payload.
@@ -173,7 +173,7 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// An OutOfCycles error is invalid: what is left of the committee's
     /// per-replica allowances can still cover the cost of delivering a response.
-    FlexibleNotOutOfCycles {
+    NotOutOfCycles {
         callback_id: CallbackId,
         /// The committee's collective allowance that is still unspent, assuming
         /// that every committee member that has not reported a spend yet has

@@ -12,9 +12,13 @@
 
 use ic_types::{
     NumBytes, NumberOfNodes,
-    canister_http::{CanisterHttpResponseProof, CanisterHttpResponseShare, Replication},
+    canister_http::{
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseShare,
+        Replication,
+    },
 };
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig, HTTPOutcalls};
+use std::collections::BTreeMap;
 
 // ============================ Base-fee constants ============================
 // Charged up-front for every request by [`base_fee`].
@@ -239,6 +243,36 @@ fn min_delivery_cost(
             subnet_size,
             (required_responses as u128).saturating_sub(min_responses as u128),
         )
+}
+
+/// A lower bound on the consensus cost of delivering a fully- or non-replicated
+/// response, given the `seen_shares` produced so far (at most one per replica).
+pub fn min_non_flexible_consensus_cost<'a>(
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
+    subnet_size: NumberOfNodes,
+    committee_size: usize,
+    threshold: usize,
+) -> Option<Cycles> {
+    // Shares agreeing on the same metadata are votes for the same response.
+    let mut votes: BTreeMap<&CanisterHttpResponseMetadata, usize> = BTreeMap::new();
+    let mut seen = 0;
+    for share in seen_shares {
+        *votes.entry(&share.content.metadata).or_default() += 1;
+        seen += 1;
+    }
+    let unseen = committee_size.saturating_sub(seen);
+
+    votes
+        .into_iter()
+        .map(|(metadata, votes)| (votes, metadata.content_size))
+        // A response nobody has voted for yet would have to come from the replicas that
+        // have not been seen, and may have an empty body.
+        .chain(std::iter::once((0, 0)))
+        .filter(|(votes, _)| votes + unseen >= threshold)
+        .map(|(_, content_size)| {
+            Cycles::from(consensus_cost_coefficient(subnet_size) * content_size as u128)
+        })
+        .min()
 }
 
 #[cfg(test)]
@@ -550,6 +584,56 @@ mod tests {
                 "bound exceeds the cost of {delivered} responses"
             );
         }
+    }
+
+    #[test]
+    fn min_non_flexible_consensus_cost_is_zero_while_another_response_can_still_win() {
+        // A committee of 13 tolerating 4 faults, so 9 have to agree.
+        let n = NumberOfNodes::from(13);
+        let (committee, threshold) = (13, 9);
+        let votes: Vec<_> = (0..13).map(|i| share(i, 1_000, 0)).collect();
+
+        // The 4 replicas that have not voted for it are exactly enough, together with
+        // the 4 still unseen, to lift some other response to 9 instead.
+        assert_eq!(
+            min_non_flexible_consensus_cost(votes[..4].iter(), n, committee, threshold),
+            Some(Cycles::zero())
+        );
+        // One more vote and they are not: 9_490 * (181 + ...) -- no per-response
+        // overhead here, a single body is delivered: 9_490 * 1_000.
+        assert_eq!(
+            min_non_flexible_consensus_cost(votes[..5].iter(), n, committee, threshold),
+            Some(Cycles::new(9_490_000))
+        );
+    }
+
+    #[test]
+    fn min_non_flexible_consensus_cost_pins_a_non_replicated_response_at_once() {
+        let n = NumberOfNodes::from(13);
+        // Nothing seen: the designated replica may still return an empty body.
+        assert_eq!(
+            min_non_flexible_consensus_cost(std::iter::empty(), n, 1, 1),
+            Some(Cycles::zero())
+        );
+        assert_eq!(
+            min_non_flexible_consensus_cost(std::iter::once(&share(0, 1_000, 0)), n, 1, 1),
+            Some(Cycles::new(9_490_000))
+        );
+    }
+
+    #[test]
+    fn min_non_flexible_consensus_cost_is_none_when_no_response_can_reach_the_threshold() {
+        let n = NumberOfNodes::from(13);
+        // Two camps of 5 out of 13, with 3 unseen: neither camp can reach 9, and the 3
+        // unseen cannot carry a third response there either.
+        let split: Vec<_> = (0..5)
+            .map(|i| share(i, 1_000, 0))
+            .chain((5..10).map(|i| share(i, 2_000, 0)))
+            .collect();
+        assert_eq!(
+            min_non_flexible_consensus_cost(split.iter(), n, 13, 9),
+            None
+        );
     }
 
     #[test]

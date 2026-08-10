@@ -45,8 +45,9 @@ use ic_test_utilities_types::{
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion, ReplicaVersion,
     batch::{
-        CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
+        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
@@ -199,6 +200,7 @@ fn multiple_payload_test() {
 
                 // Set up past payload
                 let past_payload = CanisterHttpPayload {
+                    out_of_cycles: vec![],
                     responses: vec![CanisterHttpResponseWithConsensus {
                         content: past_response,
                         proof: CanisterHttpResponseProof {
@@ -502,6 +504,7 @@ fn divergence_responses_count_toward_max_responses() {
             .collect();
 
         let payload = CanisterHttpPayload {
+            out_of_cycles: vec![],
             responses: vec![],
             timeouts: vec![],
             divergence_responses,
@@ -654,6 +657,7 @@ fn duplicate_validation() {
         let (response, metadata) = test_response_and_metadata(0);
 
         let payload = CanisterHttpPayload {
+            out_of_cycles: vec![],
             responses: vec![response_and_metadata_to_proof(&response, &metadata)],
             timeouts: vec![],
             divergence_responses: vec![],
@@ -703,6 +707,7 @@ fn divergence_response_validation_test() {
             );
 
             let payload = CanisterHttpPayload {
+                out_of_cycles: vec![],
                 responses: vec![],
                 timeouts: vec![],
                 divergence_responses: vec![CanisterHttpResponseDivergence {
@@ -728,6 +733,7 @@ fn divergence_response_validation_test() {
             assert!(validation_result.is_ok());
 
             let payload = CanisterHttpPayload {
+                out_of_cycles: vec![],
                 responses: vec![],
                 timeouts: vec![],
                 divergence_responses: vec![CanisterHttpResponseDivergence {
@@ -761,6 +767,7 @@ fn divergence_response_validation_test() {
             let (_, other_callback_id_metadata) = test_response_and_metadata(1);
 
             let payload = CanisterHttpPayload {
+                out_of_cycles: vec![],
                 responses: vec![],
                 timeouts: vec![],
                 divergence_responses: vec![CanisterHttpResponseDivergence {
@@ -820,6 +827,7 @@ fn divergence_duplicate_signer_rejected() {
             // hashes), plus a duplicate: node 0 also votes for the second hash,
             // so it now signs two shares.
             let payload = CanisterHttpPayload {
+                out_of_cycles: vec![],
                 responses: vec![],
                 timeouts: vec![],
                 divergence_responses: vec![CanisterHttpResponseDivergence {
@@ -2168,6 +2176,7 @@ where
         modify(&mut response, &mut metadata);
 
         let payload = CanisterHttpPayload {
+            out_of_cycles: vec![],
             responses: vec![response_and_metadata_to_proof(&response, &metadata)],
             timeouts: vec![],
             divergence_responses: vec![],
@@ -3463,6 +3472,7 @@ fn into_messages_emits_initial_spend_reports() {
     };
 
     let payload = CanisterHttpPayload {
+        out_of_cycles: vec![],
         responses: vec![fr_proof],
         flexible_responses: vec![flex_group],
         flexible_errors: vec![flex_error, too_large],
@@ -5572,13 +5582,16 @@ fn fully_replicated_response_waits_for_shares_covering_consensus_cost() {
     );
 }
 
-/// Builds a payload from `threshold` many fully-replicated shares for a request
-/// with the given `context`, and asserts that it carries `expected_responses`
-/// many responses.
+/// Builds a payload from `threshold` many fully-replicated shares for a request with
+/// the given `context`, and asserts that it carries `expected_responses` many
+/// responses and `expected_out_of_cycles` many out-of-cycles errors — the latter
+/// telling a response merely held back until more allowances arrive apart from one
+/// the committee can never afford.
 fn assert_responses_from_threshold_shares(
     num_nodes: usize,
     context: CanisterHttpRequestContext,
     expected_responses: usize,
+    expected_out_of_cycles: usize,
 ) {
     let cb_id = 0;
     let threshold = num_nodes - get_faults_tolerated(num_nodes);
@@ -5598,7 +5611,10 @@ fn assert_responses_from_threshold_shares(
                 add_received_shares_to_pool(pool_access.deref_mut(), shares[1..threshold].to_vec());
             }
             let payload = build_and_validate_and_parse_payload(&payload_builder);
-            assert_eq!(payload.num_responses(), expected_responses);
+            assert_eq!(
+                (payload.responses.len(), payload.out_of_cycles.len()),
+                (expected_responses, expected_out_of_cycles)
+            );
         },
     );
 }
@@ -5608,7 +5624,7 @@ fn assert_responses_from_threshold_shares(
 #[test]
 fn initial_spent_is_not_limited_under_legacy_pricing() {
     // `request_context` is priced with legacy pricing and has a zero allowance.
-    assert_responses_from_threshold_shares(4, request_context(Replication::FullyReplicated), 1);
+    assert_responses_from_threshold_shares(4, request_context(Replication::FullyReplicated), 1, 0);
 }
 
 /// Free subnets charge — and hence refund — nothing, so their responses are
@@ -5620,7 +5636,7 @@ fn initial_spent_is_not_limited_on_a_free_subnet() {
         Cycles::zero(),
     );
     context.cost_schedule = CanisterCyclesCostSchedule::Free;
-    assert_responses_from_threshold_shares(4, context, 1);
+    assert_responses_from_threshold_shares(4, context, 1, 0);
 }
 
 /// On a charging subnet with pay-as-you-go pricing, a zero collective
@@ -5634,6 +5650,9 @@ fn initial_spent_is_limited_under_pay_as_you_go_pricing() {
             Cycles::zero(),
         ),
         0,
+        // A zero allowance can never cover any response, so the outcall is reported as
+        // out of cycles rather than held back for allowances that would not help.
+        1,
     );
 }
 
@@ -5653,6 +5672,7 @@ fn initial_spent_is_covered_under_pay_as_you_go_pricing() {
         num_nodes,
         with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
         1,
+        0,
     );
 
     assert_responses_from_threshold_shares(
@@ -5662,6 +5682,185 @@ fn initial_spent_is_covered_under_pay_as_you_go_pricing() {
             allowance - Cycles::new(1),
         ),
         0,
+        // Held back, not doomed: the replica yet to be seen contributes another
+        // allowance, which together with the three seen would cover the cost.
+        0,
+    );
+}
+
+#[test]
+fn out_of_cycles_is_delivered_as_a_reject_with_the_spend_reported() {
+    let num_nodes = 4;
+    let cb_id = 0;
+    let designated = node_test_id(0);
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    // The designated replica spent its whole allowance, leaving nothing for the
+    // consensus cost of delivering its response.
+    let allowance = TEST_PER_REPLICA_ALLOWANCE;
+    let share = metadata_to_share_with_spent(node_id_to_u64(designated), &metadata, allowance);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            CallbackId::new(cb_id),
+            with_payg_allowance(
+                request_context(Replication::NonReplicated(designated)),
+                allowance,
+            ),
+        )],
+        |payload_builder, canister_http_pool| {
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+            assert_eq!(payload.responses.len(), 0);
+            assert_eq!(payload.out_of_cycles.len(), 1);
+            let error = &payload.out_of_cycles[0];
+            assert_eq!(error.shares.len(), 1);
+            assert_eq!(error.unspent_allowance, Cycles::zero());
+            assert!(!error.min_cost.is_zero());
+            let (min_cost, spent) = (error.min_cost, allowance);
+
+            let (responses, spent_report, stats) = CanisterHttpPayloadBuilderImpl::into_messages(
+                &payload_to_bytes_max_4mb(payload.clone()),
+            );
+            assert_eq!(stats.out_of_cycles, 1);
+            assert_eq!(responses.len(), 1);
+            let Payload::Reject(ref reject) = responses[0].payload else {
+                panic!("Expected Payload::Reject, got {:?}", responses[0].payload);
+            };
+            // The caller is told what was spent and what a response would have cost, so
+            // that it can tell how much more it would have had to attach.
+            assert!(
+                reject.message().contains(&format!("{spent}"))
+                    && reject.message().contains(&format!("{min_cost}")),
+                "figures missing from {}",
+                reject.message()
+            );
+
+            // And the spend is recorded, rather than refunded in full at timeout.
+            assert_eq!(spent_report.initial.len(), 1);
+            assert_eq!(spent_report.initial[0].callback, CallbackId::new(cb_id));
+            assert_eq!(spent_report.initial[0].amount, allowance);
+            assert_eq!(spent_report.initial[0].nodes, BTreeSet::from([designated]));
+        },
+    );
+}
+
+/// A fully-replicated outcall keeps waiting while replicas that have not answered yet
+/// could still contribute an allowance, and is only reported once enough of them have
+/// answered that the response is pinned and unaffordable.
+#[test]
+fn fully_replicated_out_of_cycles_waits_until_the_response_is_pinned() {
+    let num_nodes = 4;
+    let cb_id = 0;
+    let faults_tolerated = get_faults_tolerated(num_nodes);
+    let (response, metadata) = test_response_and_metadata(cb_id);
+    let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
+    // Nobody has spent anything, so the collective allowance is the same however many
+    // replicas have answered — and it does not cover the cost. What flips the verdict
+    // is therefore the response becoming pinned, and nothing else.
+    let allowance = Cycles::new((consensus_cost.get() - 1) / num_nodes as u128);
+    assert!(allowance * num_nodes < consensus_cost);
+    let shares = metadata_to_shares(num_nodes, &metadata);
+
+    // While at most `faults_tolerated` have answered, some other response could still
+    // win with an empty body, which costs nothing to deliver.
+    for seen in 0..=num_nodes {
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(
+                CallbackId::new(cb_id),
+                with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
+            )],
+            |payload_builder, canister_http_pool| {
+                {
+                    let mut pool_access = canister_http_pool.write().unwrap();
+                    if seen > 0 {
+                        add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                        add_received_shares_to_pool(
+                            pool_access.deref_mut(),
+                            shares[1..seen].to_vec(),
+                        );
+                    }
+                }
+                let payload = build_and_validate_and_parse_payload(&payload_builder);
+                let expected = usize::from(seen > faults_tolerated);
+                assert_eq!(
+                    payload.out_of_cycles.len(),
+                    expected,
+                    "unexpected verdict with {seen} of {num_nodes} shares seen"
+                );
+            },
+        );
+    }
+}
+
+#[test]
+fn validate_payload_fails_for_a_non_flexible_out_of_cycles_that_does_not_hold() {
+    let num_nodes = 4;
+    let cb_id = 0;
+    let designated = node_test_id(0);
+    let (_, metadata) = test_response_and_metadata(cb_id);
+    let share = metadata_to_share(node_id_to_u64(designated), &metadata);
+    let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
+
+    let validate = |allowance, min_cost, unspent_allowance| {
+        let payload = CanisterHttpPayload {
+            out_of_cycles: vec![CanisterHttpOutOfCycles {
+                callback_id: CallbackId::new(cb_id),
+                shares: vec![share.clone()],
+                min_cost,
+                unspent_allowance,
+            }],
+            ..Default::default()
+        };
+        let mut result = None;
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(
+                CallbackId::new(cb_id),
+                with_payg_allowance(
+                    request_context(Replication::NonReplicated(designated)),
+                    allowance,
+                ),
+            )],
+            |payload_builder, _pool| {
+                result = Some(payload_builder.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&default_validation_context()),
+                    &payload_to_bytes_max_4mb(payload),
+                    &[],
+                ));
+            },
+        );
+        result.expect("validation did not run")
+    };
+
+    // An allowance that comfortably covers the cost: nothing has run out.
+    assert_matches!(
+        validate(consensus_cost, consensus_cost, Cycles::zero()),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::NotOutOfCycles { .. },
+            ),
+        ))
+    );
+    // With a zero allowance the error holds, so validation gets as far as the figures.
+    assert_matches!(
+        validate(Cycles::zero(), consensus_cost + Cycles::new(1), Cycles::zero()),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::OutOfCyclesFigureMismatch { field, .. },
+            ),
+        )) if field == "min_cost"
+    );
+    // And the honest figures validate.
+    assert_matches!(
+        validate(Cycles::zero(), consensus_cost, Cycles::zero()),
+        Ok(())
     );
 }
 
@@ -5676,12 +5875,14 @@ fn non_replicated_response_needs_the_designated_replicas_allowance() {
     let (response, metadata) = test_response_and_metadata(cb_id);
     let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
 
-    // Once the single allowance covers the consensus cost, the response is
-    // delivered; one cycle short of it, it never is.
-    for (allowance, expected_responses) in [
-        (consensus_cost, 1),
-        (consensus_cost - Cycles::new(1), 0),
-        (Cycles::zero(), 0),
+    // Once the single allowance covers the consensus cost, the response is delivered;
+    // one cycle short of it, it never can be — no other replica contributes an
+    // allowance to a non-replicated request — so the outcall is reported as out of
+    // cycles instead of being left to time out.
+    for (allowance, expected_responses, expected_out_of_cycles) in [
+        (consensus_cost, 1, 0),
+        (consensus_cost - Cycles::new(1), 0, 1),
+        (Cycles::zero(), 0, 1),
     ] {
         setup_test_with_contexts(
             num_nodes,
@@ -5700,8 +5901,8 @@ fn non_replicated_response_needs_the_designated_replicas_allowance() {
                 }
                 let payload = build_and_validate_and_parse_payload(&payload_builder);
                 assert_eq!(
-                    payload.num_responses(),
-                    expected_responses,
+                    (payload.responses.len(), payload.out_of_cycles.len()),
+                    (expected_responses, expected_out_of_cycles),
                     "unexpected payload for allowance {allowance}"
                 );
             },
@@ -6330,7 +6531,7 @@ fn validate_payload_fails_for_out_of_cycles_with_a_wrong_figure() {
             ),
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleOutOfCyclesFigureMismatch {
+                    InvalidCanisterHttpPayloadReason::OutOfCyclesFigureMismatch {
                         field: mismatched_field,
                         received: reported,
                         expected: recomputed,
@@ -6429,7 +6630,7 @@ fn validate_payload_fails_for_out_of_cycles_that_can_still_be_paid_for() {
         ),
         Err(ValidationError::InvalidArtifact(
             InvalidPayloadReason::InvalidCanisterHttpPayload(
-                InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+                InvalidCanisterHttpPayloadReason::NotOutOfCycles {
                     unspent_allowance,
                     min_cost,
                     ..
@@ -6497,7 +6698,7 @@ fn validate_payload_fails_for_out_of_cycles_without_a_refundable_allowance() {
             result.expect("validation did not run"),
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+                    InvalidCanisterHttpPayloadReason::NotOutOfCycles {
                         unspent_allowance,
                         ..
                     },
@@ -7468,6 +7669,7 @@ fn too_many_rejects_with_extra_shares(
 
 fn flexible_payload(groups: Vec<FlexibleCanisterHttpResponses>) -> CanisterHttpPayload {
     CanisterHttpPayload {
+        out_of_cycles: vec![],
         responses: vec![],
         timeouts: vec![],
         divergence_responses: vec![],

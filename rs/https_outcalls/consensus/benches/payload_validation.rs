@@ -463,6 +463,7 @@ impl<'a> PayloadAssembler<'a> {
         }
 
         let payload = CanisterHttpPayload {
+            out_of_cycles: vec![],
             responses,
             timeouts: vec![],
             divergence_responses,
