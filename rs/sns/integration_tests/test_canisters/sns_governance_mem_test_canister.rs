@@ -136,6 +136,7 @@ fn proposal_action_iterator() -> impl Iterator<Item = u64> {
 fn pretty_bytes(bytes: usize) -> String {
     const UNITS: [&str; 9] = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
 
+    // This avoids later doing 0_f64.ln(), which (in math) has NO result.
     if bytes == 0 {
         return "0 B".to_string();
     }
