@@ -863,8 +863,8 @@ rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
 rusqlite = "0.37.0"
 rust-ini = "0.21.1"
-rust_decimal = "^1.36.0"
-rust_decimal_macros = "^1.36.0"
+rust_decimal = { version = "^1.42", default-features = false, features = ["serde"] }
+rust_decimal_macros = "^1.40"
 rustc-demangle = { version = "0.1.16" }
 rustc-hash = "^1.1.0"
 rustls = { version = "0.23.18", default-features = false, features = [

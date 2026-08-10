@@ -1,5 +1,5 @@
 {
-  "checksum": "514b2410f417ef8bc23d8a9183f220251a0f9281dbd404260ef66f9d8cfc661a",
+  "checksum": "97a9cd320431b891c4d7c4d2690ad10b3886460adea34efc6f00568501485396",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -1464,99 +1464,6 @@
         "version": "0.10.3"
       },
       "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "ahash 0.7.8": {
-      "name": "ahash",
-      "version": "0.7.8",
-      "package_url": "https://github.com/tkaitchuck/ahash",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ahash/0.7.8/download",
-          "sha256": "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ahash",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ahash",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "ahash 0.7.8",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {
-            "cfg(any(target_os = \"linux\", target_os = \"android\", target_os = \"windows\", target_os = \"macos\", target_os = \"ios\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\", target_os = \"dragonfly\", target_os = \"solaris\", target_os = \"illumos\", target_os = \"fuchsia\", target_os = \"redox\", target_os = \"cloudabi\", target_os = \"haiku\", target_os = \"vxworks\", target_os = \"emscripten\", target_os = \"wasi\"))": [
-              {
-                "id": "getrandom 0.2.10",
-                "target": "getrandom"
-              }
-            ],
-            "cfg(not(all(target_arch = \"arm\", target_os = \"none\")))": [
-              {
-                "id": "once_cell 1.21.3",
-                "target": "once_cell"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.7.8"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "version_check 0.9.4",
-              "target": "version_check"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -8742,69 +8649,6 @@
       ],
       "license_file": null
     },
-    "borsh-derive 1.5.2": {
-      "name": "borsh-derive",
-      "version": "1.5.2",
-      "package_url": "https://github.com/near/borsh-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/borsh-derive/1.5.2/download",
-          "sha256": "10aedd8f1a81a8aafbfde924b0e3061cd6fedd6f6bbcfc6a76e6fd426d7bfe26"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "borsh_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "borsh_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "proc-macro-crate 3.2.0",
-              "target": "proc_macro_crate"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.5.2"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "brotli 3.3.4": {
       "name": "brotli",
       "version": "3.3.4",
@@ -9786,89 +9630,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "bytecheck 0.6.11": {
-      "name": "bytecheck",
-      "version": "0.6.11",
-      "package_url": "https://github.com/djkoloski/bytecheck",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bytecheck/0.6.11/download",
-          "sha256": "8b6372023ac861f6e6dc89c8344a8f398fb42aaba2b5dbc649ca0c0e9dbcb627"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bytecheck",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bytecheck",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bytecheck 0.6.11",
-              "target": "build_script_build"
-            },
-            {
-              "id": "ptr_meta 0.1.4",
-              "target": "ptr_meta"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "bytecheck_derive 0.6.11",
-              "target": "bytecheck_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.6.11"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "bytecheck 0.8.2": {
       "name": "bytecheck",
       "version": "0.8.2",
@@ -9922,61 +9683,6 @@
           "selects": {}
         },
         "version": "0.8.2"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "bytecheck_derive 0.6.11": {
-      "name": "bytecheck_derive",
-      "version": "0.6.11",
-      "package_url": "https://github.com/djkoloski/bytecheck",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bytecheck_derive/0.6.11/download",
-          "sha256": "a7ec4c6f261935ad534c0c22dbef2201b45918860eb1c574b972bd213a76af61"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "bytecheck_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bytecheck_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.6.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -20995,7 +20701,7 @@
               "alias": "rust_ini"
             },
             {
-              "id": "rust_decimal 1.36.0",
+              "id": "rust_decimal 1.42.1",
               "target": "rust_decimal"
             },
             {
@@ -21509,7 +21215,7 @@
               "target": "proptest_derive"
             },
             {
-              "id": "rust_decimal_macros 1.36.0",
+              "id": "rust_decimal_macros 1.40.0",
               "target": "rust_decimal_macros"
             },
             {
@@ -56155,54 +55861,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "proc-macro-crate 3.2.0": {
-      "name": "proc-macro-crate",
-      "version": "3.2.0",
-      "package_url": "https://github.com/bkchr/proc-macro-crate",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/proc-macro-crate/3.2.0/download",
-          "sha256": "8ecf48c7ca261d60b74ab1a7b20da18bede46776b2e55535cb958eb595c5fa7b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "proc_macro_crate",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "proc_macro_crate",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "toml_edit 0.22.20",
-              "target": "toml_edit"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "3.2.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "proc-macro-error 1.0.4": {
       "name": "proc-macro-error",
       "version": "1.0.4",
@@ -57709,53 +57367,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ptr_meta 0.1.4": {
-      "name": "ptr_meta",
-      "version": "0.1.4",
-      "package_url": "https://github.com/djkoloski/ptr_meta",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ptr_meta/0.1.4/download",
-          "sha256": "0738ccf7ea06b608c10564b31debd4f5bc5e197fc8bfe088f68ae5ce81e7a4f1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ptr_meta",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ptr_meta",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "ptr_meta_derive 0.1.4",
-              "target": "ptr_meta_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.1.4"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "ptr_meta 0.3.1": {
       "name": "ptr_meta",
       "version": "0.3.1",
@@ -57787,61 +57398,6 @@
         ],
         "edition": "2021",
         "version": "0.3.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "ptr_meta_derive 0.1.4": {
-      "name": "ptr_meta_derive",
-      "version": "0.1.4",
-      "package_url": "https://github.com/djkoloski/ptr_meta",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ptr_meta_derive/0.1.4/download",
-          "sha256": "16b845dbfca988fa33db069c0e230574d15a3088f147a87b64c7589eb662c9ac"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "ptr_meta_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ptr_meta_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -61432,76 +60988,6 @@
       ],
       "license_file": null
     },
-    "rend 0.4.0": {
-      "name": "rend",
-      "version": "0.4.0",
-      "package_url": "https://github.com/djkoloski/rend",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rend/0.4.0/download",
-          "sha256": "581008d2099240d37fb08d77ad713bcaec2c4d89d50b5b21a8bb1996bbab68ab"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rend",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rend",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rend 0.4.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "rend 0.5.3": {
       "name": "rend",
       "version": "0.5.3",
@@ -62345,93 +61831,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rkyv 0.7.42": {
-      "name": "rkyv",
-      "version": "0.7.42",
-      "package_url": "https://github.com/rkyv/rkyv",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rkyv/0.7.42/download",
-          "sha256": "0200c8230b013893c0b2d6213d6ec64ed2b9be2e0e016682b7224ff82cff5c58"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rkyv",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rkyv",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "ptr_meta 0.1.4",
-              "target": "ptr_meta"
-            },
-            {
-              "id": "rkyv 0.7.42",
-              "target": "build_script_build"
-            },
-            {
-              "id": "seahash 4.1.0",
-              "target": "seahash"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "rkyv_derive 0.7.42",
-              "target": "rkyv_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.7.42"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "rkyv 0.8.16": {
       "name": "rkyv",
       "version": "0.8.16",
@@ -62493,61 +61892,6 @@
           "selects": {}
         },
         "version": "0.8.16"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "rkyv_derive 0.7.42": {
-      "name": "rkyv_derive",
-      "version": "0.7.42",
-      "package_url": "https://github.com/rkyv/rkyv",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rkyv_derive/0.7.42/download",
-          "sha256": "b2e06b915b5c230a17d7a736d1e2e63ee753c256a8614ef3f5147b13a4f5541d"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "rkyv_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rkyv_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.7.42"
       },
       "license": "MIT",
       "license_ids": [
@@ -63393,14 +62737,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rust_decimal 1.36.0": {
+    "rust_decimal 1.42.1": {
       "name": "rust_decimal",
-      "version": "1.36.0",
+      "version": "1.42.1",
       "package_url": "https://github.com/paupino/rust-decimal",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rust_decimal/1.36.0/download",
-          "sha256": "b082d80e3e3cc52b2ed634388d436fe1f4de6af5786cc2de9ba9737527bdf555"
+          "url": "https://static.crates.io/crates/rust_decimal/1.42.1/download",
+          "sha256": "be2a24f50780bc85f09cc6ac299bdf1424302742d77221106859c9d8b102126a"
         }
       },
       "targets": [
@@ -63436,9 +62780,7 @@
         ],
         "crate_features": {
           "common": [
-            "default",
-            "serde",
-            "std"
+            "serde"
           ],
           "selects": {}
         },
@@ -63453,7 +62795,7 @@
               "target": "num_traits"
             },
             {
-              "id": "rust_decimal 1.36.0",
+              "id": "rust_decimal 1.42.1",
               "target": "build_script_build"
             },
             {
@@ -63464,7 +62806,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.36.0"
+        "version": "1.42.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -63483,14 +62825,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rust_decimal_macros 1.36.0": {
+    "rust_decimal_macros 1.40.0": {
       "name": "rust_decimal_macros",
-      "version": "1.36.0",
+      "version": "1.40.0",
       "package_url": "https://github.com/paupino/rust-decimal",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rust_decimal_macros/1.36.0/download",
-          "sha256": "da991f231869f34268415a49724c6578e740ad697ba0999199d6f22b3949332c"
+          "url": "https://static.crates.io/crates/rust_decimal_macros/1.40.0/download",
+          "sha256": "74a5a6f027e892c7a035c6fddb50435a1fbf5a734ffc0c2a9fed4d0221440519"
         }
       },
       "targets": [
@@ -63525,14 +62867,14 @@
               "target": "quote"
             },
             {
-              "id": "rust_decimal 1.36.0",
-              "target": "rust_decimal"
+              "id": "syn 2.0.119",
+              "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.36.0"
+        "version": "1.40.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -66198,44 +65540,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "seahash 4.1.0": {
-      "name": "seahash",
-      "version": "4.1.0",
-      "package_url": "https://gitlab.redox-os.org/redox-os/seahash",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/seahash/4.1.0/download",
-          "sha256": "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "seahash",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "seahash",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "4.1.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
     },
     "sec1 0.7.3": {
       "name": "sec1",
@@ -77723,24 +77027,7 @@
             "parse",
             "serde"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "default",
-              "display"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "default",
-              "display"
-            ],
-            "x86_64-apple-darwin": [
-              "default",
-              "display"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "default",
-              "display"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -93370,12 +92657,6 @@
       "aarch64-unknown-linux-gnu",
       "x86_64-unknown-linux-gnu"
     ],
-    "cfg(any(target_os = \"linux\", target_os = \"android\", target_os = \"windows\", target_os = \"macos\", target_os = \"ios\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\", target_os = \"dragonfly\", target_os = \"solaris\", target_os = \"illumos\", target_os = \"fuchsia\", target_os = \"redox\", target_os = \"cloudabi\", target_os = \"haiku\", target_os = \"vxworks\", target_os = \"emscripten\", target_os = \"wasi\"))": [
-      "aarch64-apple-darwin",
-      "aarch64-unknown-linux-gnu",
-      "x86_64-apple-darwin",
-      "x86_64-unknown-linux-gnu"
-    ],
     "cfg(any(target_os = \"linux\", target_vendor = \"apple\", target_os = \"freebsd\", target_os = \"android\"))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
@@ -93806,8 +93087,8 @@
     "rusb 0.9.4",
     "rusqlite 0.37.0",
     "rust-ini 0.21.2",
-    "rust_decimal 1.36.0",
-    "rust_decimal_macros 1.36.0",
+    "rust_decimal 1.42.1",
+    "rust_decimal_macros 1.40.0",
     "rustc-demangle 0.1.26",
     "rustc-hash 1.1.0",
     "rustls 0.23.27",
