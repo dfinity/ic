@@ -24,6 +24,9 @@ ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "27ba16a68aa312de66f2ebd0f16665f1429eee36"
 
+# Fork of `comparable` migrated to syn 2 (upstream still uses syn 1).
+COMPARABLE_REV = "8338f595496454f9e770389e2edc0d96e137a4e9"
+
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 
 # Rust crates.
@@ -318,8 +321,9 @@ crate.spec(
     features = [
         "derive",
     ],
+    git = "https://github.com/dfinity/comparable",
     package = "comparable",
-    version = "^0.5",
+    rev = COMPARABLE_REV,
 )
 crate.spec(
     package = "console",
