@@ -2209,9 +2209,8 @@ dependencies = [
 
 [[package]]
 name = "comparable"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb513ee8037bf08c5270ecefa48da249f4c58e57a71ccfce0a5b0877d2a20eb2"
+version = "0.5.6"
+source = "git+https://github.com/dfinity/comparable?rev=8338f595496454f9e770389e2edc0d96e137a4e9#8338f595496454f9e770389e2edc0d96e137a4e9"
 dependencies = [
  "comparable_derive",
  "comparable_helper",
@@ -2221,26 +2220,24 @@ dependencies = [
 
 [[package]]
 name = "comparable_derive"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a54b9c40054eb8999c5d1d36fdc90e4e5f7ff0d1d9621706f360b3cbc8beb828"
-dependencies = [
- "convert_case 0.4.0",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "comparable_helper"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb5437e327e861081c91270becff184859f706e3e50f5301a9d4dc8eb50752c3"
+version = "0.5.6"
+source = "git+https://github.com/dfinity/comparable?rev=8338f595496454f9e770389e2edc0d96e137a4e9#8338f595496454f9e770389e2edc0d96e137a4e9"
 dependencies = [
  "convert_case 0.6.0",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "comparable_helper"
+version = "0.5.6"
+source = "git+https://github.com/dfinity/comparable?rev=8338f595496454f9e770389e2edc0d96e137a4e9#8338f595496454f9e770389e2edc0d96e137a4e9"
+dependencies = [
+ "convert_case 0.6.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
