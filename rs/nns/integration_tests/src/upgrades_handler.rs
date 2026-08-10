@@ -83,21 +83,24 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         let gov = &nns_canisters.governance;
         let sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
 
-        let update_versions_payload =
-            |elect: Option<String>, unelect: Vec<&str>| ReviseElectedGuestosVersionsPayload {
-                release_package_sha256_hex: elect.as_ref().map(|_| {
-                    "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D".into()
-                }),
-                release_package_urls: elect
-                    .as_ref()
-                    .map(|_| vec!["http://release_package.tar.zst".to_string()])
-                    .unwrap_or_default(),
-                guest_launch_measurements: elect
-                    .as_ref()
-                    .map(|_| guest_launch_measurements_for_test()),
+        let update_versions_payload = |elect: Option<String>, unelect: Vec<&str>| {
+            let is_electing_a_version = elect.is_some();
+
+            ReviseElectedGuestosVersionsPayload {
                 replica_version_to_elect: elect,
+                release_package_sha256_hex: is_electing_a_version.then(|| {
+                    "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D".to_string()
+                }),
+                release_package_urls: if is_electing_a_version {
+                    vec!["http://release_package.tar.zst".to_string()]
+                } else {
+                    vec![]
+                },
+                guest_launch_measurements: is_electing_a_version
+                    .then(guest_launch_measurements_for_test),
                 replica_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
-            };
+            }
+        };
         let elect_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {
             update_versions_payload(Some(version_id.into()), vec![])
         };

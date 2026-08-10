@@ -150,7 +150,8 @@ impl ReviseElectedGuestosVersionsPayload {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if !self.is_electing_a_version()? && !self.is_unelecting_a_version() {
+        let is_making_a_change = self.is_electing_a_version()? || self.is_unelecting_a_version();
+        if !is_making_a_change {
             return Err("At least one version has to be elected or unelected.".into());
         }
 
@@ -169,4 +170,171 @@ impl ReviseElectedGuestosVersionsPayload {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+
+    use ic_protobuf::registry::replica_version::v1::{
+        GuestLaunchMeasurement, GuestLaunchMeasurementMetadata,
+    };
+    use lazy_static::lazy_static;
+
+    const REPLICA_VERSION_ID: &str = "eb3ab997954f2a91db8a42f84132cf37078d481c";
+    const RELEASE_PACKAGE_SHA256_HEX: &str =
+        "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
+    const RELEASE_PACKAGE_URL: &str = "http://release_package.tar.zst";
+
+    lazy_static! {
+        static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
+            guest_launch_measurements: vec![GuestLaunchMeasurement {
+                measurement: vec![0x42; 48],
+                metadata: Some(GuestLaunchMeasurementMetadata {
+                    kernel_cmdline: Some("foo=bar".to_string()),
+                    vcpu_type: None,
+                }),
+            }],
+        };
+
+        /// A payload that elects one version, and that has everything electing a
+        /// version requires. The tests below start from this and vary the launch
+        /// measurements, because that is what they are about.
+        static ref ELECT_PAYLOAD: ReviseElectedGuestosVersionsPayload =
+            ReviseElectedGuestosVersionsPayload {
+                replica_version_to_elect: Some(REPLICA_VERSION_ID.to_string()),
+                release_package_sha256_hex: Some(RELEASE_PACKAGE_SHA256_HEX.to_string()),
+                release_package_urls: vec![RELEASE_PACKAGE_URL.to_string()],
+                guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
+                replica_versions_to_unelect: vec![],
+            };
+    }
+
+    #[test]
+    fn test_electing_a_version_with_launch_measurements_is_valid() {
+        let payload = ELECT_PAYLOAD.clone();
+        let result = payload.validate();
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_electing_a_version_without_launch_measurements_is_rejected() {
+        let mut payload = ELECT_PAYLOAD.clone();
+        payload.guest_launch_measurements = None;
+
+        let result = payload.validate();
+
+        let defect = result.unwrap_err().to_lowercase();
+        for key_word in [
+            "all parameters",
+            r#"missing parameters: ["guest_launch_measurements"]"#,
+        ] {
+            assert!(defect.contains(key_word), "{key_word} not in {defect}");
+        }
+    }
+
+    #[test]
+    fn test_electing_a_version_with_empty_launch_measurements_is_rejected() {
+        let mut payload = ELECT_PAYLOAD.clone();
+        payload.guest_launch_measurements = Some(GuestLaunchMeasurements {
+            guest_launch_measurements: vec![],
+        });
+
+        let result = payload.validate();
+
+        let defect = result.unwrap_err().to_lowercase();
+        for key_word in ["guest_launch_measurements", "empty"] {
+            assert!(defect.contains(key_word), "{key_word} not in {defect}");
+        }
+    }
+
+    #[test]
+    fn test_electing_a_version_with_invalid_launch_measurement_is_rejected() {
+        let mut payload = ELECT_PAYLOAD.clone();
+        payload.guest_launch_measurements = Some(GuestLaunchMeasurements {
+            guest_launch_measurements: vec![GuestLaunchMeasurement {
+                // The measurement is too short, it is supposed to be 48 bytes long.
+                measurement: vec![0x42; 3],
+                metadata: None,
+            }],
+        });
+
+        let result = payload.validate();
+
+        let defect = result.unwrap_err().to_lowercase();
+        for key_word in ["guest_launch_measurements", "48 bytes"] {
+            assert!(defect.contains(key_word), "{key_word} not in {defect}");
+        }
+    }
+
+    /// Launch measurements are only required when a version is elected. Unelecting
+    /// does not involve any GuestOS image.
+    #[test]
+    fn test_unelecting_a_version_without_launch_measurements_is_valid() {
+        let payload = ReviseElectedGuestosVersionsPayload {
+            replica_version_to_elect: None,
+            release_package_sha256_hex: None,
+            release_package_urls: vec![],
+            guest_launch_measurements: None,
+            replica_versions_to_unelect: vec![REPLICA_VERSION_ID.to_string()],
+        };
+
+        let result = payload.validate();
+
+        assert_eq!(result, Ok(()));
+    }
+
+    /// Launch measurements only mean something for a version that is being
+    /// elected. On an unelect-only payload they would be silently dropped, so they
+    /// are reported as a defect instead.
+    #[test]
+    fn test_unelecting_a_version_with_launch_measurements_is_rejected() {
+        let payload = ReviseElectedGuestosVersionsPayload {
+            guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
+            replica_versions_to_unelect: vec![REPLICA_VERSION_ID.to_string()],
+            ..Default::default()
+        };
+
+        let result = payload.validate();
+
+        let defect = result.unwrap_err().to_lowercase();
+        for key_word in [
+            "all parameters",
+            "replica_version_to_elect",
+            "release_package_sha256_hex",
+            "release_package_urls",
+        ] {
+            assert!(defect.contains(key_word), "{key_word} not in {defect}");
+        }
+    }
+
+    #[test]
+    fn test_neither_electing_nor_unelecting_is_rejected() {
+        let payload = ReviseElectedGuestosVersionsPayload::default();
+
+        let result = payload.validate();
+
+        let defect = result.unwrap_err().to_lowercase();
+        for key_word in ["at least one version", "elected or unelected"] {
+            assert!(defect.contains(key_word), "{key_word} not in {defect}");
+        }
+    }
+
+    #[test]
+    fn test_incomplete_election_parameters_are_rejected() {
+        let payload = ReviseElectedGuestosVersionsPayload {
+            replica_version_to_elect: Some(REPLICA_VERSION_ID.to_string()),
+            guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
+            // release_package_* fields are missing.
+            ..Default::default()
+        };
+
+        let result = payload.validate();
+
+        let defect = result.unwrap_err().to_lowercase();
+        for key_word in [
+            "all parameters",
+            "release_package_sha256_hex",
+            "release_package_urls",
+        ] {
+            assert!(defect.contains(key_word), "{key_word} not in {defect}");
+        }
+    }
+}
