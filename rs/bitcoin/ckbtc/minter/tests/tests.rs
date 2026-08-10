@@ -1850,7 +1850,8 @@ fn test_min_retrieval_amount_custom() {
 
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
-    assert_eq!(retrieve_btc_min_amount, min_amount);
+    // Testnet floor fee applies even before set_fee_percentiles: 3 * 6_172 + 12_345 = 30_861
+    assert_eq!(retrieve_btc_min_amount, 30_861);
 
     // The numbers below use increment = (min_amount / 2).max(1) = 6_172 (since min_amount = 12_345).
     // numerator = 22_100 + fee_ceil(221, rate) + 305 + check_fee; result = (numerator / 6_172) * 6_172 + min_amount.
