@@ -121,6 +121,15 @@ pub enum InvalidCanisterHttpPayloadReason {
         callback_id: CallbackId,
         signer: NodeId,
     },
+    /// A share claims a `content_size` larger than the largest response the replica
+    /// could have produced, i.e. [`CanisterHttpRequestContext::max_http_outcall_content_size`].
+    ///
+    /// [`CanisterHttpRequestContext::max_http_outcall_content_size`]: ic_types::canister_http::CanisterHttpRequestContext::max_http_outcall_content_size
+    ContentSizeExceedsLimit {
+        callback_id: CallbackId,
+        content_size: u32,
+        limit: u64,
+    },
     /// A flexible ok-response group contains a Reject response.
     FlexibleRejectNotAllowedInOkResponses {
         callback_id: CallbackId,

@@ -446,6 +446,14 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
 
+            utils::check_content_size_within_limit(
+                response.proof.metadata.content_size,
+                response.proof.metadata.is_reject,
+                callback_id,
+                request_context,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+
             let subnet_size = request_context.subnet_size;
             let (effective_committee, effective_threshold) = match request_context.replication {
                 Replication::NonReplicated(node_id) => (vec![node_id], 1),
@@ -615,10 +623,18 @@ impl CanisterHttpPayloadBuilderImpl {
                     context.registry_version,
                 ));
 
-                // Enforce the per-replica spend limit for divergence shares.
+                // Enforce the per-replica spend and response size limits for divergence
+                // shares.
                 for share in grouped_shares.values().flatten() {
                     utils::check_spent_within_limit(&share.content.payment_receipt, context)
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                    utils::check_content_size_within_limit(
+                        share.content.content_size(),
+                        share.content.is_reject(),
+                        callback_id,
+                        context,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                 }
 
                 if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
