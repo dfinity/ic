@@ -108,6 +108,9 @@ impl From<(Option<i32>, String)> for CanisterCallError {
 }
 
 impl From<IcCdkCallError> for CanisterCallError {
+    // The match is deliberately exhaustive (rather than using a catch-all arm) so
+    // that a new `IcCdkCallError` variant forces us to revisit this mapping
+    // instead of silently classifying it as `RejectCode::SysTransient`.
     fn from(err: IcCdkCallError) -> Self {
         let (code, description) = match err {
             IcCdkCallError::CallRejected(rejected) => (
@@ -120,8 +123,14 @@ impl From<IcCdkCallError> for CanisterCallError {
                 (RejectCode::CanisterError as i32, err.to_string())
             }
 
-            // The call never left this canister, so it may well succeed if retried.
-            err => (RejectCode::SysTransient as i32, err.to_string()),
+            // Neither of these ever left this canister, so the call may well
+            // succeed if retried.
+            IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
+                (RejectCode::SysTransient as i32, err.to_string())
+            }
+            IcCdkCallError::CallPerformFailed(err) => {
+                (RejectCode::SysTransient as i32, err.to_string())
+            }
         };
 
         Self {

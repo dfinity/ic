@@ -15,7 +15,7 @@ use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_cdk::call::{Call, CallFailed, RejectCode};
+use ic_cdk::call::{Call, CallFailed};
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
     CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
@@ -265,28 +265,11 @@ pub async fn change_canister(request: ChangeCanisterRequest) -> Result<(), Strin
     // This handles errors coming from install_code (which is more or less a
     // thin wrapper around the Management canister method), such as the
     // DESTINATION_INVALID (3) reject code.
+    // `CallFailed`'s `Display` already spells out the failure (for a reject, it
+    // includes the reject code and the callee's message).
     result.map_err(|err| {
-        let (rejection_code, message) = map_call_error(err);
-
-        format!(
-            "Attempt to call install_code with request {request_str} failed with code \
-             {rejection_code:?}: {message}"
-        )
+        format!("Attempt to call install_code with request {request_str} failed: {err}")
     })
-}
-
-/// Translates a failed call into the `(reject code, message)` pair that the error message
-/// above reports. Reports the same codes that the deprecated `ic_cdk::api::call` did.
-fn map_call_error(err: CallFailed) -> (RejectCode, String) {
-    match err {
-        CallFailed::CallRejected(rejected) => (
-            rejected.reject_code().unwrap_or(RejectCode::SysUnknown),
-            rejected.reject_message().to_string(),
-        ),
-
-        // The call never left this canister, so it may well succeed if retried.
-        err => (RejectCode::SysTransient, err.to_string()),
-    }
 }
 
 /// Calls a function of the management canister to install the requested code.

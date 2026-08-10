@@ -1,4 +1,4 @@
-use candid::{CandidType, Encode, candid_method};
+use candid::{CandidType, candid_method};
 use ic_cdk::api::debug_print;
 use ic_cdk::call::Call;
 use ic_cdk::update;
@@ -31,23 +31,20 @@ async fn get_sig(options: Options) {
         options.key_name, options.derivation_path,
     ));
     let response = Call::unbounded_wait(IC_00.into(), &Ic00Method::SignWithECDSA.to_string())
-        .take_raw_args(
-            Encode!(&SignWithECDSAArgs {
-                message_hash: [0; 32],
-                derivation_path: DerivationPath::new(
-                    options
-                        .derivation_path
-                        .into_iter()
-                        .map(ByteBuf::from)
-                        .collect()
-                ),
-                key_id: EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: options.key_name,
-                },
-            })
-            .unwrap(),
-        )
+        .with_arg(SignWithECDSAArgs {
+            message_hash: [0; 32],
+            derivation_path: DerivationPath::new(
+                options
+                    .derivation_path
+                    .into_iter()
+                    .map(ByteBuf::from)
+                    .collect(),
+            ),
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: options.key_name,
+            },
+        })
         .with_cycles(1_000_000_000_000)
         .await;
     debug_print(format!("got result {response:?}"));

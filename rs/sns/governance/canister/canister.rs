@@ -126,7 +126,11 @@ impl CanisterEnv {
 
 /// Translates a failed call into the `(error code, message)` pair that
 /// [`Environment::call_canister`] reports to its callers.
-fn map_call_error(err: IcCdkCallError) -> (Option<i32>, String) {
+///
+/// The match is deliberately exhaustive (rather than using a catch-all arm) so
+/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
+/// instead of silently classifying it as [`RejectCode::SysTransient`].
+fn into_reject_code_and_message(err: IcCdkCallError) -> (Option<i32>, String) {
     let (code, message) = match err {
         IcCdkCallError::CallRejected(rejected) => (
             rejected.raw_reject_code() as i32,
@@ -138,8 +142,14 @@ fn map_call_error(err: IcCdkCallError) -> (Option<i32>, String) {
             (RejectCode::CanisterError as i32, err.to_string())
         }
 
-        // The call never left this canister, so it may well succeed if retried.
-        err => (RejectCode::SysTransient as i32, err.to_string()),
+        // Neither of these ever left this canister, so the call may well succeed
+        // if retried.
+        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+        IcCdkCallError::CallPerformFailed(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
     };
 
     (Some(code), message)
@@ -182,7 +192,7 @@ impl Environment for CanisterEnv {
             .take_raw_args(arg)
             .await
             .map(|response| response.into_bytes())
-            .map_err(|err| map_call_error(err.into()))
+            .map_err(|err| into_reject_code_and_message(err.into()))
     }
 
     #[cfg(target_arch = "wasm32")]

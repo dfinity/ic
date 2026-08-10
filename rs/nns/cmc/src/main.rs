@@ -2126,7 +2126,7 @@ async fn deposit_cycles(
     .with_cycles(u128::from(cycles))
     .await
     .map_err(|err| {
-        let (code, msg) = map_call_error(err.into());
+        let (code, msg) = into_reject_code_and_message(err.into());
         format!("Depositing cycles failed with code {code}: {msg:?}")
     })?;
 
@@ -2162,7 +2162,7 @@ async fn do_mint_cycles(
                 .map_err(IcCdkCallError::from)
         })
         .map_err(|err| {
-            let (code, msg) = map_call_error(err);
+            let (code, msg) = into_reject_code_and_message(err);
             format!("Cycles ledger rejected deposit call with code {code}: {msg:?}")
         })
 }
@@ -2279,7 +2279,7 @@ async fn do_create_canister(
                 ))
             }
             Err(err) => {
-                let (code, msg) = map_call_error(err);
+                let (code, msg) = into_reject_code_and_message(err);
                 let err = format!(
                     "Creating canister in subnet {subnet_id} failed with code {code}: {msg}"
                 );
@@ -2346,7 +2346,7 @@ async fn get_rng() -> Result<StdRng, String> {
         .map_err(IcCdkCallError::from)
         .and_then(|response| response.candid::<Vec<u8>>().map_err(IcCdkCallError::from))
         .map_err(|err| {
-            let (code, msg) = map_call_error(err);
+            let (code, msg) = into_reject_code_and_message(err);
             format!("Getting random bytes failed with code {code}: {msg:?}")
         })?;
 

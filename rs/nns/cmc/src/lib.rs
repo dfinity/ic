@@ -67,7 +67,11 @@ pub fn caller() -> PrincipalId {
 
 /// Translates a failed call into the `(reject code, message)` pair that [`call_protobuf`]
 /// and this canister's error messages report.
-pub fn map_call_error(err: IcCdkCallError) -> (i32, String) {
+///
+/// The match is deliberately exhaustive (rather than using a catch-all arm) so
+/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
+/// instead of silently classifying it as [`RejectCode::SysTransient`].
+pub fn into_reject_code_and_message(err: IcCdkCallError) -> (i32, String) {
     match err {
         IcCdkCallError::CallRejected(rejected) => (
             rejected.raw_reject_code() as i32,
@@ -77,8 +81,14 @@ pub fn map_call_error(err: IcCdkCallError) -> (i32, String) {
         IcCdkCallError::CandidDecodeFailed(err) => {
             (RejectCode::CanisterError as i32, err.to_string())
         }
-        // The call never left this canister, so it may well succeed if retried.
-        err => (RejectCode::SysTransient as i32, err.to_string()),
+        // Neither of these ever left this canister, so the call may well succeed
+        // if retried.
+        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+        IcCdkCallError::CallPerformFailed(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
     }
 }
 
@@ -105,7 +115,7 @@ where
     let response = Call::unbounded_wait(canister_id.get().0, method_name)
         .take_raw_args(bytes)
         .await
-        .map_err(|err| map_call_error(err.into()))?;
+        .map_err(|err| into_reject_code_and_message(err.into()))?;
 
     let res = ProtoBuf::<Res>::from_bytes(response.into_bytes())
         .map_err(|e| (PROTOBUF_CODEC_FAILURE_CODE, e.to_string()))?
