@@ -45,8 +45,7 @@ use ic_cketh_minter::withdraw::{
     process_reimbursement, process_retrieve_eth_requests,
 };
 use ic_cketh_minter::{
-    BALANCE_SCAN_INTERVAL, INITIAL_SWEEPER_FUNDING_DELAY,
-    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
+    BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
     REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL, SWEEPER_FUNDING_INTERVAL,
     state, storage,
 };
@@ -82,6 +81,10 @@ fn setup_timers() {
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
         // Initialize the minter's public key to make the address known.
         let _ = lazy_call_ecdsa_public_key().await;
+        // Sequenced after the key rather than scheduled on a delay: the sweeper address cannot be
+        // derived without it, and a delay only guesses at when it will be cached. Running here also
+        // keeps the two off separate tasks, since two concurrent `ecdsa_public_key` calls trap.
+        fund_sweeper_address().await;
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
@@ -109,12 +112,6 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(BALANCE_SCAN_INTERVAL, async || {
         balance_scan().await;
-    });
-    // Checked shortly after install as well as on the interval, so an upgrade that finds the
-    // sweeper address low does not have to wait a whole interval to act on it. Deliberately not at
-    // zero: see INITIAL_SWEEPER_FUNDING_DELAY.
-    ic_cdk_timers::set_timer(INITIAL_SWEEPER_FUNDING_DELAY, async {
-        fund_sweeper_address().await;
     });
     ic_cdk_timers::set_timer_interval(SWEEPER_FUNDING_INTERVAL, async || {
         fund_sweeper_address().await;

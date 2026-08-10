@@ -180,8 +180,6 @@ impl CkEthSetup {
     /// in flight forever, which skews pending-outcall assertions and stops the minter from stopping.
     fn settle_initial_sweeper_funding_check(&self) {
         const TOPPED_UP: &str = "0x16345785d8a0000"; // 0.1 ETH
-        self.env
-            .advance_time(ic_cketh_minter::INITIAL_SWEEPER_FUNDING_DELAY);
         // Waits for the outcall rather than ticking a fixed number of times, so a check that stops
         // firing fails here instead of surfacing in whichever test runs next.
         let mut ticks = 0;
