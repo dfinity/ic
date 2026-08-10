@@ -5024,7 +5024,7 @@ impl Governance {
 
         let is_registered = node_providers
             .iter()
-            .any(|np| np.id.unwrap() == decoded_payload.node_provider_principal_id.unwrap());
+            .any(|np| np.id == decoded_payload.node_provider_principal_id);
         if !is_registered {
             return Err("The node provider specified in the payload is not registered".to_string());
         }

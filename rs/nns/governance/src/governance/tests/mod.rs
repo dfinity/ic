@@ -1399,6 +1399,61 @@ fn test_validate_execute_nns_function() {
     }
 }
 
+/// A node provider stored with id = None (possible from pre-validation-era state) must not
+/// cause validate_assign_noid_payload to panic. It should be treated as non-matching and
+/// the function should return a clean "not registered" error.
+#[test]
+fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
+    // Step 1: Prepare the world.
+    // Mix a legacy entry (id = None) with a valid entry to ensure neither panics nor false match.
+    let governance = Governance::new(
+        api::Governance {
+            economics: Some(api::NetworkEconomics::with_default_values()),
+            node_providers: vec![
+                api::NodeProvider {
+                    id: None,
+                    ..Default::default()
+                },
+                api::NodeProvider {
+                    id: Some(PrincipalId::new_node_test_id(1)),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        },
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    let make_valid = |principal_id| {
+        let payload = Encode!(&AddNodeOperatorPayload {
+            node_provider_principal_id: Some(principal_id),
+            ..Default::default()
+        })
+        .unwrap();
+        ValidExecuteNnsFunction::try_from(ExecuteNnsFunction {
+            nns_function: NnsFunction::AssignNoid as i32,
+            payload,
+        })
+        .unwrap()
+    };
+
+    // Step 2: Run the code under test.
+    let result_unregistered =
+        governance.validate_execute_nns_function(&make_valid(PrincipalId::new_node_test_id(99)));
+    let result_registered =
+        governance.validate_execute_nns_function(&make_valid(PrincipalId::new_node_test_id(1)));
+
+    // Step 3: Verify result(s).
+    // Unregistered provider → clean error, no panic.
+    let err = result_unregistered.unwrap_err();
+    assert!(err.error_message.contains("not registered"));
+    // Registered provider → ok.
+    assert_eq!(result_registered, Ok(()));
+}
+
 #[test]
 fn test_canister_and_function_no_unreachable() {
     use strum::IntoEnumIterator;
