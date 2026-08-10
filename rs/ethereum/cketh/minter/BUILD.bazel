@@ -336,11 +336,10 @@ rust_test(
     # Waits on the minter's 6-minute withdrawal timer for the funding transfer to be sent.
     size = "large",
     timeout = "long",
-    tags = ["long_test"],  # ~6 minutes, nearly all of it waiting on that timer.
     srcs = ["tests/sweeper_funding.rs"],
     data = [
-        "//:anvil",
         ":cketh_minter_debug.wasm.gz",
+        "//:anvil",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
         "@evm_rpc.wasm.gz//file",
@@ -353,6 +352,7 @@ rust_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
+    tags = ["long_test"],  # ~6 minutes, nearly all of it waiting on that timer.
     deps = [
         # Keep sorted.
         ":minter",
