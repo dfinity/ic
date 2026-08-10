@@ -1,5 +1,5 @@
 {
-  "checksum": "f5fa4925c2889dad8b9e769944efee74d6d541c611fc6723d1971160a87203d3",
+  "checksum": "514b2410f417ef8bc23d8a9183f220251a0f9281dbd404260ef66f9d8cfc661a",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -4803,6 +4803,67 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "atty 0.2.14": {
+      "name": "atty",
+      "version": "0.2.14",
+      "package_url": "https://github.com/softprops/atty",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/atty/0.2.14/download",
+          "sha256": "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "atty",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "atty",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(target_os = \"hermit\")": [
+              {
+                "id": "hermit-abi 0.1.19",
+                "target": "hermit_abi"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.186",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2015",
+        "version": "0.2.14"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "auto_impl 1.1.0": {
       "name": "auto_impl",
@@ -20371,7 +20432,7 @@
               "target": "ic_canister_log"
             },
             {
-              "id": "ic-canister-runtime 0.2.0",
+              "id": "ic-canister-runtime 0.2.3",
               "target": "ic_canister_runtime"
             },
             {
@@ -20761,6 +20822,10 @@
             {
               "id": "predicates 3.1.2",
               "target": "predicates"
+            },
+            {
+              "id": "pretty-bytes 0.2.2",
+              "target": "pretty_bytes"
             },
             {
               "id": "pretty_assertions 1.4.0",
@@ -24713,7 +24778,7 @@
               "target": "evm_rpc_types"
             },
             {
-              "id": "ic-canister-runtime 0.2.0",
+              "id": "ic-canister-runtime 0.2.3",
               "target": "ic_canister_runtime"
             },
             {
@@ -30143,6 +30208,54 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "hermit-abi 0.1.19": {
+      "name": "hermit-abi",
+      "version": "0.1.19",
+      "package_url": "https://github.com/hermitcore/libhermit-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hermit-abi/0.1.19/download",
+          "sha256": "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hermit_abi",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hermit_abi",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.19"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "hermit-abi 0.3.9": {
       "name": "hermit-abi",
       "version": "0.3.9",
@@ -33421,14 +33534,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-canister-runtime 0.2.0": {
+    "ic-canister-runtime 0.2.3": {
       "name": "ic-canister-runtime",
-      "version": "0.2.0",
+      "version": "0.2.3",
       "package_url": "https://github.com/dfinity/canhttp",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-canister-runtime/0.2.0/download",
-          "sha256": "03ed95be893b8d9b7309dcfd34aac7af9414f18ea8f14f71a065f89f5b94583c"
+          "url": "https://static.crates.io/crates/ic-canister-runtime/0.2.3/download",
+          "sha256": "da5bf7cb1426e5485da0e2b0b8da4f11b7b24a2a56cb127b53720ecf8495c2e0"
         }
       },
       "targets": [
@@ -33457,8 +33570,12 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.19.0",
+              "id": "ic-cdk 0.20.2",
               "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk-management-canister 0.1.1",
+              "target": "ic_cdk_management_canister"
             },
             {
               "id": "ic-error-types 0.2.0",
@@ -33485,7 +33602,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.0"
+        "version": "0.2.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -55551,6 +55668,57 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "pretty-bytes 0.2.2": {
+      "name": "pretty-bytes",
+      "version": "0.2.2",
+      "package_url": "https://github.com/banyan/rust-pretty-bytes",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/pretty-bytes/0.2.2/download",
+          "sha256": "009d6edd2c1dbf2e1c0cd48a2f7766e03498d49ada7109a01c6911815c685316"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pretty_bytes",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "pretty_bytes",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "atty 0.2.14",
+              "target": "atty"
+            },
+            {
+              "id": "getopts 0.2.24",
+              "target": "getopts"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.2.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
     },
     "pretty_assertions 1.4.0": {
       "name": "pretty_assertions",
@@ -93495,7 +93663,7 @@
     "ic-bn-lib 0.5.0",
     "ic-btc-interface 0.4.0",
     "ic-canister-log 0.2.0",
-    "ic-canister-runtime 0.2.0",
+    "ic-canister-runtime 0.2.3",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.1.0",
     "ic-cdk 0.19.0",
@@ -93595,6 +93763,7 @@
     "pkg-config 0.3.32",
     "pprof 0.15.0",
     "predicates 3.1.2",
+    "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
     "proc-macro2 1.0.106",
