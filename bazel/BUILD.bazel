@@ -1,5 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
+load("//bazel:cc_headers_dir.bzl", "cc_headers_dir")
 load("//bazel:defs.bzl", "volatile_status", "write_stable_status_file_var")
 
 bool_flag(
@@ -53,6 +54,55 @@ config_setting(
         ":hermetic_cc": "True",
     },
 )
+
+# The hermetic toolchain's libunwind headers, exposed as a directory for the cc-rs-compiled C code in
+# //rs/canister_sandbox (which does `#include <libunwind.h>`).
+cc_headers_dir(
+    name = "libunwind_include",
+    strip_prefix = "libunwind/include/",
+    visibility = ["//visibility:public"],
+    deps = ["@llvm-project//libunwind:headers"],
+)
+
+# Hermetic-llvm toolchains, wrapped so that they are additionally gated on
+# :use_hermetic_cc (see the bool_flag above). With --hermetic_cc=false none of
+# these match and toolchain resolution falls through to the autodetected local
+# toolchain registered by rules_cc (@local_config_cc_toolchains), which
+# respects action_env CC/CXX/LD — needed by --config=afl.
+# See: https://github.com/dfinity/ic/pull/3508
+#
+# These mirror the toolchains hermetic-llvm generates in @llvm_toolchains
+# (same constraints and target_settings, same underlying cc_toolchain); only
+# the :use_hermetic_cc gate is added.
+[
+    toolchain(
+        name = "hermetic_cc_%s_%s_to_%s_%s" % (exec_os, exec_cpu, target_os, target_cpu),
+        exec_compatible_with = [
+            "@platforms//os:" + exec_os,
+            "@platforms//cpu:" + exec_cpu,
+        ],
+        target_compatible_with = [
+            "@platforms//os:" + target_os,
+            "@platforms//cpu:" + target_cpu,
+        ],
+        target_settings = [
+            ":use_hermetic_cc",
+            "@llvm//toolchain:bootstrap_stage0_prebuilt_seed",
+        ],
+        toolchain = "@llvm_toolchains//:%s_%s_cc_toolchain" % (exec_os, exec_cpu),
+        toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+    )
+    for (exec_os, exec_cpu, target_os, target_cpu) in [
+        # Linux executors: native + cross + wasm.
+        ("linux", "x86_64", "linux", "x86_64"),
+        ("linux", "x86_64", "none", "wasm32"),
+        ("linux", "aarch64", "linux", "aarch64"),
+        # macOS executors: wasm only; native macOS targets use the system
+        # Xcode toolchain (see MODULE.bazel).
+        ("macos", "x86_64", "none", "wasm32"),
+        ("macos", "aarch64", "none", "wasm32"),
+    ]
+]
 
 string_flag(
     name = "timeout_value",

@@ -71,6 +71,7 @@ go.sum                    @dfinity/idx
 
 # [metrics-proxy]
 /ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
+/rs/monitoring/                                  @dfinity/dre
 
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx

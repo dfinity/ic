@@ -33,10 +33,9 @@ use prost::Message;
 /// * Each URL is well-formed.
 /// * Release package hash is a well-formed hex-encoded SHA256 value.
 ///
-/// Exception: a CloudEngine can have a blank replica_version_id in its
-/// SubnetRecord if there is a StandardEngineReplicaVersionRecord. As of July
-/// 22, 2026, this feature is disabled via a flag (but the plan is to enable it
-/// in the not too distant future).
+/// Exception: a CloudEngine is allowed to have a blank replica_version_id in
+/// its SubnetRecord, provided a StandardEngineReplicaVersionRecord exists. In
+/// that case, that record determines the Cloud Engine's replica version.
 pub(crate) fn check_replica_version_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
