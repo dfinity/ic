@@ -153,10 +153,12 @@ type UpgradeArg = record {
     ethereum_sweeper_contract_address : opt text;
 
     // Sweeper balance (in wei) below which the minter tops it up with gas for sweeping.
-    // Must stay strictly below sweeper_funding_target, otherwise funding would loop.
+    // Validated as a pair with sweeper_funding_target: the target must exceed this by at least
+    // minimum_withdrawal_amount, since that difference is the smallest amount a funding ever moves.
+    // Setting only one of the two keeps the other's current value, and the pair is validated again.
     sweeper_funding_low_water_mark : opt nat;
 
-    // Sweeper balance (in wei) the minter tops up to.
+    // Sweeper balance (in wei) the minter tops up to. See the constraint above.
     sweeper_funding_target : opt nat;
 };
 

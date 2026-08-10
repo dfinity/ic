@@ -90,6 +90,10 @@ impl SweeperFundingAccounting {
 
     /// How much ckETH a funding of `amount` still has to burn, given the credit from earlier burns
     /// that were never spent. Zero when the credit already covers it.
+    ///
+    /// Consuming that credit requires a request that records the burn separately from the ETH it
+    /// moves: reducing a single amount would shrink the transfer by as much as the burn and leave
+    /// the credit untouched. The funding task and that second field arrive together.
     pub fn burn_required_for(&self, amount: Wei) -> Wei {
         amount
             .checked_sub(self.burned_not_yet_spent())
