@@ -1,5 +1,5 @@
 {
-  "checksum": "0ab74b113c84c2d02a55dcfc84f5926dc0476e40464e5202318783ea53e65207",
+  "checksum": "987c09bb853448361351d6b167b9e528c23cea8fdaa95ce28b65cc3a9114fbce",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -53654,7 +53654,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/pcre2-sys/0.2.8/download",
-          "sha256": "25b8a7b5253a4465b873a21ee7e8d6ec561a57eed5d319621bec36bea35c86ae"
+          "sha256": "25b8a7b5253a4465b873a21ee7e8d6ec561a57eed5d319621bec36bea35c86ae",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:pcre2-sys.patch"
+          ]
         }
       },
       "targets": [
