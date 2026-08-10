@@ -150,9 +150,8 @@ fn pretty_bytes(bytes: usize) -> String {
     );
 
     // Round to 2 decimals, then trim any trailing zeros and a trailing decimal point.
-    let value = format!("{:.2}", bytes / delimiter.powi(exponent))
-        .trim_end_matches('0')
-        .trim_end_matches('.');
+    let value = format!("{:.2}", bytes / delimiter.powi(exponent));
+    let value = value.trim_end_matches('0').trim_end_matches('.');
 
     let unit = UNITS[exponent as usize];
 
