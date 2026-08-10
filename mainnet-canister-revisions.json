@@ -152,8 +152,8 @@
     "sha256": "d26b930d8756bb75b6caa5195346499b18bbd6448810386e1b8f2f1f808ade86"
   },
   "subnet_rental": {
-    "sha256": "7f15a1d822148eb9262fb799321ea780c9ab84a9f5f06657dba22ff7ec28d997",
-    "tag": "0.6.0"
+    "sha256": "11216163c1e7f2599460506eae531dbd542655ced38bea1713eaeded6439dd29",
+    "tag": "0.7.0"
   },
   "swap": {
     "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",
