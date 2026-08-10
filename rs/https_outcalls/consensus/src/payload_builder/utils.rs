@@ -1,4 +1,6 @@
-use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
+use ic_https_outcalls_pricing::fees::{
+    flexible_initial_spent, min_flexible_consensus_cost, non_flexible_initial_spent,
+};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_logger::{ReplicaLogger, warn};
 use ic_types::{
@@ -168,6 +170,73 @@ pub(crate) fn check_initial_spent_within_limit(
             Ok(())
         }
         _ => Ok(()),
+    }
+}
+
+/// An outcall is out of cycles if its committee's unspent allowance
+/// is smaller than the minimum cost required to deliver a response.
+pub(crate) struct OutOfCyclesProof {
+    /// The least it can cost to deliver a response.
+    pub min_cost: Cycles,
+    /// What is left of the committee's collective allowance.
+    pub unspent_allowance: Cycles,
+}
+
+/// Checks that a flexible outcall has run out of cycles, i.e. that its
+/// committee's remaining allowances can no longer cover the consensus cost of
+/// delivering any response.
+///
+/// `seen_shares` are the shares the committee has produced so far, at most one
+/// per member. What is left of the committee's collective allowance is at most
+/// the sum of the unspent allowances of those shares' signers, plus a full
+/// allowance for every committee member that has not been seen yet.
+pub(crate) fn check_out_of_cycles<'a>(
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare> + Clone,
+    committee_size: usize,
+    min_responses: u32,
+    callback_id: CallbackId,
+    context: &CanisterHttpRequestContext,
+) -> Result<OutOfCyclesProof, InvalidCanisterHttpPayloadReason> {
+    let min_cost = min_flexible_consensus_cost(
+        seen_shares.clone(),
+        context.subnet_size,
+        committee_size,
+        min_responses,
+    );
+    let ConsensusCostAllowance::PayAsYouGo(allowance) = per_replica_consensus_allowance(context)
+    else {
+        // There is no per-replica allowance, so there is nothing to run out
+        // of (see `per_replica_consensus_allowance`).
+        return Err(InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+            callback_id,
+            unspent_allowance: None,
+            min_cost,
+        });
+    };
+
+    let spent = seen_shares.map(|share| share.content.spent()).sum();
+    let unspent_allowance = allowance * committee_size - spent;
+
+    // Only a bound the remaining allowances fall short of means out of cycles: no
+    // bound at all means nothing is left to deliver, and so nothing to cover.
+    match min_cost {
+        Some(min_cost) if unspent_allowance < min_cost => Ok(OutOfCyclesProof {
+            min_cost,
+            unspent_allowance,
+        }),
+        _ => {
+            debug_assert!(
+                unspent_allowance >= min_cost.unwrap_or_default(),
+                "expect unspent allowance {} >= min cost {:?}",
+                unspent_allowance,
+                min_cost
+            );
+            Err(InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+                callback_id,
+                unspent_allowance: Some(unspent_allowance),
+                min_cost,
+            })
+        }
     }
 }
 
@@ -499,7 +568,8 @@ fn assemble_non_flexible_response(
 pub(crate) enum FlexibleFindResult {
     /// Collected enough OK responses for consensus.
     OkResponses(FlexibleCanisterHttpResponses, usize),
-    /// Detected an error condition (too many rejects or responses too large).
+    /// Detected an error condition (too many rejects, responses too large, or out
+    /// of cycles).
     Error(FlexibleCanisterHttpError, usize),
     /// Not enough data to decide yet; more shares may arrive.
     Pending,
@@ -526,6 +596,8 @@ struct FlexibleCandidate<'a> {
 ///   allows (`committee.len() - min_responses`).
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
 ///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
+/// - **OutOfCycles**: delivering a response can never be paid for again (see
+///   [`check_out_of_cycles`]).
 /// - **Pending**: not enough data to decide yet.
 ///
 /// Both of the results that deliver response bodies — `OkResponses` and
@@ -668,7 +740,25 @@ pub(crate) fn find_flexible_result(
         }
     }
 
-    // 4. Not enough data yet
+    // 4. Can delivering a response ever be paid for?
+    if let Ok(proof) = check_out_of_cycles(
+        all_shares.iter().copied(),
+        committee.len(),
+        min_responses as u32,
+        callback_id,
+        context,
+    ) {
+        let error = FlexibleCanisterHttpError::OutOfCycles {
+            callback_id,
+            all_seen_shares: all_shares.into_iter().cloned().collect(),
+            min_cost: proof.min_cost,
+            unspent_allowance: proof.unspent_allowance,
+        };
+        let error_size = error.count_bytes();
+        return FlexibleFindResult::Error(error, error_size);
+    }
+
+    // 5. Not enough data yet
     FlexibleFindResult::Pending
 }
 
