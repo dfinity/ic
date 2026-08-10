@@ -475,7 +475,9 @@ mod tests {
         // The `TooManyRejects` branch needs 4 - 2 + 1 = 3 rejects, which the one
         // unseen replica can no longer supply, so it is out of reach and ignored.
         let n = NumberOfNodes::from(13);
-        let seen = [share(0, 1_000, 0), share(1, 2_000, 0), share(2, 3_000, 0)];
+        // Deliberately not in ascending order, so that taking the smallest is not the
+        // same as taking the first.
+        let seen = [share(0, 3_000, 0), share(1, 1_000, 0), share(2, 2_000, 0)];
         assert_eq!(
             min_flexible_consensus_cost(seen.iter(), n, 4, 2),
             Some(Cycles::new(12_925_380))
@@ -487,20 +489,22 @@ mod tests {
         // The mirror image: 3 of a committee of 4 have rejected and 2 responses are
         // needed, so a group of successful responses is out of reach and only the
         // `TooManyRejects` error remains. It delivers 4 - 2 + 1 = 3 rejects, two of
-        // which have to come from those seen, and pays the fee for the one response
-        // it delivers beyond `min_responses`:
-        //   size_term = (181 + 50) * 2 + 181       = 643
-        //   cost      = 9_490 * 643                = 6_102_070
-        //   fee       = 13 * (2_000 * 13 + 100_000) = 1_638_000
+        // which have to come from those seen — the two smallest — and pays the fee for
+        // the one response it delivers beyond `min_responses`:
+        //   size_term = (181 + 50) + (181 + 100) + 181 = 693
+        //   cost      = 9_490 * 693                    = 6_576_570
+        //   fee       = 13 * (2_000 * 13 + 100_000)    = 1_638_000
         let n = NumberOfNodes::from(13);
+        // Distinct sizes, and not in ascending order, so that taking the two smallest
+        // is not the same as taking the first two.
         let seen = [
-            reject_share(0, 50, 0),
+            reject_share(0, 5_000, 0),
             reject_share(1, 50, 0),
-            reject_share(2, 50, 0),
+            reject_share(2, 100, 0),
         ];
         assert_eq!(
             min_flexible_consensus_cost(seen.iter(), n, 4, 2),
-            Some(Cycles::new(6_102_070 + 1_638_000))
+            Some(Cycles::new(6_576_570 + 1_638_000))
         );
     }
 
