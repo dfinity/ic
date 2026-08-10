@@ -397,9 +397,9 @@ fn add_version_id_to_replica_versions(registry: &Registry) -> Vec<RegistryMutati
 
     if mutations.len() > 10 {
         ic_cdk::println!(
-            "Trying to update ReplicaVersionRecords generated too many mutations. Truncating to 10."
+            "Trying to update ReplicaVersionRecords generated too many mutations. Aborting."
         );
-        mutations.truncate(10);
+        return Vec::new();
     }
 
     mutations
