@@ -2204,6 +2204,13 @@ crate.annotation(
 crate.annotation(
     build_script_env = {"PCRE2_SYS_STATIC": "1"},
     crate = "pcre2-sys",
+    # Patch for determinism issues: the build script enumerates the bundled
+    # PCRE2 C sources with an unsorted `read_dir`, so the archive member order
+    # depends on the build machine's filesystem and leaks into binaries that
+    # link it (the STT_FILE symbol order), making the GuestOS image
+    # non-reproducible across machines. The patch sorts the sources.
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:pcre2-sys.patch"],
 )
 crate.annotation(
     # Disabling the libudev probe makes the vendored libusb fall back to its
