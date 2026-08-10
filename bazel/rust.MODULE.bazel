@@ -1428,12 +1428,14 @@ crate.spec(
     version = "^0.37.0",
 )
 crate.spec(
+    default_features = False,
+    features = ["serde"],
     package = "rust_decimal",
-    version = "^1.36.0",
+    version = "^1.42",
 )
 crate.spec(
     package = "rust_decimal_macros",
-    version = "^1.36.0",
+    version = "^1.40",
 )
 crate.spec(
     package = "rustc-demangle",
