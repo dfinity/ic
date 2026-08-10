@@ -344,15 +344,7 @@ impl CertifierImpl {
             })
             // Filter out all heights, where the subnet splitting is taking place
             .filter(|state_hash_metadata| {
-                self.should_skip_due_to_subnet_splitting(state_hash_metadata.height)
-                    .inspect_err(|err| {
-                        warn!(
-                            self.log,
-                            "Failed to check the subnet splitting status: {err}. \
-                            Skipping creation of the certificate share"
-                        )
-                    })
-                    .is_ok_and(|should_skip| !should_skip)
+                !self.should_skip_due_to_subnet_splitting(state_hash_metadata.height)
             })
             .cloned()
             .filter_map(|state_hash_metadata| {
@@ -497,26 +489,8 @@ impl CertifierImpl {
         // shares). In particular because after a split, before replicas get restarted, they are
         // still under the same P2P network and can gossip certifications for states of different
         // subnets.
-        match self.should_skip_due_to_subnet_splitting(certification.height) {
-            Ok(true) => {
-                info!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "Skipping the validation of a certification at height {} because a \
-                    subnet splitting is taking place",
-                    certification.height
-                );
-                return None;
-            }
-            Ok(false) => {}
-            Err(err) => {
-                warn!(
-                    self.log,
-                    "Failed to check the subnet splitting status: {err}. \
-                    Skipping validation of the certificate"
-                );
-                return None;
-            }
+        if self.should_skip_due_to_subnet_splitting(certification.height) {
+            return None;
         }
 
         // check if the certification is indeed valid for the specified height. If
@@ -561,26 +535,8 @@ impl CertifierImpl {
         // shares). In particular because after a split, before replicas get restarted, they are
         // still under the same P2P network and can gossip certifications for states of different
         // subnets.
-        match self.should_skip_due_to_subnet_splitting(share.height) {
-            Ok(true) => {
-                info!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "Skipping the validation of a certification share at height {} because a \
-                    subnet splitting is taking place",
-                    share.height
-                );
-                return None;
-            }
-            Ok(false) => {}
-            Err(err) => {
-                warn!(
-                    self.log,
-                    "Failed to check the subnet splitting status: {err}. \
-                    Skipping validation of the certificate share"
-                );
-                return None;
-            }
+        if self.should_skip_due_to_subnet_splitting(share.height) {
+            return None;
         }
 
         // If the share has an invalid content or does not belong to the
@@ -651,18 +607,53 @@ impl CertifierImpl {
 
     /// Checks if we should skip the creation and/or validation of certifications/shares
     /// at the given height, due to an ongoing subnet splitting.
-    fn should_skip_due_to_subnet_splitting(&self, height: Height) -> Result<bool, String> {
+    fn should_skip_due_to_subnet_splitting(&self, height: Height) -> bool {
         match subnet_splitting_status_at_height(self.consensus_pool_cache.as_ref(), height) {
-            None => Err(format!(
-                "Missing finalized summary block for height {height}"
-            )),
-            Some(SubnetSplittingStatus::NotScheduled) => Ok(false),
+            None => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Missing finalized summary block for height {height}. \
+                    Skipping creation/validation of certifications/shares"
+                );
+
+                true
+            }
+            Some(SubnetSplittingStatus::NotScheduled) => false,
             // Don't produce certifications in the dkg interval where the subnet splitting is
             // happening as it will be skipped by consensus anyways
-            Some(SubnetSplittingStatus::Scheduled(..)) => Ok(true),
+            Some(SubnetSplittingStatus::Scheduled(..)) => {
+                info!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Skipping creation/validation of certifications/shares at height {height} \
+                    because a subnet splitting is taking place at the current interval"
+                );
+
+                true
+            }
             // Wait for the replica to be restarted with the new `subnet_id`
             Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })) => {
-                Ok(new_subnet_id != self.replica_config.subnet_id)
+                if new_subnet_id != self.replica_config.subnet_id {
+                    info!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "Skipping creation/validation of certifications/shares at height {height} \
+                        because a subnet splitting has taken place and the replica is still running \
+                        with the old subnet_id"
+                    );
+
+                    true
+                } else {
+                    info!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "A subnet splitting has just taken place and the replica is running with the \
+                        new subnet_id. Creating/validating certifications/shares at height {height}"
+                    );
+
+                    false
+                }
             }
         }
     }
