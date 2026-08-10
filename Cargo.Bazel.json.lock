@@ -1,5 +1,5 @@
 {
-  "checksum": "5c79068fe3c1bb4d83af7406cb7b26fab7ec5aaaa978d05bdd40e2ba89e5d243",
+  "checksum": "987c09bb853448361351d6b167b9e528c23cea8fdaa95ce28b65cc3a9114fbce",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -4710,6 +4710,67 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "atty 0.2.14": {
+      "name": "atty",
+      "version": "0.2.14",
+      "package_url": "https://github.com/softprops/atty",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/atty/0.2.14/download",
+          "sha256": "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "atty",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "atty",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(target_os = \"hermit\")": [
+              {
+                "id": "hermit-abi 0.1.19",
+                "target": "hermit_abi"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.186",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2015",
+        "version": "0.2.14"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "auto_impl 1.1.0": {
       "name": "auto_impl",
@@ -20478,6 +20539,10 @@
               "target": "predicates"
             },
             {
+              "id": "pretty-bytes 0.2.2",
+              "target": "pretty_bytes"
+            },
+            {
               "id": "pretty_assertions 1.4.0",
               "target": "pretty_assertions"
             },
@@ -29852,6 +29917,54 @@
         "version": "0.5.0"
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "hermit-abi 0.1.19": {
+      "name": "hermit-abi",
+      "version": "0.1.19",
+      "package_url": "https://github.com/hermitcore/libhermit-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hermit-abi/0.1.19/download",
+          "sha256": "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hermit_abi",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hermit_abi",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.19"
+      },
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -52545,7 +52658,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/pcre2-sys/0.2.8/download",
-          "sha256": "25b8a7b5253a4465b873a21ee7e8d6ec561a57eed5d319621bec36bea35c86ae"
+          "sha256": "25b8a7b5253a4465b873a21ee7e8d6ec561a57eed5d319621bec36bea35c86ae",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:pcre2-sys.patch"
+          ]
         }
       },
       "targets": [
@@ -55270,6 +55389,57 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "pretty-bytes 0.2.2": {
+      "name": "pretty-bytes",
+      "version": "0.2.2",
+      "package_url": "https://github.com/banyan/rust-pretty-bytes",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/pretty-bytes/0.2.2/download",
+          "sha256": "009d6edd2c1dbf2e1c0cd48a2f7766e03498d49ada7109a01c6911815c685316"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pretty_bytes",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "pretty_bytes",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "atty 0.2.14",
+              "target": "atty"
+            },
+            {
+              "id": "getopts 0.2.24",
+              "target": "getopts"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.2.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
     },
     "pretty_assertions 1.4.0": {
       "name": "pretty_assertions",
@@ -92889,6 +93059,7 @@
     "pkg-config 0.3.32",
     "pprof 0.15.0",
     "predicates 3.1.2",
+    "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
     "proc-macro2 1.0.106",
