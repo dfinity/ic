@@ -646,7 +646,9 @@ chrono = { version = "0.4.42", default-features = false, features = [
 ciborium = "0.2.2"
 clap = { version = "4.5.20", features = ["derive", "string"] }
 colored = "^2.0.0"
-comparable = { version = "0.5", features = ["derive"] }
+# Fork of `comparable` migrated to syn 2 (upstream still uses syn 1), so it no
+# longer forces a duplicate syn 1.0 into the dependency graph.
+comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496454f9e770389e2edc0d96e137a4e9", features = ["derive"] }
 crc32fast = "^1.2.0"
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
