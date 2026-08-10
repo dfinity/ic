@@ -26,6 +26,9 @@ pub struct MockJsonRpcProviders {
 #[allow(clippy::enum_variant_names)]
 #[derive(Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString)]
 pub enum JsonRpcMethod {
+    #[strum(serialize = "eth_call")]
+    EthCall,
+
     #[strum(serialize = "eth_getBlockByNumber")]
     EthGetBlockByNumber,
 
@@ -111,21 +114,12 @@ impl JsonRpcRequestMatcher {
     }
 
     fn tick_until_next_http_request(&self, env: &StateMachine) {
-        let method = self.json_rpc_method.to_string();
         for _ in 0..MAX_TICKS {
-            let matching_method = env
+            let has_matching_request = env
                 .canister_http_request_contexts()
                 .values()
-                .any(|context| {
-                    JsonRpcRequest::from_str(
-                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
-                    )
-                    .expect("BUG: invalid JSON RPC method")
-                    .method
-                    .to_string()
-                        == method
-                });
-            if matching_method {
+                .any(|context| self.matches(context));
+            if has_matching_request {
                 break;
             }
             env.tick();
@@ -278,7 +272,7 @@ impl StubOnce {
     }
 }
 
-fn debug_http_outcalls(env: &StateMachine) -> String {
+pub fn debug_http_outcalls(env: &StateMachine) -> String {
     let mut debug_str = vec![];
     for context in env.canister_http_request_contexts().values() {
         let request_body = context

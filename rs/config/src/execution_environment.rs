@@ -11,7 +11,7 @@ const MIB: u64 = 1024 * KIB;
 const GIB: u64 = 1024 * MIB;
 const TIB: u64 = 1024 * GIB;
 
-const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Disabled;
+const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Enabled;
 
 const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Disabled;
 
@@ -180,7 +180,7 @@ pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
 
 /// Default maximum number of canisters per subnet if not set in the registry.
-pub const DEFAULT_MAX_NUMBER_OF_CANISTERS: u64 = 120_000;
+pub const DEFAULT_MAX_NUMBER_OF_CANISTERS: u64 = 250_000;
 
 /// Maximum number of canister snapshots that can be stored for a single canister.
 pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 10;

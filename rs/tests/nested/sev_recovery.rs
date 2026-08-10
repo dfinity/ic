@@ -95,7 +95,7 @@ pub fn test_alternative_guestos_recovery(env: TestEnv) {
         &session,
         r#"
             set -e
-            sudo systemctl stop guestos
+            sudo systemctl stop guestos@0.service
 
             sudo partprobe /dev/hostlvm/guestos
 
@@ -106,7 +106,7 @@ pub fn test_alternative_guestos_recovery(env: TestEnv) {
             sudo mount "/dev/disk/by-partuuid/${GUEST_A_BOOT_UUID}" /tmp/guest_boot
             sudo cp /tmp/test_recovery_proposal.cbor /tmp/guest_boot/alternative_guestos_proposal.cbor
             sudo umount /tmp/guest_boot
-            sudo systemctl start guestos
+            sudo systemctl start guestos@0.service
         "#,
     )
     .expect("Failed to install recovery proposal and restart guestos");

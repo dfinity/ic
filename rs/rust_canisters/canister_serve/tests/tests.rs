@@ -1,9 +1,7 @@
 #![allow(deprecated)]
 use ic_canister_log::{declare_log_buffer, log};
 use ic_canister_serve::serve_logs;
-use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpMethod, HttpResponse,
-};
+use ic_cdk::management_canister::{HttpMethod, HttpRequestArgs, HttpRequestResult};
 use maplit::hashmap;
 use serde_json::json;
 use std::collections::HashMap;
@@ -41,15 +39,16 @@ fn test_serve_logs_no_frills() {
     log!(ERROR, "DA ROOF IS ON FAIYA");
 
     // Step 2: Call the code under test.
-    let http_request = CanisterHttpRequestArgument {
+    let http_request = HttpRequestArgs {
         method: HttpMethod::GET,
         url: "http://example.com/logs".to_string(),
         headers: vec![],
         body: Some(vec![]),
         max_response_bytes: None,
         transform: None,
+        is_replicated: None,
     };
-    let HttpResponse {
+    let HttpRequestResult {
         status,
         headers,
         body,
@@ -136,16 +135,17 @@ fn test_serve_logs_only_errors() {
     log!(ERROR, "BAR!");
 
     // Step 2: Call the code under test.
-    let http_request = CanisterHttpRequestArgument {
+    let http_request = HttpRequestArgs {
         method: HttpMethod::GET,
         url: "http://example.com/logs?severity=Error".to_string(),
         headers: vec![],
         body: Some(vec![]),
         max_response_bytes: None,
         transform: None,
+        is_replicated: None,
     };
 
-    let HttpResponse {
+    let HttpRequestResult {
         status,
         headers,
         body,
@@ -210,15 +210,16 @@ fn test_serve_logs_time_bound() {
     log!(INFO, "after");
 
     // Step 2: Call the code under test.
-    let http_request = CanisterHttpRequestArgument {
+    let http_request = HttpRequestArgs {
         method: HttpMethod::GET,
         url: format!("http://example.com/logs?time={between_timestamp_nanoseconds}"),
         headers: vec![],
         body: Some(vec![]),
         max_response_bytes: None,
         transform: None,
+        is_replicated: None,
     };
-    let HttpResponse {
+    let HttpRequestResult {
         status,
         headers,
         body,
@@ -278,15 +279,16 @@ fn test_serve_logs_malformed_request() {
     log!(ERROR, "BAZ!");
 
     // Step 2: Call the code under test.
-    let http_request = CanisterHttpRequestArgument {
+    let http_request = HttpRequestArgs {
         method: HttpMethod::GET,
         url: "http://example.com/logs?time=NONSENSE".to_string(),
         headers: vec![],
         body: Some(vec![]),
         max_response_bytes: None,
         transform: None,
+        is_replicated: None,
     };
-    let HttpResponse {
+    let HttpRequestResult {
         status,
         headers,
         body,

@@ -68,10 +68,11 @@ use ic_management_canister_types_private::{
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
-    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SetupInitialDKGResponse,
-    SignWithECDSAReply, SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadChunkArgs, UploadChunkReply, VetKdDeriveKeyResult,
+    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, CanisterStatusResultV2,
+    ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId, InstallChunkedCodeArgs, LoadCanisterSnapshotArgs,
+    SchnorrAlgorithm, SetupInitialDKGResponse, SignWithECDSAReply, SignWithSchnorrReply,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    VetKdDeriveKeyResult,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -2475,6 +2476,7 @@ impl StateMachine {
                 }
                 Err(sm) => {
                     state_manager = sm;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
                 }
             }
             if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
@@ -3897,7 +3899,15 @@ impl StateMachine {
 
     /// Creates a new canister and returns the canister principal.
     pub fn create_canister(&self, settings: Option<CanisterSettingsArgs>) -> CanisterId {
-        self.create_canister_with_cycles(None, Cycles::new(0), settings)
+        // This helper creates the canister with zero cycles, which cannot account
+        // for its `canister_creation` history entry under a non-zero freezing
+        // threshold. Default the freezing threshold to zero unless the caller
+        // explicitly set one.
+        let mut settings = settings.unwrap_or_else(|| CanisterSettingsArgsBuilder::new().build());
+        if settings.freezing_threshold.is_none() {
+            settings.freezing_threshold = Some(candid::Nat::from(0_u64));
+        }
+        self.create_canister_with_cycles(None, Cycles::new(0), Some(settings))
     }
 
     /// Creates a new canister and returns the canister principal.

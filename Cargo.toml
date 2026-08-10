@@ -242,6 +242,7 @@ members = [
     "rs/monitoring/adapter_metrics/service",
     "rs/monitoring/logger",
     "rs/monitoring/metrics",
+    "rs/monitoring/metrics_proxy",
     "rs/monitoring/pprof",
     "rs/monitoring/tracing",
     "rs/monitoring/tracing/jaeger_exporter",
@@ -612,6 +613,7 @@ async-stream = "0.3.6"
 async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
+axum-otel-metrics = "0.14.1"
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backon = { version = "1.6.0", default-features = false, features = ["std"] }
 base64 = { version = "0.13.1" }
@@ -626,14 +628,14 @@ bitcoin = { package = "bitcoin-dogecoin", version = "0.32.7-doge.0", features = 
 ] }
 # build-info and build-info-build MUST be kept in sync!
 bs58 = "^0.5.0"
-build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
-build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
+build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "27ba16a68aa312de66f2ebd0f16665f1429eee36" }
+build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "27ba16a68aa312de66f2ebd0f16665f1429eee36", default-features = false }
 by_address = "^1.1.0"
 byteorder = "^1.3.4"
 bytes = "1.9.0"
 cached = { version = "0.49", default-features = false }
-canbench-rs = "0.6.0"
-candid = { version = "0.10.31" }
+canbench-rs = "0.7.0"
+candid = { version = "0.10.34" }
 candid_parser = { version = "0.1.2" }
 cargo_metadata = "^0.14.2"
 chrono = { version = "0.4.42", default-features = false, features = [
@@ -641,10 +643,12 @@ chrono = { version = "0.4.42", default-features = false, features = [
     "clock",
     "serde",
 ] }
-ciborium = "0.2.1"
+ciborium = "0.2.2"
 clap = { version = "4.5.20", features = ["derive", "string"] }
 colored = "^2.0.0"
-comparable = { version = "0.5", features = ["derive"] }
+# Fork of `comparable` migrated to syn 2 (upstream still uses syn 1), so it no
+# longer forces a duplicate syn 1.0 into the dependency graph.
+comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496454f9e770389e2edc0d96e137a4e9", features = ["derive"] }
 crc32fast = "^1.2.0"
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
@@ -667,7 +671,9 @@ ed25519-dalek = { version = "2.2.0", features = [
     "pem",
     "hazmat",
 ] }
+duration-string = { version = "0.3.0", features = ["serde"] }
 escargot = "0.5.7"
+exitcode = "1.1.2"
 ethers-core = "^2.0.7"
 ethnum = { version = "1.5.3", features = ["serde"] }
 evm_rpc_client = "0.4.0"
@@ -707,7 +713,7 @@ ic0 = "1.0.0"
 ic-agent = { version = "0.49.1", features = ["pem"] }
 ic-bn-lib = { version = "0.5.0", features = ["acme-alpn", "pubsub"] }
 ic-btc-interface = "0.4.0"
-ic-canister-runtime = "0.2.0"
+ic-canister-runtime = "0.2.3"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
 ic-cdk = "0.19.0"
@@ -759,21 +765,22 @@ k256 = { version = "0.13.4", default-features = false, features = [
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
+log = "0.4"
 libcryptsetup-rs = "0.15"
 libflate = "2.1.0"
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
 lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
-local-ip-address = "0.5.6"
+local-ip-address = "0.6.13"
 loopdev-3 = "0.5"
 lzma-sys = { version = "0.1.20", features = ["static"] }
 macaddr = "1.0"
 maplit = "^1.0.2"
 memchr = "2.7"
 memmap2 = "0.9.5"
-minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
-minicbor-derive = "0.13.0"
+minicbor = { version = "0.22.0", features = ["alloc", "derive"] }
+minicbor-derive = "0.14.0"
 mockall = "0.13.0"
 mockito = "1.6.1"
 more-asserts = "0.3.1"
@@ -789,7 +796,8 @@ opentelemetry-otlp = { version = "0.32.0", default-features = false, features = 
     "grpc-tonic",
     "trace",
 ] }
-opentelemetry_sdk = { version = "0.32.1", features = ["trace"] }
+opentelemetry-prometheus = "0.32.0"
+opentelemetry_sdk = { version = "0.32.1", features = ["metrics", "trace"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "alloc",
     "arithmetic",
@@ -857,8 +865,8 @@ rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
 rusqlite = "0.37.0"
 rust-ini = "0.21.1"
-rust_decimal = "^1.36.0"
-rust_decimal_macros = "^1.36.0"
+rust_decimal = { version = "^1.42", default-features = false, features = ["serde"] }
+rust_decimal_macros = "^1.40"
 rustc-demangle = { version = "0.1.16" }
 rustc-hash = "^1.1.0"
 rustls = { version = "0.23.18", default-features = false, features = [
@@ -872,7 +880,7 @@ rusty-fork = "^0.3.0"
 schemars = { version = "0.8.21", features = ["derive"] }
 scoped_threadpool = "^0.1.9"
 scopeguard = "1.2.0"
-scraper = "^0.17.1"
+scraper = "^0.24.0"
 secp256k1 = { version = "0.29", features = ["global-context", "rand", "std"] }
 securefmt = "0.1.5"
 semver = { version = "1.0.9", features = ["serde"] }
@@ -892,6 +900,7 @@ sha3 = "0.10.8"
 shell-escape = { version = "^0.1.5" }
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
+simple_logger = "4.3.0"
 slog = { version = "2.7.0", features = [
     "max_level_trace",
     "nested-values",
@@ -915,7 +924,9 @@ systemd = "0.10"
 tar = "0.4.39"
 tempfile = "3.20"
 textplots = "^0.8"
-thiserror = "2.0.18"
+# DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
+# codebase uses syn 2.
+thiserror = "=2.0.18"
 thousands = "^0.2.0"
 threadpool = "1.8.1"
 tikv-jemalloc-ctl = { version = "0.7", features = ["stats"] }
@@ -966,12 +977,13 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.26.4"
-wasm-encoder = { version = "0.251.0", features = ["wasmparser"] }
-wasmparser = "0.251.0"
-wasmprinter = "0.251.0"
-wasmtime = { version = "46.0.1", default-features = false, features = ["cranelift", "gc", "gc-null", "parallel-compilation", "runtime"] }
-wast = "251.0.0"
-wat = "~1.251.0"
+wasm-encoder = { version = "0.252.0", features = ["wasmparser"] }
+wasm-smith = { version = "0.252.0", default-features = false, features = ["wasmparser"] }
+wasmparser = "0.252.0"
+wasmprinter = "0.252.0"
+wasmtime = { version = "47.0.3", default-features = false, features = ["cranelift", "gc", "gc-null", "parallel-compilation", "runtime"] }
+wast = "252.0.0"
+wat = "~1.252.0"
 webpki-roots = "1.0.6"
 which = "6.0.3"
 wirm = { version = "4.0.4", features = ["parallel"] }
@@ -986,4 +998,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.10.0"
+version = "^0.11.1"

@@ -198,6 +198,20 @@ impl Replication {
             Replication::NonReplicated(_) => ReplicationKind::NonReplicated,
         }
     }
+
+    /// The number of nodes that will attempt the HTTP request. `subnet_size` is
+    /// the size of the subnet at the time the request was made.
+    ///
+    /// This is both the divisor that splits a request's `refundable_cycles` into
+    /// its `per_replica_allowance` and the number of allowances that have to be
+    /// accounted for before the request is fully settled.
+    pub fn node_count(&self, subnet_size: NumberOfNodes) -> usize {
+        match self {
+            Replication::FullyReplicated => (subnet_size.get() as usize).max(1),
+            Replication::NonReplicated(_) => 1,
+            Replication::Flexible { committee, .. } => committee.len().max(1),
+        }
+    }
 }
 
 /// The kind of replication of a request.
