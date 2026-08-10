@@ -1712,19 +1712,19 @@ mod tests {
 
     fn assert_for_all_subnet_splitting_statuses(
         pool: &mut TestConsensusPool,
-        mut test: impl FnMut(SubnetSplittingStatus, Height),
+        mut test: impl FnMut(SubnetSplittingStatus, bool, Height),
     ) {
-        for status in [
-            not_scheduled_splitting(),
-            scheduled_splitting(),
-            done_splitting_different_subnet(),
-            done_splitting_same_subnet(),
+        for (status, should_skip) in [
+            (not_scheduled_splitting(), false),
+            (scheduled_splitting(), true),
+            (done_splitting_different_subnet(), true),
+            (done_splitting_same_subnet(), false),
         ] {
             let splitting_height = advance_to_splitting_interval(pool, status);
             for test_height in splitting_height.get()..=splitting_height.get() + TEST_DKG_INTERVAL {
                 let test_height = Height::from(test_height);
 
-                test(status, test_height);
+                test(status, should_skip, test_height);
             }
         }
     }
@@ -1762,40 +1762,31 @@ mod tests {
                     log,
                 );
 
-                assert_for_all_subnet_splitting_statuses(&mut pool, |status, test_height| {
-                    let shares = certifier.sign(
-                        &cert_pool,
-                        &[StateHashMetadata {
-                            height: test_height,
-                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2, 3])),
-                            height_witness: Witness::new_for_testing_with_height(),
-                        }],
-                    );
+                assert_for_all_subnet_splitting_statuses(
+                    &mut pool,
+                    |status, should_skip, test_height| {
+                        let shares = certifier.sign(
+                            &cert_pool,
+                            &[StateHashMetadata {
+                                height: test_height,
+                                hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2, 3])),
+                                height_witness: Witness::new_for_testing_with_height(),
+                            }],
+                        );
 
-                    match status {
-                        SubnetSplittingStatus::Scheduled(..) => {
+                        if should_skip {
                             assert!(
                                 shares.is_empty(),
-                                "Expected no shares during subnet splitting, got: {shares:?}"
+                                "Expected shares to be empty for status {status:?}, got: {shares:?}"
                             );
-                        }
-                        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
-                            if new_subnet_id != subnet_test_id(0) =>
-                        {
-                            assert!(
-                                shares.is_empty(),
-                                "Expected no shares after Done splitting with different subnet ID, got: {shares:?}"
-                            );
-                        }
-                        SubnetSplittingStatus::NotScheduled
-                        | SubnetSplittingStatus::PostSplit(..) => {
+                        } else {
                             assert!(
                                 !shares.is_empty(),
-                                "Expected shares when not splitting or splitting with same subnet ID"
+                                "Expected shares to be non-empty for status {status:?}"
                             );
                         }
-                    }
-                });
+                    },
+                );
             })
         })
     }
@@ -1833,42 +1824,36 @@ mod tests {
                     log,
                 );
 
-                assert_for_all_subnet_splitting_statuses(&mut pool, |status, test_height| {
-                    let content = gen_content(test_height);
-                    let share = CertificationShare {
-                        height: test_height,
-                        height_witness: Witness::new_for_testing_with_height(),
-                        signed: Signed {
-                            content,
-                            signature: ThresholdSignatureShare::fake(node_test_id(1)),
-                        },
-                    };
+                assert_for_all_subnet_splitting_statuses(
+                    &mut pool,
+                    |status, should_skip, test_height| {
+                        let content = gen_content(test_height);
+                        let share = CertificationShare {
+                            height: test_height,
+                            height_witness: Witness::new_for_testing_with_height(),
+                            signed: Signed {
+                                content,
+                                signature: ThresholdSignatureShare::fake(node_test_id(1)),
+                            },
+                        };
 
-                    let result = certifier.validate_share(&cert_pool, &share);
-                    match status {
-                        SubnetSplittingStatus::Scheduled(..) => {
-                            assert_eq!(result, None, "Expected None during subnet splitting");
-                        }
-                        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
-                            if new_subnet_id != subnet_test_id(0) =>
-                        {
+                        let result = certifier.validate_share(&cert_pool, &share);
+                        if should_skip {
                             assert_eq!(
                                 result, None,
-                                "Expected None after Done splitting with different subnet ID"
+                                "Expected no change action for status {status:?}, got: {result:?}"
                             );
-                        }
-                        SubnetSplittingStatus::NotScheduled
-                        | SubnetSplittingStatus::PostSplit(..) => {
+                        } else {
                             assert_eq!(
                                 result,
                                 Some(ChangeAction::MoveToValidated(
                                     CertificationMessage::CertificationShare(share)
                                 )),
-                                "Expected MoveToValidated when not splitting or splitting with same subnet ID"
+                                "Expected MoveToValidated for status {status:?}, got: {result:?}"
                             );
                         }
-                    }
-                });
+                    },
+                );
             })
         })
     }
@@ -1899,42 +1884,36 @@ mod tests {
                     log,
                 );
 
-                assert_for_all_subnet_splitting_statuses(&mut pool, |status, test_height| {
-                    let content = gen_content(test_height);
-                    let cert = Certification {
-                        height: test_height,
-                        height_witness: Some(Witness::new_for_testing_with_height()),
-                        signed: Signed {
-                            content,
-                            signature: ThresholdSignature::fake(),
-                        },
-                    };
+                assert_for_all_subnet_splitting_statuses(
+                    &mut pool,
+                    |status, should_skip, test_height| {
+                        let content = gen_content(test_height);
+                        let cert = Certification {
+                            height: test_height,
+                            height_witness: Some(Witness::new_for_testing_with_height()),
+                            signed: Signed {
+                                content,
+                                signature: ThresholdSignature::fake(),
+                            },
+                        };
 
-                    let result = certifier.validate_certification(&cert);
-                    match status {
-                        SubnetSplittingStatus::Scheduled(..) => {
-                            assert_eq!(result, None, "Expected None during subnet splitting");
-                        }
-                        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
-                            if new_subnet_id != subnet_test_id(0) =>
-                        {
+                        let result = certifier.validate_certification(&cert);
+                        if should_skip {
                             assert_eq!(
                                 result, None,
-                                "Expected None after Done splitting with different subnet ID"
+                                "Expected no change action for status {status:?}, got: {result:?}"
                             );
-                        }
-                        SubnetSplittingStatus::NotScheduled
-                        | SubnetSplittingStatus::PostSplit(..) => {
+                        } else {
                             assert_eq!(
                                 result,
                                 Some(ChangeAction::MoveToValidated(
-                                    CertificationMessage::Certification(cert.clone())
+                                    CertificationMessage::Certification(cert)
                                 )),
-                                "Expected MoveToValidated when not splitting or splitting with same subnet ID"
+                                "Expected MoveToValidated for status {status:?}, got: {result:?}"
                             );
                         }
-                    }
-                });
+                    },
+                );
             })
         })
     }
