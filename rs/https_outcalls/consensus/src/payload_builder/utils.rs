@@ -194,6 +194,8 @@ pub(crate) fn check_initial_spent_within_limit(
     }
 }
 
+/// An outcall is out of cycles if its committee's unspent allowance
+/// is smaller than the minimum cost required to deliver a response.
 pub(crate) struct OutOfCyclesProof {
     /// The least it can cost to deliver a response.
     pub min_cost: Cycles,
@@ -234,11 +236,21 @@ fn out_of_cycles_verdict(
                 unspent_allowance,
             })
         }
-        _ => Err(InvalidCanisterHttpPayloadReason::NotOutOfCycles {
-            callback_id,
-            unspent_allowance,
-            min_cost,
-        }),
+        _ => {
+            debug_assert!(
+                unspent_allowance
+                    .map(|allowance| allowance >= min_cost.unwrap_or_default())
+                    .unwrap_or(true),
+                "expect unspent allowance {:?} >= min cost {:?}",
+                unspent_allowance,
+                min_cost
+            );
+            Err(InvalidCanisterHttpPayloadReason::NotOutOfCycles {
+                callback_id,
+                unspent_allowance,
+                min_cost,
+            })
+        }
     }
 }
 
