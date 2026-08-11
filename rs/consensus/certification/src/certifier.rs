@@ -705,7 +705,6 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::backwards_compatibility::BackwardsCompatible;
     use ic_types::consensus::{BlockPayload, HashedBlock, Payload, dkg::SplittingArgs};
     use ic_types::{
         CryptoHashOfPartialState, Height,
@@ -1675,7 +1674,7 @@ mod tests {
         let mut proposal = pool.make_next_block();
         let block = proposal.content.as_mut();
         let mut payload = block.payload.as_ref().as_summary().clone();
-        payload.dkg.subnet_splitting_status = BackwardsCompatible::new_for_test_only(Some(status));
+        payload.dkg.subnet_splitting_status = status;
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Summary(payload),
