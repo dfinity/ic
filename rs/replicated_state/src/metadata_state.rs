@@ -419,8 +419,8 @@ pub struct SubnetTopology {
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
     /// Whether the subnet is "cooling down", i.e. quiescing: it stops accepting new
-    /// messages and lets the subnet messages already in flight drain. While a subnet
-    /// is cooling down:
+    /// messages and lets the messages already in flight drain. While a subnet is
+    /// cooling down:
     ///
     ///  * Ingress messages addressed to it are rejected with
     ///    `ErrorCode::SubnetCoolingDown` (`RejectCode::SysTransient`) by the ingress
@@ -438,11 +438,10 @@ pub struct SubnetTopology {
     ///    stays put rather than being rejected. A message that must never cross an
     ///    engine boundary is still handled by the engine boundary check instead, as
     ///    it is illegal there permanently rather than transiently.
-    ///  * It executes no canister messages: the inner round only drains its
-    ///    subnet queues, and no `Heartbeat` or `GlobalTimer` tasks are enqueued.
-    ///    Note that `install_code` is a subnet message, so it is still executed
-    ///    (and resumed, if long-running) and does run the canister's `start` /
-    ///    `pre_upgrade` / `post_upgrade` hooks.
+    ///
+    /// Execution is left alone: the subnet keeps executing the messages it already
+    /// holds (that is what "letting them drain" means), including `Heartbeat` and
+    /// `GlobalTimer` tasks.
     pub cooling_down: bool,
 }
 

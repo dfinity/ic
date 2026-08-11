@@ -458,20 +458,6 @@ impl SchedulerImpl {
                 scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
             }
 
-            // A cooling down subnet executes no canister messages: the inner round
-            // only drains the subnet queues, which we have just done. Bail out before
-            // any heartbeat / global timer tasks are enqueued, any canister messages
-            // are executed or any messages are inducted on the same subnet.
-            //
-            // Note that a single pass over the subnet queues is enough: without
-            // canister execution, nothing can push new messages into them.
-            if state.is_own_subnet_cooling_down() {
-                self.metrics
-                    .round_inner_iteration_skipped_cooling_down
-                    .inc();
-                break state;
-            }
-
             let mut round_limits = scheduler_round_limits.canister_round_limits();
             if round_limits.instructions_reached() {
                 self.metrics

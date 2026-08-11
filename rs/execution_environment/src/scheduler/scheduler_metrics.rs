@@ -29,7 +29,6 @@ pub struct SchedulerMetrics {
     pub(super) execute_round_called: IntCounter,
     pub(super) inner_loop_processed_non_zero_inputs_count: IntCounter,
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
-    pub(super) round_inner_iteration_skipped_cooling_down: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
     pub(super) round_preparation_duration: Histogram,
@@ -152,11 +151,6 @@ impl SchedulerMetrics {
                 "inner_round_loop_consumed_max_instructions",
                 "The number of times inner_rounds()'s loop exited because \
                       max allowed instructions were consumed.",
-            ),
-            round_inner_iteration_skipped_cooling_down: metrics_registry.int_counter(
-                "scheduler_round_inner_iteration_skipped_cooling_down",
-                "The number of times inner_round()'s loop exited after draining \
-                      the subnet queues because the subnet is cooling down.",
             ),
             num_canisters_uninstalled_out_of_cycles: metrics_registry.int_counter(
                 "scheduler_num_canisters_uninstalled_out_of_cycles",
