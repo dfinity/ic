@@ -757,7 +757,7 @@ mod tests {
                 let destination_subnet_id = subnet_test_id(2);
                 let source_nodes = vec![node_test_id(0)];
                 let destination_nodes = vec![node_test_id(1)];
-                let registry_version = 1u64;
+                let registry_version = 1_u64;
                 let dkg_interval_len = 3;
 
                 // Set up two subnets: the source subnet is where node_test_id(0) lives, the

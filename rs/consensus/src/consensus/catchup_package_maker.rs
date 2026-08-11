@@ -28,7 +28,7 @@ use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    NodeId, SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackage, CatchUpPackageShare,
