@@ -40,7 +40,9 @@ use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_nns_delegation_manager::{DelegationVerificationError, NNSDelegationBuilder};
+use ic_nns_delegation_manager::{
+    DelegationValidationError, DelegationVerificationError, NNSDelegationBuilder,
+};
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
@@ -2600,12 +2602,6 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
         );
 
         let response = endpoint.call(addr, message).await;
-        // if matches!(endpoint, UpdateEndpoint::Subnet(CallSubnet::V4(_)))
-        //     && matches!(
-        //         drift,
-        //         DelegationDrift::DelegationCanisterRangesChange { .. }
-        //             | DelegationDrift::StateCanisterRangesChange { .. }
-        //     )
         match (endpoint, drift) {
             (
                 UpdateEndpoint::Subnet(CallSubnet::V4(_)),
@@ -2665,11 +2661,17 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
 /// returns [`QueryExecutionError::OutdatedDelegation`] or
 /// [`QueryExecutionError::InvalidDelegation`].
 #[rstest]
-#[case::outdated(
+#[case(
     QueryExecutionError::DelegationInconsistentWithState(
         DelegationVerificationError::Inconsistent
     ),
     "This replica has an outdated delegation. Please try again."
+)]
+#[case(
+    QueryExecutionError::DelegationInconsistentWithState(DelegationVerificationError::Validation(
+        DelegationValidationError::UnexpectedTreeShape("missing public_key leaf".to_string())
+    )),
+    "This replica has an invalid delegation. Please try again."
 )]
 fn test_query_endpoint_returns_service_unavailable_on_delegation_mismatch(
     #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]

@@ -9381,6 +9381,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics",
  "ic-nns-constants",
+ "ic-nns-delegation-reader-test-utils",
  "ic-query-stats",
  "ic-registry-provisional-whitelist",
  "ic-registry-resource-limits",

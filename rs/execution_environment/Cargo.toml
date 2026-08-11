@@ -67,6 +67,7 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-nns-constants = { path = "../nns/constants" }
+ic-nns-delegation-reader-test-utils = { path = "../http_endpoints/nns_delegation_reader/test_utils" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
