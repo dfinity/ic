@@ -333,9 +333,11 @@ rust_test(
 
 rust_test(
     name = "sweeper_funding",
-    # Waits on the minter's 6-minute withdrawal timer for the funding transfer to be sent.
+    # Waits on the minter's 6-minute withdrawal timer for the funding transfer to be sent. Its own
+    # deadlines can total 21 minutes, so anything below `eternal` (60 minutes) would have Bazel kill
+    # the test before they fire, replacing their diagnostics with a bare timeout.
     size = "large",
-    timeout = "long",
+    timeout = "eternal",
     srcs = ["tests/sweeper_funding.rs"],
     data = [
         ":cketh_minter_debug.wasm.gz",
