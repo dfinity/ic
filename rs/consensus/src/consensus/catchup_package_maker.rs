@@ -606,8 +606,8 @@ mod tests {
         },
         crypto::CryptoHash,
     };
-    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
+    use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2, SUBNET_3};
     use rstest::rstest;
     use std::sync::{Arc, RwLock};
 
@@ -1126,6 +1126,12 @@ mod tests {
         })
     }
 
+    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
+    const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+    const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+    const INTERVAL_LENGTH: Height = Height::new(9);
+
     // In this test the subnet initially has 4 nodes, and after the split `NODE_1, NODE_2` will stay
     // in the original subnet, and `NODE_3, NODE_4` will be moved to a new one.
     #[rstest]
@@ -1156,13 +1162,6 @@ mod tests {
     ) {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
-                const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
-                const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
-                const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
-                const INTERVAL_LENGTH: Height = Height::new(9);
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
-
                 let Dependencies {
                     mut pool,
                     membership,
@@ -1214,6 +1213,7 @@ mod tests {
                 .with_mocked_state_manager()
                 .build();
 
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
                 state_manager
                     .get_mut()
                     .expect_get_state_hash_at()
@@ -1285,15 +1285,124 @@ mod tests {
         })
     }
 
+    // During a scheduled subnet split, a node which ends up neither in the source subnet nor in
+    // the destination subnet cannot determine the type of the CUP to create, and thus should not
+    // create any CUP share.
+    #[rstest]
+    #[case::node_unassigned_after_split(None)]
+    #[case::node_moved_to_unrelated_subnet(Some(SUBNET_3))]
+    #[trace]
+    fn no_post_split_cup_share_for_node_outside_both_subnets_test(
+        #[case] new_subnet_of_cup_maker: Option<SubnetId>,
+    ) {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let mut records = vec![
+                    (
+                        INITIAL_REGISTRY_VERSION.get(),
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4, NODE_5])
+                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                            .build(),
+                    ),
+                    (
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_2])
+                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                            .build(),
+                    ),
+                    (
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        DESTINATION_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_3, NODE_4])
+                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                            .build(),
+                    ),
+                ];
+                if let Some(subnet_id) = new_subnet_of_cup_maker {
+                    records.push((
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        subnet_id,
+                        SubnetRecordBuilder::from(&[NODE_5])
+                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                            .build(),
+                    ));
+                }
+
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    crypto,
+                    state_manager,
+                    ..
+                } = DependenciesBuilder::new(pool_config, records)
+                    .with_replica_config(ReplicaConfig {
+                        node_id: NODE_5,
+                        subnet_id: SOURCE_SUBNET_ID,
+                    })
+                    .with_mocked_state_manager()
+                    .build();
+
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(fake_state_hash.clone()));
+
+                let message_routing = FakeMessageRouting::new();
+                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                let message_routing = Arc::new(message_routing);
+
+                let cup_maker = CatchUpPackageMaker::new(
+                    ReplicaConfig {
+                        node_id: NODE_5,
+                        subnet_id: SOURCE_SUBNET_ID,
+                    },
+                    membership,
+                    crypto,
+                    state_manager,
+                    message_routing,
+                    registry,
+                    log,
+                );
+
+                pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
+
+                let subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id: SOURCE_SUBNET_ID,
+                    destination_subnet_id: DESTINATION_SUBNET_ID,
+                });
+                let mut proposal = pool.make_next_block();
+                let block = proposal.content.as_mut();
+                block.context.certified_height = block.height;
+                block.context.registry_version = SPLITTING_REGISTRY_VERSION;
+                let mut payload = block.payload.as_ref().as_summary().clone();
+                payload.dkg.subnet_splitting_status =
+                    BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(payload),
+                );
+                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                pool.insert_validated(proposal.clone());
+                pool.notarize(&proposal);
+                pool.finalize(&proposal);
+
+                assert_eq!(
+                    cup_maker
+                        .consider_block(&PoolReader::new(&pool), proposal.content.as_ref().clone()),
+                    None,
+                    "A node outside of both subnets should not create a CUP share"
+                );
+            })
+        })
+    }
+
     #[test]
     fn create_post_split_summary_block_copies_idkg_summary() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
-            const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
-            const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
-            const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
-            const INTERVAL_LENGTH: Height = Height::new(9);
-
             let Dependencies {
                 mut pool, registry, ..
             } = DependenciesBuilder::new(

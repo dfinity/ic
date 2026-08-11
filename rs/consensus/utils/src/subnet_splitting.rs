@@ -470,7 +470,6 @@ mod tests {
         status: SubnetSplittingStatus,
     ) {
         let block = make_summary_block_with_status(status);
-        let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
 
         assert!(is_split_scheduled(&block).is_none());
     }

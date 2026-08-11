@@ -700,6 +700,46 @@ pub mod test {
     }
 
     #[test]
+    fn test_get_next_summary_height() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let interval_length = 3;
+            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(
+                        (0..1).map(node_test_id).collect::<Vec<_>>().as_slice(),
+                    )
+                    .with_dkg_interval_length(interval_length)
+                    .build(),
+                )],
+            );
+
+            // At genesis the highest finalized summary block is the genesis block.
+            let next_summary_height = Height::from(interval_length + 1);
+            let pool_reader = PoolReader::new(&pool);
+            assert_eq!(pool_reader.get_next_summary_height(), next_summary_height);
+
+            // Advancing within the current DKG interval doesn't change the next summary
+            // height.
+            pool.advance_round_normal_operation_n(interval_length);
+            let pool_reader = PoolReader::new(&pool);
+            assert_eq!(pool_reader.get_next_summary_height(), next_summary_height);
+
+            // Crossing the interval boundary *without* creating a CUP advances the next
+            // summary height, while the next CUP height stays behind.
+            pool.advance_round_normal_operation_no_cup_n(1);
+            let pool_reader = PoolReader::new(&pool);
+            assert_eq!(
+                pool_reader.get_next_summary_height(),
+                Height::from(2 * (interval_length + 1))
+            );
+            assert_eq!(pool_reader.get_next_cup_height(), next_summary_height);
+        })
+    }
+
+    #[test]
     fn test_get_finalized_block_at_height_without_finalization() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);

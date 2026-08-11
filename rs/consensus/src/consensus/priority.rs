@@ -186,6 +186,17 @@ mod tests {
             };
             assert_eq!(bouncer(&cup_id), Wants);
 
+            // CUP shares are exempt from the validator-CUP gap as well: even though the
+            // share is at the same height as the stashed artifacts above, we should
+            // still fetch it, since it is not above the next summary height.
+            let cup_share_id = ConsensusMessageId {
+                hash: ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(
+                    vec![],
+                ))),
+                height: block.height(),
+            };
+            assert_eq!(bouncer(&cup_share_id), Wants);
+
             // Insert CUP for next summary height and recompute bouncer function.
             pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
             let bouncer = new_bouncer(&pool, expected_batch_height);
@@ -196,6 +207,57 @@ mod tests {
             assert_eq!(bouncer(&block.get_id()), Wants);
             assert_eq!(bouncer(&notarization.get_id()), Wants);
             assert_eq!(bouncer(&equivocation_proof_id), Wants);
+        })
+    }
+
+    #[test]
+    fn test_bouncer_for_catch_up_package_shares() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval = 9;
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(committee.as_slice())
+                        .with_dkg_interval_length(dkg_interval)
+                        .build(),
+                )],
+            );
+
+            // Advance the pool into the second DKG interval, producing a CUP at the
+            // interval boundary.
+            pool.advance_round_normal_operation_n(dkg_interval + 1);
+
+            let pool_reader = PoolReader::new(&pool);
+            let cup_height = pool_reader.get_catch_up_height();
+            let next_summary_height = pool_reader.get_next_summary_height();
+            assert_eq!(cup_height, Height::new(dkg_interval + 1));
+            assert_eq!(next_summary_height, Height::new(2 * (dkg_interval + 1)));
+
+            let cup_share_id_at = |height| ConsensusMessageId {
+                hash: ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(
+                    vec![],
+                ))),
+                height,
+            };
+
+            let expected_batch_height = Height::from(1);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+
+            // Shares at or below the current CUP height are useless.
+            assert_eq!(bouncer(&cup_share_id_at(Height::new(0))), Unwanted);
+            assert_eq!(bouncer(&cup_share_id_at(cup_height)), Unwanted);
+            // Shares between the current CUP height (exclusive) and the next summary
+            // height (inclusive) should be fetched.
+            assert_eq!(bouncer(&cup_share_id_at(cup_height.increment())), Wants);
+            assert_eq!(bouncer(&cup_share_id_at(next_summary_height)), Wants);
+            // Shares beyond the next summary height might become useful later.
+            assert_eq!(
+                bouncer(&cup_share_id_at(next_summary_height.increment())),
+                MaybeWantsLater
+            );
         })
     }
 
