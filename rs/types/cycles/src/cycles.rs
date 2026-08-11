@@ -1,9 +1,10 @@
 use candid::{CandidType, Nat};
 use ic_heap_bytes::DeterministicHeapBytes;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccount;
 use ic_protobuf::state::queues::v1::Cycles as PbCycles;
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
+use std::array::TryFromSliceError;
 use std::iter::Sum;
 use std::{
     fmt,
@@ -92,9 +93,13 @@ impl From<u64> for Cycles {
     }
 }
 
-impl From<&Vec<u8>> for Cycles {
-    fn from(bytes: &Vec<u8>) -> Self {
-        Self::new(u128::from_le_bytes(bytes.as_slice().try_into().unwrap()))
+/// Decodes `Cycles` from their little-endian representation, as produced by
+/// `From<Cycles> for Vec<u8>`. Fails if `bytes` is not exactly 16 bytes long.
+impl TryFrom<&[u8]> for Cycles {
+    type Error = TryFromSliceError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        Ok(Self::new(u128::from_le_bytes(bytes.try_into()?)))
     }
 }
 
@@ -212,9 +217,11 @@ impl From<Cycles> for PbCycles {
     }
 }
 
-impl From<PbCycles> for Cycles {
-    fn from(item: PbCycles) -> Self {
-        Self::from(&item.raw_cycles)
+impl TryFrom<PbCycles> for Cycles {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: PbCycles) -> Result<Self, Self::Error> {
+        try_from_le_bytes(&item.raw_cycles)
     }
 }
 
@@ -226,10 +233,21 @@ impl From<Cycles> for pbCyclesAccount {
     }
 }
 
-impl From<pbCyclesAccount> for Cycles {
-    fn from(value: pbCyclesAccount) -> Self {
-        Self::from(&value.cycles_balance)
+impl TryFrom<pbCyclesAccount> for Cycles {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pbCyclesAccount) -> Result<Self, Self::Error> {
+        try_from_le_bytes(&value.cycles_balance)
     }
+}
+
+/// Decodes `Cycles` from the little-endian representation used by the protobuf
+/// encodings above, mapping a length mismatch onto a `ProxyDecodeError`.
+fn try_from_le_bytes(bytes: &[u8]) -> Result<Cycles, ProxyDecodeError> {
+    Cycles::try_from(bytes).map_err(|_| ProxyDecodeError::ValueOutOfRange {
+        typ: "Cycles",
+        err: format!("expected 16 bytes, got {}", bytes.len()),
+    })
 }
 
 #[cfg(test)]
@@ -372,5 +390,44 @@ mod test {
             format!("{cycles:?}"),
             "Cycles(340282366920938463463374607431768211455)"
         );
+    }
+
+    #[test]
+    fn test_le_bytes_roundtrip() {
+        for cycles in [Cycles::zero(), Cycles::new(1), Cycles::new(u128::MAX)] {
+            let bytes: Vec<u8> = cycles.into();
+            assert_eq!(bytes.len(), 16);
+            assert_eq!(Cycles::try_from(bytes.as_slice()).unwrap(), cycles);
+        }
+    }
+
+    #[test]
+    fn test_try_from_le_bytes_of_wrong_length_fails() {
+        for len in [0, 15, 17] {
+            assert!(Cycles::try_from(vec![0; len].as_slice()).is_err());
+        }
+    }
+
+    #[test]
+    fn test_try_from_proto_with_wrong_length_fails() {
+        for len in [0, 15, 17] {
+            let err = Cycles::try_from(PbCycles {
+                raw_cycles: vec![0; len],
+            })
+            .unwrap_err();
+            assert!(
+                matches!(err, ProxyDecodeError::ValueOutOfRange { typ: "Cycles", .. }),
+                "unexpected error: {err:?}"
+            );
+
+            let err = Cycles::try_from(pbCyclesAccount {
+                cycles_balance: vec![0; len],
+            })
+            .unwrap_err();
+            assert!(
+                matches!(err, ProxyDecodeError::ValueOutOfRange { typ: "Cycles", .. }),
+                "unexpected error: {err:?}"
+            );
+        }
     }
 }
