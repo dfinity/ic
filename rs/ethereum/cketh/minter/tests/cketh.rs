@@ -1397,3 +1397,40 @@ fn should_derive_the_expected_minter_address() {
         Address::from_str(&cketh.minter_address()).unwrap()
     );
 }
+
+/// The funding task must record what it read even when no funding is due, and must record nothing
+/// at all when the read fails. The prepaid-gas gate treats a *fresh* observation as authority to
+/// spend, so a missing one only delays sweeping whereas a fabricated one would authorise it against
+/// gas nobody has seen.
+#[test]
+fn should_record_a_sweeper_balance_observation_only_when_the_read_succeeds() {
+    /// The observation is written by the balance outcall's callback, which needs rounds to run.
+    const TICKS_FOR_THE_CALLBACK: usize = 20;
+
+    // Answering the install-time read is what distinguishes the two fixtures. The successful answer
+    // reports a balance above the low-water mark, so that side is also the no-funding-due path: the
+    // observation has to be refreshed even though nothing is funded.
+    let read_succeeded = CkEthSetup::default();
+    read_succeeded.settle_initial_sweeper_funding_check();
+    let read_failed = CkEthSetup::default();
+    read_failed.fail_initial_sweeper_funding_check();
+    // Ticked the same number of times, so the negative case below is at least as generous as the
+    // positive one and cannot pass merely by being read too early.
+    for _ in 0..TICKS_FOR_THE_CALLBACK {
+        read_succeeded.env.tick();
+        read_failed.env.tick();
+    }
+
+    // Matched as "some number" rather than the exact balance, which is the harness' business.
+    read_succeeded
+        .check_minter_metrics()
+        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance [0-9]")
+        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance_age_seconds 0");
+
+    // NaN and +Inf rather than zeroes: "never looked" must stay distinguishable from "no gas left",
+    // since only the latter is a reading the gate may act on.
+    read_failed
+        .check_minter_metrics()
+        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance NaN")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_gas_balance_age_seconds \+Inf");
+}
