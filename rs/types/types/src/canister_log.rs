@@ -291,8 +291,10 @@ impl CanisterLog {
         }
 
         // Assume records sorted chronologically (with increasing idx): the new next
-        // index is the one following the delta's last record. Computed before the
-        // trimming below, which only ever drops the delta's oldest records.
+        // index is the one following the delta's last record. Read here and not after
+        // the trimming below, as that may drop every single delta record (if the
+        // capacity is too small to hold even one), while the next index has to
+        // advance past dropped records just the same.
         let next_idx = delta_log
             .records
             .get()
