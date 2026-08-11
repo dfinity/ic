@@ -744,7 +744,7 @@ ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
 indicatif = "^0.17.3"
-indoc = "1.0.9"
+indoc = "2.0.7"
 inferno = "0.12.0"
 inotify = { version = "0.11.2", default-features = false, features = [
     "stream",
