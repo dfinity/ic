@@ -321,7 +321,6 @@ impl SweeperFundingSetup {
         }
     }
 
-    /// The minter's tECDSA-derived main address, which also proves key derivation works here.
     /// Waits until the in-flight funding row clears, i.e. its transaction has finalized, mining
     /// meanwhile so the minter's `finalized` view keeps advancing.
     ///
