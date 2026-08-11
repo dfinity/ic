@@ -128,10 +128,13 @@ struct ResponseHelper {
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
     // Instructions already executed by a Wasm execution that has been paused and
-    // has not finished yet. Such instructions are not reflected in the
-    // instruction limits because those are updated only when the Wasm execution
-    // finishes, so they are tracked here in order to be charged if the execution
-    // fails before the Wasm execution finishes.
+    // has not finished yet. The instructions charged for this message are derived
+    // from `output.num_instructions_left` of a *finished* Wasm execution, while a
+    // paused slice only reports its executed instructions to the round limits.
+    // Hence such instructions are tracked here in order to be charged if the
+    // execution fails before the Wasm execution finishes. The counter is reset by
+    // `start_new_wasm_execution` because a finished Wasm execution is reflected in
+    // the instruction limits of the next one (the cleanup callback).
     executed_wasm_instructions: NumInstructions,
     applied_subnet_memory_reservation: NumBytes,
     deallocation_sender: DeallocationSender,
@@ -773,8 +776,8 @@ impl PausedExecution for PausedResponseExecution {
         // the Wasm state changes are applied to the up-to-date state.
         // If resuming fails, then the instructions already executed by the paused
         // Wasm execution are still charged: they have been executed and hence
-        // consumed round instructions, but the instruction limits are updated
-        // only when the Wasm execution finishes.
+        // consumed round instructions, but the paused Wasm execution never finishes
+        // and hence yields no `num_instructions_left` to derive them from.
         let executed_wasm_instructions = self.helper.executed_wasm_instructions;
         let (helper, result) = match ResponseHelper::resume(
             self.helper,
@@ -897,8 +900,8 @@ impl PausedExecution for PausedCleanupExecution {
         // because the cleanup callback runs only if the response callback fails.
         // If resuming fails, then the instructions already executed by the paused
         // Wasm execution are still charged: they have been executed and hence
-        // consumed round instructions, but the instruction limits are updated
-        // only when the Wasm execution finishes.
+        // consumed round instructions, but the paused Wasm execution never finishes
+        // and hence yields no `num_instructions_left` to derive them from.
         let executed_wasm_instructions = self.helper.executed_wasm_instructions;
         let (helper, result) = match ResponseHelper::resume(
             self.helper,

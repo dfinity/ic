@@ -332,10 +332,11 @@ struct CallOrTaskHelper {
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
     // Instructions already executed by a Wasm execution that has been paused and
-    // has not finished yet. Such instructions are not reflected in the
-    // instruction limits because those are updated only when the Wasm execution
-    // finishes, so they are tracked here in order to be charged if the execution
-    // fails before the Wasm execution finishes.
+    // has not finished yet. The instructions charged for this message are derived
+    // from `output.num_instructions_left` of a *finished* Wasm execution (see
+    // `finish`), while a paused slice only reports its executed instructions to
+    // the round limits. Hence such instructions are tracked here in order to be
+    // charged if the execution fails before the Wasm execution finishes.
     executed_wasm_instructions: NumInstructions,
     deallocation_sender: DeallocationSender,
 }
@@ -732,8 +733,8 @@ impl PausedExecution for PausedCallOrTaskExecution {
         );
         // If resuming fails, then the instructions already executed by the paused
         // Wasm execution are still charged: they have been executed and hence
-        // consumed round instructions, but the instruction limits are updated
-        // only when the Wasm execution finishes.
+        // consumed round instructions, but the paused Wasm execution never finishes
+        // and hence yields no `num_instructions_left` to derive them from.
         let executed_wasm_instructions = self.paused_helper.executed_wasm_instructions;
         let helper = match CallOrTaskHelper::resume(
             &clean_canister,
