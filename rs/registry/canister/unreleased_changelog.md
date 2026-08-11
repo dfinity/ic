@@ -15,9 +15,8 @@ on the process that this file is part of, see
 
 ## Removed
 
-## Fixed
+The `blessed_replica_versions` record has been removed.
 
-* `do_split_subnet` - don't assume that all the registry entries exist when checking whether the
-  entries changed across await point
+## Fixed
 
 ## Security

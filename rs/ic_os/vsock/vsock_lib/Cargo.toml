@@ -14,7 +14,10 @@ serde_json = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }
 reqwest = { workspace = true }
-rusb = "0.9"
+# vendored: build the bundled libusb instead of linking the system one, so
+# neither build needs libusb-1.0-0-dev (Bazel additionally disables the
+# libudev probe; see the libusb1-sys annotation in bazel/rust.MODULE.bazel).
+rusb = { version = "0.9", features = ["vendored"] }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 vsock = "0.4"

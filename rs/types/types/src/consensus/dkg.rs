@@ -279,7 +279,7 @@ pub struct DkgSummary {
     /// The number of intervals a DKG for the given remote target was attempted.
     pub remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
     /// Status of the subnet splitting.
-    pub subnet_splitting_status: BackwardsCompatible<SubnetSplittingStatus, false>,
+    pub subnet_splitting_status: BackwardsCompatible<SubnetSplittingStatus, true>,
 }
 
 impl DkgSummary {
@@ -307,7 +307,7 @@ impl DkgSummary {
             next_interval_length,
             height,
             remote_dkg_attempts,
-            subnet_splitting_status: BackwardsCompatible::empty(),
+            subnet_splitting_status: BackwardsCompatible::new(SubnetSplittingStatus::NotScheduled),
         }
     }
 
@@ -787,7 +787,6 @@ pub enum DkgPayloadCreationError {
     FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
     FailedToGetVetKdKeyList(RegistryClientError),
-    MissingDkgStartBlock,
 }
 
 /// Reasons for why a dkg payload might be invalid.
