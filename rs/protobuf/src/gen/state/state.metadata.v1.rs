@@ -36,7 +36,11 @@ pub struct SubnetTopology {
     #[prost(message, repeated, tag = "8")]
     pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
     /// Whether the subnet is "cooling down", i.e. quiescing: it accepts no new
-    /// ingress or inter-canister messages and executes no canister messages.
+    /// ingress or inter-canister messages and lets the messages it already holds
+    /// drain (which it keeps executing).
+    ///
+    /// See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+    /// semantics.
     #[prost(bool, tag = "9")]
     pub cooling_down: bool,
 }

@@ -34,7 +34,11 @@ message SubnetTopology {
   registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
   repeated types.v1.PrincipalId subnet_admins = 8;
   // Whether the subnet is "cooling down", i.e. quiescing: it accepts no new
-  // ingress or inter-canister messages and executes no canister messages.
+  // ingress or inter-canister messages and lets the messages it already holds
+  // drain (which it keeps executing).
+  //
+  // See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+  // semantics.
   bool cooling_down = 9;
 }
 
