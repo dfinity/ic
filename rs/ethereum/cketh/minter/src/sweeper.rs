@@ -58,6 +58,17 @@ pub async fn fund_sweeper_address() {
             );
             return;
         }
+        FundingDecision::InsufficientBalance {
+            available,
+            required,
+        } => {
+            log!(
+                INFO,
+                "[fund_sweeper]: SKIPPING: funding {sweeper} needs {required} but only {available} \
+                 of the minter's ETH is backed by deposits"
+            );
+            return;
+        }
         FundingDecision::AlreadyInFlight(in_flight) => {
             log!(
                 INFO,
@@ -138,6 +149,11 @@ pub enum FundingDecision {
     Fund(FundingPlan),
     /// A previous funding is still between its burn and its finalized transfer.
     AlreadyInFlight(InFlightFunding),
+    /// The minter's deposit-backed ETH does not cover the funding.
+    InsufficientBalance {
+        available: Wei,
+        required: Wei,
+    },
     NotDue,
 }
 
@@ -153,10 +169,23 @@ pub fn plan_funding(state: &State, sweeper_balance: Wei) -> FundingDecision {
     }
     match state.sweeper_funding_config.amount_due(sweeper_balance) {
         None => FundingDecision::NotDue,
-        Some(amount) => FundingDecision::Fund(FundingPlan {
-            amount,
-            burn: burn_for(&state.sweeper_funding, amount, minimum_burn(state)),
-        }),
+        Some(amount) => {
+            // Funding debits `eth_balance`, which counts only ETH received through deposits, so
+            // moving more than that would spend ETH the accounting knows nothing about — and the
+            // debit at finalization would underflow and trap the withdrawal timer, head-of-line
+            // blocking every user withdrawal behind it. Waiting is the safe direction.
+            let available = state.eth_balance().eth_balance();
+            if available < amount {
+                return FundingDecision::InsufficientBalance {
+                    available,
+                    required: amount,
+                };
+            }
+            FundingDecision::Fund(FundingPlan {
+                amount,
+                burn: burn_for(&state.sweeper_funding, amount, minimum_burn(state)),
+            })
+        }
     }
 }
 

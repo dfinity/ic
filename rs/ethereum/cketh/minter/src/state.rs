@@ -822,6 +822,17 @@ impl Default for EthBalance {
     }
 }
 
+#[cfg(test)]
+impl EthBalance {
+    /// An `EthBalance` holding `eth_balance` of deposit-backed ETH.
+    pub fn with_eth_balance(eth_balance: Wei) -> Self {
+        Self {
+            eth_balance,
+            ..Default::default()
+        }
+    }
+}
+
 impl EthBalance {
     fn eth_balance_add(&mut self, value: Wei) {
         self.eth_balance = self.eth_balance.checked_add(value).unwrap_or_else(|| {

@@ -126,7 +126,36 @@ mod concurrent_fundings {
             target: Wei::new(TARGET),
         };
         state.cketh_minimum_withdrawal_amount = Wei::new(MINIMUM_BURN);
+        // Funding is capped by the ETH the minter received through deposits, so a fixture with none
+        // could never fund at all.
+        state.eth_balance = crate::state::EthBalance::with_eth_balance(Wei::new(10 * TARGET));
         state
+    }
+
+    #[test]
+    fn should_refuse_to_fund_more_than_the_deposit_backed_balance() {
+        let mut state = state();
+        state.eth_balance = crate::state::EthBalance::with_eth_balance(Wei::new(TARGET - 1));
+
+        assert_eq!(
+            plan_funding(&state, Wei::ZERO),
+            FundingDecision::InsufficientBalance {
+                available: Wei::new(TARGET - 1),
+                required: Wei::new(TARGET),
+            },
+            "funding beyond the backed balance would underflow the debit at finalization and trap"
+        );
+    }
+
+    #[test]
+    fn should_fund_when_the_backed_balance_exactly_covers_it() {
+        let mut state = state();
+        state.eth_balance = crate::state::EthBalance::with_eth_balance(Wei::new(TARGET));
+
+        match plan_funding(&state, Wei::ZERO) {
+            FundingDecision::Fund(plan) => assert_eq!(plan.amount, Wei::new(TARGET)),
+            other => panic!("a fully covered funding must be due, got {other:?}"),
+        }
     }
 
     #[test]
