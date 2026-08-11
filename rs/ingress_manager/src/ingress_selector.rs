@@ -534,7 +534,7 @@ impl IngressManager {
         // also checked by the ingress filter on the receiving nodes, so under normal
         // circumstances such a message never even reaches the ingress pool; this check
         // is what makes it binding, both when building and when validating a payload.
-        if state.is_own_subnet_cooling_down() {
+        if state.metadata.is_cooling_down() {
             return Err(ValidationError::InvalidArtifact(
                 InvalidIngressPayloadReason::SubnetCoolingDown,
             ));

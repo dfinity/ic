@@ -1151,15 +1151,21 @@ fn build_streams_drops_refunds_at_engine_boundary() {
     }
 }
 
-/// The local canister used by the cooling down tests, hosted by `LOCAL_SUBNET`.
-const COOLING_DOWN_LOCAL_CANISTER: CanisterId = CanisterId::from_u64(0);
-/// The remote canister used by the cooling down tests, hosted by `REMOTE_SUBNET`
-/// (except in `new_loopback_cooling_down_fixture()`, where it too is local).
-const COOLING_DOWN_REMOTE_CANISTER: CanisterId = CanisterId::from_u64(1);
+/// The cooling down subnet of the cooling down tests (except in
+/// `new_loopback_cooling_down_fixture()`, where `LOCAL_SUBNET` is the one cooling
+/// down).
+const COOLING_DOWN_SUBNET: SubnetId = REMOTE_SUBNET;
 
-/// Sets up a fixture with `COOLING_DOWN_LOCAL_CANISTER` hosted by `LOCAL_SUBNET`
-/// and `COOLING_DOWN_REMOTE_CANISTER` by `REMOTE_SUBNET`, the latter cooling down
-/// and of the given subnet type.
+/// The sender canister of the cooling down tests, hosted by `LOCAL_SUBNET`.
+const LOCAL_CANISTER: CanisterId = CanisterId::from_u64(0);
+/// The destination canister of the cooling down tests, hosted by
+/// `COOLING_DOWN_SUBNET` (except in `new_loopback_cooling_down_fixture()`, where
+/// it too is hosted by `LOCAL_SUBNET`).
+const COOLING_DOWN_CANISTER: CanisterId = CanisterId::from_u64(1);
+
+/// Sets up a fixture with `LOCAL_CANISTER` hosted by `LOCAL_SUBNET` and
+/// `COOLING_DOWN_CANISTER` by `COOLING_DOWN_SUBNET`, the latter cooling down and
+/// of the given subnet type.
 fn new_cooling_down_fixture(
     log: &ReplicaLogger,
     remote_subnet_type: SubnetType,
@@ -1169,7 +1175,7 @@ fn new_cooling_down_fixture(
     state.metadata.modify_network_topology(|network_topology| {
         network_topology.set_subnets(btreemap! {
             LOCAL_SUBNET => SubnetTopology::default(),
-            REMOTE_SUBNET => SubnetTopology {
+            COOLING_DOWN_SUBNET => SubnetTopology {
                 subnet_type: remote_subnet_type,
                 cooling_down: true,
                 ..Default::default()
@@ -1177,8 +1183,8 @@ fn new_cooling_down_fixture(
         });
         network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: COOLING_DOWN_LOCAL_CANISTER, end: COOLING_DOWN_LOCAL_CANISTER } => LOCAL_SUBNET,
-                CanisterIdRange { start: COOLING_DOWN_REMOTE_CANISTER, end: COOLING_DOWN_REMOTE_CANISTER } => REMOTE_SUBNET,
+                CanisterIdRange { start: LOCAL_CANISTER, end: LOCAL_CANISTER } => LOCAL_SUBNET,
+                CanisterIdRange { start: COOLING_DOWN_CANISTER, end: COOLING_DOWN_CANISTER } => COOLING_DOWN_SUBNET,
             })
             .unwrap(),
         );
@@ -1200,7 +1206,7 @@ fn new_loopback_cooling_down_fixture(
         });
         network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: COOLING_DOWN_LOCAL_CANISTER, end: COOLING_DOWN_REMOTE_CANISTER } => LOCAL_SUBNET,
+                CanisterIdRange { start: LOCAL_CANISTER, end: COOLING_DOWN_CANISTER } => LOCAL_SUBNET,
             })
             .unwrap(),
         );
@@ -1261,22 +1267,22 @@ fn push_subnet_output_response(
     RequestOrResponse::Response(response)
 }
 
-/// A request from `COOLING_DOWN_LOCAL_CANISTER` to `COOLING_DOWN_REMOTE_CANISTER`.
+/// A request from `LOCAL_CANISTER` to `COOLING_DOWN_CANISTER`.
 fn cooling_down_request(deadline: CoarseTime, payment: Cycles) -> Request {
     RequestBuilder::new()
-        .sender(COOLING_DOWN_LOCAL_CANISTER)
-        .receiver(COOLING_DOWN_REMOTE_CANISTER)
+        .sender(LOCAL_CANISTER)
+        .receiver(COOLING_DOWN_CANISTER)
         .sender_reply_callback(CallbackId::from(1))
         .deadline(deadline)
         .payment(payment)
         .build()
 }
 
-/// A response from `COOLING_DOWN_LOCAL_CANISTER` to `COOLING_DOWN_REMOTE_CANISTER`.
+/// A response from `LOCAL_CANISTER` to `COOLING_DOWN_CANISTER`.
 fn cooling_down_response(deadline: CoarseTime, refund: Cycles) -> RequestOrResponse {
     RequestOrResponse::Response(Arc::new(Response {
-        originator: COOLING_DOWN_REMOTE_CANISTER,
-        respondent: COOLING_DOWN_LOCAL_CANISTER,
+        originator: COOLING_DOWN_CANISTER,
+        respondent: LOCAL_CANISTER,
         originator_reply_callback: CallbackId::from(1),
         refund,
         response_payload: Payload::Data(vec![]),
@@ -1284,8 +1290,8 @@ fn cooling_down_response(deadline: CoarseTime, refund: Cycles) -> RequestOrRespo
     }))
 }
 
-/// The two kinds of canister message from `COOLING_DOWN_LOCAL_CANISTER` to
-/// `COOLING_DOWN_REMOTE_CANISTER` (a request and a response), each paired with its
+/// The two kinds of canister message from `LOCAL_CANISTER` to
+/// `COOLING_DOWN_CANISTER` (a request and a response), each paired with its
 /// metric type label. Neither kind makes any difference to a message headed for a
 /// cooling down (non-engine) subnet.
 fn cooling_down_messages(
@@ -1310,13 +1316,13 @@ fn cooling_down_messages(
 /// makes any difference to a message headed for a cooling down (non-engine)
 /// subnet; contrast with `is_illegal_engine_msg` in `build_streams()`.
 fn deadline_and_cycles_matrix() -> impl Iterator<Item = (CoarseTime, Cycles)> {
-    [NO_DEADLINE, SOME_DEADLINE]
-        .into_iter()
-        .flat_map(|deadline| {
-            [Cycles::zero(), Cycles::new(100)]
-                .into_iter()
-                .map(move |cycles| (deadline, cycles))
-        })
+    [
+        (NO_DEADLINE, Cycles::zero()),
+        (NO_DEADLINE, Cycles::new(100)),
+        (SOME_DEADLINE, Cycles::zero()),
+        (SOME_DEADLINE, Cycles::new(100)),
+    ]
+    .into_iter()
 }
 
 /// Asserts that no canister message was routed into the stream to `subnet_id`.
@@ -1418,21 +1424,17 @@ fn build_streams_retains_messages_to_cooling_down_subnet() {
 
                 let mut result_state = stream_builder.build_streams(provided_state);
 
-                // Nothing was routed into the `REMOTE_SUBNET` stream; the message is
+                // Nothing was routed into the `COOLING_DOWN_SUBNET` stream; the message is
                 // still in the sender's output queue; and no reject response was
                 // produced for it.
-                assert_no_messages_routed(&result_state, REMOTE_SUBNET);
+                assert_no_messages_routed(&result_state, COOLING_DOWN_SUBNET);
                 assert_eq!(
                     vec![msg.clone()],
-                    output_queue_contents(
-                        &result_state,
-                        COOLING_DOWN_LOCAL_CANISTER,
-                        COOLING_DOWN_REMOTE_CANISTER
-                    )
+                    output_queue_contents(&result_state, LOCAL_CANISTER, COOLING_DOWN_CANISTER)
                 );
                 assert!(
                     !result_state
-                        .canister_state(&COOLING_DOWN_LOCAL_CANISTER)
+                        .canister_state(&LOCAL_CANISTER)
                         .unwrap()
                         .has_input()
                 );
@@ -1445,11 +1447,11 @@ fn build_streams_retains_messages_to_cooling_down_subnet() {
                 assert_eq_critical_errors(0, 0, 0, &metrics_registry);
 
                 // And it is routed as soon as the subnet stops cooling down.
-                clear_cooling_down(&mut result_state, REMOTE_SUBNET);
+                clear_cooling_down(&mut result_state, COOLING_DOWN_SUBNET);
                 let result_state = stream_builder.build_streams(result_state);
                 assert_eq!(
                     vec![StreamMessage::from(msg)],
-                    routed_messages(&result_state, REMOTE_SUBNET)
+                    routed_messages(&result_state, COOLING_DOWN_SUBNET)
                 );
             });
         }
@@ -1466,14 +1468,13 @@ fn build_streams_routes_subnet_output_queues_while_cooling_down() {
         let (stream_builder, mut provided_state, metrics_registry) =
             new_cooling_down_fixture(&log, SubnetType::Application);
         set_cooling_down(&mut provided_state, LOCAL_SUBNET, true);
-        let response =
-            push_subnet_output_response(&mut provided_state, COOLING_DOWN_REMOTE_CANISTER);
+        let response = push_subnet_output_response(&mut provided_state, COOLING_DOWN_CANISTER);
 
         let result_state = stream_builder.build_streams(provided_state);
 
         assert_eq!(
             vec![StreamMessage::from(response)],
-            routed_messages(&result_state, REMOTE_SUBNET)
+            routed_messages(&result_state, COOLING_DOWN_SUBNET)
         );
         assert!(!result_state.subnet_queues().has_output());
         assert_one_message_status(
@@ -1488,8 +1489,7 @@ fn build_streams_routes_subnet_output_queues_while_cooling_down() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) =
             new_loopback_cooling_down_fixture(&log);
-        let response =
-            push_subnet_output_response(&mut provided_state, COOLING_DOWN_LOCAL_CANISTER);
+        let response = push_subnet_output_response(&mut provided_state, LOCAL_CANISTER);
 
         let result_state = stream_builder.build_streams(provided_state);
 
@@ -1515,13 +1515,13 @@ fn build_streams_retains_refunds_to_cooling_down_subnet() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) =
             new_cooling_down_fixture(&log, SubnetType::Application);
-        provided_state.add_refund(COOLING_DOWN_REMOTE_CANISTER, Cycles::new(100));
+        provided_state.add_refund(COOLING_DOWN_CANISTER, Cycles::new(100));
 
         let mut result_state = stream_builder.build_streams(provided_state);
 
-        // Nothing was routed into the `REMOTE_SUBNET` stream; the refund is still in
+        // Nothing was routed into the `COOLING_DOWN_SUBNET` stream; the refund is still in
         // the refund pool.
-        assert_eq!(0, routed_refund_count(&result_state, REMOTE_SUBNET));
+        assert_eq!(0, routed_refund_count(&result_state, COOLING_DOWN_SUBNET));
         assert_eq!(1, result_state.refunds().len());
 
         assert_one_message_status(
@@ -1532,10 +1532,10 @@ fn build_streams_retains_refunds_to_cooling_down_subnet() {
         assert_eq_critical_errors(0, 0, 0, &metrics_registry);
 
         // And it is routed as soon as the subnet stops cooling down.
-        clear_cooling_down(&mut result_state, REMOTE_SUBNET);
+        clear_cooling_down(&mut result_state, COOLING_DOWN_SUBNET);
         let result_state = stream_builder.build_streams(result_state);
         assert!(result_state.refunds().is_empty());
-        assert_eq!(1, routed_refund_count(&result_state, REMOTE_SUBNET));
+        assert_eq!(1, routed_refund_count(&result_state, COOLING_DOWN_SUBNET));
     });
 }
 
@@ -1559,16 +1559,12 @@ fn build_streams_retains_messages_behind_message_to_cooling_down_subnet() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        // Nothing was routed into the `REMOTE_SUBNET` stream. Both messages are still
+        // Nothing was routed into the `COOLING_DOWN_SUBNET` stream. Both messages are still
         // in the output queue, in the original order.
-        assert_no_messages_routed(&result_state, REMOTE_SUBNET);
+        assert_no_messages_routed(&result_state, COOLING_DOWN_SUBNET);
         assert_eq!(
             vec![response, request],
-            output_queue_contents(
-                &result_state,
-                COOLING_DOWN_LOCAL_CANISTER,
-                COOLING_DOWN_REMOTE_CANISTER
-            )
+            output_queue_contents(&result_state, LOCAL_CANISTER, COOLING_DOWN_CANISTER)
         );
 
         // Only the response was observed; the request was never even looked at.
@@ -1597,11 +1593,7 @@ fn build_streams_does_not_exempt_loopback_while_cooling_down() {
             assert_no_messages_routed(&result_state, LOCAL_SUBNET);
             assert_eq!(
                 vec![msg],
-                output_queue_contents(
-                    &result_state,
-                    COOLING_DOWN_LOCAL_CANISTER,
-                    COOLING_DOWN_REMOTE_CANISTER
-                )
+                output_queue_contents(&result_state, LOCAL_CANISTER, COOLING_DOWN_CANISTER)
             );
             assert_one_message_status(
                 msg_type,
@@ -1634,7 +1626,7 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
 
         assert_reject_response(
             &result_state,
-            COOLING_DOWN_LOCAL_CANISTER,
+            LOCAL_CANISTER,
             RejectCode::SysFatal,
             "Unbounded-wait calls and calls with cycles are not allowed to CloudEngine subnets",
         );
@@ -1658,14 +1650,10 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_no_messages_routed(&result_state, REMOTE_SUBNET);
+        assert_no_messages_routed(&result_state, COOLING_DOWN_SUBNET);
         assert_eq!(
             vec![request],
-            output_queue_contents(
-                &result_state,
-                COOLING_DOWN_LOCAL_CANISTER,
-                COOLING_DOWN_REMOTE_CANISTER
-            )
+            output_queue_contents(&result_state, LOCAL_CANISTER, COOLING_DOWN_CANISTER)
         );
         assert_one_message_status(
             LABEL_VALUE_TYPE_REQUEST,
@@ -1680,12 +1668,12 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) =
             new_cooling_down_fixture(&log, SubnetType::CloudEngine);
-        provided_state.add_refund(COOLING_DOWN_REMOTE_CANISTER, Cycles::new(100));
+        provided_state.add_refund(COOLING_DOWN_CANISTER, Cycles::new(100));
 
         let result_state = stream_builder.build_streams(provided_state);
 
         assert!(result_state.refunds().is_empty());
-        assert_eq!(0, routed_refund_count(&result_state, REMOTE_SUBNET));
+        assert_eq!(0, routed_refund_count(&result_state, COOLING_DOWN_SUBNET));
         assert_one_message_status(
             LABEL_VALUE_TYPE_REFUND,
             LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,

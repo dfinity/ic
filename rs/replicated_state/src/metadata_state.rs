@@ -822,6 +822,14 @@ impl SystemMetadata {
             .get_reference_subnet_size(&self.own_subnet_id)
     }
 
+    /// Returns whether this subnet is cooling down. Defaults to `false` if
+    /// `network_topology` is not populated.
+    ///
+    /// See [`SubnetTopology::cooling_down`] for the exact semantics.
+    pub fn is_cooling_down(&self) -> bool {
+        self.network_topology.is_cooling_down(&self.own_subnet_id)
+    }
+
     /// Returns the subnet's guaranteed response message memory capacity, capped
     /// relative to the subnet's heap delta capacity.
     pub fn guaranteed_response_message_memory_capacity(&self) -> NumBytes {

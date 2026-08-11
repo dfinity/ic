@@ -3427,7 +3427,7 @@ impl ExecutionEnvironment {
         // that they never make it into a block. The same check is applied during
         // block validation (see `IngressSelector::validate_ingress_payload()`), which
         // is what actually guarantees it.
-        if state.is_own_subnet_cooling_down() {
+        if state.metadata.is_cooling_down() {
             return Err(UserError::new(
                 ErrorCode::SubnetCoolingDown,
                 format!(

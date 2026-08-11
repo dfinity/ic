@@ -471,13 +471,13 @@ impl StreamBuilderImpl {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
-                    let is_engine_dst = !is_loopback_stream
                     // A message that must never cross an engine boundary: a
                     // guaranteed-response message, or one carrying cycles. Such a message
                     // is always handled by the engine boundary arms below, whether or not
                     // the destination subnet is cooling down: it is illegal there
                     // permanently, so a transient rejection would be misleading.
-                    let is_illegal_engine_msg = (msg.deadline() == NO_DEADLINE || msg.cycles() > Cycles::zero())
+                    let is_illegal_engine_msg = (msg.deadline() == NO_DEADLINE
+                        || msg.cycles() > Cycles::zero())
                         && !is_loopback_stream
                         && (own_subnet_type == SubnetType::CloudEngine
                             || network_topology
@@ -494,8 +494,9 @@ impl StreamBuilderImpl {
                     // responses that the subnet itself produced while draining its
                     // subnet queues, and they are always routed, whether or not this
                     // subnet or the destination subnet is cooling down. Retaining one
-                    // would leave the state of a cooling down subnet with work still
-                    // to do, which is the very thing cooling down is meant to avoid.
+                    // would leave a message behind in the subnet queues of a cooling
+                    // down subnet, which is the very thing cooling down is meant to
+                    // avoid.
                     if !is_from_subnet_queues
                         && network_topology.is_cooling_down(&dst_subnet_id)
                         && !is_illegal_engine_msg
@@ -823,8 +824,8 @@ impl StreamBuilderImpl {
                     let is_engine_src = !is_loopback_stream && own_is_engine;
                     // Checked before the cool-down check below: a refund always
                     // carries cycles, so one at an engine boundary is illegal there
-                    // permanently, not transiently, and must still raise the critical
-                    // error rather than being retained.
+                    // permanently, not transiently, and must be dropped rather than
+                    // retained.
                     if is_engine_dst || is_engine_src {
                         // A refund destined to cross the engine boundary should not exist: a
                         // refund is only produced for a dropped cycle-bearing message, but a
