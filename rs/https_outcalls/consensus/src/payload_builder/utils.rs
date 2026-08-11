@@ -1,17 +1,18 @@
-use CanisterHttpResponseContent::Reject;
-use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
+use ic_https_outcalls_pricing::fees::{
+    flexible_initial_spent, min_flexible_consensus_cost, non_flexible_initial_spent,
+};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_logger::{ReplicaLogger, warn};
 use ic_types::{
-    CountBytes, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
+    CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
         FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
+        CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus, PricingVersion,
     },
     crypto::{Signed, crypto_hash},
@@ -169,6 +170,73 @@ pub(crate) fn check_initial_spent_within_limit(
             Ok(())
         }
         _ => Ok(()),
+    }
+}
+
+/// An outcall is out of cycles if its committee's unspent allowance
+/// is smaller than the minimum cost required to deliver a response.
+pub(crate) struct OutOfCyclesProof {
+    /// The least it can cost to deliver a response.
+    pub min_cost: Cycles,
+    /// What is left of the committee's collective allowance.
+    pub unspent_allowance: Cycles,
+}
+
+/// Checks that a flexible outcall has run out of cycles, i.e. that its
+/// committee's remaining allowances can no longer cover the consensus cost of
+/// delivering any response.
+///
+/// `seen_shares` are the shares the committee has produced so far, at most one
+/// per member. What is left of the committee's collective allowance is at most
+/// the sum of the unspent allowances of those shares' signers, plus a full
+/// allowance for every committee member that has not been seen yet.
+pub(crate) fn check_out_of_cycles<'a>(
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare> + Clone,
+    committee_size: usize,
+    min_responses: u32,
+    callback_id: CallbackId,
+    context: &CanisterHttpRequestContext,
+) -> Result<OutOfCyclesProof, InvalidCanisterHttpPayloadReason> {
+    let min_cost = min_flexible_consensus_cost(
+        seen_shares.clone(),
+        context.subnet_size,
+        committee_size,
+        min_responses,
+    );
+    let ConsensusCostAllowance::PayAsYouGo(allowance) = per_replica_consensus_allowance(context)
+    else {
+        // There is no per-replica allowance, so there is nothing to run out
+        // of (see `per_replica_consensus_allowance`).
+        return Err(InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+            callback_id,
+            unspent_allowance: None,
+            min_cost,
+        });
+    };
+
+    let spent = seen_shares.map(|share| share.content.spent()).sum();
+    let unspent_allowance = allowance * committee_size - spent;
+
+    // Only a bound the remaining allowances fall short of means out of cycles: no
+    // bound at all means nothing is left to deliver, and so nothing to cover.
+    match min_cost {
+        Some(min_cost) if unspent_allowance < min_cost => Ok(OutOfCyclesProof {
+            min_cost,
+            unspent_allowance,
+        }),
+        _ => {
+            debug_assert!(
+                unspent_allowance >= min_cost.unwrap_or_default(),
+                "expect unspent allowance {} >= min cost {:?}",
+                unspent_allowance,
+                min_cost
+            );
+            Err(InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
+                callback_id,
+                unspent_allowance: Some(unspent_allowance),
+                min_cost,
+            })
+        }
     }
 }
 
@@ -500,25 +568,42 @@ fn assemble_non_flexible_response(
 pub(crate) enum FlexibleFindResult {
     /// Collected enough OK responses for consensus.
     OkResponses(FlexibleCanisterHttpResponses, usize),
-    /// Detected an error condition (too many rejects or responses too large).
+    /// Detected an error condition (too many rejects, responses too large, or out
+    /// of cycles).
     Error(FlexibleCanisterHttpError, usize),
     /// Not enough data to decide yet; more shares may arrive.
     Pending,
 }
 
+/// A committee member's contribution to a flexible HTTP outcall: the response it
+/// produced, its signed receipt, and the number of payload bytes that delivering
+/// that response takes.
+struct FlexibleCandidate<'a> {
+    response: CanisterHttpResponse,
+    share: &'a CanisterHttpResponseShare,
+    size: usize,
+}
+
 /// Scans grouped shares for a flexible HTTP outcall and determines the result.
 ///
-/// Iterates shares sorted by `content_size` ascending (preferring smaller
-/// responses), collecting OK responses from distinct committee members.
-///
-/// If enough OK responses are gathered, returns [`FlexibleFindResult::OkResponses`].
+/// Collects one candidate response per committee member and, if enough of them
+/// are OK responses, returns a [`FlexibleFindResult::OkResponses`] delivering
+/// between `min_responses` and `max_responses` of them (see
+/// [`select_flexible_responses`]).
 ///
 /// Otherwise checks for error conditions:
 /// - **TooManyRejects**: more nodes returned rejects than the slack
 ///   allows (`committee.len() - min_responses`).
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
 ///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
+/// - **OutOfCycles**: delivering a response can never be paid for again (see
+///   [`check_out_of_cycles`]).
 /// - **Pending**: not enough data to decide yet.
+///
+/// Both of the results that deliver response bodies — `OkResponses` and
+/// `TooManyRejects` — are topped up with [extra
+/// shares](FlexibleCanisterHttpResponses::extra_shares) as needed to cover their
+/// consensus cost (see [`fund_flexible_selection`]).
 ///
 /// The cloning of the share is only done when building the [`FlexibleCanisterHttpResponses`] result.
 pub(crate) fn find_flexible_result(
@@ -529,25 +614,17 @@ pub(crate) fn find_flexible_result(
     max_responses: u32,
     accumulated_size: usize,
     max_payload_size: NumBytes,
-    subnet_size: NumberOfNodes,
+    context: &CanisterHttpRequestContext,
     pool_access: &dyn CanisterHttpPool,
 ) -> FlexibleFindResult {
-    let mut entries_sorted_asc: Vec<_> = grouped_shares.iter().collect();
-    entries_sorted_asc.sort_unstable_by_key(|(metadata, _)| metadata.content_size);
-
-    let min_responses = min_responses as usize;
-    let mut ok_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
-    let mut ok_responses_size = FlexibleCanisterHttpResponses::base_count_bytes();
-    // Tracks all signers processed (both OK and reject)
+    let mut all_shares: Vec<&CanisterHttpResponseShare> = Vec::new();
+    let mut ok_candidates: Vec<FlexibleCandidate> = Vec::new();
+    let mut reject_candidates: Vec<FlexibleCandidate> = Vec::new();
+    // Tracks all signers processed (both OK and reject).
     let mut seen_signers = BTreeSet::new();
-    let mut reject_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
-    let mut all_ok_shares_sorted_asc: Vec<(&CanisterHttpResponseShare, usize)> = Vec::new();
-
-    'outer: for (metadata, shares) in entries_sorted_asc {
+    // We don't care about the grouping by metadata, so flatten the shares in two loops.
+    for (metadata, shares) in grouped_shares {
         for &share in shares {
-            if ok_responses.len() >= max_responses as usize {
-                break 'outer;
-            }
             let signer = share.signature.signer;
             if !committee.contains(&signer) || !seen_signers.insert(signer) {
                 continue;
@@ -556,90 +633,101 @@ pub(crate) fn find_flexible_result(
             else {
                 continue;
             };
-
-            if matches!(response.content, Reject(_)) {
-                reject_responses.push((response, share));
-                continue;
+            all_shares.push(share);
+            let candidate = FlexibleCandidate {
+                size: FlexibleCanisterHttpResponseWithProof::count_bytes(&response, share),
+                response,
+                share,
+            };
+            if candidate.response.content.is_reject() {
+                reject_candidates.push(candidate);
+            } else {
+                ok_candidates.push(candidate);
             }
-
-            let response_with_proof_size =
-                FlexibleCanisterHttpResponseWithProof::count_bytes(&response, share);
-            all_ok_shares_sorted_asc.push((share, response_with_proof_size));
-
-            let new_total = NumBytes::new(
-                (accumulated_size + ok_responses_size + response_with_proof_size) as u64,
-            );
-            if new_total >= max_payload_size {
-                // We `continue` rather than `break` here, to further populate
-                // the Vec later used to detect ResponsesTooLarge errors.
-                continue;
-            }
-            ok_responses_size += response_with_proof_size;
-            ok_responses.push((response, share));
         }
     }
+    // Order response candidates by size, so that smallest ones are selected first.
+    let by_size = |candidate: &FlexibleCandidate| {
+        (
+            candidate.size,
+            candidate.share.content.spent(),
+            candidate.share.signature.signer,
+        )
+    };
+    ok_candidates.sort_unstable_by_key(by_size);
+    reject_candidates.sort_unstable_by_key(by_size);
+    // Order all shares by the cycles they spent, so that the ones with the highest
+    // unspent allowance are selected first, as extra shares for funding candidates.
+    all_shares.sort_unstable_by_key(|share| (share.content.spent(), share.signature.signer));
+    let min_responses = min_responses as usize;
 
     // 1. Enough OK responses collected?
-    if ok_responses.len() >= min_responses {
-        let initial_spent = flexible_initial_spent(
-            ok_responses.iter().map(|(_, share)| *share),
-            subnet_size,
-            min_responses as u32,
-        );
-        return FlexibleFindResult::OkResponses(
-            FlexibleCanisterHttpResponses {
-                callback_id,
-                responses: ok_responses
-                    .into_iter()
-                    .map(|(response, share)| FlexibleCanisterHttpResponseWithProof {
-                        response,
-                        proof: share.clone(),
-                    })
-                    .collect(),
-                initial_spent,
-            },
-            ok_responses_size,
-        );
-    }
-
-    // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
-    if reject_responses.len() > committee.len().saturating_sub(min_responses) {
-        let initial_spent = flexible_initial_spent(
-            reject_responses.iter().map(|(_, share)| *share),
-            subnet_size,
-            min_responses as u32,
-        );
-        let error = FlexibleCanisterHttpError::TooManyRejects {
+    // A group that cannot be paid for or does not fit falls through to the checks below.
+    if ok_candidates.len() >= min_responses {
+        if let Some(selection) = select_flexible_responses(
+            &ok_candidates,
+            &all_shares,
             callback_id,
-            reject_responses: reject_responses
-                .into_iter()
-                .map(|(response, share)| FlexibleCanisterHttpResponseWithProof {
-                    response,
-                    proof: share.clone(),
-                })
-                .collect(),
-            initial_spent,
-        };
-        let error_size = error.count_bytes();
-        return FlexibleFindResult::Error(error, error_size);
+            /* min_to_select = */ min_responses,
+            /* max_to_select = */ max_responses as usize,
+            /* min_responses = */ min_responses as u32,
+            accumulated_size,
+            max_payload_size,
+            context,
+        ) {
+            let group = FlexibleCanisterHttpResponses {
+                callback_id,
+                responses: into_responses_with_proof(ok_candidates, selection.count),
+                extra_shares: selection.extra_shares.into_iter().cloned().collect(),
+                initial_spent: selection.initial_spent,
+            };
+            let group_size = group.count_bytes();
+            return FlexibleFindResult::OkResponses(group, group_size);
+        }
+    }
+    // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
+    else if reject_candidates.len() > committee.len().saturating_sub(min_responses) {
+        // Delivering the smallest `min_rejects` of them already proves the error;
+        // the rest is included only if they fit and are covered.
+        let min_rejects = committee.len().saturating_sub(min_responses) + 1;
+        if let Some(selection) = select_flexible_responses(
+            &reject_candidates,
+            &all_shares,
+            callback_id,
+            /* min_to_select = */ min_rejects,
+            /* max_to_select = */ reject_candidates.len(),
+            /* min_responses = */ min_responses as u32,
+            accumulated_size,
+            max_payload_size,
+            context,
+        ) {
+            let error = FlexibleCanisterHttpError::TooManyRejects {
+                callback_id,
+                reject_responses: into_responses_with_proof(reject_candidates, selection.count),
+                extra_shares: selection.extra_shares.into_iter().cloned().collect(),
+                initial_spent: selection.initial_spent,
+            };
+            let error_size = error.count_bytes();
+            return FlexibleFindResult::Error(error, error_size);
+        }
     }
 
     // 3. Even the smallest OK responses exceed the absolute payload limit?
     // Unseen responses could still submit small OK responses, so we account for them.
     let num_unseen = committee.len().saturating_sub(seen_signers.len());
     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
-    if all_ok_shares_sorted_asc.len() >= min_known_ok_needed {
-        let smallest_content_sum: usize = all_ok_shares_sorted_asc
+    if ok_candidates.len() >= min_known_ok_needed {
+        let smallest_content_sum: usize = ok_candidates
             .iter()
             .take(min_known_ok_needed)
-            .map(|(_share, response_with_proof_size)| response_with_proof_size)
+            .map(|candidate| candidate.size)
             .sum();
 
         if smallest_content_sum > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
-            let all_seen_shares: Vec<_> = all_ok_shares_sorted_asc
+            let all_seen_shares: Vec<_> = ok_candidates
                 .iter()
-                .map(|(share, _)| (*share).clone())
-                .chain(reject_responses.iter().map(|(_, share)| (*share).clone()))
+                .chain(reject_candidates.iter())
+                .map(|candidate| candidate.share.clone())
                 .collect();
             let error = FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
@@ -652,8 +740,161 @@ pub(crate) fn find_flexible_result(
         }
     }
 
-    // 4. Not enough data yet
+    // 4. Can delivering a response ever be paid for?
+    if let Ok(proof) = check_out_of_cycles(
+        all_shares.iter().copied(),
+        committee.len(),
+        min_responses as u32,
+        callback_id,
+        context,
+    ) {
+        let error = FlexibleCanisterHttpError::OutOfCycles {
+            callback_id,
+            all_seen_shares: all_shares.into_iter().cloned().collect(),
+            min_cost: proof.min_cost,
+            unspent_allowance: proof.unspent_allowance,
+        };
+        let error_size = error.count_bytes();
+        return FlexibleFindResult::Error(error, error_size);
+    }
+
+    // 5. Not enough data yet
     FlexibleFindResult::Pending
+}
+
+/// Turns the first `selected` of `candidates` into the entries of a flexible
+/// result, dropping the rest (whose shares may still be included as [extra
+/// shares](FlexibleCanisterHttpResponses::extra_shares)).
+fn into_responses_with_proof(
+    candidates: Vec<FlexibleCandidate>,
+    selected: usize,
+) -> Vec<FlexibleCanisterHttpResponseWithProof> {
+    candidates
+        .into_iter()
+        .take(selected)
+        .map(|candidate| FlexibleCanisterHttpResponseWithProof {
+            response: candidate.response,
+            proof: candidate.share.clone(),
+        })
+        .collect()
+}
+
+struct FlexibleSelection<'a> {
+    /// How many of the candidates were selected.
+    count: usize,
+    /// Any extra shares funding the selected candidates' consensus cost.
+    extra_shares: Vec<&'a CanisterHttpResponseShare>,
+    /// The collective cost of the selected candidates and any extra shares.
+    initial_spent: Cycles,
+}
+
+/// Returns how many (up to `max_to_select`) of `candidates` to include in the payload, and
+/// which extra shares of `all_shares` to fund them with. Returns `None` if even the smallest
+/// `min_to_select` responses do not fit into what is left of the block, or if the committee's
+/// unspent allowance can not cover their cost.
+///
+/// `candidates` must be ordered smallest-response-first and `all_shares` smallest-spend-first,
+/// each holding at most one share per committee member.
+fn select_flexible_responses<'a>(
+    candidates: &[FlexibleCandidate<'a>],
+    all_shares: &[&'a CanisterHttpResponseShare],
+    callback_id: CallbackId,
+    min_to_select: usize,
+    max_to_select: usize,
+    min_responses: u32,
+    accumulated_size: usize,
+    max_payload_size: NumBytes,
+    context: &CanisterHttpRequestContext,
+) -> Option<FlexibleSelection<'a>> {
+    let max_to_select = max_to_select.min(candidates.len());
+
+    // Start with as many candidates as possible (up to `max_to_select`). Check whether the
+    // current selection is funded (potentially by adding extra shares) and fits into the
+    // block. If not, give up the largest response and try again with one fewer.
+    for selected in (min_to_select..=max_to_select).rev() {
+        let selected = &candidates[..selected];
+        // Compute the cost of the current selection without any extra shares.
+        let selected_spend = flexible_initial_spent(
+            selected.iter().map(|candidate| candidate.share),
+            std::iter::empty(),
+            context.subnet_size,
+            min_responses,
+        );
+        let selected_signers: BTreeSet<_> = selected
+            .iter()
+            .map(|candidate| candidate.share.signature.signer)
+            .collect();
+        // If the current selection is not covered by unspent allowance, try to fund it
+        // by adding extra shares.
+        let Some((extra_shares, extra_spent)) = fund_flexible_selection(
+            selected_spend,
+            selected.len(),
+            &selected_signers,
+            all_shares,
+            callback_id,
+            context,
+        ) else {
+            continue;
+        };
+        let size = FlexibleCanisterHttpResponses::base_count_bytes()
+            + selected
+                .iter()
+                .map(|candidate| candidate.size)
+                .sum::<usize>()
+            + extra_shares
+                .iter()
+                .map(|share| share.count_bytes())
+                .sum::<usize>();
+        // Return the selection if it also fits into the block.
+        if NumBytes::new((accumulated_size + size) as u64) < max_payload_size {
+            return Some(FlexibleSelection {
+                count: selected.len(),
+                extra_shares,
+                initial_spent: selected_spend + extra_spent,
+            });
+        }
+    }
+    None
+}
+
+/// Picks the fewest of `all_shares` required to cover the collective spend of
+/// `selected_count` many responses with unspent allowance.
+/// Returns the chosen shares together with the spend they add, or `None` if
+/// even all of them together cannot cover the `selected_spend`.
+fn fund_flexible_selection<'a>(
+    selected_spend: Cycles,
+    selected_count: usize,
+    selected_signers: &BTreeSet<NodeId>,
+    all_shares: &[&'a CanisterHttpResponseShare],
+    callback_id: CallbackId,
+    context: &CanisterHttpRequestContext,
+) -> Option<(Vec<&'a CanisterHttpResponseShare>, Cycles)> {
+    // Replicas that deliver a response already contribute their allowance.
+    let mut fundable = all_shares
+        .iter()
+        .filter(|share| !selected_signers.contains(&share.signature.signer));
+    let mut extra_shares = Vec::new();
+    let mut extra_spent = Cycles::zero();
+
+    loop {
+        if check_initial_spent_within_limit(
+            selected_spend + extra_spent,
+            selected_count + extra_shares.len(),
+            callback_id,
+            context,
+            None,
+        )
+        .is_ok()
+        {
+            // Return the chosen extra shares and the spend they add, if the
+            // candidates are now covered by unspent allowance.
+            return Some((extra_shares, extra_spent));
+        }
+        // Else: Add another share if one exists.
+        let share = fundable.next()?;
+        extra_spent += share.content.spent();
+        extra_shares.push(*share);
+    }
 }
 
 #[cfg(test)]
