@@ -1586,19 +1586,52 @@ fn composite_query_call_to_management_canister_rejects_unknown_methods() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
-    let err = test
+    let reply = test
         .non_replicated_query(
             canister_id,
             "composite_query",
             ic00_composite_query("unknown", Encode!().unwrap()),
         )
-        .unwrap_err();
+        .unwrap();
 
-    // Calls to methods not exported by the management canister are rejected
-    // before the request is even pushed onto the output queue and thus the
-    // reject response is not propagated to the caller.
-    // TODO(EXC-1655): fix reject response propagation.
-    assert_eq!(err.code(), ErrorCode::CanisterDidNotReply);
+    // The call is rejected with the same error as a query sent by an end user
+    // to the management canister.
+    assert_eq!(
+        reply,
+        WasmResult::Reply(b"Query method unknown not found.".to_vec())
+    );
+}
+
+// Calls to the management canister made from a reply callback of a composite
+// query must be handled in exactly the same way as calls made from the
+// composite query method itself.
+#[test]
+fn composite_query_call_to_management_canister_from_callback_rejects_unknown_methods() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    // Canister A calls the management canister in the reply callback of a
+    // nested composite query call to canister B.
+    let reply = test
+        .non_replicated_query(
+            canister_a,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    canister_b,
+                    call_args()
+                        .other_side(wasm().reply_data(b"pong"))
+                        .on_reply(ic00_composite_query("unknown", Encode!().unwrap())),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        reply,
+        WasmResult::Reply(b"Query method unknown not found.".to_vec())
+    );
 }
 
 #[test]
