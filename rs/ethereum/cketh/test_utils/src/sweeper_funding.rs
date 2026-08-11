@@ -70,8 +70,10 @@ pub struct SweeperFundingSetup {
 }
 
 impl SweeperFundingSetup {
-    /// The fee account is funded before the minter is installed, not after: the funding task starts
-    /// with the minter, so a test seeding it afterwards would race its own arrangement.
+    /// The fee account is funded once the deposit has been credited and before the timers are
+    /// re-armed, which is the one window in which no funding check can be running: leaving it empty
+    /// until then means the install-time check has nothing to burn however the timers interleave, so
+    /// the post-upgrade run is deterministically the first that can fund.
     pub fn new_live() -> Self {
         Self::new_live_with_fee_account_balance(FEE_ACCOUNT_BALANCE)
     }
@@ -104,7 +106,7 @@ impl SweeperFundingSetup {
             env.add_cycles(canister, u128::from(u64::MAX));
         }
 
-        install_ledger(&env, ledger_id, minter_id, fee_account_balance);
+        install_ledger(&env, ledger_id, minter_id);
         install_evm_rpc(&env, evm_rpc_id, anvil.url());
 
         // Live before installing the minter: its install-time timers issue outcalls immediately.
@@ -137,10 +139,14 @@ impl SweeperFundingSetup {
         setup
             .anvil
             .set_balance(&setup.minter_address, MINTER_ETH_BALANCE);
-        // The install-time funding check races the scrape, so it will have seen a zero balance, and
-        // the next scheduled one is a whole interval away. Re-arm the timers once the deposit has
-        // landed so tests start from a minter that can actually fund.
         setup.await_deposit_credited(Duration::from_secs(300));
+        // Funded here rather than at install: with an empty fee account the install-time check
+        // cannot burn, whichever way it and the scrape interleave. Safe to do now because the next
+        // scheduled check is a whole interval away, so nothing is watching until the upgrade below
+        // re-arms the timers — which makes that run the first one able to fund.
+        if fee_account_balance > 0 {
+            setup.mint_cketh(setup.fee_account(), fee_account_balance);
+        }
         setup.upgrade_minter();
         setup
     }
@@ -385,15 +391,12 @@ fn long_lived_server_url() -> Url {
         .clone()
 }
 
-fn install_ledger(
-    env: &PocketIc,
-    ledger_id: Principal,
-    minter_id: Principal,
-    fee_account_balance: u128,
-) {
+/// Installs the ckETH ledger with every balance empty. The fee account is credited afterwards, by
+/// [`SweeperFundingSetup::new_live`], for the reason given there.
+fn install_ledger(env: &PocketIc, ledger_id: Principal, minter_id: Principal) {
     use ic_icrc1_ledger::InitArgsBuilder as LedgerInitArgsBuilder;
 
-    let mut builder = LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
+    let builder = LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
         .with_minting_account(minter_id)
         .with_transfer_fee(CKETH_TRANSFER_FEE)
         .with_max_memo_length(80)
@@ -402,15 +405,6 @@ fn install_ledger(
             icrc2: true,
             icrc152: false,
         });
-    if fee_account_balance > 0 {
-        builder = builder.with_initial_balance(
-            Account {
-                owner: minter_id,
-                subaccount: Some(ic_cketh_minter::CKETH_FEE_SUBACCOUNT),
-            },
-            fee_account_balance,
-        );
-    }
     let args = LedgerArgument::Init(builder.build());
     env.install_canister(
         ledger_id,
