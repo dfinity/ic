@@ -436,6 +436,11 @@ pub struct SubnetTopology {
     ///    behind it. A message that must never cross an engine boundary is still
     ///    handled by the engine boundary check instead, as it is illegal there
     ///    permanently rather than transiently.
+    ///  * A sending subnet's own output queues are exempt: the responses it
+    ///    produced while draining its subnet queues are always routed, whether or
+    ///    not either subnet is cooling down. Retaining one would leave a cooling
+    ///    down subnet with work still to do, which is what cooling down is meant to
+    ///    avoid.
     ///
     /// Execution is left alone: the subnet keeps executing the messages it already
     /// holds (that is what "letting them drain" means), including `Heartbeat` and

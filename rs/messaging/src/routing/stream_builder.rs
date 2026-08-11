@@ -14,7 +14,7 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CountBytes, SubnetId};
+use ic_types::{CanisterId, CountBytes, SubnetId};
 use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
@@ -443,6 +443,8 @@ impl StreamBuilderImpl {
         let refund_limit = self.max_stream_messages / 2;
         self.route_refunds(&mut state, refund_limit, &network_topology, &mut streams);
 
+        let subnet_id_as_canister_id = CanisterId::from(self.subnet_id);
+
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
         let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
@@ -458,6 +460,12 @@ impl StreamBuilderImpl {
         while let Some(msg) = output_iter.peek() {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
+
+            // Whether the message comes from the subnet's own output queues rather
+            // than a canister's. Those only ever hold responses produced by the subnet
+            // itself, with the subnet's own principal as the respondent; and no
+            // canister can have that principal as its canister ID.
+            let is_from_subnet_queues = msg.sender() == subnet_id_as_canister_id;
 
             match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
@@ -483,7 +491,17 @@ impl StreamBuilderImpl {
                     // Retain them in the output queue (along with everything behind
                     // them) until it stops cooling down, rather than rejecting or
                     // dropping them.
-                    if network_topology.is_cooling_down(&dst_subnet_id) && !is_illegal_engine_msg {
+                    //
+                    // Except for the subnet's own output queues: those hold only the
+                    // responses that the subnet itself produced while draining its
+                    // subnet queues, and they are always routed, whether or not this
+                    // subnet or the destination subnet is cooling down. Retaining one
+                    // would leave the state of a cooling down subnet with work still
+                    // to do, which is the very thing cooling down is meant to avoid.
+                    if !is_from_subnet_queues
+                        && network_topology.is_cooling_down(&dst_subnet_id)
+                        && !is_illegal_engine_msg
+                    {
                         self.observe_message_status(&msg, LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN);
                         output_iter.exclude_queue();
                         continue;
