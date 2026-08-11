@@ -58,6 +58,15 @@ pub enum InvalidCanisterHttpPayloadReason {
         spent: Cycles,
         limit: Cycles,
     },
+    /// A share claims a `content_size` larger than the largest response the replica
+    /// could have produced, i.e. [`CanisterHttpRequestContext::max_http_outcall_content_size`].
+    ///
+    /// [`CanisterHttpRequestContext::max_http_outcall_content_size`]: ic_types::canister_http::CanisterHttpRequestContext::max_http_outcall_content_size
+    ContentSizeExceedsLimit {
+        callback_id: CallbackId,
+        content_size: u32,
+        limit: u64,
+    },
     /// The collective initial spent cycles included in the payload do not match
     /// the value recomputed from the request context's subnet size and the
     /// signed per-replica receipts.

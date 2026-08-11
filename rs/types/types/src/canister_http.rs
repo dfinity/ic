@@ -94,6 +94,11 @@ pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
 /// Maximum size of a canister http reject message.
 pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 
+/// Bytes reserved on top of a request's `max_response_bytes` for the Candid
+/// encoding of the response, since `max_response_bytes` is enforced on the
+/// response before it is encoded.
+pub const CANDID_OVERHEAD_RESERVE_BYTES: u64 = 1024; // 1KB
+
 /// Maximum number of bytes to represent URL for a canister http request.
 pub const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
 
@@ -959,13 +964,20 @@ impl From<&CanisterHttpReject> for RejectContext {
     }
 }
 
+impl CanisterHttpReject {
+    /// Same calculation as `Self::count_bytes` but from decomposed parts.
+    pub fn count_bytes_from_parts(message_len: usize) -> usize {
+        size_of::<RejectCode>() + message_len
+    }
+}
+
 impl CountBytes for CanisterHttpReject {
     fn count_bytes(&self) -> usize {
         let CanisterHttpReject {
-            reject_code,
+            reject_code: _,
             message,
         } = &self;
-        size_of_val(reject_code) + message.len()
+        Self::count_bytes_from_parts(message.len())
     }
 }
 
@@ -1155,6 +1167,20 @@ impl CanisterHttpRequestContext {
         match self.cost_schedule {
             CanisterCyclesCostSchedule::Free => MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
             CanisterCyclesCostSchedule::Normal => self.refund_status.per_replica_allowance,
+        }
+    }
+
+    /// Returns the maximum [`CanisterHttpResponseMetadata::content_size`] a single
+    /// replica's response to this outcall may have, i.e. the size of the largest
+    /// [`CanisterHttpResponseContent`] it could legitimately have produced.
+    pub fn max_http_outcall_content_size(&self, is_reject: bool) -> u64 {
+        if is_reject {
+            CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES)
+                as u64
+        } else {
+            self.max_response_bytes
+                .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
+                + CANDID_OVERHEAD_RESERVE_BYTES
         }
     }
 }
