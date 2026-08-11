@@ -472,20 +472,18 @@ impl StreamBuilderImpl {
                 Some(dst_subnet_id) => {
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
                     let is_engine_dst = !is_loopback_stream
-                        && network_topology
-                            .subnets()
-                            .get(&dst_subnet_id)
-                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
-                    let is_engine_src =
-                        !is_loopback_stream && own_subnet_type == SubnetType::CloudEngine;
                     // A message that must never cross an engine boundary: a
                     // guaranteed-response message, or one carrying cycles. Such a message
                     // is always handled by the engine boundary arms below, whether or not
                     // the destination subnet is cooling down: it is illegal there
-                    // permanently, so retaining it until the subnet stops cooling down
-                    // would only defer the same outcome.
-                    let is_illegal_engine_msg = (is_engine_dst || is_engine_src)
-                        && (msg.deadline() == NO_DEADLINE || msg.cycles() > Cycles::zero());
+                    // permanently, so a transient rejection would be misleading.
+                    let is_illegal_engine_msg = (msg.deadline() == NO_DEADLINE || msg.cycles() > Cycles::zero())
+                        && !is_loopback_stream
+                        && (own_subnet_type == SubnetType::CloudEngine
+                            || network_topology
+                                .subnets()
+                                .get(&dst_subnet_id)
+                                .is_some_and(|s| s.subnet_type == SubnetType::CloudEngine));
 
                     // A cooling down destination subnet must not be sent any messages.
                     // Retain them in the output queue (along with everything behind

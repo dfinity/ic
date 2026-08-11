@@ -418,6 +418,7 @@ pub struct SubnetTopology {
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
+
     /// Whether the subnet is "cooling down", i.e. quiescing: it stops accepting new
     /// messages and lets the messages already in flight drain. While a subnet is
     /// cooling down:
