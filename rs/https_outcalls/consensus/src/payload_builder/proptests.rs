@@ -488,7 +488,7 @@ fn prop_flexible_kind(max_size: usize, subnet_size: usize) -> impl Strategy<Valu
 
 /// Generates random content that is either a success message of length up to
 /// `max_size` bytes or a reject message whose description has length up to
-/// `max_size` bytes.
+/// `min(max_size, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES=1KiB)` bytes.
 fn prop_content(max_size: usize) -> impl Strategy<Value = CanisterHttpResponseContent> {
     prop_oneof![
         (0..=max_size).prop_map(|size| CanisterHttpResponseContent::Success(vec![0; size])),
