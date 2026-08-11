@@ -41,7 +41,7 @@ pub const MAX_SUBNET_ADMINS: usize = 10;
 ///         * consist of nodes with reward type 4
 ///    * Conversely, only cloud engines can have nodes with reward type 4
 ///    * SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
-///    * SEV-enabled subnets run GuestOS versions that have launch measurements only
+///    * SEV-enabled subnets only run GuestOS versions that have launch measurements
 ///    * Only rented subnets or cloud engines can have subnet admins set to a non-empty list
 ///    * No subnet has more than `MAX_SUBNET_ADMINS` subnet admins
 ///    * The default initial DKG subnet, if set, refers to a subnet that
@@ -333,17 +333,21 @@ fn check_sev_subnet_invariants(
     Ok(())
 }
 
-/// An SEV-enabled subnet must run a GuestOS version that has launch measurements as
-/// otherwise the upgrade from one version to another would not be possible.
+/// An SEV-enabled subnet must run only GuestOS versions that have launch measurements; otherwise
+/// its nodes cannot be attested, which defeats the purpose of enabling SEV.
 fn check_sev_subnet_launch_measurements(
     subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
-    replica_version_id: &str,
+    subnet_replica_version_id: &str,
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let replica_version_ids = if replica_version_id.is_empty() {
+    let replica_version_ids = if subnet_replica_version_id.is_empty() {
+        // A subnet normally runs the single version that its SubnetRecord names. A
+        // CloudEngine is allowed to leave that field blank, and then runs the versions
+        // of the StandardEngineReplicaVersionRecord instead (both the old and the new
+        // one, because the engines are being upgraded from one to the other).
         get_all_standard_engine_replica_versions(snapshot)
     } else {
-        BTreeSet::from([replica_version_id.to_string()])
+        BTreeSet::from([subnet_replica_version_id.to_string()])
     };
 
     let versions_missing_launch_measurements = replica_version_ids

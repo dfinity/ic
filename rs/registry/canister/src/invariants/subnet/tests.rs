@@ -204,6 +204,7 @@ fn elect_replica_version(
 ) {
     let guest_launch_measurements = with_launch_measurements.then(|| GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
+            // A SEV-SNP measurement is 48 bytes long. The value itself does not matter here.
             measurement: vec![0x42; 48],
             metadata: None,
         }],
@@ -236,6 +237,7 @@ fn deploy_replica_version_to_subnet(
 
 #[test]
 fn test_sev_enabled_subnet_runs_version_with_launch_measurements() {
+    // Step 1: Prepare the world.
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
     let (mut snapshot, mut test_subnet_record) =
@@ -253,12 +255,16 @@ fn test_sev_enabled_subnet_runs_version_with_launch_measurements() {
         REPLICA_VERSION_ID,
     );
 
+    // Step 2: Run the code under test.
     let result = check_subnet_invariants(&snapshot);
+
+    // Step 3: Verify result(s). The subnet is compliant, so there is no defect.
     result.unwrap();
 }
 
 #[test]
 fn test_sev_enabled_subnet_cannot_run_version_without_launch_measurements() {
+    // Step 1: Prepare the world.
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
     let (mut snapshot, mut test_subnet_record) =
@@ -276,6 +282,7 @@ fn test_sev_enabled_subnet_cannot_run_version_without_launch_measurements() {
         REPLICA_VERSION_ID,
     );
 
+    // Step 2 & 3: Run the code under test, and verify the defect it reports.
     assert_non_compliant_record(
         &snapshot,
         "is sev-enabled, but the following guestos versions that it runs are missing guest \
@@ -288,6 +295,7 @@ fn test_sev_enabled_subnet_cannot_run_version_without_launch_measurements() {
 /// must stay compliant.
 #[test]
 fn test_subnet_without_sev_can_run_version_without_launch_measurements() {
+    // Step 1: Prepare the world.
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
     let (mut snapshot, mut test_subnet_record) =
@@ -310,7 +318,11 @@ fn test_subnet_without_sev_can_run_version_without_launch_measurements() {
         REPLICA_VERSION_ID,
     );
 
+    // Step 2: Run the code under test.
     let result = check_subnet_invariants(&snapshot);
+
+    // Step 3: Verify result(s). Only SEV-enabled subnets are constrained, so
+    // there is no defect.
     result.unwrap();
 }
 
@@ -319,6 +331,9 @@ fn test_subnet_without_sev_can_run_version_without_launch_measurements() {
 /// measurements as well.
 #[test]
 fn test_sev_enabled_cloud_engine_cannot_run_standard_engine_version_without_launch_measurements() {
+    // Step 1: Prepare the world.
+
+    // Step 1.1: A SEV-enabled CloudEngine that leaves its replica_version_id blank.
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
     let (mut snapshot, mut test_subnet_record) =
@@ -331,8 +346,8 @@ fn test_sev_enabled_cloud_engine_cannot_run_standard_engine_version_without_laun
         "", // replica_version_id
     );
 
-    // The engines are being upgraded from a version that has launch measurements
-    // to one that does not.
+    // Step 1.2: The engines are being upgraded from a version that has launch
+    // measurements to one that does not.
     let new_replica_version_id = "63d086714a1e2bc6b0615008d5582f527d554cd3";
     elect_replica_version(
         &mut snapshot,
@@ -354,8 +369,9 @@ fn test_sev_enabled_cloud_engine_cannot_run_standard_engine_version_without_laun
         .encode_to_vec(),
     );
 
-    // Run the code under test, and verify the result. Only the new
-    // version is reported, because the old one has launch measurements.
+    // Step 2 & 3: Run the code under test, and verify the defect it reports.
+    // The resulting subnet record is non-compliant because it runs a GuestOS
+    // version that does not have launch measurements.
     assert_non_compliant_record(
         &snapshot,
         &format!("missing guest launch measurements: [\"{new_replica_version_id}\"]"),

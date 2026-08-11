@@ -49,21 +49,24 @@ pub fn add_guest_launch_measurements_to_replica_version(
     replica_version_id: &str,
 ) {
     let key = make_replica_version_key(replica_version_id);
+
     let registry_value = registry
         .get(key.as_bytes(), registry.latest_version())
         .unwrap_or_else(|| panic!("Version {replica_version_id} is not elected"));
+
     let mut replica_version_record =
         ReplicaVersionRecord::decode(registry_value.value.as_slice()).unwrap();
 
     replica_version_record.guest_launch_measurements = Some(GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
+            // An SEV-SNP measurement is exactly 48 bytes long. The value itself does not matter here.
             measurement: vec![0x42; 48],
             metadata: None,
         }],
     });
 
     registry.maybe_apply_mutation_internal(vec![upsert(
-        make_replica_version_key(replica_version_id).as_bytes(),
+        key.as_bytes(),
         replica_version_record.encode_to_vec(),
     )]);
 }
