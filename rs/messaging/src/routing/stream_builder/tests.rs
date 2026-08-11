@@ -1243,6 +1243,27 @@ fn cooling_down_response(deadline: CoarseTime, refund: Cycles) -> RequestOrRespo
     }))
 }
 
+/// The two kinds of canister message from `COOLING_DOWN_LOCAL_CANISTER` to
+/// `COOLING_DOWN_REMOTE_CANISTER` (a request and a response), each paired with its
+/// metric type label. Neither kind makes any difference to a message headed for a
+/// cooling down (non-engine) subnet.
+fn cooling_down_messages(
+    deadline: CoarseTime,
+    cycles: Cycles,
+) -> impl Iterator<Item = (&'static str, RequestOrResponse)> {
+    [
+        (
+            LABEL_VALUE_TYPE_REQUEST,
+            cooling_down_request(deadline, cycles).into(),
+        ),
+        (
+            LABEL_VALUE_TYPE_RESPONSE,
+            cooling_down_response(deadline, cycles),
+        ),
+    ]
+    .into_iter()
+}
+
 /// The 4 combinations of deadline (guaranteed-response or bounded-wait) and
 /// attached cycles (none or some) that a canister message may have. None of them
 /// makes any difference to a message headed for a cooling down (non-engine)
@@ -1327,106 +1348,63 @@ fn assert_reject_response(
     }
 }
 
-/// Asserts that `sender`'s input queue holds a `SysTransient` reject response
-/// blaming `dst_canister_id`'s subnet cooling down.
-fn assert_cooling_down_reject(
-    state: &ReplicatedState,
-    sender: CanisterId,
-    dst_canister_id: CanisterId,
-) {
-    assert_reject_response(
-        state,
-        sender,
-        RejectCode::SysTransient,
-        &format!("Canister {dst_canister_id} is deployed to a subnet that is cooling down"),
-    );
-}
-
-/// Tests that a request to a canister on a cooling down subnet is rejected with
-/// a synthetic `SysTransient` reject response, rather than routed into a stream.
-/// Covers every combination of deadline and attached cycles.
+/// Tests that a canister message to a canister on a cooling down subnet is
+/// retained in the sending canister's output queue, rather than routed, rejected or
+/// dropped; and that it is routed as soon as the subnet stops cooling down. Covers
+/// requests and responses, in every combination of deadline and attached cycles.
 #[test]
-fn build_streams_rejects_requests_to_cooling_down_subnet() {
-    for (deadline, payment) in deadline_and_cycles_matrix() {
-        with_test_replica_logger(|log| {
-            let (stream_builder, mut provided_state, metrics_registry) =
-                new_cooling_down_fixture(&log, SubnetType::Application);
-            provided_state.put_canister_states(canister_states_with_outputs(vec![
-                cooling_down_request(deadline, payment),
-            ]));
+fn build_streams_retains_messages_to_cooling_down_subnet() {
+    for (deadline, cycles) in deadline_and_cycles_matrix() {
+        for (msg_type, msg) in cooling_down_messages(deadline, cycles) {
+            with_test_replica_logger(|log| {
+                let (stream_builder, mut provided_state, metrics_registry) =
+                    new_cooling_down_fixture(&log, SubnetType::Application);
+                provided_state.put_canister_states(canister_states_with_outputs(vec![msg.clone()]));
 
-            let result_state = stream_builder.build_streams(provided_state);
+                let mut result_state = stream_builder.build_streams(provided_state);
 
-            // Nothing was routed into the `REMOTE_SUBNET` stream; and a `SysTransient`
-            // reject response was delivered back to the sender.
-            assert_no_messages_routed(&result_state, REMOTE_SUBNET);
-            assert_cooling_down_reject(
-                &result_state,
-                COOLING_DOWN_LOCAL_CANISTER,
-                COOLING_DOWN_REMOTE_CANISTER,
-            );
+                // Nothing was routed into the `REMOTE_SUBNET` stream; the message is
+                // still in the sender's output queue; and no reject response was
+                // produced for it.
+                assert_no_messages_routed(&result_state, REMOTE_SUBNET);
+                assert_eq!(
+                    vec![msg.clone()],
+                    output_queue_contents(
+                        &result_state,
+                        COOLING_DOWN_LOCAL_CANISTER,
+                        COOLING_DOWN_REMOTE_CANISTER
+                    )
+                );
+                assert!(
+                    !result_state
+                        .canister_state(&COOLING_DOWN_LOCAL_CANISTER)
+                        .unwrap()
+                        .has_input()
+                );
 
-            assert_one_message_status(
-                LABEL_VALUE_TYPE_REQUEST,
-                LABEL_VALUE_STATUS_COOLING_DOWN,
-                &metrics_registry,
-            );
-            assert_eq_critical_errors(0, 0, 0, &metrics_registry);
-        });
-    }
-}
+                assert_one_message_status(
+                    msg_type,
+                    LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
+                    &metrics_registry,
+                );
+                assert_eq_critical_errors(0, 0, 0, &metrics_registry);
 
-/// Tests that a response to a canister on a cooling down subnet is retained in
-/// the sending canister's output queue, rather than routed or dropped; and that it
-/// is routed as soon as the subnet stops cooling down. Covers every combination of
-/// deadline and attached cycles.
-#[test]
-fn build_streams_retains_responses_to_cooling_down_subnet() {
-    for (deadline, refund) in deadline_and_cycles_matrix() {
-        with_test_replica_logger(|log| {
-            let response = cooling_down_response(deadline, refund);
-
-            let (stream_builder, mut provided_state, metrics_registry) =
-                new_cooling_down_fixture(&log, SubnetType::Application);
-            provided_state
-                .put_canister_states(canister_states_with_outputs(vec![response.clone()]));
-
-            let mut result_state = stream_builder.build_streams(provided_state);
-
-            // Nothing was routed into the `REMOTE_SUBNET` stream; the response is
-            // still in the sender's output queue.
-            assert_no_messages_routed(&result_state, REMOTE_SUBNET);
-            assert_eq!(
-                vec![response.clone()],
-                output_queue_contents(
-                    &result_state,
-                    COOLING_DOWN_LOCAL_CANISTER,
-                    COOLING_DOWN_REMOTE_CANISTER
-                )
-            );
-
-            assert_one_message_status(
-                LABEL_VALUE_TYPE_RESPONSE,
-                LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
-                &metrics_registry,
-            );
-            assert_eq_critical_errors(0, 0, 0, &metrics_registry);
-
-            // And it is routed as soon as the subnet stops cooling down.
-            clear_cooling_down(&mut result_state, REMOTE_SUBNET);
-            let result_state = stream_builder.build_streams(result_state);
-            assert_eq!(
-                vec![StreamMessage::from(response)],
-                result_state
-                    .streams()
-                    .get(&REMOTE_SUBNET)
-                    .unwrap()
-                    .messages()
-                    .iter()
-                    .map(|(_, msg)| msg.clone())
-                    .collect::<Vec<_>>()
-            );
-        });
+                // And it is routed as soon as the subnet stops cooling down.
+                clear_cooling_down(&mut result_state, REMOTE_SUBNET);
+                let result_state = stream_builder.build_streams(result_state);
+                assert_eq!(
+                    vec![StreamMessage::from(msg)],
+                    result_state
+                        .streams()
+                        .get(&REMOTE_SUBNET)
+                        .unwrap()
+                        .messages()
+                        .iter()
+                        .map(|(_, msg)| msg.clone())
+                        .collect::<Vec<_>>()
+                );
+            });
+        }
     }
 }
 
@@ -1462,11 +1440,11 @@ fn build_streams_retains_refunds_to_cooling_down_subnet() {
     });
 }
 
-/// Tests that retaining a response to a cooling down subnet also holds back the
-/// messages queued behind it (the whole output queue is skipped), including
-/// requests, which would otherwise have been rejected.
+/// Tests that retaining a message to a cooling down subnet also holds back the
+/// messages queued behind it: the whole output queue is skipped, without so much as
+/// looking at the rest of it.
 #[test]
-fn build_streams_retains_messages_behind_response_to_cooling_down_subnet() {
+fn build_streams_retains_messages_behind_message_to_cooling_down_subnet() {
     with_test_replica_logger(|log| {
         // A response followed by a request, in the same output queue.
         let response = cooling_down_response(NO_DEADLINE, Cycles::zero());
@@ -1483,8 +1461,7 @@ fn build_streams_retains_messages_behind_response_to_cooling_down_subnet() {
         let result_state = stream_builder.build_streams(provided_state);
 
         // Nothing was routed into the `REMOTE_SUBNET` stream. Both messages are still
-        // in the output queue, in the original order; and no reject response was
-        // produced for the request.
+        // in the output queue, in the original order.
         assert_no_messages_routed(&result_state, REMOTE_SUBNET);
         assert_eq!(
             vec![response, request],
@@ -1493,12 +1470,6 @@ fn build_streams_retains_messages_behind_response_to_cooling_down_subnet() {
                 COOLING_DOWN_LOCAL_CANISTER,
                 COOLING_DOWN_REMOTE_CANISTER
             )
-        );
-        assert!(
-            !result_state
-                .canister_state(&COOLING_DOWN_LOCAL_CANISTER)
-                .unwrap()
-                .has_input()
         );
 
         // Only the response was observed; the request was never even looked at.
@@ -1512,68 +1483,43 @@ fn build_streams_retains_messages_behind_response_to_cooling_down_subnet() {
 }
 
 /// Tests that the loopback stream is not exempt: while the local subnet itself is
-/// cooling down, a request to a local canister is rejected and a response to one is
-/// retained, exactly as for a remote cooling down subnet.
+/// cooling down, a message to a local canister is retained in the output queue,
+/// exactly as for a remote cooling down subnet.
 #[test]
 fn build_streams_does_not_exempt_loopback_while_cooling_down() {
-    // A request to a local canister is rejected.
-    with_test_replica_logger(|log| {
-        let (stream_builder, mut provided_state, metrics_registry) =
-            new_loopback_cooling_down_fixture(&log);
-        provided_state.put_canister_states(canister_states_with_outputs(vec![
-            cooling_down_request(NO_DEADLINE, Cycles::zero()),
-        ]));
+    for (msg_type, msg) in cooling_down_messages(NO_DEADLINE, Cycles::zero()) {
+        with_test_replica_logger(|log| {
+            let (stream_builder, mut provided_state, metrics_registry) =
+                new_loopback_cooling_down_fixture(&log);
+            provided_state.put_canister_states(canister_states_with_outputs(vec![msg.clone()]));
 
-        let result_state = stream_builder.build_streams(provided_state);
+            let result_state = stream_builder.build_streams(provided_state);
 
-        assert_no_messages_routed(&result_state, LOCAL_SUBNET);
-        assert_cooling_down_reject(
-            &result_state,
-            COOLING_DOWN_LOCAL_CANISTER,
-            COOLING_DOWN_REMOTE_CANISTER,
-        );
-        assert_one_message_status(
-            LABEL_VALUE_TYPE_REQUEST,
-            LABEL_VALUE_STATUS_COOLING_DOWN,
-            &metrics_registry,
-        );
-        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
-    });
-
-    // A response to a local canister is retained in the output queue.
-    with_test_replica_logger(|log| {
-        let response = cooling_down_response(NO_DEADLINE, Cycles::zero());
-
-        let (stream_builder, mut provided_state, metrics_registry) =
-            new_loopback_cooling_down_fixture(&log);
-        provided_state.put_canister_states(canister_states_with_outputs(vec![response.clone()]));
-
-        let result_state = stream_builder.build_streams(provided_state);
-
-        assert_no_messages_routed(&result_state, LOCAL_SUBNET);
-        assert_eq!(
-            vec![response],
-            output_queue_contents(
-                &result_state,
-                COOLING_DOWN_LOCAL_CANISTER,
-                COOLING_DOWN_REMOTE_CANISTER
-            )
-        );
-        assert_one_message_status(
-            LABEL_VALUE_TYPE_RESPONSE,
-            LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
-            &metrics_registry,
-        );
-        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
-    });
+            assert_no_messages_routed(&result_state, LOCAL_SUBNET);
+            assert_eq!(
+                vec![msg],
+                output_queue_contents(
+                    &result_state,
+                    COOLING_DOWN_LOCAL_CANISTER,
+                    COOLING_DOWN_REMOTE_CANISTER
+                )
+            );
+            assert_one_message_status(
+                msg_type,
+                LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
+                &metrics_registry,
+            );
+            assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+        });
+    }
 }
 
 /// Tests that the engine boundary check takes precedence over cooling down: a
 /// message that must never cross an engine boundary is rejected as `SysFatal` (or,
 /// for a refund, dropped with a critical error) even if the destination subnet
-/// happens to be cooling down, because it is illegal there permanently and a
-/// transient rejection would invite a pointless retry. A request that *is* legal at
-/// the boundary is still rejected as `SysTransient`.
+/// happens to be cooling down, because it is illegal there permanently and
+/// retaining it would only defer the same outcome. A request that *is* legal at the
+/// boundary is instead retained until the subnet stops cooling down.
 #[test]
 fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
     // A guaranteed-response, cycle-bearing request is illegal at the boundary:
@@ -1602,24 +1548,29 @@ fn build_streams_engine_boundary_takes_precedence_over_cooling_down() {
     });
 
     // A bounded-wait request without cycles is legal at the boundary, so it is
-    // rejected because the subnet is cooling down.
+    // retained because the subnet is cooling down.
     with_test_replica_logger(|log| {
+        let request =
+            RequestOrResponse::Request(cooling_down_request(SOME_DEADLINE, Cycles::zero()).into());
+
         let (stream_builder, mut provided_state, metrics_registry) =
             new_cooling_down_fixture(&log, SubnetType::CloudEngine);
-        provided_state.put_canister_states(canister_states_with_outputs(vec![
-            cooling_down_request(SOME_DEADLINE, Cycles::zero()),
-        ]));
+        provided_state.put_canister_states(canister_states_with_outputs(vec![request.clone()]));
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_cooling_down_reject(
-            &result_state,
-            COOLING_DOWN_LOCAL_CANISTER,
-            COOLING_DOWN_REMOTE_CANISTER,
+        assert_no_messages_routed(&result_state, REMOTE_SUBNET);
+        assert_eq!(
+            vec![request],
+            output_queue_contents(
+                &result_state,
+                COOLING_DOWN_LOCAL_CANISTER,
+                COOLING_DOWN_REMOTE_CANISTER
+            )
         );
         assert_one_message_status(
             LABEL_VALUE_TYPE_REQUEST,
-            LABEL_VALUE_STATUS_COOLING_DOWN,
+            LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
             &metrics_registry,
         );
         assert_eq_critical_errors(0, 0, 0, &metrics_registry);

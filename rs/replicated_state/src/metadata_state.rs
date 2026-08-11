@@ -428,16 +428,14 @@ pub struct SubnetTopology {
     ///    payload; and a block containing one is invalid. The filter reads the
     ///    latest certified state, so it lags by the certification delay — payload
     ///    building and validation are what make this binding.
-    ///  * Inter-canister requests addressed to it are rejected with
-    ///    `RejectCode::SysTransient` by the sending subnet, before they are routed
-    ///    into a stream (including the loopback stream, i.e. the subnet rejects
-    ///    requests to itself). Responses and anonymous refunds addressed to it are
-    ///    instead retained by the sender (in canister output queues and the refund
-    ///    pool, respectively) until it stops cooling down; retaining a response
-    ///    also holds back whatever is queued behind it, so a request behind one
-    ///    stays put rather than being rejected. A message that must never cross an
-    ///    engine boundary is still handled by the engine boundary check instead, as
-    ///    it is illegal there permanently rather than transiently.
+    ///  * Inter-canister messages and anonymous refunds addressed to it are not
+    ///    routed into a stream (not even the loopback stream, i.e. the subnet also
+    ///    holds back messages to itself). They are retained by the sender (in
+    ///    canister output queues and the refund pool, respectively) until it stops
+    ///    cooling down; retaining a message also holds back everything queued
+    ///    behind it. A message that must never cross an engine boundary is still
+    ///    handled by the engine boundary check instead, as it is illegal there
+    ///    permanently rather than transiently.
     ///
     /// Execution is left alone: the subnet keeps executing the messages it already
     /// holds (that is what "letting them drain" means), including `Heartbeat` and

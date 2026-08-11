@@ -75,7 +75,6 @@ const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
 const LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED: &str = "engine_not_allowed";
-const LABEL_VALUE_STATUS_COOLING_DOWN: &str = "cooling_down";
 const LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN: &str = "retained_cooling_down";
 
 const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "mr_stream_builder_payload_too_large";
@@ -447,7 +446,6 @@ impl StreamBuilderImpl {
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
         let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
-        let mut cooling_down_requests_to_reject: Vec<Arc<Request>> = Vec::new();
         let mut engine_response_dropped_cycles = Cycles::zero();
         let mut dropped_response_cycles = Cycles::zero();
         let own_cost_schedule = state.get_own_cost_schedule();
@@ -476,24 +474,17 @@ impl StreamBuilderImpl {
                     // guaranteed-response message, or one carrying cycles. Such a message
                     // is always handled by the engine boundary arms below, whether or not
                     // the destination subnet is cooling down: it is illegal there
-                    // permanently, so a transient rejection would be misleading.
+                    // permanently, so retaining it until the subnet stops cooling down
+                    // would only defer the same outcome.
                     let is_illegal_engine_msg = (is_engine_dst || is_engine_src)
                         && (msg.deadline() == NO_DEADLINE || msg.cycles() > Cycles::zero());
 
                     // A cooling down destination subnet must not be sent any messages.
-                    // Requests are rejected below, so that the caller is not left
-                    // waiting; responses are instead retained in the output queue (a
-                    // response cannot be rejected; and dropping it would leave the
-                    // originator hanging forever), along with everything behind them.
-                    let is_cooling_down_dst = network_topology.is_cooling_down(&dst_subnet_id);
-                    if is_cooling_down_dst
-                        && !is_illegal_engine_msg
-                        && matches!(msg, RequestOrResponse::Response(_))
-                    {
-                        self.observe_message_type_status(
-                            LABEL_VALUE_TYPE_RESPONSE,
-                            LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
-                        );
+                    // Retain them in the output queue (along with everything behind
+                    // them) until it stops cooling down, rather than rejecting or
+                    // dropping them.
+                    if network_topology.is_cooling_down(&dst_subnet_id) && !is_illegal_engine_msg {
+                        self.observe_message_status(&msg, LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN);
                         output_iter.exclude_queue();
                         continue;
                     }
@@ -566,18 +557,6 @@ impl StreamBuilderImpl {
                                 dst_stream_entry.or_default().push(msg.into());
                             }
                             // Best-effort illegal responses are dropped (consumed here).
-                        }
-
-                        // Request to a cooling down subnet: reject it, so that the caller
-                        // is not left waiting for the subnet to come back. Responses were
-                        // already retained above, so this is the only kind of message that
-                        // can still be headed for a cooling down subnet.
-                        RequestOrResponse::Request(req) if is_cooling_down_dst => {
-                            self.observe_message_type_status(
-                                LABEL_VALUE_TYPE_REQUEST,
-                                LABEL_VALUE_STATUS_COOLING_DOWN,
-                            );
-                            cooling_down_requests_to_reject.push(req);
                         }
 
                         // Remote request above the payload size limit.
@@ -735,16 +714,6 @@ impl StreamBuilderImpl {
                 RejectCode::SysFatal,
                 "Unbounded-wait calls and calls with cycles are not allowed to CloudEngine subnets"
                     .to_string(),
-            );
-        }
-
-        for req in cooling_down_requests_to_reject {
-            let dst_canister_id = req.receiver;
-            self.reject_local_request(
-                &mut state,
-                &req,
-                RejectCode::SysTransient,
-                format!("Canister {dst_canister_id} is deployed to a subnet that is cooling down"),
             );
         }
 

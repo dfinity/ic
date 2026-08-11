@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
-- Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: messages addressed to a subnet that is "cooling down" are rejected with this error code.
+- Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
 
 
 
