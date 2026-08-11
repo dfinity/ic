@@ -1207,7 +1207,7 @@ crate.spec(
     # https://github.com/tikv/pprof-rs
     git = "https://github.com/dfinity/pprof-rs",
     package = "pprof",
-    rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
+    rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771",
 )
 crate.spec(
     package = "predicates",

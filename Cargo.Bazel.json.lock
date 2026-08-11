@@ -47011,6 +47011,8 @@
             "default",
             "ioctl",
             "memoffset",
+            "process",
+            "signal",
             "socket"
           ],
           "selects": {}
@@ -54580,7 +54582,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/pprof-rs",
           "commitish": {
-            "Rev": "7f5228262196e3eb9c8d1ddbaca984787dea331a"
+            "Rev": "9159b45ecc3540d7fc44c6a6e70a173676cfa771"
           }
         }
       },
@@ -54663,7 +54665,7 @@
               "target": "log"
             },
             {
-              "id": "nix 0.30.1",
+              "id": "nix 0.27.1",
               "target": "nix"
             },
             {
@@ -54683,7 +54685,7 @@
               "target": "smallvec"
             },
             {
-              "id": "spin 0.10.1",
+              "id": "spin 0.9.8",
               "target": "spin"
             },
             {
@@ -70205,56 +70207,11 @@
         ],
         "crate_features": {
           "common": [
-            "mutex",
-            "once",
-            "spin_mutex"
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.9.8"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "spin 0.10.1": {
-      "name": "spin",
-      "version": "0.10.1",
-      "package_url": "https://github.com/mvdnes/spin-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/spin/0.10.1/download",
-          "sha256": "023a211cb3138dbc438680b32560ad89f699977624c9f8dbb95a47d5b4c07dd3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "spin",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "spin",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
             "barrier",
             "default",
             "lazy",
             "lock_api",
+            "lock_api_crate",
             "mutex",
             "once",
             "rwlock",
@@ -70273,7 +70230,7 @@
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.10.1"
+        "version": "0.9.8"
       },
       "license": "MIT",
       "license_ids": [
