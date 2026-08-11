@@ -16,6 +16,10 @@ const OBSERVATION_WINDOW: Duration = Duration::from_secs(8 * 60);
 const ABOVE_LOW_WATER_MARK: u128 = 500_000_000_000_000_000; // 0.5 ETH
 /// Sending and finalizing both wait on the 6-minute withdrawal timer, so allow for two ticks.
 const FINALIZATION_DEADLINE: Duration = Duration::from_secs(15 * 60);
+/// How long to wait for the minter to record a funding it has already burned for. Generous for an
+/// inter-canister hop, yet far below the six minutes before the transaction can finalize and clear
+/// the row again.
+const IN_FLIGHT_DEADLINE: Duration = Duration::from_secs(2 * 60);
 
 #[test]
 fn should_not_fund_when_the_fee_account_is_empty() {
@@ -144,10 +148,10 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
 
     let burned = await_burn(&setup, supply_before, Duration::from_secs(180));
     assert!(burned > 0, "funding must burn ckETH up front");
-    // Read while the funding is still in flight: the dashboard clears the row once it finalizes.
-    let burn_index = setup
-        .in_flight_funding_burn_index()
-        .expect("the funding must be in flight once its burn has happened");
+    // Polled, not read once: the minter records the funding only after the ledger call it awaited
+    // returns, so the supply `await_burn` watches drops before the dashboard shows the request.
+    // Bounded well below the time to finalization, since the row clears again once that happens.
+    let burn_index = await_in_flight_burn_index(&setup, IN_FLIGHT_DEADLINE);
 
     // Waits for the transaction to finalize rather than watching for a fixed window: without this
     // the assertions below all hold while it is merely still in flight, which proves nothing about
@@ -179,6 +183,23 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
         surplus, "0 Wei",
         "the unreimbursed burn must be tracked as prepaid gas, got {surplus}"
     );
+}
+
+/// The burn index of the funding the minter currently has in flight, waiting for it to appear.
+fn await_in_flight_burn_index(setup: &SweeperFundingSetup, deadline: Duration) -> u64 {
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(index) = setup.in_flight_funding_burn_index() {
+            return index;
+        }
+        assert!(
+            start.elapsed() <= deadline,
+            "the minter burned ckETH but recorded no in-flight funding within {deadline:?}; \
+             minter logs:\n{}",
+            setup.minter_logs().join("\n")
+        );
+        std::thread::sleep(Duration::from_secs(2));
+    }
 }
 
 fn await_burn(setup: &SweeperFundingSetup, supply_before: u128, deadline: Duration) -> u128 {
