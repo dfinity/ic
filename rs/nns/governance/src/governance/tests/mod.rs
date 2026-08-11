@@ -1443,6 +1443,7 @@ fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
     };
 
     // Step 2: Run the code under test.
+    // The following calls must not panic — that's the main thing this test verifies.
     let result_unregistered = governance.validate_execute_nns_function(
         &new_valid_assign_node_operator_proposal_action(PrincipalId::new_node_test_id(99)),
     );
