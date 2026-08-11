@@ -211,6 +211,49 @@ impl Anvil {
             .to_string()
     }
 
+    /// Emits a `ReceivedEth(from, value, principal)` log from `helper`, the way the real ckETH helper
+    /// contract does, so the minter's log scraping credits a deposit against it.
+    ///
+    /// Places runtime code at `helper` that emits the log and stops, then calls it: a bare `eth_call`
+    /// would not produce a log in a block, and the minter only sees logs that were mined.
+    pub(crate) fn emit_received_eth(
+        &self,
+        helper: &Address,
+        from: &Address,
+        value: u128,
+        principal_topic: &[u8; 32],
+    ) {
+        // Keccak256("ReceivedEth(address,uint256,bytes32)")
+        let received_eth_topic = keccak256(b"ReceivedEth(address,uint256,bytes32)");
+        let mut from_topic = [0_u8; 32];
+        from_topic[12..].copy_from_slice(from.as_ref());
+
+        let mut code = Vec::new();
+        // mstore(0, value) — the log's data word.
+        code.push(0x7f);
+        code.extend_from_slice(&u256_be(value));
+        code.extend_from_slice(&[0x60, 0x00, 0x52]);
+        // LOG3 pops offset, size, topic1, topic2, topic3, so push them in reverse.
+        code.push(0x7f);
+        code.extend_from_slice(principal_topic);
+        code.push(0x7f);
+        code.extend_from_slice(&from_topic);
+        code.push(0x7f);
+        code.extend_from_slice(&received_eth_topic);
+        // PUSH1 32 (size), PUSH1 0 (offset), LOG3, STOP. LOG3 is 0xa3 — 0xa2 is LOG2, which would
+        // drop the principal topic and the minter would reject the event as having invalid topics.
+        code.extend_from_slice(&[0x60, 0x20, 0x60, 0x00, 0xa3, 0x00]);
+
+        self.set_code(helper, &code);
+        let hash = self.send_transaction(from, Some(helper), &[]);
+        assert!(
+            status_ok(&self.await_receipt(&hash)),
+            "emitting the deposit log reverted"
+        );
+        // The minter reads at `finalized`, which trails `latest`.
+        self.mine(3);
+    }
+
     pub(crate) fn deploy(&self, from: &Address, code: &[u8]) -> Address {
         let hash = self.send_transaction(from, None, code);
         let receipt = self.await_receipt(&hash);

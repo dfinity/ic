@@ -29,11 +29,14 @@ use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{FeatureFlags, LedgerArgument};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
-use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder};
+use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder, StartServerParams, start_server};
+use reqwest::Url;
+use std::process::Child;
 use std::str::FromStr;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use crate::anvil::Anvil;
+use crate::anvil::{Anvil, DEV_ACCOUNT, address_from_hex};
 use crate::{
     CKETH_MINIMUM_WITHDRAWAL_AMOUNT, ETH_HELPER_CONTRACT_ADDRESS, evm_rpc_wasm, ledger_wasm,
     minter_wasm,
@@ -43,6 +46,9 @@ const ECDSA_KEY_NAME: &str = "key_1";
 
 const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
 
+/// Credited to the minter as a deposit, so funding has deposit-backed ETH to spend. Comfortably
+/// above the default 0.1 ETH funding target.
+const DEPOSIT_AMOUNT: u128 = 5_000_000_000_000_000_000; // 5 ETH
 const MINTER_ETH_BALANCE: u128 = 100_000_000_000_000_000_000; // 100 ETH
 
 pub const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
@@ -79,6 +85,7 @@ impl SweeperFundingSetup {
         let anvil = Anvil::start_mainnet_like();
 
         let mut env = PocketIcBuilder::new()
+            .with_server_url(long_lived_server_url())
             .with_nns_subnet() // make_live requires an NNS subnet.
             .with_fiduciary_subnet() // holds the secp256k1 `key_1` the minter signs with.
             .build();
@@ -103,6 +110,20 @@ impl SweeperFundingSetup {
         // Live before installing the minter: its install-time timers issue outcalls immediately.
         let _gateway = env.make_live(None);
 
+        // Emitted before the minter exists, so its install-time log scrape credits the deposit.
+        // Funding may only spend ETH the minter received through deposits, so without this every
+        // funding is refused: setting a balance on anvil credits the accounting nothing.
+        let mut principal_topic = [0_u8; 32];
+        let principal_bytes = controller().as_slice().to_vec();
+        principal_topic[0] = principal_bytes.len() as u8;
+        principal_topic[1..1 + principal_bytes.len()].copy_from_slice(&principal_bytes);
+        anvil.emit_received_eth(
+            &address_from_hex(ETH_HELPER_CONTRACT_ADDRESS),
+            &address_from_hex(DEV_ACCOUNT),
+            DEPOSIT_AMOUNT,
+            &principal_topic,
+        );
+
         install_minter(&env, minter_id, ledger_id, evm_rpc_id);
 
         let mut setup = Self {
@@ -116,7 +137,64 @@ impl SweeperFundingSetup {
         setup
             .anvil
             .set_balance(&setup.minter_address, MINTER_ETH_BALANCE);
+        // The install-time funding check races the scrape, so it will have seen a zero balance, and
+        // the next scheduled one is a whole interval away. Re-arm the timers once the deposit has
+        // landed so tests start from a minter that can actually fund.
+        setup.await_deposit_credited(Duration::from_secs(300));
+        setup.upgrade_minter();
         setup
+    }
+
+    /// Waits until the minter has credited the harness' deposit, i.e. its ETH balance is non-zero.
+    pub fn await_deposit_credited(&self, deadline: Duration) {
+        let start = Instant::now();
+        loop {
+            // Observed through the mint the deposit produces: crediting the minter's ETH balance
+            // and minting ckETH to the beneficiary are the same state transition.
+            if self.cketh_balance_of(Account {
+                owner: controller(),
+                subaccount: None,
+            }) > 0
+            {
+                return;
+            }
+            assert!(
+                start.elapsed() <= deadline,
+                "the minter never credited the deposit within {deadline:?}; logs:\n{}",
+                self.minter_logs().join("\n")
+            );
+            self.anvil.mine(1);
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    }
+
+    /// Re-arms the minter's periodic timers by upgrading it, so a funding check runs again inside the
+    /// test rather than at the next 24-hour tick.
+    ///
+    /// Stopped first, as any upgrade must be: upgrading a running canister leaves its in-flight
+    /// HTTPS outcalls to resolve into fresh Wasm, which traps it with
+    /// "CallFutureState for in-flight calls" and corrupts its heap.
+    pub fn upgrade_minter(&self) {
+        self.env
+            .stop_canister(self.minter_id, Some(controller()))
+            .expect("stopping the minter must succeed");
+        self.env
+            .upgrade_canister(
+                self.minter_id,
+                minter_wasm(),
+                Encode!(&None::<MinterArg>).unwrap(),
+                Some(controller()),
+            )
+            .expect("upgrading the minter must succeed");
+        self.env
+            .start_canister(self.minter_id, Some(controller()))
+            .expect("starting the minter must succeed");
+    }
+
+    /// Mines `blocks` on the owned anvil node, so a change made with `set_eth_balance` or `set_code`
+    /// becomes visible at `finalized`, which trails `latest` by two blocks.
+    pub fn mine(&self, blocks: u64) {
+        self.anvil.mine(blocks);
     }
 
     pub fn fee_account(&self) -> Account {
@@ -275,6 +353,36 @@ impl SweeperFundingSetup {
 fn nat_to_u128(nat: Nat) -> u128 {
     use num_traits::ToPrimitive;
     nat.0.to_u128().expect("balance does not fit into u128")
+}
+
+/// URL of a PocketIC server started by this process with a hard TTL above the Bazel timeout.
+///
+/// `PocketIc::new` starts every server with `--hard-ttl 600`, and the server then calls
+/// `exit(124)` 600s after launch regardless of activity or requests in flight. That budget covers
+/// *every* test in the binary combined, and these tests wait on the minter's 6-minute withdrawal
+/// timer, so they cross it and have the server shot out from under them mid-request — surfacing as
+/// `hyper::Error(IncompleteMessage)` with no hint of the cause. Starting the server here is the only
+/// way to raise it: the value is not exposed through `PocketIcBuilder`.
+fn long_lived_server_url() -> Url {
+    // Above the target's `timeout = "eternal"` (3600s), so Bazel's own timeout is what bounds a
+    // stuck run, and the hard TTL stays only a backstop against an orphaned server.
+    const HARD_TTL: Duration = Duration::from_secs(4200);
+
+    static SERVER: OnceLock<(Child, Url)> = OnceLock::new();
+    SERVER
+        .get_or_init(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("building a runtime for the PocketIC server must succeed");
+            runtime.block_on(start_server(StartServerParams {
+                reuse: true,
+                hard_ttl: Some(HARD_TTL),
+                ..Default::default()
+            }))
+        })
+        .1
+        .clone()
 }
 
 fn install_ledger(
