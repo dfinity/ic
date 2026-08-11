@@ -133,8 +133,8 @@ struct ResponseHelper {
     // paused slice only reports its executed instructions to the round limits.
     // Hence such instructions are tracked here in order to be charged if the
     // execution fails before the Wasm execution finishes. The counter is reset by
-    // `start_new_wasm_execution` because a finished Wasm execution is reflected in
-    // the instruction limits of the next one (the cleanup callback).
+    // `reset_executed_wasm_instructions` once a Wasm execution has finished and is
+    // reflected in the instruction limits of the next one (the cleanup callback).
     executed_wasm_instructions: NumInstructions,
     applied_subnet_memory_reservation: NumBytes,
     deallocation_sender: DeallocationSender,
@@ -327,11 +327,12 @@ impl ResponseHelper {
         }
     }
 
-    /// Resets the instructions executed by a paused Wasm execution because a new
-    /// Wasm execution (the cleanup callback) is about to start and the
-    /// instructions of the previous one are already reflected in the instruction
-    /// limits of the new one.
-    fn start_new_wasm_execution(&mut self) {
+    /// Resets the instructions executed by a Wasm execution that has been paused
+    /// because those instructions are now reflected in the instruction limits,
+    /// which have just been updated from the output of the finished Wasm execution
+    /// (the response callback). Hence the next Wasm execution (the cleanup
+    /// callback) starts counting from zero.
+    fn reset_executed_wasm_instructions(&mut self) {
         self.executed_wasm_instructions = NumInstructions::new(0);
     }
 
@@ -1152,7 +1153,7 @@ fn execute_response_cleanup(
         .update(instructions_left);
     // The instructions executed by the response callback are reflected in the
     // instruction limits updated above.
-    helper.start_new_wasm_execution();
+    helper.reset_executed_wasm_instructions();
     let func_ref = match original.call_origin {
         CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
             FuncRef::UpdateClosure(cleanup_closure)
