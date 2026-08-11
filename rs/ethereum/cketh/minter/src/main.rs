@@ -1168,8 +1168,9 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_burned_not_yet_spent",
                     s.sweeper_funding.burned_not_yet_spent().as_f64(),
-                    "ckETH burned for sweeping but not yet spent, i.e. the credit that offsets \
-                     the next funding.",
+                    "ckETH burned for sweeping but not yet spent, i.e. how far burn runs ahead of \
+                     spend. Gross: while a funding is in flight this includes its burn, which the \
+                     next funding may not offset against.",
                 )?;
                 // NaN rather than 0: "no gas" and "never looked" must not read alike.
                 w.encode_gauge(
