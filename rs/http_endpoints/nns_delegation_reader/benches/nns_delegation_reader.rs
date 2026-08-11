@@ -3,7 +3,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
-use ic_nns_delegation_reader::{CanisterRangesCheck, NNSDelegationBuilder, NNSDelegationReader};
+use ic_nns_delegation_reader::{CanisterRangesCheck, NNSDelegationBuilder};
 use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::ids::SUBNET_0;
@@ -11,7 +11,6 @@ use ic_types::{
     CanisterId,
     messages::{Blob, Certificate},
 };
-use tokio::sync::watch;
 
 fn build_delegation_verify_all_subnet_ranges(criterion: &mut Criterion) {
     build_delegation_bench(
@@ -54,12 +53,12 @@ fn build_delegation_bench(
 
     let mut bench_function = |canister_id_ranges_count| {
         let canister_id_ranges = (0..canister_id_ranges_count)
-            .map(|i| (CanisterId::from(2 * i), CanisterId::from(2 * i + 1)))
+            // Leaving gaps on purpose between ranges to simulate a fragmented routing table
+            .map(|i| (CanisterId::from(3 * i), CanisterId::from(3 * i + 1)))
             .collect();
         let (delegation, _root_public_key) =
             create_fake_certificate_delegation(&canister_id_ranges, SUBNET_0);
         let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate).unwrap();
-        // TODO: Review this file again
         let labeled_tree = LabeledTree::try_from(certificate.tree.clone()).unwrap();
         // Extract the public key certified in the delegation so that the verification performed by
         // `build_verified` succeeds
@@ -77,8 +76,7 @@ fn build_delegation_bench(
             .try_into()
             .unwrap();
 
-        let builder =
-            NNSDelegationBuilder::new(certificate.clone(), labeled_tree, Blob(vec![]), SUBNET_0);
+        let builder = NNSDelegationBuilder::new(certificate, labeled_tree, Blob(vec![]), SUBNET_0);
 
         let build_verified = || {
             builder
@@ -111,25 +109,12 @@ fn build_delegation_bench(
     bench_function(120_000);
 }
 
-fn get_builder_on_nns(criterion: &mut Criterion) {
-    let mut group = criterion.benchmark_group("get_builder_on_nns");
-
-    // On NNS there is no delegation
-    let (_, rx) = watch::channel(None);
-    let reader = NNSDelegationReader::new(rx);
-
-    group.bench_function("builder", |bencher| {
-        bencher.iter(|| black_box(reader.builder()));
-    });
-}
-
 criterion_group!(
     benches,
     build_delegation_verify_all_subnet_ranges,
     build_delegation_verify_canister_in_flat,
     build_delegation_verify_canister_in_tree,
     build_delegation_no_ranges_check,
-    get_builder_on_nns,
 );
 
 criterion_main!(benches);
