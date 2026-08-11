@@ -6955,6 +6955,47 @@ fn validate_payload_fails_for_flexible_initial_spent_exceeding_allowance() {
     );
 }
 
+/// An extra share funding a flexible response group carries no response body, so
+/// nothing but the size limit stops it from claiming an arbitrarily large
+/// `content_size`.
+#[test]
+fn validate_payload_fails_for_a_flexible_group_with_an_oversized_share() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    // One byte more than the largest response the replica could have returned.
+    let oversized = (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES) as u32 + 1;
+    let group = flexible_group_with_extra_shares(
+        callback_id,
+        num_nodes as u32,
+        1,
+        vec![flexible_response(callback_id.get(), 0, b"data")],
+        vec![metadata_share_with_content_size(
+            callback_id.get(),
+            1,
+            oversized,
+        )],
+    );
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            TEST_PER_REPLICA_ALLOWANCE,
+            flexible_payload(vec![group]),
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
+                    content_size,
+                    limit,
+                    ..
+                },
+            ),
+        )) if content_size == oversized && limit == oversized as u64 - 1
+    );
+}
+
 /// The validator rejects a `TooManyRejects` error whose collective initial spend
 /// exceeds the collective allowance of its contributors.
 #[test]

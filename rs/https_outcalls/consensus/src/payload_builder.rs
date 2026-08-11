@@ -447,8 +447,7 @@ impl CanisterHttpPayloadBuilderImpl {
             )?;
 
             utils::check_content_size_within_limit(
-                response.proof.metadata.content_size,
-                response.proof.metadata.is_reject,
+                &response.proof.metadata,
                 callback_id,
                 request_context,
             )
@@ -629,8 +628,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     utils::check_spent_within_limit(&share.content.payment_receipt, context)
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     utils::check_content_size_within_limit(
-                        share.content.content_size(),
-                        share.content.is_reject(),
+                        &share.content.metadata,
                         callback_id,
                         context,
                     )

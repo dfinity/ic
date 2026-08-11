@@ -98,20 +98,19 @@ pub(crate) fn check_spent_within_limit(
     Ok(())
 }
 
-/// Enforces the response size limit from the request context: the `content_size` the
-/// signed metadata claims must never exceed the maximum returned by
+/// Enforces the response size limit from the request context: the `content_size`
+/// the signed metadata claims must never exceed the maximum returned by
 /// [`CanisterHttpRequestContext::max_http_outcall_content_size`].
 pub(crate) fn check_content_size_within_limit(
-    content_size: u32,
-    is_reject: bool,
+    metadata: &CanisterHttpResponseMetadata,
     callback_id: CallbackId,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    let limit = context.max_http_outcall_content_size(is_reject);
-    if content_size as u64 > limit {
+    let limit = context.max_http_outcall_content_size(metadata.is_reject);
+    if metadata.content_size as u64 > limit {
         return Err(InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
             callback_id,
-            content_size,
+            content_size: metadata.content_size,
             limit,
         });
     }
@@ -379,14 +378,6 @@ pub(crate) fn validate_response_share(
     seen_signers: &mut HashSet<NodeId>,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    check_spent_within_limit(&share.content.payment_receipt, context)?;
-    check_content_size_within_limit(
-        share.content.content_size(),
-        share.content.is_reject(),
-        callback_id,
-        context,
-    )?;
-
     if share.content.id() != callback_id {
         return Err(
             InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
@@ -395,6 +386,9 @@ pub(crate) fn validate_response_share(
             },
         );
     }
+
+    check_spent_within_limit(&share.content.payment_receipt, context)?;
+    check_content_size_within_limit(&share.content.metadata, callback_id, context)?;
 
     let signer = share.signature.signer;
     if !seen_signers.insert(signer) {
@@ -928,12 +922,13 @@ mod tests {
     use super::*;
     use ic_error_types::RejectCode;
     use ic_types::{
-        CanisterId, NumberOfNodes,
+        CanisterId, NumberOfNodes, ReplicaVersion,
         canister_http::{
             CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpReject,
             MAX_CANISTER_HTTP_RESPONSE_BYTES, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
             MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion, RefundStatus, Replication,
         },
+        crypto::{CryptoHash, CryptoHashOf},
         messages::{NO_DEADLINE, Request},
         time::UNIX_EPOCH,
     };
@@ -1048,7 +1043,15 @@ mod tests {
         is_reject: bool,
         context: &CanisterHttpRequestContext,
     ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-        check_content_size_within_limit(content_size, is_reject, CallbackId::from(1), context)
+        let callback_id = CallbackId::from(1);
+        let metadata = CanisterHttpResponseMetadata {
+            id: callback_id,
+            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+            content_size,
+            is_reject,
+            replica_version: ReplicaVersion::default(),
+        };
+        check_content_size_within_limit(&metadata, callback_id, context)
     }
 
     #[test]
