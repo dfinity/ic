@@ -1421,3 +1421,34 @@ fn should_record_a_sweeper_balance_observation_only_when_the_read_succeeds() {
         .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance NaN")
         .assert_contains_metric_matching(r"cketh_minter_sweeper_gas_balance_age_seconds \+Inf");
 }
+
+/// The observation must not survive an upgrade. It authorises spending by being *fresh*, so one
+/// taken before an upgrade must not authorise a sweep after it; the gate has to fail closed until a
+/// new balance read completes. Nothing event-sources this cache today, and this test is what would
+/// notice if that changed.
+#[test]
+fn should_forget_the_sweeper_balance_observation_across_an_upgrade() {
+    const TICKS_FOR_THE_CALLBACK: usize = 20;
+
+    let cketh = CkEthSetup::default();
+    for _ in 0..TICKS_FOR_THE_CALLBACK {
+        cketh.env.tick();
+    }
+    // Arrangement, not the assertion: there has to be an observation for its loss to mean anything.
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance [0-9]");
+
+    let cketh = cketh.upgrade_minter_without_changes();
+
+    // The post-upgrade check re-reads the balance, and this harness deliberately leaves that outcall
+    // unanswered — so the gate stays closed here for as long as no read completes, which is the
+    // property under test rather than a timing artifact.
+    for _ in 0..TICKS_FOR_THE_CALLBACK {
+        cketh.env.tick();
+    }
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance NaN")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_gas_balance_age_seconds \+Inf");
+}
