@@ -11,7 +11,7 @@ on the process that this file is part of, see
 
 ## Changed
 
-* Guest launch measurements is now required (when electing a new Guestos version).
+* Guest launch measurements are now required (when electing a new GuestOS version).
 
 ## Deprecated
 

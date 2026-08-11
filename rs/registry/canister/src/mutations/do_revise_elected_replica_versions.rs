@@ -186,6 +186,8 @@ mod tests {
     lazy_static! {
         static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
+                // An SEV-SNP measurement is exactly 48 bytes long. The value
+                // itself does not matter here.
                 measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("foo=bar".to_string()),
@@ -216,11 +218,14 @@ mod tests {
 
     #[test]
     fn test_electing_a_version_without_launch_measurements_is_rejected() {
+        // Step 1: Prepare the world.
         let mut payload = ELECT_PAYLOAD.clone();
         payload.guest_launch_measurements = None;
 
+        // Step 2: Run the code under test.
         let result = payload.validate();
 
+        // Step 3: Verify result(s). The defect names the missing parameter.
         let defect = result.unwrap_err().to_lowercase();
         for key_word in [
             "all parameters",
@@ -232,13 +237,16 @@ mod tests {
 
     #[test]
     fn test_electing_a_version_with_empty_launch_measurements_is_rejected() {
+        // Step 1: Prepare the world.
         let mut payload = ELECT_PAYLOAD.clone();
         payload.guest_launch_measurements = Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![],
         });
 
+        // Step 2: Run the code under test.
         let result = payload.validate();
 
+        // Step 3: Verify result(s).
         let defect = result.unwrap_err().to_lowercase();
         for key_word in ["guest_launch_measurements", "empty"] {
             assert!(defect.contains(key_word), "{key_word} not in {defect}");
@@ -247,6 +255,7 @@ mod tests {
 
     #[test]
     fn test_electing_a_version_with_invalid_launch_measurement_is_rejected() {
+        // Step 1: Prepare the world.
         let mut payload = ELECT_PAYLOAD.clone();
         payload.guest_launch_measurements = Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
@@ -256,8 +265,10 @@ mod tests {
             }],
         });
 
+        // Step 2: Run the code under test.
         let result = payload.validate();
 
+        // Step 3: Verify result(s).
         let defect = result.unwrap_err().to_lowercase();
         for key_word in ["guest_launch_measurements", "48 bytes"] {
             assert!(defect.contains(key_word), "{key_word} not in {defect}");
@@ -286,14 +297,18 @@ mod tests {
     /// are reported as a defect instead.
     #[test]
     fn test_unelecting_a_version_with_launch_measurements_is_rejected() {
+        // Step 1: Prepare the world.
         let payload = ReviseElectedGuestosVersionsPayload {
             guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
             replica_versions_to_unelect: vec![REPLICA_VERSION_ID.to_string()],
             ..Default::default()
         };
 
+        // Step 2: Run the code under test.
         let result = payload.validate();
 
+        // Step 3: Verify result(s). The measurements are the only election
+        // parameter that is set, so the other three are reported as missing.
         let defect = result.unwrap_err().to_lowercase();
         for key_word in [
             "all parameters",
@@ -307,10 +322,13 @@ mod tests {
 
     #[test]
     fn test_neither_electing_nor_unelecting_is_rejected() {
+        // Step 1: Prepare the world.
         let payload = ReviseElectedGuestosVersionsPayload::default();
 
+        // Step 2: Run the code under test.
         let result = payload.validate();
 
+        // Step 3: Verify result(s).
         let defect = result.unwrap_err().to_lowercase();
         for key_word in ["at least one version", "elected or unelected"] {
             assert!(defect.contains(key_word), "{key_word} not in {defect}");
@@ -319,6 +337,7 @@ mod tests {
 
     #[test]
     fn test_incomplete_election_parameters_are_rejected() {
+        // Step 1: Prepare the world.
         let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: Some(REPLICA_VERSION_ID.to_string()),
             guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
@@ -326,8 +345,10 @@ mod tests {
             ..Default::default()
         };
 
+        // Step 2: Run the code under test.
         let result = payload.validate();
 
+        // Step 3: Verify result(s).
         let defect = result.unwrap_err().to_lowercase();
         for key_word in [
             "all parameters",

@@ -31,6 +31,8 @@ const MOCK_HASH: &str = "acdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacd
 lazy_static! {
     static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
+            // An SEV-SNP measurement is exactly 48 bytes long. The value itself
+            // does not matter here.
             measurement: vec![0x42; 48],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("foo=bar".to_string()),
