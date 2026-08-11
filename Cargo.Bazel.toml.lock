@@ -3410,7 +3410,7 @@ dependencies = [
  "idna 1.0.3",
  "indexmap 2.14.0",
  "indicatif",
- "indoc 1.0.9",
+ "indoc",
  "inferno",
  "inotify",
  "insta",
@@ -3440,7 +3440,7 @@ dependencies = [
  "lzma-sys",
  "macaddr",
  "maplit",
- "maxminddb 0.24.0",
+ "maxminddb",
  "memchr",
  "memmap2 0.9.5",
  "minicbor",
@@ -3592,7 +3592,7 @@ dependencies = [
  "tokio-socks",
  "tokio-stream",
  "tokio-test",
- "tokio-tungstenite 0.26.2",
+ "tokio-tungstenite 0.29.0",
  "tokio-util",
  "toml 0.5.11",
  "tonic",
@@ -3609,7 +3609,7 @@ dependencies = [
  "tracing-flame",
  "tracing-journald",
  "tracing-opentelemetry",
- "tracing-serde 0.1.3",
+ "tracing-serde",
  "tracing-slog",
  "tracing-subscriber",
  "trust-dns-resolver",
@@ -5607,7 +5607,7 @@ dependencies = [
  "hyper-util",
  "ic-agent",
  "ic-custom-domains-canister-api",
- "indoc 2.0.7",
+ "indoc",
  "instant-acme",
  "itertools 0.15.0",
  "moka",
@@ -5947,7 +5947,7 @@ dependencies = [
  "isbot",
  "itertools 0.15.0",
  "lazy_static",
- "maxminddb 0.29.0",
+ "maxminddb",
  "moka",
  "prometheus",
  "rand 0.8.6",
@@ -5969,7 +5969,7 @@ dependencies = [
  "tower-http 0.7.0",
  "tracing",
  "tracing-core",
- "tracing-serde 0.2.0",
+ "tracing-serde",
  "tracing-subscriber",
  "url",
  "urlencoding",
@@ -6571,12 +6571,6 @@ dependencies = [
 
 [[package]]
 name = "indoc"
-version = "1.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfa799dd5ed20a7e349f3b4639aa80d74549c81716d9ec4f994c9b5815598306"
-
-[[package]]
-name = "indoc"
 version = "2.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79cf5c93f93228cf8efb3ba362535fb11199ac548a09ce117c9b1adc3030d706"
@@ -6657,7 +6651,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "435d80800b936787d62688c927b6490e887c7ef5ff9ce922c6c6050fca75eb9a"
 dependencies = [
  "darling 0.20.11",
- "indoc 2.0.7",
+ "indoc",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -6730,15 +6724,6 @@ name = "ipnet"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddc24109865250148c2e0f3d25d4f0f479571723792d3802153c60922a4fb708"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "ipnetwork"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf466541e9d546596ee94f9f69590f89473455f88372423e0008fc1a7daf100e"
 dependencies = [
  "serde",
 ]
@@ -7680,23 +7665,11 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "maxminddb"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6087e5d8ea14861bb7c7f573afbc7be3798d3ef0fae87ec4fd9a4de9a127c3c"
-dependencies = [
- "ipnetwork 0.20.0",
- "log",
- "memchr",
- "serde",
-]
-
-[[package]]
-name = "maxminddb"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65e84ef32bcbf18a95548989e880db4af6fafd563463753afb4b9a149fb2782c"
 dependencies = [
- "ipnetwork 0.21.1",
+ "ipnetwork",
  "log",
  "memchr",
  "serde",
@@ -9954,7 +9927,7 @@ dependencies = [
  "cassowary",
  "compact_str",
  "crossterm",
- "indoc 2.0.7",
+ "indoc",
  "instability",
  "itertools 0.13.0",
  "lru 0.12.5",
@@ -12706,18 +12679,6 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.26.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
-dependencies = [
- "futures-util",
- "log",
- "tokio",
- "tungstenite 0.26.2",
-]
-
-[[package]]
-name = "tokio-tungstenite"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
@@ -13110,16 +13071,6 @@ dependencies = [
 
 [[package]]
 name = "tracing-serde"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
-dependencies = [
- "serde",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-serde"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
@@ -13158,7 +13109,7 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
- "tracing-serde 0.2.0",
+ "tracing-serde",
 ]
 
 [[package]]
@@ -13258,23 +13209,6 @@ dependencies = [
  "sha1 0.10.6",
  "thiserror 1.0.68",
  "url",
- "utf-8",
-]
-
-[[package]]
-name = "tungstenite"
-version = "0.26.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
-dependencies = [
- "bytes",
- "data-encoding",
- "http 1.3.1",
- "httparse",
- "log",
- "rand 0.9.4",
- "sha1 0.10.6",
- "thiserror 2.0.18",
  "utf-8",
 ]
 
