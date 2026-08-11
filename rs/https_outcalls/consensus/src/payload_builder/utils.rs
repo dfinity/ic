@@ -98,6 +98,25 @@ pub(crate) fn check_spent_within_limit(
     Ok(())
 }
 
+/// Enforces the response size limit from the request context: the `content_size`
+/// the signed metadata claims must never exceed the maximum returned by
+/// [`CanisterHttpRequestContext::max_http_outcall_content_size`].
+pub(crate) fn check_content_size_within_limit(
+    metadata: &CanisterHttpResponseMetadata,
+    callback_id: CallbackId,
+    context: &CanisterHttpRequestContext,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    let limit = context.max_http_outcall_content_size(metadata.is_reject);
+    if metadata.content_size as u64 > limit {
+        return Err(InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
+            callback_id,
+            content_size: metadata.content_size,
+            limit,
+        });
+    }
+    Ok(())
+}
+
 enum ConsensusCostAllowance {
     Legacy(Cycles),
     PayAsYouGo(Cycles),
@@ -346,8 +365,8 @@ pub(crate) fn validate_flexible_response_with_proof(
 
 /// Validates a single [`CanisterHttpResponseShare`]'s metadata.
 ///
-/// Checks callback-id consistency, duplicate signers, committee membership,
-/// and the per-replica spend limit.
+/// Checks callback-id consistency, duplicate signers, committee membership, the
+/// per-replica spend limit, and the response size limit.
 ///
 /// **NOTE**: The signature is not verified. Callers are expected to
 /// batch-verify the signatures of all shares in the surrounding group via
@@ -359,8 +378,6 @@ pub(crate) fn validate_response_share(
     seen_signers: &mut HashSet<NodeId>,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    check_spent_within_limit(&share.content.payment_receipt, context)?;
-
     if share.content.id() != callback_id {
         return Err(
             InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
@@ -369,6 +386,9 @@ pub(crate) fn validate_response_share(
             },
         );
     }
+
+    check_spent_within_limit(&share.content.payment_receipt, context)?;
+    check_content_size_within_limit(&share.content.metadata, callback_id, context)?;
 
     let signer = share.signature.signer;
     if !seen_signers.insert(signer) {
@@ -900,12 +920,15 @@ fn fund_flexible_selection<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_error_types::RejectCode;
     use ic_types::{
-        CanisterId, NumberOfNodes,
+        CanisterId, NumberOfNodes, ReplicaVersion,
         canister_http::{
-            CanisterHttpMethod, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET, PricingVersion, RefundStatus,
-            Replication,
+            CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpReject,
+            MAX_CANISTER_HTTP_RESPONSE_BYTES, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
+            MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion, RefundStatus, Replication,
         },
+        crypto::{CryptoHash, CryptoHashOf},
         messages::{NO_DEADLINE, Request},
         time::UNIX_EPOCH,
     };
@@ -1012,6 +1035,68 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    /// Checks `content_size` against the limit, for a response of the given kind.
+    fn check_size(
+        content_size: u32,
+        is_reject: bool,
+        context: &CanisterHttpRequestContext,
+    ) -> Result<(), InvalidCanisterHttpPayloadReason> {
+        let callback_id = CallbackId::from(1);
+        let metadata = CanisterHttpResponseMetadata {
+            id: callback_id,
+            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+            content_size,
+            is_reject,
+            replica_version: ReplicaVersion::default(),
+        };
+        check_content_size_within_limit(&metadata, callback_id, context)
+    }
+
+    #[test]
+    fn content_size_of_a_successful_response_is_bounded_by_the_response_maximum() {
+        let ctx = context(CanisterCyclesCostSchedule::Normal, Cycles::new(100));
+        let limit = (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES) as u32;
+        assert!(check_size(limit, /* is_reject = */ false, &ctx).is_ok());
+        assert!(matches!(
+            check_size(limit + 1, /* is_reject = */ false, &ctx),
+            Err(InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
+                content_size,
+                limit: reported,
+                ..
+            }) if content_size == limit + 1 && reported == limit as u64
+        ));
+    }
+
+    #[test]
+    fn content_size_of_a_reject_is_bounded_by_the_message_maximum() {
+        let ctx = context(CanisterCyclesCostSchedule::Normal, Cycles::new(100));
+        let largest_reject = CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "m".repeat(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES),
+        };
+        let limit = largest_reject.count_bytes() as u32;
+        // Far below what a successful response would be allowed.
+        assert!((limit as u64) < MAX_CANISTER_HTTP_RESPONSE_BYTES);
+        assert!(check_size(limit, /* is_reject = */ true, &ctx).is_ok());
+        assert!(matches!(
+            check_size(limit + 1, /* is_reject = */ true, &ctx),
+            Err(InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit { .. })
+        ));
+    }
+
+    #[test]
+    fn content_size_is_bounded_by_the_requested_max_response_bytes() {
+        let mut ctx = context(CanisterCyclesCostSchedule::Normal, Cycles::new(100));
+        ctx.max_response_bytes = Some(NumBytes::from(1_000));
+        let limit = (1_000 + CANDID_OVERHEAD_RESERVE_BYTES) as u32;
+        assert!(check_size(limit, /* is_reject = */ false, &ctx).is_ok());
+        assert!(matches!(
+            check_size(limit + 1, /* is_reject = */ false, &ctx),
+            Err(InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit { limit: reported, .. })
+                if reported == limit as u64
+        ));
     }
 
     #[test]
