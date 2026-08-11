@@ -4729,15 +4729,13 @@ impl ExecutionEnvironment {
         }
     }
 
-    /// Iterates over all `Stopping` canisters and, for each one:
-    ///   1. If it is ready to stop, transitions it to `Stopped` and replies to all
-    ///      of its stop contexts with a success.
-    ///   2. Otherwise, rejects those of its stop contexts that have timed out (i.e.
-    ///      are older than `stop_canister_timeout_duration`), retaining the rest.
+    /// Checks for stopping canisters and performs the following:
+    ///   1. If there are stop contexts that have timed out, respond to them.
+    ///   2. If any stopping canisters are ready to stop, transition them to
+    ///      be fully stopped and reply to the corresponding stop contexts.
     ///
-    /// Replying to a stop context also removes the corresponding call from the
-    /// subnet call context manager. Replies are written to ingress history or
-    /// returned to the calling canisters respectively.
+    /// Responses to the pending stop messages are written to ingress history
+    /// or returned to the calling canisters respectively.
     pub fn process_stopping_canisters(
         &self,
         mut state: ReplicatedState,
@@ -4755,7 +4753,6 @@ impl ExecutionEnvironment {
             let canister = Arc::make_mut(canister);
             let (stopped, stop_contexts) =
                 canister.system_state.try_stop_canister(|stop_context| {
-                    // Reject the stop context iff it has timed out.
                     match stop_context.call_id() {
                         Some(call_id) => {
                             let sc_time = state
