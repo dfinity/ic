@@ -198,7 +198,7 @@ fn do_flat_ranges_match(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
     state_ranges: &[(PrincipalId, PrincipalId)],
-) -> Result<Option<bool>, DelegationValidationError> {
+) -> Result<bool, DelegationValidationError> {
     match lookup_path(
         tree,
         &[
@@ -691,14 +691,6 @@ mod tests {
                 }
             }
         }
-
-        /// The layout carrying the ranges only in the location this check reads.
-        fn layout(&self) -> Layout {
-            match self {
-                Self::Flat => Layout::FlatOnly,
-                Self::Tree => Layout::TreeOnly,
-            }
-        }
     }
 
     /// The per-canister checks only require the delegation and the state to agree on the
@@ -721,7 +713,7 @@ mod tests {
         let subnet_id = SUBNET_1;
         let public_key = vec![1, 2, 3];
         let state_ranges = [range(10, 20), range(100, 200)];
-        let tree = build_tree(location.layout(), subnet_id, &public_key, &certified_ranges);
+        let tree = build_tree(subnet_id, &public_key, &certified_ranges);
 
         assert_matches!(
             validate(&tree, subnet_id, &public_key, &state_ranges, location.check(canister_id)),
@@ -749,7 +741,6 @@ mod tests {
         // the tree location only certifies [100, 200].
         let state_ranges = [range(10, 20), range(100, 200)];
         let tree = build_tree_with_distinct_ranges(
-            Layout::Both,
             subnet_id,
             &public_key,
             &[range(10, 20)],
@@ -767,24 +758,40 @@ mod tests {
     /// A per-canister check whose ranges location is missing from the certificate tree is
     /// an error.
     #[rstest]
-    #[case::flat_check_without_flat_location(CanisterCheckLocation::Flat, Layout::TreeOnly)]
-    #[case::flat_check_with_key_only(CanisterCheckLocation::Flat, Layout::KeyOnly)]
-    #[case::tree_check_without_tree_location(CanisterCheckLocation::Tree, Layout::FlatOnly)]
-    #[case::tree_check_with_key_only(CanisterCheckLocation::Tree, Layout::KeyOnly)]
     fn per_canister_check_with_missing_location_is_an_error(
-        #[case] location: CanisterCheckLocation,
-        #[case] layout: Layout,
+        #[values(CanisterCheckLocation::Flat, CanisterCheckLocation::Tree)]
+        location: CanisterCheckLocation,
     ) {
         let subnet_id = SUBNET_1;
         let public_key = vec![1, 2, 3];
         let ranges = [range(10, 20)];
-        let tree = build_tree(layout, subnet_id, &public_key, &ranges);
+        // The tree carries the ranges only in the location which the check does NOT read.
+        let tree = match location {
+            CanisterCheckLocation::Flat => LabeledTree::SubTree(flatmap![
+                Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                    Label::from(subnet_id.get().to_vec()) => tree_ranges_subtree(&ranges),
+                ]),
+                Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                    Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                        Label::from("public_key") => LabeledTree::Leaf(public_key.clone()),
+                    ]),
+                ]),
+            ]),
+            CanisterCheckLocation::Tree => LabeledTree::SubTree(flatmap![
+                Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                    Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                        Label::from("canister_ranges") => ranges_leaf(&ranges),
+                        Label::from("public_key") => LabeledTree::Leaf(public_key.clone()),
+                    ]),
+                ]),
+            ]),
+        };
 
         assert_matches!(
             validate(&tree, subnet_id, &public_key, &ranges, location.check(15)),
             Err(DelegationValidationError::UnexpectedTreeShape(_)),
-            "the {location:?} per-canister check should fail with UnexpectedTreeShape in \
-             the {layout:?} layout"
+            "the {location:?} per-canister check should fail with UnexpectedTreeShape when \
+             the location it reads is missing"
         );
     }
 

@@ -21,8 +21,8 @@ use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
     certification::CertificationPool,
     execution_environment::{
-        CanisterRangesCheck, CanisterRangesFilter, IngressHistoryReader, QueryExecutionError,
-        QueryExecutionInput, QueryExecutionService,
+        CanisterRangesCheck, IngressHistoryReader, QueryExecutionError, QueryExecutionInput,
+        QueryExecutionService,
     },
     messaging::{MessageRouting, MessageRoutingError},
     time_source::SysTimeSource,
@@ -904,7 +904,6 @@ impl Player {
         let input = QueryExecutionInput {
             query,
             nns_delegation_builder: None,
-            canister_ranges_filter: CanisterRangesFilter::Flat,
             canister_ranges_check: CanisterRangesCheck::NoCheck,
         };
         match self
@@ -1217,7 +1216,6 @@ impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
         let input = QueryExecutionInput {
             query,
             nns_delegation_builder: None,
-            canister_ranges_filter: CanisterRangesFilter::Flat,
             canister_ranges_check: CanisterRangesCheck::NoCheck,
         };
         query_execution_service.oneshot(input).await

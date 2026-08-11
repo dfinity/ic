@@ -6,9 +6,7 @@ use super::{
 };
 use crate::{
     HttpError,
-    common::{
-        Cbor, WithTimeout, delegation_verification_failure_reason, into_cbor, subnet_state_view,
-    },
+    common::{Cbor, LOG_EVERY_N_SECONDS, WithTimeout, get_verified_delegation, into_cbor},
     metrics::{
         CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, HttpHandlerMetrics,
         SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
@@ -33,7 +31,7 @@ use ic_crypto_tree_hash::{
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, warn};
-use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
+use ic_nns_delegation_manager::{CanisterRangesCheck, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CanisterId, PrincipalId, SubnetId,
@@ -46,8 +44,6 @@ use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
 use tokio_util::time::FutureExt;
 use tower::{ServiceBuilder, util::BoxCloneService};
-
-const LOG_EVERY_N_SECONDS: i32 = 10;
 
 /// The timeout duration used when creating a subscriber for the ingres message,
 /// by calling [`IngressWatcherHandle::subscribe_for_certification`].
@@ -206,12 +202,11 @@ async fn call_sync(
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> SyncCallResponse {
-    let (effective_destination, delegation_filter, delegation_check) = match version {
+    let (effective_destination, delegation_check) = match version {
         Version::V3 => {
             let canister_id = CanisterId::unchecked_from_principal(id);
             (
                 EffectiveDestination::Canister(canister_id),
-                CanisterRangesFilter::Flat,
                 CanisterRangesCheck::CanisterInFlat(canister_id),
             )
         }
@@ -219,13 +214,11 @@ async fn call_sync(
             let canister_id = CanisterId::unchecked_from_principal(id);
             (
                 EffectiveDestination::Canister(canister_id),
-                CanisterRangesFilter::Tree(canister_id),
                 CanisterRangesCheck::CanisterInTree(canister_id),
             )
         }
         Version::SubnetV4 => (
             EffectiveDestination::Subnet(SubnetId::from(id)),
-            CanisterRangesFilter::None,
             CanisterRangesCheck::NoCheck,
         ),
     };
@@ -248,8 +241,8 @@ async fn call_sync(
         state_reader.clone(),
         message_id.clone(),
         &nns_delegation_reader,
-        delegation_filter,
         delegation_check,
+        &log,
         &metrics,
     )
     .await
@@ -352,8 +345,8 @@ async fn call_sync(
         state_reader,
         message_id.clone(),
         &nns_delegation_reader,
-        delegation_filter,
         delegation_check,
+        &log,
         &metrics,
     )
     .await
@@ -424,17 +417,19 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
 }
 
 /// Reads the certificate for the given message from the latest certified state, together
-/// with the NNS delegation (built with `delegation_filter`) to attach to it.
+/// with the NNS delegation to attach to it.
 ///
-/// Returns `None` if the certified state is not available, or if the NNS delegation could
-/// not be verified to be consistent (according to `delegation_check`) with the certified
-/// state which the certificate is built from.
+/// Returns `Ok(None)` if the certified state is not available.
+///
+/// Returns an error if the NNS delegation could not be verified to be consistent
+/// (according to `delegation_check`) with the certified state which the certificate is
+/// built from.
 async fn tree_cert_deleg_for_message(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: MessageId,
     nns_delegation_reader: &NNSDelegationReader,
-    delegation_filter: CanisterRangesFilter,
     delegation_check: CanisterRangesCheck,
+    log: &ReplicaLogger,
     metrics: &HttpHandlerMetrics,
 ) -> Result<Option<(MixedHashTree, Certification, Option<CertificateDelegation>)>, HttpError> {
     let certified_state_reader = match tokio::task::spawn_blocking(move || {
@@ -446,33 +441,14 @@ async fn tree_cert_deleg_for_message(
         Ok(None) | Err(_) => return Ok(None),
     };
 
-    // Only serve a delegation which is consistent with the certified state which the
-    // response certificate will be built from.
-    let delegation_from_nns = match nns_delegation_reader.builder() {
-        None => None,
-        Some(builder) => {
-            match builder.build_verified(delegation_filter, delegation_check, |subnet_id| {
-                subnet_state_view(
-                    &certified_state_reader.get_state().metadata.network_topology,
-                    subnet_id,
-                )
-            }) {
-                Ok((delegation, _metadata)) => Some(delegation),
-                Err(err) => {
-                    metrics
-                        .delegation_verification_failures_total
-                        .with_label_values(&["call", delegation_verification_failure_reason(&err)])
-                        .inc();
-                    return Err(HttpError {
-                        status: StatusCode::SERVICE_UNAVAILABLE,
-                        message: format!(
-                            "This replica has an outdated NNS delegation. Please try again."
-                        ),
-                    });
-                }
-            }
-        }
-    };
+    let delegation_from_nns = get_verified_delegation(
+        nns_delegation_reader,
+        certified_state_reader.as_ref(),
+        delegation_check,
+        log,
+        metrics,
+        "call",
+    )?;
 
     // We always add time path to comply with the IC spec.
     let time_path = Path::from(Label::from("time"));

@@ -37,9 +37,8 @@ use ic_interfaces::{
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
     execution_environment::{
-        CanisterRangesCheck, CanisterRangesFilter, IngressFilterService, IngressHistoryReader,
-        NNSDelegationBuilder, QueryExecutionInput, QueryExecutionService,
-        TransformExecutionService,
+        CanisterRangesCheck, IngressFilterService, IngressHistoryReader, NNSDelegationBuilder,
+        QueryExecutionInput, QueryExecutionService, TransformExecutionService,
     },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
@@ -4590,15 +4589,10 @@ impl StateMachine {
             query: user_query,
             nns_delegation_builder: delegation.map(|delegation| {
                 Arc::new(
-                    NNSDelegationBuilder::try_new(
-                        delegation.certificate,
-                        self.get_subnet_id(),
-                        &self.replica_logger,
-                    )
-                    .expect("failed to parse the delegation certificate"),
+                    NNSDelegationBuilder::try_new(delegation.certificate, self.get_subnet_id())
+                        .expect("failed to parse the delegation certificate"),
                 )
             }),
-            canister_ranges_filter: CanisterRangesFilter::Flat,
             // Test fixture delegations are not guaranteed to be consistent with the test
             // state, so don't verify them (preserving the behavior from before
             // verification was introduced).

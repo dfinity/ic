@@ -48,7 +48,6 @@ rust_library(
         "//rs/monitoring/tracing",
         "//rs/registry/helpers",
         "//rs/registry/provisional_whitelist",
-        "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/types/types",

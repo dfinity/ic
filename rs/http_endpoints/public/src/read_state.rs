@@ -3,8 +3,8 @@
 use crate::{
     HttpError, ReplicaHealthStatus,
     common::{
-        Cbor, WithTimeout, build_validator, delegation_verification_failure_reason, into_cbor,
-        subnet_state_view, validation_error_to_http_error,
+        Cbor, WithTimeout, build_validator, get_verified_delegation, into_cbor,
+        validation_error_to_http_error,
     },
     metrics::HttpHandlerMetrics,
 };
@@ -24,8 +24,8 @@ use ic_crypto_tree_hash::{
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
-use ic_logger::{ReplicaLogger, warn};
-use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
+use ic_logger::ReplicaLogger;
+use ic_nns_delegation_manager::{CanisterRangesCheck, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
@@ -284,55 +284,28 @@ pub(crate) async fn read_state(
             return (status, message).into_response();
         }
 
-        let (canister_ranges_filter, canister_ranges_check) = match (version, target) {
-            (Version::V2, Target::Canister) => (
-                CanisterRangesFilter::Flat,
-                CanisterRangesCheck::CanisterInFlat(effective_canister_id),
-            ),
-            (Version::V2, Target::Subnet) => (
-                CanisterRangesFilter::Flat,
-                CanisterRangesCheck::AllSubnetRanges,
-            ),
-            (Version::V3, Target::Canister) => (
-                CanisterRangesFilter::Tree(effective_canister_id),
-                CanisterRangesCheck::CanisterInTree(effective_canister_id),
-            ),
-            (Version::V3, Target::Subnet) => {
-                (CanisterRangesFilter::None, CanisterRangesCheck::NoCheck)
+        let canister_ranges_check = match (version, target) {
+            (Version::V2, Target::Canister) => {
+                CanisterRangesCheck::CanisterInFlat(effective_canister_id)
             }
+            (Version::V2, Target::Subnet) => CanisterRangesCheck::AllSubnetRanges,
+            (Version::V3, Target::Canister) => {
+                CanisterRangesCheck::CanisterInTree(effective_canister_id)
+            }
+            (Version::V3, Target::Subnet) => CanisterRangesCheck::NoCheck,
         };
-
-        // Only serve a delegation which is consistent with the certified state which the
-        // response certificate will be built from.
-        let delegation_from_nns = match nns_delegation_reader.builder() {
-            None => None,
-            Some(builder) => match builder.build_verified(
-                canister_ranges_filter,
-                canister_ranges_check,
-                |subnet_id| {
-                    subnet_state_view(
-                        &certified_state_reader.get_state().metadata.network_topology,
-                        subnet_id,
-                    )
-                },
-            ) {
-                Ok((delegation, _metadata)) => Some(delegation),
-                Err(err) => {
-                    warn!(
-                        log,
-                        "Refusing to serve a read_state response with an NNS delegation \
-                         which could not be verified against the certified state: {err}"
-                    );
-                    metrics
-                        .delegation_verification_failures_total
-                        .with_label_values(&[
-                            "read_state",
-                            delegation_verification_failure_reason(&err),
-                        ])
-                        .inc();
-                    return make_service_unavailable_response();
-                }
-            },
+        let delegation_from_nns = match get_verified_delegation(
+            &nns_delegation_reader,
+            certified_state_reader.as_ref(),
+            canister_ranges_check,
+            &log,
+            &metrics,
+            "read_state",
+        ) {
+            Ok(delegation) => delegation,
+            Err(err) => {
+                return err.into_response();
+            }
         };
 
         let maybe_nns_subnet_filter = match version {

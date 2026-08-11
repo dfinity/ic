@@ -5,8 +5,8 @@ use ic_config::{Config, crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
-    CanisterRangesCheck, CanisterRangesFilter, IngressHistoryReader, QueryExecutionError,
-    QueryExecutionInput, QueryExecutionService,
+    CanisterRangesCheck, IngressHistoryReader, QueryExecutionError, QueryExecutionInput,
+    QueryExecutionService,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -610,13 +610,12 @@ impl LocalTestRuntime {
         let input = QueryExecutionInput {
             query,
             nns_delegation_builder: None,
-            canister_ranges_filter: CanisterRangesFilter::Flat,
             canister_ranges_check: CanisterRangesCheck::NoCheck,
         };
         let result = match query_svc.oneshot(input).await.unwrap() {
             Ok((result, _)) => result,
             Err(err @ QueryExecutionError::CertifiedStateUnavailable)
-            | Err(err @ QueryExecutionError::DelegationInconsistentWithState) => {
+            | Err(err @ QueryExecutionError::DelegationInconsistentWithState(_)) => {
                 panic!("Query failed: {err}.")
             }
         };

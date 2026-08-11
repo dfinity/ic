@@ -40,7 +40,7 @@ use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_nns_delegation_manager::NNSDelegationBuilder;
+use ic_nns_delegation_manager::{DelegationVerificationError, NNSDelegationBuilder};
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
@@ -2147,9 +2147,8 @@ fn test_call_v4_subnet_wrong_canister_or_method(
 // ---------------------------------------------------------------------------
 
 /// Builds an NNS delegation for `subnet_test_id(1)` certifying the given public key
-/// and the given canister ranges (in both the flat and the tree layout, so it works
-/// with every [`ic_nns_delegation_manager::CanisterRangesFilter`]). If no public key
-/// is given, a fresh one is generated.
+/// and the given canister ranges (in both the flat and the tree layout). If no public
+/// key is given, a fresh one is generated.
 fn nns_delegation_and_public_key(
     existing_public_key: Option<ThresholdSigPublicKey>,
     ranges: &[(CanisterId, CanisterId)],
@@ -2452,7 +2451,7 @@ fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_stat
         if expected_unavailable {
             assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
             assert_eq!(
-                "Certified state is not available yet. Please try again...",
+                "This replica has an outdated delegation. Please try again.",
                 response.text().await.unwrap(),
             );
         } else {
@@ -2652,7 +2651,7 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
                 // The same request now fails, because the delegation no longer matches.
                 assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
                 assert_eq!(
-                    "This replica has an outdated NNS delegation. Please try again.",
+                    "This replica has an outdated delegation. Please try again.",
                     response.text().await.unwrap(),
                 );
             }
@@ -2667,8 +2666,10 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
 /// [`QueryExecutionError::InvalidDelegation`].
 #[rstest]
 #[case::outdated(
-    QueryExecutionError::DelegationInconsistentWithState,
-    "The NNS delegation could not be verified to be consistent with the certified state. Please try again."
+    QueryExecutionError::DelegationInconsistentWithState(
+        DelegationVerificationError::Inconsistent
+    ),
+    "This replica has an outdated delegation. Please try again."
 )]
 fn test_query_endpoint_returns_service_unavailable_on_delegation_mismatch(
     #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]

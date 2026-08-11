@@ -10,7 +10,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/tree_hash",
-        "//rs/monitoring/logger",
         "//rs/registry/routing_table",
         "//rs/types/types",
         "@crate_index//:serde",
@@ -43,7 +42,7 @@ rust_ic_bench(
         ":nns_delegation_reader",
         "//rs/crypto/tree_hash",
         "//rs/http_endpoints/nns_delegation_reader/test_utils",
-        "//rs/monitoring/logger",
+        "//rs/registry/routing_table",
         "//rs/test_utilities/types",
         "//rs/types/types",
         "@crate_index//:criterion",

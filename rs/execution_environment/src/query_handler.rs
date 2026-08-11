@@ -21,8 +21,8 @@ use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    CanisterRangesCheck, CanisterRangesFilter, NNSDelegationBuilder, QueryExecutionError,
-    QueryExecutionInput, QueryExecutionResponse, QueryExecutionService, TransformExecutionInput,
+    CanisterRangesCheck, NNSDelegationBuilder, QueryExecutionError, QueryExecutionInput,
+    QueryExecutionResponse, QueryExecutionService, TransformExecutionInput,
     TransformExecutionService,
 };
 use ic_interfaces_state_manager::{Labeled, StateReader};
@@ -73,8 +73,7 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 /// embedded) and the metadata of the embedded delegation, if any.
 struct CertifiedStateWithDataCertificate {
     state: Labeled<Arc<ReplicatedState>>,
-    data_certificate: Vec<u8>,
-    certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+    data_certificate_with_delegation_metadata: DataCertificateWithDelegationMetadata,
 }
 
 /// Reads the latest certified state and builds the data certificate for the canister
@@ -87,7 +86,6 @@ struct CertifiedStateWithDataCertificate {
 fn get_latest_certified_state_and_data_certificate(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     nns_delegation_builder: Option<Arc<NNSDelegationBuilder>>,
-    canister_ranges_filter: CanisterRangesFilter,
     canister_ranges_check: CanisterRangesCheck,
     canister_id: CanisterId,
 ) -> Result<CertifiedStateWithDataCertificate, QueryExecutionError> {
@@ -114,32 +112,31 @@ fn get_latest_certified_state_and_data_certificate(
         Some(builder) => {
             let network_topology = &state.metadata.network_topology;
             let (delegation, metadata) = builder
-                .build_verified(canister_ranges_filter, canister_ranges_check, |subnet_id| {
-                    network_topology
-                        .subnets_for_certification()
-                        .get(&subnet_id)
-                        .map(|subnet_topology| {
-                            (
-                                subnet_topology.public_key.clone(),
-                                network_topology
-                                    .routing_table_for_certification()
-                                    .ranges(subnet_id),
-                            )
-                        })
-                })
-                .map_err(|_err| QueryExecutionError::DelegationInconsistentWithState)?;
+                .build_verified(
+                    canister_ranges_check,
+                    network_topology.routing_table_for_certification(),
+                    |subnet_id| {
+                        network_topology
+                            .subnets_for_certification()
+                            .get(&subnet_id)
+                            .map(|subnet_topology| subnet_topology.public_key.as_slice())
+                    },
+                )
+                .map_err(QueryExecutionError::DelegationInconsistentWithState)?;
             (Some(delegation), Some(metadata))
         }
     };
 
     Ok(CertifiedStateWithDataCertificate {
         state: Labeled::new(cert.height, state),
-        data_certificate: into_cbor(&Certificate {
-            tree,
-            signature: Blob(cert.signed.signature.signature.get().0),
-            delegation: certificate_delegation,
-        }),
-        certificate_delegation_metadata,
+        data_certificate_with_delegation_metadata: DataCertificateWithDelegationMetadata {
+            data_certificate: into_cbor(&Certificate {
+                tree,
+                signature: Blob(cert.signed.signature.signature.get().0),
+                delegation: certificate_delegation,
+            }),
+            certificate_delegation_metadata,
+        },
     })
 }
 
@@ -424,7 +421,6 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         QueryExecutionInput {
             query,
             nns_delegation_builder,
-            canister_ranges_filter,
             canister_ranges_check,
         }: QueryExecutionInput,
     ) -> Self::Future {
@@ -446,18 +442,17 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                 // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
                 // with a reference to older states which can cause out-of-memory crashes.
 
-                let result = match get_latest_certified_state_and_data_certificate(
+                let result = get_latest_certified_state_and_data_certificate(
                     state_reader,
                     nns_delegation_builder,
-                    canister_ranges_filter,
                     canister_ranges_check,
                     query.receiver,
-                ) {
-                    Ok(CertifiedStateWithDataCertificate {
-                        state,
-                        data_certificate,
-                        certificate_delegation_metadata,
-                    }) => {
+                )
+                .map(
+                    |CertifiedStateWithDataCertificate {
+                         state,
+                         data_certificate_with_delegation_metadata,
+                     }| {
                         let time = state.get_ref().metadata.batch_time;
 
                         let certified_height_used_for_execution = state.height();
@@ -468,12 +463,6 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let data_certificate_with_delegation_metadata =
-                            DataCertificateWithDelegationMetadata {
-                                data_certificate,
-                                certificate_delegation_metadata,
-                            };
-
                         let response = internal.query(
                             query,
                             state,
@@ -483,10 +472,9 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             None,
                         );
 
-                        Ok((response, time))
-                    }
-                    Err(err) => Err(err),
-                };
+                        (response, time)
+                    },
+                );
 
                 let _ = tx.send(Ok(result));
             }

@@ -2,6 +2,7 @@ use ic_metrics::{
     MetricsRegistry,
     buckets::{add_bucket, decimal_buckets, linear_buckets},
 };
+use ic_nns_delegation_manager::DelegationVerificationError;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 pub const LABEL_DETAIL: &str = "detail";
@@ -235,6 +236,20 @@ impl HttpHandlerMetrics {
     pub fn observe_read_state_path(&self, endpoint_type: &str, path_type: &str) {
         self.read_state_path_type_total
             .with_label_values(&[endpoint_type, path_type])
+            .inc()
+    }
+
+    pub fn observe_delegation_verification_failure(
+        &self,
+        endpoint_type: &str,
+        error: &DelegationVerificationError,
+    ) {
+        let error_label = match error {
+            DelegationVerificationError::Inconsistent => "inconsistent",
+            DelegationVerificationError::Validation(_) => "validation",
+        };
+        self.delegation_verification_failures_total
+            .with_label_values(&[endpoint_type, error_label])
             .inc()
     }
 }

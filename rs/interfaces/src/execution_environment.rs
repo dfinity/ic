@@ -6,7 +6,7 @@ use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::MasterPublicKeyId;
 pub use ic_nns_delegation_reader::{
-    CanisterRangesCheck, CanisterRangesFilter, DelegationVerificationError, NNSDelegationBuilder,
+    CanisterRangesCheck, DelegationVerificationError, NNSDelegationBuilder,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -552,7 +552,7 @@ pub enum QueryExecutionError {
     #[error("Certified state is not available yet")]
     CertifiedStateUnavailable,
     #[error("The NNS delegation could not be verified to be consistent with the certified state")]
-    DelegationInconsistentWithState,
+    DelegationInconsistentWithState(DelegationVerificationError),
 }
 
 /// The response type to a `call()` request in [`QueryExecutionService`].
@@ -568,8 +568,6 @@ pub struct QueryExecutionInput {
     /// verifying it against the certified state the certificate is built from.
     /// `None` when there is no delegation (e.g. on the NNS subnet).
     pub nns_delegation_builder: Option<Arc<NNSDelegationBuilder>>,
-    /// The canister ranges filter to build the NNS delegation with.
-    pub canister_ranges_filter: CanisterRangesFilter,
     /// What to verify the NNS delegation's canister ranges against; should correspond to
     /// what the delegation built with `canister_ranges_filter` will carry.
     pub canister_ranges_check: CanisterRangesCheck,
