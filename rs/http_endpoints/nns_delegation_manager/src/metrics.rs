@@ -3,10 +3,13 @@ use prometheus::{Histogram, HistogramVec, IntCounter};
 
 #[derive(Clone)]
 pub(crate) struct DelegationManagerMetrics {
-    pub(crate) update_duration: Histogram,
+    pub(crate) fetch_duration: Histogram,
     pub(crate) delegation_size: HistogramVec,
     pub(crate) updates: IntCounter,
-    pub(crate) errors: IntCounter,
+    pub(crate) fetch_errors: IntCounter,
+    pub(crate) state_comparison_errors: IntCounter,
+    pub(crate) held_back_delegations: IntCounter,
+    pub(crate) reactive_fetches: IntCounter,
 }
 
 impl DelegationManagerMetrics {
@@ -16,9 +19,9 @@ impl DelegationManagerMetrics {
                 "nns_delegation_manager_updates_total",
                 "How many times has the nns delegation been updated",
             ),
-            update_duration: metrics_registry.histogram(
-                "nns_delegation_manager_update_duration_seconds",
-                "How long it took to update the nns delegation, in seconds",
+            fetch_duration: metrics_registry.histogram(
+                "nns_delegation_manager_fetch_duration_seconds",
+                "How long it took to fetch the nns delegation, in seconds",
                 // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
                 decimal_buckets(-3, 1),
             ),
@@ -29,9 +32,21 @@ impl DelegationManagerMetrics {
                 decimal_buckets(0, 6),
                 &["delegation_format"],
             ),
-            errors: metrics_registry.int_counter(
-                "nns_delegation_manager_errors_total",
+            fetch_errors: metrics_registry.int_counter(
+                "nns_delegation_manager_fetch_errors_total",
                 "Number of errors encountered while fetching nns delegations",
+            ),
+            state_comparison_errors: metrics_registry.int_counter(
+                "nns_delegation_manager_state_comparison_errors_total",
+                "Number of errors encountered while comparing an nns delegation with the latest certified state",
+            ),
+            held_back_delegations: metrics_registry.int_counter(
+                "nns_delegation_manager_held_back_delegations_total",
+                "Number of delegations that were held back due to not matching the latest certified state",
+            ),
+            reactive_fetches: metrics_registry.int_counter(
+                "nns_delegation_manager_reactive_fetches_total",
+                "Number of times the delegation manager fetched a delegation reactively due to a mismatch with the latest certified state",
             ),
         }
     }

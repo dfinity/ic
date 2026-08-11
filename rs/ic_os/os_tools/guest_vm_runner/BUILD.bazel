@@ -45,7 +45,6 @@ rust_binary(
         "@crate_index//:tracing",
         "@crate_index//:uuid",
         "@crate_index//:virt",
-        "@libvirt",
     ],
 )
 
@@ -93,7 +92,6 @@ rust_binary(
         "@crate_index//:tracing",
         "@crate_index//:uuid",
         "@crate_index//:virt",
-        "@libvirt",
     ],
 )
 
@@ -189,6 +187,5 @@ rust_test(
         "@crate_index//:tracing",
         "@crate_index//:uuid",
         "@crate_index//:virt",
-        "@libvirt",
     ],
 )
