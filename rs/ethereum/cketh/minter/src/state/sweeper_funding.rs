@@ -118,10 +118,17 @@ impl ObservedSweeperBalance {
     }
 }
 
-/// Whether sweeping may spend `required` wei of prepaid gas.
+/// Whether the sweeper's last observed balance covers `required` wei of gas for *one* sweep.
 ///
-/// Fails closed: an unknown or stale balance is an error, since spending ETH no burn has covered is
-/// what must not happen, and a wrongly withheld sweep costs only delay.
+/// Fails closed: an unknown or stale observation is an error, since a sweep the sweeper cannot pay
+/// for is wasted work, while a wrongly withheld sweep costs only delay.
+///
+/// A precondition on a snapshot, not an allowance: it neither reserves nor deducts, so a caller
+/// issuing several sweeps between two observations has to subtract what it has already committed.
+/// Two 6-wei sweeps both pass against a 10-wei observation, as does one whose gas the queried block
+/// had not yet accounted for. The backing invariant does not rest on this: funding counts the whole
+/// transfer as spent once it finalizes, so every wei at the sweeper address is already covered by a
+/// burn that preceded it, and drawing it down cannot make spend outrun burn.
 pub fn check_prepaid_sweep_gas(
     observed: Option<ObservedSweeperBalance>,
     required: Wei,
