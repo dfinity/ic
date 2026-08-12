@@ -597,7 +597,7 @@ mod tests {
                 ..
             } = DependenciesBuilder::new(pool_config, 4)
                 .with_dkg_interval_length(interval_length)
-                .without_mocked_state_manager()
+                .without_state_manager_expectations()
                 .build();
 
             let height = Height::from(0);

@@ -807,7 +807,7 @@ mod tests {
                 subnet_id,
                 vec![(1, subnet_record_builder.build())],
             )
-            .without_mocked_state_manager()
+            .without_state_manager_expectations()
             .build();
 
             // Enable the configured keys

@@ -779,7 +779,7 @@ mod tests {
                     ..
                 } = DependenciesBuilder::new(pool_config, 2)
                     .with_dkg_interval_length(dkg_interval_length)
-                    .without_mocked_state_manager()
+                    .without_state_manager_expectations()
                     .build();
 
                 let target_id = NiDkgTargetId::new([0_u8; 32]);
@@ -934,7 +934,7 @@ mod tests {
                 ..
             } = DependenciesBuilder::new(pool_config, 2)
                 .with_dkg_interval_length(dkg_interval_length)
-                .without_mocked_state_manager()
+                .without_state_manager_expectations()
                 .build();
 
             let target_id = NiDkgTargetId::new([0_u8; 32]);
@@ -1496,11 +1496,11 @@ mod tests {
                     // Set pool_1 and pool_2
                     let dependencies_1 = DependenciesBuilder::new(pool_config_1, 2)
                         .with_dkg_interval_length(dkg_interval_length)
-                        .without_mocked_state_manager()
+                        .without_state_manager_expectations()
                         .build();
                     let dependencies_2 = DependenciesBuilder::new(pool_config_2, 2)
                         .with_dkg_interval_length(dkg_interval_length)
-                        .without_mocked_state_manager()
+                        .without_state_manager_expectations()
                         .build();
 
                     // Return an empty call context when we create the first summary,
@@ -1695,7 +1695,7 @@ mod tests {
                     .build(),
             )],
         )
-        .without_mocked_state_manager()
+        .without_state_manager_expectations()
         .build();
 
         let target_id = NiDkgTargetId::new([0_u8; 32]);
@@ -2072,7 +2072,7 @@ mod tests {
 
                 let mut deps = DependenciesBuilder::new(pool_config, 2)
                     .with_dkg_interval_length(dkg_interval_length)
-                    .without_mocked_state_manager()
+                    .without_state_manager_expectations()
                     .build();
 
                 // Start without context so remote dealing validation is deferred.
@@ -2207,7 +2207,7 @@ mod tests {
                         .build(),
                 )],
             )
-            .without_mocked_state_manager()
+            .without_state_manager_expectations()
             .build();
 
             // No contexts at the beginning
@@ -2318,7 +2318,7 @@ mod tests {
                             .build(),
                     )],
                 )
-                .without_mocked_state_manager()
+                .without_state_manager_expectations()
                 .build();
 
                 let registry_version = deps.registry.get_latest_version();

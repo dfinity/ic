@@ -119,7 +119,7 @@ pub struct DependenciesBuilder {
     pool_config: ArtifactPoolConfig,
     sorted_subnet_records: Vec<(u64, SubnetId, SubnetRecord)>,
     replica_config: ReplicaConfig,
-    mocked_state_manager: bool,
+    with_state_manager_expectations: bool,
 }
 
 impl DependenciesBuilder {
@@ -180,7 +180,7 @@ impl DependenciesBuilder {
                 subnet_id: subnet_records[0].1,
             },
             sorted_subnet_records: subnet_records,
-            mocked_state_manager: true,
+            with_state_manager_expectations: true,
         }
     }
 
@@ -200,8 +200,8 @@ impl DependenciesBuilder {
 
     /// Leaves the returned `RefMockStateManager` without any expectations, so
     /// that the test can set up its own `get_state_at` behavior.
-    pub fn without_mocked_state_manager(mut self) -> Self {
-        self.mocked_state_manager = false;
+    pub fn without_state_manager_expectations(mut self) -> Self {
+        self.with_state_manager_expectations = false;
         self
     }
 
@@ -293,7 +293,7 @@ impl DependenciesBuilder {
             self.replica_config.subnet_id,
         ));
 
-        if self.mocked_state_manager {
+        if self.with_state_manager_expectations {
             state_manager
                 .get_mut()
                 .expect_get_state_at()

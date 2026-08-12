@@ -1094,7 +1094,7 @@ mod tests {
                             .build(),
                     )],
                 )
-                .without_mocked_state_manager()
+                .without_state_manager_expectations()
                 .build();
                 let registry_version = deps.registry.get_latest_version();
                 let setup_target = NiDkgTargetId::new([5_u8; 32]);

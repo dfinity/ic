@@ -2123,8 +2123,8 @@ pub mod test {
             self
         }
 
-        fn without_mocked_state_manager(mut self) -> Self {
-            self.deps_builder = self.deps_builder.without_mocked_state_manager();
+        fn without_state_manager_expectations(mut self) -> Self {
+            self.deps_builder = self.deps_builder.without_state_manager_expectations();
             self
         }
 
@@ -2315,7 +2315,7 @@ pub mod test {
                 mut pool,
                 ..
             } = ValidatorAndDependenciesBuilder::new(pool_config, 4)
-                .without_mocked_state_manager()
+                .without_state_manager_expectations()
                 .build();
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
