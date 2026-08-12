@@ -584,7 +584,7 @@ pub(super) mod tests {
         },
         utils::block_chain_reader,
     };
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, mock_transcript,
@@ -641,7 +641,7 @@ pub(super) mod tests {
                 mut pool,
                 replica_config,
                 ..
-            } = dependencies(pool_config.clone(), 4);
+            } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
             // Advance 4 rounds without IDkg
             let mut height = pool.advance_round_normal_operation_n(4);
