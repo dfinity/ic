@@ -154,35 +154,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 body: request_body,
                 http_method: request_http_method,
                 transform: request_transform,
-                pricing_version: request_pricing_version,
                 replication: request_replication,
                 ..
             } = request_context;
-
-            if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
-                warn!(
-                    log,
-                    "Canister HTTP request with PayAsYouGo pricing is not supported yet: \
-                    request_id {}, sender {}, process_id: {}",
-                    request_id,
-                    request_sender,
-                    std::process::id(),
-                );
-                let _ = permit.send((
-                    CanisterHttpResponse {
-                        id: request_id,
-                        canister_id: request_sender,
-                        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                            reject_code: RejectCode::SysFatal,
-                            message:
-                                "Canister HTTP request with PayAsYouGo pricing is not supported"
-                                    .to_string(),
-                        }),
-                    },
-                    budget.create_payment_receipt(),
-                ));
-                return;
-            }
 
             let mut payload = async {
                 // Execute the HTTP request and get the adapter response.

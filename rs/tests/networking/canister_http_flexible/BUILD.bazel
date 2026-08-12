@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "canister_http_flexible",
+    testonly = True,
+    srcs = ["canister_http_flexible.rs"],
+    crate_name = "canister_http_flexible",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/proxy_canister:lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/networking/canister_http",
+        "//rs/types/management_canister_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
+)

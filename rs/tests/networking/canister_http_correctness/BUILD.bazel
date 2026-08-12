@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "canister_http_correctness",
+    testonly = True,
+    srcs = ["canister_http_correctness.rs"],
+    crate_name = "canister_http_correctness",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/proxy_canister:lib",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/networking/canister_http",
+        "//rs/types/base_types",
+        "//rs/types/cycles",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)

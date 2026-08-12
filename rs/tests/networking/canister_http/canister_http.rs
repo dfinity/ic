@@ -71,14 +71,27 @@ pub fn setup(env: TestEnv) {
     );
 }
 
-/// Like [`setup`], but the application subnet uses a free cost schedule (enabling
-/// flexible HTTP outcalls via the legacy pricing fallback) and the system subnet
-/// also runs HTTP outcalls with its own proxy canister — system subnets are free
-/// for outcalls too, despite a normal cost schedule.
+/// Like [`setup`], but the application subnet uses a free cost schedule, so HTTP
+/// outcalls cost nothing there, and the system subnet also runs HTTP outcalls with
+/// its own proxy canister — system subnets are free for outcalls too, despite a
+/// normal cost schedule.
 pub fn setup_with_free_cost_schedule(env: TestEnv) {
     setup_with_cost_schedule(
         env,
         CanisterCyclesCostSchedule::Free,
+        /*system_subnet_outcalls=*/ true,
+    );
+}
+
+/// Like [`setup_with_free_cost_schedule`], but the application subnet is on a
+/// normal cost schedule, so its HTTP outcalls are actually paid for under
+/// pay-as-you-go. That is where the allowance, refund and out-of-cycles paths
+/// are live, so a test suite worth running on a free subnet is generally worth
+/// running here too.
+pub fn setup_with_paying_cost_schedule(env: TestEnv) {
+    setup_with_cost_schedule(
+        env,
+        CanisterCyclesCostSchedule::Normal,
         /*system_subnet_outcalls=*/ true,
     );
 }
