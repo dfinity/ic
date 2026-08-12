@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
-use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
@@ -178,11 +178,12 @@ fn build_target(
         })
         .build();
 
-    let deps = dependencies_with_subnet_params(
+    let deps = DependenciesBuilder::single_subnet(
         pool_config,
         subnet_id,
         vec![(REGISTRY_VERSION.get(), subnet_record)],
-    );
+    )
+    .build();
 
     let registry_client: Arc<dyn RegistryClient> = deps.registry.clone();
 
