@@ -2,6 +2,7 @@ use crate::chrono_utils::last_unix_timestamp_nanoseconds;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{NaiveDateStorable, VM};
+use crate::telemetry;
 use candid::Principal;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
@@ -557,6 +558,14 @@ impl NodeRewardsCanister {
 
         let mut rewards_per_node_provider: BTreeMap<Principal, u64> = BTreeMap::new();
 
+        // The self-call at the end of each iteration ends that message, so one day is computed per
+        // message. That makes a day's instructions the number the subnet's instruction limits
+        // apply to — a message pauses until a later round above the per-slice limit, and traps
+        // above the per-message limit — whereas nothing bounds their sum across the call context.
+        // The costliest day is therefore what says how much headroom is left.
+        let mut instruction_counter = telemetry::InstructionCounter::default();
+        let mut max_message_instructions = 0;
+
         let algorithm_version = request.algorithm_version.unwrap_or_default();
         for day in from_date.iter_days().take_while(|d| *d <= to_date) {
             let result_for_day = canister
@@ -581,7 +590,19 @@ impl NodeRewardsCanister {
             )
             .await
             .unwrap();
+
+            // Lapped after the self-call rather than before it: issuing the call is itself part of
+            // the message that the call ends, and the counter keeps accumulating across the
+            // boundary, so reading it here closes the measurement where the message actually
+            // ended.
+            max_message_instructions = max_message_instructions.max(instruction_counter.lap());
         }
+
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|metrics| {
+            metrics.record_last_get_node_providers_rewards_max_message_instructions(
+                max_message_instructions,
+            )
+        });
 
         Ok(NodeProvidersRewards {
             algorithm_version,
