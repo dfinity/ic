@@ -1412,7 +1412,7 @@ fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
             node_providers: vec![
                 api::NodeProvider {
                     // This used to cause a panic in the code under test,
-                    // whereas, now, it is safely skipped.
+                    // whereas, now, it just logs a warning.
                     id: None,
                     ..Default::default()
                 },
