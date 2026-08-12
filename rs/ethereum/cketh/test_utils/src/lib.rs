@@ -31,10 +31,13 @@ use pocket_ic::common::rest::{
     CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, IcpConfig,
     IcpConfigFlag, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
 };
-use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
+use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse, StartServerParams, start_server};
+use reqwest::Url;
 use std::path::PathBuf;
+use std::process::Child;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 pub mod anvil;
@@ -751,8 +754,35 @@ pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
     Address::from_str(address).unwrap().to_string()
 }
 
+/// The PocketIC server exits hard this long after it started, whatever the traffic, and its
+/// default of 10 minutes is short enough that a single-threaded run of the ckERC20 suite gets
+/// close to it. Losing the server mid-suite fails every test that follows instead of the one
+/// that is actually slow, so give it more room than the bazel timeout of the suites using it.
+const SERVER_HARD_TTL: Duration = Duration::from_secs(3600);
+
+/// `PocketIcBuilder` does not expose the server's TTL, so start the server here and hand the
+/// builder its URL. `reuse` means every fixture in a test binary shares this one server.
+fn long_lived_server_url() -> Url {
+    static SERVER: OnceLock<(Child, Url)> = OnceLock::new();
+    SERVER
+        .get_or_init(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(start_server(StartServerParams {
+                reuse: true,
+                hard_ttl: Some(SERVER_HARD_TTL),
+                ..Default::default()
+            }))
+        })
+        .1
+        .clone()
+}
+
 pub fn new_pocket_ic() -> PocketIc {
     PocketIcBuilder::new()
+        .with_server_url(long_lived_server_url())
         .with_fiduciary_subnet()
         .with_icp_config(IcpConfig {
             canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
