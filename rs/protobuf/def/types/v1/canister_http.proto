@@ -104,12 +104,19 @@ message FlexibleCanisterHttpTooManyRejects {
   repeated CanisterHttpShare extra_shares = 3;
 }
 
+message FlexibleCanisterHttpOutOfCycles {
+  repeated CanisterHttpShare all_seen_shares = 1;
+  state.queues.v1.Cycles min_cost = 2;
+  state.queues.v1.Cycles unspent_allowance = 3;
+}
+
 message FlexibleCanisterHttpError {
   uint64 callback_id = 1;
   oneof error_details {
     FlexibleCanisterHttpTimeout timeout = 2;
     FlexibleCanisterHttpResponsesTooLarge responses_too_large = 3;
     FlexibleCanisterHttpTooManyRejects too_many_rejects = 4;
+    FlexibleCanisterHttpOutOfCycles out_of_cycles = 5;
   }
 }
 
