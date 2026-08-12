@@ -1898,6 +1898,7 @@ pub enum ErrorCode {
     CertifiedStateUnavailable = 208,
     CanisterInstallCodeRateLimited = 209,
     CanisterHeapDeltaRateLimited = 210,
+    SubnetCoolingDown = 211,
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
@@ -1971,6 +1972,7 @@ impl TryFrom<u64> for ErrorCode {
             208 => Ok(ErrorCode::CertifiedStateUnavailable),
             209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             210 => Ok(ErrorCode::CanisterHeapDeltaRateLimited),
+            211 => Ok(ErrorCode::SubnetCoolingDown),
             // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
             305 => Ok(ErrorCode::CanisterSnapshotNotFound),
