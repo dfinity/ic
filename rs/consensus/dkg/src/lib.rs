@@ -795,7 +795,7 @@ mod tests {
                 let dkg_key_manager =
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
-                    replica_config.node_id,
+                    node_test_id(1),
                     replica_config.subnet_id,
                     registry.clone(),
                     state_manager.clone(),
