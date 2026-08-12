@@ -1,5 +1,5 @@
 {
-  "checksum": "d219ecf3003ae760b2a967cbf6532e80a278a2640cd74d57ab32af145fae636f",
+  "checksum": "c01a916747d85338109fc87aa59422228ddee3bc1442f690957c1a40eef8749e",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -3165,96 +3165,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "asn1-rs 0.6.1": {
-      "name": "asn1-rs",
-      "version": "0.6.1",
-      "package_url": "https://github.com/rusticata/asn1-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/asn1-rs/0.6.1/download",
-          "sha256": "22ad1373757efa0f70ec53939aabc7152e1591cb485208052993070ac8d2429d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "asn1_rs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "asn1_rs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "datetime",
-            "default",
-            "std",
-            "time"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "nom 7.1.3",
-              "target": "nom"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            },
-            {
-              "id": "rusticata-macros 4.1.0",
-              "target": "rusticata_macros"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "time 0.3.47",
-              "target": "time"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "asn1-rs-derive 0.5.0",
-              "target": "asn1_rs_derive"
-            },
-            {
-              "id": "asn1-rs-impl 0.2.0",
-              "target": "asn1_rs_impl"
-            },
-            {
-              "id": "displaydoc 0.2.4",
-              "target": "displaydoc"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.6.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "asn1-rs 0.7.1": {
       "name": "asn1-rs",
       "version": "0.7.1",
@@ -3344,66 +3254,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "asn1-rs-derive 0.5.0": {
-      "name": "asn1-rs-derive",
-      "version": "0.5.0",
-      "package_url": "https://github.com/rusticata/asn1-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/asn1-rs-derive/0.5.0/download",
-          "sha256": "7378575ff571966e99a744addeff0bff98b8ada0dedf1956d59e634db95eaac1"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "asn1_rs_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "asn1_rs_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            },
-            {
-              "id": "synstructure 0.13.1",
-              "target": "synstructure"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.5.0"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "asn1-rs-derive 0.6.0": {
       "name": "asn1-rs-derive",
@@ -4710,67 +4560,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "atty 0.2.14": {
-      "name": "atty",
-      "version": "0.2.14",
-      "package_url": "https://github.com/softprops/atty",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/atty/0.2.14/download",
-          "sha256": "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "atty",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "atty",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(target_os = \"hermit\")": [
-              {
-                "id": "hermit-abi 0.1.19",
-                "target": "hermit_abi"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.186",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.2.14"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "auto_impl 1.1.0": {
       "name": "auto_impl",
@@ -13107,7 +12896,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.48.0",
                 "target": "windows_sys"
               }
             ]
@@ -18306,88 +18095,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "der-parser 9.0.0": {
-      "name": "der-parser",
-      "version": "9.0.0",
-      "package_url": "https://github.com/rusticata/der-parser.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/der-parser/9.0.0/download",
-          "sha256": "5cd0a5c643689626bec213c4d8bd4d96acc8ffdb4ad4bb6bc16abf27d5f4b553"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "der_parser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "der_parser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "bigint",
-            "default",
-            "num-bigint",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "asn1-rs 0.6.1",
-              "target": "asn1_rs"
-            },
-            {
-              "id": "nom 7.1.3",
-              "target": "nom"
-            },
-            {
-              "id": "num-bigint 0.4.6",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            },
-            {
-              "id": "rusticata-macros 4.1.0",
-              "target": "rusticata_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "displaydoc 0.2.4",
-              "target": "displaydoc"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "9.0.0"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "der-parser 10.0.0": {
       "name": "der-parser",
       "version": "10.0.0",
@@ -20407,7 +20114,7 @@
               "target": "maplit"
             },
             {
-              "id": "maxminddb 0.24.0",
+              "id": "maxminddb 0.29.0",
               "target": "maxminddb"
             },
             {
@@ -20537,10 +20244,6 @@
             {
               "id": "predicates 3.1.2",
               "target": "predicates"
-            },
-            {
-              "id": "pretty-bytes 0.2.2",
-              "target": "pretty_bytes"
             },
             {
               "id": "pretty_assertions 1.4.0",
@@ -20990,7 +20693,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-tungstenite 0.26.2",
+              "id": "tokio-tungstenite 0.29.0",
               "target": "tokio_tungstenite"
             },
             {
@@ -21058,7 +20761,7 @@
               "target": "tracing_opentelemetry"
             },
             {
-              "id": "tracing-serde 0.1.3",
+              "id": "tracing-serde 0.2.0",
               "target": "tracing_serde"
             },
             {
@@ -21208,7 +20911,7 @@
               "target": "enum_ordinalize_derive"
             },
             {
-              "id": "indoc 1.0.9",
+              "id": "indoc 2.0.7",
               "target": "indoc"
             },
             {
@@ -29923,54 +29626,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hermit-abi 0.1.19": {
-      "name": "hermit-abi",
-      "version": "0.1.19",
-      "package_url": "https://github.com/hermitcore/libhermit-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hermit-abi/0.1.19/download",
-          "sha256": "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hermit_abi",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hermit_abi",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.19"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "hermit-abi 0.3.9": {
       "name": "hermit-abi",
       "version": "0.3.9",
@@ -32975,7 +32630,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-acme 0.15.3",
+              "id": "rustls-acme 0.15.4",
               "target": "rustls_acme"
             },
             {
@@ -38020,45 +37675,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "indoc 1.0.9": {
-      "name": "indoc",
-      "version": "1.0.9",
-      "package_url": "https://github.com/dtolnay/indoc",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/indoc/1.0.9/download",
-          "sha256": "bfa799dd5ed20a7e349f3b4639aa80d74549c81716d9ec4f994c9b5815598306"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "indoc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "indoc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "1.0.9"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "indoc 2.0.7": {
       "name": "indoc",
       "version": "2.0.7",
@@ -38951,61 +38567,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "ipnetwork 0.20.0": {
-      "name": "ipnetwork",
-      "version": "0.20.0",
-      "package_url": "https://github.com/achanda/ipnetwork",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ipnetwork/0.20.0/download",
-          "sha256": "bf466541e9d546596ee94f9f69590f89473455f88372423e0008fc1a7daf100e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ipnetwork",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ipnetwork",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "serde"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.20.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.md"
     },
     "ipnetwork 0.21.1": {
       "name": "ipnetwork",
@@ -45097,71 +44658,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "maxminddb 0.24.0": {
-      "name": "maxminddb",
-      "version": "0.24.0",
-      "package_url": "https://github.com/oschwald/maxminddb-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/maxminddb/0.24.0/download",
-          "sha256": "d6087e5d8ea14861bb7c7f573afbc7be3798d3ef0fae87ec4fd9a4de9a127c3c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "maxminddb",
-            "crate_root": "src/maxminddb/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "maxminddb",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ipnetwork 0.20.0",
-              "target": "ipnetwork"
-            },
-            {
-              "id": "log 0.4.33",
-              "target": "log"
-            },
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.24.0"
-      },
-      "license": "ISC",
-      "license_ids": [
-        "ISC"
-      ],
-      "license_file": "LICENSE"
-    },
     "maxminddb 0.29.0": {
       "name": "maxminddb",
       "version": "0.29.0",
@@ -47283,6 +46779,8 @@
             "default",
             "ioctl",
             "memoffset",
+            "process",
+            "signal",
             "socket"
           ],
           "selects": {}
@@ -49907,97 +49405,6 @@
         ]
       },
       "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "oid-registry 0.7.0": {
-      "name": "oid-registry",
-      "version": "0.7.0",
-      "package_url": "https://github.com/rusticata/oid-registry.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/oid-registry/0.7.0/download",
-          "sha256": "1c958dd45046245b9c3c2547369bb634eb461670b2e7e0de552905801a648d1d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "oid_registry",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "oid_registry",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "crypto",
-            "default",
-            "kdf",
-            "nist_algs",
-            "pkcs1",
-            "pkcs12",
-            "pkcs7",
-            "pkcs9",
-            "registry",
-            "x509",
-            "x962"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "asn1-rs 0.6.1",
-              "target": "asn1_rs"
-            },
-            {
-              "id": "oid-registry 0.7.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.7.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -52658,7 +52065,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/pcre2-sys/0.2.8/download",
-          "sha256": "25b8a7b5253a4465b873a21ee7e8d6ec561a57eed5d319621bec36bea35c86ae"
+          "sha256": "25b8a7b5253a4465b873a21ee7e8d6ec561a57eed5d319621bec36bea35c86ae",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:pcre2-sys.patch"
+          ]
         }
       },
       "targets": [
@@ -54846,7 +54259,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/pprof-rs",
           "commitish": {
-            "Rev": "7f5228262196e3eb9c8d1ddbaca984787dea331a"
+            "Rev": "9159b45ecc3540d7fc44c6a6e70a173676cfa771"
           }
         }
       },
@@ -54929,7 +54342,7 @@
               "target": "log"
             },
             {
-              "id": "nix 0.30.1",
+              "id": "nix 0.27.1",
               "target": "nix"
             },
             {
@@ -54949,7 +54362,7 @@
               "target": "smallvec"
             },
             {
-              "id": "spin 0.10.1",
+              "id": "spin 0.9.8",
               "target": "spin"
             },
             {
@@ -55383,57 +54796,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "pretty-bytes 0.2.2": {
-      "name": "pretty-bytes",
-      "version": "0.2.2",
-      "package_url": "https://github.com/banyan/rust-pretty-bytes",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pretty-bytes/0.2.2/download",
-          "sha256": "009d6edd2c1dbf2e1c0cd48a2f7766e03498d49ada7109a01c6911815c685316"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pretty_bytes",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pretty_bytes",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "atty 0.2.14",
-              "target": "atty"
-            },
-            {
-              "id": "getopts 0.2.24",
-              "target": "getopts"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.2.2"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
     },
     "pretty_assertions 1.4.0": {
       "name": "pretty_assertions",
@@ -63775,14 +63137,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls-acme 0.15.3": {
+    "rustls-acme 0.15.4": {
       "name": "rustls-acme",
-      "version": "0.15.3",
+      "version": "0.15.4",
       "package_url": "https://github.com/FlorianUekermann/rustls-acme",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-acme/0.15.3/download",
-          "sha256": "b9c70a17ecb067d5067565a16a2e0f26a4a2ea0924f49739d558c45186facc75"
+          "url": "https://static.crates.io/crates/rustls-acme/0.15.4/download",
+          "sha256": "64f24daec4ed0dfe6327bcb2b8045bf1d1cb4835e4f824d4cf487140f4b0cee4"
         }
       },
       "targets": [
@@ -63879,7 +63241,7 @@
               "target": "webpki_roots"
             },
             {
-              "id": "x509-parser 0.16.0",
+              "id": "x509-parser 0.18.1",
               "target": "x509_parser"
             }
           ],
@@ -63895,7 +63257,7 @@
           ],
           "selects": {}
         },
-        "version": "0.15.3"
+        "version": "0.15.4"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -70522,56 +69884,11 @@
         ],
         "crate_features": {
           "common": [
-            "mutex",
-            "once",
-            "spin_mutex"
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.9.8"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "spin 0.10.1": {
-      "name": "spin",
-      "version": "0.10.1",
-      "package_url": "https://github.com/mvdnes/spin-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/spin/0.10.1/download",
-          "sha256": "023a211cb3138dbc438680b32560ad89f699977624c9f8dbb95a47d5b4c07dd3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "spin",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "spin",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
             "barrier",
             "default",
             "lazy",
             "lock_api",
+            "lock_api_crate",
             "mutex",
             "once",
             "rwlock",
@@ -70590,7 +69907,7 @@
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.10.1"
+        "version": "0.9.8"
       },
       "license": "MIT",
       "license_ids": [
@@ -76532,74 +75849,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-tungstenite 0.26.2": {
-      "name": "tokio-tungstenite",
-      "version": "0.26.2",
-      "package_url": "https://github.com/snapview/tokio-tungstenite",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tokio-tungstenite/0.26.2/download",
-          "sha256": "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tokio_tungstenite",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tokio_tungstenite",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "connect",
-            "default",
-            "handshake",
-            "stream"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "log 0.4.33",
-              "target": "log"
-            },
-            {
-              "id": "tokio 1.50.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tungstenite 0.26.2",
-              "target": "tungstenite"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.26.2"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "tokio-tungstenite 0.29.0": {
       "name": "tokio-tungstenite",
       "version": "0.29.0",
@@ -78783,57 +78032,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing-serde 0.1.3": {
-      "name": "tracing-serde",
-      "version": "0.1.3",
-      "package_url": "https://github.com/tokio-rs/tracing",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tracing-serde/0.1.3/download",
-          "sha256": "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tracing_serde",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tracing_serde",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "tracing-core 0.1.36",
-              "target": "tracing_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.3"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "tracing-serde 0.2.0": {
       "name": "tracing-serde",
       "version": "0.2.0",
@@ -79602,96 +78800,6 @@
         },
         "edition": "2018",
         "version": "0.21.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "tungstenite 0.26.2": {
-      "name": "tungstenite",
-      "version": "0.26.2",
-      "package_url": "https://github.com/snapview/tungstenite-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tungstenite/0.26.2/download",
-          "sha256": "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tungstenite",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tungstenite",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "data-encoding",
-            "handshake",
-            "http",
-            "httparse",
-            "sha1"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "data-encoding 2.11.0",
-              "target": "data_encoding"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "httparse 1.10.1",
-              "target": "httparse"
-            },
-            {
-              "id": "log 0.4.33",
-              "target": "log"
-            },
-            {
-              "id": "rand 0.9.4",
-              "target": "rand"
-            },
-            {
-              "id": "sha1 0.10.6",
-              "target": "sha1"
-            },
-            {
-              "id": "thiserror 2.0.18",
-              "target": "thiserror"
-            },
-            {
-              "id": "utf-8 0.7.6",
-              "target": "utf8"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.26.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -90894,92 +90002,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "x509-parser 0.16.0": {
-      "name": "x509-parser",
-      "version": "0.16.0",
-      "package_url": "https://github.com/rusticata/x509-parser.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/x509-parser/0.16.0/download",
-          "sha256": "fcbc162f30700d6f3f82a24bf7cc62ffe7caea42c0b2cba8bf7f3ae50cf51f69"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "x509_parser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "x509_parser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "asn1-rs 0.6.1",
-              "target": "asn1_rs"
-            },
-            {
-              "id": "data-encoding 2.11.0",
-              "target": "data_encoding"
-            },
-            {
-              "id": "der-parser 9.0.0",
-              "target": "der_parser"
-            },
-            {
-              "id": "lazy_static 1.5.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "nom 7.1.3",
-              "target": "nom"
-            },
-            {
-              "id": "oid-registry 0.7.0",
-              "target": "oid_registry"
-            },
-            {
-              "id": "rusticata-macros 4.1.0",
-              "target": "rusticata_macros"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "time 0.3.47",
-              "target": "time"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.16.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "x509-parser 0.18.1": {
       "name": "x509-parser",
       "version": "0.18.1",
@@ -92988,7 +92010,7 @@
     "idna 1.0.3",
     "indexmap 2.14.0",
     "indicatif 0.17.5",
-    "indoc 1.0.9",
+    "indoc 2.0.7",
     "inferno 0.12.0",
     "inotify 0.11.2",
     "insta 1.31.0",
@@ -93018,7 +92040,7 @@
     "lzma-sys 0.1.20",
     "macaddr 1.0.1",
     "maplit 1.0.2",
-    "maxminddb 0.24.0",
+    "maxminddb 0.29.0",
     "memchr 2.7.4",
     "memmap2 0.9.5",
     "minicbor 0.22.0",
@@ -93053,7 +92075,6 @@
     "pkg-config 0.3.32",
     "pprof 0.15.0",
     "predicates 3.1.2",
-    "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
     "proc-macro2 1.0.106",
@@ -93171,7 +92192,7 @@
     "tokio-socks 0.5.2",
     "tokio-stream 0.1.17",
     "tokio-test 0.4.4",
-    "tokio-tungstenite 0.26.2",
+    "tokio-tungstenite 0.29.0",
     "tokio-util 0.7.17",
     "toml 0.5.11",
     "tonic 0.14.6",
@@ -93188,7 +92209,7 @@
     "tracing-flame 0.2.0",
     "tracing-journald 0.3.2",
     "tracing-opentelemetry 0.33.0",
-    "tracing-serde 0.1.3",
+    "tracing-serde 0.2.0",
     "tracing-slog 0.2.0",
     "tracing-subscriber 0.3.23",
     "trust-dns-resolver 0.22.0",

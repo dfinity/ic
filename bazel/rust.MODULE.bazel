@@ -858,7 +858,7 @@ crate.spec(
 )
 crate.spec(
     package = "indoc",
-    version = "^1.0.9",
+    version = "^2.0.7",
 )
 crate.spec(
     package = "inferno",
@@ -1014,7 +1014,7 @@ crate.spec(
 )
 crate.spec(
     package = "maxminddb",
-    version = "^0.24",
+    version = "^0.29",
 )
 crate.spec(
     package = "memchr",
@@ -1207,15 +1207,11 @@ crate.spec(
     # https://github.com/tikv/pprof-rs
     git = "https://github.com/dfinity/pprof-rs",
     package = "pprof",
-    rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
+    rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771",
 )
 crate.spec(
     package = "predicates",
     version = "^3.1.2",
-)
-crate.spec(
-    package = "pretty-bytes",
-    version = "^0.2.2",
 )
 crate.spec(
     package = "pretty_assertions",
@@ -1817,7 +1813,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-tungstenite",
-    version = "^0.26.0",
+    version = "^0.29",
 )
 crate.spec(
     features = [
@@ -1902,7 +1898,7 @@ crate.spec(
 )
 crate.spec(
     package = "tracing-serde",
-    version = "^0.1.3",
+    version = "^0.2",
 )
 crate.spec(
     package = "tracing-slog",
@@ -2204,6 +2200,13 @@ crate.annotation(
 crate.annotation(
     build_script_env = {"PCRE2_SYS_STATIC": "1"},
     crate = "pcre2-sys",
+    # Patch for determinism issues: the build script enumerates the bundled
+    # PCRE2 C sources with an unsorted `read_dir`, so the archive member order
+    # depends on the build machine's filesystem and leaks into binaries that
+    # link it (the STT_FILE symbol order), making the GuestOS image
+    # non-reproducible across machines. The patch sorts the sources.
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:pcre2-sys.patch"],
 )
 crate.annotation(
     # Disabling the libudev probe makes the vendored libusb fall back to its
