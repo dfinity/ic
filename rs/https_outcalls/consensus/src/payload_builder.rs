@@ -8,9 +8,8 @@ use crate::{
             FlexibleFindResult, ResponseShareSigInput, find_flexible_result,
             find_fully_replicated_response, find_non_flexible_out_of_cycles,
             find_non_replicated_response, group_shares_by_callback_id,
-            grouped_shares_meet_divergence_criteria, one_share_per_committee_member,
-            response_share_sig_inputs, validate_flexible_response_with_proof,
-            validate_response_share,
+            grouped_shares_meet_divergence_criteria, response_share_sig_inputs,
+            validate_flexible_response_with_proof, validate_response_share,
         },
     },
 };
@@ -293,10 +292,8 @@ impl CanisterHttpPayloadBuilderImpl {
                             }
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
                             *callback_id,
-                            &one_share_per_committee_member(grouped_shares, |signer| {
-                                committee.contains(signer)
-                            }),
-                            committee.len(),
+                            grouped_shares,
+                            &BTreeSet::from_iter(committee),
                             threshold,
                             request,
                         ) {
@@ -327,12 +324,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             }
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
                             *callback_id,
+                            grouped_shares,
                             // Only the designated replica's response is ever delivered, so
                             // it is a committee of one and its own threshold.
-                            &one_share_per_committee_member(grouped_shares, |signer| {
-                                signer == designated_node_id
-                            }),
-                            /* committee_size = */ 1,
+                            &BTreeSet::from([*designated_node_id]),
                             /* threshold = */ 1,
                             request,
                         ) {
@@ -1602,7 +1597,7 @@ fn out_of_cycles_reject_message(
 ) -> String {
     let total_spent: Cycles = shares.iter().map(|share| share.content.spent()).sum();
     format!(
-        "Out of cycles: {} of the assigned replicas have collectively spent {} cycles, \
+        "Out of cycles: {} of the assigned replicas reported a collective spend of {} cycles, \
          leaving {} cycles of the attached payment (after base fee deduction). \
          Delivering a response would cost at least {} cycles.",
         shares.len(),

@@ -298,9 +298,9 @@ pub(crate) fn check_non_flexible_out_of_cycles<'a>(
 }
 
 /// Collects at most one share per committee member.
-pub(crate) fn one_share_per_committee_member<'a>(
+fn one_share_per_committee_member<'a>(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&'a CanisterHttpResponseShare>>,
-    is_committee_member: impl Fn(&NodeId) -> bool,
+    committee: &BTreeSet<NodeId>,
 ) -> Vec<&'a CanisterHttpResponseShare> {
     let mut seen_signers = BTreeSet::new();
     grouped_shares
@@ -308,7 +308,7 @@ pub(crate) fn one_share_per_committee_member<'a>(
         .flatten()
         .filter(|share| {
             let signer = share.signature.signer;
-            is_committee_member(&signer) && seen_signers.insert(signer)
+            committee.contains(&signer) && seen_signers.insert(signer)
         })
         .copied()
         .collect()
@@ -318,14 +318,15 @@ pub(crate) fn one_share_per_committee_member<'a>(
 /// delivering a response, or `None` while it still can.
 pub(crate) fn find_non_flexible_out_of_cycles(
     callback_id: CallbackId,
-    shares: &[&CanisterHttpResponseShare],
-    committee_size: usize,
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
+    committee: &BTreeSet<NodeId>,
     threshold: usize,
     context: &CanisterHttpRequestContext,
 ) -> Option<CanisterHttpOutOfCycles> {
+    let shares = one_share_per_committee_member(grouped_shares, committee);
     let proof = check_non_flexible_out_of_cycles(
         shares.iter().copied(),
-        committee_size,
+        committee.len(),
         threshold,
         callback_id,
         context,
@@ -333,7 +334,7 @@ pub(crate) fn find_non_flexible_out_of_cycles(
     .ok()?;
     Some(CanisterHttpOutOfCycles {
         callback_id,
-        shares: shares.iter().map(|share| (*share).clone()).collect(),
+        shares: shares.into_iter().cloned().collect(),
         min_cost: proof.min_cost,
         unspent_allowance: proof.unspent_allowance,
     })
@@ -400,12 +401,10 @@ pub(crate) fn validate_flexible_response_with_proof(
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if response_with_proof.response.id != callback_id {
-        return Err(
-            InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                callback_id,
-                mismatched_id: response_with_proof.response.id,
-            },
-        );
+        return Err(InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch {
+            callback_id,
+            mismatched_id: response_with_proof.response.id,
+        });
     }
 
     validate_response_share(
@@ -443,7 +442,8 @@ pub(crate) fn validate_flexible_response_with_proof(
     Ok(())
 }
 
-/// Validates a single [`CanisterHttpResponseShare`]'s metadata.
+/// Validates a single [`CanisterHttpResponseShare`]'s metadata against the
+/// `committee` the request was assigned to.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership, the
 /// per-replica spend limit, and the response size limit.
@@ -454,17 +454,15 @@ pub(crate) fn validate_flexible_response_with_proof(
 pub(crate) fn validate_response_share(
     share: &CanisterHttpResponseShare,
     callback_id: CallbackId,
-    flex_committee: &BTreeSet<NodeId>,
+    committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if share.content.id() != callback_id {
-        return Err(
-            InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                callback_id,
-                mismatched_id: share.content.id(),
-            },
-        );
+        return Err(InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch {
+            callback_id,
+            mismatched_id: share.content.id(),
+        });
     }
 
     check_spent_within_limit(&share.content.payment_receipt, context)?;
@@ -472,14 +470,14 @@ pub(crate) fn validate_response_share(
 
     let signer = share.signature.signer;
     if !seen_signers.insert(signer) {
-        return Err(InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner {
+        return Err(InvalidCanisterHttpPayloadReason::DuplicateShareSigner {
             callback_id,
             signer,
         });
     }
-    if !flex_committee.contains(&signer) {
+    if !committee.contains(&signer) {
         return Err(
-            InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee {
+            InvalidCanisterHttpPayloadReason::ShareSignerNotInCommittee {
                 callback_id,
                 signer,
             },
