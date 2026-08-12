@@ -718,7 +718,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
     fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
         use ic_cketh_minter::endpoints::events::{
             DepositAddressRegistration as CandidDepositAddressRegistration,
-            Erc20Balance as CandidDetectedErc20, EventPayload as EP,
+            Erc20Balance as CandidErc20Balance, EventPayload as EP,
         };
         CandidEvent {
             timestamp,
@@ -748,7 +748,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     deposits: deposit
                         .deposits
                         .into_iter()
-                        .map(|d| CandidDetectedErc20 {
+                        .map(|d| CandidErc20Balance {
                             token: d.token.to_string(),
                             scanned_balance: d.scanned_balance.into(),
                         })

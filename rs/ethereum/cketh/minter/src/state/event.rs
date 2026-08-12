@@ -196,7 +196,7 @@ pub struct DepositAddressRegistry {
     #[n(1)]
     pub capacity: u64,
     /// Registered addresses in time-index order (ascending expiry, insertion
-    /// order within a shared expiry), as produced by `snapshot`.
+    /// order within a shared expiry), as produced by `watchlist_snapshot`.
     #[n(2)]
     pub registrations: Vec<DepositAddressRegistration>,
 }

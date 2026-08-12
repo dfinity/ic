@@ -337,7 +337,7 @@ mod deposit_erc20 {
                 event.payload,
                 EventPayload::AutomaticDepositReceived { .. }
             )),
-            "below-minimum balances must not emit a AutomaticDepositReceived event"
+            "below-minimum balances must not emit an AutomaticDepositReceived event"
         );
     }
 

@@ -412,7 +412,7 @@ unique, deterministic deposit address, derived from the minter's threshold-ECDSA
 * The response carries the address plus a **status** so a caller can follow the
   (multi-minute) detection progress: `Scanning { valid_until, last_scanned_block,
   scan_count }` while the address is armed and no balance at or above the per-token
-  minimum has been seen yet, or `AwaitingSweep([{ token, amount, detected_at_block }, …])`
+  minimum has been seen yet, or `AwaitingSweep([{ token, scanned_balance, detected_at_block }, …])`
   — one entry per funded token — once a balance has been detected and queued for
   sweeping. Once detected, the address is **not re-armed** by further `deposit_erc20`
   calls (they return the same `AwaitingSweep`) until it is swept (DEFI-2924); the
