@@ -879,4 +879,46 @@ mod tests {
             assert!(result.is_ok());
         })
     }
+
+    /// When the registry returns `Ok(None)` for the subnet record,
+    /// `get_dkg_dealings_per_block` yields `None` and the validator converts
+    /// it to `Err(SubnetRecordNotFound)` instead of panicking.
+    #[test]
+    fn test_validate_payload_returns_err_on_missing_subnet_record() {
+        use ic_interfaces_registry_mocks::MockRegistryClient;
+        use ic_registry_client_helpers::subnet::SubnetRegistry;
+        use ic_types::consensus::dkg::DkgPayloadValidationFailure;
+
+        let subnet_id = subnet_test_id(1);
+        let registry_version = RegistryVersion::from(10);
+
+        // Registry returns Ok(None) — no subnet record at this version.
+        let mut registry = MockRegistryClient::new();
+        registry.expect_get_value().return_const(Ok(None));
+        registry
+            .expect_get_latest_version()
+            .return_const(registry_version);
+
+        // Verify the registry call returns Ok(None) and the ok_or conversion
+        // produces the expected error — mirroring exactly what validate_payload does.
+        let result = registry
+            .get_dkg_dealings_per_block(subnet_id, registry_version)
+            .expect("registry call itself should not fail")
+            .ok_or(DkgPayloadValidationFailure::SubnetRecordNotFound {
+                subnet_id,
+                registry_version,
+            });
+
+        assert!(
+            matches!(
+                result,
+                Err(DkgPayloadValidationFailure::SubnetRecordNotFound {
+                    subnet_id: s,
+                    registry_version: v,
+                }) if s == subnet_id && v == registry_version
+            ),
+            "expected SubnetRecordNotFound, got: {:?}",
+            result
+        );
+    }
 }

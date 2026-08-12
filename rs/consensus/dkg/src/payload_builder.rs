@@ -2247,4 +2247,66 @@ mod tests {
         let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert!(selected.is_empty());
     }
+
+    /// When the registry has no subnet record at the requested version,
+    /// `get_dkg_interval_length` must return `Err(SubnetRecordNotFound)` instead of panicking.
+    #[test]
+    fn test_get_dkg_interval_length_returns_err_on_missing_subnet_record() {
+        use ic_interfaces_registry_mocks::MockRegistryClient;
+        use ic_types::consensus::dkg::DkgPayloadCreationError;
+
+        let subnet_id = subnet_test_id(1);
+        let registry_version = RegistryVersion::from(42);
+
+        let mut registry = MockRegistryClient::new();
+        registry.expect_get_value().return_const(Ok(None));
+        registry
+            .expect_get_latest_version()
+            .return_const(registry_version);
+
+        let result = get_dkg_interval_length(&registry, registry_version, subnet_id);
+
+        assert!(
+            matches!(
+                result,
+                Err(DkgPayloadCreationError::SubnetRecordNotFound {
+                    subnet_id: s,
+                    registry_version: v,
+                }) if s == subnet_id && v == registry_version
+            ),
+            "expected SubnetRecordNotFound, got: {:?}",
+            result
+        );
+    }
+
+    /// When the registry has no subnet record at the requested version,
+    /// `get_node_list` must return `Err(SubnetRecordNotFound)` instead of panicking.
+    #[test]
+    fn test_get_node_list_returns_err_on_missing_subnet_record() {
+        use ic_interfaces_registry_mocks::MockRegistryClient;
+        use ic_types::consensus::dkg::DkgPayloadCreationError;
+
+        let subnet_id = subnet_test_id(2);
+        let registry_version = RegistryVersion::from(99);
+
+        let mut registry = MockRegistryClient::new();
+        registry.expect_get_value().return_const(Ok(None));
+        registry
+            .expect_get_latest_version()
+            .return_const(registry_version);
+
+        let result = get_node_list(subnet_id, &registry, registry_version);
+
+        assert!(
+            matches!(
+                result,
+                Err(DkgPayloadCreationError::SubnetRecordNotFound {
+                    subnet_id: s,
+                    registry_version: v,
+                }) if s == subnet_id && v == registry_version
+            ),
+            "expected SubnetRecordNotFound, got: {:?}",
+            result
+        );
+    }
 }
