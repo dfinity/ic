@@ -309,7 +309,6 @@ mod tests {
             fake_signature_request_context_with_registry_version,
         },
     };
-
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         CryptoHashOfState, Height, RegistryVersion,

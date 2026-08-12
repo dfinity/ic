@@ -191,7 +191,6 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
-
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         NodeId, RegistryVersion,
