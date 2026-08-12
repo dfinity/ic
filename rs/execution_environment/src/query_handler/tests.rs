@@ -1365,18 +1365,25 @@ fn test_list_canisters_success() {
     );
 }
 
-/// Returns a composite query calling the given management canister method
-/// with the given payload and replying with the reply or the reject message.
-fn ic00_composite_query(method_name: &str, payload: Vec<u8>) -> Vec<u8> {
+/// Returns a composite query calling the given method of the given receiver
+/// (`IC_00` or a subnet ID) with the given payload and replying with the reply
+/// or the reject message.
+fn subnet_composite_query(receiver: CanisterId, method_name: &str, payload: Vec<u8>) -> Vec<u8> {
     wasm()
         .call_simple(
-            CanisterId::ic_00(),
+            receiver,
             method_name,
             call_args()
                 .other_side(payload)
                 .on_reject(wasm().reject_message().append_and_reply()),
         )
         .build()
+}
+
+/// Returns a composite query calling the given management canister method
+/// with the given payload and replying with the reply or the reject message.
+fn ic00_composite_query(method_name: &str, payload: Vec<u8>) -> Vec<u8> {
+    subnet_composite_query(CanisterId::ic_00(), method_name, payload)
 }
 
 #[test]
@@ -1631,6 +1638,91 @@ fn composite_query_call_to_management_canister_from_callback_rejects_unknown_met
     assert_eq!(
         reply,
         WasmResult::Reply(b"Query method unknown not found.".to_vec())
+    );
+}
+
+// A management canister call may also provide the target subnet ID directly in
+// the request. Such a call is not executed as a management canister call by the
+// query handler; it is rejected with `CanisterNotFound` and, in particular, the
+// reject response is propagated to the caller.
+#[test]
+fn composite_query_call_to_own_subnet_id() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    // The caller is not an NNS canister.
+    assert_ne!(
+        own_subnet_id,
+        test.state().metadata.network_topology.nns_subnet_id
+    );
+
+    let reply = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            subnet_composite_query(
+                CanisterId::from(own_subnet_id),
+                "canister_status",
+                CanisterIdRecord::from(canister_id).encode(),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(
+        reply,
+        WasmResult::Reply(format!("Canister {own_subnet_id} not found").into_bytes())
+    );
+}
+
+#[test]
+fn composite_query_call_to_own_subnet_id_rejects_unknown_methods() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+
+    let reply = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            subnet_composite_query(
+                CanisterId::from(own_subnet_id),
+                "unknown",
+                Encode!().unwrap(),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(
+        reply,
+        WasmResult::Reply(format!("Canister {own_subnet_id} not found").into_bytes())
+    );
+}
+
+// A composite query cannot cross subnet boundaries: a request addressed to a
+// remote subnet ID is rejected by the query handler (and not silently dropped
+// while pushing the outgoing requests).
+#[test]
+fn composite_query_call_to_remote_subnet_id() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let nns_subnet_id = test.state().metadata.network_topology.nns_subnet_id;
+    assert_ne!(nns_subnet_id, test.state().metadata.own_subnet_id);
+
+    let reply = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            subnet_composite_query(
+                CanisterId::from(nns_subnet_id),
+                "canister_status",
+                CanisterIdRecord::from(canister_id).encode(),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(
+        reply,
+        WasmResult::Reply(format!("Canister {nns_subnet_id} not found").into_bytes())
     );
 }
 

@@ -826,10 +826,12 @@ impl<'a> QueryContext<'a> {
 
         let canister_id = request.receiver;
 
-        // Requests to the management canister made by a composite query are routed
-        // to the own subnet, so the own subnet ID as the receiver means that this
-        // is a call to the management canister.
-        if canister_id.get() == self.hypervisor.subnet_id().get() {
+        // Requests to the management canister made by a composite query are not
+        // routed to a destination subnet, i.e. they reach the query handler with
+        // `IC_00` as the receiver. A request providing a subnet ID directly in the
+        // request is not treated as a management canister call: it is rejected
+        // below with `CanisterNotFound`, as no canister with that ID exists.
+        if canister_id == CanisterId::ic_00() {
             return self.handle_ic00_request(&request, to_query_result);
         }
 
@@ -927,10 +929,9 @@ impl<'a> QueryContext<'a> {
         };
 
         // Reject the calls to all the management canister methods that cannot be
-        // executed in the non-replicated mode with the same error as for such a
-        // query sent by an end user to the management canister. Note that calls to
-        // methods not exported by the management canister at all are rejected
-        // before they even reach the query handler.
+        // executed in the non-replicated mode, as well as the calls to methods not
+        // exported by the management canister at all, with the same error as for
+        // such a query sent by an end user to the management canister.
         let method = match parse_query_method(&request.method_name) {
             Ok(method) => method,
             Err(err) => return reject(err),

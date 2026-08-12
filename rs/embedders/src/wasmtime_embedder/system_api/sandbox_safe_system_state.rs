@@ -469,7 +469,6 @@ impl SystemStateModifications {
                 // response would be pushed onto the canister's input queue, which is
                 // never inducted while evaluating a query call graph, and hence the
                 // composite query would fail with `CanisterDidNotReply`.
-                msg.receiver = CanisterId::from(own_subnet_id);
                 Self::push_message(system_state, time, msg, logger)?;
             } else if msg.receiver == IC_00 {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
@@ -512,6 +511,15 @@ impl SystemStateModifications {
                         )?;
                     }
                 }
+            } else if subnet_ids.contains(&msg.receiver.get()) && is_composite_query {
+                // A management canister call made by a composite query that provides the
+                // target subnet ID directly in the request. Just like a request addressed
+                // to `IC_00` above, it is neither validated nor routed here and, for the
+                // very same reason, it must not be rejected here either. Instead, it is
+                // rejected by the query handler with `CanisterNotFound`: only requests
+                // addressed to `IC_00` are executed as management canister calls in a
+                // composite query.
+                Self::push_message(system_state, time, msg, logger)?;
             } else if subnet_ids.contains(&msg.receiver.get()) {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
                 {
