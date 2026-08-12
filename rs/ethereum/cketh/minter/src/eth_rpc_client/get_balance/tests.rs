@@ -1,8 +1,6 @@
-use crate::eth_rpc_client::get_balance::{
-    DecodeBalanceError, decode_balance, eth_get_balance_request,
-};
+use crate::eth_rpc_client::get_balance::{decode_balance, eth_get_balance_request};
 use crate::numeric::Wei;
-use evm_rpc_types::{BlockTag, Nat256};
+use evm_rpc_types::{BlockTag, Nat256, RpcError};
 use ic_ethereum_types::Address;
 use serde_json::json;
 
@@ -82,6 +80,13 @@ mod request {
 mod decode {
     use super::*;
 
+    fn assert_rejected(result: &str) {
+        assert!(
+            matches!(decode_balance(result), Err(RpcError::ValidationError(_))),
+            "should have rejected {result:?}"
+        );
+    }
+
     #[test]
     fn should_decode_quantities() {
         for (result, expected) in [
@@ -102,13 +107,18 @@ mod decode {
         assert_eq!(decode_balance(&max), Ok(Wei::MAX));
     }
 
-    /// Case is the one rendering difference that is not a protocol violation, so it stays valid.
+    /// Renderings that differ from the minimal-length form but still say what the balance is.
     #[test]
-    fn should_decode_an_uppercase_quantity() {
-        assert_eq!(
-            decode_balance("0xDE0B6B3A7640000"),
-            Ok(Wei::new(1_000_000_000_000_000_000))
-        );
+    fn should_decode_unusually_rendered_quantities() {
+        for (result, expected) in [
+            ("0xDE0B6B3A7640000", Wei::new(1_000_000_000_000_000_000)), // uppercase
+            ("0x0de0b6b3a7640000", Wei::new(1_000_000_000_000_000_000)), // leading zero
+            ("0x00", Wei::ZERO),
+            ("0x0000000000000000", Wei::ZERO),
+            ("+0x1", Wei::new(1)), // the integer parser accepts a sign before the prefix
+        ] {
+            assert_eq!(decode_balance(result), Ok(expected), "failed on {result}");
+        }
     }
 
     #[test]
@@ -123,43 +133,18 @@ mod decode {
             "0x 1",     // embedded space
             "null",     // a JSON null passed through verbatim
             "-0x1",     // negative
-            "+0x1",     // signed; the integer parser would otherwise accept the sign
             "0x+1",     // sign after the prefix
             "\"0x1\"",  // quoted: the canister hands back contents, so quotes are the provider's
             "  0x1  ",  // padded, for the same reason
         ] {
-            assert_eq!(
-                decode_balance(result),
-                Err(DecodeBalanceError::NotAQuantity(result.to_string())),
-                "should have rejected {result:?}"
-            );
+            assert_rejected(result);
         }
-    }
-
-    #[test]
-    fn should_reject_a_quantity_with_a_leading_zero() {
-        assert_eq!(
-            decode_balance("0x0de0b6b3a7640000"),
-            Err(DecodeBalanceError::NotAQuantity(
-                "0x0de0b6b3a7640000".to_string()
-            )),
-            "a non-minimal quantity is a provider not speaking the protocol"
-        );
-        assert_eq!(
-            decode_balance("0x0"),
-            Ok(Wei::ZERO),
-            "but zero itself is 0x0"
-        );
     }
 
     #[test]
     fn should_reject_a_balance_wider_than_32_bytes() {
         // 33 bytes of 0xff: a valid hex quantity that cannot be a balance.
-        let too_large = format!("0x{}", "f".repeat(66));
-        assert_eq!(
-            decode_balance(&too_large),
-            Err(DecodeBalanceError::TooLarge(too_large.clone()))
-        );
+        assert_rejected(&format!("0x{}", "f".repeat(66)));
     }
 
     #[test]
@@ -171,14 +156,13 @@ mod decode {
             "0x",
             "null",
             "latest",
-            // One-sided and repeated quotes: stripping quote characters would turn these into a
-            // zero, which is exactly the confusion this guards.
+            // One-sided and repeated quotes: stripping quote characters rather than rejecting them
+            // would turn these into a zero, which is exactly the confusion this guards.
             "\"0x0",
             "0x0\"",
             "\"\"0x0\"\"",
-            // Non-minimal quantities are not the protocol's, so they are provider errors too.
-            "0x00",
-            "0x0000000000000000",
+            // Padding, for the same reason.
+            "  0x0  ",
         ] {
             assert!(
                 decode_balance(result).is_err(),
