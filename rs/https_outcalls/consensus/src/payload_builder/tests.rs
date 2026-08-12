@@ -49,12 +49,14 @@ use ic_types::{
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
-        CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestContext,
-        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
-        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus, Replication,
+        CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+        CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod, CanisterHttpPaymentReceipt,
+        CanisterHttpReject, CanisterHttpRequestContext, CanisterHttpResponse,
+        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
+        CanisterHttpResponseShare, CanisterHttpResponseSignature,
+        CanisterHttpResponseWithConsensus, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Replication,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -853,6 +855,49 @@ fn divergence_duplicate_signer_rejected() {
             }
         });
     }
+}
+
+#[test]
+fn divergence_oversized_share_rejected() {
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        inject_request_contexts(&mut payload_builder, fully_replicated_contexts([0]));
+        let (_, metadata) = test_response_and_metadata(0);
+        // A share claiming one byte more than the replica could have produced, among an
+        // otherwise valid divergence of two equal halves.
+        let oversized =
+            (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES) as u32 + 1;
+        let payload =
+            CanisterHttpPayload {
+                divergence_responses: vec![CanisterHttpResponseDivergence {
+                    shares: (0..subnet_size / 2)
+                        .map(|node| metadata_to_share(node as u64, &metadata))
+                        .chain((subnet_size / 2..subnet_size).map(|node| {
+                            metadata_share_with_content_size(0, node as u64, oversized)
+                        }))
+                        .collect(),
+                }],
+                ..Default::default()
+            };
+
+        assert_matches!(
+            payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES),
+                &[],
+            ),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
+                        content_size,
+                        limit,
+                        ..
+                    },
+                ),
+            )) if content_size == oversized && limit == oversized as u64 - 1
+        );
+    });
 }
 
 /// Check that the divergence error message is constructed correctly and readable
@@ -5157,7 +5202,8 @@ fn flexible_error_too_many_rejects_content_size_mismatch() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let entry_ok = flexible_reject_response(callback_id.get(), 0);
         let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
-        entry_bad.proof.content.metadata.content_size = 999_999;
+        let mismatched_size = MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES as u32;
+        entry_bad.proof.content.metadata.content_size = mismatched_size;
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
@@ -5180,7 +5226,7 @@ fn flexible_error_too_many_rejects_content_size_mismatch() {
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::ContentSizeMismatch { metadata_size: ms, calculated_size: cs }
                 )
-            )) if ms == 999_999 && cs < ms && cs != 0
+            )) if ms == mismatched_size && cs < ms && cs != 0
         );
     });
 }
@@ -6464,6 +6510,72 @@ fn validate_payload_fails_for_out_of_cycles_without_a_refundable_allowance() {
     }
 }
 
+#[test]
+fn validate_payload_fails_for_out_of_cycles_with_an_oversized_share() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    let min_responses = 2;
+    // One byte more than the largest response the replica could have returned.
+    let oversized = (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES) as u32 + 1;
+    // Two of the four have rejected, which is one short of the three that would
+    // prove a `TooManyRejects`, so that cheaper result is out of reach and the two
+    // remaining OK responses are the group whose cost decides. Both of them have to
+    // be delivered, so the inflated size lands in the bound in full.
+    let shares = |first_ok_size| {
+        vec![
+            metadata_share_with_content_size(callback_id.get(), 0, first_ok_size),
+            metadata_share_with_content_size(callback_id.get(), 1, 1_000),
+            reject_metadata_share(callback_id.get(), 2),
+            reject_metadata_share(callback_id.get(), 3),
+        ]
+    };
+    let bound = |shares: &[CanisterHttpResponseShare]| {
+        min_flexible_consensus_cost(
+            shares.iter(),
+            NumberOfNodes::from(num_nodes as u32),
+            num_nodes,
+            min_responses,
+        )
+        .expect("a bound exists")
+    };
+    let min_cost = bound(&shares(oversized));
+    // An allowance that the inflated size puts a response out of reach of, while an
+    // honestly sized one stays comfortably affordable: without the size limit this
+    // error would validate.
+    let allowance = Cycles::new((min_cost.get() - 1) / num_nodes as u128);
+    assert!(allowance * num_nodes < min_cost);
+    assert!(bound(&shares(1_000)) < allowance * num_nodes);
+
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::OutOfCycles {
+            callback_id,
+            all_seen_shares: shares(oversized),
+            min_cost,
+            unspent_allowance: allowance * num_nodes,
+        }],
+        ..Default::default()
+    };
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            min_responses,
+            allowance,
+            payload,
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
+                    content_size,
+                    limit,
+                    ..
+                },
+            ),
+        )) if content_size == oversized && limit == oversized as u64 - 1
+    );
+}
+
 /// An `OutOfCycles` error may only rest on shares from distinct committee
 /// members, since it credits every replica it does not mention a full allowance.
 #[test]
@@ -6574,6 +6686,73 @@ fn too_many_rejects_is_topped_up_with_extra_shares() {
             assert_eq!(spent.initial[0].nodes, contributors);
         },
     );
+}
+
+#[test]
+fn validate_payload_fails_for_an_oversized_non_flexible_response() {
+    let num_nodes = 4;
+    let cb_id = 0;
+    let designated = node_test_id(0);
+    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    // One byte more than the largest response the replica could have returned.
+    let oversized = (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES) as usize + 1;
+    let (response, metadata) = test_response_and_metadata_with_content(
+        cb_id,
+        CanisterHttpResponseContent::Success(vec![0; oversized]),
+    );
+
+    for (replication, signers) in [
+        (Replication::NonReplicated(designated), vec![designated]),
+        (
+            Replication::FullyReplicated,
+            (0..threshold as u64).map(node_test_id).collect(),
+        ),
+    ] {
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        for signer in &signers {
+            add_signer_to_proof(&mut proof, *signer);
+        }
+        proof.initial_spent =
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(num_nodes as u32));
+        // An allowance the oversized body's consensus cost stays well within, so that
+        // the size limit is the only thing standing in the way of delivering it.
+        let allowance = TEST_PER_REPLICA_ALLOWANCE;
+        assert!(proof.initial_spent <= allowance * signers.len());
+
+        let mut result = None;
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(
+                CallbackId::new(cb_id),
+                with_payg_allowance(request_context(replication.clone()), allowance),
+            )],
+            |payload_builder, _pool| {
+                let payload = CanisterHttpPayload {
+                    responses: vec![proof.clone()],
+                    ..Default::default()
+                };
+                result = Some(payload_builder.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&default_validation_context()),
+                    &payload_to_bytes_max_4mb(payload),
+                    &[],
+                ));
+            },
+        );
+        assert_matches!(
+            result.expect("validation did not run"),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
+                        content_size,
+                        limit,
+                        ..
+                    },
+                ),
+            )) if content_size as usize == oversized && limit as usize == oversized - 1,
+            "expected an oversized {replication:?} response to be rejected"
+        );
+    }
 }
 
 /// The validator rejects a fully-replicated response whose collective initial
@@ -6773,6 +6952,47 @@ fn validate_payload_fails_for_flexible_initial_spent_exceeding_allowance() {
             flexible_payload(vec![group]),
         ),
         Ok(())
+    );
+}
+
+/// An extra share funding a flexible response group carries no response body, so
+/// nothing but the size limit stops it from claiming an arbitrarily large
+/// `content_size`.
+#[test]
+fn validate_payload_fails_for_a_flexible_group_with_an_oversized_share() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+    // One byte more than the largest response the replica could have returned.
+    let oversized = (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES) as u32 + 1;
+    let group = flexible_group_with_extra_shares(
+        callback_id,
+        num_nodes as u32,
+        1,
+        vec![flexible_response(callback_id.get(), 0, b"data")],
+        vec![metadata_share_with_content_size(
+            callback_id.get(),
+            1,
+            oversized,
+        )],
+    );
+
+    assert_matches!(
+        validate_flexible_payload_with_allowance(
+            num_nodes,
+            callback_id,
+            1,
+            TEST_PER_REPLICA_ALLOWANCE,
+            flexible_payload(vec![group]),
+        ),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
+                    content_size,
+                    limit,
+                    ..
+                },
+            ),
+        )) if content_size == oversized && limit == oversized as u64 - 1
     );
 }
 

@@ -767,7 +767,7 @@ leb128 = "0.2.5"
 libc = "0.2.158"
 log = "0.4"
 libcryptsetup-rs = "0.15"
-libflate = "2.1.0"
+libflate = "2.3.1"
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
@@ -813,7 +813,7 @@ pem = { version = "^3", default-features = false, features = ["std"] }
 pin-project-lite = "^0.2"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
-pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a", default-features = false, features = [
+pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771", default-features = false, features = [
     "criterion",
     "flamegraph",
     "prost-codec",
@@ -977,6 +977,7 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.26.4"
+warp = { version = "0.3.7", features = ["tls"] }
 wasm-encoder = { version = "0.252.0", features = ["wasmparser"] }
 wasm-smith = { version = "0.252.0", default-features = false, features = ["wasmparser"] }
 wasmparser = "0.252.0"

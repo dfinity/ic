@@ -21,6 +21,7 @@ pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
 pub mod flow;
+pub mod pocket_ic;
 pub mod universal_canister;
 
 const MAX_TICKS: usize = 10;

@@ -16,7 +16,7 @@ ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-ledger-suite-orchestrator = { path = "../../ledger-suite-orchestrator" }
 ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
-ic-metrics-assert = { path = "../../../../packages/ic-metrics-assert" }
+ic-metrics-assert = { path = "../../../../packages/ic-metrics-assert", features = ["pocket_ic"] }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types-cycles = { path = "../../../types/cycles" }
@@ -24,4 +24,5 @@ ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 paste = { workspace = true }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
