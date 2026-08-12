@@ -1216,6 +1216,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
             });
             network_topology.set_routing_table(
