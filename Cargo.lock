@@ -10570,7 +10570,6 @@ dependencies = [
 name = "ic-ledger-suite-orchestrator-test-utils"
 version = "0.9.0"
 dependencies = [
- "assert_matches",
  "candid",
  "ic-base-types",
  "ic-cdk 0.19.0",
@@ -10578,11 +10577,8 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
  "ic-management-canister-types 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-management-canister-types-private",
  "ic-metrics-assert",
- "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
- "ic-types",
  "ic-types-cycles",
  "ic-universal-canister",
  "icrc-ledger-types",
