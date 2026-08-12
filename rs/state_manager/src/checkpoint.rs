@@ -441,6 +441,14 @@ impl CheckpointLoader {
             );
         }
 
+        // Like the split marker, the "subnet was merged" marker is persisted
+        // separately from `SystemMetadata`.
+        metadata.subnet_merged = self
+            .checkpoint_layout
+            .subnet_merged_marker()
+            .deserialize()?
+            .merged;
+
         Ok(metadata)
     }
 
@@ -881,15 +889,6 @@ pub fn load_canister_state(
         metrics,
     );
 
-    let lms_next_idx = system_state.log_memory_store.next_idx();
-    let log_next_idx = system_state.canister_log.next_idx();
-    if lms_next_idx != log_next_idx {
-        metrics.observe_broken_soft_invariant(format!(
-            "canister {canister_id}: log_memory_store.next_idx ({lms_next_idx}) \
-             != canister_log.next_idx ({log_next_idx})",
-        ));
-    }
-
     let canister_state = CanisterState {
         system_state,
         execution_state,
@@ -1013,6 +1012,7 @@ pub fn load_snapshot(
         wasm_chunk_store,
         execution_snapshot,
         canister_snapshot_bits.total_size,
+        canister_snapshot_bits.restored,
     );
 
     let metrics = LoadCanisterMetrics { durations };

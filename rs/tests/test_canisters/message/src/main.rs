@@ -1,5 +1,5 @@
-#![allow(deprecated)]
 use ic_cdk::api::{msg_reject, msg_reply};
+use ic_cdk::call::Call;
 use ic_message::ForwardParams;
 use std::cell::RefCell;
 use std::marker::PhantomData;
@@ -28,9 +28,15 @@ pub async fn forward(
         payload,
     }: ForwardParams,
 ) -> PhantomData<Vec<u8>> {
-    match ic_cdk::api::call::call_raw128(receiver, &method, &payload, cycles).await {
-        Ok(res) => msg_reply(candid::encode_one(res).expect("Failed to encode the reply.")),
-        Err((_, err)) => msg_reject(err),
+    match Call::unbounded_wait(receiver, &method)
+        .with_raw_args(&payload)
+        .with_cycles(cycles)
+        .await
+    {
+        Ok(response) => msg_reply(
+            candid::encode_one(response.into_bytes()).expect("Failed to encode the reply."),
+        ),
+        Err(err) => msg_reject(err.to_string()),
     }
 
     PhantomData

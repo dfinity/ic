@@ -327,7 +327,19 @@ impl Hypervisor {
             execution_parameters.instruction_limits.message(),
             execution_parameters.instruction_limits.slice()
         );
-        let is_composite_query = matches!(api_type, ApiType::CompositeQuery { .. });
+        // Every execution that is part of a composite query, not just its entry
+        // point: the reply and reject callbacks can make calls themselves and so
+        // must route calls to the management canister in the same way. The cleanup
+        // callback cannot currently make calls at all (`ic0.call_new` is not
+        // available to it), but it is covered here so that the flag means "is part
+        // of a composite query" rather than "can currently make calls".
+        let is_composite_query = matches!(
+            api_type,
+            ApiType::CompositeQuery { .. }
+                | ApiType::CompositeReplyCallback { .. }
+                | ApiType::CompositeRejectCallback { .. }
+                | ApiType::CompositeCleanup { .. }
+        );
         let execution_result = self.execute_dts(
             api_type,
             &execution_state,

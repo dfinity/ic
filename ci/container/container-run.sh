@@ -165,9 +165,6 @@ CTR_CACHE_DIR="$CTR_HOME/.cache"
 # NOTE: in devenvs, ~/.cache is `/hoststorage/cache`
 CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 
-ZIG_CACHE="${CACHE_DIR}/zig-cache"
-mkdir -p "${ZIG_CACHE}"
-
 # make sure we have all bind-mounts
 # ~/.aws, ~/.ssh: credentials forwarded to the container
 # ~/.cache: used as cache persisted across containers (cargo, etc)
@@ -198,7 +195,6 @@ RUNTIME_RUN_ARGS=(
     --init
 
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # mount the local repo checkout
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"   # C toolchain cache, persisted to speed up rebuilds
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_CACHE_DIR}" # persisted root for caches (cargo, etc)
 
     # mount credentials & settings
