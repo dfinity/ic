@@ -239,15 +239,23 @@ impl RecurringAsyncTaskNonSend for GetNodeProvidersRewardsInstructionsExporter {
         };
 
         let instruction_counter = telemetry::InstructionCounter::default();
-        if let Err(e) =
-            NodeRewardsCanister::get_node_providers_rewards(self.canister, request).await
-        {
-            ic_cdk::println!("Failed to get node providers rewards: {:?}", e);
+        match NodeRewardsCanister::get_node_providers_rewards(self.canister, request).await {
+            Ok(_) => {
+                telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+                    m.mark_last_get_node_providers_rewards_success();
+                    m.record_last_get_node_providers_rewards_instructions(
+                        instruction_counter.sum(),
+                    );
+                });
+            }
+            Err(e) => {
+                // The instruction metrics are deliberately left alone. A calculation that gives up
+                // partway through costs less than one that finishes, so recording it would show
+                // the cost falling at the moment rewards stopped being computed. What reports the
+                // failure is the success timestamp above going stale.
+                ic_cdk::println!("Failed to get node providers rewards: {:?}", e);
+            }
         }
-
-        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
-            m.record_last_get_node_providers_rewards_instructions(instruction_counter.sum())
-        });
 
         (Self::default_delay(), self)
     }
