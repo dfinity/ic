@@ -10553,13 +10553,13 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.9",
- "ic-state-machine-tests",
  "ic0",
  "icrc-ledger-types",
  "maplit",
  "mockall",
  "num-traits",
  "paste",
+ "pocket-ic",
  "proptest",
  "scopeguard",
  "scraper",
@@ -10591,6 +10591,7 @@ dependencies = [
  "ic-universal-canister",
  "icrc-ledger-types",
  "paste",
+ "pocket-ic",
  "proptest",
 ]
 

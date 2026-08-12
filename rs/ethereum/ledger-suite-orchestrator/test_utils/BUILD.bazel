@@ -17,8 +17,9 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-http-types",
-        "//packages/ic-metrics-assert",
+        "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//packages/pocket-ic",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/state_machine_tests",
