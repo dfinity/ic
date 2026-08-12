@@ -1070,7 +1070,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 } => {
                     // The shares must prove that the committee's remaining
                     // allowances can no longer pay for a response...
-                    let expected = utils::check_out_of_cycles(
+                    let expected = utils::check_flexible_out_of_cycles(
                         all_seen_shares.iter(),
                         flex_committee.len(),
                         min_responses as u32,

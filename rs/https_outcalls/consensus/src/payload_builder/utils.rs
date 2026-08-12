@@ -203,8 +203,7 @@ pub(crate) struct OutOfCyclesProof {
 }
 
 /// What is left of the committee's collective allowance, given the shares it has
-/// produced so far (at most one per member): the whole collective allowance less
-/// everything reported spent out of it.
+/// produced so far.
 ///
 /// `None` if the consensus cost of this outcall is not enforced against its per-replica
 /// allowance (see [`per_replica_consensus_allowance`]).
@@ -221,7 +220,7 @@ fn unspent_committee_allowance<'a>(
     Some(allowance * committee_size - spent)
 }
 
-/// An out of cycles error is produced once what is left of its allowance falls short
+/// An out of cycles error is produced once what is left of the allowance falls short
 /// of the least a delivery can cost.
 fn out_of_cycles_verdict(
     min_cost: Option<Cycles>,
@@ -256,7 +255,7 @@ fn out_of_cycles_verdict(
 /// Checks that a flexible outcall has run out of cycles, i.e. that its
 /// committee's remaining allowances can no longer cover the consensus cost of
 /// delivering any response.
-pub(crate) fn check_out_of_cycles<'a>(
+pub(crate) fn check_flexible_out_of_cycles<'a>(
     seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare> + Clone,
     committee_size: usize,
     min_responses: u32,
@@ -589,6 +588,8 @@ pub(crate) fn group_shares_by_callback_id<
 /// allowances unspent to cover the consensus cost of putting it into a block
 /// (see [`check_initial_spent_within_limit`]); otherwise it is held back until
 /// further shares have arrived, each of which contributes another allowance.
+/// If no further shares can be received that would add enough allowance, we
+/// will generate an out-of-cycles error instead (see [`check_flexible_out_of_cycles`]).
 pub(crate) fn find_fully_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
@@ -614,9 +615,8 @@ pub(crate) fn find_fully_replicated_response(
 /// If found, returns the assembled [`CanisterHttpResponseWithConsensus`].
 ///
 /// As for fully-replicated responses, the response is held back while its
-/// collective spend exceeds the designated replica's allowance. Since no other
-/// replica contributes an allowance to a non-replicated outcall, such a request
-/// can only ever time out.
+/// collective spend exceeds the designated replica's allowance. In that case,
+/// we will generate an out-of-cycles error instead (see [`check_flexible_out_of_cycles`]).
 pub(crate) fn find_non_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
@@ -695,7 +695,7 @@ struct FlexibleCandidate<'a> {
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
 ///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
 /// - **OutOfCycles**: delivering a response can never be paid for again (see
-///   [`check_out_of_cycles`]).
+///   [`check_flexible_out_of_cycles`]).
 /// - **Pending**: not enough data to decide yet.
 ///
 /// Both of the results that deliver response bodies — `OkResponses` and
@@ -839,7 +839,7 @@ pub(crate) fn find_flexible_result(
     }
 
     // 4. Can delivering a response ever be paid for?
-    if let Ok(proof) = check_out_of_cycles(
+    if let Ok(proof) = check_flexible_out_of_cycles(
         all_shares.iter().copied(),
         committee.len(),
         min_responses as u32,
