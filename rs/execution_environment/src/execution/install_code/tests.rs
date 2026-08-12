@@ -223,6 +223,13 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
     // The instructions consumed by the slices of the failed execution: compiling
     // the Wasm module and executing the first Wasm slice, which together consumed
     // more than the slice instruction limit.
+    //
+    // Unlike `dts_resume_fails_due_to_cycles_decrease`, which compares the
+    // instructions reported by the failed execution against the round
+    // instructions consumed by its slices, no such comparison is needed here:
+    // for `install_code`, `ExecutionTest` derives the executed instructions
+    // from the round instructions consumed by the slices, and thus the round
+    // limits are already checked via `canister_executed_instructions`.
     let executed_instructions =
         test.canister_executed_instructions(canister_id) - original_executed_instructions;
     assert_gt!(executed_instructions.get(), SLICE_INSTRUCTION_LIMIT);

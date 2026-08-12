@@ -6011,6 +6011,11 @@ fn list_canisters_via_ingress_fails_at_execution() {
 /// to check the accounting of a paused execution that fails to resume.
 #[derive(Clone, Copy)]
 struct ExecutionAccounting {
+    /// The counter metric is used because it only records the cycles consumed
+    /// for instructions when the prepaid execution cycles are refunded at the
+    /// end of a message execution: unlike the gauge metric, which is bumped
+    /// already by the prepayment, it thus does not depend on whether the
+    /// snapshot is taken before or after the prepayment.
     consumed_cycles: NominalCycles,
     execution_cost: CompoundCycles<Instructions>,
     round_instructions: NumInstructions,
@@ -6024,7 +6029,7 @@ impl ExecutionAccounting {
                 .canister_state(canister_id)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_as_counters()
                 .get(&CyclesUseCase::Instructions)
                 .cloned()
                 .unwrap_or_default(),
@@ -6043,16 +6048,11 @@ impl ExecutionAccounting {
 /// instructions consumed by its slices, and the cycles charged to the canister
 /// match the cost of exactly those instructions.
 ///
-/// `before_execution` must be taken right before the first slice of the paused
-/// execution. `before_message` must be taken before the execution cycles were
-/// prepaid, which happens when the message execution starts, except for a
-/// response callback, whose execution is prepaid already when the caller
-/// performs the call; the two snapshots coincide in the former case.
+/// `before` must be taken right before the first slice of the paused execution.
 fn resume_paused_execution_after_cycles_decrease(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
-    before_message: ExecutionAccounting,
-    before_execution: ExecutionAccounting,
+    before: ExecutionAccounting,
 ) {
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
@@ -6074,11 +6074,10 @@ fn resume_paused_execution_after_cycles_decrease(
     // The failed execution reports exactly the instructions consumed by its
     // slices: resuming failed before resuming the Wasm execution, so no further
     // instructions were consumed after the last pause.
-    let executed_instructions =
-        after.executed_instructions - before_execution.executed_instructions;
+    let executed_instructions = after.executed_instructions - before.executed_instructions;
     assert_eq!(
         executed_instructions,
-        after.round_instructions - before_execution.round_instructions
+        after.round_instructions - before.round_instructions
     );
 
     // The canister is charged exactly the cost of those instructions.
@@ -6091,12 +6090,12 @@ fn resume_paused_execution_after_cycles_decrease(
         )
         .nominal();
     assert_eq!(
-        (after.execution_cost - before_execution.execution_cost).nominal(),
+        (after.execution_cost - before.execution_cost).nominal(),
         expected_cost
     );
     assert_eq!(
-        after.consumed_cycles - before_message.consumed_cycles,
-        (after.execution_cost - before_message.execution_cost).nominal()
+        after.consumed_cycles - before.consumed_cycles,
+        expected_cost
     );
 }
 
@@ -6128,7 +6127,7 @@ fn dts_resume_fails_due_to_cycles_decrease() {
 
         let before = ExecutionAccounting::take(&test, a_id);
         test.execute_slice(a_id);
-        resume_paused_execution_after_cycles_decrease(&mut test, a_id, before, before);
+        resume_paused_execution_after_cycles_decrease(&mut test, a_id, before);
 
         let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
         let message = if method == "update" {
@@ -6177,10 +6176,6 @@ fn dts_resume_fails_due_to_cycles_decrease() {
 
         let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
 
-        // The execution of the response callback is prepaid when canister A
-        // performs the call, so the snapshots are taken before that.
-        let before_message = ExecutionAccounting::take(&test, a_id);
-
         // Canister A calls canister B, which replies.
         test.execute_message(a_id);
         test.induct_messages();
@@ -6188,14 +6183,9 @@ fn dts_resume_fails_due_to_cycles_decrease() {
         test.induct_messages();
 
         // Start executing the response|cleanup callback.
-        let before_execution = ExecutionAccounting::take(&test, a_id);
+        let before = ExecutionAccounting::take(&test, a_id);
         test.execute_slice(a_id);
-        resume_paused_execution_after_cycles_decrease(
-            &mut test,
-            a_id,
-            before_message,
-            before_execution,
-        );
+        resume_paused_execution_after_cycles_decrease(&mut test, a_id, before);
 
         let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
         let code = if cleanup {
@@ -6248,7 +6238,7 @@ fn dts_resume_fails_due_to_cycles_decrease() {
         // Start executing the heartbeat.
         let before = ExecutionAccounting::take(&test, canister_id);
         test.execute_slice(canister_id);
-        resume_paused_execution_after_cycles_decrease(&mut test, canister_id, before, before);
+        resume_paused_execution_after_cycles_decrease(&mut test, canister_id, before);
 
         // A canister task has no ingress status and the failure is not recorded
         // in the canister log, but the state changes of the heartbeat must have
