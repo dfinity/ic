@@ -3430,8 +3430,20 @@ impl ExecutionEnvironment {
         )
     }
 
-    /// Asks the canister if it is willing to accept the provided ingress
-    /// message.
+    /// Runs the ingress filter checks against the provided ingress message: that
+    /// the subnet is accepting ingress messages at all; that the paying canister
+    /// can cover the message's induction cost; and that the target canister
+    /// accepts the message -- for messages addressed to the subnet by validating
+    /// them against the management canister's ingress rules and the provisional
+    /// whitelist, for all other messages by asking the canister itself (i.e. by
+    /// executing its `canister_inspect_message` hook, if exported) and requiring
+    /// that it is running.
+    ///
+    /// This is executed by the replica that received the message from the user,
+    /// before the message enters the ingress pool: on `Ok(())` the message is
+    /// admitted into the pool and gossiped to the rest of the subnet; on `Err(_)`
+    /// it is immediately rejected with the returned error by this replica and
+    /// never enters the pool.
     pub fn should_accept_ingress_message(
         &self,
         state: Arc<ReplicatedState>,
