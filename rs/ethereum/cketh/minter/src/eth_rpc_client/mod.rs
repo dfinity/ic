@@ -11,6 +11,7 @@ use std::{
     fmt::Debug,
 };
 
+pub mod get_balance;
 pub mod responses;
 
 #[cfg(test)]
