@@ -609,7 +609,8 @@ mod tests {
     use ic_types::{
         NumberOfNodes, RegistryVersion,
         canister_http::{
-            MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
+            CANDID_OVERHEAD_RESERVE_BYTES, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion,
+            RefundStatus, Replication, Transform,
         },
     };
     use ic_types::{
@@ -1410,6 +1411,14 @@ mod tests {
         if let CanisterHttpResponseContent::Success(content) = x.content {
             // Subtract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
             assert!(content.len() <= MAX_CANISTER_HTTP_PAYLOAD_SIZE - 50 * 1024);
+            assert!(
+                content.len() as u64
+                    <= MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES,
+                "encoding the largest allowed response overflows the \
+                 {CANDID_OVERHEAD_RESERVE_BYTES}-byte Candid reserve: {} bytes encoded, from \
+                 {MAX_CANISTER_HTTP_RESPONSE_BYTES} bytes of headers and body",
+                content.len(),
+            );
         } else {
             panic!("build_mock_canister_http_response_success should not return this case");
         }
