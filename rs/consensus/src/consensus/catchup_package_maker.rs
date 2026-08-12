@@ -33,7 +33,7 @@ use ic_types::{
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackage, CatchUpPackageShare,
         CatchUpShareContent, HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon, Payload,
-        RandomBeacon, RandomBeaconContent, Rank, SummaryPayload, dkg::SubnetSplittingStatus,
+        RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
@@ -544,7 +544,9 @@ mod tests {
         backwards_compatibility::BackwardsCompatible,
         consensus::{
             BlockPayload, BlockProposal, ConsensusMessageHashable, HasVersion, Payload,
-            SummaryPayload, dkg::SplittingArgs, idkg::PreSigId,
+            SummaryPayload,
+            dkg::{SplittingArgs, SubnetSplittingStatus},
+            idkg::PreSigId,
         },
         crypto::CryptoHash,
     };
