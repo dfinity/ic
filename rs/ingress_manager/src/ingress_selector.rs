@@ -530,10 +530,13 @@ impl IngressManager {
         num_messages: usize,
         cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
     ) -> ValidationResult<IngressPayloadValidationError> {
-        // A cooling down subnet inducts no ingress messages at all. Note that this is
-        // also checked by the ingress filter on the receiving nodes, so under normal
-        // circumstances such a message never even reaches the ingress pool; this check
-        // is what makes it binding, both when building and when validating a payload.
+        // A cooling down subnet inducts no ingress messages at all. This check is the
+        // only thing that guarantees it, both when building and when validating a
+        // payload. The ingress filter on the receiving nodes applies the same check,
+        // but only as an optimization (and in order to return a meaningful error to
+        // the user): messages already in the ingress pool when the subnet starts
+        // cooling down are not affected by it; and a malicious node may ignore it
+        // altogether.
         if state.metadata.is_cooling_down() {
             return Err(ValidationError::InvalidArtifact(
                 InvalidIngressPayloadReason::SubnetCoolingDown,
