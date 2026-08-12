@@ -14,9 +14,9 @@ use ic_management_canister_types_private::{
     NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, ReshareChainKeyArgs,
     SchnorrPublicKeyArgs, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
+    StoredChunksArgs, SubnetInfoArgs, SubnetMetricsArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -201,6 +201,7 @@ pub(super) fn resolve_destination(
         Ok(Ic00Method::NodeMetricsHistory) => {
             Ok(NodeMetricsHistoryArgs::decode(payload)?.subnet_id)
         }
+        Ok(Ic00Method::SubnetMetrics) => Ok(SubnetMetricsArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
             let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
@@ -1179,5 +1180,33 @@ mod tests {
                 _ => panic!("Unexpected result."),
             };
         }
+    }
+
+    /// `subnet_metrics` names its target subnet in the payload, so a call routes
+    /// there rather than to the caller's own subnet.
+    ///
+    /// Composite queries never reach this function: `apply_changes` short-circuits
+    /// them to the own subnet (`sandbox_safe_system_state.rs`), where the query
+    /// handler rejects any method absent from `QueryMethod` — and `subnet_metrics`
+    /// is deliberately absent from it.
+    #[test]
+    fn resolve_subnet_metrics_routes_to_named_subnet() {
+        let logger = no_op_logger();
+        let target_subnet = subnet_test_id(1);
+        assert_eq!(
+            resolve_destination(
+                &network_with_ecdsa_subnets(),
+                &Ic00Method::SubnetMetrics.to_string(),
+                &Encode!(&SubnetMetricsArgs {
+                    subnet_id: target_subnet.get()
+                })
+                .unwrap(),
+                subnet_test_id(2),
+                canister_test_id(1),
+                &logger,
+            )
+            .unwrap(),
+            target_subnet.get()
+        );
     }
 }

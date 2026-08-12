@@ -652,6 +652,28 @@ impl SubnetMetrics {
         total
     }
 
+    /// All cycles removed from circulation on the subnet, by both deleted and
+    /// still-existing canisters: the subnet-level aggregate
+    /// ([`Self::consumed_cycles_total`]) plus the cycles consumed by the canisters
+    /// that currently exist, which the caller obtains from
+    /// [`crate::CanisterStates::total_consumed_cycles`].
+    ///
+    /// The canisters' contribution is a parameter rather than read here because
+    /// `SubnetMetrics` does not own the canisters, and because computing it is
+    /// `O(|hot canisters|)` — the certified state tree only wants it from
+    /// certification version `V29` onwards and passes `zero()` below that.
+    ///
+    /// **This is the single definition of the quantity, deliberately.** Two
+    /// consumers must agree on it bit for bit: the certified state tree at
+    /// `/subnet/<subnet_id>/metrics` (from `V29`) and the `subnet_metrics`
+    /// management canister method. Both call this, so they cannot drift.
+    pub fn consumed_cycles_total_including_canisters(
+        &self,
+        consumed_cycles_by_canisters: NominalCycles,
+    ) -> NominalCycles {
+        self.consumed_cycles_total() + consumed_cycles_by_canisters
+    }
+
     /// Legacy computation of the total consumed cycles, used by the canonical
     /// state consumer for certification versions up to and including `V28`.
     ///

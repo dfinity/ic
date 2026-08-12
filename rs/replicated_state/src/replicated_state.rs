@@ -676,6 +676,17 @@ impl ReplicatedState {
 
     /// Re-establishes strict hot / cold partitioning of canister states (see
     /// [`CanisterStates::try_cool_all`]).
+    ///
+    /// **The caller in `commit_and_certify` must not be made conditional** (e.g.
+    /// "only on checkpoint rounds"). Execution reads
+    /// [`CanisterStates::hot_len`] — the `subnet_metrics` management method
+    /// charges round instructions proportional to it — so the *cardinality* of
+    /// the partition, not just its consistency, has to be identical on every
+    /// replica. Repartitioning on every commit is what makes the committed
+    /// partition equal the one `CanisterStates::new` derives at load, and hence
+    /// makes a replica that keeps running agree with one that restarts from a
+    /// checkpoint. `hot_cold_partition_is_canonical_after_every_commit` in
+    /// `rs/state_manager/tests/state_manager.rs` pins this.
     pub fn repartition_canister_states(&mut self) {
         self.canister_states.try_cool_all();
     }

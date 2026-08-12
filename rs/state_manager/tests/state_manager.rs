@@ -24,8 +24,8 @@ use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, Routin
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
-    ReplicatedState, Stream, SubnetTopology,
+    CanisterStates, ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages,
+    PageMap, ReplicatedState, Stream, SubnetTopology,
     canister_state::canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::{
@@ -713,6 +713,69 @@ fn last_install_timestamp_survives_a_checkpoint() {
                 .last_install_timestamp,
             Some(install_timestamp),
         );
+    });
+}
+
+/// `hot_len()` as `CanisterStates::new` derives it from the flat canister set,
+/// i.e. the value a replica that loads this state from a checkpoint would see.
+fn derived_hot_len(state: &ReplicatedState) -> usize {
+    let flat: BTreeMap<_, _> = state
+        .canister_states()
+        .all_iter()
+        .map(|(id, canister)| (*id, Arc::clone(canister)))
+        .collect();
+    CanisterStates::new(flat).hot_len()
+}
+
+/// The hot/cold partition must be re-canonicalised on **every** commit, not only
+/// on checkpoint rounds.
+///
+/// This is a correctness requirement, not a canonicalisation convenience, since
+/// `subnet_metrics_instructions` in `rs/execution_environment` charges round
+/// instructions proportional to `CanisterStates::hot_len()`. If
+/// `repartition_canister_states()` were made conditional — the plausible
+/// optimisation being "strictness is only *needed* at checkpoint time, so only do
+/// it there" — a replica continuing in memory would carry quiet-but-still-hot
+/// canisters into the next round while a replica that restarted from the last
+/// checkpoint would load them as cold. Different `hot_len()` means a different
+/// charge, which means a different number of subnet messages drained in that
+/// round, which is state divergence.
+///
+/// So this test commits with `CertificationScope::Metadata` — a *non-checkpoint*
+/// round — and asserts the committed partition still equals the derived one.
+#[test]
+fn hot_cold_partition_is_canonical_after_every_commit() {
+    state_manager_test(|_metrics, state_manager| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+
+        // Leave behind a stale hot entry, as a round of execution does: taking a
+        // mutable reference promotes the canister into the `hot` pool without
+        // giving it any work, so it is hot-by-position but cold-by-predicate.
+        let (_height, mut state) = state_manager.take_tip();
+        assert!(state.canister_state_make_mut(&canister_id).is_some());
+
+        // Executable precondition: the partition really is stale before the
+        // commit, so the assertion afterwards is not vacuous.
+        assert_eq!(state.canister_states().hot_len(), 1);
+        assert_eq!(derived_hot_len(&state), 0);
+
+        // A non-checkpoint commit. This is the round that a conditional
+        // repartition would skip.
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+
+        let (_height, state) = state_manager.take_tip();
+        assert_eq!(
+            state.canister_states().hot_len(),
+            derived_hot_len(&state),
+            "the committed hot/cold partition differs from the one a replica \
+             loading this state from a checkpoint would derive; \
+             `repartition_canister_states()` must run on every commit, because \
+             `subnet_metrics_instructions` charges on `hot_len()`"
+        );
+        assert_eq!(state.canister_states().hot_len(), 0);
     });
 }
 

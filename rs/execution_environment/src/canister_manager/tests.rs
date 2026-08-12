@@ -45,8 +45,8 @@ use ic_management_canister_types_private::{
     InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
     OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply, WasmMemoryPersistence,
+    SubnetInfoResponse, SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -6204,6 +6204,298 @@ fn subnet_info_ingress_fails() {
             ErrorCode::CanisterContractViolation,
             "cannot be called by a user",
         );
+}
+
+/// Sends the given payload to `subnet_metrics` as an inter-canister call from a
+/// canister on a remote subnet, executes it, and returns the decoded response or
+/// the reject.
+fn subnet_metrics_raw_call(
+    test: &mut ExecutionTest,
+    payload: Vec<u8>,
+) -> Result<SubnetMetricsResponse, (RejectCode, String)> {
+    test.inject_call_to_ic00(Method::SubnetMetrics, payload, Cycles::zero());
+    test.execute_subnet_message();
+    // Route the response back towards the caller (on a different subnet) so that
+    // it can be inspected via `xnet_messages`.
+    test.induct_messages();
+    let index = test.xnet_messages().len() - 1;
+    match &test.get_xnet_response(index).response_payload {
+        ic_types::messages::Payload::Data(bytes) => {
+            Ok(Decode!(bytes, SubnetMetricsResponse).unwrap())
+        }
+        ic_types::messages::Payload::Reject(context) => {
+            Err((context.code(), context.message().to_string()))
+        }
+    }
+}
+
+/// As [`subnet_metrics_raw_call`], with a well-formed payload naming `subnet_id`.
+fn subnet_metrics_call(
+    test: &mut ExecutionTest,
+    subnet_id: PrincipalId,
+) -> Result<SubnetMetricsResponse, (RejectCode, String)> {
+    subnet_metrics_raw_call(test, SubnetMetricsArgs { subnet_id }.encode())
+}
+
+#[test]
+fn subnet_metrics_canister_call_succeeds() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let uni_canister = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    let uc_call = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::SubnetMetrics,
+            call_args().other_side(payload),
+        )
+        .build();
+    let result = test.ingress(uni_canister, "update", uc_call).unwrap();
+    let bytes = match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {err_msg}"),
+    };
+    let response = Decode!(&bytes, SubnetMetricsResponse).unwrap();
+    // All five fields decode. `ExecutionTest` starts at round 1 and does not run
+    // message routing, so only `block_height` and the live cycles fold have
+    // non-default values here; the other fields are covered by
+    // `subnet_metrics_reflects_subnet_metrics_state`.
+    assert_eq!(response.block_height, candid::Nat::from(1_u64));
+    assert_eq!(
+        response.num_canisters,
+        candid::Nat::from(test.state().metadata.subnet_metrics.num_canisters)
+    );
+    assert_eq!(
+        response.canister_state_bytes,
+        candid::Nat::from(
+            test.state()
+                .metadata
+                .subnet_metrics
+                .canister_state_bytes
+                .get()
+        )
+    );
+    assert!(response.consumed_cycles_total > 0_u64);
+    assert_eq!(
+        response.update_transactions_total,
+        candid::Nat::from(
+            test.state()
+                .metadata
+                .subnet_metrics
+                .update_transactions_total
+        )
+    );
+}
+
+#[test]
+fn subnet_metrics_block_height_matches_current_round() {
+    let own_subnet_id = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .with_caller(subnet_test_id(2), caller_canister)
+        .with_current_round(42)
+        .build();
+
+    let response = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+    assert_eq!(response.block_height, candid::Nat::from(42_u64));
+}
+
+#[test]
+fn subnet_metrics_block_height_is_non_decreasing() {
+    let own_subnet_id = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .with_caller(subnet_test_id(2), caller_canister)
+        .with_current_round(7)
+        .build();
+
+    let first = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+    test.set_current_round(8);
+    let second = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+
+    assert_eq!(first.block_height, candid::Nat::from(7_u64));
+    assert_eq!(second.block_height, candid::Nat::from(8_u64));
+    assert!(second.block_height > first.block_height);
+}
+
+#[test]
+fn subnet_metrics_ingress_update_fails_at_ingress_filter() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+
+    let result = test.should_accept_ingress_message(IC_00, Method::SubnetMetrics, payload);
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "ic00 method subnet_metrics can not be called via ingress messages"
+        ))
+    );
+}
+
+#[test]
+fn subnet_metrics_ingress_update_fails_at_execution() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    test.subnet_message(Method::SubnetMetrics, payload)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterContractViolation,
+            "subnet_metrics cannot be called by a user",
+        );
+}
+
+#[test]
+fn subnet_metrics_ingress_query_fails() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    test.non_replicated_query(CanisterId::ic_00(), "subnet_metrics", payload)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterMethodNotFound,
+            "Query method subnet_metrics not found.",
+        );
+}
+
+#[test]
+fn subnet_metrics_foreign_subnet_id_is_rejected() {
+    let own_subnet_id = subnet_test_id(1);
+    let other_subnet_id = subnet_test_id(3);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .with_caller(subnet_test_id(2), caller_canister)
+        .build();
+
+    let (code, message) = subnet_metrics_call(&mut test, other_subnet_id.get()).unwrap_err();
+    assert_eq!(code, RejectCode::CanisterReject);
+    assert!(
+        message.contains("does not match current subnet ID"),
+        "unexpected reject message: {message}"
+    );
+}
+
+#[test]
+fn subnet_metrics_reflects_subnet_metrics_state() {
+    let own_subnet_id = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .with_caller(subnet_test_id(2), caller_canister)
+        .build();
+    // Create a canister so that the fold over canisters is non-trivial.
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let cost_schedule = test.state().get_own_subnet_cycles_config().cost_schedule;
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(CompoundCycles::<Memory>::new(
+            Cycles::new(1_000_000),
+            cost_schedule,
+        ));
+
+    let deleted_cycles = NominalCycles::new(987_654_321_u128);
+    {
+        let metrics = &mut test.state_mut().metadata.subnet_metrics;
+        metrics.num_canisters = 17;
+        metrics.canister_state_bytes = NumBytes::new(4_321);
+        metrics.update_transactions_total = 99;
+        metrics.observe_consumed_cycles_by_deleted_canisters(deleted_cycles);
+    }
+    // Computed independently of the handler: the sum over all canisters plus the
+    // subnet-level aggregate.
+    let expected_consumed_cycles = test.state().metadata.subnet_metrics.consumed_cycles_total()
+        + test
+            .state()
+            .canister_states()
+            .all_values()
+            .fold(NominalCycles::zero(), |acc, canister| {
+                acc + canister.system_state.canister_metrics().consumed_cycles()
+            });
+    assert!(expected_consumed_cycles > deleted_cycles);
+
+    let response = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+
+    assert_eq!(response.num_canisters, candid::Nat::from(17_u64));
+    assert_eq!(response.canister_state_bytes, candid::Nat::from(4_321_u64));
+    assert_eq!(
+        response.update_transactions_total,
+        candid::Nat::from(99_u64)
+    );
+    assert_eq!(
+        response.consumed_cycles_total,
+        candid::Nat::from(expected_consumed_cycles.get())
+    );
+}
+
+#[test]
+fn subnet_metrics_is_partition_independent() {
+    let own_subnet_id = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .with_caller(subnet_test_id(2), caller_canister)
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let cost_schedule = test.state().get_own_subnet_cycles_config().cost_schedule;
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(CompoundCycles::<Memory>::new(
+            Cycles::new(1_000_000),
+            cost_schedule,
+        ));
+
+    let before = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+    test.state_mut().repartition_canister_states();
+    let after = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+
+    assert_eq!(before.consumed_cycles_total, after.consumed_cycles_total);
+}
+
+#[test]
+fn subnet_metrics_malformed_payload_is_rejected() {
+    let own_subnet_id = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .with_caller(subnet_test_id(2), caller_canister)
+        .build();
+
+    let (code, message) =
+        subnet_metrics_raw_call(&mut test, EmptyBlob.encode()).expect_err("expected a reject");
+    // The Candid decode failure surfaces as `ErrorCode::InvalidManagementPayload`
+    // (`candid_error_to_user_error`), which maps to `RejectCode::CanisterReject`.
+    assert_eq!(code, RejectCode::CanisterReject);
+    assert!(
+        message.contains("Error decoding candid"),
+        "unexpected reject message: {message}"
+    );
 }
 
 #[test]

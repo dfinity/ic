@@ -1801,10 +1801,11 @@ fn can_execute_subnet_msg(
     // Some heavy methods use round instructions.
     let instructions_reached = round_limits.instructions_reached();
 
-    // `list_canisters` iterates over the subnet's canisters and thus consumes
-    // round instructions, even though it has no effective canister ID. Defer it
-    // to a later round if the round instruction limit has already been reached.
-    if let Some(Ic00Method::ListCanisters) = msg_method {
+    // `list_canisters` and `subnet_metrics` iterate over the subnet's canisters
+    // and thus consume round instructions, even though they have no effective
+    // canister ID. Defer them to a later round if the round instruction limit has
+    // already been reached.
+    if let Some(Ic00Method::ListCanisters | Ic00Method::SubnetMetrics) = msg_method {
         return !instructions_reached;
     }
 
@@ -1903,6 +1904,7 @@ fn get_instruction_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | SubnetMetrics
             | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles

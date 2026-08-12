@@ -3529,6 +3529,16 @@ impl StateManager for StateManagerImpl {
         // during the round may have left canisters that are now cold in `hot`. The
         // partition must be canonical at checkpoint time so that a replica continuing
         // through a checkpoint and one (re)starting from it agree on the partition.
+        //
+        // This call is deliberately outside the `CertificationScope::Metadata`
+        // branch above and must stay unconditional: execution reads
+        // `CanisterStates::hot_len()` (the `subnet_metrics` management method
+        // charges round instructions proportional to it), so a round that skipped
+        // the repartition would leave a continuing replica and a restarted one
+        // with different `hot_len()`, hence a different charge and a different
+        // number of subnet messages drained — a state divergence. Pinned by
+        // `hot_cold_partition_is_canonical_after_every_commit` in
+        // `tests/state_manager.rs`.
         self.metrics
             .hot_canisters_count
             .observe(state.canister_states().hot_len() as f64);

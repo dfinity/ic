@@ -220,6 +220,287 @@ pub fn test_cycles_burn(env: TestEnv) {
     })
 }
 
+/// Decodes a `subnet_metrics` reply and returns it, asserting the fields are
+/// plausible.
+fn decode_subnet_metrics(bytes: &[u8]) -> ic00::SubnetMetricsResponse {
+    let response = Decode!(bytes, ic00::SubnetMetricsResponse).unwrap();
+    // The subnet has processed at least the blocks that carried this call.
+    assert!(response.block_height > 0_u64);
+    response
+}
+
+pub fn subnet_metrics_own_subnet_succeeds(env: TestEnv) {
+    // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
+    let logger = env.logger();
+    let subnet_id = app_node.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .update(wasm().call_simple(
+                    ic00::IC_00,
+                    Method::SubnetMetrics,
+                    call_args().other_side(ic00::SubnetMetricsArgs { subnet_id }.encode()),
+                ))
+                .await;
+            // Assert.
+            let bytes = result.expect("subnet_metrics call failed");
+            let mut response = decode_subnet_metrics(&bytes);
+            // The universal canister itself is on the subnet, and `num_canisters`
+            // and `update_transactions_total` are written at the end of every
+            // round, so both are non-zero as soon as the canister exists.
+            assert!(response.num_canisters > 0_u64);
+            assert!(response.update_transactions_total > 0_u64);
+            // `canister_state_bytes` is different: it is refreshed only on rounds
+            // whose batch number is a multiple of 10
+            // (`rs/messaging/src/message_routing.rs`), so it legitimately reads 0
+            // for the first rounds after a subnet's first canister appears —
+            // measured in-process as 0 at heights 5 and 9, non-zero from height 17.
+            // Whether the first read lands before or after a refresh is a race, so
+            // re-read until it is populated instead of assuming. Each update
+            // advances at least one round, so this terminates well inside the
+            // bound; exhausting it means the field never refreshed, which is a
+            // real failure.
+            for _ in 0..30 {
+                if response.canister_state_bytes > 0_u64 {
+                    break;
+                }
+                let bytes = canister
+                    .update(wasm().call_simple(
+                        ic00::IC_00,
+                        Method::SubnetMetrics,
+                        call_args().other_side(ic00::SubnetMetricsArgs { subnet_id }.encode()),
+                    ))
+                    .await
+                    .expect("subnet_metrics call failed");
+                response = decode_subnet_metrics(&bytes);
+            }
+            assert!(
+                response.canister_state_bytes > 0_u64,
+                "canister_state_bytes never refreshed off 0 across 30 rounds; \
+                 expected a multiple-of-10 batch to have refreshed it by now"
+            );
+        }
+    })
+}
+
+/// A canister on the application subnet calls `subnet_metrics` naming a
+/// *different* subnet. Message routing delivers the call to that subnet, which
+/// executes it and answers with **its own** metrics.
+///
+/// The attribution half is what this test is really for, and asserting only that
+/// a reply arrives would not test it: a subnet answering a foreign `subnet_id`
+/// with its *own* metrics — exactly what the own-subnet check exists to prevent —
+/// also replies successfully. So the test perturbs only the *remote* subnet, by
+/// installing a canister there, and asserts the remote reading moves. Under that
+/// bug the two readings would be local and a remote canister creation could not
+/// move them.
+///
+/// Note also: unlike `node_metrics_history_another_subnet_succeeds`, which calls
+/// `get_first_healthy_application_node_snapshot()` twice and so ends up naming its
+/// *own* subnet (the test group's `setup` configures a single application subnet),
+/// this test names the verified-application subnet, so the call really does cross
+/// a subnet boundary.
+pub fn subnet_metrics_another_subnet_succeeds(env: TestEnv) {
+    // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
+    let other_node = env.get_first_healthy_verified_application_node_snapshot();
+    let other_agent = other_node.build_default_agent();
+    let logger = env.logger();
+    let other_subnet_id = other_node.subnet_id().unwrap().get();
+    assert_ne!(other_subnet_id, app_node.subnet_id().unwrap().get());
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+
+            let read_remote = || async {
+                let result = canister
+                    .update(
+                        wasm().call_simple(
+                            ic00::IC_00,
+                            Method::SubnetMetrics,
+                            call_args().other_side(
+                                ic00::SubnetMetricsArgs {
+                                    subnet_id: other_subnet_id,
+                                }
+                                .encode(),
+                            ),
+                        ),
+                    )
+                    .await;
+                decode_subnet_metrics(&result.expect("cross-subnet subnet_metrics call failed"))
+            };
+
+            // Act.
+            let before = read_remote().await;
+            // Perturb only the remote subnet.
+            let _remote_canister = UniversalCanister::new_with_retries(
+                &other_agent,
+                other_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            let after = read_remote().await;
+
+            // Assert: the reply reports the *target* subnet's population, so
+            // creating a canister there moves it.
+            //
+            // Note the direction of the assertion. The tests of this group are
+            // registered via `SystemTestGroup::add_parallel(SystemTestSubGroup..)`
+            // in `general_execution_test.rs`, and both of those compose under
+            // `EvalOrder::Parallel` (`rs/tests/driver/src/driver/group.rs`:
+            // `add_parallel` → `add_group(_, EvalOrder::Parallel)`, and
+            // `SystemTestSubGroup::new()` sets `ordering: EvalOrder::Parallel`,
+            // which `add_test` preserves). So siblings *do* run concurrently and
+            // can create canisters on the remote subnet meanwhile — but that can
+            // only make `num_canisters` larger, never smaller, so a strict `>`
+            // cannot fail spuriously.
+            assert!(
+                after.num_canisters > before.num_canisters,
+                "cross-subnet subnet_metrics did not report the target subnet's \
+                 canister population: num_canisters was {} before and {} after \
+                 creating a canister on subnet {other_subnet_id}",
+                before.num_canisters,
+                after.num_canisters,
+            );
+            // Sanity: the counters advance on the target subnet too.
+            assert!(after.block_height > before.block_height);
+            assert!(after.update_transactions_total > before.update_transactions_total);
+        }
+    })
+}
+
+pub fn subnet_metrics_non_existing_subnet_fails(env: TestEnv) {
+    // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
+    let logger = env.logger();
+    // Create non existing subnet id.
+    let subnet_id = PrincipalId::new_subnet_test_id(1);
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .update(wasm().call_simple(
+                    ic00::IC_00,
+                    Method::SubnetMetrics,
+                    call_args().other_side(ic00::SubnetMetricsArgs { subnet_id }.encode()),
+                ))
+                .await;
+            // Assert. The universal canister masks the inner `DestinationInvalid`
+            // reject as a `CanisterReject`.
+            assert_reject(result, RejectCode::CanisterReject);
+        }
+    })
+}
+
+pub fn subnet_metrics_query_fails(env: TestEnv) {
+    // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
+    let logger = env.logger();
+    let subnet_id = app_node.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .query(wasm().call_simple(
+                    ic00::IC_00,
+                    Method::SubnetMetrics,
+                    call_args().other_side(ic00::SubnetMetricsArgs { subnet_id }.encode()),
+                ))
+                .await;
+            // Assert. Note that this message comes from `ic0.call_new` being
+            // unavailable in a non-replicated query and is method-agnostic, so
+            // this test would also pass against a stub implementation. It exists
+            // for parity with `node_metrics_history_query_fails`;
+            // `subnet_metrics_composite_query_fails` is the test that actually
+            // exercises the new code in a query context.
+            assert_reject_msg(
+                result,
+                RejectCode::CanisterError,
+                "cannot be executed in non replicated query mode",
+            );
+        }
+    })
+}
+
+/// A composite query calling `subnet_metrics` is rejected with a method-specific
+/// message.
+///
+/// Composite-query calls to the management canister do not go through
+/// `resolve_destination` at all: `apply_changes` short-circuits them to the caller's
+/// own subnet (`rs/embedders/src/wasmtime_embedder/system_api/sandbox_safe_system_state.rs`),
+/// where the query handler accepts only the methods listed in `QueryMethod`.
+/// `subnet_metrics` is deliberately absent from that allowlist, so the inner call is
+/// rejected with `"Query method subnet_metrics not found."`, the universal canister's
+/// `on_reject` re-rejects with that message, and the caller sees it.
+///
+/// Keeping `subnet_metrics` out of `QueryMethod` is load-bearing rather than
+/// incidental: the query path has no round-instruction accounting, so the
+/// `O(|hot canisters|)` fold would run unmetered on query threads, against a
+/// different state snapshot. This test is what fails if it is ever added there.
+pub fn subnet_metrics_composite_query_fails(env: TestEnv) {
+    // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
+    let logger = env.logger();
+    let subnet_id = app_node.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .composite_query(
+                    wasm().call_simple(
+                        ic00::IC_00,
+                        Method::SubnetMetrics,
+                        call_args()
+                            .other_side(ic00::SubnetMetricsArgs { subnet_id }.encode())
+                            // Surfaces the inner reject message, which is what makes
+                            // this assertion method-specific rather than a generic
+                            // "the query did not succeed" check.
+                            .on_reject(wasm().reject_message().reject()),
+                    ),
+                )
+                .await;
+            // Assert. The message names the method, so this fails if
+            // `subnet_metrics` is ever added to `QueryMethod`.
+            assert_reject_msg(
+                result,
+                RejectCode::CanisterReject,
+                "Query method subnet_metrics not found",
+            );
+        }
+    })
+}
+
 pub fn node_metrics_history_query_fails(env: TestEnv) {
     // Arrange.
     let (app_node, agent) = setup_app_node_and_agent(&env);
