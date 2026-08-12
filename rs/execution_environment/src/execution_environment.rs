@@ -66,7 +66,6 @@ use ic_replicated_state::{
 use ic_types::batch::ChainKeyData;
 use ic_types::canister_http::{
     CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus,
-    Replication,
 };
 use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
 use ic_types::crypto::{
@@ -348,7 +347,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
     ) {
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
-        let res = self.cycles_account_manager.consume_cycles(
+        let res = self.cycles_account_manager.consume_cycles_for_final_instructions(
             &mut canister.system_state,
             memory_usage,
             message_memory_usage,
@@ -2137,6 +2136,13 @@ impl ExecutionEnvironment {
                         .unflushed_checkpoint_ops
                         .push(unflushed_checkpoint_op);
                 }
+                if let Some(snapshot_id) = response.snapshot_to_make_immutable
+                    && let Some(canister) =
+                        state.canister_state_make_mut(&snapshot_id.get_canister_id())
+                    && let Some(snapshot) = canister.canister_snapshots.get_mut(snapshot_id)
+                {
+                    Arc::make_mut(snapshot).set_restored();
+                }
                 crate::util::process_responses(
                     response.deleted_call_context_responses,
                     state,
@@ -2261,11 +2267,9 @@ impl ExecutionEnvironment {
         } else {
             canister_http_request_context.request.payment - base_fee.real()
         };
-        let node_count = match &canister_http_request_context.replication {
-            Replication::Flexible { committee, .. } => committee.len().max(1),
-            Replication::NonReplicated(_) => 1,
-            Replication::FullyReplicated => cycles_config.subnet_size.max(1),
-        };
+        let node_count = canister_http_request_context
+            .replication
+            .node_count(canister_http_request_context.subnet_size);
         canister_http_request_context.refund_status = RefundStatus {
             refundable_cycles,
             per_replica_allowance: refundable_cycles / node_count,

@@ -1,7 +1,7 @@
 use canister_test::{Canister, Project};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallModeV2;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -89,12 +89,15 @@ fn test_upgrade_governance_through_root_proposal() {
         let proposer_pid = *TEST_USER1_PRINCIPAL;
 
         // Build and submit a root proposal
-        let change_canister_request =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                // Note that we upgrade the governance canister to the universal
-                // canister (effectively breaking governance). This is needed so
-                // that we can be sure that the upgrade actually went through.
-                .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
+        let change_canister_request = ChangeCanisterRequest::new(
+            true, // Stop before installing.
+            CanisterInstallModeV2::Upgrade(None),
+            GOVERNANCE_CANISTER_ID,
+        )
+        // As long as this is not what Governance is currently running, if
+        // Governance ends up with this, then, we have demonstrated that
+        // upgrading (Governance) via "root proposals" works.
+        .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
             &ic_crypto_sha2::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
@@ -188,9 +191,12 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
         let proposer = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
 
         // Build and submit a root proposal
-        let change_canister_request =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
+        let change_canister_request = ChangeCanisterRequest::new(
+            true, // Stop before installing.
+            CanisterInstallModeV2::Upgrade(None),
+            GOVERNANCE_CANISTER_ID,
+        )
+        .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let response: Result<(), String> = nns_canisters
             .root
@@ -227,9 +233,12 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
         let proposer = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
 
         // Build and submit a root proposal
-        let change_canister_request =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
+        let change_canister_request = ChangeCanisterRequest::new(
+            true, // Stop before installing.
+            CanisterInstallModeV2::Upgrade(None),
+            GOVERNANCE_CANISTER_ID,
+        )
+        .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
             &ic_crypto_sha2::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
@@ -272,12 +281,12 @@ fn test_enough_no_votes_rejects_the_proposal() {
         let proposer_pid = *TEST_USER1_PRINCIPAL;
 
         // Build and submit a root proposal
-        let change_canister_request =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                // Note that we upgrade the governance canister to the universal
-                // canister (effectively breaking governance). This is needed so
-                // that we can be sure that the upgrade actually went through.
-                .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
+        let change_canister_request = ChangeCanisterRequest::new(
+            true, // Stop before installing.
+            CanisterInstallModeV2::Upgrade(None),
+            GOVERNANCE_CANISTER_ID,
+        )
+        .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
             &ic_crypto_sha2::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
@@ -348,12 +357,12 @@ fn test_changing_the_sha_invalidates_the_proposal() {
         let proposer1_pid = *TEST_USER1_PRINCIPAL;
 
         // Build and submit a root proposal
-        let change_canister_request1 =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                // Note that we upgrade the governance canister to the empty
-                // canister (effectively breaking governance). This is needed so
-                // that we can be sure that the upgrade actually went through.
-                .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
+        let change_canister_request1 = ChangeCanisterRequest::new(
+            true, // Stop before installing.
+            CanisterInstallModeV2::Upgrade(None),
+            GOVERNANCE_CANISTER_ID,
+        )
+        .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
             &ic_crypto_sha2::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
@@ -379,9 +388,12 @@ fn test_changing_the_sha_invalidates_the_proposal() {
         let proposer2_pid = *TEST_USER2_PRINCIPAL;
 
         // Build and submit a second root proposal
-        let change_canister_request2 =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
+        let change_canister_request2 = ChangeCanisterRequest::new(
+            true, // Stop before installing.
+            CanisterInstallModeV2::Upgrade(None),
+            GOVERNANCE_CANISTER_ID,
+        )
+        .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let response: Result<(), String> = nns_canisters
             .root

@@ -9,7 +9,7 @@ use crate::foundation::get_user_home;
 use crate::fs::composite::ensure_dir_exists;
 use directories_next::ProjectDirs;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
 pub fn project_dirs() -> Result<&'static ProjectDirs, GetUserHomeError> {
@@ -26,18 +26,34 @@ pub fn get_shared_network_data_directory(network: &str) -> Result<PathBuf, GetUs
         .join(network))
 }
 
+/// Usually `~/.config/dfx`: see `get_user_dfx_config_dir_with_override` for
+/// the exact rule, including the `DFX_CONFIG_ROOT` override and the
+/// Windows-specific location.
 pub fn get_user_dfx_config_dir() -> Result<PathBuf, ConfigError> {
     let config_root = DFX_CONFIG_ROOT.lock().unwrap().clone();
+    get_user_dfx_config_dir_with_override(config_root.as_deref().map(Path::new))
+}
+
+/// Like [`get_user_dfx_config_dir`], but the config root override is passed in
+/// explicitly instead of being read from the process-global [`DFX_CONFIG_ROOT`].
+/// This lets a caller (in particular, a test) supply a value directly, instead
+/// of mutating shared global state that would otherwise race across parallel
+/// test threads.
+pub(crate) fn get_user_dfx_config_dir_with_override(
+    config_root_override: Option<&Path>,
+) -> Result<PathBuf, ConfigError> {
     // dirs-next is not used for *nix to preserve existing paths
     #[cfg(not(windows))]
     let p = {
         let home = get_user_home().map_err(DetermineConfigDirectoryFailed)?;
-        let root = config_root.unwrap_or(home);
+        let root = config_root_override
+            .map(|root| root.as_os_str().to_owned())
+            .unwrap_or(home);
         PathBuf::from(root).join(".config").join("dfx")
     };
     #[cfg(windows)]
-    let p = match config_root {
-        Some(var) => PathBuf::from(var),
+    let p = match config_root_override {
+        Some(var) => var.to_owned(),
         None => project_dirs()
             .map_err(DetermineConfigDirectoryFailed)?
             .config_dir()

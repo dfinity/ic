@@ -14,6 +14,12 @@ use std::collections::{BTreeMap, HashMap};
 
 pub type RetryCount = u64;
 
+/// How many failing subnets to name in the aggregated error log line. Failures
+/// are correlated (an unreachable subnet fails on every retry, and exhausted
+/// call capacity fails all of them at once), so naming a handful is enough to
+/// diagnose without emitting one line per subnet per retry forever.
+const MAX_LOGGED_FAILURES: usize = 5;
+
 #[async_trait]
 pub trait ManagementCanisterClient {
     async fn node_metrics_history(
@@ -103,7 +109,7 @@ where
         &self,
         subnets: Vec<SubnetId>,
     ) -> Result<NaiveDate, String> {
-        let mut success = true;
+        let mut failures: Vec<(SubnetId, String)> = Vec::new();
         let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
         let subnets_metrics = self.fetch_subnets_metrics(&last_timestamp_per_subnet).await;
         for (subnet_id, call_result) in subnets_metrics {
@@ -147,17 +153,31 @@ where
                     }
                 }
                 Err(e) => {
-                    success = false;
-                    ic_cdk::println!(
-                        "Error fetching metrics for subnet {}: ERROR: {}",
-                        subnet_id,
-                        e
-                    );
+                    failures.push((subnet_id, e.to_string()));
                 }
             }
         }
 
-        if success {
+        // One line per sync rather than one per failing subnet: a subnet that
+        // is unreachable fails on every retry, and when the canister runs out
+        // of call capacity every subnet fails at once, so per-subnet logging
+        // turns a single stuck subnet into millions of NNS log lines an hour.
+        if !failures.is_empty() {
+            let sample = failures
+                .iter()
+                .take(MAX_LOGGED_FAILURES)
+                .map(|(subnet_id, e)| format!("{subnet_id}: {e}"))
+                .join(", ");
+            ic_cdk::println!(
+                "Error fetching metrics for {} of {} subnets (showing up to {}): {}",
+                failures.len(),
+                last_timestamp_per_subnet.len(),
+                MAX_LOGGED_FAILURES,
+                sample,
+            );
+        }
+
+        if failures.is_empty() {
             let max_ts_update = self
                 .last_timestamp_per_subnet(subnets)
                 .into_values()

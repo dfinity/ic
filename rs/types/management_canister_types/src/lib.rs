@@ -1940,17 +1940,21 @@ pub enum CanisterInstallMode {
     Upgrade = 3,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, EnumString, Serialize,
+)]
 /// Wasm main memory retention on upgrades.
 /// Currently used to specify the persistence of Wasm main memory.
 pub enum WasmMemoryPersistence {
     /// Retain the main memory across upgrades.
     /// Used for enhanced orthogonal persistence, as implemented in Motoko
     #[serde(rename = "keep")]
+    #[strum(serialize = "keep")]
     Keep,
     /// Reinitialize the main memory on upgrade.
     /// Default behavior without enhanced orthogonal persistence.
     #[serde(rename = "replace")]
+    #[strum(serialize = "replace")]
     Replace,
 }
 

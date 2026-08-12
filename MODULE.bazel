@@ -17,22 +17,20 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "rules_cc", version = "0.2.22")
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "hermetic_cc_toolchain", version = "4.3.0")
 
-# can be replaced with `single_version_override` once 4.3.0
-# is released to BCR
-archive_override(
-    module_name = "hermetic_cc_toolchain",
+# Hermetic clang/lld-based CC toolchain
+# (https://github.com/hermeticbuild/hermetic-llvm)
+bazel_dep(name = "llvm", version = "0.8.16")
+
+# Keep clang from warning that the toolchain's own --unwindlib=none is unused
+# on rustc links (surfaced by rustc's linker_messages lint); see the patch
+# header for details.
+single_version_override(
+    module_name = "llvm",
     patch_strip = 1,
-    patches = [
-        "//bazel:hermetic_cc_toolchain_strip.patch",
-        "//bazel:hermetic_cc_toolchain_cache_dir.patch",
-        "//bazel:hermetic_cc_toolchain_lto.patch",
-    ],
-    sha256 = "79338d8c5c4499c7402aea1fe78dcd20267f300e9f8f5886be7017d57ccf0fbc",
-    urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v4.3.0/hermetic_cc_toolchain-v4.3.0.tar.gz"],
+    patches = ["//bazel:hermetic_llvm_unwindlib.patch"],
 )
 
 # configure/make dependencies
@@ -46,7 +44,8 @@ register_toolchains(
 # Use a patch to work around determinism issues in make & pkgconfig toolchains
 # https://github.com/bazel-contrib/rules_foreign_cc/issues/1313
 # Also we use HEAD to have the latest version of the dependencies (Meson in
-# particular which otherwise cannot use the zig toolchain)
+# particular, which needs a recent rules_foreign_cc to work with hermetic
+# toolchains)
 archive_override(
     module_name = "rules_foreign_cc",
     patch_strip = 1,
@@ -136,7 +135,9 @@ bazel_dep(name = "rules_buf", version = "0.5.2")
 
 # Go dependencies
 
-bazel_dep(name = "rules_go", version = "0.61.1")
+# 0.62.0 matches what the resolved dependency graph selects (pulled in via
+# the llvm module); keep the declaration in line with the resolution.
+bazel_dep(name = "rules_go", version = "0.62.0")
 bazel_dep(name = "gazelle", version = "0.51.3")
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
@@ -1300,27 +1301,68 @@ os_info = use_repo_rule("//bazel:os_info.bzl", "os_info")
 
 os_info(name = "os_info")
 
-# Set up hermetic cc toolchains for binaries and canisters
-toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+# Set up hermetic cc toolchains (hermetic-llvm) for binaries and canisters.
+#
+# We register wrapper toolchain()s from //bazel instead of the generated
+# @llvm_toolchains//... toolchains so that every toolchain is additionally
+# gated on //bazel:use_hermetic_cc. This lets builds opt out in favor of the
+# system toolchain (e.g. --config=afl / --hermetic_cc=false), replicating
+# hermetic_cc_toolchain's extra_target_settings mechanism, which hermetic-llvm
+# does not provide.
+llvm_toolchain = use_extension("@llvm//extensions:toolchain.bzl", "toolchain")
 
-# The use_hermetic_cc setting is added to each toolchain to allow us to opt out
-# in favor of system toolchains, when needed.
-toolchains.extra_target_settings(settings = ["//bazel:use_hermetic_cc"])
-use_repo(toolchains, "zig_sdk")
+# Executors. macOS executors are declared only so that wasm32 (canister)
+# builds keep working on macs; native macOS targets stay on the system Xcode
+# toolchain until hermetic-llvm's macOS support matures (see the registration
+# below).
+llvm_toolchain.exec(
+    arch = "x86_64",
+    os = "linux",
+)
+llvm_toolchain.exec(
+    arch = "aarch64",
+    os = "linux",
+)
+llvm_toolchain.exec(
+    arch = "x86_64",
+    os = "macos",
+)
+llvm_toolchain.exec(
+    arch = "aarch64",
+    os = "macos",
+)
+
+# Targets: native Linux, plus wasm32 for canisters.
+llvm_toolchain.target(
+    arch = "x86_64",
+    os = "linux",
+)
+llvm_toolchain.target(
+    arch = "aarch64",
+    os = "linux",
+)
+llvm_toolchain.target(
+    arch = "wasm32",
+    os = "none",
+)
+use_repo(llvm_toolchain, "llvm_toolchains")
+
+# The llvm-project sources, for the libunwind headers used by
+# //bazel:libunwind_include.
+llvm_project = use_extension("@llvm//extensions:llvm.bzl", "llvm")
+use_repo(llvm_project, "llvm-project")
 
 register_toolchains(
-    # Linux toolchains
-    "@zig_sdk//toolchain:linux_amd64_gnu.2.31",
-    "@zig_sdk//toolchain:linux_arm64_gnu.2.31",
+    # Linux executors: native + cross + wasm.
+    "//bazel:hermetic_cc_linux_x86_64_to_linux_x86_64",
+    "//bazel:hermetic_cc_linux_x86_64_to_none_wasm32",
+    "//bazel:hermetic_cc_linux_aarch64_to_linux_aarch64",
 
-    # macOS toolchains
-    # Do not use hermetic toolchains for macOS until we have had a chance to
-    # wrap the various system libraries.
-    # "@zig_sdk//toolchain:darwin_amd64",
-    # "@zig_sdk//toolchain:darwin_arm64",
-
-    # wasm toolchains
-    "@zig_sdk//toolchain:none_wasm",
+    # macOS executors: wasm only. Native macOS targets deliberately stay on the system Xcode toolchain:
+    # hermetic-llvm's macOS support (trimmed Apple SDK sysroot, resource-dir handling)
+    # is not yet mature enough for the full darwin build (e.g. configure-based cargo build scripts fail to find SDK headers).
+    "//bazel:hermetic_cc_macos_x86_64_to_none_wasm32",
+    "//bazel:hermetic_cc_macos_aarch64_to_none_wasm32",
 
     # These toolchains are only registered locally.
     dev_dependency = True,
@@ -1340,6 +1382,18 @@ new_local_repository(
 
 # Use libvirt from the host environment
 # Used for managing virtual machines programmatically.
+new_local_repository(
+    name = "cryptsetup",
+    build_file = "@//third_party:BUILD.cryptsetup.bazel",
+    path = "/usr",
+)
+
+new_local_repository(
+    name = "devmapper",
+    build_file = "@//third_party:BUILD.devmapper.bazel",
+    path = "/usr",
+)
+
 new_local_repository(
     name = "libvirt",
     build_file = "@//third_party:BUILD.libvirt.bazel",

@@ -11,6 +11,37 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-07: Proposal 143409
+
+http://dashboard.internetcomputer.org/proposal/143409
+
+## Added
+
+* Added `maximum_query_instructions` and `maximum_query_walltime_seconds` fields to the
+  subnet record's `ResourceLimits`, allowing the query instruction limit and the maximum query
+  wall-clock time to be configured per subnet via `create_subnet` and `update_subnet`.
+  `maximum_query_instructions` applies both to a single (non-composite) query method execution
+  and to the total across a composite query call graph; `maximum_query_walltime_seconds`
+  bounds the wall-clock time a query (including a composite query call graph) may run. For each,
+  a value of `0` (or unset) means the replica's default is used.
+
+## Changed
+
+* Cloud Engines are now allowed to have blank `replica_version_id` (in their
+  `SubnetRecord`). In this case, `StandardEngineReplicaVersionRecord` is used to
+  determine the Cloud Engine's replica version.
+
+
+# 2026-07-31: Proposal 143259
+
+http://dashboard.internetcomputer.org/proposal/143259
+
+## Fixed
+
+* `do_split_subnet` - don't assume that all the registry entries exist when checking whether the
+  entries changed across await point
+
+
 # 2026-07-24: Proposal 143074
 
 http://dashboard.internetcomputer.org/proposal/143074

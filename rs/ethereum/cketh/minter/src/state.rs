@@ -849,4 +849,5 @@ pub enum TaskType {
     Reimbursement,
     MintCkErc20,
     RefreshLatestBlockHeight,
+    BalanceScan,
 }
