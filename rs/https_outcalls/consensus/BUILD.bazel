@@ -19,6 +19,7 @@ rust_library(
         # Keep sorted.
         "//packages/ic-error-types",
         "//rs/consensus/utils",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/interfaces/adapter_client",
         "//rs/interfaces/registry",
@@ -56,6 +57,7 @@ rust_test(
         "//rs/artifact_pool",
         "//rs/consensus/mocks",
         "//rs/consensus/utils",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/interfaces/adapter_client",
         "//rs/interfaces/mocks",
@@ -97,12 +99,17 @@ rust_bench(
     testonly = True,
     srcs = ["benches/payload_validation.rs"],
     pin_cpu = True,
+    # The benchmark asserts that the payload it builds actually validates, so
+    # running it once (criterion's test mode) guards against the payload drifting
+    # out of sync with the validation rules.
+    test_name = "payload_validation_bench_test",
     deps = [
         # Keep sorted.
         ":consensus",
         "//rs/config",
         "//rs/consensus/mocks",
         "//rs/crypto/temp_crypto",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",

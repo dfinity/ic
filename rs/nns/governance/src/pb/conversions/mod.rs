@@ -2632,6 +2632,9 @@ impl From<pb::InstallCode> for api::InstallCode {
             skip_stopping_before_installing: item.skip_stopping_before_installing,
             wasm_module_hash: item.wasm_module_hash,
             arg_hash: item.arg_hash,
+            canister_upgrade_options: item
+                .canister_upgrade_options
+                .map(api::install_code::CanisterUpgradeOptions::from),
         }
     }
 }
@@ -2647,6 +2650,9 @@ impl From<api::InstallCode> for pb::InstallCode {
             arg: None,
             wasm_module_hash: item.wasm_module_hash,
             arg_hash: item.arg_hash,
+            canister_upgrade_options: item
+                .canister_upgrade_options
+                .map(pb::install_code::CanisterUpgradeOptions::from),
         }
     }
 }
@@ -2678,6 +2684,26 @@ impl From<api::InstallCodeRequest> for pb::InstallCode {
             skip_stopping_before_installing: item.skip_stopping_before_installing,
             wasm_module_hash,
             arg_hash,
+            canister_upgrade_options: item
+                .canister_upgrade_options
+                .map(pb::install_code::CanisterUpgradeOptions::from),
+        }
+    }
+}
+
+impl From<pb::install_code::CanisterUpgradeOptions> for api::install_code::CanisterUpgradeOptions {
+    fn from(item: pb::install_code::CanisterUpgradeOptions) -> Self {
+        Self {
+            skip_pre_upgrade: item.skip_pre_upgrade,
+            wasm_memory_persistence: item.wasm_memory_persistence,
+        }
+    }
+}
+impl From<api::install_code::CanisterUpgradeOptions> for pb::install_code::CanisterUpgradeOptions {
+    fn from(item: api::install_code::CanisterUpgradeOptions) -> Self {
+        Self {
+            skip_pre_upgrade: item.skip_pre_upgrade,
+            wasm_memory_persistence: item.wasm_memory_persistence,
         }
     }
 }

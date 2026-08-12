@@ -206,6 +206,13 @@ pub struct DepositAddressRegistration {
     pub address: Address,
     #[n(3)]
     pub expires_at_nanos: Timestamp,
+    /// Latest block number at which this address's balance was scanned; `None` if
+    /// never scanned.
+    #[n(4)]
+    pub last_scanned_block: Option<BlockNumber>,
+    /// How many times this address has been scanned.
+    #[n(5)]
+    pub scan_count: u32,
 }
 
 impl ReceivedEvent {

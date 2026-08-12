@@ -111,6 +111,14 @@ pub struct SystemMetadata {
     /// exported.
     pub subnet_split_from: Option<SubnetId>,
 
+    /// "Subnet was merged" marker: `true` if this subnet is the result of a subnet
+    /// merge.
+    ///
+    /// Like `split_from`, persisted in its own `subnet_merged.pbuf` file rather than
+    /// as a `SystemMetadata` proto field. A `false` flag encodes to an empty message,
+    /// so the file is absent in that case.
+    pub subnet_merged: bool,
+
     /// Asynchronously handled subnet messages.
     pub subnet_call_context_manager: SubnetCallContextManager,
 
@@ -625,11 +633,11 @@ impl SubnetMetrics {
     /// Computes the total consumed cycles on the subnet.
     ///
     /// This is the current computation, which avoids double counting the cycles
-    /// consumed by deleted canisters. It is not yet reflected in the certified
-    /// state: the canonical state consumer still uses
-    /// [`Self::consumed_cycles_total_v27`] for all certification versions up to
-    /// and including `V27`. A future certification version should switch the
-    /// consumer over to this function.
+    /// consumed by deleted canisters. The canonical state consumer uses it
+    /// starting with certification version `V29`, adding on top the cycles
+    /// consumed by all non-deleted canisters; for earlier certification
+    /// versions the consumer uses the legacy [`Self::consumed_cycles_total_v28`]
+    /// instead.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -684,16 +692,16 @@ impl SubnetMetrics {
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical
-    /// state consumer for certification versions up to and including `V27`.
+    /// state consumer for certification versions up to and including `V28`.
     ///
     /// This version double counts the cycles consumed by deleted canisters: at
     /// deletion, a canister's per-use-case consumption is added both to
     /// `consumed_cycles_by_deleted_canisters` and to the
     /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
-    /// unchanged to preserve the certified state for existing certification
-    /// versions; [`Self::consumed_cycles_total`] fixes the double counting for
-    /// future certification versions.
-    pub fn consumed_cycles_total_v27(&self) -> NominalCycles {
+    /// unchanged to preserve the certified state for certification versions up
+    /// to and including `V28`; [`Self::consumed_cycles_total`] fixes the double
+    /// counting starting with certification version `V29`.
+    pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
@@ -777,6 +785,7 @@ impl SystemMetadata {
             own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
+            subnet_merged: false,
 
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -1015,6 +1024,7 @@ impl SystemMetadata {
     ) -> Result<Self, String> {
         assert_eq!(None, self.split_from);
         assert_eq!(None, self.subnet_split_from);
+        assert!(!self.subnet_merged);
         assert_eq!(0, self.heap_delta_estimate.get());
         assert!(self.expected_compiled_wasms.is_empty());
 
@@ -1118,6 +1128,7 @@ impl SystemMetadata {
             own_subnet_info: _,
             ref mut split_from,
             subnet_split_from,
+            subnet_merged,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
             state_sync_version: _,
@@ -1135,6 +1146,7 @@ impl SystemMetadata {
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
         assert_eq!(None, subnet_split_from);
+        assert!(!subnet_merged);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -1222,6 +1234,7 @@ impl SystemMetadata {
             own_subnet_info,
             split_from,
             mut subnet_split_from,
+            subnet_merged,
             mut subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -1236,6 +1249,7 @@ impl SystemMetadata {
 
         assert_eq!(None, split_from);
         assert_eq!(None, subnet_split_from);
+        assert!(!subnet_merged);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -1325,6 +1339,8 @@ impl SystemMetadata {
             own_subnet_info,
             split_from,
             subnet_split_from,
+            // Just asserted to be `false`; a subnet split does not set it.
+            subnet_merged,
             subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -1851,6 +1867,16 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
+        // `IngressStatus::Unknown` stands for the absence of an entry, so it must
+        // never be recorded as the status of a message. Note that
+        // `IngressStatus::is_valid_state_transition()` (checked by the callers) can
+        // only catch this if there already is an entry, as it allows any transition
+        // away from `Unknown`, i.e. from "no entry".
+        debug_assert!(
+            !matches!(status, IngressStatus::Unknown),
+            "Attempted to record `IngressStatus::Unknown` for message {message_id}"
+        );
+
         // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
@@ -2456,6 +2482,7 @@ pub mod testing {
             own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
+            subnet_merged: false,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,

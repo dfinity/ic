@@ -19,7 +19,6 @@ libtool
 pkg-config
 libclang-dev
 libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)
-libusb-1.0-0-dev # required for HSM
 lld # used as the default system linker for cargo builds (see ci/container/Dockerfile)
 protobuf-compiler # needed by cargo for prost-build/tonic-build (Bazel brings its own)
 llvm

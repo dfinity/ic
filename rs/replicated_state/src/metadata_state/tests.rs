@@ -1,7 +1,8 @@
 use super::subnet_call_context_manager::{
-    EcdsaArguments, EcdsaMatchedPreSignature, InstallCodeCall, PreSignatureStash, RawRandContext,
-    SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall,
-    SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
+    DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT, EcdsaArguments, EcdsaMatchedPreSignature,
+    InstallCodeCall, PreSignatureStash, RawRandContext, SchnorrArguments,
+    SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
+    SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
 use crate::metadata_state::testing::SystemMetadataTesting;
@@ -371,6 +372,13 @@ fn system_metadata_roundtrip_encoding() {
     std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
     };
+    std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).resource_limits =
+        ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(1 << 30)),
+            maximum_state_delta: Some(NumBytes::new(1 << 20)),
+            maximum_query_instructions: Some(ic_types::NumInstructions::new(7_000_000_000)),
+            maximum_query_walltime_seconds: Some(15),
+        };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
@@ -978,6 +986,122 @@ fn subnet_call_contexts_deserialization() {
     )
 }
 
+/// A `CanisterHttpRequestContext` from `canister_test_id(1)` with the given
+/// pricing version, made at `time`.
+fn canister_http_request_context(
+    pricing_version: PricingVersion,
+    time: Time,
+) -> CanisterHttpRequestContext {
+    CanisterHttpRequestContext {
+        request: RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(IC_00)
+            .method_payload(vec![1, 2, 3])
+            .build(),
+        url: "https://example.com".into(),
+        max_response_bytes: None,
+        headers: vec![],
+        body: Some(vec![4, 5, 6]),
+        http_method: CanisterHttpMethod::GET,
+        transform: Some(Transform {
+            method_name: "transform".into(),
+            context: vec![7, 8, 9],
+        }),
+        time,
+        replication: Replication::FullyReplicated,
+        pricing_version,
+        refund_status: RefundStatus {
+            refundable_cycles: Cycles::new(13_000),
+            per_replica_allowance: Cycles::new(1_000),
+            refunded_cycles: Cycles::zero(),
+            refunding_nodes: BTreeSet::new(),
+        },
+        registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
+    }
+}
+
+/// Retrieving the response for a pay-as-you-go priced HTTP outcall retains the
+/// context for refund accounting; a legacy priced one is not retained.
+#[test]
+fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
+    for (pricing_version, retained) in [
+        (PricingVersion::PayAsYouGo, true),
+        (PricingVersion::Legacy, false),
+    ] {
+        let mut manager = SubnetCallContextManager::default();
+        let context = canister_http_request_context(pricing_version, UNIX_EPOCH);
+        let callback_id =
+            manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
+
+        match manager.retrieve_context(callback_id, &no_op_logger()) {
+            Some(SubnetCallContext::CanisterHttpRequest(retrieved)) => {
+                assert_eq!(context, retrieved)
+            }
+            _ => panic!("Expected a `CanisterHttpRequest` context"),
+        }
+        // The context is always removed from the in-flight contexts.
+        assert!(manager.canister_http_request_contexts.is_empty());
+
+        let delivered = manager.delivered_canister_http_request_contexts;
+        if retained {
+            assert_eq!(btreemap! { callback_id => context }, delivered);
+        } else {
+            assert!(delivered.is_empty());
+        }
+    }
+}
+
+/// Delivered contexts are timed out (and returned along with their callback IDs)
+/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since the
+/// request was made, and retained until then.
+#[test]
+fn time_out_delivered_canister_http_request_contexts() {
+    let mut manager = SubnetCallContextManager::default();
+    // Two contexts, made 1 second apart.
+    let contexts: Vec<_> = [0, 1]
+        .iter()
+        .map(|i| {
+            let context = canister_http_request_context(
+                PricingVersion::PayAsYouGo,
+                UNIX_EPOCH + Duration::from_secs(*i),
+            );
+            let callback_id =
+                manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
+            manager.retrieve_context(callback_id, &no_op_logger());
+            (callback_id, context)
+        })
+        .collect();
+    assert_eq!(2, manager.delivered_canister_http_request_contexts.len());
+
+    // One nanosecond before the first context times out, nothing is timed out.
+    let before =
+        UNIX_EPOCH + (DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT - Duration::from_nanos(1));
+    assert!(
+        manager
+            .time_out_delivered_canister_http_request_contexts(before)
+            .is_empty()
+    );
+    assert_eq!(2, manager.delivered_canister_http_request_contexts.len());
+
+    // Exactly at its timeout, only the first context is timed out.
+    let at_first_timeout = UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
+    assert_eq!(
+        vec![contexts[0].clone()],
+        manager.time_out_delivered_canister_http_request_contexts(at_first_timeout)
+    );
+    assert_eq!(1, manager.delivered_canister_http_request_contexts.len());
+
+    // And a second later, the second one.
+    let at_second_timeout = at_first_timeout + Duration::from_secs(1);
+    assert_eq!(
+        vec![contexts[1].clone()],
+        manager.time_out_delivered_canister_http_request_contexts(at_second_timeout)
+    );
+    assert!(manager.delivered_canister_http_request_contexts.is_empty());
+}
+
 pub fn generate_pre_signature(
     env: &CanisterThresholdSigTestEnvironment,
     dealers: &IDkgDealers,
@@ -1372,6 +1496,21 @@ fn test_status_done(i: u64) -> IngressStatus {
 }
 
 #[test]
+#[should_panic(expected = "Attempted to record `IngressStatus::Unknown`")]
+fn ingress_history_insert_unknown_status_panics() {
+    let mut ingress_history = IngressHistoryState::new();
+    // `IngressStatus::Unknown` stands for the absence of an entry, so recording one
+    // is a bug.
+    ingress_history.insert(
+        message_test_id(1),
+        IngressStatus::Unknown,
+        UNIX_EPOCH,
+        NumBytes::from(u64::MAX),
+        |_| {},
+    );
+}
+
+#[test]
 fn ingress_history_insert_beyond_limit_will_succeed() {
     let mut ingress_history = IngressHistoryState::default();
 
@@ -1471,7 +1610,6 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
             state: IngressState::Received,
         },
         test_status_done(4),
-        IngressStatus::Unknown,
     ];
     statuses.into_iter().enumerate().for_each(|(i, status)| {
         ingress_history_limit.insert(
@@ -2455,7 +2593,7 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     // + 64 (instructions) + 128 (request and response transmission)
     // + 256 (uninstall) + 512 (canister creation) + 1024 (burned cycles).
     assert_eq!(
-        subnet_metrics.consumed_cycles_total_v27(),
+        subnet_metrics.consumed_cycles_total_v28(),
         NominalCycles::new(131064)
     );
 }

@@ -409,12 +409,9 @@ impl Registry {
         &self,
         record_key: &str,
         version: Version,
-    ) -> Version {
+    ) -> Option<Version> {
         self.get(record_key.as_bytes(), version)
             .map(|record| record.version)
-            .unwrap_or_else(|| {
-                panic!("Record for {record_key} not found in registry");
-            })
     }
 }
 

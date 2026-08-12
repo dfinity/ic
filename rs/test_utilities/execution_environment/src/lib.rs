@@ -22,8 +22,8 @@ use ic_execution_environment::Ic00MethodPermissions;
 use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
-    IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits, WasmSource,
-    abort_all_paused_executions, execute_canister, wasm_execution_mode,
+    IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    abort_all_paused_executions, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -38,10 +38,9 @@ use ic_logger::{
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsArgs,
     CanisterMetricsResult, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
-    LogVisibilityV2, MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    SchnorrAlgorithm, UpdateSettingsArgs,
+    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob, InstallCodeArgs,
+    InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -93,7 +92,7 @@ use ic_types_cycles::{
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
-use ic_wasm_types::{BinaryEncodedWasm, CanisterModule, WasmHash};
+use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
 use num_traits::ops::saturating::SaturatingAdd;
 use prometheus::IntCounter;
@@ -1582,69 +1581,19 @@ impl ExecutionTest {
         };
         let method = Method::from_str(message.method_name());
         match method {
-            Ok(Method::InstallCode) | Ok(Method::InstallChunkedCode) => {
-                let wasm_source = match method {
-                    Ok(Method::InstallCode) => {
-                        let wasm_module = InstallCodeArgsV2::decode(message.method_payload())
-                            .unwrap()
-                            .wasm_module;
-                        WasmSource::CanisterModule(CanisterModule::new(wasm_module))
-                    }
-                    Ok(Method::InstallChunkedCode) => {
-                        let payload =
-                            InstallChunkedCodeArgs::decode(message.method_payload()).unwrap();
-                        let store_canister_id: CanisterId = payload
-                            .store_canister
-                            .unwrap_or(payload.target_canister)
-                            .try_into()
-                            .unwrap();
-                        let wasm_chunk_store = self
-                            .state
-                            .as_ref()
-                            .unwrap()
-                            .canister_state(&store_canister_id)
-                            .unwrap()
-                            .system_state
-                            .wasm_chunk_store
-                            .clone();
-                        let chunk_hashes_list = payload
-                            .chunk_hashes_list
-                            .into_iter()
-                            .map(|chunk_hash| chunk_hash.hash)
-                            .collect();
-                        let wasm_module_hash =
-                            WasmHash::try_from(payload.wasm_module_hash).unwrap();
-                        WasmSource::ChunkStore {
-                            wasm_chunk_store,
-                            chunk_hashes_list,
-                            wasm_module_hash,
-                        }
-                    }
-                    _ => unreachable!(),
-                };
-                let execution_mode = wasm_execution_mode(wasm_source);
-                self.cycles_account_manager()
-                    .execution_cost(
-                        instructions_used,
-                        self.get_own_subnet_cycles_config(),
-                        execution_mode,
-                    )
-                    .nominal()
-            }
-            Ok(Method::LoadCanisterSnapshot) => {
-                let payload = LoadCanisterSnapshotArgs::decode(message.method_payload()).unwrap();
-                let snapshot = self.canister_state(payload.get_canister_id()).canister_snapshots.get(payload.snapshot_id()).expect("Loading a non-existing snapshot should fail during validation and no instructions should be used in that case!");
-                let wasm_module = snapshot.execution_snapshot().wasm_binary.clone();
-                let wasm_source = WasmSource::CanisterModule(wasm_module);
-                let execution_mode = wasm_execution_mode(wasm_source);
-                self.cycles_account_manager()
-                    .execution_cost(
-                        instructions_used,
-                        self.get_own_subnet_cycles_config(),
-                        execution_mode,
-                    )
-                    .nominal()
-            }
+            // Install and snapshot load messages are always charged at the
+            // Wasm32 rate: the actual Wasm execution mode of the module being
+            // installed is not known before compilation in the sandbox.
+            Ok(Method::InstallCode)
+            | Ok(Method::InstallChunkedCode)
+            | Ok(Method::LoadCanisterSnapshot) => self
+                .cycles_account_manager()
+                .execution_cost(
+                    instructions_used,
+                    self.get_own_subnet_cycles_config(),
+                    WasmExecutionMode::Wasm32,
+                )
+                .nominal(),
             Ok(Method::UpdateSettings)
             | Ok(Method::UploadChunk)
             | Ok(Method::TakeCanisterSnapshot)

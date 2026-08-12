@@ -27,7 +27,6 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-admin = { path = "../registry/admin" }
 ic-agent = { workspace = true }
-ic-bn-lib-common = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-btc-interface = { workspace = true }
@@ -111,7 +110,7 @@ flate2 = { workspace = true }
 ic-btc-adapter-test-utils = { path = "../bitcoin/adapter/test_utils" }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
-nix = { version = "0.29.0", features = ["process", "signal"] }
+nix = { workspace = true }
 prometheus = { workspace = true }
 rcgen = { workspace = true }
 reqwest = { workspace = true }

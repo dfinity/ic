@@ -3,7 +3,6 @@ e2fsprogs, built from source. The bundled libuuid/libblkid are enabled so we
 don't link against system copies.
 """
 
-load("@//bazel:defs.bzl", "disable_hermetic_cc_target")
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 filegroup(
@@ -12,7 +11,7 @@ filegroup(
 )
 
 configure_make(
-    name = "e2fsprogs_impl",
+    name = "e2fsprogs",
     args = ["-j"],
     configure_in_place = True,
     configure_options = [
@@ -26,7 +25,8 @@ configure_make(
         "--disable-nls",
         "--disable-tls",
         "--disable-fsck",
-        # Per the upstream INSTALL doc, static binaries need ELF shared libs off.
+        # Link e2fsprogs' own libraries (libext2fs, libcom_err, ...) into the
+        # binaries statically, so they don't need a shared lib alongside them.
         "--disable-elf-shlibs",
         # The e2scrub install rules write to absolute host paths (/usr/lib/udev,
         # /etc/cron.d, /usr/lib/systemd) which fails under the build sandbox.
@@ -36,8 +36,8 @@ configure_make(
         "--with-systemd-unit-dir=no",
     ],
     env = {
-        "CFLAGS": "-O2 -static -I$$EXT_BUILD_DEPS/include",
-        "LDFLAGS": "-static -L$$EXT_BUILD_DEPS/lib",
+        "CFLAGS": "-O2 -I$$EXT_BUILD_DEPS/include",
+        "LDFLAGS": "-L$$EXT_BUILD_DEPS/lib",
     },
     lib_source = ":all_srcs",
     out_binaries = [
@@ -60,8 +60,7 @@ configure_make(
         " && find $$INSTALLDIR -mindepth 1 -maxdepth 1 ! -name bin ! -name include -exec rm -rf {} +" +
         " && find $$INSTALLDIR/bin -mindepth 1 ! -name fuse2fs ! -name mke2fs -delete"
     ),
-    # Static glibc linking is a Linux/glibc thing; this isn't expected to work
-    # elsewhere.
+    # These tools are only ever used to build Linux filesystem images.
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -69,14 +68,6 @@ configure_make(
     deps = [
         "@libfuse",
     ],
-)
-
-# e2fsprogs' dependency, libfuse does not build with hermetic toolchains (meson is not happy with the zig linker),
-# and building libfuse without the hermetic and e2fsprogs with the hermetic toolchain causes linking issues because of
-# glibc version mismatch. So just disable the hermetic toolchain for e2fsprogs.
-disable_hermetic_cc_target(
-    name = "e2fsprogs",
-    target = ":e2fsprogs_impl",
 )
 
 filegroup(

@@ -210,10 +210,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     // test? To do this, they set the NNS_CANISTER_UPGRADE_SEQUENCE environment variable.
 
     let all_canisters = [
-        // Keep sorted.
         "cycles-minting",
-        "genesis-token",
-        "governance",
         "ledger",
         "lifeline",
         "migration",
@@ -221,6 +218,11 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         "node-rewards",
         "root",
         "sns-wasm",
+        // Governance is upgraded last, because in general, it is the one that
+        // calls other NNS canisters (e.g. Root, Registry, SNS-WASM) as part
+        // of proposal execution.
+        "governance",
+        "genesis-token",
     ]
     .join(",");
 
