@@ -1,6 +1,6 @@
 use ic_crypto::MegaKeyFromRegistryError;
 use ic_types::{
-    Height, RegistryVersion, SubnetId,
+    RegistryVersion, SubnetId,
     consensus::idkg,
     crypto::canister_threshold_sig::{
         error::{
@@ -19,7 +19,6 @@ use super::InvalidChainCacheError;
 pub enum IDkgPayloadError {
     RegistryClientError(RegistryClientError),
     MegaKeyFromRegistryError(MegaKeyFromRegistryError),
-    ConsensusSummaryBlockNotFound(Height),
     StateManagerError(StateManagerError),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
     PreSignatureError(EcdsaPresignatureQuadrupleCreationError),

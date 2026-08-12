@@ -238,6 +238,9 @@ pub struct CanisterSnapshot {
     size: NumBytes,
     /// The certified data blob belonging to the canister.
     certified_data: Vec<u8>,
+    /// Whether this snapshot has been loaded onto a canister. Restored snapshots
+    /// are immutable and cannot be modified via `upload_canister_snapshot_data`.
+    restored: bool,
     /// Snapshot of chunked store.
     #[validate_eq(CompareWithValidateEq)]
     chunk_store: WasmChunkStore,
@@ -254,12 +257,14 @@ impl CanisterSnapshot {
         chunk_store: WasmChunkStore,
         execution_snapshot: ExecutionStateSnapshot,
         size: NumBytes,
+        restored: bool,
     ) -> CanisterSnapshot {
         Self {
             source,
             taken_at_timestamp,
             canister_version,
             certified_data,
+            restored,
             chunk_store,
             execution_snapshot,
             size,
@@ -316,6 +321,7 @@ impl CanisterSnapshot {
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version(),
             certified_data: canister.system_state.certified_data.clone(),
+            restored: false,
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
             size: canister.snapshot_size_bytes(),
@@ -360,6 +366,7 @@ impl CanisterSnapshot {
             canister_version,
             size: metadata.snapshot_size_bytes(),
             certified_data: metadata.certified_data.clone(),
+            restored: false,
             chunk_store,
             execution_snapshot,
         }
@@ -367,6 +374,14 @@ impl CanisterSnapshot {
 
     pub fn source(&self) -> SnapshotSource {
         self.source
+    }
+
+    pub fn restored(&self) -> bool {
+        self.restored
+    }
+
+    pub fn set_restored(&mut self) {
+        self.restored = true;
     }
 
     pub fn canister_version(&self) -> u64 {
@@ -642,6 +657,7 @@ mod tests {
             WasmChunkStore::new_for_testing(),
             execution_snapshot,
             NumBytes::from(0),
+            false,
         );
 
         let snapshot_id = SnapshotId::from((canister_id, local_id));

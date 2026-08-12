@@ -448,3 +448,10 @@ message SplitFrom {
   // subnet that this was split from.
   types.v1.SubnetId subnet_id = 1;
 }
+
+message SubnetMerged {
+  // Whether the subnet is the result of a subnet merge. Because `false` is
+  // encoded as an empty message, the enclosing file is not written at all in
+  // that case.
+  bool merged = 1;
+}
