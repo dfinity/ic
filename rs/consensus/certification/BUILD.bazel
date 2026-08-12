@@ -55,7 +55,6 @@ rust_test(
         "//rs/test_utilities/artifact_pool",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/logger",
-        "//rs/test_utilities/registry",
         "//rs/test_utilities/types",
         "//rs/types/types",
         "//rs/types/types_test_utils",
