@@ -215,7 +215,7 @@ impl<T: CyclesUseCaseKind> TryFrom<PbCompoundCycles> for CompoundCycles<T> {
                 .ok_or(ProxyDecodeError::MissingField("CompoundCycles::nominal"))?,
         )?;
         Ok(CompoundCycles {
-            real: Cycles::from(real),
+            real: Cycles::try_from(real)?,
             nominal,
             _cycles_use_case_marker: PhantomData,
         })

@@ -349,6 +349,7 @@ fn get_adjusted_notary_delay_from_settings(
     let halting = || {
         status::should_halt(
             notarized_height,
+            None,
             membership.registry_client.as_ref(),
             membership.subnet_id,
             pool,

@@ -9,7 +9,7 @@ use tracing::{info, warn};
 use url::Url;
 
 use config_tool::{DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, deserialize_config};
-use config_types::{Ipv6Config, SetupOSConfig};
+use config_types::{Ipv6Config, SetupOSConfig, VmSlot};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use network::generate_network_config;
@@ -74,6 +74,7 @@ pub fn main() -> Result<()> {
                 &setupos_config.icos_settings.mgmt_mac,
                 setupos_config.icos_settings.deployment_environment,
                 NodeType::SetupOS,
+                VmSlot::Plain,
             );
             warn!("Using generated mac {generated_mac}");
 
@@ -96,6 +97,7 @@ pub fn main() -> Result<()> {
                 &setupos_config.icos_settings.mgmt_mac,
                 setupos_config.icos_settings.deployment_environment,
                 node_type,
+                VmSlot::Plain,
             );
             warn!("Using generated mac address {generated_mac}");
 

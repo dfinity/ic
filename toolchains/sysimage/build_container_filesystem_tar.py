@@ -31,7 +31,7 @@ class BaseImageOverride:
 def get_storage_dir_args():
     if "PODMAN_STORAGE_DIR" in os.environ:
         base = os.environ.get("PODMAN_STORAGE_DIR")
-        return f"--root {base}/root --runroot {base}/runroot"
+        return f"--root {base}/root --runroot {base}/runroot --tmpdir {base}/tmpdir"
     else:
         return ""
 
