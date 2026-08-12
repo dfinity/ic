@@ -19484,6 +19484,7 @@ dependencies = [
  "ic-vetkeys",
  "icrc-ledger-types",
  "k256",
+ "libc",
  "maplit",
  "prost",
  "registry-canister",
