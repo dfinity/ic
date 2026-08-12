@@ -562,8 +562,6 @@ impl NodeRewardsCanister {
                     .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
             }
 
-            max_message_instructions = max_message_instructions.max(instruction_counter.lap());
-
             #[cfg(target_arch = "wasm32")]
             let _ = ic_cdk::call::Call::bounded_wait(
                 ic_cdk::api::canister_self(),
@@ -571,6 +569,12 @@ impl NodeRewardsCanister {
             )
             .await
             .unwrap();
+
+            // Lapped after the self-call rather than before it: issuing the call is itself part of
+            // the message that the call ends, and the counter keeps accumulating across the
+            // boundary, so reading it here closes the measurement where the message actually
+            // ended.
+            max_message_instructions = max_message_instructions.max(instruction_counter.lap());
         }
 
         telemetry::PROMETHEUS_METRICS.with_borrow_mut(|metrics| {

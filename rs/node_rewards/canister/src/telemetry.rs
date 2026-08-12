@@ -275,11 +275,16 @@ mod tests {
         let mut metrics = PrometheusMetrics::default();
         assert_eq!(metrics.last_get_node_providers_rewards_success, 0.0);
 
+        // Bracketed rather than compared to a single later reading: off wasm the clock is the real
+        // one, so the mark and that reading can land either side of a second boundary.
+        let before = now_seconds();
         metrics.mark_last_get_node_providers_rewards_success();
+        let after = now_seconds();
 
-        assert_eq!(
-            metrics.last_get_node_providers_rewards_success,
-            now_seconds()
+        let marked = metrics.last_get_node_providers_rewards_success;
+        assert!(
+            (before..=after).contains(&marked),
+            "marked {marked}, which is outside {before}..={after}"
         );
     }
 }
