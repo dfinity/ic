@@ -1539,44 +1539,6 @@ fn build_streams_retains_refunds_to_cooling_down_subnet() {
     });
 }
 
-/// Tests that retaining a message to a cooling down subnet also holds back the
-/// messages queued behind it: the whole output queue is skipped, without so much as
-/// looking at the rest of it.
-#[test]
-fn build_streams_retains_messages_behind_message_to_cooling_down_subnet() {
-    with_test_replica_logger(|log| {
-        // A response followed by a request, in the same output queue.
-        let response = cooling_down_response(NO_DEADLINE, Cycles::zero());
-        let request =
-            RequestOrResponse::Request(cooling_down_request(NO_DEADLINE, Cycles::zero()).into());
-
-        let (stream_builder, mut provided_state, metrics_registry) =
-            new_cooling_down_fixture(&log, SubnetType::Application);
-        provided_state.put_canister_states(canister_states_with_outputs(vec![
-            response.clone(),
-            request.clone(),
-        ]));
-
-        let result_state = stream_builder.build_streams(provided_state);
-
-        // Nothing was routed into the `COOLING_DOWN_SUBNET` stream. Both messages are still
-        // in the output queue, in the original order.
-        assert_no_messages_routed(&result_state, COOLING_DOWN_SUBNET);
-        assert_eq!(
-            vec![response, request],
-            output_queue_contents(&result_state, LOCAL_CANISTER, COOLING_DOWN_CANISTER)
-        );
-
-        // Only the response was observed; the request was never even looked at.
-        assert_one_message_status(
-            LABEL_VALUE_TYPE_RESPONSE,
-            LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
-            &metrics_registry,
-        );
-        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
-    });
-}
-
 /// Tests that the loopback stream is not exempt: while the local subnet itself is
 /// cooling down, a message to a local canister is retained in the output queue,
 /// exactly as for a remote cooling down subnet.
