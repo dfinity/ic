@@ -75,12 +75,17 @@ fn should_not_fund_a_sweeper_above_the_low_water_mark() {
     setup.mine(3);
     setup.mint_cketh(setup.fee_account(), FEE_ACCOUNT_BALANCE);
 
+    // Captured before the timers are re-armed, not after: the post-upgrade check runs on a
+    // zero-delay timer, so a minter that wrongly funded could burn before these queries returned
+    // and both assertions below would then compare against an already-debited state — passing
+    // precisely when the behaviour they reject had happened.
+    let supply_before = setup.cketh_total_supply();
+    let fee_account_before = setup.cketh_balance_of(setup.fee_account());
+
     // The next scheduled check is a whole interval away, so re-arm the timers: from here a funding
     // could succeed, and the point is that it declines.
     setup.upgrade_minter();
 
-    let supply_before = setup.cketh_total_supply();
-    let fee_account_before = setup.cketh_balance_of(setup.fee_account());
     let start = std::time::Instant::now();
     while start.elapsed() <= OBSERVATION_WINDOW {
         std::thread::sleep(Duration::from_secs(10));
