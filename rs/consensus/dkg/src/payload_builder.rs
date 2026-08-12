@@ -56,6 +56,7 @@ pub fn create_payload(
     pool_reader: &PoolReader<'_>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     parent: &Block,
+    last_summary_block: &Block,
     state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
@@ -63,10 +64,6 @@ pub fn create_payload(
     dkg_payload_metrics: Option<&DkgPayloadMetrics>,
 ) -> Result<DkgPayload, DkgPayloadCreationError> {
     let height = parent.height.increment();
-    // Get the last summary from the chain.
-    let last_summary_block = pool_reader
-        .dkg_summary_block(parent)
-        .ok_or(DkgPayloadCreationError::MissingDkgStartBlock)?;
     let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
 
     if last_dkg_summary.get_next_start_height() == height {
@@ -96,7 +93,7 @@ pub fn create_payload(
             dkg_pool,
             parent,
             max_dealings_per_block,
-            &last_summary_block,
+            last_summary_block,
             last_dkg_summary,
             crypto,
             state_reader,

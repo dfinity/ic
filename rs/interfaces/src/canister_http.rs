@@ -58,6 +58,15 @@ pub enum InvalidCanisterHttpPayloadReason {
         spent: Cycles,
         limit: Cycles,
     },
+    /// A share claims a `content_size` larger than the largest response the replica
+    /// could have produced, i.e. [`CanisterHttpRequestContext::max_http_outcall_content_size`].
+    ///
+    /// [`CanisterHttpRequestContext::max_http_outcall_content_size`]: ic_types::canister_http::CanisterHttpRequestContext::max_http_outcall_content_size
+    ContentSizeExceedsLimit {
+        callback_id: CallbackId,
+        content_size: u32,
+        limit: u64,
+    },
     /// The collective initial spent cycles included in the payload do not match
     /// the value recomputed from the request context's subnet size and the
     /// signed per-replica receipts.
@@ -67,6 +76,15 @@ pub enum InvalidCanisterHttpPayloadReason {
         received: Cycles,
         /// The initial spend the validator recomputed and expected.
         expected: Cycles,
+    },
+    /// The collective initial spent cycles of a response exceed the collective
+    /// allowance of the replicas that contributed to it, i.e. the sum of their
+    /// per-replica allowances.
+    InitialSpentExceedsLimit {
+        callback_id: CallbackId,
+        initial_spent: Cycles,
+        per_replica_allowance: Cycles,
+        num_replicas: usize,
     },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
@@ -143,6 +161,29 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
     FlexibleResponsesNotTooLarge(CallbackId),
+    /// A figure an OutOfCycles error reports to the caller does not match the value
+    /// recomputed from the request context and the signed receipts.
+    FlexibleOutOfCyclesFigureMismatch {
+        callback_id: CallbackId,
+        field: &'static str,
+        /// The figure received in the payload.
+        received: Cycles,
+        /// The figure the validator recomputed and expected.
+        expected: Cycles,
+    },
+    /// An OutOfCycles error is invalid: what is left of the committee's
+    /// per-replica allowances can still cover the cost of delivering a response.
+    FlexibleNotOutOfCycles {
+        callback_id: CallbackId,
+        /// The committee's collective allowance that is still unspent, assuming
+        /// that every committee member that has not reported a spend yet has
+        /// spent nothing; or `None` if the outcall has no per-replica allowance to
+        /// spend in the first place, and so none to run out of.
+        unspent_allowance: Option<Cycles>,
+        /// The least it can cost to deliver a response, or `None` if no response
+        /// can be delivered any more, in which case there is no cost to cover.
+        min_cost: Option<Cycles>,
+    },
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
 }

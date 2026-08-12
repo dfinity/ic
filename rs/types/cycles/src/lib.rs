@@ -11,8 +11,8 @@ pub use cycles_account_manager_subnet_config::CyclesAccountManagerSubnetConfig;
 pub use cycles_cost_schedule::CanisterCyclesCostSchedule;
 pub use cycles_use_case::{
     BurnedCycles, CanisterCreation, ComputeAllocation, CyclesUseCase, CyclesUseCaseKind,
-    CyclesUseCaseRefundableKind, DeletedCanisters, DroppedMessages, ECDSAOutcalls, HTTPOutcalls,
-    IngressInduction, Instructions, Memory, RequestAndResponseTransmission, SchnorrOutcalls,
-    Uninstall, VetKd,
+    CyclesUseCaseNonRefundableKind, CyclesUseCaseRefundableKind, DeletedCanisters, DroppedMessages,
+    ECDSAOutcalls, HTTPOutcalls, IngressInduction, Instructions, Memory,
+    RequestAndResponseTransmission, SchnorrOutcalls, Uninstall, VetKd,
 };
 pub use nominal_cycles::{NominalCycles, testing::NominalCyclesTesting};
