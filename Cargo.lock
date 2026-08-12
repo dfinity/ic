@@ -7536,7 +7536,6 @@ dependencies = [
  "ic-artifact-pool",
  "ic-canonical-state",
  "ic-canonical-state-tree-hash",
- "ic-config",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-test-utils-crypto-returning-ok",

@@ -25,7 +25,6 @@ slog = { workspace = true }
 assert_matches = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../mocks" }
-ic-config = { path = "../../config" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-test-artifact-pool = { path = "../../test_utilities/artifact_pool" }
