@@ -95,11 +95,17 @@ impl From<u64> for Cycles {
 
 /// Decodes `Cycles` from their little-endian representation, as produced by
 /// `From<Cycles> for Vec<u8>`. Fails if `bytes` is not exactly 16 bytes long.
-impl TryFrom<&[u8]> for Cycles {
+///
+/// Takes a `&Vec<u8>` rather than a `&[u8]` because that is what all callers
+/// hold, and a `&[u8]` impl alone would force each of them to spell out an
+/// `as_slice()`. A blanket `impl<T: AsRef<[u8]>>` covering both is not
+/// possible: it would conflict with the `impl<T, U: Into<T>> TryFrom<U> for T`
+/// in `core`.
+impl TryFrom<&Vec<u8>> for Cycles {
     type Error = TryFromSliceError;
 
-    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self::new(u128::from_le_bytes(bytes.try_into()?)))
+    fn try_from(bytes: &Vec<u8>) -> Result<Self, Self::Error> {
+        Ok(Self::new(u128::from_le_bytes(bytes.as_slice().try_into()?)))
     }
 }
 
@@ -221,7 +227,7 @@ impl TryFrom<PbCycles> for Cycles {
     type Error = ProxyDecodeError;
 
     fn try_from(item: PbCycles) -> Result<Self, Self::Error> {
-        try_from_le_bytes(&item.raw_cycles)
+        try_from_le_bytes(item.raw_cycles)
     }
 }
 
@@ -237,14 +243,14 @@ impl TryFrom<pbCyclesAccount> for Cycles {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pbCyclesAccount) -> Result<Self, Self::Error> {
-        try_from_le_bytes(&value.cycles_balance)
+        try_from_le_bytes(value.cycles_balance)
     }
 }
 
 /// Decodes `Cycles` from the little-endian representation used by the protobuf
 /// encodings above, mapping a length mismatch onto a `ProxyDecodeError`.
-fn try_from_le_bytes(bytes: &[u8]) -> Result<Cycles, ProxyDecodeError> {
-    Cycles::try_from(bytes).map_err(|_| ProxyDecodeError::ValueOutOfRange {
+fn try_from_le_bytes(bytes: Vec<u8>) -> Result<Cycles, ProxyDecodeError> {
+    Cycles::try_from(&bytes).map_err(|_| ProxyDecodeError::ValueOutOfRange {
         typ: "Cycles",
         err: format!("expected 16 bytes, got {}", bytes.len()),
     })
@@ -397,14 +403,14 @@ mod test {
         for cycles in [Cycles::zero(), Cycles::new(1), Cycles::new(u128::MAX)] {
             let bytes: Vec<u8> = cycles.into();
             assert_eq!(bytes.len(), 16);
-            assert_eq!(Cycles::try_from(bytes.as_slice()).unwrap(), cycles);
+            assert_eq!(Cycles::try_from(&bytes).unwrap(), cycles);
         }
     }
 
     #[test]
     fn test_try_from_le_bytes_of_wrong_length_fails() {
         for len in [0, 15, 17] {
-            assert!(Cycles::try_from(vec![0; len].as_slice()).is_err());
+            assert!(Cycles::try_from(&vec![0; len]).is_err());
         }
     }
 
