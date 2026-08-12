@@ -115,11 +115,9 @@ impl Records {
     }
 
     /// Appends all records from `other` to `self`, making sure the size limit is respected.
-    ///
-    /// The caller must have trimmed `other` to `self.byte_capacity` beforehand (see
-    /// `trim_to_capacity`), otherwise `self` would exceed its own capacity: making
-    /// free space in `self` cannot compensate for an oversized `other`.
     fn append(&mut self, other: &mut Self) {
+        // The caller must have trimmed `other` to `self.byte_capacity` beforehand (see
+        // `trim_to_capacity`).
         debug_assert!(other.bytes_used <= self.byte_capacity);
         self.make_free_space_within_limit(other.bytes_used);
         self.records.append(&mut other.records);
@@ -292,9 +290,7 @@ impl CanisterLog {
 
         // Assume records sorted chronologically (with increasing idx): the new next
         // index is the one following the delta's last record. Read here and not after
-        // the trimming below, as that may drop every single delta record (if the
-        // capacity is too small to hold even one), while the next index has to
-        // advance past dropped records just the same.
+        // the trimming below, as that may drop some or even all delta records.
         let next_idx = delta_log
             .records
             .get()
@@ -311,11 +307,10 @@ impl CanisterLog {
         match delta_log.records.get().front() {
             // The delta continues where the aggregate left off, keep both.
             Some(first) if first.idx <= self.next_idx => {}
-            // Either records were evicted (by the delta itself or by the trimming
+            // Records were evicted (by the delta itself or by the trimming
             // above), leaving a gap between the aggregate's next expected index and
-            // the delta's first record, or the trimming dropped every single delta
-            // record — the delta was not empty here, see the early return above.
-            // Either way, drop the aggregate records to maintain index continuity.
+            // the delta's first record. Drop the aggregate records to maintain
+            // index continuity.
             _ => self.records.clear(),
         }
 
