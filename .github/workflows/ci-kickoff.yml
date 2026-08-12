@@ -5,9 +5,7 @@ on:
   push:
     branches:
       - master
-      - feat-ai-on-engines # special protected long-lived feature branch for experimenting with AI on cloud engines.
       - 'dev-gh-*'
-      - 'public-hotfix-*'
   pull_request:
     branches-ignore:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing

@@ -127,7 +127,7 @@ impl AutomaticDeposits {
             let due = match request.last_scanned_block {
                 None => true,
                 Some(last_scanned_block) => {
-                    let index = request.scan_count as usize;
+                    let index = (request.scan_count as usize).saturating_sub(1);
                     index < SCAN_GAP_SECS.len() && {
                         let elapsed_blocks = latest_block
                             .checked_sub(last_scanned_block)
@@ -147,6 +147,17 @@ impl AutomaticDeposits {
     /// currently armed (absent or expired as of `now`).
     pub fn get_entry(&self, now: Timestamp, account: &Account) -> Option<&Entry<DepositRequest>> {
         self.watchlist.get_entry(now, account)
+    }
+
+    /// Record that `account`'s deposit address was scanned at `block`, advancing it along the
+    /// backoff schedule (`last_scanned_block = block`, `scan_count += 1`). No-op if the account is
+    /// no longer live as of `now` (expired or evicted).
+    // TODO DEFI-2923: move the watched address with balance to a separate queue for sweeping.
+    pub fn record_scan(&mut self, now: Timestamp, account: &Account, block: BlockNumber) {
+        if let Some(request) = self.watchlist.get_value_mut(now, account) {
+            request.last_scanned_block = Some(block);
+            request.scan_count = request.scan_count.saturating_add(1);
+        }
     }
 
     /// Full snapshot of the watchlist, faithful enough to reconstruct it exactly
@@ -170,6 +181,10 @@ impl AutomaticDeposits {
             capacity: self.watchlist.capacity().get() as u64,
             registrations,
         }
+    }
+
+    pub fn watchlist_len(&self) -> usize {
+        self.watchlist.len()
     }
 }
 

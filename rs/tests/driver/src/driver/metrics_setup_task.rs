@@ -54,7 +54,7 @@ pub(crate) fn metrics_setup_task(group_ctx: GroupContext) {
 
     info!(logger, "Setting up PrometheusVm ...");
 
-    PrometheusVm::default()
+    PrometheusVm::new(&env)
         .with_required_host_features(host_features)
         .with_resource_overrides(vm_resource_overrides)
         .with_scrape_interval(prometheus_scrape_interval)
