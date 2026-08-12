@@ -483,6 +483,7 @@ mod tests {
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
     use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2, SUBNET_3};
     use rstest::rstest;
+    use std::collections::BTreeSet;
     use std::sync::{Arc, RwLock};
 
     fn assert_cup_share_matches_block_and_state(
@@ -1009,29 +1010,18 @@ mod tests {
     // In this test the subnet initially has 4 nodes, and after the split `NODE_1, NODE_2` will stay
     // in the original subnet, and `NODE_3, NODE_4` will be moved to a new one.
     #[rstest]
-    #[case::source_subnet_node(
-        NODE_1,
-        "d5a517cd0906e1d36b43edf4103ef9b0dfb0e6892a87712ce5ed6602bfa5c97e"
-    )]
-    #[case::source_subnet_node(
-        NODE_2,
-        "d5a517cd0906e1d36b43edf4103ef9b0dfb0e6892a87712ce5ed6602bfa5c97e"
-    )]
-    #[case::destination_subnet_node(
-        NODE_3,
-        "e8614bf48bba176a546186f90e7cfc02ec573e4b87296e9d73a70547ca168416"
-    )]
-    #[case::destination_subnet_node(
-        NODE_4,
-        "e8614bf48bba176a546186f90e7cfc02ec573e4b87296e9d73a70547ca168416"
-    )]
+    #[case::source_subnet_node(NODE_1, SOURCE_SUBNET_ID, &[NODE_1, NODE_2])]
+    #[case::source_subnet_node(NODE_2, SOURCE_SUBNET_ID, &[NODE_1, NODE_2])]
+    #[case::destination_subnet_node(NODE_3, DESTINATION_SUBNET_ID, &[NODE_3, NODE_4])]
+    #[case::destination_subnet_node(NODE_4, DESTINATION_SUBNET_ID, &[NODE_3, NODE_4])]
     #[trace]
     fn create_post_split_cup_share_test(
         #[case] node_id: NodeId,
-        // We don't necessarily care what the hash is, but we want to ensure that different
-        // nodes produce different blocks (and hence different hashes), depending on which subnet
-        // they are going to land on
-        #[case] expected_block_hash_in_cup: &str,
+        // The subnet the node lands on after the split, which determines the block it puts into
+        // the CUP
+        #[case] expected_new_subnet_id: SubnetId,
+        // The membership of `expected_new_subnet_id` after the split
+        #[case] expected_committee: &[NodeId],
         #[values(Height::new(0), Height::new(1000))] context_certified_height: Height,
     ) {
         with_test_replica_logger(|log| {
@@ -1103,7 +1093,7 @@ mod tests {
                     crypto,
                     state_manager,
                     message_routing,
-                    registry,
+                    registry.clone(),
                     log,
                 );
 
@@ -1135,10 +1125,43 @@ mod tests {
 
                 assert!(share.check_integrity());
                 assert_eq!(share.content.version, *proposal.content.version());
-                assert_eq!(
-                    hex::encode(&share.content.block.get().0),
-                    expected_block_hash_in_cup
-                );
+
+                // The share only carries the hash of the CUP block, so instead of pinning that
+                // hash we re-derive the two blocks the node could have chosen from, and check that
+                // it chose the one belonging to the subnet it lands on.
+                let post_split_block = |subnet_id| {
+                    create_post_split_summary_block(
+                        proposal.content.as_ref(),
+                        subnet_id,
+                        registry.as_ref(),
+                    )
+                    .expect("Should be able to create a post split block")
+                };
+                let other_subnet_id = if expected_new_subnet_id == SOURCE_SUBNET_ID {
+                    DESTINATION_SUBNET_ID
+                } else {
+                    SOURCE_SUBNET_ID
+                };
+                let expected_block = post_split_block(expected_new_subnet_id);
+                let other_block = post_split_block(other_subnet_id);
+
+                // The DKG transcripts of the post-split block are the ones of the subnet the node
+                // lands on, i.e. their committee is that subnet's membership ...
+                let expected_committee =
+                    expected_committee.iter().copied().collect::<BTreeSet<_>>();
+                for tag in [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold] {
+                    assert_eq!(
+                        get_current_transcript_from_summary_block(&expected_block, &tag)
+                            .expect("Post split block should contain a current transcript")
+                            .committee
+                            .get(),
+                        &expected_committee,
+                    );
+                }
+                // ... which is why nodes landing on different subnets create different blocks.
+                assert_ne!(crypto_hash(&expected_block), crypto_hash(&other_block));
+
+                assert_eq!(share.content.block, crypto_hash(&expected_block));
                 assert_eq!(
                     share.content.random_beacon.get_value().content.height,
                     proposal.content.height() + INTERVAL_LENGTH + Height::new(1),
