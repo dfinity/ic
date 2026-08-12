@@ -16,9 +16,9 @@
 use crate::consensus::status;
 use ic_consensus_dkg::payload_builder::get_post_split_dkg_summary;
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
-    get_current_transcript_from_summary_block, get_oldest_state_registry_version,
-    membership::Membership, pool_reader::PoolReader, subnet_splitting,
+    crypto::ConsensusCrypto, get_current_transcript_from_summary_block,
+    get_oldest_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    subnet_splitting,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
@@ -31,14 +31,13 @@ use ic_types::{
     NodeId, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block, BlockPayload, CatchUpContent, CatchUpPackage, CatchUpPackageShare,
-        CatchUpShareContent, HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon, Payload,
-        RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
+        Block, BlockPayload, CatchUpContent, CatchUpPackageShare, CatchUpShareContent, HasHeight,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeacon, RandomBeaconContent, Rank,
+        SummaryPayload, catchup::CatchUpPackageType,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
-        crypto_hash,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
+        crypto_hash, threshold_sig::ni_dkg::NiDkgTag,
     },
     replica_config::ReplicaConfig,
     signature::ThresholdSignature,
@@ -54,17 +53,6 @@ pub(crate) struct CatchUpPackageMaker {
     message_routing: Arc<dyn MessageRouting>,
     registry: Arc<dyn RegistryClient>,
     log: ReplicaLogger,
-}
-
-/// Type of [`CatchUpPackage`].
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(crate) enum CatchUpPackageType {
-    Normal,
-    /// After deliverying a splitting block to the DSM, we immediately create a CUP at the start of
-    /// the next dkg interval and we create a new summary block and a dummy random beacon on the fly.
-    PostSplit {
-        new_subnet_id: SubnetId,
-    },
 }
 
 impl CatchUpPackageMaker {
@@ -276,66 +264,67 @@ impl CatchUpPackageMaker {
 
         let cup_block = self
             .get_cup_block(start_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Can't get a block for a CUP: {err}"))
+            .inspect_err(|err| warn!(self.log, "Could't get a block for a CUP: {err}"))
             .ok()?;
+
+        let height = cup_block.height();
 
         let random_beacon = self
             .get_cup_random_beacon(pool, &cup_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Can't get a random beacon for a CUP: {err}"))
+            .inspect_err(|err| warn!(self.log, "Could't get a random beacon for a CUP: {err}"))
             .ok()?;
 
-        let high_dkg_id = self
-            .get_high_dkg_id(pool, &cup_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Can't get a high dkg id for a CUP: {err}"))
-            .ok()?;
+        let high_threshold_transcript =
+            get_current_transcript_from_summary_block(&cup_block, &NiDkgTag::HighThreshold)
+                .or_else(|| {
+                    warn!(self.log, "Could't find transcript at height {height}");
+                    None
+                })?;
 
-        if !self
-            .node_belongs_to_threshold_committee(&cup_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Can't check if node belongs to committee: {err}"))
-            .unwrap_or_default()
+        let my_node_id = self.replica_config.node_id;
+        if !high_threshold_transcript
+            .committee
+            .get()
+            .contains(&my_node_id)
         {
             return None;
         }
 
         // Skip if this node has already made a share
         if pool
-            .get_catch_up_package_shares(cup_block.height())
-            .any(|share| share.signature.signer == self.replica_config.node_id)
+            .get_catch_up_package_shares(height)
+            .any(|share| share.signature.signer == my_node_id)
         {
             return None;
         }
 
+        let high_dkg_id = high_threshold_transcript.dkg_id.clone();
         let content = CatchUpContent::new(
             HashedBlock::new(ic_types::crypto::crypto_hash, cup_block),
             HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
             state_hash,
             oldest_registry_version_in_use_by_replicated_state,
         );
-
         let share_content = CatchUpShareContent::from(&content);
-        let share_height = share_content.height();
-        match self
+        let signature = self
             .crypto
-            .sign(&content, self.replica_config.node_id, high_dkg_id)
-        {
-            Ok(signature) => {
-                info!(
-                    self.log,
-                    "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {share_height}"
-                );
-                Some(CatchUpPackageShare {
-                    content: share_content,
-                    signature,
-                })
-            }
-            Err(err) => {
+            .sign(&content, my_node_id, high_dkg_id)
+            .inspect_err(|err| {
                 error!(
                     self.log,
-                    "Couldn't create a signature at height {share_height}: {err}"
-                );
-                None
-            }
-        }
+                    "Couldn't create a signature at height {height}: {err}"
+                )
+            })
+            .ok()?;
+
+        info!(
+            self.log,
+            "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {height}"
+        );
+        Some(CatchUpPackageShare {
+            content: share_content,
+            signature,
+        })
     }
 
     fn get_cup_block(
@@ -367,65 +356,6 @@ impl CatchUpPackageMaker {
             // During subnet splitting we create a dummy, unsigned random beacon, because at the
             // height at which we are building a CUP, we won't have a random beacon.
             CatchUpPackageType::PostSplit { .. } => create_post_split_random_beacon(cup_block),
-        }
-    }
-
-    fn get_high_dkg_id(
-        &self,
-        pool: &PoolReader<'_>,
-        cup_block: &Block,
-        cup_type: CatchUpPackageType,
-    ) -> Result<NiDkgId, String> {
-        // TODO: can we always take the transcript from the block?
-        match cup_type {
-            CatchUpPackageType::Normal => {
-                active_high_threshold_nidkg_id(pool.as_cache(), cup_block.height).ok_or_else(|| {
-                    format!("Couldn't find transcript at height {}", cup_block.height)
-                })
-            }
-            CatchUpPackageType::PostSplit { .. } => {
-                match get_current_transcript_from_summary_block(cup_block, &NiDkgTag::HighThreshold)
-                {
-                    Some(transcript) => Ok(transcript.dkg_id.clone()),
-                    None => Err(format!(
-                        "Couldn't find post-split transcript at height {}",
-                        cup_block.height
-                    )),
-                }
-            }
-        }
-    }
-
-    fn node_belongs_to_threshold_committee(
-        &self,
-        cup_block: &Block,
-        cup_type: CatchUpPackageType,
-    ) -> Result<bool, String> {
-        // TODO: can we always take the transcript from the block?
-        match cup_type {
-            CatchUpPackageType::Normal => self
-                .membership
-                .node_belongs_to_threshold_committee(
-                    self.replica_config.node_id,
-                    cup_block.height,
-                    CatchUpPackage::committee(),
-                )
-                .map_err(|err| {
-                    format!("Failed to check if node belongs to threshold committee {err:?}")
-                }),
-            CatchUpPackageType::PostSplit { .. } => {
-                match get_current_transcript_from_summary_block(cup_block, &NiDkgTag::HighThreshold)
-                {
-                    Some(transcript) => Ok(transcript
-                        .committee
-                        .get()
-                        .contains(&self.replica_config.node_id)),
-                    None => Err(format!(
-                        "Couldn't find post-split transcript at height {}",
-                        cup_block.height
-                    )),
-                }
-            }
         }
     }
 }

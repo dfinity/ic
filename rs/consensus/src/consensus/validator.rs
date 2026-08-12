@@ -2,9 +2,7 @@
 //! artifacts.
 #![allow(clippy::result_large_err)]
 use crate::consensus::{
-    ConsensusMessageId,
-    catchup_package_maker::{self, CatchUpPackageType},
-    check_protocol_version,
+    ConsensusMessageId, catchup_package_maker, check_protocol_version,
     metrics::ValidatorMetrics,
     status::{self, Status},
 };
@@ -42,6 +40,7 @@ use ic_types::{
         EquivocationProof, FinalizationContent, HasBlockHash, HasCommittee, HasHash, HasHeight,
         HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare,
         RandomTape, RandomTapeShare, Rank,
+        catchup::CatchUpPackageType,
         dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
     },
     crypto::{
@@ -1785,9 +1784,15 @@ impl Validator {
                 "Failed to determine the cup type: {err}"
             ))
         })? {
-            CatchUpPackageType::PostSplit { new_subnet_id }
-                if dkg_summary.get_next_start_height() == share_height =>
-            {
+            CatchUpPackageType::PostSplit { new_subnet_id } => {
+                // Post-split CUPs should be produced on the fly skipping one interval past the
+                // last summary
+                if dkg_summary.get_next_start_height() != share_height {
+                    return Err(
+                        InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare.into(),
+                    );
+                }
+
                 let post_split_block = catchup_package_maker::create_post_split_summary_block(
                     &dkg_summary_block,
                     new_subnet_id,
@@ -1803,13 +1808,7 @@ impl Validator {
 
                 (post_split_block, post_split_random_beacon, state_height)
             }
-            // We don't produce CUPs for the height at which a subnet splitting is happening.
-            CatchUpPackageType::PostSplit { .. } if dkg_summary.height == share_height => {
-                return Err(
-                    InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare.into(),
-                );
-            }
-            CatchUpPackageType::PostSplit { .. } | CatchUpPackageType::Normal => {
+            CatchUpPackageType::Normal => {
                 let block = pool_reader
                     .get_finalized_block(share_height)
                     .ok_or(ValidationFailure::FinalizedBlockNotFound(share_height))?;

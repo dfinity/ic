@@ -89,6 +89,10 @@ pub fn get_status(
     })
 }
 
+/// Returns the `SplittingArgs` if the given summary block has a scheduled subnet split, or `None`
+/// otherwise.
+/// To be used in conjunction with `get_post_split_subnet_assignment` to determine the post-split
+/// subnet assignment of a node.
 pub fn is_split_scheduled(summary_block: &Block) -> Option<SplittingArgs> {
     match summary_block
         .payload
@@ -118,6 +122,8 @@ pub enum PostSplitAssignmentError {
     DisallowedMembershipChange(SubnetId),
 }
 
+/// Returns the subnet assignment of a node after a subnet split, given the `Scheduled` summary
+/// block
 pub fn get_post_split_subnet_assignment(
     node_id: NodeId,
     summary_block: &Block,
@@ -127,16 +133,30 @@ pub fn get_post_split_subnet_assignment(
         source_subnet_id,
     }: SplittingArgs,
 ) -> Result<PostSplitAssignment, PostSplitAssignmentError> {
+    debug_assert!(matches!(
+        summary_block
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .subnet_splitting_status(),
+        SubnetSplittingStatus::Scheduled(..)
+    ));
+
+    // We determine the new subnet assignment of the node by looking up its subnet id in the
+    // registry at the registry version of the summary block's validation context because this will
+    // contain precisely the registry version at which the subnet split was scheduled to happen.
+    let looked_up_registry_version = summary_block.context.registry_version;
     let new_subnet_id = registry_client
-        .get_subnet_id_from_node_id(node_id, summary_block.context.registry_version)
+        .get_subnet_id_from_node_id(node_id, looked_up_registry_version)
         .map_err(|err| {
             PostSplitAssignmentError::FailedToGetSubnetIdFromTheRegistry(
-                summary_block.context.registry_version,
+                looked_up_registry_version,
                 err,
             )
         })?
         .ok_or(PostSplitAssignmentError::Unassigned(
-            summary_block.context.registry_version,
+            looked_up_registry_version,
         ))?;
 
     let other_subnet_id = if new_subnet_id == destination_subnet_id {

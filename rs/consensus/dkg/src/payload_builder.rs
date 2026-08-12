@@ -26,6 +26,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block,
+        catchup::CatchUpPackageType,
         dkg::{
             DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary, Message,
             PostSplitArgs, RemoteTranscriptResult, SubnetSplittingStatus,
@@ -582,7 +583,7 @@ pub fn get_dkg_summary_from_cup_contents(
         subnet_id,
         registry,
         registry_version,
-        SubnetSplittingStatus::default(),
+        CatchUpPackageType::Normal,
     )
 }
 
@@ -591,7 +592,7 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
-    _subnet_splitting_status: SubnetSplittingStatus,
+    cup_type: CatchUpPackageType,
 ) -> Result<DkgSummary, String> {
     // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
     // NNS we're recovering.
@@ -682,6 +683,14 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
             format!("Could not retrieve the interval length for the genesis summary: {err:?}")
         })?;
     let next_interval_length = interval_length;
+
+    let _subnet_splitting_status = match cup_type {
+        CatchUpPackageType::Normal => SubnetSplittingStatus::NotScheduled,
+        CatchUpPackageType::PostSplit { new_subnet_id } => {
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
+        }
+    };
+
     // TODO: Pass `subnet_splitting_status` when enabling subnet splitting
     Ok(DkgSummary::new(
         configs,
@@ -898,6 +907,8 @@ pub fn get_post_split_dkg_summary(
         last_summary.subnet_splitting_status(),
         SubnetSplittingStatus::Scheduled(..)
     ));
+
+    // The splitting CUP lives exactly at the `Scheduled` summary's context's registry version
     let registry_version = last_summary_block.context.registry_version;
 
     let mut cup_contents = registry
@@ -916,7 +927,7 @@ pub fn get_post_split_dkg_summary(
         new_subnet_id,
         registry,
         registry_version,
-        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }),
+        CatchUpPackageType::PostSplit { new_subnet_id },
     )
     .map_err(|err| format!("Failed to create post-split dkg summary from contents: {err}"))
 }

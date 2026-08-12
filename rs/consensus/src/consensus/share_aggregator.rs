@@ -2,10 +2,7 @@
 //! of shares into full objects. That is, it constructs Random Beacon objects
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
-use crate::consensus::{
-    catchup_package_maker::CatchUpPackageType,
-    random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE,
-};
+use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
     crypto::ConsensusCrypto, get_current_transcript_from_summary_block, membership::Membership,
@@ -19,6 +16,7 @@ use ic_types::{
     consensus::{
         Block, CatchUpContent, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable,
         FinalizationContent, HasCommittee, HasHeight, RandomTapeContent,
+        catchup::CatchUpPackageType,
     },
     crypto::threshold_sig::ni_dkg::NiDkgTag,
     replica_config::ReplicaConfig,
