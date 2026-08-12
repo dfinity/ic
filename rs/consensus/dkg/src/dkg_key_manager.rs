@@ -614,7 +614,7 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, DependenciesBuilder, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -630,23 +630,15 @@ mod tests {
     fn test_transcripts_get_loaded_and_retained() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let nodes: Vec<_> = (0..1).map(node_test_id).collect();
                 let dkg_interval_len = 3;
                 let Dependencies {
                     mut pool,
                     registry,
                     replica_config,
                     ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(222),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&nodes)
-                            .with_dkg_interval_length(dkg_interval_len)
-                            .build(),
-                    )],
-                );
+                } = DependenciesBuilder::new(pool_config, 1)
+                    .with_dkg_interval_length(dkg_interval_len)
+                    .build();
                 let csp = Arc::new(CryptoReturningOk::default());
                 let mut key_manager = DkgKeyManager::new(
                     MetricsRegistry::new(),
@@ -769,7 +761,7 @@ mod tests {
                     registry,
                     replica_config,
                     ..
-                } = DependenciesBuilder::new(
+                } = DependenciesBuilder::multiple_subnets(
                     pool_config,
                     vec![
                         (
@@ -788,7 +780,6 @@ mod tests {
                         ),
                     ],
                 )
-                .with_mocked_state_manager()
                 .build();
 
                 // Advance dkg_interval_len rounds so the finalized tip is at height

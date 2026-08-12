@@ -627,7 +627,7 @@ mod tests {
     use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
@@ -758,7 +758,8 @@ mod tests {
         const EXPECTED_CERTIFIED_HEIGHT: u64 = 10;
         const EXPECTED_FINALIZED_HEIGHT: u64 = 12;
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config.clone(), 1);
+            let Dependencies { mut pool, .. } =
+                DependenciesBuilder::new(pool_config.clone(), 1).build();
 
             let state_manager = Arc::new(RefMockStateManager::default());
             state_manager

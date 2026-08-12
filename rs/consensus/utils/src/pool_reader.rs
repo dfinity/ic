@@ -597,7 +597,7 @@ where
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces_registry::RegistryClient;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -606,18 +606,9 @@ pub mod test {
     fn test_get_dkg_summary_block() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
-            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(
-                        (0..1).map(node_test_id).collect::<Vec<_>>().as_slice(),
-                    )
-                    .with_dkg_interval_length(interval_length)
-                    .build(),
-                )],
-            );
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
+                .with_dkg_interval_length(interval_length)
+                .build();
 
             // Get the finalized block after skipping exactly one DKG interval.
             let height = pool.advance_round_normal_operation_n(interval_length + 1);
@@ -703,18 +694,9 @@ pub mod test {
     fn test_get_next_summary_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
-            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(
-                        (0..1).map(node_test_id).collect::<Vec<_>>().as_slice(),
-                    )
-                    .with_dkg_interval_length(interval_length)
-                    .build(),
-                )],
-            );
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
+                .with_dkg_interval_length(interval_length)
+                .build();
 
             // At genesis the highest finalized summary block is the genesis block.
             let next_summary_height = Height::from(interval_length + 1);
@@ -742,7 +724,7 @@ pub mod test {
     #[test]
     fn test_get_finalized_block_at_height_without_finalization() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let start = pool.make_next_block();
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(10));
             pool.insert_block_chain_with(start.clone(), Height::from(10));
@@ -767,18 +749,10 @@ pub mod test {
     #[test]
     fn test_get_notarized_finalized_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee = vec![node_test_id(0)];
             let interval_length = 4;
-            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                )],
-            );
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
+                .with_dkg_interval_length(interval_length)
+                .build();
             pool.advance_round_normal_operation_n(4);
             pool.prepare_round().dont_add_catch_up_package().advance();
             let block = pool.latest_notarized_blocks().next().unwrap();
@@ -804,7 +778,8 @@ pub mod test {
             let replicas = 10;
             let f = 3;
             let block_proposals_per_round = f + 1;
-            let Dependencies { mut pool, .. } = dependencies(pool_config, replicas);
+            let Dependencies { mut pool, .. } =
+                DependenciesBuilder::new(pool_config, replicas).build();
 
             // Because `TestConsensusPool::advance_round` alternates between
             // putting blocks in validated and unvalidated pools for each rank,
@@ -868,11 +843,12 @@ pub mod test {
                 registry,
                 replica_config,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(1, record.clone())],
-            );
+            )
+            .build();
             let subnet_id = replica_config.subnet_id;
             let pool_reader = PoolReader::new(&pool);
             // Right now we only have the genesis block. For the genesis interval and the

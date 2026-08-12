@@ -635,7 +635,7 @@ byteorder = "^1.3.4"
 bytes = "1.9.0"
 cached = { version = "0.49", default-features = false }
 canbench-rs = "0.7.0"
-candid = { version = "0.10.34" }
+candid = { version = "0.10.35" }
 candid_parser = { version = "0.1.2" }
 cargo_metadata = "^0.14.2"
 chrono = { version = "0.4.42", default-features = false, features = [
@@ -646,7 +646,9 @@ chrono = { version = "0.4.42", default-features = false, features = [
 ciborium = "0.2.2"
 clap = { version = "4.5.20", features = ["derive", "string"] }
 colored = "^2.0.0"
-comparable = { version = "0.5", features = ["derive"] }
+# Fork of `comparable` migrated to syn 2 (upstream still uses syn 1), so it no
+# longer forces a duplicate syn 1.0 into the dependency graph.
+comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496454f9e770389e2edc0d96e137a4e9", features = ["derive"] }
 crc32fast = "^1.2.0"
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
@@ -711,7 +713,7 @@ ic0 = "1.0.0"
 ic-agent = { version = "0.49.1", features = ["pem"] }
 ic-bn-lib = { version = "0.5.0", features = ["acme-alpn", "pubsub"] }
 ic-btc-interface = "0.4.0"
-ic-canister-runtime = "0.2.0"
+ic-canister-runtime = "0.2.3"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
 ic-cdk = "0.19.0"
@@ -742,7 +744,7 @@ ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
 indicatif = "^0.17.3"
-indoc = "1.0.9"
+indoc = "2.0.7"
 inferno = "0.12.0"
 inotify = { version = "0.11.2", default-features = false, features = [
     "stream",
@@ -765,7 +767,7 @@ leb128 = "0.2.5"
 libc = "0.2.158"
 log = "0.4"
 libcryptsetup-rs = "0.15"
-libflate = "2.1.0"
+libflate = "2.3.1"
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
@@ -811,7 +813,7 @@ pem = { version = "^3", default-features = false, features = ["std"] }
 pin-project-lite = "^0.2"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
-pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a", default-features = false, features = [
+pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771", default-features = false, features = [
     "criterion",
     "flamegraph",
     "prost-codec",
@@ -863,8 +865,8 @@ rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
 rusqlite = "0.37.0"
 rust-ini = "0.21.1"
-rust_decimal = "^1.36.0"
-rust_decimal_macros = "^1.36.0"
+rust_decimal = { version = "^1.42", default-features = false, features = ["serde"] }
+rust_decimal_macros = "^1.40"
 rustc-demangle = { version = "0.1.16" }
 rustc-hash = "^1.1.0"
 rustls = { version = "0.23.18", default-features = false, features = [
@@ -975,6 +977,7 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.26.4"
+warp = { version = "0.3.7", features = ["tls"] }
 wasm-encoder = { version = "0.252.0", features = ["wasmparser"] }
 wasm-smith = { version = "0.252.0", default-features = false, features = ["wasmparser"] }
 wasmparser = "0.252.0"
