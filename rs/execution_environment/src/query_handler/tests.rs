@@ -12,7 +12,7 @@ use ic_management_canister_types_private::{
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_state::CanisterStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
     NumInstructions,
     ingress::WasmResult,
@@ -1645,15 +1645,23 @@ fn composite_query_call_to_management_canister_from_callback_rejects_unknown_met
 // the request. Such a call is not executed as a management canister call by the
 // query handler; it is rejected with `CanisterNotFound` and, in particular, the
 // reject response is propagated to the caller.
-#[test]
-fn composite_query_call_to_own_subnet_id() {
-    let mut test = ExecutionTestBuilder::new().build();
+//
+// Outside of composite queries, such a call is only allowed for NNS canisters
+// and rejected for all other canisters, and hence both cases are covered here.
+fn composite_query_call_to_own_subnet_id_impl(own_subnet_is_nns: bool) {
+    let subnet_id = subnet_test_id(1);
+    let mut builder = ExecutionTestBuilder::new().with_own_subnet_id(subnet_id);
+    if own_subnet_is_nns {
+        builder = builder.with_nns_subnet_id(subnet_id);
+    }
+    let mut test = builder.build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let own_subnet_id = test.state().metadata.own_subnet_id;
-    // The caller is not an NNS canister.
-    assert_ne!(
-        own_subnet_id,
-        test.state().metadata.network_topology.nns_subnet_id
+    assert_eq!(own_subnet_id, subnet_id);
+    // The caller is an NNS canister if and only if the own subnet is the NNS subnet.
+    assert_eq!(
+        own_subnet_id == test.state().metadata.network_topology.nns_subnet_id,
+        own_subnet_is_nns
     );
 
     let reply = test
@@ -1672,6 +1680,16 @@ fn composite_query_call_to_own_subnet_id() {
         reply,
         WasmResult::Reply(format!("Canister {own_subnet_id} not found").into_bytes())
     );
+}
+
+#[test]
+fn composite_query_call_to_own_subnet_id() {
+    composite_query_call_to_own_subnet_id_impl(false);
+}
+
+#[test]
+fn composite_query_call_to_own_subnet_id_on_nns_subnet() {
+    composite_query_call_to_own_subnet_id_impl(true);
 }
 
 #[test]
