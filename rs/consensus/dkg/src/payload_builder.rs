@@ -714,7 +714,7 @@ pub(crate) fn get_configs_for_local_transcripts(
 
         let threshold =
             NumberOfNodes::from(tag.threshold_for_subnet_of_size(node_ids.len()) as u32);
-        let new_config = match NiDkgConfig::new(NiDkgConfigData {
+        let new_config = NiDkgConfig::new(NiDkgConfigData {
             dkg_id,
             max_corrupt_dealers: NumberOfNodes::from(get_faults_tolerated(dealers.len()) as u32),
             max_corrupt_receivers: NumberOfNodes::from(get_faults_tolerated(node_ids.len()) as u32),
@@ -723,10 +723,8 @@ pub(crate) fn get_configs_for_local_transcripts(
             threshold,
             registry_version,
             resharing_transcript,
-        }) {
-            Ok(config) => config,
-            Err(err) => unreachable!("Failed to create a DKG config: {:?}", err),
-        };
+        })
+        .map_err(DkgPayloadCreationError::InvalidDkgConfig)?;
         new_configs.push(new_config);
     }
 
@@ -741,10 +739,9 @@ fn get_dkg_interval_length(
     registry_client
         .get_dkg_interval_length(subnet_id, version)
         .map_err(DkgPayloadCreationError::FailedToGetDkgIntervalSettingFromRegistry)?
-        .ok_or_else(|| {
-            panic!(
-                "No subnet record found for registry version={version:?} and subnet_id={subnet_id:?}",
-            )
+        .ok_or(DkgPayloadCreationError::SubnetRecordNotFound {
+            subnet_id,
+            registry_version: version,
         })
 }
 
@@ -753,16 +750,14 @@ pub(crate) fn get_node_list(
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<BTreeSet<NodeId>, DkgPayloadCreationError> {
-    Ok(registry_client
+    registry_client
         .get_node_ids_on_subnet(subnet_id, registry_version)
         .map_err(DkgPayloadCreationError::FailedToGetSubnetMemberListFromRegistry)?
-        .unwrap_or_else(|| {
-            panic!(
-                "No subnet record found for registry version={registry_version:?} and subnet_id={subnet_id:?}",
-            )
+        .ok_or(DkgPayloadCreationError::SubnetRecordNotFound {
+            subnet_id,
+            registry_version,
         })
-        .into_iter()
-        .collect())
+        .map(|ids| ids.into_iter().collect())
 }
 
 /// Returns the set of remote target IDs for which at least one DKG instance

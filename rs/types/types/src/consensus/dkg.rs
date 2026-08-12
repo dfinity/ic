@@ -7,7 +7,7 @@ use crate::{
     backwards_compatibility::BackwardsCompatible,
     crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
-        config::NiDkgConfig,
+        config::{NiDkgConfig, errors::NiDkgConfigValidationError},
         errors::{
             create_transcript_error::DkgCreateTranscriptError,
             verify_dealing_error::DkgVerifyDealingError,
@@ -787,6 +787,13 @@ pub enum DkgPayloadCreationError {
     FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
     FailedToGetVetKdKeyList(RegistryClientError),
+    /// The registry returned `Ok(None)` — no subnet record exists at the given version.
+    SubnetRecordNotFound {
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    },
+    /// `NiDkgConfig::new` rejected the computed config parameters.
+    InvalidDkgConfig(NiDkgConfigValidationError),
 }
 
 /// Reasons for why a dkg payload might be invalid.
@@ -823,6 +830,11 @@ pub enum DkgPayloadValidationFailure {
     DkgVerifyDealingError(DkgVerifyDealingError),
     FailedToGetMaxDealingsPerBlock(RegistryClientError),
     FailedToGetRegistryVersion,
+    /// The registry returned `Ok(None)` — no subnet record exists at the given version.
+    SubnetRecordNotFound {
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    },
 }
 
 impl From<DkgVerifyDealingError> for InvalidDkgPayloadReason {

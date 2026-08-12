@@ -109,11 +109,10 @@ pub fn validate_payload(
             let max_dealings_per_block = registry_client
                 .get_dkg_dealings_per_block(subnet_id, registry_version)
                 .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
-                .unwrap_or_else(|| {
-                    panic!(
-                        "No subnet record found for registry version={registry_version} and subnet_id={subnet_id}"
-                    )
-                });
+                .ok_or(DkgPayloadValidationFailure::SubnetRecordNotFound {
+                    subnet_id,
+                    registry_version,
+                })?;
 
             validate_dealings_payload(
                 subnet_id,
