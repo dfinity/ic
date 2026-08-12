@@ -597,14 +597,14 @@ mod tests {
         let (committee, threshold) = (13, 9);
         let votes: Vec<_> = (0..13).map(|i| share(i, 1_000, 0)).collect();
 
-        // The 4 replicas that have not voted for it are exactly enough, together with
-        // the 4 still unseen, to lift some other response to 9 instead.
+        // With 4 shares for a response of non-zero size (thus cost), the remaining 9 unseen
+        // shares may all be for a response of size 0, so the cheapest deliverable response is still free.
         assert_eq!(
             min_non_flexible_consensus_cost(votes[..4].iter(), n, committee, threshold),
             Some(Cycles::zero())
         );
-        // One more vote and they are not: 9_490 * (181 + ...) -- no per-response
-        // overhead here, a single body is delivered: 9_490 * 1_000.
+        // One more share for the non-zero size response, and a zero size response may no longer
+        // reach majority: the cheapest deliverable response is now the one with non-zero size.
         assert_eq!(
             min_non_flexible_consensus_cost(votes[..5].iter(), n, committee, threshold),
             Some(Cycles::new(9_490_000))

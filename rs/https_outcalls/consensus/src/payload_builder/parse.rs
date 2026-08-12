@@ -130,7 +130,7 @@ pub(crate) fn parse_past_payload_ids(
         .collect()
 }
 
-/// Extracts the CanisterId (as u64) from a [`CanisterHttpResponseMessage`]
+/// Extracts the CallbackId (as u64) from a [`CanisterHttpResponseMessage`]
 fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
     match message.message_type {
         Some(MessageType::Response(response)) => response.response.map(|response| response.id),

@@ -1597,13 +1597,10 @@ fn out_of_cycles_reject_message(
 ) -> String {
     let total_spent: Cycles = shares.iter().map(|share| share.content.spent()).sum();
     format!(
-        "Out of cycles: {} of the assigned replicas reported a collective spend of {} cycles, \
-         leaving {} cycles of the attached payment (after base fee deduction). \
-         Delivering a response would cost at least {} cycles.",
+        "Out of cycles: {} of the assigned replicas reported a collective spend of {total_spent} cycles, \
+         leaving {unspent_allowance} cycles of the attached payment (after base fee deduction). \
+         Delivering a response would cost at least {min_cost} cycles.",
         shares.len(),
-        total_spent,
-        unspent_allowance,
-        min_cost,
     )
 }
 
