@@ -428,32 +428,15 @@ pub struct SubnetTopology {
     pub subnet_admins: BTreeSet<PrincipalId>,
 
     /// Whether the subnet is "cooling down", i.e. quiescing: it stops being sent new
-    /// messages and lets the messages already in flight drain (it keeps inducting and
-    /// executing those). While a subnet is cooling down:
+    /// messages and lets the messages already in flight drain.
+    /// While a subnet is cooling down:
     ///
-    ///  * Ingress messages addressed to it are rejected with
-    ///    `ErrorCode::SubnetCoolingDown` (`RejectCode::SysTransient`) by the ingress
-    ///    filter on the receiving nodes; they are excluded when building a block
-    ///    payload; and a block containing one is invalid. The filter reads the
-    ///    latest certified state, so it lags by the certification delay — payload
-    ///    building and validation are what make this binding.
-    ///  * Inter-canister messages and anonymous refunds addressed to it are not
-    ///    routed into a stream (not even the loopback stream, i.e. the subnet also
-    ///    holds back messages to itself). They are retained by the sender (in
-    ///    canister output queues and the refund pool, respectively) until it stops
-    ///    cooling down; retaining a message also holds back everything queued
-    ///    behind it. A message that must never cross an engine boundary is still
-    ///    handled by the engine boundary check instead, as it is illegal there
-    ///    permanently rather than transiently.
-    ///  * A sending subnet's own output queues are exempt: the responses it
-    ///    produced while draining its subnet queues are always routed, whether or
-    ///    not either subnet is cooling down. Retaining one would leave a cooling
-    ///    down subnet with work still to do, which is what cooling down is meant to
-    ///    avoid.
-    ///
-    /// Execution is left alone: the subnet keeps executing the messages it already
-    /// holds (that is what "letting them drain" means), including `Heartbeat` and
-    /// `GlobalTimer` tasks.
+    ///  * It inducts all messages from its incoming stream slices.
+    ///  * It inducts no ingress messages.
+    ///  * No subnet routes messages to its (outgoing) stream (incl. the loopback stream)
+    ///    to the subnet that is cooling down, except for messages (responses)
+    ///    in subnet output queues that are always routed into streams.
+    ///  * It keeps executing messages in its input queues.
     pub cooling_down: bool,
 }
 
