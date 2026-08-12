@@ -145,7 +145,6 @@ pub struct Hypervisor {
     compilation_cache: Arc<CompilationCache>,
     create_execution_state_base_cost: NumInstructions,
     cost_to_compile_wasm_instruction: NumInstructions,
-    dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
 }
 
@@ -267,7 +266,6 @@ impl Hypervisor {
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
-            dirty_page_overhead,
             canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
@@ -280,7 +278,6 @@ impl Hypervisor {
         wasm_executor: Arc<dyn WasmExecutor>,
         create_execution_state_base_cost: NumInstructions,
         cost_to_compile_wasm_instruction: NumInstructions,
-        dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
@@ -297,7 +294,6 @@ impl Hypervisor {
             ),
             create_execution_state_base_cost,
             cost_to_compile_wasm_instruction,
-            dirty_page_overhead,
             canister_guaranteed_callback_quota,
         }
     }
@@ -331,7 +327,19 @@ impl Hypervisor {
             execution_parameters.instruction_limits.message(),
             execution_parameters.instruction_limits.slice()
         );
-        let is_composite_query = matches!(api_type, ApiType::CompositeQuery { .. });
+        // Every execution that is part of a composite query, not just its entry
+        // point: the reply and reject callbacks can make calls themselves and so
+        // must route calls to the management canister in the same way. The cleanup
+        // callback cannot currently make calls at all (`ic0.call_new` is not
+        // available to it), but it is covered here so that the flag means "is part
+        // of a composite query" rather than "can currently make calls".
+        let is_composite_query = matches!(
+            api_type,
+            ApiType::CompositeQuery { .. }
+                | ApiType::CompositeReplyCallback { .. }
+                | ApiType::CompositeRejectCallback { .. }
+                | ApiType::CompositeCleanup { .. }
+        );
         let execution_result = self.execute_dts(
             api_type,
             &execution_state,
@@ -411,7 +419,6 @@ impl Hypervisor {
             system_state,
             *self.cycles_account_manager,
             network_topology,
-            self.dirty_page_overhead,
             execution_parameters.compute_allocation,
             available_callbacks,
             request_metadata,

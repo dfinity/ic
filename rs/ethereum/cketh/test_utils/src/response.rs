@@ -11,6 +11,24 @@ pub fn empty_logs() -> Vec<ethers_core::types::Log> {
     vec![]
 }
 
+/// Encode a deployless balance-batcher `eth_call` response: the `balances` as a flat
+/// concatenation of 32-byte words, exactly what the batcher's `RETURN` yields — one word per
+/// scanned `(address, token)` pair, in call order.
+///
+/// Encoded as a flat list of `Uint` tokens (not `Token::Array`, which would prepend an ABI
+/// offset+length header the batcher does not emit).
+pub fn balance_scan_response(balances: &[u128]) -> String {
+    use ethers_core::abi::{Token, encode};
+    use ethers_core::types::U256;
+    let words = encode(
+        &balances
+            .iter()
+            .map(|&balance| Token::Uint(U256::from(balance)))
+            .collect::<Vec<_>>(),
+    );
+    format!("0x{}", hex::encode(words))
+}
+
 pub fn multi_logs_for_single_transaction<Entry: Clone + Into<ethers_core::types::Log>>(
     log_entry: Entry,
     num_logs: usize,

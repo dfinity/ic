@@ -57,6 +57,9 @@ pub struct CanisterHttpPayloadBuilderMetrics {
     /// answered in the chain (i.e. shares that are still candidates for
     /// inclusion in a payload).
     pub active_shares: IntGauge,
+    /// The number of times the initial spent exceeds the limit under
+    /// legacy pricing.
+    pub initial_spent_exceeds_limit: IntCounter,
 }
 
 impl CanisterHttpPayloadBuilderMetrics {
@@ -77,6 +80,10 @@ impl CanisterHttpPayloadBuilderMetrics {
                 "canister_http_total_active_validated_shares",
                 "The total number of validated shares whose request has not already been answered in the chain."
             ),
+            initial_spent_exceeds_limit: metrics_registry.int_counter(
+                "canister_http_initial_spent_exceeds_limit",
+                "The number of times the initial spent exceeds the limit under legacy pricing."
+            )
         }
     }
 }

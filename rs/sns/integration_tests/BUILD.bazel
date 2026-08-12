@@ -37,7 +37,6 @@ BASE_DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:candid",
     "@crate_index//:maplit",
-    "@crate_index//:pretty-bytes",
     "@crate_index//:proptest",
     "@crate_index//:prost",
     "@crate_index//:rand",
@@ -123,7 +122,6 @@ rust_canister(
         "//rs/sns/governance",
         "//rs/types/base_types",
         "@crate_index//:ic-stable-structures",
-        "@crate_index//:pretty-bytes",
         "@crate_index//:prost",
         "@crate_index//:rand",
     ],
@@ -299,6 +297,8 @@ rust_ic_test_suite_with_extra_srcs(
     ]),
     exec_properties = {
         "cpu": "8",
+        # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
+        # so we need this Namespace.so-specific execution property to open up the network on RBE:
         "namespace_requires_network": "true",
     },
     extra_srcs = [],

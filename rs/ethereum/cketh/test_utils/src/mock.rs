@@ -24,6 +24,9 @@ pub struct MockJsonRpcProviders {
 #[allow(clippy::enum_variant_names)]
 #[derive(Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString)]
 pub enum JsonRpcMethod {
+    #[strum(serialize = "eth_call")]
+    EthCall,
+
     #[strum(serialize = "eth_getBlockByNumber")]
     EthGetBlockByNumber,
 

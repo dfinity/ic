@@ -84,7 +84,15 @@ rust_ic_test(
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
-    data = ["src/backtrace.c"],
+    # backtrace.c includes <libunwind.h>, which the hermetic toolchain's
+    # zero-sysroot clang does not provide in its default include path.
+    build_script_env = {
+        "CFLAGS": "-I$(execpath //bazel:libunwind_include)",
+    },
+    data = [
+        "src/backtrace.c",
+        "//bazel:libunwind_include",
+    ],
     deps = ["@crate_index//:cc"],
 )
 
