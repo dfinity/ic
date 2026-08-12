@@ -292,9 +292,9 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
         ],
     },
     // Second round: 50% for three months for the node providers that failed to respond within the
-    // 24h window in BOTH of the two most recent incident-response smoke tests (June 13 and July 27,
-    // 2026) — the same "two consecutive misses" rule as the first round, moved forward by one
-    // drill. A late (>24h) response counts as a failure. Providers from the round above that have
+    // 24h window in BOTH of the incident-response smoke tests of June 13 and July 27, 2026 — the
+    // same "two consecutive misses" rule as the first round, applied to the drill pair that follows
+    // it. A late (>24h) response counts as a failure. Providers from the round above that have
     // since recovered are deliberately absent here, so their reduction ends with that round's
     // window on 2026-10-15 and they are rewarded in full from the second half of October on.
     // Providers in both rounds are reduced continuously from 2026-07-15 to 2026-11-01 — at 50%,
