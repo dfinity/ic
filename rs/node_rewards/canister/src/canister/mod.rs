@@ -291,12 +291,23 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
             "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
         ],
     },
-    // Second round: 50% for three months for the node providers that failed the incident-response
-    // requirement in the follow-up review. Providers from the round above that have since recovered
-    // are deliberately absent here, so their reduction ends with that round's window on 2026-10-15
-    // and they are rewarded in full from the second half of October on. Providers in both rounds
-    // are reduced continuously from 2026-07-15 to 2026-11-01 — at 50%, not 25%, on the overlapping
-    // days.
+    // Second round: 50% for three months for the node providers that failed to respond within the
+    // 24h window in BOTH of the two most recent incident-response smoke tests (June 13 and July 27,
+    // 2026) — the same "two consecutive misses" rule as the first round, moved forward by one
+    // drill. A late (>24h) response counts as a failure. Providers from the round above that have
+    // since recovered are deliberately absent here, so their reduction ends with that round's
+    // window on 2026-10-15 and they are rewarded in full from the second half of October on.
+    // Providers in both rounds are reduced continuously from 2026-07-15 to 2026-11-01 — at 50%,
+    // not 25%, on the overlapping days.
+    //
+    // Corrected on 2026-08-12: this cohort was originally populated from the July 27 drill alone
+    // rather than the June 13 + July 27 pair. That wrongly included MI Servers, which replied in
+    // time in June and so never missed two in a row, and wrongly omitted ParaFi Technologies NS
+    // LLC, which was late in both. Editing an existing entry is admissible here only because no
+    // day of this window had been minted yet — the 2026-07-15..2026-08-15 reward period was still
+    // open — so nothing already paid out is rewritten. See the append-only note above; once a day
+    // in the window has been minted, a wrongly included provider can no longer be made whole
+    // through this table, because multipliers are constrained to (0, 1).
     RewardReduction {
         start: (2026, 8, 1),
         end: (2026, 11, 1),
@@ -314,8 +325,8 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
             "7ryes-jnj73-bsyu4-lo6h7-lbxk5-x4ien-lylws-5qwzl-hxd5f-xjh3w-mqe", // Extragone SA
             "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
             "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
-            "izmhk-lpjum-uo4oy-lviba-yctpc-arg4b-2ywim-vgoiu-gqaj2-gskmw-2qe", // MI Servers
             "4dibr-2alzr-h6kva-bvwn2-yqgsl-o577t-od46o-v275p-a2zov-tcw4f-eae", // Neptune Partners
+            "2hl5k-umjdt-ykii4-goecz-kkps6-nvl53-l7ost-p4mcp-qmnmw-rzrfc-mqe", // ParaFi Technologies NS LLC
             "ma7dp-gz4tg-3c2wv-pgnsv-wna7u-czvhu-fpu47-t4dr6-gzxql-wr2m2-qae", // Reist Telecom AG
             "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase
             "glrjs-2dbzh-owbdd-fpp5e-eweoz-nsuto-e3jmk-tl42c-wem4f-qfpfa-qqe", // Zarety
@@ -927,5 +938,26 @@ mod reward_reduction_tests {
                 "duplicate provider in a reward reduction round"
             );
         }
+    }
+
+    /// The second round is the June 13 + July 27 pair, not the July 27 drill alone. Pinned by
+    /// principal: the count-based assertions above survive a one-for-one swap, which is exactly
+    /// how these two providers were originally mis-assigned.
+    #[test]
+    fn second_round_follows_the_two_consecutive_misses_rule() {
+        let second_round = REWARD_REDUCTIONS[1].providers;
+
+        // Late in both June and July — a late reply counts as a failure, so in scope.
+        assert!(
+            second_round
+                .contains(&"2hl5k-umjdt-ykii4-goecz-kkps6-nvl53-l7ost-p4mcp-qmnmw-rzrfc-mqe"),
+            "ParaFi Technologies NS LLC replied late in both drills and belongs in the second round"
+        );
+        // Replied in time in June and missed only July, so it never missed two drills in a row.
+        assert!(
+            !second_round
+                .contains(&"izmhk-lpjum-uo4oy-lviba-yctpc-arg4b-2ywim-vgoiu-gqaj2-gskmw-2qe"),
+            "MI Servers missed only the July drill and must not be reduced"
+        );
     }
 }
