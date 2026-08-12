@@ -970,4 +970,85 @@ mod reward_reduction_tests {
             "MI Servers missed only the July drill and must not be reduced"
         );
     }
+
+    // The exact cohort of each round, pinned by principal. The assertions in
+    // `reward_reduction_round_membership_is_as_intended` are count-based and survive a
+    // one-for-one swap, which is how MI Servers and ParaFi Technologies NS LLC were originally
+    // mis-assigned. Only a literal list makes a cohort change visible in review. This is a
+    // deliberate second copy of each cohort: changing a round means changing both, and the drill
+    // outcomes in the comments are the reason each provider is in the list.
+
+    /// First round: missed the 24h window in BOTH the May 20 and June 13, 2026 drills.
+    const FIRST_ROUND_COHORT: [&str; 19] = [
+        "sqhxa-h6ili-qkwup-ohzwn-yofnm-vvnp5-kxdhg-saabw-rvua3-xp325-zqe", // 43rd Big Idea Films (no reply / no reply)
+        "eipr5-izbom-neyqh-s3ec2-52eww-cyfpg-qfomg-3dpwj-4pffh-34xcu-7qe", // 87m Neuron (late / no reply)
+        "2dgp4-h57n4-a4kgx-n4uun-huo3a-wbdlc-m57wd-jtkuh-g5vcc-fcbby-6qe", // 100 Count Holdings (late / late)
+        "ss6oe-fm7b2-b5r57-y3x74-omrz5-d5pgy-5iwtw-4aew5-aqj3l-6ydra-wqe", // Arceau NP LLC (no reply / no reply)
+        "mjnyf-lzqq6-s7fzb-62rqm-xzvge-5oa26-humwp-dvwxp-jxxkf-hoel7-fqe", // Bitmoon (no reply / no reply)
+        "sma3p-ivkif-hz7nu-ngmvq-ibnjg-nubke-zf6gh-wbnfc-2dlng-l3die-zqe", // BLP22 (late / no reply)
+        "ks7ow-zvs7i-ratdk-azq34-zio2b-gbekj-qjicg-pfhp3-ovhgu-k5qql-dae", // BlockTech Ventures (no reply / no reply)
+        "i3cfo-s2tgu-qe5ym-wk7e6-y7ura-pptgu-kevuf-2feh7-z4enq-5hz4s-mqe", // Conic Ventures (no reply / no reply)
+        "w4buy-lgwzr-pccs7-huzhh-qqnws-rns75-iaoox-jolrm-xs2ra-vdu3o-2qe", // Decentralized Entities Foundation (no reply / no reply)
+        "7ryes-jnj73-bsyu4-lo6h7-lbxk5-x4ien-lylws-5qwzl-hxd5f-xjh3w-mqe", // Extragone SA (no reply / no reply)
+        "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel (no reply / no reply)
+        "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects (no reply / no reply)
+        "4dibr-2alzr-h6kva-bvwn2-yqgsl-o577t-od46o-v275p-a2zov-tcw4f-eae", // Neptune Partners (no reply / no reply)
+        "r3yjn-kthmg-pfgmb-2fngg-5c7d7-t6kqg-wi37r-j7gy6-iee64-kjdja-jae", // Pindar Technology Limited (no reply / no reply)
+        "4fedi-eu6ue-nd7ts-vnof5-hzg66-hgzl7-liy5n-3otyp-h7ipw-owycg-uae", // Power Meta Corporation (no reply / no reply)
+        "g2ax6-jrkmb-3zuh3-jibtb-q5xoq-njrgo-5utbc-j2o7g-zfq2w-yyhky-dqe", // Wancloud limited (late / late)
+        "glrjs-2dbzh-owbdd-fpp5e-eweoz-nsuto-e3jmk-tl42c-wem4f-qfpfa-qqe", // Zarety (no reply / no reply)
+        "pa5mu-yxsey-b4yrk-bodka-dhjnm-a3nx4-w2grw-3b766-ddr6e-nupu4-pqe", // Zenith Code LLC (no reply / no reply)
+        "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG (no reply / no reply)
+    ];
+
+    /// Second round: missed the 24h window in BOTH the June 13 and July 27, 2026 drills.
+    const SECOND_ROUND_COHORT: [&str; 18] = [
+        "2dgp4-h57n4-a4kgx-n4uun-huo3a-wbdlc-m57wd-jtkuh-g5vcc-fcbby-6qe", // 100 Count Holdings (late / no reply)
+        "sqhxa-h6ili-qkwup-ohzwn-yofnm-vvnp5-kxdhg-saabw-rvua3-xp325-zqe", // 43rd Big Idea Films (no reply / no reply)
+        "cp5ib-twnmx-h4dvd-isef2-tu44u-kb2ka-fise5-m4hta-hnxoq-k45mm-hqe", // ACCUSET SOLUTIONS (no reply / no reply)
+        "kos24-5xact-6aror-uofg2-tnvt6-dq3bk-c2c5z-jtptt-jbqvc-lmegy-qae", // Anonstake (no reply / no reply)
+        "ss6oe-fm7b2-b5r57-y3x74-omrz5-d5pgy-5iwtw-4aew5-aqj3l-6ydra-wqe", // Arceau NP LLC (no reply / no reply)
+        "mjnyf-lzqq6-s7fzb-62rqm-xzvge-5oa26-humwp-dvwxp-jxxkf-hoel7-fqe", // Bitmoon (no reply / no reply)
+        "ks7ow-zvs7i-ratdk-azq34-zio2b-gbekj-qjicg-pfhp3-ovhgu-k5qql-dae", // BlockTech Ventures (no reply / no reply)
+        "sma3p-ivkif-hz7nu-ngmvq-ibnjg-nubke-zf6gh-wbnfc-2dlng-l3die-zqe", // BLP22 (no reply / no reply)
+        "w4buy-lgwzr-pccs7-huzhh-qqnws-rns75-iaoox-jolrm-xs2ra-vdu3o-2qe", // Decentralized Entities Foundation (no reply / no reply)
+        "7ryes-jnj73-bsyu4-lo6h7-lbxk5-x4ien-lylws-5qwzl-hxd5f-xjh3w-mqe", // Extragone SA (no reply / no reply)
+        "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel (no reply / no reply)
+        "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects (no reply / no reply)
+        "4dibr-2alzr-h6kva-bvwn2-yqgsl-o577t-od46o-v275p-a2zov-tcw4f-eae", // Neptune Partners (no reply / no reply)
+        "2hl5k-umjdt-ykii4-goecz-kkps6-nvl53-l7ost-p4mcp-qmnmw-rzrfc-mqe", // ParaFi Technologies NS LLC (late / late)
+        "ma7dp-gz4tg-3c2wv-pgnsv-wna7u-czvhu-fpu47-t4dr6-gzxql-wr2m2-qae", // Reist Telecom AG (no reply / no reply)
+        "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase (no reply / no reply)
+        "glrjs-2dbzh-owbdd-fpp5e-eweoz-nsuto-e3jmk-tl42c-wem4f-qfpfa-qqe", // Zarety (no reply / no reply)
+        "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG (no reply / no reply)
+    ];
+
+    #[test]
+    fn reward_reduction_cohorts_are_pinned() {
+        assert_eq!(
+            REWARD_REDUCTIONS.len(),
+            2,
+            "a new round needs a pinned cohort here"
+        );
+        for (round, expected, label) in [
+            (
+                &REWARD_REDUCTIONS[0],
+                FIRST_ROUND_COHORT.as_slice(),
+                "first",
+            ),
+            (
+                &REWARD_REDUCTIONS[1],
+                SECOND_ROUND_COHORT.as_slice(),
+                "second",
+            ),
+        ] {
+            let actual: BTreeSet<&str> = round.providers.iter().copied().collect();
+            let expected: BTreeSet<&str> = expected.iter().copied().collect();
+            assert_eq!(
+                actual, expected,
+                "{label} round cohort changed; update it only together with the drill results it \
+                 encodes"
+            );
+        }
+    }
 }
