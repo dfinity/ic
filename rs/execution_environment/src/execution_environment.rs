@@ -3440,6 +3440,23 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
+        // While the subnet is cooling down it accepts no ingress messages at all, so
+        // that they don't make it into the ingress pool (and the user gets a
+        // meaningful error). This is only an optimization: messages already in the
+        // pool when the subnet starts cooling down are not affected. The same check
+        // applied during payload building and validation (see
+        // `IngressSelector::validate_ingress_payload()`) is what actually guarantees
+        // that no such message ever makes it into a block.
+        if state.metadata.is_cooling_down() {
+            return Err(UserError::new(
+                ErrorCode::SubnetCoolingDown,
+                format!(
+                    "Subnet {} is cooling down and does not accept ingress messages",
+                    state.metadata.own_subnet_id
+                ),
+            ));
+        }
+
         let canister = |canister_id: CanisterId| -> Result<&CanisterState, UserError> {
             match state.canister_state(&canister_id) {
                 Some(canister) => Ok(canister),
