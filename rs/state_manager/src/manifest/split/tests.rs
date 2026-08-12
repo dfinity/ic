@@ -123,27 +123,36 @@ fn split_manifest_unassigned_canister() {
     );
 }
 
+/// `SystemMetadata::split()` requires the absence of both the split and the
+/// "subnet was merged" markers, so a manifest containing either marker file
+/// cannot be the input of a split.
 #[test]
-fn split_manifest_state_already_splitting() {
-    let manifest = Manifest::new(
-        CURRENT_STATE_SYNC_VERSION,
-        vec![empty_file_info(SPLIT_MARKER_FILE)],
-        vec![],
-    );
+fn split_manifest_marked_state() {
+    for (marker_file, reason) in [
+        (SPLIT_MARKER_FILE, "state is already undergoing a split"),
+        (SUBNET_MERGED_FILE, "state was just merged"),
+    ] {
+        let manifest = Manifest::new(
+            CURRENT_STATE_SYNC_VERSION,
+            vec![empty_file_info(marker_file)],
+            vec![],
+        );
 
-    assert_eq!(
-        Err(ManifestValidationError::InconsistentManifest {
-            reason: "state is already undergoing a split".into()
-        }),
-        split_manifest(
-            &manifest,
-            SUBNET_0,
-            SUBNET_1,
-            SubnetType::Application,
-            BATCH_TIME,
-            &RoutingTable::default(),
-        )
-    );
+        assert_eq!(
+            Err(ManifestValidationError::InconsistentManifest {
+                reason: reason.into()
+            }),
+            split_manifest(
+                &manifest,
+                SUBNET_0,
+                SUBNET_1,
+                SubnetType::Application,
+                BATCH_TIME,
+                &RoutingTable::default(),
+            ),
+            "unexpected result for {marker_file}"
+        );
+    }
 }
 
 #[test]
@@ -404,8 +413,8 @@ fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
             size_bytes: 77,
             hash: [
-                132, 60, 39, 43, 5, 126, 239, 199, 135, 112, 135, 24, 216, 250, 46, 129, 53, 72,
-                115, 191, 9, 227, 162, 168, 52, 194, 186, 178, 160, 152, 16, 29,
+                36, 90, 246, 163, 78, 136, 98, 202, 53, 243, 91, 188, 208, 212, 30, 38, 147, 56,
+                152, 200, 27, 121, 23, 74, 226, 36, 151, 172, 169, 201, 227, 250,
             ],
         },
         ChunkInfo {
@@ -413,8 +422,8 @@ fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
             size_bytes: 77,
             offset: 0,
             hash: [
-                71, 116, 76, 13, 66, 185, 50, 5, 244, 31, 181, 47, 222, 43, 166, 71, 113, 217, 63,
-                234, 90, 164, 72, 225, 45, 205, 213, 216, 93, 209, 159, 156,
+                189, 70, 108, 20, 213, 242, 63, 231, 92, 11, 153, 228, 106, 188, 196, 97, 196, 103,
+                101, 175, 198, 56, 53, 125, 175, 157, 156, 53, 53, 22, 193, 211,
             ],
         },
     )

@@ -87,6 +87,7 @@ message FlexibleCanisterHttpResponses {
   uint64 callback_id = 1;
   repeated FlexibleCanisterHttpResponseWithProof responses = 2;
   state.queues.v1.Cycles initial_spent = 3;
+  repeated CanisterHttpShare extra_shares = 4;
 }
 
 message FlexibleCanisterHttpTimeout {}
@@ -100,6 +101,13 @@ message FlexibleCanisterHttpResponsesTooLarge {
 message FlexibleCanisterHttpTooManyRejects {
   repeated FlexibleCanisterHttpResponseWithProof reject_responses = 1;
   state.queues.v1.Cycles initial_spent = 2;
+  repeated CanisterHttpShare extra_shares = 3;
+}
+
+message FlexibleCanisterHttpOutOfCycles {
+  repeated CanisterHttpShare all_seen_shares = 1;
+  state.queues.v1.Cycles min_cost = 2;
+  state.queues.v1.Cycles unspent_allowance = 3;
 }
 
 message FlexibleCanisterHttpError {
@@ -108,6 +116,7 @@ message FlexibleCanisterHttpError {
     FlexibleCanisterHttpTimeout timeout = 2;
     FlexibleCanisterHttpResponsesTooLarge responses_too_large = 3;
     FlexibleCanisterHttpTooManyRejects too_many_rejects = 4;
+    FlexibleCanisterHttpOutOfCycles out_of_cycles = 5;
   }
 }
 

@@ -454,18 +454,28 @@ impl SystemStateModifications {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
                 {
                     Ok(()) => {
-                        // This is a request to ic:00. Update the receiver to the appropriate subnet.
-                        match routing::resolve_destination(
-                            network_topology,
-                            msg.method_name.as_str(),
-                            msg.method_payload.as_slice(),
-                            own_subnet_id,
-                            system_state.canister_id(),
-                            is_composite_query,
-                            logger,
-                        )
-                        .map(CanisterId::unchecked_from_principal)
-                        {
+                        // This is a request to the management canister.
+                        // Update the receiver to the appropriate subnet.
+                        let destination = if is_composite_query {
+                            // Requests to the management canister made by a composite
+                            // query (including from its callbacks) are not routed
+                            // based on the method and the payload: they are
+                            // executed by the query handler against the state of the own
+                            // subnet (or rejected by it if the method cannot be executed
+                            // in the non-replicated mode). Note that composite queries
+                            // are always executed in the non-replicated mode.
+                            Ok(own_subnet_id.get())
+                        } else {
+                            routing::resolve_destination(
+                                network_topology,
+                                msg.method_name.as_str(),
+                                msg.method_payload.as_slice(),
+                                own_subnet_id,
+                                system_state.canister_id(),
+                                logger,
+                            )
+                        };
+                        match destination.map(CanisterId::unchecked_from_principal) {
                             Ok(destination_subnet) => {
                                 msg.receiver = destination_subnet;
                                 Self::push_message(system_state, time, msg, logger)?;

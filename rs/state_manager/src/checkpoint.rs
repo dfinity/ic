@@ -441,6 +441,14 @@ impl CheckpointLoader {
             );
         }
 
+        // Like the split marker, the "subnet was merged" marker is persisted
+        // separately from `SystemMetadata`.
+        metadata.subnet_merged = self
+            .checkpoint_layout
+            .subnet_merged_marker()
+            .deserialize()?
+            .merged;
+
         Ok(metadata)
     }
 
@@ -1003,6 +1011,7 @@ pub fn load_snapshot(
         wasm_chunk_store,
         execution_snapshot,
         canister_snapshot_bits.total_size,
+        canister_snapshot_bits.restored,
     );
 
     let metrics = LoadCanisterMetrics { durations };

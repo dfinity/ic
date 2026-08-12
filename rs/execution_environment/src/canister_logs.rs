@@ -15,11 +15,10 @@ pub(crate) fn fetch_canister_logs(
     round_limits: &mut RoundLimits,
 ) -> Result<CanisterManagerResponse, CanisterManagerError> {
     let canister_id = canister.canister_id();
-    let (reply, record_count, content_size) = fetch_canister_logs_response(sender, canister, args)?;
+    let (reply, instructions) = fetch_canister_logs_response(sender, canister, args)?;
     // Charge the read/encode work against the round's instruction budget. No cycles
     // fee is charged for the call because every term is already covered by fees the
     // caller pays (per-message execution fee and per-byte response transmission fee).
-    let instructions = fetch_canister_logs_instructions(record_count, content_size);
     round_limits.instructions -= as_round_instructions(instructions);
     Ok(CanisterManagerResponse {
         canister_id,
@@ -29,7 +28,42 @@ pub(crate) fn fetch_canister_logs(
         deleted_call_context_responses: vec![],
         stop_call_id_to_remove: None,
         stop_contexts_to_reject: vec![],
+        snapshot_to_make_immutable: None,
     })
+}
+
+/// Executes the `fetch_canister_logs` management method against the given canister
+/// on behalf of the given sender and returns the Candid-encoded
+/// `FetchCanisterLogsResponse` together with the number of instructions consumed
+/// while producing it.
+///
+/// This is shared by the replicated path (see `fetch_canister_logs`) and the
+/// non-replicated path (see `crate::query_handler::subnet_query`) so that both
+/// charge the same number of instructions for the same reply.
+pub(crate) fn fetch_canister_logs_response(
+    sender: PrincipalId,
+    canister: &CanisterState,
+    args: FetchCanisterLogsRequest,
+) -> Result<(Vec<u8>, NumInstructions), CanisterManagerError> {
+    check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
+    let canister_log_records = canister.system_state.log_memory_store.records(args.filter);
+    // The number of records returned and the total size of their content determine
+    // the instructions deducted for the call.
+    let record_count = canister_log_records.len() as u64;
+    let content_size = NumBytes::new(
+        canister_log_records
+            .iter()
+            .map(|r| r.content.len())
+            .sum::<usize>() as u64,
+    );
+    let reply = Encode!(&FetchCanisterLogsResponse {
+        canister_log_records
+    })
+    .unwrap();
+    Ok((
+        reply,
+        fetch_canister_logs_instructions(record_count, content_size),
+    ))
 }
 
 /// Derives the number of round instructions to deduct for a `fetch_canister_logs`
@@ -58,29 +92,6 @@ pub(crate) fn fetch_canister_logs_instructions(
     )
 }
 
-/// Reads the requested canister log records and returns the Candid-encoded
-/// `FetchCanisterLogsResponse` together with the number of records returned and the
-/// total size of their content. The record count and content size are used to
-/// deduct round instructions for the call (see `fetch_canister_logs_instructions`).
-pub(crate) fn fetch_canister_logs_response(
-    sender: PrincipalId,
-    canister: &CanisterState,
-    args: FetchCanisterLogsRequest,
-) -> Result<(Vec<u8>, u64, NumBytes), CanisterManagerError> {
-    check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
-    let canister_log_records = canister.system_state.log_memory_store.records(args.filter);
-    let record_count = canister_log_records.len() as u64;
-    let content_size = canister_log_records
-        .iter()
-        .map(|r| r.content.len())
-        .sum::<usize>();
-    let reply = Encode!(&FetchCanisterLogsResponse {
-        canister_log_records
-    })
-    .unwrap();
-    Ok((reply, record_count, NumBytes::new(content_size as u64)))
-}
-
 /// Benchmark-only entry point for the `management_canister_bench`: runs
 /// [`fetch_canister_logs_response`] and returns its result, panicking on error.
 /// Re-exported from the crate root so the benchmark can time the read/encode work
@@ -91,7 +102,7 @@ pub fn fetch_canister_logs_response_for_bench(
     sender: PrincipalId,
     canister: &CanisterState,
     args: FetchCanisterLogsRequest,
-) -> (Vec<u8>, u64, NumBytes) {
+) -> (Vec<u8>, NumInstructions) {
     fetch_canister_logs_response(sender, canister, args)
         .expect("fetch_canister_logs_response failed")
 }
