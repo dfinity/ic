@@ -233,11 +233,21 @@ impl NodeRewardsCanister {
 //   * Each window is expressed as fixed UTC calendar dates. Reward calculation is deterministic
 //     given the stored daily metrics, so querying any past day always returns the same result, and
 //     each entry's reduction reverts automatically at its `end` without a further upgrade.
-//   * Entries are only ever APPENDED, never edited or removed — not even once their window has
-//     passed. Nothing in this canister persists computed rewards: every query recomputes the
-//     requested days from the stored raw metrics using the table compiled into the running Wasm.
-//     Editing or deleting a past entry therefore silently rewrites the canister's account of days
-//     that have already been minted.
+//   * An entry MUST NOT be changed once any day in its window has been minted. Nothing in this
+//     canister persists computed rewards: every query recomputes the requested days from the
+//     stored raw metrics using the table compiled into the running Wasm. Editing or deleting an
+//     entry that covers a minted day therefore silently rewrites this canister's account of what
+//     was paid, in either direction: a removed provider reads as never reduced, an added one as
+//     reduced on days it was in fact paid in full.
+//   * In practice that makes the table append-only. A window that has already started is normally
+//     partly minted, so correcting a live entry is admissible only in the narrow case where no day
+//     of its window has been minted yet, and only until the open reward period is minted. The
+//     second round was corrected under exactly that exception on 2026-08-12; see the note on that
+//     entry. Treat it as the exception rather than the precedent: when in doubt, append.
+//   * A wrongly INCLUDED provider cannot be made whole through this table once its days are
+//     minted, because multipliers are constrained to (0, 1) and no entry can raise rewards. A
+//     wrongly OMITTED provider can always be added by a later entry, though its window then starts
+//     later than the rest of its cohort's.
 //   * A new entry's `start` must not predate the first day of the current, not-yet-minted reward
 //     period. Governance advances its reward period past every day it has minted and never
 //     recomputes those days, so a reduction reaching further back is a no-op in terms of tokens
@@ -259,7 +269,8 @@ struct RewardReduction {
     providers: &'static [&'static str],
 }
 
-/// The reward reductions applied so far, in the order they were introduced. Append-only; see the
+/// The reward reductions applied so far, in the order they were introduced. Entries are appended,
+/// not edited: an entry covering a day that has already been minted must never change. See the
 /// design notes above before touching an existing entry.
 const REWARD_REDUCTIONS: &[RewardReduction] = &[
     // First round: 50% for three months for the node providers that failed to respond within the
@@ -303,11 +314,10 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
     // Corrected on 2026-08-12: this cohort was originally populated from the July 27 drill alone
     // rather than the June 13 + July 27 pair. That wrongly included MI Servers, which replied in
     // time in June and so never missed two in a row, and wrongly omitted ParaFi Technologies NS
-    // LLC, which was late in both. Editing an existing entry is admissible here only because no
-    // day of this window had been minted yet — the 2026-07-15..2026-08-15 reward period was still
-    // open — so nothing already paid out is rewritten. See the append-only note above; once a day
-    // in the window has been minted, a wrongly included provider can no longer be made whole
-    // through this table, because multipliers are constrained to (0, 1).
+    // LLC, which was late in both. This edit fell under the narrow exception described in the
+    // design notes above: no day of this window had been minted yet, since the
+    // 2026-07-15..2026-08-15 reward period was still open, so nothing already paid out was
+    // rewritten.
     RewardReduction {
         start: (2026, 8, 1),
         end: (2026, 11, 1),
