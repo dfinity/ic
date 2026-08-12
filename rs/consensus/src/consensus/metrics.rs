@@ -188,6 +188,7 @@ pub(crate) struct FinalizerMetrics {
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
     pub canister_http_out_of_cycles_delivered: IntCounter,
+    pub canister_http_async_refunds_delivered: IntCounter,
     pub canister_http_flexible_candid_failures: IntCounter,
     pub canister_http_flexible_errors_delivered: IntCounter,
     pub canister_http_payload_bytes_delivered: Histogram,
@@ -304,6 +305,10 @@ impl FinalizerMetrics {
                 "canister_http_out_of_cycles_delivered",
                 "Total number of canister http messages delivered as out of cycles",
             ),
+            canister_http_async_refunds_delivered: metrics_registry.int_counter(
+                "canister_http_async_refunds_delivered",
+                "Total number of canister http asynchronous refunds delivered",
+            ),
             canister_http_flexible_candid_failures: metrics_registry.int_counter(
                 "canister_http_flexible_candid_failures",
                 "Total number of flexible canister http responses skipped due to candid encoding/decoding failures",
@@ -371,6 +376,8 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
         self.canister_http_out_of_cycles_delivered
             .inc_by(batch_stats.canister_http.out_of_cycles as u64);
+        self.canister_http_async_refunds_delivered
+            .inc_by(batch_stats.canister_http.async_refunds as u64);
 
         let flexible_ok_candid_failures = batch_stats
             .canister_http

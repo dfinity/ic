@@ -135,6 +135,10 @@ message CanisterHttpResponseMessage {
     FlexibleCanisterHttpResponses flexible_responses = 4;
     FlexibleCanisterHttpError flexible_error = 5;
     CanisterHttpOutOfCycles out_of_cycles = 6;
+    // A receipt of a replica that was not covered by the already delivered
+    // response of its outcall. The callback it refunds is the one its metadata
+    // is signed for.
+    CanisterHttpShare async_refund = 7;
   }
 }
 

@@ -47,6 +47,16 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A timeout refers to a CallbackId that is unknown by the StateManager
     UnknownCallbackId(CallbackId),
+    /// An asynchronous refund refers to a CallbackId that the StateManager does not
+    /// know as an already responded to request, i.e. one that is not among the
+    /// `delivered_canister_http_request_contexts`.
+    UnknownDeliveredCallbackId(CallbackId),
+    /// An asynchronous refund reports a replica whose spend has already been
+    /// accounted for, either in the certified state or in a past payload.
+    AlreadyRefunded {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
     /// A CallbackId was included as a timeout, however the Request has not timed out at all
     NotTimedOut(CallbackId),
     /// There was an error with a signature calculation

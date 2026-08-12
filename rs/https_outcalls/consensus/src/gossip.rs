@@ -37,8 +37,13 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
                 &latest_state.get_ref().metadata.subnet_call_context_manager;
             let known_request_ids: BTreeSet<_> = subnet_call_context_manger
                 .canister_http_request_contexts
-                .iter()
-                .map(|item| *item.0)
+                .keys()
+                .chain(
+                    subnet_call_context_manger
+                        .delivered_canister_http_request_contexts
+                        .keys(),
+                )
+                .copied()
                 .collect();
             let next_callback_id = subnet_call_context_manger.next_callback_id();
             (known_request_ids, next_callback_id)
@@ -70,5 +75,109 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
 
     fn refresh_period(&self) -> std::time::Duration {
         std::time::Duration::from_secs(3)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
+    use ic_interfaces_state_manager::Labeled;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
+    use ic_test_utilities::state_manager::RefMockStateManager;
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::RequestBuilder,
+    };
+    use ic_types::{
+        Height, NumberOfNodes, RegistryVersion, ReplicaVersion,
+        canister_http::{
+            CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpRequestContext,
+            CanisterHttpResponseMetadata, CanisterHttpResponseReceipt, PricingVersion,
+            RefundStatus, Replication,
+        },
+        crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
+        signature::BasicSignature,
+        time::UNIX_EPOCH,
+    };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
+    use std::sync::Arc;
+
+    fn request_context() -> CanisterHttpRequestContext {
+        CanisterHttpRequestContext {
+            request: RequestBuilder::new().build(),
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::PayAsYouGo,
+            refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+        }
+    }
+
+    fn share_id(callback_id: CallbackId) -> CanisterHttpResponseId {
+        Signed {
+            content: CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: callback_id,
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    content_size: 0,
+                    is_reject: false,
+                    replica_version: ReplicaVersion::default(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt::default(),
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: node_test_id(0),
+            },
+        }
+    }
+
+    /// Shares for an outcall that has already been responded to are still wanted:
+    /// they may yet be picked up as an asynchronous refund.
+    #[test]
+    fn shares_of_delivered_contexts_are_wanted() {
+        let mut state = ReplicatedState::new(subnet_test_id(0), SubnetType::Application);
+        let contexts = &mut state.metadata.subnet_call_context_manager;
+        // Advance `next_callback_id` to 3
+        for _ in 0..3 {
+            contexts.push_context(SubnetCallContext::CanisterHttpRequest(request_context()));
+        }
+        contexts.canister_http_request_contexts.clear();
+        contexts
+            .canister_http_request_contexts
+            .insert(CallbackId::new(0), request_context());
+        contexts
+            .delivered_canister_http_request_contexts
+            .insert(CallbackId::new(1), request_context());
+
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_latest_state()
+            .return_const(Labeled::new(Height::new(1), Arc::new(state)));
+
+        let gossip = CanisterHttpGossipImpl::new(state_manager);
+        let pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let bouncer = gossip.new_bouncer(&pool);
+
+        assert_eq!(bouncer(&share_id(CallbackId::new(0))), BouncerValue::Wants);
+        assert_eq!(bouncer(&share_id(CallbackId::new(1))), BouncerValue::Wants);
+        // A request that is neither pending nor delivered is settled for good.
+        assert_eq!(
+            bouncer(&share_id(CallbackId::new(2))),
+            BouncerValue::Unwanted
+        );
     }
 }

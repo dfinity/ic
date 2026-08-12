@@ -733,7 +733,7 @@ pub mod flexible_canister_http_error {
 pub struct CanisterHttpResponseMessage {
     #[prost(
         oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3, 4, 5, 6"
+        tags = "1, 2, 3, 4, 5, 6, 7"
     )]
     pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
 }
@@ -753,6 +753,11 @@ pub mod canister_http_response_message {
         FlexibleError(super::FlexibleCanisterHttpError),
         #[prost(message, tag = "6")]
         OutOfCycles(super::CanisterHttpOutOfCycles),
+        /// A receipt of a replica that was not covered by the already delivered
+        /// response of its outcall. The callback it refunds is the one its metadata
+        /// is signed for.
+        #[prost(message, tag = "7")]
+        AsyncRefund(super::CanisterHttpShare),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

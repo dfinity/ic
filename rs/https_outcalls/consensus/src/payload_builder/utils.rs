@@ -339,6 +339,23 @@ pub(crate) fn find_non_flexible_out_of_cycles(
     })
 }
 
+/// The receipts of the replicas that have contributed to an already responded to
+/// outcall but have not been refunded yet, at most one per replica.
+///
+/// `already_refunded` tells whether a replica's spend has already been accounted
+/// for, either by the response that was delivered or by an earlier asynchronous
+/// refund.
+pub(crate) fn find_async_refunds<'a>(
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&'a CanisterHttpResponseShare>>,
+    committee: &BTreeSet<NodeId>,
+    already_refunded: impl Fn(&NodeId) -> bool,
+) -> Vec<&'a CanisterHttpResponseShare> {
+    one_share_per_committee_member(grouped_shares, committee)
+        .into_iter()
+        .filter(|share| !already_refunded(&share.signature.signer))
+        .collect()
+}
+
 /// Reconstructs, for every signer of an aggregated proof, the
 /// [`CanisterHttpResponseShare`] that signer actually signed: the shared
 /// [`CanisterHttpResponseMetadata`] combined with that signer's own

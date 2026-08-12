@@ -39,6 +39,7 @@ impl BatchPayloadBuilder for FakeCanisterHttpPayloadBuilder {
             out_of_cycles: vec![],
             flexible_responses: vec![],
             flexible_errors: vec![],
+            async_refunds: vec![],
         };
         payload_to_bytes(payload, max_size)
     }
