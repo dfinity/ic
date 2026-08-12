@@ -8,8 +8,8 @@ use crate::consensus::{
 };
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
-    registry_version_at_height,
+    crypto::ConsensusCrypto, get_current_transcript_from_summary_block, membership::Membership,
+    pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
@@ -19,7 +19,6 @@ use ic_types::{
     consensus::{
         Block, CatchUpContent, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable,
         FinalizationContent, HasCommittee, HasHeight, RandomTapeContent,
-        dkg::{PostSplitArgs, SubnetSplittingStatus},
     },
     crypto::threshold_sig::ni_dkg::NiDkgTag,
     replica_config::ReplicaConfig,
@@ -199,13 +198,14 @@ impl ShareAggregator {
         pool: &PoolReader<'_>,
         summary_block: Block,
     ) -> Result<Option<CatchUpPackage>, String> {
-        let (threshold, dkg_id, block) = match catchup_package_maker::get_catch_up_package_type(
+        let cup_type = catchup_package_maker::get_catch_up_package_type(
             self.registry.as_ref(),
             self.replica_config.node_id,
             &summary_block,
         )
-        .map_err(|err| format!("Failed to determine the cup type: {err}"))?
-        {
+        .map_err(|err| format!("Failed to determine the cup type: {err}"))?;
+
+        let (threshold, dkg_id, block) = match cup_type {
             CatchUpPackageType::Normal => {
                 let threshold = self
                     .membership
@@ -227,15 +227,13 @@ impl ShareAggregator {
                     )
                     .map_err(|err| format!("Failed to create a post-split summary block: {err}"))?;
 
-                let transcript = post_split_summary_block
-                    .payload
-                    .as_ref()
-                    .as_summary()
-                    .dkg
-                    .current_transcript(&NiDkgTag::HighThreshold)
-                    .ok_or_else(|| {
-                        String::from("Couldn't find the transcript in the post-split summary block")
-                    })?;
+                let transcript = get_current_transcript_from_summary_block(
+                    &post_split_summary_block,
+                    &NiDkgTag::HighThreshold,
+                )
+                .ok_or_else(|| {
+                    String::from("Couldn't find the transcript in the post-split summary block")
+                })?;
 
                 let threshold = transcript.threshold.get().get() as usize;
                 let dkg_id = transcript.dkg_id.clone();
@@ -255,12 +253,6 @@ impl ShareAggregator {
         }
         let share_content = shares.first().unwrap().content.clone();
 
-        let subnet_splitting_status = block
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .subnet_splitting_status();
         let cup_content = CatchUpContent::from_share_content(share_content, block);
         let signatures = shares.iter().map(|share| &share.signature).collect();
 
@@ -273,9 +265,7 @@ impl ShareAggregator {
                 signature,
             })?;
 
-        if let SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) =
-            subnet_splitting_status
-        {
+        if let CatchUpPackageType::PostSplit { new_subnet_id } = cup_type {
             info!(
                 self.log,
                 "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",

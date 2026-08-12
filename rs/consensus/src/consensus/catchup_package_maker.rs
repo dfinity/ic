@@ -16,8 +16,9 @@
 use crate::consensus::status;
 use ic_consensus_dkg::payload_builder::get_post_split_dkg_summary;
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, get_oldest_state_registry_version,
-    membership::Membership, pool_reader::PoolReader,
+    active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
+    get_current_transcript_from_summary_block, get_oldest_state_registry_version,
+    membership::Membership, pool_reader::PoolReader, subnet_splitting,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
@@ -25,7 +26,6 @@ use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };
 use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
-use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     NodeId, SubnetId,
@@ -33,13 +33,12 @@ use ic_types::{
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackage, CatchUpPackageShare,
         CatchUpShareContent, HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon, Payload,
-        RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
-        dkg::{SplittingArgs, SubnetSplittingStatus},
+        RandomBeacon, RandomBeaconContent, Rank, SummaryPayload, dkg::SubnetSplittingStatus,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
         crypto_hash,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
     },
     replica_config::ReplicaConfig,
     signature::ThresholdSignature,
@@ -436,44 +435,20 @@ pub(crate) fn get_catch_up_package_type(
     node_id: NodeId,
     summary_block: &Block,
 ) -> Result<CatchUpPackageType, String> {
-    match summary_block
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg
-        .subnet_splitting_status()
-    {
-        SubnetSplittingStatus::Scheduled(SplittingArgs {
-            destination_subnet_id,
-            source_subnet_id,
-        }) => {
-            let new_subnet_id = get_new_subnet_id(
-                registry,
-                summary_block,
-                node_id,
-                source_subnet_id,
-                destination_subnet_id,
-            )
-            .map_err(|err| format!("Failed to get the new subnet assignment: {err}"))?;
+    let Some(splitting_args) = subnet_splitting::is_split_scheduled(summary_block) else {
+        return Ok(CatchUpPackageType::Normal);
+    };
 
-            Ok(CatchUpPackageType::PostSplit { new_subnet_id })
-        }
-        SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit(..) => {
-            Ok(CatchUpPackageType::Normal)
-        }
-    }
-}
-
-fn get_current_transcript_from_summary_block<'a>(
-    summary_block: &'a Block,
-    tag: &NiDkgTag,
-) -> Option<&'a NiDkgTranscript> {
-    summary_block
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg
-        .current_transcript(tag)
+    subnet_splitting::get_post_split_subnet_assignment(
+        node_id,
+        summary_block,
+        registry,
+        splitting_args,
+    )
+    .map(|assignment| CatchUpPackageType::PostSplit {
+        new_subnet_id: assignment.new_subnet_id,
+    })
+    .map_err(|err| format!("Failed to get the new subnet assignment: {err}"))
 }
 
 pub(crate) fn create_post_split_summary_block(
@@ -538,39 +513,6 @@ pub(crate) fn create_post_split_random_beacon(cup_block: &Block) -> Result<Rando
     })
 }
 
-fn get_new_subnet_id(
-    registry: &dyn RegistryClient,
-    summary_block: &Block,
-    node_id: NodeId,
-    source_subnet_id: SubnetId,
-    destination_subnet_id: SubnetId,
-) -> Result<SubnetId, String> {
-    let registry_version = summary_block.context.registry_version;
-    let new_subnet_id = registry
-        .get_subnet_id_from_node_id(node_id, registry_version)
-        .map_err(|err| {
-            format!(
-                "Failed to get the new subnet id at \
-                registry version {registry_version}: {err}"
-            )
-        })?
-        .ok_or_else(|| {
-            format!(
-                "Node is not assigned to any subnet at \
-                registry version {registry_version}"
-            )
-        })?;
-
-    if ![source_subnet_id, destination_subnet_id].contains(&new_subnet_id) {
-        return Err(format!(
-            "According to the registry version {registry_version} \
-            the node belongs to neither source subnet nor the destination subnet"
-        ));
-    }
-
-    Ok(new_subnet_id)
-}
-
 #[cfg(test)]
 mod tests {
     //! CatchUpPackageMaker unit tests
@@ -602,7 +544,7 @@ mod tests {
         backwards_compatibility::BackwardsCompatible,
         consensus::{
             BlockPayload, BlockProposal, ConsensusMessageHashable, HasVersion, Payload,
-            SummaryPayload, idkg::PreSigId,
+            SummaryPayload, dkg::SplittingArgs, idkg::PreSigId,
         },
         crypto::CryptoHash,
     };
@@ -1450,11 +1392,10 @@ mod tests {
 
             pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
 
-            let subnet_splitting_status =
-                ic_types::consensus::dkg::SubnetSplittingStatus::Scheduled(SplittingArgs {
-                    source_subnet_id: SOURCE_SUBNET_ID,
-                    destination_subnet_id: DESTINATION_SUBNET_ID,
-                });
+            let subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
+                source_subnet_id: SOURCE_SUBNET_ID,
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+            });
 
             let mut proposal = pool.make_next_block();
             let block = proposal.content.as_mut();

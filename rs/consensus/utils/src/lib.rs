@@ -294,6 +294,21 @@ pub fn active_high_threshold_nidkg_id(
     })
 }
 
+/// Returns the current DKG transcript with the given tag from the DKG summary of the given
+/// summary block, if there is one.
+/// This function panics if the given block is not a summary block.
+pub fn get_current_transcript_from_summary_block<'a>(
+    summary_block: &'a Block,
+    tag: &NiDkgTag,
+) -> Option<&'a NiDkgTranscript> {
+    summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .current_transcript(tag)
+}
+
 /// Return the current low transcript for the given height if it was found.
 pub fn active_low_threshold_committee(
     reader: &dyn ConsensusPoolCache,

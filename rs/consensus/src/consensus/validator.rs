@@ -13,7 +13,7 @@ use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
     MINIMUM_CHAIN_LENGTH, RoundRobin, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    get_oldest_state_registry_version,
+    get_current_transcript_from_summary_block, get_oldest_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::{PoolReader, UnexpectedChainLength},
     subnet_splitting,
@@ -307,18 +307,13 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let dkg_id = self
-            .content
-            .block
-            .as_ref()
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .current_transcript(&NiDkgTag::HighThreshold)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?
-            .dkg_id
-            .clone();
+        let dkg_id = get_current_transcript_from_summary_block(
+            self.content.block.as_ref(),
+            &NiDkgTag::HighThreshold,
+        )
+        .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?
+        .dkg_id
+        .clone();
         verify_threshold_committee(
             membership,
             self.signature.signer,
