@@ -429,6 +429,7 @@ impl StreamBuilderImpl {
         let mut streams = state.take_streams();
         let network_topology = state.metadata.network_topology.clone();
         let own_subnet_type = state.metadata.own_subnet_type;
+        let own_subnet_cooling_down = state.metadata.is_cooling_down();
 
         // First, have up to `max_stream_messages / 2` refunds in each stream (including
         // already routed ones) while respecting stream message and byte limits.
@@ -490,14 +491,16 @@ impl StreamBuilderImpl {
                     // them) until it stops cooling down, rather than rejecting or
                     // dropping them.
                     //
-                    // Except for the subnet's own output queues: those hold only the
-                    // responses that the subnet itself produced while draining its
-                    // subnet queues, and they are always routed, whether or not this
-                    // subnet or the destination subnet is cooling down. Retaining one
+                    // Except for this subnet's own output queues while it is itself
+                    // cooling down: those hold only the responses it produced while
+                    // draining its subnet queues, and they are always routed, whether
+                    // or not the destination subnet is cooling down. Retaining one
                     // would leave a message behind in the subnet queues of a cooling
                     // down subnet, which is the very thing cooling down is meant to
-                    // avoid.
-                    if !is_from_subnet_queues
+                    // avoid. A subnet that is not cooling down has no such urgency, so
+                    // its own output queues are held back just like a canister's.
+                    let is_exempt_subnet_output = is_from_subnet_queues && own_subnet_cooling_down;
+                    if !is_exempt_subnet_output
                         && network_topology.is_cooling_down(&dst_subnet_id)
                         && !is_illegal_engine_msg
                     {

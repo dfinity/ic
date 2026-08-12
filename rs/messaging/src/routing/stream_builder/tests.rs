@@ -1467,9 +1467,10 @@ fn build_streams_retains_messages_to_cooling_down_subnet() {
     }
 }
 
-/// Tests that a response in the subnet's own output queues is routed even while
-/// the sending subnet is cooling down, whether or not the destination subnet is
-/// cooling down too (a remote one here, the local one itself in the loopback case).
+/// Tests that a response in the subnet's own output queues is routed while the
+/// sending subnet is cooling down, even though the destination subnet is cooling
+/// down too (a remote one in the first case, the local subnet itself in the
+/// loopback one).
 #[test]
 fn build_streams_routes_subnet_output_queues_while_cooling_down() {
     // To a canister on a remote cooling down subnet.
@@ -1513,6 +1514,41 @@ fn build_streams_routes_subnet_output_queues_while_cooling_down() {
             &metrics_registry,
         );
         assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+    });
+}
+
+/// Tests that the subnet's own output queues are only exempt from cooling down
+/// while the sending subnet is itself cooling down: if it is not, a response to a
+/// canister on a cooling down subnet is retained in the subnet queues, just like a
+/// canister's message; and it is routed as soon as the destination subnet stops
+/// cooling down.
+#[test]
+fn build_streams_retains_subnet_output_queues_when_not_cooling_down() {
+    with_test_replica_logger(|log| {
+        // `COOLING_DOWN_SUBNET` is cooling down, `LOCAL_SUBNET` is not.
+        let (stream_builder, mut provided_state, metrics_registry) =
+            new_cooling_down_fixture(&log, SubnetType::Application);
+        let response = push_subnet_output_response(&mut provided_state, COOLING_DOWN_CANISTER);
+
+        let mut result_state = stream_builder.build_streams(provided_state);
+
+        assert_no_messages_routed(&result_state, COOLING_DOWN_SUBNET);
+        assert!(result_state.subnet_queues().has_output());
+        assert_one_message_status(
+            LABEL_VALUE_TYPE_RESPONSE,
+            LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
+            &metrics_registry,
+        );
+        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+
+        // And it is routed as soon as the destination subnet stops cooling down.
+        clear_cooling_down(&mut result_state, COOLING_DOWN_SUBNET);
+        let result_state = stream_builder.build_streams(result_state);
+        assert_eq!(
+            vec![StreamMessage::from(response)],
+            routed_messages(&result_state, COOLING_DOWN_SUBNET)
+        );
+        assert!(!result_state.subnet_queues().has_output());
     });
 }
 

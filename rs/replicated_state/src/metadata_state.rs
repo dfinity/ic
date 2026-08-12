@@ -434,9 +434,11 @@ pub struct SubnetTopology {
     ///  * It inducts all messages from its incoming stream slices.
     ///  * It inducts no ingress messages.
     ///  * No subnet routes messages to its (outgoing) stream (incl. the loopback stream)
-    ///    to the subnet that is cooling down, except for messages (responses)
-    ///    in subnet output queues that are always routed into streams.
+    ///    to the subnet that is cooling down.
     ///  * It keeps executing messages in its input queues.
+    ///  * It still routes the responses in its own subnet output queues, even to a
+    ///    cooling down destination subnet.
+    ///    A subnet that is not cooling down holds those back just like a canister's messages.
     pub cooling_down: bool,
 }
 
