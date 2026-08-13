@@ -179,6 +179,8 @@ impl DependenciesBuilder {
             replica_config: ReplicaConfig {
                 node_id: node_test_id(0),
                 subnet_id: subnet_records[0].1,
+                replica_version: ReplicaVersion::from_str(&subnet_records[0].2.replica_version_id)
+                    .expect("Invalid replica_version_id"),
             },
             sorted_subnet_records: subnet_records,
             with_state_manager_expectations: true,
@@ -209,8 +211,6 @@ impl DependenciesBuilder {
     pub fn build(self) -> Dependencies {
         let time_source = FastForwardTimeSource::new();
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let replica_version = ReplicaVersion::from_str(&records[0].1.replica_version_id)
-            .expect("Invalid replica_version_id");
 
         registry_data_provider
             .add(
