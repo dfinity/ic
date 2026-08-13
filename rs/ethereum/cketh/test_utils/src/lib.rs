@@ -861,9 +861,13 @@ impl EvmRpcBackend<'_> {
     }
 }
 
+/// PocketIC's fiduciary subnet holds the secp256k1 test key under this name, the key the minter
+/// derives deposit addresses from.
+const ECDSA_KEY_NAME: &str = "key_1";
+
 fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &EvmRpcBackend) {
     let args = MinterInitArgs {
-        ecdsa_key_name: "key_1".parse().unwrap(),
+        ecdsa_key_name: ECDSA_KEY_NAME.to_string(),
         ethereum_network: EthereumNetwork::Mainnet,
         ledger_id: canisters.ledger_id,
         next_transaction_nonce: 0_u8.into(),
