@@ -27,6 +27,7 @@ use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::anvil::{
@@ -70,9 +71,12 @@ pub struct Holding {
 
 /// Wraps the shared [`CkEthSetup`] fixture — built in live mode against an owned anvil node — with
 /// the balance-scan test's own state: the anvil node itself, kept alive for the harness' lifetime.
+///
+/// `cketh` is declared first so it drops first: the PocketIC instance goes away, and only then does
+/// the node its canisters were calling out to.
 pub struct LiveBalanceScanSetup {
     cketh: CkEthSetup,
-    anvil: Anvil,
+    anvil: Arc<Anvil>,
 }
 
 impl LiveBalanceScanSetup {
@@ -80,9 +84,9 @@ impl LiveBalanceScanSetup {
     /// it (installing only the minter and EVM RPC canister), then activates the ckERC20 feature and
     /// registers ckUSDC/ckUSDT so the EVM RPC canister's outcalls reach anvil for real.
     pub fn new_live() -> Self {
-        let anvil = Anvil::start();
+        let anvil = Arc::new(Anvil::start());
         let cketh = CkEthSetup::builder()
-            .with_ethereum_backend(EthereumBackend::Anvil(anvil.url()))
+            .with_ethereum_backend(EthereumBackend::Anvil(Arc::clone(&anvil)))
             .build();
         activate_ckerc20(&cketh);
         register_supported_tokens(&cketh);

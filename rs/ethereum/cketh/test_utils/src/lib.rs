@@ -1,3 +1,4 @@
+use crate::anvil::Anvil;
 use crate::events::MinterEventAssert;
 use crate::flow::{
     ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
@@ -152,7 +153,7 @@ impl CkEthSetup {
     /// PocketIC instance (fiduciary subnet only), an anonymous controller, and canned JSON-RPC
     /// responses. [`live_scan`] switches it to the live balance-scan harness via
     /// [`CkEthSetupBuilder::with_ethereum_backend`].
-    fn builder<'a>() -> CkEthSetupBuilder<'a> {
+    fn builder() -> CkEthSetupBuilder {
         CkEthSetupBuilder {
             env: None,
             backend: EthereumBackend::Mocked,
@@ -722,12 +723,12 @@ impl CkEthSetup {
     }
 }
 
-struct CkEthSetupBuilder<'a> {
+struct CkEthSetupBuilder {
     env: Option<Arc<PocketIc>>,
-    backend: EthereumBackend<'a>,
+    backend: EthereumBackend,
 }
 
-impl<'a> CkEthSetupBuilder<'a> {
+impl CkEthSetupBuilder {
     /// Reuses an existing PocketIC instance instead of building one via [`new_env`], so this
     /// fixture can be composed with others that need the same instance (e.g. `CkErc20Setup`'s
     /// orchestrator). Only for the mocked backend: a live instance needs the added NNS subnet and
@@ -737,7 +738,7 @@ impl<'a> CkEthSetupBuilder<'a> {
         self
     }
 
-    fn with_ethereum_backend(mut self, backend: EthereumBackend<'a>) -> Self {
+    fn with_ethereum_backend(mut self, backend: EthereumBackend) -> Self {
         self.backend = backend;
         self
     }
@@ -911,11 +912,12 @@ fn install_ledger(env: &PocketIc, canisters: &CkEthCanisters) {
 /// the corresponding minter init/upgrade assumptions about that chain's state (the block height to
 /// track, and where its log-scraping cursor starts), and — since only a chain reachable over the
 /// network needs genuine outcalls — whether the fixture runs on a live PocketIC instance.
-enum EthereumBackend<'a> {
+enum EthereumBackend {
     /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot, injected into a regular
     /// (non-live) PocketIC instance.
     Mocked,
-    /// A live anvil node reached over HTTP at `url`: a fresh chain with no finalized blocks yet.
+    /// A live anvil node, reached over HTTP at its own URL: a fresh chain with no finalized blocks
+    /// yet. Shared with the harness that started the node and keeps it running, hence the [`Arc`].
     ///
     /// Reaching it takes a live PocketIC instance, which in turn shapes the whole fixture: an NNS
     /// subnet in addition to the fiduciary one, going live before any canister exists (see
@@ -924,10 +926,10 @@ enum EthereumBackend<'a> {
     /// ledger uninstalled — the balance scan never calls it, and installing it would need the
     /// ledger canister Wasm declared as a Bazel data dependency of the anvil-backed test target,
     /// which it is not.
-    Anvil(&'a str),
+    Anvil(Arc<Anvil>),
 }
 
-impl EthereumBackend<'_> {
+impl EthereumBackend {
     fn is_live(&self) -> bool {
         match self {
             EthereumBackend::Mocked => false,
@@ -939,10 +941,10 @@ impl EthereumBackend<'_> {
         InstallArgs {
             override_provider: match self {
                 EthereumBackend::Mocked => None,
-                EthereumBackend::Anvil(url) => Some(OverrideProvider {
+                EthereumBackend::Anvil(anvil) => Some(OverrideProvider {
                     override_url: Some(RegexSubstitution {
                         pattern: ".*".into(),
-                        replacement: url.to_string(),
+                        replacement: anvil.url().to_string(),
                     }),
                 }),
             },
