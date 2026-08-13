@@ -10572,18 +10572,15 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-cdk 0.19.0",
- "ic-http-types",
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
  "ic-management-canister-types 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-metrics-assert",
- "ic-test-utilities-load-wasm",
  "ic-types-cycles",
  "ic-universal-canister",
  "icrc-ledger-types",
  "paste",
  "pocket-ic",
- "proptest",
 ]
 
 [[package]]

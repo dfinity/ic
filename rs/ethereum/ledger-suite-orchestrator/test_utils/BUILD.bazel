@@ -16,7 +16,6 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//packages/ic-http-types",
         "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
@@ -28,6 +27,5 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-management-canister-types",
-        "@crate_index//:proptest",
     ],
 )
