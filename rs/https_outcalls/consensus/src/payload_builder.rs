@@ -6,10 +6,10 @@ use crate::{
         parse::bytes_to_payload,
         utils::{
             FlexibleFindResult, ResponseShareSigInput, find_flexible_result,
-            find_fully_replicated_response, find_non_replicated_response,
-            group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
-            response_share_sig_inputs, validate_flexible_response_with_proof,
-            validate_response_share,
+            find_fully_replicated_response, find_non_flexible_out_of_cycles,
+            find_non_replicated_response, group_shares_by_callback_id,
+            grouped_shares_meet_divergence_criteria, response_share_sig_inputs,
+            validate_flexible_response_with_proof, validate_response_share,
         },
     },
 };
@@ -57,6 +57,7 @@ use ic_types::{
     registry::RegistryClientError,
     signature::BasicSigBatchEntry,
 };
+use ic_types_cycles::Cycles;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::{Arc, RwLock},
@@ -77,6 +78,7 @@ pub struct CanisterHttpBatchStats {
     pub responses: usize,
     pub timeouts: usize,
     pub divergence_responses: usize,
+    pub out_of_cycles: usize,
     pub single_signature_responses: usize,
     pub flexible_ok_responses: usize,
     pub flexible_ok_responses_candid_failures: usize,
@@ -166,6 +168,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut responses = vec![];
         let mut timeouts = vec![];
         let mut divergence_responses = vec![];
+        let mut out_of_cycles = vec![];
         let mut flexible_responses = vec![];
         let mut flexible_errors = vec![];
 
@@ -241,9 +244,9 @@ impl CanisterHttpPayloadBuilderImpl {
                         // request are derived from the registry version pinned in
                         // its context.
                         let CanisterHttpCommittee {
+                            committee,
                             threshold,
                             faults_tolerated,
-                            ..
                         } = match self
                             .membership
                             .get_canister_http_committee(request.registry_version)
@@ -287,6 +290,20 @@ impl CanisterHttpPayloadBuilderImpl {
                                 responses_included += 1;
                                 accumulated_size += divergence_size;
                             }
+                        } else if let Some(error) = find_non_flexible_out_of_cycles(
+                            *callback_id,
+                            grouped_shares,
+                            &BTreeSet::from_iter(committee),
+                            threshold,
+                            request,
+                        ) {
+                            let error_size = error.count_bytes();
+                            let size = NumBytes::new((accumulated_size + error_size) as u64);
+                            if size < max_payload_size {
+                                out_of_cycles.push(error);
+                                responses_included += 1;
+                                accumulated_size += error_size;
+                            }
                         }
                     }
                     Replication::NonReplicated(designated_node_id) => {
@@ -304,6 +321,22 @@ impl CanisterHttpPayloadBuilderImpl {
                                 responses.push(response);
                                 responses_included += 1;
                                 accumulated_size += candidate_size;
+                            }
+                        } else if let Some(error) = find_non_flexible_out_of_cycles(
+                            *callback_id,
+                            grouped_shares,
+                            // Only the designated replica's response is ever delivered, so
+                            // it is a committee of one and its own threshold.
+                            &BTreeSet::from([*designated_node_id]),
+                            /* threshold = */ 1,
+                            request,
+                        ) {
+                            let error_size = error.count_bytes();
+                            let size = NumBytes::new((accumulated_size + error_size) as u64);
+                            if size < max_payload_size {
+                                out_of_cycles.push(error);
+                                responses_included += 1;
+                                accumulated_size += error_size;
                             }
                         }
                     }
@@ -347,6 +380,7 @@ impl CanisterHttpPayloadBuilderImpl {
             responses,
             timeouts,
             divergence_responses,
+            out_of_cycles,
             flexible_responses,
             flexible_errors,
         }
@@ -444,6 +478,13 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
                 ),
             )?;
+
+            utils::check_content_size_within_limit(
+                &response.proof.metadata,
+                callback_id,
+                request_context,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             let subnet_size = request_context.subnet_size;
             let (effective_committee, effective_threshold) = match request_context.replication {
@@ -614,15 +655,107 @@ impl CanisterHttpPayloadBuilderImpl {
                     context.registry_version,
                 ));
 
-                // Enforce the per-replica spend limit for divergence shares.
+                // Enforce the per-replica spend and response size limits for divergence
+                // shares.
                 for share in grouped_shares.values().flatten() {
                     utils::check_spent_within_limit(&share.content.payment_receipt, context)
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                    utils::check_content_size_within_limit(
+                        &share.content.metadata,
+                        callback_id,
+                        context,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                 }
 
                 if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::DivergenceProofDoesNotMeetDivergenceCriteria,
+                    );
+                }
+            }
+        }
+
+        // Validate out-of-cycles errors for fully- and non-replicated requests.
+        for error in &payload.out_of_cycles {
+            let callback_id = error.callback_id;
+            if !delivered_ids.insert(callback_id) {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
+                    callback_id,
+                ));
+            }
+            let context = http_contexts.get(&callback_id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                ),
+            )?;
+            // Which replicas a response could come from, and how many of them have to
+            // agree on it for it to be delivered.
+            let (committee, threshold) = match &context.replication {
+                Replication::FullyReplicated => {
+                    let CanisterHttpCommittee {
+                        committee,
+                        threshold,
+                        ..
+                    } = self
+                        .membership
+                        .get_canister_http_committee(context.registry_version)
+                        .map_err(|err| {
+                            warn!(self.log, "Failed to get membership: {:?}", err);
+                            CanisterHttpPayloadValidationError::ValidationFailed(
+                                CanisterHttpPayloadValidationFailure::Membership,
+                            )
+                        })?;
+                    (BTreeSet::from_iter(committee), threshold)
+                }
+                // Only the designated replica's response is ever delivered, so it is a
+                // committee of one and its own threshold.
+                Replication::NonReplicated(node_id) => (BTreeSet::from([*node_id]), 1),
+                Replication::Flexible { .. } => {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
+                    );
+                }
+            };
+
+            let mut seen_signers = HashSet::new();
+            for share in &error.shares {
+                validate_response_share(share, callback_id, &committee, &mut seen_signers, context)
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            }
+            // Defer signature verification.
+            sig_inputs.extend(response_share_sig_inputs(
+                &error.shares,
+                context.registry_version,
+            ));
+
+            // The shares must prove that the committee's remaining allowances can no
+            // longer pay for a response...
+            let expected = utils::check_non_flexible_out_of_cycles(
+                error.shares.iter(),
+                committee.len(),
+                threshold,
+                callback_id,
+                context,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            // ...and the figures reported to the caller must be the ones it is proved by.
+            for (field, received, expected) in [
+                ("min_cost", error.min_cost, expected.min_cost),
+                (
+                    "unspent_allowance",
+                    error.unspent_allowance,
+                    expected.unspent_allowance,
+                ),
+            ] {
+                if received != expected {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::OutOfCyclesFigureMismatch {
+                            callback_id,
+                            field,
+                            received,
+                            expected,
+                        },
                     );
                 }
             }
@@ -929,6 +1062,44 @@ impl CanisterHttpPayloadBuilderImpl {
                         );
                     }
                 }
+                FlexibleCanisterHttpError::OutOfCycles {
+                    all_seen_shares,
+                    min_cost,
+                    unspent_allowance,
+                    ..
+                } => {
+                    // The shares must prove that the committee's remaining
+                    // allowances can no longer pay for a response...
+                    let expected = utils::check_flexible_out_of_cycles(
+                        all_seen_shares.iter(),
+                        flex_committee.len(),
+                        min_responses as u32,
+                        callback_id,
+                        context,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                    // ...and the figures reported to the caller must be the ones it
+                    // is proved by.
+                    for (field, received, expected) in [
+                        ("min_cost", *min_cost, expected.min_cost),
+                        (
+                            "unspent_allowance",
+                            *unspent_allowance,
+                            expected.unspent_allowance,
+                        ),
+                    ] {
+                        if received != expected {
+                            return invalid_artifact(
+                                InvalidCanisterHttpPayloadReason::OutOfCyclesFigureMismatch {
+                                    callback_id,
+                                    field,
+                                    received,
+                                    expected,
+                                },
+                            );
+                        }
+                    }
+                }
             }
         }
 
@@ -1116,6 +1287,34 @@ impl
             }
         }
 
+        // Out of cycles: like a divergence, this delivers no body, so its consensus
+        // cost is zero and its spend is just what the replicas reported.
+        for error in messages.out_of_cycles {
+            stats.out_of_cycles += 1;
+            let nodes: BTreeSet<NodeId> = error
+                .shares
+                .iter()
+                .map(|share| share.signature.signer)
+                .collect();
+            let amount = error.shares.iter().map(|share| share.content.spent()).sum();
+            spent.initial.push(CanisterHttpInitialSpent {
+                callback: error.callback_id,
+                amount,
+                nodes,
+            });
+            consensus_responses.push(ConsensusResponse::new(
+                error.callback_id,
+                Payload::Reject(RejectContext::new(
+                    RejectCode::SysTransient,
+                    out_of_cycles_reject_message(
+                        &error.shares,
+                        error.unspent_allowance,
+                        error.min_cost,
+                    ),
+                )),
+            ));
+        }
+
         // The collective initial spend was computed during payload building
         // and validated during payload validation.
         for response_group in messages.flexible_responses {
@@ -1167,9 +1366,13 @@ impl
                         nodes,
                     })
                 }
-                // `ResponsesTooLarge` delivers no body, so its consensus cost is
-                // zero and its spend is summed on the fly from the seen shares.
+                // `ResponsesTooLarge` and `OutOfCycles` deliver no body, so their
+                // consensus cost is zero and their spend is summed on the fly from
+                // the seen shares.
                 FlexibleCanisterHttpError::ResponsesTooLarge {
+                    all_seen_shares, ..
+                }
+                | FlexibleCanisterHttpError::OutOfCycles {
                     all_seen_shares, ..
                 } => {
                     let nodes: BTreeSet<NodeId> = all_seen_shares
@@ -1350,11 +1553,55 @@ fn flexible_error_into_consensus_response(
                 message,
             }
         }
+        FlexibleCanisterHttpError::OutOfCycles {
+            all_seen_shares,
+            min_cost,
+            unspent_allowance,
+            ..
+        } => {
+            let node_details: Vec<_> = all_seen_shares
+                .iter()
+                .map(|share| FlexibleHttpNodeDetail {
+                    node_id: candid::Principal::from(share.signature.signer.get()),
+                    report: HttpRequestResourceReport::default(),
+                    error: Some(FlexibleHttpNodeError {
+                        code: if share.content.is_reject() {
+                            "reject".to_string()
+                        } else {
+                            "ok".to_string()
+                        },
+                        message: format!("{} cycles spent", share.content.spent()),
+                    }),
+                })
+                .collect();
+
+            let message =
+                out_of_cycles_reject_message(&all_seen_shares, unspent_allowance, min_cost);
+            FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved)),
+                node_details,
+                message,
+            }
+        }
     };
 
     let bytes = Encode!(&FlexibleHttpRequestResult::Err(err)).ok()?;
 
     Some(ConsensusResponse::new(callback_id, Payload::Data(bytes)))
+}
+
+fn out_of_cycles_reject_message(
+    shares: &[CanisterHttpResponseShare],
+    unspent_allowance: Cycles,
+    min_cost: Cycles,
+) -> String {
+    let total_spent: Cycles = shares.iter().map(|share| share.content.spent()).sum();
+    format!(
+        "Out of cycles: {} of the assigned replicas reported a collective spend of {total_spent} cycles, \
+         leaving {unspent_allowance} cycles of the attached payment (after base fee deduction). \
+         Delivering a response would cost at least {min_cost} cycles.",
+        shares.len(),
+    )
 }
 
 /// Turns a [`CanisterHttpResponseDivergence`] into a [`ConsensusResponse`] containing a rejection.

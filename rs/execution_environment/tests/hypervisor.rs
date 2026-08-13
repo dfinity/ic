@@ -9323,7 +9323,7 @@ fn invoke_cost_call() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost,);
 }
 
@@ -9343,7 +9343,7 @@ fn invoke_cost_create_canister() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -9367,7 +9367,7 @@ fn invoke_cost_http_request() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -9438,7 +9438,7 @@ fn assert_cost_http_request_v2_params(
         test.get_own_subnet_cycles_config(),
     );
     let bytes = get_reply(res);
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -9586,7 +9586,7 @@ fn invoke_cost_sign_with_ecdsa() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -9700,7 +9700,7 @@ fn invoke_cost_sign_with_schnorr() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -9779,7 +9779,7 @@ fn invoke_cost_vetkd_derive_key() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 

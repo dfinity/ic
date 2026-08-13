@@ -187,7 +187,7 @@ impl RandomTapeMaker {
 mod tests {
     use super::*;
     use crate::consensus::add_all_to_validated;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::{p2p::consensus::MutablePool, time_source::TimeSource};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
@@ -210,7 +210,7 @@ mod tests {
                 time_source,
                 crypto,
                 ..
-            } = dependencies(pool_config, 4);
+            } = DependenciesBuilder::new(pool_config, 4).build();
             let message_routing = Arc::new(FakeMessageRouting::new());
             pool.advance_round_normal_operation();
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);
