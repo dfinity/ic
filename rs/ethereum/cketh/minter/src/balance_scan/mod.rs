@@ -8,7 +8,7 @@ use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::audit::process_event;
-use crate::state::automatic_deposits::DepositAccount;
+use crate::state::automatic_deposits::{DepositAccount, DepositRequest};
 use crate::state::event::{AutomaticDeposit, Erc20Balance, EventType};
 use crate::state::{TaskType, mutate_state, read_state};
 use crate::timed_sized_map::Timestamp;
@@ -77,15 +77,20 @@ async fn scan<R: Runtime>(
         );
         return;
     }
-    let (addresses_to_scan, watchlist_len) = read_state(|s| {
+    // The due entries are read once, up front: they carry everything a funded address' deposit
+    // event needs. Re-reading the watchlist after the outcalls could come back empty — a concurrent
+    // `deposit_erc20` evicts entries whose window closed since `now` — which would drop funds
+    // already observed on-chain.
+    let (due, watchlist_len) = read_state(|s| {
         (
             s.automatic_deposits
                 .addresses_to_scan_iter(now, latest_block)
-                .collect::<Vec<_>>(),
+                .map(|(account, entry)| (*account, entry.value.clone()))
+                .collect::<BTreeMap<Account, DepositRequest>>(),
             s.automatic_deposits.watchlist_len(),
         )
     });
-    if addresses_to_scan.is_empty() {
+    if due.is_empty() {
         log!(
             DEBUG,
             "[balance_scan] SKIPPING: 0/{watchlist_len} user addresses ready to be scanned"
@@ -103,6 +108,10 @@ async fn scan<R: Runtime>(
     // `batch` chunks *by address* so an address' per-token calls never straddle a batch boundary:
     // the per-address scan-state advance is all-or-nothing per batch, and a split address could be
     // advanced with only part of its balances read.
+    let addresses_to_scan: Vec<DepositAccount> = due
+        .iter()
+        .map(|(account, request)| DepositAccount::new(*account, request.address))
+        .collect();
     let scan = BalanceScan::new(&addresses_to_scan, &erc20_tokens);
     for batch in scan.batch(MAX_CALLS_PER_BATCH) {
         let calls = batch.balance_calls();
@@ -145,20 +154,20 @@ async fn scan<R: Runtime>(
                 continue;
             }
             // A funded address is event-sourced into the sweep queue (durable the moment funds are
-            // detected) instead of being advanced, so it is no longer re-scanned. Its watchlist
-            // entry gives the derived address and the scan count (this finding scan included); skip
-            // if the account is no longer live as of `now`.
-            let Some(entry) = s.automatic_deposits.get_entry(now, account) else {
-                continue;
-            };
-            let address = entry.value.address;
-            let scan_count = entry.value.scan_count.saturating_add(1);
+            // detected) instead of being advanced, so it is no longer re-scanned. Its entry as read
+            // before the scan gives the derived address and the scan count (this finding scan
+            // included). Funds the scan observed on-chain are queued whether or not the address is
+            // still armed: the minter is the only party that saw them, so dropping the detection
+            // here would lose it with no trace.
+            let request = due
+                .get(account)
+                .expect("BUG: every scanned account was read off the watchlist before scanning");
             let deposit = AutomaticDeposit {
                 owner: account.owner,
                 subaccount: account.subaccount,
-                address,
+                address: request.address,
                 last_scanned_block: latest_block,
-                scan_count,
+                scan_count: request.scan_count.saturating_add(1),
                 deposits: candidates
                     .iter()
                     .map(|(token, scanned_balance)| Erc20Balance {

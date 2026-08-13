@@ -165,8 +165,8 @@ fn should_snapshot_entries_in_time_index_order() {
 
 mod addresses_to_scan_iter {
     use super::{
-        BlockNumber, SCAN_GAP_SECS, SECS_PER_BLOCK, account, deposit_address, deposits_from,
-        scan_state, ts, window_nanos,
+        BlockNumber, DepositRequest, Entry, SCAN_GAP_SECS, SECS_PER_BLOCK, account,
+        deposit_address, deposits_from, scan_state, ts, window_nanos,
     };
 
     #[test]
@@ -175,10 +175,22 @@ mod addresses_to_scan_iter {
 
         let due: Vec<_> = deposits
             .addresses_to_scan_iter(ts(0), BlockNumber::new(1_000))
-            .map(|da| (da.account(), da.address()))
             .collect();
 
-        assert_eq!(due, vec![(account(0), deposit_address(&account(0)))]);
+        assert_eq!(
+            due,
+            vec![(
+                &account(0),
+                &Entry {
+                    value: DepositRequest {
+                        address: deposit_address(&account(0)),
+                        last_scanned_block: None,
+                        scan_count: 0,
+                    },
+                    expires_at: ts(window_nanos()),
+                }
+            )]
+        );
     }
 
     #[test]
@@ -215,9 +227,18 @@ mod addresses_to_scan_iter {
             assert_eq!(
                 deposits
                     .addresses_to_scan_iter(ts(0), at_boundary)
-                    .map(|da| (da.account(), da.address()))
                     .collect::<Vec<_>>(),
-                vec![(account(0), deposit_address(&account(0)))],
+                vec![(
+                    &account(0),
+                    &Entry {
+                        value: DepositRequest {
+                            address: deposit_address(&account(0)),
+                            last_scanned_block: Some(last_scanned),
+                            scan_count: case.scan_count,
+                        },
+                        expires_at: ts(window_nanos()),
+                    }
+                )],
                 "scan_count {}: due exactly when the gap elapses",
                 case.scan_count
             );

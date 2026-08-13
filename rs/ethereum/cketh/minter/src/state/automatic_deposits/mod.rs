@@ -122,20 +122,25 @@ impl AutomaticDeposits {
         self.watchlist = TimedSizedMap::from_ordered_entries(ttl, capacity, entries);
     }
 
-    /// Iterate the live [`DepositAccount`]s that are due for a balance scan as of the
+    /// Iterate the live watchlist entries that are due for a balance scan as of the
     /// given latest block height, using elapsed blocks as a proxy for elapsed time
     /// against the backoff schedule. `now` filters expired entries.
+    ///
+    /// Entries are yielded whole, so a caller can keep everything a scan of one needs:
+    /// looking an entry up again once the scan completes can come back empty, since a
+    /// scan spans several await points and an entry can be evicted at any of them (see
+    /// [`Self::record_scan`]).
     pub fn addresses_to_scan_iter(
         &self,
         now: Timestamp,
         latest_block: BlockNumber,
-    ) -> impl Iterator<Item = DepositAccount> + '_ {
-        self.watchlist.iter().filter_map(move |(account, entry)| {
+    ) -> impl Iterator<Item = (&Account, &Entry<DepositRequest>)> + '_ {
+        self.watchlist.iter().filter(move |(_account, entry)| {
             if entry.expires_at < now {
-                return None;
+                return false;
             }
             let request = &entry.value;
-            let due = match request.last_scanned_block {
+            match request.last_scanned_block {
                 None => true,
                 Some(last_scanned_block) => {
                     let index = (request.scan_count as usize).saturating_sub(1);
@@ -149,8 +154,7 @@ impl AutomaticDeposits {
                         elapsed_secs >= SCAN_GAP_SECS[index]
                     }
                 }
-            };
-            due.then_some(DepositAccount::new(*account, request.address))
+            }
         })
     }
 
