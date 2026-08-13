@@ -251,13 +251,7 @@ fn register_supported_tokens(cketh: &CkEthSetup) {
             ckerc20_ledger_id: cketh.env.create_canister(),
         };
         cketh
-            .env
-            .update_call(
-                cketh.minter_id,
-                live_controller(),
-                "add_ckerc20_token",
-                Encode!(&arg).unwrap(),
-            )
+            .add_ckerc20_token(live_controller(), &arg)
             .expect("BUG: add_ckerc20_token was rejected");
     }
 }
