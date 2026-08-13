@@ -730,9 +730,10 @@ struct CkEthSetupBuilder<'a> {
 }
 
 impl<'a> CkEthSetupBuilder<'a> {
-    /// Reuses an existing PocketIC instance instead of creating one, so this fixture can be
-    /// composed with others that need the same instance (e.g. `CkErc20Setup`'s orchestrator).
-    /// Ignored in live mode, which always creates its own instance (with an added NNS subnet).
+    /// Reuses an existing PocketIC instance instead of building one via [`new_env`], so this
+    /// fixture can be composed with others that need the same instance (e.g. `CkErc20Setup`'s
+    /// orchestrator). Not combined with [`Self::with_live_mode`] today: live mode's instance needs
+    /// the added NNS subnet and to already be live before any canister exists.
     fn with_env(mut self, env: Arc<PocketIc>) -> Self {
         self.env = Some(env);
         self
@@ -743,43 +744,39 @@ impl<'a> CkEthSetupBuilder<'a> {
         self
     }
 
-    /// Switches PocketIC to live mode: a fixed non-anonymous controller (instead of every other
-    /// fixture's anonymous default) that owns the minter and EVM RPC canister, `u64::MAX` cycles
-    /// (instead of `u128::MAX` — headroom below the saturating `Cycles` balance ceiling; see
-    /// [`live_controller`] and the live `add_cycles` calls below for why each differs), an
-    /// uninstalled placeholder ckETH ledger canister, and `make_live` before the minter is
-    /// installed (its install schedules timers whose outcalls would otherwise stall).
+    /// Switches PocketIC to live mode: an NNS subnet in addition to the fiduciary one, going live
+    /// before any canister exists (see [`new_env`]), and a fixed non-anonymous controller (instead
+    /// of every other fixture's anonymous default) that owns every canister this fixture creates —
+    /// see [`live_controller`] for why.
     fn with_live_mode(mut self) -> Self {
         self.live = true;
         self
     }
 
     fn build(self) -> CkEthSetup {
-        if self.live {
-            build_live(self.backend)
-        } else {
-            build_mocked(
-                self.env.unwrap_or_else(|| Arc::new(new_pocket_ic())),
-                self.backend,
-            )
+        let env = self.env.unwrap_or_else(|| Arc::new(new_env(self.live)));
+        let controller = self.live.then(live_controller);
+        let canisters = create_cketh_canisters(&env, controller);
+        if !self.live {
+            // Tried installing the real ledger for the live harness too, to drop this
+            // conditional: it fails outright, since the anvil-backed Bazel test target does not
+            // declare the ledger canister Wasm as a data dependency (`load_wasm`'s `cargo
+            // metadata` fallback has no access to the ledger crate's directory in that sandbox).
+            // The minter stores the ledger's id at init but never calls it on the balance-scan
+            // path, so the live harness leaves it uninstalled instead.
+            install_ledger(&env, &canisters);
         }
-    }
-}
+        install_evm_rpc(&env, &canisters, &self.backend);
+        install_minter(&env, &canisters, &self.backend);
 
-fn build_mocked(env: Arc<PocketIc>, backend: EthereumBackend) -> CkEthSetup {
-    let canisters = create_cketh_canisters(&env);
-    install_ledger(&env, &canisters);
-    install_evm_rpc(&env, &canisters, &backend);
-    install_minter(&env, &canisters, &backend);
-
-    let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
-    CkEthSetup {
-        env,
-        caller,
-        ledger_id: canisters.ledger_id,
-        minter_id: canisters.minter_id,
-        evm_rpc_id: canisters.evm_rpc_id,
-        support_subaccount: false,
+        CkEthSetup {
+            env,
+            caller: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID),
+            ledger_id: canisters.ledger_id,
+            minter_id: canisters.minter_id,
+            evm_rpc_id: canisters.evm_rpc_id,
+            support_subaccount: false,
+        }
     }
 }
 
@@ -791,53 +788,22 @@ fn live_controller() -> Principal {
     Principal::from_slice(&[0x0a; 10])
 }
 
-fn build_live(backend: EthereumBackend) -> CkEthSetup {
-    // `make_live` requires an NNS subnet, on top of the fiduciary subnet every ckETH fixture needs
-    // for the secp256k1 `key_1` used by the minter.
-    let mut env = pocket_ic_builder().with_nns_subnet().build();
-
-    let settings = CanisterSettings {
-        controllers: Some(vec![live_controller()]),
-        ..Default::default()
-    };
-
-    // A placeholder ckETH ledger: the minter stores its id at init but never calls it on the
-    // balance-scan path, so it is left uninstalled.
-    let ledger_id = env.create_canister();
-    let evm_rpc_id =
-        env.create_canister_with_settings(Some(live_controller()), Some(settings.clone()));
-    // Unlike the mocked fixture's `u128::MAX`, this must leave headroom below the saturating
-    // `Cycles` balance ceiling: a canister already at that ceiling cannot observe *any* further
-    // cycle addition, and the first HTTPS outcall a live canister accepts cycles for trips a
-    // cycle-accounting assertion in the replica if its balance cannot move. Applies equally to
-    // `minter_id` below.
-    env.add_cycles(evm_rpc_id, u128::from(u64::MAX));
-
-    let minter_id = env.create_canister_with_settings(Some(live_controller()), Some(settings));
-    env.add_cycles(minter_id, u128::from(u64::MAX));
-
-    let canisters = CkEthCanisters {
-        minter_id,
-        ledger_id,
-        evm_rpc_id,
-        controller: Some(live_controller()),
-    };
-    install_evm_rpc(&env, &canisters, &backend);
-
-    // Go live *before* installing the minter: its install schedules immediate refresh and
-    // balance-scan timers that issue HTTPS outcalls, which would stall (holding the task guards)
-    // if they fired while the outcalls could not be answered.
-    let _gateway = env.make_live(None);
-
-    install_minter(&env, &canisters, &backend);
-
-    CkEthSetup {
-        env: Arc::new(env),
-        caller: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID),
-        ledger_id,
-        minter_id,
-        evm_rpc_id,
-        support_subaccount: false,
+/// Builds the PocketIC instance for [`CkEthSetupBuilder::build`]: the fiduciary subnet every
+/// ckETH fixture needs for the secp256k1 `key_1` used by the minter, plus — in live mode — an NNS
+/// subnet (required by [`PocketIc::make_live`]) and going live immediately, before any canister of
+/// this fixture exists to schedule a timer whose outcall could stall waiting for an answer.
+fn new_env(live: bool) -> PocketIc {
+    if live {
+        let mut env = pocket_ic_builder().with_nns_subnet().build();
+        let _gateway = env.make_live(None);
+        env
+    } else {
+        pocket_ic_builder()
+            .with_icp_config(IcpConfig {
+                canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
+                ..Default::default()
+            })
+            .build()
     }
 }
 
@@ -846,12 +812,7 @@ pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
 }
 
 pub fn new_pocket_ic() -> PocketIc {
-    pocket_ic_builder()
-        .with_icp_config(IcpConfig {
-            canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
-            ..Default::default()
-        })
-        .build()
+    new_env(false)
 }
 
 /// A [`PocketIcBuilder`] with the fiduciary subnet every ckETH fixture needs for the secp256k1
@@ -892,10 +853,10 @@ fn evm_rpc_wasm() -> Vec<u8> {
 }
 
 /// The minter, its ckETH ledger and the EVM RPC canister it calls out to, plus the sender to
-/// install/upgrade them as. [`build_mocked`] creates all 3 (via [`create_cketh_canisters`], minter
-/// first) and installs all 3; [`build_live`] creates all 3 itself (ledger first, under its own
-/// non-anonymous controller) and installs only the minter and the EVM RPC canister, assembling this
-/// same struct to hand to [`install_minter`]/[`install_evm_rpc`].
+/// install/upgrade them as (`None`: every other fixture's anonymous default; `Some`: the live
+/// harness' [`live_controller`]). Built by [`create_cketh_canisters`] and installed by
+/// [`install_ledger`]/[`install_minter`]/[`install_evm_rpc`], shared by every
+/// [`CkEthSetupBuilder::build`].
 struct CkEthCanisters {
     minter_id: Principal,
     ledger_id: Principal,
@@ -903,19 +864,32 @@ struct CkEthCanisters {
     controller: Option<Principal>,
 }
 
-fn create_cketh_canisters(env: &PocketIc) -> CkEthCanisters {
+fn create_canister(env: &PocketIc, controller: Option<Principal>) -> Principal {
+    match controller {
+        None => env.create_canister(),
+        Some(controller) => env.create_canister_with_settings(
+            Some(controller),
+            Some(CanisterSettings {
+                controllers: Some(vec![controller]),
+                ..Default::default()
+            }),
+        ),
+    }
+}
+
+fn create_cketh_canisters(env: &PocketIc, controller: Option<Principal>) -> CkEthCanisters {
     // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
-    let minter_id = env.create_canister();
-    env.add_cycles(minter_id, u128::MAX);
-    let ledger_id = env.create_canister();
-    env.add_cycles(ledger_id, u128::MAX);
-    let evm_rpc_id = env.create_canister();
-    env.add_cycles(evm_rpc_id, u128::MAX);
+    let minter_id = create_canister(env, controller);
+    env.add_cycles(minter_id, u128::from(u64::MAX));
+    let ledger_id = create_canister(env, controller);
+    env.add_cycles(ledger_id, u128::from(u64::MAX));
+    let evm_rpc_id = create_canister(env, controller);
+    env.add_cycles(evm_rpc_id, u128::from(u64::MAX));
     CkEthCanisters {
         minter_id,
         ledger_id,
         evm_rpc_id,
-        controller: None,
+        controller,
     }
 }
 
