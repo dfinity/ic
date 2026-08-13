@@ -869,8 +869,8 @@ fn evm_rpc_wasm() -> Vec<u8> {
 /// The minter, its ckETH ledger and the EVM RPC canister it calls out to, plus the sender to
 /// install/upgrade them as (`None`: every other fixture's anonymous default; `Some`: the live
 /// harness' [`live_controller`]). Built by [`create_cketh_canisters`] and installed by
-/// [`install_ledger`]/[`install_minter`]/[`install_evm_rpc`], shared by every
-/// [`CkEthSetupBuilder::build`].
+/// [`install_ledger`]/[`install_minter`]/[`install_evm_rpc`], used by
+/// [`CkEthSetupBuilder::build`] for both modes.
 struct CkEthCanisters {
     minter_id: Principal,
     ledger_id: Principal,
