@@ -35,15 +35,6 @@ pub struct CanisterHttpPayload {
     pub out_of_cycles: Vec<CanisterHttpOutOfCycles>,
     pub flexible_responses: Vec<FlexibleCanisterHttpResponses>,
     pub flexible_errors: Vec<FlexibleCanisterHttpError>,
-    /// Receipts signed for HTTP outcalls whose responses have already been
-    /// delivered, by replicas whose spend was not covered by those responses'
-    /// initial refunds. Each receipt refunds the callback its signed metadata
-    /// names, and at most one receipt per replica and callback may appear.
-    ///
-    /// Delivering them lets the caller be refunded what those replicas left of
-    /// their per-replica allowances, instead of having to wait for the delivered
-    /// context to time out (which would refund the full allowance, i.e. charge
-    /// nothing at all for the work these replicas did).
     pub async_refunds: Vec<CanisterHttpResponseShare>,
 }
 

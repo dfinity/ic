@@ -113,10 +113,7 @@ impl CanisterHttpPoolManagerImpl {
     }
 
     /// Purge shares of responses for requests that have already been processed.
-    ///
-    /// A request that has been responded to is only fully processed once its
-    /// delivered context is gone: until then its shares may still be picked up as
-    /// [asynchronous refunds](ic_types::batch::CanisterHttpPayload::async_refunds).
+    /// I.e. their contexts are no longer part of the replicated state.
     fn purge_shares_of_processed_requests(
         &self,
         canister_http_pool: &dyn CanisterHttpPool,
@@ -345,6 +342,9 @@ impl CanisterHttpPoolManagerImpl {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
                 Ok((response, payment_receipt)) => {
+                    // Drop the response if its context is no longer present in the replicated state.
+                    // We continue gossipping a share even if a response to the context has already
+                    // been delivered, in order to report the amount of cycles spent.
                     let Some(context) = active_contexts
                         .get(&response.id)
                         .or_else(|| delivered_contexts.get(&response.id))

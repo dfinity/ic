@@ -144,14 +144,17 @@ mod tests {
         }
     }
 
-    /// Shares for an outcall that has already been responded to are still wanted:
-    /// they may yet be picked up as an asynchronous refund.
-    #[test]
-    fn shares_of_delivered_contexts_are_wanted() {
+    /// The `next_callback_id` of the state [`test_bouncer`] builds.
+    const NEXT_CALLBACK_ID: u64 = 3;
+
+    /// A bouncer over a state that has handed out callback ids 0, 1 and 2 — so
+    /// `next_callback_id` is [`NEXT_CALLBACK_ID`] — of which 0 is still awaiting a
+    /// response, 1 has been responded to, and 2 is gone for good.
+    fn test_bouncer() -> Bouncer<CanisterHttpResponseId> {
         let mut state = ReplicatedState::new(subnet_test_id(0), SubnetType::Application);
         let contexts = &mut state.metadata.subnet_call_context_manager;
-        // Advance `next_callback_id` to 3
-        for _ in 0..3 {
+        // Advance `next_callback_id` to NEXT_CALLBACK_ID
+        for _ in 0..NEXT_CALLBACK_ID {
             contexts.push_context(SubnetCallContext::CanisterHttpRequest(request_context()));
         }
         contexts.canister_http_request_contexts.clear();
@@ -170,7 +173,12 @@ mod tests {
 
         let gossip = CanisterHttpGossipImpl::new(state_manager);
         let pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-        let bouncer = gossip.new_bouncer(&pool);
+        gossip.new_bouncer(&pool)
+    }
+
+    #[test]
+    fn shares_of_delivered_contexts_are_wanted() {
+        let bouncer = test_bouncer();
 
         assert_eq!(bouncer(&share_id(CallbackId::new(0))), BouncerValue::Wants);
         assert_eq!(bouncer(&share_id(CallbackId::new(1))), BouncerValue::Wants);
@@ -178,6 +186,36 @@ mod tests {
         assert_eq!(
             bouncer(&share_id(CallbackId::new(2))),
             BouncerValue::Unwanted
+        );
+    }
+
+    #[test]
+    fn shares_of_upcoming_requests_are_wanted() {
+        let bouncer = test_bouncer();
+
+        // The very next id execution will hand out, ...
+        assert_eq!(
+            bouncer(&share_id(CallbackId::new(NEXT_CALLBACK_ID))),
+            BouncerValue::Wants
+        );
+        // ... and everything up to the far edge of the look-ahead window.
+        assert_eq!(
+            bouncer(&share_id(CallbackId::new(
+                NEXT_CALLBACK_ID + MAX_NUMBER_OF_REQUESTS_AHEAD
+            ))),
+            BouncerValue::Wants
+        );
+    }
+
+    #[test]
+    fn shares_beyond_the_look_ahead_window_are_stashed() {
+        let bouncer = test_bouncer();
+
+        assert_eq!(
+            bouncer(&share_id(CallbackId::new(
+                NEXT_CALLBACK_ID + MAX_NUMBER_OF_REQUESTS_AHEAD + 1
+            ))),
+            BouncerValue::MaybeWantsLater
         );
     }
 }

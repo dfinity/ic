@@ -385,7 +385,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
             }
 
-            // Collect any synchronous refunds
+            // Collect any asynchronous refunds
             'refunds: for (callback_id, request) in delivered_canister_http_request_contexts {
                 let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
                     continue;

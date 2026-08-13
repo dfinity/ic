@@ -130,8 +130,8 @@ pub struct PastPayloads {
     pub refunded_nodes: BTreeMap<CallbackId, HashSet<NodeId>>,
 }
 
-/// Collects from the `past_payloads` everything a payload built on top of them must
-/// not repeat: the responses already delivered and the asynchronous refunds already
+/// Collects from the `past_payloads` everything a new payload not repeat:
+/// the responses already delivered and the asynchronous refunds already
 /// reported.
 pub(crate) fn parse_past_payloads(
     past_payloads: &[PastPayload],
@@ -150,8 +150,6 @@ pub(crate) fn parse_past_payloads(
                 vec![]
             });
         for message in messages {
-            // An asynchronous refund does not deliver a response, so it is tracked
-            // by its reporting replica rather than as a settled callback id.
             if let Some(MessageType::AsyncRefund(share)) = &message.message_type {
                 if let Some((callback_id, signer)) = callback_and_signer_of_share(share) {
                     parsed
@@ -170,8 +168,8 @@ pub(crate) fn parse_past_payloads(
     parsed
 }
 
-/// Extracts the callback a [`pb::CanisterHttpShare`] is signed for and its signer,
-/// or `None` if either is missing or malformed. Such a share would have failed
+/// Extracts the callback and signer IDs of a [`pb::CanisterHttpShare`], or
+/// `None` if either is missing or malformed. Such a share would have failed
 /// payload validation, so it cannot appear in a past payload.
 fn callback_and_signer_of_share(share: &pb::CanisterHttpShare) -> Option<(CallbackId, NodeId)> {
     let callback_id = CallbackId::new(share.metadata.as_ref()?.id);
