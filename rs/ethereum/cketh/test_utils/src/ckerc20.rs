@@ -74,7 +74,13 @@ impl AsRef<CkEthSetup> for CkErc20Setup {
 
 impl CkErc20Setup {
     pub fn new() -> Self {
-        let mut ckerc20 = Self::new_without_ckerc20_active();
+        Self::with_cketh(CkEthSetup::default())
+    }
+
+    /// Activates the ckERC20 feature on an existing ckETH fixture: the balance-scan harness in
+    /// [`crate::live_scan`] supplies one backed by a live anvil node rather than the mocked default.
+    pub(crate) fn with_cketh(cketh: CkEthSetup) -> Self {
+        let mut ckerc20 = Self::without_ckerc20_active(cketh);
         ckerc20.cketh = ckerc20
             .cketh
             .upgrade_minter_to_add_orchestrator_id(
@@ -84,10 +90,13 @@ impl CkErc20Setup {
         ckerc20
     }
 
+    pub fn new_without_ckerc20_active() -> Self {
+        Self::without_ckerc20_active(CkEthSetup::default())
+    }
+
     /// The ckETH fixture builds the PocketIC instance (its Ethereum backend decides how), and the
     /// orchestrator is then created on that same instance so both share one replica.
-    pub fn new_without_ckerc20_active() -> Self {
-        let cketh = CkEthSetup::default();
+    fn without_ckerc20_active(cketh: CkEthSetup) -> Self {
         let env = cketh.env.clone();
         let orchestrator = LedgerSuiteOrchestrator::new(
             env.clone(),

@@ -17,13 +17,11 @@
 //! or any spawned ledgers — the balance scan only needs the token contract addresses in the
 //! minter's state.
 
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
+    DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
 };
-use ic_cketh_minter::lifecycle::MinterArg;
-use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
 use std::str::FromStr;
@@ -33,10 +31,8 @@ use std::time::{Duration, Instant};
 use crate::anvil::{
     Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20, erc20_balance_slot, u256_be,
 };
-use crate::{
-    CkEthSetup, ERC20_HELPER_CONTRACT_ADDRESS, EthereumBackend, USDC_ERC20_CONTRACT_ADDRESS,
-    minter_wasm,
-};
+use crate::ckerc20::CkErc20Setup;
+use crate::{CkEthSetup, EthereumBackend, USDC_ERC20_CONTRACT_ADDRESS};
 
 /// USDT's mainnet address, the second token registered so the scan reads more than one token per
 /// address. Matches the ckUSDT contract the minter prices in `balance_scan::MIN_DEPOSITS`.
@@ -69,29 +65,29 @@ pub struct Holding {
     pub amount: u128,
 }
 
-/// Wraps the shared [`CkEthSetup`] fixture — built in live mode against an owned anvil node — with
-/// the balance-scan test's own state: the anvil node itself, kept alive for the harness' lifetime.
+/// Wraps the shared [`CkErc20Setup`] fixture — built against an owned anvil node — with the
+/// balance-scan test's own state: the anvil node itself, kept alive for the harness' lifetime.
 ///
-/// `cketh` is declared first so it drops first: the PocketIC instance goes away, and only then does
-/// the node its canisters were calling out to.
+/// `ckerc20` is declared first so it drops first: the PocketIC instance goes away, and only then
+/// does the node its canisters were calling out to.
 pub struct LiveBalanceScanSetup {
-    cketh: CkEthSetup,
+    ckerc20: CkErc20Setup,
     anvil: Arc<Anvil>,
 }
 
 impl LiveBalanceScanSetup {
-    /// Starts a local anvil node and builds the shared [`CkEthSetup`] fixture in live mode against
-    /// it (installing only the minter and EVM RPC canister), then activates the ckERC20 feature and
-    /// registers ckUSDC/ckUSDT so the EVM RPC canister's outcalls reach anvil for real.
+    /// Starts a local anvil node, builds the shared [`CkEthSetup`] fixture against it — which makes
+    /// the PocketIC instance live, so the EVM RPC canister's outcalls reach anvil for real — and
+    /// wraps it in the full [`CkErc20Setup`], whose orchestrator registers ckUSDC/ckUSDT at the
+    /// mainnet addresses the balance scan reads.
     pub fn new_live() -> Self {
         let anvil = Arc::new(Anvil::start());
         let cketh = CkEthSetup::builder()
             .with_ethereum_backend(EthereumBackend::Anvil(Arc::clone(&anvil)))
             .build();
-        activate_ckerc20(&cketh);
-        register_supported_tokens(&cketh);
+        let ckerc20 = CkErc20Setup::with_cketh(cketh).add_supported_erc20_tokens();
 
-        Self { cketh, anvil }
+        Self { ckerc20, anvil }
     }
 
     /// A distinct non-anonymous depositing principal for `seed`, so a test can register several
@@ -116,10 +112,10 @@ impl LiveBalanceScanSetup {
             },
         };
         let reply = self
-            .cketh
+            .ckerc20
             .env
             .update_call(
-                self.cketh.minter_id,
+                self.ckerc20.cketh.minter_id,
                 caller,
                 "deposit_erc20",
                 Encode!(&arg).unwrap(),
@@ -195,7 +191,8 @@ impl LiveBalanceScanSetup {
     /// `deposit_erc20` reports that an address was scanned but not whether its balance cleared the
     /// candidate threshold. `0` if no scan has logged a count yet.
     pub fn balance_scan_candidates(&self) -> u64 {
-        self.cketh
+        self.ckerc20
+            .cketh
             .minter_canister_logs()
             .into_iter()
             .filter_map(|log| candidates_in_log(&log.content))
@@ -216,43 +213,4 @@ fn candidates_in_log(line: &str) -> Option<u64> {
         .next()?
         .parse()
         .ok()
-}
-
-/// Activates the ckERC20 feature by pointing the minter's orchestrator id at the anonymous
-/// principal (so this harness can register tokens itself, as every canister here is anonymously
-/// controlled) and setting the ERC-20 deposit helper contract.
-fn activate_ckerc20(cketh: &CkEthSetup) {
-    let upgrade = UpgradeArg {
-        ledger_suite_orchestrator_id: Some(Principal::anonymous()),
-        erc20_helper_contract_address: Some(ERC20_HELPER_CONTRACT_ADDRESS.to_string()),
-        ..Default::default()
-    };
-    cketh
-        .env
-        .upgrade_canister(
-            cketh.minter_id,
-            minter_wasm(),
-            Encode!(&MinterArg::UpgradeArg(upgrade)).unwrap(),
-            None,
-        )
-        .expect("BUG: failed to activate the ckERC20 feature");
-}
-
-fn register_supported_tokens(cketh: &CkEthSetup) {
-    for (address, symbol) in [
-        (USDC_ERC20_CONTRACT_ADDRESS, "ckUSDC"),
-        (USDT_ERC20_CONTRACT_ADDRESS, "ckUSDT"),
-    ] {
-        let arg = AddCkErc20Token {
-            chain_id: Nat::from(1_u8),
-            address: address.to_string(),
-            ckerc20_token_symbol: symbol.to_string(),
-            // A distinct placeholder ledger per token: the minter rejects duplicate ledger ids and
-            // never calls these on the balance-scan path.
-            ckerc20_ledger_id: cketh.env.create_canister(),
-        };
-        cketh
-            .add_ckerc20_token(Principal::anonymous(), &arg)
-            .expect("BUG: add_ckerc20_token was rejected");
-    }
 }
