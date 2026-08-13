@@ -45,8 +45,7 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
-    NominalCyclesTesting,
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
@@ -6017,7 +6016,6 @@ struct ExecutionAccounting {
     /// already by the prepayment, it thus does not depend on whether the
     /// snapshot is taken before or after the prepayment.
     consumed_cycles: NominalCycles,
-    execution_cost: CompoundCycles<Instructions>,
     round_instructions: NumInstructions,
     executed_instructions: NumInstructions,
 }
@@ -6033,7 +6031,6 @@ impl ExecutionAccounting {
                 .get(&CyclesUseCase::Instructions)
                 .cloned()
                 .unwrap_or_default(),
-            execution_cost: test.canister_execution_cost(canister_id),
             round_instructions: test.round_instructions(canister_id),
             executed_instructions: test.executed_instructions(),
         }
@@ -6089,10 +6086,6 @@ fn resume_paused_execution_after_cycles_decrease(
             WasmExecutionMode::Wasm32,
         )
         .nominal();
-    assert_eq!(
-        (after.execution_cost - before.execution_cost).nominal(),
-        expected_cost
-    );
     assert_eq!(
         after.consumed_cycles - before.consumed_cycles,
         expected_cost

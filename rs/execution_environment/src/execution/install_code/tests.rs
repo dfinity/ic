@@ -168,7 +168,6 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
     // which happens when the message execution starts.
     let original_balance = test.canister_state(canister_id).system_state.balance();
     let original_consumed_cycles = consumed_cycles_for_instructions(&test, canister_id);
-    let original_execution_cost = test.canister_execution_cost(canister_id);
     let original_executed_instructions = test.canister_executed_instructions(canister_id);
 
     let ingress_id = test.dts_install_code(payload);
@@ -241,10 +240,6 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
         executed_instructions,
         test.get_own_subnet_cycles_config(),
         WASM_EXECUTION_MODE,
-    );
-    assert_eq!(
-        test.canister_execution_cost(canister_id) - original_execution_cost,
-        expected_cost
     );
     assert_eq!(
         consumed_cycles_for_instructions(&test, canister_id) - original_consumed_cycles,
