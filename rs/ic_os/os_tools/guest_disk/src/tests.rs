@@ -15,6 +15,7 @@
 
 use crate::{Args, Partition, crypt_name, metrics_file_path, run};
 use anyhow::{Result, anyhow};
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use config_types::{GuestOSConfig, GuestVMType, ICOSSettings};
 use guest_disk::DiskEncryption;
 use guest_disk::crypt::{
@@ -69,7 +70,7 @@ fn default_launch_tcb_as_u64() -> u64 {
 
 /// The default launch measurement for slot A. Tests that assert on keyslot metadata
 /// expect this value (and its derived key) to be written by the SEV format path.
-fn default_launch_measurement() -> [u8; 48] {
+fn default_launch_measurement() -> [u8; LAUNCH_MEASUREMENT_LEN] {
     std::array::from_fn(|i| i as u8)
 }
 
@@ -251,13 +252,13 @@ impl<'a> PartitionView<'a> {
 /// launch measurement identifying the GuestOS version installed on this slot.
 struct BootSlot {
     name: &'static str,
-    launch_measurement: [u8; 48],
+    launch_measurement: [u8; LAUNCH_MEASUREMENT_LEN],
     var_dir: TempDir,
     var_device: TempDevice,
 }
 
 impl BootSlot {
-    fn new(name: &'static str, launch_measurement: [u8; 48]) -> Self {
+    fn new(name: &'static str, launch_measurement: [u8; LAUNCH_MEASUREMENT_LEN]) -> Self {
         let var_device = TempDevice::new(Bytes(18 * 1024 * 1024).sectors()).unwrap();
         Self {
             name,
@@ -482,7 +483,10 @@ impl TestFixture {
     /// measurement) on the other boot slot, then rotates the SEV key (copy detached header,
     /// exchange key) and boots. Returns the result of opening the store so callers can attach
     /// context (e.g. an iteration index).
-    fn upgrade_sev_guestos_to(&mut self, new_launch_measurement: [u8; 48]) -> Result<()> {
+    fn upgrade_sev_guestos_to(
+        &mut self,
+        new_launch_measurement: [u8; LAUNCH_MEASUREMENT_LEN],
+    ) -> Result<()> {
         // Derive the current slot's key (upgrade protocol key exchange).
         let old_key = self.derive_sev_key(Partition::Store);
 
@@ -1167,11 +1171,11 @@ fn test_open_store_multiple_times_with_different_keys() {
         .map(|m| m.sev_metadata.launch_measurement_hex.clone())
         .collect();
     assert!(
-        measurements.contains(&hex::encode([4_u8; 48])),
+        measurements.contains(&hex::encode([4_u8; LAUNCH_MEASUREMENT_LEN])),
         "expected a keyslot from iteration 4, got {measurements:?}"
     );
     assert!(
-        measurements.contains(&hex::encode([5_u8; 48])),
+        measurements.contains(&hex::encode([5_u8; LAUNCH_MEASUREMENT_LEN])),
         "expected a keyslot from iteration 5, got {measurements:?}"
     );
     assert_eq!(fixture.store_partition().active_keyslot_count(), 2);

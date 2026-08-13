@@ -1,3 +1,4 @@
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use sev::firmware::host::TcbVersion;
 use sev::parser::Encoder;
 use sev_guest_firmware::MockSevGuestFirmware;
@@ -12,7 +13,7 @@ pub struct MockSevGuestFirmwareBuilder {
     custom_data_override: Option<[u8; 64]>,
     /// If not set, the derived key will be derived from the measurement bytes.
     derived_key: Option<[u8; 32]>,
-    measurement: [u8; 48],
+    measurement: [u8; LAUNCH_MEASUREMENT_LEN],
     chip_id: [u8; 64],
     reported_tcb: TcbVersion,
     launch_tcb: TcbVersion,
@@ -26,7 +27,7 @@ impl Default for MockSevGuestFirmwareBuilder {
         Self {
             derived_key: None,
             custom_data_override: None,
-            measurement: [0_u8; 48],
+            measurement: [0_u8; LAUNCH_MEASUREMENT_LEN],
             chip_id: [0_u8; 64],
             reported_tcb: TcbVersion::default(),
             launch_tcb: TcbVersion::default(),
@@ -56,7 +57,7 @@ impl MockSevGuestFirmwareBuilder {
         self
     }
 
-    pub fn with_measurement(mut self, measurement: [u8; 48]) -> Self {
+    pub fn with_measurement(mut self, measurement: [u8; LAUNCH_MEASUREMENT_LEN]) -> Self {
         self.measurement = measurement;
         self
     }

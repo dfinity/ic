@@ -1,6 +1,7 @@
 use crate::partitions::{A_BOOT_UUID, A_ROOT_UUID, B_BOOT_UUID, B_ROOT_UUID};
 use crate::recovery::{CONFIG_DEVICE_LABEL, RECOVERY_PROPOSAL_FILE_NAME};
 use anyhow::{Context, Result};
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use candid::Encode;
 use command_runner::MockCommandRunner;
 use config_tool::serialize_and_write_config;
@@ -38,7 +39,7 @@ const BASE_ROOTFS_HASH: &str = "ba5e";
 const RECOVERY_ROOTFS_HASH: &str =
     "1d0dad2a5a983ae4be9a401b0aac325d2a38f1ba217efe0c43bc68806d2ba54a";
 const CHIP_ID: [u8; 64] = [42_u8; 64];
-const MEASUREMENT: [u8; 48] = [66_u8; 48];
+const MEASUREMENT: [u8; LAUNCH_MEASUREMENT_LEN] = [66_u8; LAUNCH_MEASUREMENT_LEN];
 
 const A_ROOT_PATH: &str = "/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7";
 const B_ROOT_PATH: &str = "/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5";
@@ -385,7 +386,7 @@ fn test_recovery_proposal_measurement_mismatch() {
         rootfs_hash: Some(RECOVERY_ROOTFS_HASH.to_string()),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: Some(vec![GuestLaunchMeasurement {
-                measurement: Some(vec![1_u8; 48]), // different from MEASUREMENT
+                measurement: Some(vec![1_u8; LAUNCH_MEASUREMENT_LEN]), // different from MEASUREMENT
                 metadata: None,
             }]),
         }),

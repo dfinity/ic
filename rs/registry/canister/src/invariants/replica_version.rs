@@ -175,6 +175,7 @@ mod tests {
     };
 
     use super::*;
+    use attestation::LAUNCH_MEASUREMENT_LEN;
     use canister_test::PrincipalId;
     use ic_protobuf::registry::replica_version::v1::{
         GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
@@ -587,7 +588,7 @@ mod tests {
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
                 guest_launch_measurements: vec![GuestLaunchMeasurement {
-                    measurement: vec![0x42; 48],
+                    measurement: vec![0x42; LAUNCH_MEASUREMENT_LEN],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: Some("foo=bar".to_string()),
                         vcpu_type: None,

@@ -13,6 +13,7 @@ use ic_registry_keys::{make_replica_version_key, make_subnet_record_key};
 use ic_test_utilities_types::ids::subnet_test_id;
 
 use assert_matches::assert_matches;
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
 };
@@ -31,14 +32,14 @@ fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
     Some(GuestLaunchMeasurements {
         guest_launch_measurements: vec![
             GuestLaunchMeasurement {
-                measurement: vec![0x42; 48],
+                measurement: vec![0x42; LAUNCH_MEASUREMENT_LEN],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("foo=bar".into()),
                     vcpu_type: None,
                 }),
             },
             GuestLaunchMeasurement {
-                measurement: vec![0x42; 48],
+                measurement: vec![0x42; LAUNCH_MEASUREMENT_LEN],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("hello=world".into()),
                     vcpu_type: None,
