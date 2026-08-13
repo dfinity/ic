@@ -290,14 +290,13 @@ pub struct ExecutionTest {
     subnet_memory_reservation: NumBytes,
     // The pool of callbacks available on the subnet.
     subnet_available_callbacks: i64,
-    // The number of instructions executed so far by completed message executions,
-    // per canister.
+    // The number of instructions executed so far, per canister. For canister
+    // messages and tasks, this is accumulated for every executed slice and thus
+    // also accounts for slices of executions that were paused and did not
+    // finish (yet). For subnet messages, i.e. `install_code`, it is accumulated
+    // only once the execution finishes because the instructions charged for
+    // such a message are capped at its instruction limit.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
-    // The total number of instructions executed so far by slices of canister
-    // messages and tasks, per canister. Unlike `executed_instructions`, this is
-    // accumulated for every executed slice and thus also accounts for slices of
-    // executions that were paused and did not finish (yet).
-    total_slice_executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
     execution_cost: HashMap<CanisterId, CompoundCycles<Instructions>>,
     // Tracks paused subnet message executions per canister.
@@ -448,16 +447,6 @@ impl ExecutionTest {
 
     pub fn executed_instructions(&self) -> NumInstructions {
         self.executed_instructions.values().sum()
-    }
-
-    /// Returns the total number of instructions executed so far by slices of
-    /// canister messages and tasks of the given canister, including slices of
-    /// executions that did not finish.
-    pub fn total_slice_executed_instructions(&self, canister_id: CanisterId) -> NumInstructions {
-        self.total_slice_executed_instructions
-            .get(&canister_id)
-            .copied()
-            .unwrap_or_else(|| NumInstructions::new(0))
     }
 
     pub fn ingress_memory_capacity(&self) -> NumBytes {
@@ -1989,17 +1978,20 @@ impl ExecutionTest {
                     state.get_own_subnet_cycles_config(),
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
+                // The instructions of every executed slice are accounted for,
+                // even if the execution was paused and did not finish, whereas
+                // the execution cost is charged only once the execution
+                // finishes.
                 let slice_instructions_used =
                     remaining_round_instructions_before - round_limits.instructions;
-                *self
-                    .total_slice_executed_instructions
-                    .entry(canister_id)
-                    .or_insert_with(|| NumInstructions::new(0)) +=
-                    NumInstructions::from(slice_instructions_used.get() as u64);
+                self.update_executed_instructions(
+                    canister_id,
+                    NumInstructions::from(slice_instructions_used.get() as u64),
+                );
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = result.instructions_used {
-                    self.update_execution_stats(
+                    self.update_execution_cost(
                         canister_id,
                         instructions_used,
                         state.get_own_subnet_cycles_config(),
@@ -2040,12 +2032,27 @@ impl ExecutionTest {
         executed: NumInstructions,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) {
-        let mgr = &self.cycles_account_manager;
+        self.update_executed_instructions(canister_id, executed);
+        self.update_execution_cost(canister_id, executed, subnet_cycles_config);
+    }
+
+    // Increments the executed instructions counter.
+    fn update_executed_instructions(&mut self, canister_id: CanisterId, executed: NumInstructions) {
         *self
             .executed_instructions
             .entry(canister_id)
             .or_insert(NumInstructions::new(0)) += executed;
+    }
 
+    // Increments the execution cost counter by the cost of the given executed
+    // instructions.
+    fn update_execution_cost(
+        &mut self,
+        canister_id: CanisterId,
+        executed: NumInstructions,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+    ) {
+        let mgr = &self.cycles_account_manager;
         let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
 
         let instruction_cost =
@@ -3112,7 +3119,6 @@ impl ExecutionTestBuilder {
             state: Some(state),
             message_id: 0,
             executed_instructions: HashMap::new(),
-            total_slice_executed_instructions: HashMap::new(),
             execution_cost: HashMap::new(),
             paused_subnet_messages: HashMap::new(),
             xnet_messages: vec![],

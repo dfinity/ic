@@ -6016,7 +6016,8 @@ struct ExecutionAccounting {
     /// already by the prepayment, it thus does not depend on whether the
     /// snapshot is taken before or after the prepayment.
     consumed_cycles: NominalCycles,
-    total_slice_executed_instructions: NumInstructions,
+    /// The instructions executed by all the slices of the canister, including
+    /// slices of an execution that was paused and did not finish (yet).
     executed_instructions: NumInstructions,
 }
 
@@ -6031,8 +6032,7 @@ impl ExecutionAccounting {
                 .get(&CyclesUseCase::Instructions)
                 .cloned()
                 .unwrap_or_default(),
-            total_slice_executed_instructions: test.total_slice_executed_instructions(canister_id),
-            executed_instructions: test.executed_instructions(),
+            executed_instructions: test.canister_executed_instructions(canister_id),
         }
     }
 }
@@ -6041,10 +6041,8 @@ impl ExecutionAccounting {
 /// must pause, then decreases the cycles balance of that canister and resumes
 /// the execution, which must fail.
 ///
-/// Asserts that the failed execution is charged for exactly the instructions it
-/// had already executed: the instructions it reports as used match the round
-/// instructions consumed by its slices, and the cycles charged to the canister
-/// match the cost of exactly those instructions.
+/// Asserts that the canister is charged for exactly the instructions that the
+/// slices of the failed execution had executed.
 fn paused_execution_fails_to_resume_after_cycles_decrease(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
@@ -6069,16 +6067,11 @@ fn paused_execution_fails_to_resume_after_cycles_decrease(
 
     let after = ExecutionAccounting::take(test, canister_id);
 
-    // The failed execution reports exactly the instructions consumed by its
-    // slices: resuming failed before resuming the Wasm execution, so no further
-    // instructions were consumed after the last pause.
+    // The cycles consumed for instructions, which the execution derives from the
+    // instructions it reports as used, match the cost of the instructions
+    // executed by the slices: resuming failed before resuming the Wasm
+    // execution, so no further instructions were executed after the last pause.
     let executed_instructions = after.executed_instructions - before.executed_instructions;
-    assert_eq!(
-        executed_instructions,
-        after.total_slice_executed_instructions - before.total_slice_executed_instructions
-    );
-
-    // The canister is charged exactly the cost of those instructions.
     let expected_cost = test
         .cycles_account_manager()
         .execution_cost(
