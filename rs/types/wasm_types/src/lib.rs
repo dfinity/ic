@@ -10,9 +10,7 @@ use ic_heap_bytes::DeterministicHeapBytes;
 use ic_types::DiskBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use ic_validate_eq::ValidateEq;
-use ic_validate_eq_derive::ValidateEq;
 use std::ops::DerefMut;
-use std::sync::RwLock;
 use std::sync::{Mutex, OnceLock};
 use std::{fmt, path::Path, sync::Arc};
 
@@ -65,24 +63,31 @@ const ALL_ZERO: [u8; WASM_HASH_LENGTH] = [0; WASM_HASH_LENGTH];
 ///   * Gzip-compressed Wasm modules (magic number \1f\8b\08)
 // We don't derive `Serialize` and `Deserialize` because this is a binary that is serialized by
 // writing it to a file when creating checkpoints.
-#[derive(ValidateEq)]
 pub struct CanisterModule {
     /// The Wasm binary.
-    #[validate_eq(Ignore)]
     module: ModuleStorage,
     /// The Sha256 hash of the binary.
     /// This field may have a special value, [0; 32], which means that the hash is not
     /// yet computed (as an optimization). This is the case after a call to `write` and
     /// before a subsequent call to `module_hash`.
-    #[validate_eq(Ignore)]
-    module_hash: RwLock<[u8; WASM_HASH_LENGTH]>,
+    module_hash: Mutex<[u8; WASM_HASH_LENGTH]>,
+}
+
+impl ValidateEq for CanisterModule {
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        debug_assert!(*self.module_hash.lock().unwrap() != ALL_ZERO);
+        if *self.module_hash.lock().unwrap() != *rhs.module_hash.lock().unwrap() {
+            return Err("module_hash".into());
+        }
+        Ok(())
+    }
 }
 
 impl Clone for CanisterModule {
     fn clone(&self) -> Self {
         Self {
             module: self.module.clone(),
-            module_hash: RwLock::new(self.module_hash.read().unwrap().clone()),
+            module_hash: Mutex::new(self.module_hash.lock().unwrap().clone()),
         }
     }
 }
@@ -92,7 +97,7 @@ impl CanisterModule {
         let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
         Self {
             module,
-            module_hash: RwLock::new(module_hash),
+            module_hash: Mutex::new(module_hash),
         }
     }
 
@@ -104,7 +109,7 @@ impl CanisterModule {
         let module = ModuleStorage::from_file(wasm_file_layout, len)?;
         Ok(Self {
             module,
-            module_hash: RwLock::new(module_hash.0),
+            module_hash: Mutex::new(module_hash.0),
         })
     }
 
@@ -120,7 +125,7 @@ impl CanisterModule {
         match self.module.write(buf, offset) {
             Ok(()) => {
                 // Mark the hash as invalid. Compute it lazily when requested via `module_hash()`.
-                *self.module_hash.write().unwrap() = ALL_ZERO;
+                *self.module_hash.lock().unwrap() = ALL_ZERO;
                 Ok(())
             }
             Err(e) => Err(e),
@@ -148,10 +153,12 @@ impl CanisterModule {
 
     /// Returns the Sha256 hash of this Wasm module.
     pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
-        if *self.module_hash.read().unwrap() == ALL_ZERO {
-            *self.module_hash.write().unwrap() = ic_crypto_sha2::Sha256::hash(self.as_slice());
+        let mut hash = self.module_hash.lock().unwrap();
+        if *hash != ALL_ZERO {
+            return *hash;
         }
-        *self.module_hash.read().unwrap()
+        *hash = ic_crypto_sha2::Sha256::hash(self.as_slice());
+        *hash
     }
 
     /// Returns the loading status of the module storage.
