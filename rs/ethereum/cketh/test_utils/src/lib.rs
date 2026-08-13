@@ -5,6 +5,7 @@ use crate::flow::{
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
+use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
@@ -144,42 +145,18 @@ impl PocketIcHttpQuery for &CkEthSetup {
 
 impl CkEthSetup {
     pub fn new(env: Arc<PocketIc>) -> Self {
-        // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
-        let minter_id = env.create_canister();
-        env.add_cycles(minter_id, u128::MAX);
-        let ledger_id = env.create_canister();
-        env.add_cycles(ledger_id, u128::MAX);
-        let evm_rpc_id = env.create_canister();
-        env.add_cycles(evm_rpc_id, u128::MAX);
-
-        env.install_canister(
-            ledger_id,
-            ledger_wasm(),
-            Encode!(&LedgerArgument::Init(
-                LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
-                    .with_minting_account(minter_id)
-                    .with_transfer_fee(CKETH_TRANSFER_FEE)
-                    .with_max_memo_length(80)
-                    .with_decimals(18)
-                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
-                        icrc2: true,
-                        icrc152: false
-                    })
-                    .build(),
-            ))
-            .unwrap(),
-            None,
-        );
-        install_evm_rpc(&env, evm_rpc_id);
-        let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
+        let canisters = create_cketh_canisters(&env);
+        install_ledger(&env, &canisters);
+        install_evm_rpc(&env, &canisters, &EvmRpcBackend::Mocked);
+        install_minter(&env, &canisters, &EvmRpcBackend::Mocked);
 
         let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
         Self {
             env,
             caller,
-            ledger_id,
-            minter_id,
-            evm_rpc_id,
+            ledger_id: canisters.ledger_id,
+            minter_id: canisters.minter_id,
+            evm_rpc_id: canisters.evm_rpc_id,
             support_subaccount: false,
         }
     }
@@ -752,13 +729,19 @@ pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
 }
 
 pub fn new_pocket_ic() -> PocketIc {
-    PocketIcBuilder::new()
-        .with_fiduciary_subnet()
+    pocket_ic_builder()
         .with_icp_config(IcpConfig {
             canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
             ..Default::default()
         })
         .build()
+}
+
+/// A [`PocketIcBuilder`] with the fiduciary subnet every ckETH fixture needs for the secp256k1
+/// `key_1` used by the minter; callers add anything further (e.g. an NNS subnet for
+/// [`PocketIc::make_live`]) before `build()`.
+fn pocket_ic_builder() -> PocketIcBuilder {
+    PocketIcBuilder::new().with_fiduciary_subnet()
 }
 
 fn ledger_wasm() -> Vec<u8> {
@@ -791,36 +774,118 @@ fn evm_rpc_wasm() -> Vec<u8> {
     )
 }
 
-fn install_minter(
-    env: &PocketIc,
-    ledger_id: Principal,
+/// The 3 canisters every ckETH fixture creates: the minter, its ckETH ledger and the EVM RPC
+/// canister it calls out to.
+struct CkEthCanisters {
     minter_id: Principal,
+    ledger_id: Principal,
     evm_rpc_id: Principal,
-) -> Principal {
+}
+
+fn create_cketh_canisters(env: &PocketIc) -> CkEthCanisters {
+    // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
+    let minter_id = env.create_canister();
+    env.add_cycles(minter_id, u128::MAX);
+    let ledger_id = env.create_canister();
+    env.add_cycles(ledger_id, u128::MAX);
+    let evm_rpc_id = env.create_canister();
+    env.add_cycles(evm_rpc_id, u128::MAX);
+    CkEthCanisters {
+        minter_id,
+        ledger_id,
+        evm_rpc_id,
+    }
+}
+
+fn install_ledger(env: &PocketIc, canisters: &CkEthCanisters) {
+    env.install_canister(
+        canisters.ledger_id,
+        ledger_wasm(),
+        Encode!(&LedgerArgument::Init(
+            LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
+                .with_minting_account(canisters.minter_id)
+                .with_transfer_fee(CKETH_TRANSFER_FEE)
+                .with_max_memo_length(80)
+                .with_decimals(18)
+                .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
+                    icrc2: true,
+                    icrc152: false
+                })
+                .build(),
+        ))
+        .unwrap(),
+        None,
+    );
+}
+
+/// Where the EVM RPC canister's outcalls are answered, and the Ethereum chain state that follows
+/// from it.
+enum EvmRpcBackend<'a> {
+    /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot.
+    Mocked,
+    /// A live anvil node reached over HTTP at `url`: a fresh chain with no finalized blocks yet.
+    Anvil(&'a str),
+}
+
+impl EvmRpcBackend<'_> {
+    fn install_args(&self) -> InstallArgs {
+        InstallArgs {
+            override_provider: match self {
+                EvmRpcBackend::Mocked => None,
+                EvmRpcBackend::Anvil(url) => Some(OverrideProvider {
+                    override_url: Some(RegexSubstitution {
+                        pattern: ".*".into(),
+                        replacement: url.to_string(),
+                    }),
+                }),
+            },
+            ..Default::default()
+        }
+    }
+
+    fn ethereum_block_height(&self) -> CandidBlockTag {
+        match self {
+            EvmRpcBackend::Mocked => CandidBlockTag::Finalized,
+            // A fresh anvil chain has no finalized blocks, so track its "latest" head instead.
+            EvmRpcBackend::Anvil(_) => CandidBlockTag::Latest,
+        }
+    }
+
+    fn last_scraped_block_number(&self) -> Nat {
+        match self {
+            EvmRpcBackend::Mocked => LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
+            EvmRpcBackend::Anvil(_) => 0_u8.into(),
+        }
+    }
+}
+
+fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &EvmRpcBackend) {
     let args = MinterInitArgs {
         ecdsa_key_name: "key_1".parse().unwrap(),
         ethereum_network: EthereumNetwork::Mainnet,
-        ledger_id,
+        ledger_id: canisters.ledger_id,
         next_transaction_nonce: 0_u8.into(),
-        ethereum_block_height: CandidBlockTag::Finalized,
+        ethereum_block_height: backend.ethereum_block_height(),
         ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
         minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
-        last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
-        evm_rpc_id: Some(evm_rpc_id),
+        last_scraped_block_number: backend.last_scraped_block_number(),
+        evm_rpc_id: Some(canisters.evm_rpc_id),
     };
-    let minter_arg = MinterArg::InitArg(args);
     env.install_canister(
-        minter_id,
+        canisters.minter_id,
         minter_wasm(),
-        Encode!(&minter_arg).unwrap(),
+        Encode!(&MinterArg::InitArg(args)).unwrap(),
         None,
     );
-    minter_id
 }
 
-fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal) {
-    let args = evm_rpc_types::InstallArgs::default();
-    env.install_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap(), None);
+fn install_evm_rpc(env: &PocketIc, canisters: &CkEthCanisters, backend: &EvmRpcBackend) {
+    env.install_canister(
+        canisters.evm_rpc_id,
+        evm_rpc_wasm(),
+        Encode!(&backend.install_args()).unwrap(),
+        None,
+    );
 }
 
 fn fail_as_timed_out(env: &PocketIc, request: &CanisterHttpRequest) {

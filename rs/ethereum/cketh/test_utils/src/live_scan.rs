@@ -1,13 +1,14 @@
-//! A live [`PocketIc`] harness for the ckERC20 balance scan, driving *real* canister outcalls
+//! A live [`pocket_ic::PocketIc`] harness for the ckERC20 balance scan, driving *real* canister outcalls
 //! against a local anvil node that the harness owns (see [`crate::anvil`]).
 //!
-//! Unlike [`crate::ckerc20::CkErc20Setup`] — which runs on `StateMachine` and answers the EVM RPC
-//! canister's JSON-RPC outcalls with canned mocks ([`crate::mock::MockJsonRpcProviders`]) — this
-//! harness runs PocketIC in *live* mode so the EVM RPC canister makes genuine outcalls through the
-//! IC's HTTPS-outcalls feature, and installs it with an `overrideProvider` that rewrites every
-//! provider URL to the harness' anvil node (reached over HTTP, mirroring the `evm_rpc_local`
-//! configuration of the EVM RPC canister). The minter therefore reads real Ethereum state from
-//! anvil, exercising the balance scan end to end: minter → EVM RPC canister → anvil.
+//! Unlike [`crate::ckerc20::CkErc20Setup`] — which also runs on PocketIC but answers the EVM RPC
+//! canister's JSON-RPC outcalls with canned canister-http mocks ([`crate::mock::MockJsonRpcProviders`])
+//! — this harness runs PocketIC in *live* mode so the EVM RPC canister makes genuine outcalls
+//! through the IC's HTTPS-outcalls feature, and installs it with an `overrideProvider` that
+//! rewrites every provider URL to the harness' anvil node (reached over HTTP, mirroring the
+//! `evm_rpc_local` configuration of the EVM RPC canister). The minter therefore reads real
+//! Ethereum state from anvil, exercising the balance scan end to end: minter → EVM RPC canister →
+//! anvil.
 //!
 //! Only the minter and the EVM RPC canister are installed. The full ckERC20 feature is activated by
 //! pointing the minter's ledger-suite-orchestrator id at a principal this harness controls, so
@@ -16,7 +17,6 @@
 //! minter's state.
 
 use candid::{Decode, Encode, Nat, Principal};
-use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
@@ -25,7 +25,7 @@ use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
-use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder};
+use pocket_ic::{CanisterSettings, PocketIc};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 
@@ -34,7 +34,7 @@ use crate::anvil::{
 };
 use crate::{
     CKETH_MINIMUM_WITHDRAWAL_AMOUNT, ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS,
-    USDC_ERC20_CONTRACT_ADDRESS, evm_rpc_wasm, minter_wasm,
+    EvmRpcBackend, USDC_ERC20_CONTRACT_ADDRESS, evm_rpc_wasm, minter_wasm, pocket_ic_builder,
 };
 
 /// USDT's mainnet address, the second token registered so the scan reads more than one token per
@@ -68,12 +68,14 @@ pub struct Holding {
     pub amount: u128,
 }
 
-/// PocketIC's fiduciary subnet holds the secp256k1 test key named `key_1`, the key the minter
-/// derives deposit addresses from.
-const ECDSA_KEY_NAME: &str = "key_1";
-
 /// A fixed non-anonymous principal used as the canisters' controller and as the minter's stand-in
 /// ledger-suite-orchestrator id, so this harness can register supported tokens itself.
+///
+/// The minter and EVM RPC canister are deliberately controlled by this fixed principal rather than
+/// the anonymous default every other ckETH fixture uses: with the anonymous default, the very first
+/// HTTPS outcall the minter issues after going live reproducibly crashed the PocketIC replica with a
+/// cycle-accounting assertion failure (`Invalid cycle change`). This harness keeps its own
+/// canister-creation/controller setup separate from [`crate::CkEthSetup::new`] for that reason.
 fn controller() -> Principal {
     Principal::from_slice(&[0x0a; 10])
 }
@@ -90,11 +92,9 @@ impl CkErc20LiveScanSetup {
     /// the EVM RPC canister's outcalls reach anvil for real.
     pub fn new_live() -> Self {
         let anvil = Anvil::start();
-
-        let mut env = PocketIcBuilder::new()
-            .with_nns_subnet() // make_live requires an NNS subnet.
-            .with_fiduciary_subnet() // holds the secp256k1 `key_1` used by the minter.
-            .build();
+        // `make_live` requires an NNS subnet, on top of the fiduciary subnet every ckETH fixture
+        // needs for the secp256k1 `key_1` used by the minter.
+        let mut env = pocket_ic_builder().with_nns_subnet().build();
 
         let settings = CanisterSettings {
             controllers: Some(vec![controller()]),
@@ -107,7 +107,8 @@ impl CkErc20LiveScanSetup {
         let evm_rpc_id =
             env.create_canister_with_settings(Some(controller()), Some(settings.clone()));
         env.add_cycles(evm_rpc_id, u128::from(u64::MAX));
-        install_evm_rpc(&env, evm_rpc_id, anvil.url());
+        let backend = EvmRpcBackend::Anvil(anvil.url());
+        install_evm_rpc(&env, evm_rpc_id, &backend);
 
         let minter_id = env.create_canister_with_settings(Some(controller()), Some(settings));
         env.add_cycles(minter_id, u128::from(u64::MAX));
@@ -117,7 +118,7 @@ impl CkErc20LiveScanSetup {
         // if they fired while the outcalls could not be answered.
         let _gateway = env.make_live(None);
 
-        install_minter(&env, minter_id, ledger_id, evm_rpc_id);
+        install_minter(&env, minter_id, ledger_id, evm_rpc_id, &backend);
         activate_ckerc20(&env, minter_id);
         register_supported_tokens(&env, minter_id);
 
@@ -253,20 +254,11 @@ fn candidates_in_log(line: &str) -> Option<u64> {
         .ok()
 }
 
-fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, anvil_url: &str) {
-    let args = InstallArgs {
-        override_provider: Some(OverrideProvider {
-            override_url: Some(RegexSubstitution {
-                pattern: ".*".into(),
-                replacement: anvil_url.to_string(),
-            }),
-        }),
-        ..Default::default()
-    };
+fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, backend: &EvmRpcBackend) {
     env.install_canister(
         evm_rpc_id,
         evm_rpc_wasm(),
-        Encode!(&args).unwrap(),
+        Encode!(&backend.install_args()).unwrap(),
         Some(controller()),
     );
 }
@@ -276,17 +268,17 @@ fn install_minter(
     minter_id: Principal,
     ledger_id: Principal,
     evm_rpc_id: Principal,
+    backend: &EvmRpcBackend,
 ) {
     let args = MinterInitArgs {
         ethereum_network: EthereumNetwork::Mainnet,
-        ecdsa_key_name: ECDSA_KEY_NAME.to_string(),
+        ecdsa_key_name: "key_1".to_string(),
         ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
         ledger_id,
-        // anvil is a fresh chain with no finalized blocks, so track its "latest" head.
-        ethereum_block_height: ic_cketh_minter::endpoints::CandidBlockTag::Latest,
+        ethereum_block_height: backend.ethereum_block_height(),
         minimum_withdrawal_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
         next_transaction_nonce: Nat::from(0_u8),
-        last_scraped_block_number: Nat::from(0_u8),
+        last_scraped_block_number: backend.last_scraped_block_number(),
         evm_rpc_id: Some(evm_rpc_id),
     };
     env.install_canister(
