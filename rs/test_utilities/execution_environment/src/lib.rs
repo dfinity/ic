@@ -1728,7 +1728,8 @@ impl ExecutionTest {
             // The instructions of every executed slice are accounted for, even if
             // the execution was paused and did not finish, whereas the execution
             // cost is accumulated only once the execution finishes (see below).
-            // For backward compatibility, we only perform stats updates for install code messages.
+            // For backward compatibility, we only account for the instructions
+            // executed by install code messages.
             if is_install_code {
                 self.update_executed_instructions(
                     canister_id,
@@ -1759,6 +1760,8 @@ impl ExecutionTest {
                         // then no instructions should be used.
                         assert_eq!(capped_slice_instructions_used.get(), 0);
                     }
+                    // For backward compatibility, we only account for the
+                    // execution cost of install code messages.
                     if is_install_code {
                         self.update_execution_cost(
                             canister_id,
