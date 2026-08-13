@@ -55,8 +55,6 @@ pub enum ModuleLoadingStatus {
     FileNotLoaded,
 }
 
-const ALL_ZERO: [u8; WASM_HASH_LENGTH] = [0; WASM_HASH_LENGTH];
-
 /// Canister module stored by the replica.
 /// Currently, we support two kinds of modules:
 ///   * Raw Wasm modules (magic number \0asm)
@@ -67,15 +65,14 @@ pub struct CanisterModule {
     /// The Wasm binary.
     module: ModuleStorage,
     /// The Sha256 hash of the binary.
-    /// This field may have a special value, [0; 32], which means that the hash is not
-    /// yet computed (as an optimization). This is the case after a call to `write` and
-    /// before a subsequent call to `module_hash`.
-    module_hash: Mutex<[u8; WASM_HASH_LENGTH]>,
+    /// This field is `None` when the hash is not yet computed (as an optimization).
+    /// This is the case after a call to `write` and before a subsequent call to `module_hash`.
+    module_hash: Mutex<Option<[u8; WASM_HASH_LENGTH]>>,
 }
 
 impl ValidateEq for CanisterModule {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
-        debug_assert!(*self.module_hash.lock().unwrap() != ALL_ZERO);
+        debug_assert!(self.module_hash.lock().unwrap().is_some());
         if *self.module_hash.lock().unwrap() != *rhs.module_hash.lock().unwrap() {
             return Err("module_hash".into());
         }
@@ -97,7 +94,7 @@ impl CanisterModule {
         let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
         Self {
             module,
-            module_hash: Mutex::new(module_hash),
+            module_hash: Mutex::new(Some(module_hash)),
         }
     }
 
@@ -109,7 +106,7 @@ impl CanisterModule {
         let module = ModuleStorage::from_file(wasm_file_layout, len)?;
         Ok(Self {
             module,
-            module_hash: Mutex::new(module_hash.0),
+            module_hash: Mutex::new(Some(module_hash.0)),
         })
     }
 
@@ -125,7 +122,7 @@ impl CanisterModule {
         match self.module.write(buf, offset) {
             Ok(()) => {
                 // Mark the hash as invalid. Compute it lazily when requested via `module_hash()`.
-                *self.module_hash.lock().unwrap() = ALL_ZERO;
+                *self.module_hash.lock().unwrap() = None;
                 Ok(())
             }
             Err(e) => Err(e),
@@ -154,11 +151,11 @@ impl CanisterModule {
     /// Returns the Sha256 hash of this Wasm module.
     pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
         let mut hash = self.module_hash.lock().unwrap();
-        if *hash != ALL_ZERO {
-            return *hash;
+        if let Some(hash) = *hash {
+            return hash;
         }
-        *hash = ic_crypto_sha2::Sha256::hash(self.as_slice());
-        *hash
+        *hash = Some(ic_crypto_sha2::Sha256::hash(self.as_slice()));
+        hash.unwrap()
     }
 
     /// Returns the loading status of the module storage.
