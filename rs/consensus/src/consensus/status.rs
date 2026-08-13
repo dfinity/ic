@@ -166,7 +166,7 @@ mod tests {
     use std::sync::Arc;
 
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -197,7 +197,7 @@ mod tests {
         let node_ids = [node_test_id(0)];
         let Dependencies {
             mut pool, registry, ..
-        } = dependencies_with_subnet_params(
+        } = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_id,
             vec![
@@ -216,7 +216,8 @@ mod tests {
                         .build(),
                 ),
             ],
-        );
+        )
+        .build();
 
         pool.advance_round_normal_operation_n(CUP_HEIGHT.get());
         Round::new(&mut pool)

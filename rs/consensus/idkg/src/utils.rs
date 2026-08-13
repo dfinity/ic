@@ -519,7 +519,7 @@ mod tests {
     };
     use assert_matches::assert_matches;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_canister_threshold_sigs::{
         IDkgParticipants, dummy_values::dummy_initial_idkg_dealing_for_tests,
         generate_key_transcript,
@@ -687,7 +687,7 @@ mod tests {
             registry,
             registry_data_provider,
             ..
-        } = dependencies(pool_config, 1);
+        } = DependenciesBuilder::new(pool_config, 1).build();
         let subnet_id = subnet_test_id(1);
         let registry_version = RegistryVersion::from(10);
 
@@ -996,7 +996,7 @@ mod tests {
         let block = make_block(Some(idkg_payload), height);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let mut stats = IDkgPayloadStats::default();
@@ -1061,7 +1061,7 @@ mod tests {
         let block = make_block(Some(idkg_payload), block_height);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let mut stats = IDkgPayloadStats::default();
@@ -1081,7 +1081,7 @@ mod tests {
     #[test]
     fn test_block_without_idkg_should_not_deliver_data() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let block = make_block(None, Height::from(100));
@@ -1141,7 +1141,7 @@ mod tests {
         let block = make_block(Some(idkg_payload), height);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let mut stats = IDkgPayloadStats::default();

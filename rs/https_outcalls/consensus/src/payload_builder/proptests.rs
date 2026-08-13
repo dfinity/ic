@@ -11,7 +11,7 @@ use ic_types::{
     canister_http::{
         CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpReject, CanisterHttpRequestContext,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, Replication,
+        CanisterHttpResponseShare, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Replication,
     },
     crypto::{CryptoHash, CryptoHashOf, crypto_hash},
     messages::CallbackId,
@@ -488,16 +488,16 @@ fn prop_flexible_kind(max_size: usize, subnet_size: usize) -> impl Strategy<Valu
 
 /// Generates random content that is either a success message of length up to
 /// `max_size` bytes or a reject message whose description has length up to
-/// `max_size` bytes.
+/// `min(max_size, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES=1KiB)` bytes.
 fn prop_content(max_size: usize) -> impl Strategy<Value = CanisterHttpResponseContent> {
     prop_oneof![
         (0..=max_size).prop_map(|size| CanisterHttpResponseContent::Success(vec![0; size])),
-        (0..=max_size).prop_map(
-            |size| CanisterHttpResponseContent::Reject(CanisterHttpReject {
+        (0..=max_size.min(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES)).prop_map(|size| {
+            CanisterHttpResponseContent::Reject(CanisterHttpReject {
                 reject_code: RejectCode::SysFatal,
                 message: "a".repeat(size),
             })
-        ),
+        }),
     ]
 }
 
