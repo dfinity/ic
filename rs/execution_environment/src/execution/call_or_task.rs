@@ -427,15 +427,16 @@ impl CallOrTaskHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// performed update call steps in subsequent rounds.
-    /// The given `executed_wasm_instructions` are the instructions executed by
-    /// the Wasm slice that is being paused.
-    fn pause(self, executed_wasm_instructions: NumInstructions) -> PausedCallOrTaskHelper {
+    /// The given `slice_executed_instructions` are the instructions executed by
+    /// the slice of the Wasm execution that is being paused; they are added to
+    /// the instructions executed by its earlier slices.
+    fn pause(self, slice_executed_instructions: NumInstructions) -> PausedCallOrTaskHelper {
         self.deallocation_sender.send(Box::new(self.canister));
         PausedCallOrTaskHelper {
             call_context_id: self.call_context_id,
             initial_cycles_balance: self.initial_cycles_balance,
             executed_wasm_instructions: self.executed_wasm_instructions
-                + executed_wasm_instructions,
+                + slice_executed_instructions,
         }
     }
 

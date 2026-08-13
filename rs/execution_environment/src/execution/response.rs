@@ -306,12 +306,13 @@ impl ResponseHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// initial steps in subsequent rounds.
-    /// The given `executed_wasm_instructions` are the instructions executed by
-    /// the Wasm slice that is being paused.
+    /// The given `slice_executed_instructions` are the instructions executed by
+    /// the slice of the Wasm execution that is being paused; they are added to
+    /// the instructions executed by its earlier slices.
     fn pause(
         self,
         round_limits: &mut RoundLimits,
-        executed_wasm_instructions: NumInstructions,
+        slice_executed_instructions: NumInstructions,
     ) -> PausedResponseHelper {
         self.revert_subnet_memory_reservation(round_limits);
         self.deallocation_sender.send(Box::new(self.canister));
@@ -323,7 +324,7 @@ impl ResponseHelper {
             initial_cycles_balance: self.initial_cycles_balance,
             response_sender: self.response_sender,
             executed_wasm_instructions: self.executed_wasm_instructions
-                + executed_wasm_instructions,
+                + slice_executed_instructions,
         }
     }
 

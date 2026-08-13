@@ -248,15 +248,16 @@ impl InstallCodeHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// performed `install_code` steps in subsequent rounds.
-    /// The given `executed_wasm_instructions` are the instructions executed by
-    /// the Wasm slice that is being paused.
-    pub fn pause(self, executed_wasm_instructions: NumInstructions) -> PausedInstallCodeHelper {
+    /// The given `slice_executed_instructions` are the instructions executed by
+    /// the slice of the Wasm execution that is being paused; they are added to
+    /// the instructions executed by its earlier slices.
+    pub fn pause(self, slice_executed_instructions: NumInstructions) -> PausedInstallCodeHelper {
         PausedInstallCodeHelper {
             instructions_left: self.instructions_left(),
             steps: self.steps,
             initial_cycles_balance: self.initial_cycles_balance,
             executed_wasm_instructions: self.executed_wasm_instructions
-                + executed_wasm_instructions,
+                + slice_executed_instructions,
         }
     }
 
