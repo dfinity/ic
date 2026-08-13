@@ -100,13 +100,13 @@ impl CkErc20LiveScanSetup {
         // A placeholder ckETH ledger: the minter stores its id at init but never calls it on the
         // balance-scan path, so it is left uninstalled.
         let ledger_id = env.create_canister();
-        // Unlike the mocked fixture's `u128::MAX` (never executed as real cycles since it never
-        // goes live), this must leave headroom below the saturating `Cycles` balance ceiling: a
-        // canister that has already saturated cannot observe *any* further cycle addition, and the
-        // first HTTPS outcall a live canister accepts cycles for trips a cycle-accounting assertion
-        // in the replica if its balance cannot move.
         let evm_rpc_id =
             env.create_canister_with_settings(Some(controller()), Some(settings.clone()));
+        // Unlike the mocked fixture's `u128::MAX`, this must leave headroom below the saturating
+        // `Cycles` balance ceiling: a canister already at that ceiling cannot observe *any* further
+        // cycle addition, and the first HTTPS outcall a live canister accepts cycles for trips a
+        // cycle-accounting assertion in the replica if its balance cannot move. Applies equally to
+        // `minter_id` below.
         env.add_cycles(evm_rpc_id, u128::from(u64::MAX));
 
         let minter_id = env.create_canister_with_settings(Some(controller()), Some(settings));
