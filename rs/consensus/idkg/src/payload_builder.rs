@@ -709,7 +709,7 @@ mod tests {
     use super::*;
     use crate::{test_utils::*, utils::block_chain_reader};
     use assert_matches::assert_matches;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
         dummy_values::dummy_initial_idkg_dealing_for_tests, generate_tecdsa_protocol_inputs,
@@ -902,7 +902,7 @@ mod tests {
     fn test_update_summary_refs(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let subnet_id = subnet_test_id(1);
             let mut expected_transcripts = BTreeSet::new();
             let transcript_builder = TestIDkgTranscriptBuilder::new();
@@ -1163,7 +1163,7 @@ mod tests {
     fn test_summary_proto_conversion(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let subnet_id = subnet_test_id(1);
             let transcript_builder = TestIDkgTranscriptBuilder::new();
             // Create a summary block with transcripts
@@ -1419,7 +1419,7 @@ mod tests {
                 registry,
                 registry_data_provider,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
             let subnet_id = subnet_test_id(1);
             let mut block_reader = TestIDkgBlockReader::new();
 
@@ -1559,7 +1559,7 @@ mod tests {
                 registry,
                 registry_data_provider,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
             let subnet_id = subnet_test_id(1);
             let mut block_reader = TestIDkgBlockReader::new();
 
@@ -1896,7 +1896,7 @@ mod tests {
                 registry,
                 registry_data_provider,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
             let subnet_id = subnet_test_id(1);
             let node_ids = vec![node_test_id(0)];
             let subnet_record = SubnetRecordBuilder::from(&node_ids)
@@ -2099,7 +2099,7 @@ mod tests {
                 registry,
                 registry_data_provider,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
             let subnet_id = subnet_test_id(1);
             let node_ids = vec![node_test_id(0)];
             let subnet_record = SubnetRecordBuilder::from(&node_ids)

@@ -381,7 +381,7 @@ impl TryFrom<pb::Callback> for Callback {
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
             respondent: try_from_option_field(value.respondent, "Callback::respondent")?,
-            cycles_sent: Cycles::from(cycles_sent),
+            cycles_sent: Cycles::try_from(cycles_sent)?,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
             prepayment_for_call_transmission,

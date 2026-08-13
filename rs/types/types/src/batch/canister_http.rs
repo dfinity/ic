@@ -32,8 +32,40 @@ pub struct CanisterHttpPayload {
     pub responses: Vec<CanisterHttpResponseWithConsensus>,
     pub timeouts: Vec<CallbackId>,
     pub divergence_responses: Vec<CanisterHttpResponseDivergence>,
+    pub out_of_cycles: Vec<CanisterHttpOutOfCycles>,
     pub flexible_responses: Vec<FlexibleCanisterHttpResponses>,
     pub flexible_errors: Vec<FlexibleCanisterHttpError>,
+}
+
+/// A fully- or non-replicated HTTP outcall whose committee can no longer cover the
+/// consensus cost of delivering a response, proved by the receipts it has signed so
+/// far.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpOutOfCycles {
+    pub callback_id: CallbackId,
+    /// The signed receipts seen so far, at most one per replica.
+    pub shares: Vec<CanisterHttpResponseShare>,
+    /// The least it can cost to deliver a response.
+    pub min_cost: Cycles,
+    /// What is left of the committee's collective allowance, counting a full allowance
+    /// for every replica not among `shares`.
+    pub unspent_allowance: Cycles,
+}
+
+impl CountBytes for CanisterHttpOutOfCycles {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            callback_id,
+            shares,
+            min_cost,
+            unspent_allowance,
+        } = self;
+        callback_id.count_bytes()
+            + shares.iter().map(|s| s.count_bytes()).sum::<usize>()
+            + std::mem::size_of_val(min_cost)
+            + std::mem::size_of_val(unspent_allowance)
+    }
 }
 
 /// An error detected during flexible HTTP outcall processing.
@@ -237,12 +269,14 @@ impl CanisterHttpPayload {
             responses,
             timeouts,
             divergence_responses,
+            out_of_cycles,
             flexible_responses,
             flexible_errors,
         } = self;
         responses.len()
             + timeouts.len()
             + divergence_responses.len()
+            + out_of_cycles.len()
             + flexible_responses.len()
             + flexible_errors.len()
     }
@@ -253,11 +287,13 @@ impl CanisterHttpPayload {
             responses,
             timeouts: _,
             divergence_responses,
+            out_of_cycles,
             flexible_responses,
             flexible_errors,
         } = self;
         responses.len()
             + divergence_responses.len()
+            + out_of_cycles.len()
             + flexible_responses.len()
             + flexible_errors
                 .iter()
@@ -531,6 +567,44 @@ impl TryFrom<pb::FlexibleCanisterHttpResponseWithProof> for FlexibleCanisterHttp
             proof: try_from_option_field(
                 entry.proof,
                 "FlexibleCanisterHttpResponseWithProof::proof",
+            )?,
+        })
+    }
+}
+
+impl From<CanisterHttpOutOfCycles> for pb::CanisterHttpOutOfCycles {
+    fn from(out_of_cycles: CanisterHttpOutOfCycles) -> Self {
+        pb::CanisterHttpOutOfCycles {
+            callback_id: out_of_cycles.callback_id.get(),
+            shares: out_of_cycles
+                .shares
+                .into_iter()
+                .map(pb::CanisterHttpShare::from)
+                .collect(),
+            min_cost: Some(out_of_cycles.min_cost.into()),
+            unspent_allowance: Some(out_of_cycles.unspent_allowance.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpOutOfCycles> for CanisterHttpOutOfCycles {
+    type Error = ProxyDecodeError;
+
+    fn try_from(out_of_cycles: pb::CanisterHttpOutOfCycles) -> Result<Self, Self::Error> {
+        Ok(CanisterHttpOutOfCycles {
+            callback_id: CallbackId::new(out_of_cycles.callback_id),
+            shares: out_of_cycles
+                .shares
+                .into_iter()
+                .map(CanisterHttpResponseShare::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+            min_cost: try_from_option_field(
+                out_of_cycles.min_cost,
+                "CanisterHttpOutOfCycles::min_cost",
+            )?,
+            unspent_allowance: try_from_option_field(
+                out_of_cycles.unspent_allowance,
+                "CanisterHttpOutOfCycles::unspent_allowance",
             )?,
         })
     }
@@ -846,6 +920,7 @@ mod tests {
             let CanisterHttpPayload {
                 responses,
                 divergence_responses,
+                out_of_cycles,
                 flexible_responses,
                 flexible_errors,
                 timeouts: _, // skipped because there is no dedicated protobuf conversion for this
@@ -875,6 +950,11 @@ mod tests {
             for error in flexible_errors {
                 let pb = pb::FlexibleCanisterHttpError::from(error.clone());
                 let roundtripped = FlexibleCanisterHttpError::try_from(pb).unwrap();
+                assert_eq!(error, roundtripped);
+            }
+            for error in out_of_cycles {
+                let pb = pb::CanisterHttpOutOfCycles::from(error.clone());
+                let roundtripped = CanisterHttpOutOfCycles::try_from(pb).unwrap();
                 assert_eq!(error, roundtripped);
             }
         }

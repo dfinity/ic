@@ -253,7 +253,7 @@ crate.spec(
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.34",
+    version = "^0.10.35",
 )
 crate.spec(
     package = "cargo_metadata",
@@ -1207,7 +1207,7 @@ crate.spec(
     # https://github.com/tikv/pprof-rs
     git = "https://github.com/dfinity/pprof-rs",
     package = "pprof",
-    rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
+    rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771",
 )
 crate.spec(
     package = "predicates",
@@ -1718,6 +1718,7 @@ crate.spec(
     features = [
         "full",
     ],
+    # Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
     git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
     rev = "cddf1c64011d00f36016146e8447bef99531030c",
