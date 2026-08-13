@@ -877,14 +877,21 @@ fn create_canister(env: &PocketIc, controller: Option<Principal>) -> Principal {
     }
 }
 
+/// Cycles every canister this fixture creates is funded with. `u128::MAX` — the natural "as much as
+/// possible" choice — reproducibly crashes the live harness' PocketIC replica with a
+/// cycle-accounting assertion failure (`Invalid cycle change`) on the minter's first HTTPS outcall:
+/// a canister already at the saturating `Cycles` balance ceiling cannot observe any further
+/// addition. This amount leaves headroom below that ceiling instead.
+const CANISTER_CYCLES: u128 = u64::MAX as u128;
+
 fn create_cketh_canisters(env: &PocketIc, controller: Option<Principal>) -> CkEthCanisters {
     // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
     let minter_id = create_canister(env, controller);
-    env.add_cycles(minter_id, u128::from(u64::MAX));
+    env.add_cycles(minter_id, CANISTER_CYCLES);
     let ledger_id = create_canister(env, controller);
-    env.add_cycles(ledger_id, u128::from(u64::MAX));
+    env.add_cycles(ledger_id, CANISTER_CYCLES);
     let evm_rpc_id = create_canister(env, controller);
-    env.add_cycles(evm_rpc_id, u128::from(u64::MAX));
+    env.add_cycles(evm_rpc_id, CANISTER_CYCLES);
     CkEthCanisters {
         minter_id,
         ledger_id,
