@@ -745,9 +745,11 @@ impl<'a> CkEthSetupBuilder<'a> {
     }
 
     /// Switches PocketIC to live mode: an NNS subnet in addition to the fiduciary one, going live
-    /// before any canister exists (see [`new_env`]), and a fixed non-anonymous controller (instead
-    /// of every other fixture's anonymous default) that owns every canister this fixture creates —
-    /// see [`live_controller`] for why.
+    /// before any canister exists (see [`new_env`]), a fixed non-anonymous controller (instead of
+    /// every other fixture's anonymous default) that owns every canister this fixture creates (see
+    /// [`live_controller`]), and leaving the ckETH ledger uninstalled — the balance scan never
+    /// calls it, and installing it would need the ledger canister Wasm declared as a Bazel data
+    /// dependency of the anvil-backed test target, which it is not.
     fn with_live_mode(mut self) -> Self {
         self.live = true;
         self
@@ -758,12 +760,7 @@ impl<'a> CkEthSetupBuilder<'a> {
         let controller = self.live.then(live_controller);
         let canisters = create_cketh_canisters(&env, controller);
         if !self.live {
-            // Tried installing the real ledger for the live harness too, to drop this
-            // conditional: it fails outright, since the anvil-backed Bazel test target does not
-            // declare the ledger canister Wasm as a data dependency (`load_wasm`'s `cargo
-            // metadata` fallback has no access to the ledger crate's directory in that sandbox).
-            // The minter stores the ledger's id at init but never calls it on the balance-scan
-            // path, so the live harness leaves it uninstalled instead.
+            // Live mode leaves the ckETH ledger uninstalled; see with_live_mode's doc for why.
             install_ledger(&env, &canisters);
         }
         install_evm_rpc(&env, &canisters, &self.backend);
