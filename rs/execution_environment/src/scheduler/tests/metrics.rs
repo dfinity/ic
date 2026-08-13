@@ -21,10 +21,7 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
-use ic_replicated_state::testing::{
-    OutputRequestBuilder, ReplicatedStateTesting, SystemStateTesting,
-};
-use ic_replicated_state::{CallOrigin, SubnetTopology};
+use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
     fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, labels,
@@ -32,14 +29,13 @@ use ic_test_utilities_metrics::{
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
+use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RejectContext, StopCanisterCallId,
-    StopCanisterContext,
+    CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::time::{CoarseTime, UNIX_EPOCH};
-use ic_types::{NumBytes, SubnetId};
+use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
 };
@@ -838,205 +834,6 @@ fn replicated_state_metrics_pending_refunds() {
 
     state.take_refunds(|_| true);
     assert_gauge(0, &state, NAME);
-}
-
-#[test]
-fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts() {
-    const NAME: &str = "replicated_state_unresponded_unbounded_wait_call_contexts";
-    let own_subnet = subnet_test_id(1);
-    let remote_subnet = subnet_test_id(2);
-    let local_canister = canister_test_id(0);
-
-    let subnet_label_values = &[
-        own_subnet.to_string(),
-        remote_subnet.to_string(),
-        "unknown".to_string(),
-    ];
-    let subnet_label_values: Vec<&str> = subnet_label_values.iter().map(String::as_str).collect();
-
-    // A sender on this subnet, one on a remote subnet and one that cannot be routed
-    // anywhere; each expected under the respective label value.
-    for (sender, label_value) in [
-        (canister_test_id(1), own_subnet.to_string()),
-        (canister_test_id(11), remote_subnet.to_string()),
-        (canister_test_id(100), "unknown".to_string()),
-    ] {
-        let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
-        state.metadata.modify_network_topology(|network_topology| {
-            for (range, subnet_id) in [
-                ((canister_test_id(0), canister_test_id(9)), own_subnet),
-                ((canister_test_id(10), canister_test_id(19)), remote_subnet),
-            ] {
-                network_topology
-                    .routing_table_mut()
-                    .insert(
-                        CanisterIdRange {
-                            start: range.0,
-                            end: range.1,
-                        },
-                        subnet_id,
-                    )
-                    .unwrap();
-            }
-            let subnets = [own_subnet, remote_subnet]
-                .into_iter()
-                .map(|subnet_id| (subnet_id, SubnetTopology::default()))
-                .collect();
-            network_topology.set_subnets(subnets);
-        });
-        state.put_canister_state(get_running_canister(local_canister));
-        assert_gauge_vec(None, &state, NAME, "sender_subnet", &subnet_label_values);
-
-        // An unbounded-wait call from `sender`, awaiting a response, bumps the count
-        // for its subnet to 1.
-        let system_state = &mut state
-            .canister_state_make_mut(&local_canister)
-            .unwrap()
-            .system_state;
-        let call_context_id = system_state
-            .new_call_context(
-                CallOrigin::CanisterUpdate(
-                    sender,
-                    CallbackId::from(1),
-                    NO_DEADLINE,
-                    String::from(""),
-                ),
-                Cycles::zero(),
-                UNIX_EPOCH,
-                Default::default(),
-                None,
-            )
-            .unwrap();
-        assert_gauge_vec(
-            Some(&label_value),
-            &state,
-            NAME,
-            "sender_subnet",
-            &subnet_label_values,
-        );
-
-        // Responding to it drops the count back to 0. A downstream call is made
-        // first, so that the call context survives being responded to and the count
-        // drops because of the response, not because the call context is gone: the
-        // downstream call registers a callback against the call context, so the
-        // latter still has an outstanding call when it is responded to and is thus
-        // retained (a responded call context with no outstanding calls is dropped).
-        let system_state = &mut state
-            .canister_state_make_mut(&local_canister)
-            .unwrap()
-            .system_state;
-        let mut downstream_call = OutputRequestBuilder::default()
-            .sender(local_canister)
-            .receiver(canister_test_id(20))
-            .build();
-        downstream_call.call_context_id = call_context_id;
-        system_state
-            .push_output_request(downstream_call, UNIX_EPOCH)
-            .unwrap();
-        system_state
-            .on_canister_result(
-                call_context_id,
-                Ok(Some(WasmResult::Reply(vec![]))),
-                NumInstructions::from(0),
-            )
-            .unwrap();
-        assert!(
-            system_state
-                .call_context_manager()
-                .unwrap()
-                .call_context(call_context_id)
-                .unwrap()
-                .has_responded()
-        );
-        assert_gauge_vec(None, &state, NAME, "sender_subnet", &subnet_label_values);
-
-        // The call context of a paused or aborted request execution is not part of
-        // the `CallContextManager`, but it is counted all the same. Not so for a
-        // best-effort request.
-        let system_state = &mut state
-            .canister_state_make_mut(&local_canister)
-            .unwrap()
-            .system_state;
-        let aborted_execution = |deadline| ExecutionTask::AbortedExecution {
-            input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::new(
-                RequestBuilder::default()
-                    .sender(sender)
-                    .receiver(local_canister)
-                    .deadline(deadline)
-                    .build(),
-            ))),
-            prepaid_execution_cycles: CompoundCycles::new(
-                Cycles::zero(),
-                CanisterCyclesCostSchedule::Normal,
-            ),
-        };
-        system_state
-            .task_queue
-            .enqueue(aborted_execution(CoarseTime::from_secs_since_unix_epoch(1)));
-        assert_gauge_vec(None, &state, NAME, "sender_subnet", &subnet_label_values);
-
-        let system_state = &mut state
-            .canister_state_make_mut(&local_canister)
-            .unwrap()
-            .system_state;
-        system_state.task_queue.pop_front();
-        system_state
-            .task_queue
-            .enqueue(aborted_execution(NO_DEADLINE));
-        assert_gauge_vec(
-            Some(&label_value),
-            &state,
-            NAME,
-            "sender_subnet",
-            &subnet_label_values,
-        );
-    }
-}
-
-#[test]
-fn replicated_state_metrics_unresponded_unbounded_wait_call_contexts_drops_removed_subnets() {
-    const NAME: &str = "replicated_state_unresponded_unbounded_wait_call_contexts";
-    let own_subnet = subnet_test_id(1);
-    let remote_subnet = subnet_test_id(2);
-
-    let set_subnets = |state: &mut ReplicatedState, subnet_ids: &[SubnetId]| {
-        let subnets = subnet_ids
-            .iter()
-            .map(|subnet_id| (*subnet_id, SubnetTopology::default()))
-            .collect();
-        state
-            .metadata
-            .modify_network_topology(|network_topology| network_topology.set_subnets(subnets));
-    };
-
-    // Unlike elsewhere in this test module, the same metrics registry is used across
-    // both observations, in order to be able to observe stale time series.
-    let registry = MetricsRegistry::new();
-    let metrics = ReplicatedStateMetrics::new(&registry);
-
-    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
-    set_subnets(&mut state, &[own_subnet, remote_subnet]);
-    metrics.observe(own_subnet, &state, 0.into(), &no_op_logger());
-    assert_eq!(
-        metric_vec(&[
-            (&[("sender_subnet", own_subnet.to_string())], 0),
-            (&[("sender_subnet", remote_subnet.to_string())], 0),
-            (&[("sender_subnet", "unknown".into())], 0),
-        ]),
-        fetch_int_gauge_vec(&registry, NAME)
-    );
-
-    // Dropping `remote_subnet` from the network topology (e.g. because it was merged
-    // into `own_subnet`) drops its time series, rather than leaving it behind.
-    set_subnets(&mut state, &[own_subnet]);
-    metrics.observe(own_subnet, &state, 0.into(), &no_op_logger());
-    assert_eq!(
-        metric_vec(&[
-            (&[("sender_subnet", own_subnet.to_string())], 0),
-            (&[("sender_subnet", "unknown".into())], 0),
-        ]),
-        fetch_int_gauge_vec(&registry, NAME)
-    );
 }
 
 #[test]
