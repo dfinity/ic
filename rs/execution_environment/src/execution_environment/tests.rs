@@ -6218,9 +6218,11 @@ fn dts_resume_fails_due_to_cycles_decrease() {
             "update",
             wasm()
                 .set_heartbeat(
+                    // The stable memory is grown before the execution is paused
+                    // so that the resume can be checked to drop that change.
                     wasm()
-                        .instruction_counter_is_at_least(1_000_000)
                         .stable_grow(1)
+                        .instruction_counter_is_at_least(1_000_000)
                         .build(),
                 )
                 .reply()
