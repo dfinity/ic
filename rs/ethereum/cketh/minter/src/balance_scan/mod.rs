@@ -147,7 +147,7 @@ async fn scan_balances<R: Runtime>(
     let mut decode_errors = 0_usize;
     let mut call_errors = 0_usize;
 
-    // `batch` chunks *by address* so an address' per-token calls never straddle a batch boundary:
+    // `batches` chunks *by address* so an address' per-token calls never straddle a batch boundary:
     // the per-address scan-state advance is all-or-nothing per batch, and a split address could be
     // advanced with only part of its balances read.
     let addresses_to_scan: Vec<DepositAccount> = due
@@ -155,7 +155,7 @@ async fn scan_balances<R: Runtime>(
         .map(|(account, request)| DepositAccount::new(*account, request.address))
         .collect();
     let scan = BalanceScan::new(&addresses_to_scan, erc20_tokens);
-    for batch in scan.batch(MAX_CALLS_PER_BATCH) {
+    for batch in scan.batches(MAX_CALLS_PER_BATCH) {
         let calls = batch.balance_calls();
         let input = batcher::encode_balance_batch(&calls);
         match client
@@ -362,7 +362,7 @@ fn call_args(input: Vec<u8>, block: BlockNumber) -> evm_rpc_types::CallArgs {
 }
 
 /// A set of deposit accounts to read every supported ERC-20 `token` balance for. Splittable into
-/// `eth_call`-sized [`BalanceScanBatch`]es, and — per batch — turned into the `balanceOf` calls to
+/// `eth_call`-sized [`BalanceScanBatches`], and — per batch — turned into the `balanceOf` calls to
 /// send ([`Self::balance_calls`]) and, from the decoded balances, one [`BalanceScanResult`] per
 /// `(account, token)` ([`Self::collect_balances`]).
 struct BalanceScan<'a> {
@@ -375,17 +375,18 @@ impl<'a> BalanceScan<'a> {
         Self { accounts, tokens }
     }
 
-    /// Split into batches of at most `size` `balanceOf` calls, chunking whole accounts so an
-    /// account's per-token calls are never spread across batches. Panics if `size` is smaller than
-    /// the token count, which would make a single account's calls exceed one batch.
-    fn batch(&self, size: usize) -> BalanceScanBatch<'a> {
-        assert!(
-            size >= self.tokens.len(),
-            "BUG: batch of size {size} would split an address across multiple batches"
-        );
-        let addresses_per_chunk = (size / self.tokens.len().max(1)).max(1);
-        BalanceScanBatch {
-            accounts: self.accounts.chunks(addresses_per_chunk),
+    /// Split into batches of `size` `balanceOf` calls, chunking whole accounts so an account's
+    /// per-token calls are never spread across batches.
+    ///
+    /// `size` is a target, not a hard cap: an account is never split, so once the token set alone
+    /// needs more than `size` calls, each batch holds exactly one account and overshoots. That is
+    /// the safer overshoot — an oversized batch at worst fails at the provider and stalls its own
+    /// addresses, whereas splitting an account could advance it (see [`MAX_CALLS_PER_BATCH`]) with
+    /// only part of its balances read.
+    fn batches(&self, size: usize) -> BalanceScanBatches<'a> {
+        let accounts_per_batch = (size / self.tokens.len().max(1)).max(1);
+        BalanceScanBatches {
+            accounts: self.accounts.chunks(accounts_per_batch),
             tokens: self.tokens,
         }
     }
@@ -424,12 +425,12 @@ impl<'a> BalanceScan<'a> {
 
 /// Iterator over the [`BalanceScan`] batches of a larger scan, each a chunk of accounts small
 /// enough to read in a single `eth_call`.
-struct BalanceScanBatch<'a> {
+struct BalanceScanBatches<'a> {
     accounts: Chunks<'a, DepositAccount>,
     tokens: &'a [Address],
 }
 
-impl<'a> Iterator for BalanceScanBatch<'a> {
+impl<'a> Iterator for BalanceScanBatches<'a> {
     type Item = BalanceScan<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {

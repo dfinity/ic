@@ -145,15 +145,57 @@ fn should_build_no_calls_when_no_addresses_or_no_tokens() {
     assert!(BalanceScan::new(&[], &[TOKEN_A]).balance_calls().is_empty());
     let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
     assert!(BalanceScan::new(&addresses, &[]).balance_calls().is_empty());
+
+    // Batching a token-less scan yields a call-less batch rather than dividing by zero. `scan`
+    // never gets here — it returns early when no ERC-20 contract is supported.
+    let batches: Vec<Vec<BalanceOfCall>> = BalanceScan::new(&addresses, &[])
+        .batches(MAX_CALLS_PER_BATCH)
+        .map(|batch| batch.balance_calls())
+        .collect();
+    assert_eq!(batches, vec![Vec::<BalanceOfCall>::new()]);
 }
 
 #[test]
-#[should_panic(expected = "would split an address")]
-fn should_reject_a_batch_smaller_than_the_token_count() {
-    let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
+fn should_overshoot_a_batch_smaller_than_the_token_count() {
+    let addresses = vec![
+        deposit_account(account(1), DEPOSIT_ADDRESS),
+        deposit_account(account(2), Address::new([0x99; 20])),
+    ];
     let tokens = vec![TOKEN_A, TOKEN_B];
-    // A batch of 1 call cannot hold a single address' 2 token calls without splitting it.
-    let _ = BalanceScan::new(&addresses, &tokens).batch(1);
+
+    // A batch of 1 call cannot hold a single address' 2 token calls. Rather than splitting the
+    // address (which a failing batch could then advance half-read) or refusing to scan at all,
+    // each batch holds one whole address and overshoots the requested size.
+    let batches: Vec<Vec<BalanceOfCall>> = BalanceScan::new(&addresses, &tokens)
+        .batches(1)
+        .map(|batch| batch.balance_calls())
+        .collect();
+
+    assert_eq!(
+        batches,
+        vec![
+            vec![
+                BalanceOfCall {
+                    token: TOKEN_A,
+                    holder: DEPOSIT_ADDRESS
+                },
+                BalanceOfCall {
+                    token: TOKEN_B,
+                    holder: DEPOSIT_ADDRESS
+                },
+            ],
+            vec![
+                BalanceOfCall {
+                    token: TOKEN_A,
+                    holder: Address::new([0x99; 20])
+                },
+                BalanceOfCall {
+                    token: TOKEN_B,
+                    holder: Address::new([0x99; 20])
+                },
+            ],
+        ]
+    );
 }
 
 #[test]
@@ -173,14 +215,21 @@ fn should_never_split_an_address_across_batches() {
         .map(|i| deposit_account(account(i), address_at(1_000 + i)))
         .collect();
 
-    for num_tokens in [1_usize, 2, 7] {
+    // Batch sizes holding ~2 addresses, so the 5 addresses span several batches — plus the two
+    // rows where a single address' calls alone meet or exceed the cap, and every batch must hold
+    // exactly one whole address rather than split it.
+    for (num_tokens, batch_size) in [
+        (1_usize, 2_usize),
+        (2, 4),
+        (7, 14),
+        (MAX_CALLS_PER_BATCH, MAX_CALLS_PER_BATCH),
+        (MAX_CALLS_PER_BATCH + 1, MAX_CALLS_PER_BATCH),
+    ] {
         let tokens: Vec<Address> = (0..num_tokens as u64).map(address_at).collect();
         let scan = BalanceScan::new(&accounts, &tokens);
-        // A batch that holds ~2 addresses, so the 5 addresses span several batches.
-        let batch_size = 2 * num_tokens;
 
         let mut seen: BTreeSet<Address> = BTreeSet::new();
-        for batch in scan.batch(batch_size) {
+        for batch in scan.batches(batch_size) {
             let calls = batch.balance_calls();
             let mut holders: Vec<Address> = calls.iter().map(|call| call.holder).collect();
             holders.dedup();
