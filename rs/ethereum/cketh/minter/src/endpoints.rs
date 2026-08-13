@@ -282,7 +282,8 @@ pub enum DepositErc20Error {
     UnsupportedCkErc20Token,
     /// The account already has the maximum number of ERC-20 tokens armed.
     TooManyTokensForAccount,
-    /// The maximum number of concurrently armed deposit addresses has been reached.
+    /// The maximum number of concurrently armed deposits (`(account, token)` pairs) has been
+    /// reached.
     TooManyActiveAddresses,
     /// The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable(String),

@@ -394,11 +394,12 @@ unique, deterministic deposit address, derived from the minter's threshold-ECDSA
   funds at a deposit address never depend on contract code — even without
   EIP-7702, any balance is recoverable by funding the address with gas and signing
   a normal transfer.
-* Endpoint `deposit_erc20({ erc20_contract_address, account, fee? }) -> { address, status }`
-  (address EIP-55 checksummed). The `erc20_contract_address` is the Ethereum ERC-20
-  contract to deposit, parsed to an `Address` and required to be a minter-supported
-  ckERC20 — mirroring the CEX UX: pick the token, the network is always Ethereum,
-  then show the (shared) deposit address.
+* Endpoint `deposit_erc20({ erc20_contract_address, mode }) -> { address, status }`
+  (returned address EIP-55 checksummed). The depositing account is the caller principal plus
+  the optional subaccount carried in `mode` (a future `Sponsored` `mode` variant adds the fee
+  arguments). The `erc20_contract_address` is the Ethereum ERC-20 contract to deposit, parsed
+  to an `Address` and required to be a minter-supported ckERC20 — mirroring the CEX UX: pick
+  the token, the network is always Ethereum, then show the (shared) deposit address.
   **Decided: the endpoint is ERC-20-specific** — mirroring the existing
   `withdraw_eth`/`withdraw_erc20` split. **Decided: the deposit address stays
   shared across a caller's ERC-20 tokens** (still the schema-1 address, unchanged);
@@ -1138,7 +1139,7 @@ at $2'500 and the sweep-gas figures from the
 tokens) bounds an account's contribution to this schedule. Scheduling is
 **block-based, not wall-clock**:
 elapsed time is measured as `elapsed_blocks × SECS_PER_BLOCK` (≈ 12 s/block) against a
-33-entry gap table (`SCAN_GAP_SECS` in `automatic_deposits/mod.rs::addresses_to_scan_iter`).
+33-entry gap table (`SCAN_GAP_SECS` in `automatic_deposits/mod.rs::scan_targets_iter`).
 The scan task itself fires on a fixed **30 s** timer (`BALANCE_SCAN_INTERVAL`), which quantizes
 each address' due time to that cadence:
 
