@@ -331,12 +331,14 @@ struct CallOrTaskHelper {
     canister: CanisterState,
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
-    // Instructions already executed by a Wasm execution that has been paused and
-    // has not finished yet. The instructions charged for this message are derived
-    // from `output.num_instructions_left` of a *finished* Wasm execution (see
-    // `finish`), while a paused slice only reports its executed instructions to
-    // the round limits. Hence such instructions are tracked here in order to be
-    // charged if the execution fails before the Wasm execution finishes.
+    /// Instructions already executed by this message, if previously paused.
+    ///
+    /// *Finished* Wasm executions are charged based on
+    /// `output.num_instructions_left` (see `finish`). Paused slices only update
+    /// the round limits. If resuming a paused execution fails, there is no
+    /// `output.num_instructions_left` to derive the charge from. Hence, we track
+    /// the executed instructions, to make it possible to charge for failed
+    /// resumptions.
     executed_wasm_instructions: NumInstructions,
     deallocation_sender: DeallocationSender,
 }
@@ -732,10 +734,6 @@ impl PausedExecution for PausedCallOrTaskExecution {
             self.original.method,
             clean_canister.canister_id(),
         );
-        // If resuming fails, then the instructions already executed by the paused
-        // Wasm execution are still charged: they have been executed and hence
-        // consumed round instructions, but the paused Wasm execution never finishes
-        // and hence yields no `num_instructions_left` to derive them from.
         let executed_wasm_instructions = self.paused_helper.executed_wasm_instructions;
         let helper = match CallOrTaskHelper::resume(
             &clean_canister,
@@ -753,6 +751,11 @@ impl PausedExecution for PausedCallOrTaskExecution {
                     err,
                 );
                 self.paused_wasm_execution.abort();
+                // The instructions already executed by the paused Wasm execution
+                // are still charged: they have been executed and hence consumed
+                // round instructions, but the paused Wasm execution never
+                // finishes and hence yields no `num_instructions_left` to derive
+                // them from.
                 let instructions_left = NumInstructions::new(
                     self.original
                         .execution_parameters

@@ -129,13 +129,18 @@ pub(crate) struct InstallCodeHelper {
     total_heap_delta: NumBytes,
     // The cycles balance of the clean canister state this helper was built from.
     initial_cycles_balance: Cycles,
-    // Instructions already executed by a Wasm execution that has been paused and
-    // has not finished yet. Such instructions are not reflected in
-    // `execution_parameters` because the instruction limits are updated only
-    // when the Wasm execution finishes, so they are tracked here in order to be
-    // charged if the execution fails before the Wasm execution finishes. The
-    // counter is reset once a Wasm execution has finished and is reflected in
-    // the instruction limits of the next one.
+    /// Instructions already executed by this `install_code`, if previously
+    /// paused.
+    ///
+    /// *Finished* Wasm executions update the instruction limits in
+    /// `execution_parameters`. Paused slices only update the round limits. If
+    /// resuming a paused execution fails, the instruction limits are not
+    /// updated. Hence, we track the executed instructions, to make it possible
+    /// to charge for failed resumptions.
+    ///
+    /// Reset once a Wasm execution has finished and updated the instruction
+    /// limits correspondingly, so that the next Wasm execution (e.g.,
+    /// `canister_init` after `(start)`) starts counting from zero.
     executed_wasm_instructions: NumInstructions,
 }
 
