@@ -436,19 +436,22 @@ impl DkgKeyManager {
                 .payload
                 .as_ref()
                 .as_summary()
-                .dkg
-                .clone(),
+                .dkg,
         );
 
         while let Some(summary) = dkg_summary {
             let next_summary_height = summary.get_next_start_height();
-            for transcript in summary.into_transcripts() {
-                transcripts_to_retain.insert(transcript);
+            for transcript in summary
+                .current_transcripts()
+                .values()
+                .chain(summary.next_transcripts().values())
+            {
+                transcripts_to_retain.insert(transcript.clone());
             }
 
             dkg_summary = pool_reader
                 .get_finalized_block(next_summary_height)
-                .map(|b| b.payload.as_ref().as_summary().dkg.clone());
+                .map(|b| b.payload.as_ref().as_summary().dkg);
         }
 
         let crypto = self.crypto.clone();
