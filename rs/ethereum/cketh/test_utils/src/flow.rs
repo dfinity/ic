@@ -335,8 +335,6 @@ impl DepositFlow {
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
-                // Constrained so the block height refresh timer's query for the latest
-                // block cannot consume this stub.
                 .with_request_params(json!(["finalized", false]))
                 .respond_for_all_with(block_response(latest_finalized_block));
         (self.override_rpc_eth_get_block_by_number)(default_get_block_by_number)
