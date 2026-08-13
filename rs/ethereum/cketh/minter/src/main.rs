@@ -179,6 +179,11 @@ async fn minter_address() -> String {
 async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
+    let token = Address::from_str(&arg.erc20_contract_address)
+        .map_err(DepositErc20Error::InvalidErc20ContractAddress)?;
+    if !read_state(|s| s.is_supported_ckerc20(&token)) {
+        return Err(DepositErc20Error::UnsupportedCkErc20Token);
+    }
     let subaccount = match arg.mode {
         DepositMode::Unsponsored { subaccount } => subaccount,
     };
@@ -188,7 +193,8 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     };
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
-    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account)) {
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+    {
         return Ok(status);
     }
 
@@ -196,10 +202,10 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     // the state so that the (synchronous) registration below can derive the address.
     state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    mutate_state(|s| s.register_deposit_address(now, account))?;
+    mutate_state(|s| s.register_deposit_address(now, account, token))?;
     Ok(
-        read_state(|s| s.automatic_deposits.deposit_status(now, &account))
-            .expect("BUG: a just-registered address must report a Scanning status"),
+        read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+            .expect("BUG: a just-registered pair must report a Scanning status"),
     )
 }
 
@@ -717,8 +723,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
 
     fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
         use ic_cketh_minter::endpoints::events::{
-            DepositAddressRegistration as CandidDepositAddressRegistration,
-            Erc20Balance as CandidErc20Balance, EventPayload as EP,
+            DepositAddressRegistration as CandidDepositAddressRegistration, EventPayload as EP,
         };
         CandidEvent {
             timestamp,
@@ -732,6 +737,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         .map(|r| CandidDepositAddressRegistration {
                             owner: r.owner,
                             subaccount: r.subaccount,
+                            token: r.token.to_string(),
                             address: r.address.to_string(),
                             expires_at_nanos: r.expires_at_nanos.as_nanos(),
                             last_scanned_block: r.last_scanned_block.map(Into::into),
@@ -743,16 +749,10 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     owner: deposit.owner,
                     subaccount: deposit.subaccount,
                     address: deposit.address.to_string(),
+                    token: deposit.token.to_string(),
                     last_scanned_block: deposit.last_scanned_block.into(),
                     scan_count: deposit.scan_count.into(),
-                    deposits: deposit
-                        .deposits
-                        .into_iter()
-                        .map(|d| CandidErc20Balance {
-                            token: d.token.to_string(),
-                            scanned_balance: d.scanned_balance.into(),
-                        })
-                        .collect(),
+                    scanned_balance: deposit.scanned_balance.into(),
                 },
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),

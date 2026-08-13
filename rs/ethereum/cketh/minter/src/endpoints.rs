@@ -215,6 +215,9 @@ pub struct WithdrawalArg {
 /// Argument for the `deposit_erc20` endpoint.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DepositErc20Arg {
+    /// The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC). Must be a
+    /// ckERC20 token supported by the minter.
+    pub erc20_contract_address: String,
     pub mode: DepositMode,
 }
 
@@ -256,9 +259,8 @@ pub enum DepositStatus {
         /// How many times the address' balance has been scanned so far.
         scan_count: u64,
     },
-    /// Funds were detected at or above the minimum and queued for sweeping, one
-    /// entry per funded token.
-    AwaitingSweep(Vec<DetectedDeposit>),
+    /// Funds were detected at or above the minimum and queued for sweeping.
+    AwaitingSweep(DetectedDeposit),
 }
 
 /// A funded token detected at a deposit address and queued for sweeping.
@@ -274,6 +276,12 @@ pub struct DetectedDeposit {
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositErc20Error {
+    /// The `erc20_contract_address` could not be parsed as an Ethereum address.
+    InvalidErc20ContractAddress(String),
+    /// The `erc20_contract_address` is not a ckERC20 token supported by the minter.
+    UnsupportedCkErc20Token,
+    /// The account already has the maximum number of ERC-20 tokens armed.
+    TooManyTokensForAccount,
     /// The maximum number of concurrently armed deposit addresses has been reached.
     TooManyActiveAddresses,
     /// The minter is temporarily unavailable, retry the request.
@@ -568,23 +576,18 @@ pub mod events {
             owner: Principal,
             subaccount: Option<[u8; 32]>,
             address: String,
+            token: String,
             last_scanned_block: Nat,
             scan_count: u64,
-            deposits: Vec<Erc20Balance>,
+            scanned_balance: Nat,
         },
-    }
-
-    /// One funded token in an [`EventPayload::AutomaticDepositReceived`].
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-    pub struct Erc20Balance {
-        pub token: String,
-        pub scanned_balance: Nat,
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct DepositAddressRegistration {
         pub owner: Principal,
         pub subaccount: Option<[u8; 32]>,
+        pub token: String,
         pub address: String,
         pub expires_at_nanos: u64,
         pub last_scanned_block: Option<Nat>,
