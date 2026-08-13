@@ -150,12 +150,10 @@ mod deposit_erc20 {
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::DEFAULT_USER_SUBACCOUNT;
     use ic_cketh_test_utils::ckerc20::CkErc20Setup;
-    use ic_cketh_test_utils::new_pocket_ic;
-    use std::sync::Arc;
 
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
-        let ckerc20 = CkErc20Setup::new_without_ckerc20_active(Arc::new(new_pocket_ic()));
+        let ckerc20 = CkErc20Setup::new_without_ckerc20_active();
         let caller = ckerc20.caller();
         ckerc20
             .call_minter_deposit_erc20(caller, None)
@@ -407,7 +405,7 @@ mod withdraw_erc20 {
         CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE,
-        JsonRpcProvider, new_pocket_ic,
+        JsonRpcProvider,
     };
     use ic_ledger_suite_orchestrator_test_utils::CKERC20_TRANSFER_FEE;
     use icrc_ledger_types::icrc3::transactions::Burn;
@@ -415,13 +413,12 @@ mod withdraw_erc20 {
     use num_traits::ToPrimitive;
     use serde_bytes::ByteBuf;
     use std::convert::identity;
-    use std::sync::Arc;
 
     const NOT_SUPPORTED_CKERC20_LEDGER_ID: Principal = Principal::management_canister();
 
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
-        CkErc20Setup::new_without_ckerc20_active(Arc::new(new_pocket_ic()))
+        CkErc20Setup::new_without_ckerc20_active()
             .call_minter_withdraw_erc20(
                 Principal::anonymous(),
                 0_u8,

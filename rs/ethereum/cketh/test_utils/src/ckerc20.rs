@@ -13,7 +13,7 @@ use crate::{
     DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, ERC20_HELPER_CONTRACT_ADDRESS,
     ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, LedgerBalance, MAX_TICKS,
     RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
-    format_ethereum_address_to_eip_55, new_pocket_ic,
+    format_ethereum_address_to_eip_55,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
@@ -62,7 +62,7 @@ pub struct CkErc20Setup {
 
 impl Default for CkErc20Setup {
     fn default() -> Self {
-        Self::new(Arc::new(new_pocket_ic()))
+        Self::new()
     }
 }
 
@@ -73,8 +73,8 @@ impl AsRef<CkEthSetup> for CkErc20Setup {
 }
 
 impl CkErc20Setup {
-    pub fn new(env: Arc<PocketIc>) -> Self {
-        let mut ckerc20 = Self::new_without_ckerc20_active(env);
+    pub fn new() -> Self {
+        let mut ckerc20 = Self::new_without_ckerc20_active();
         ckerc20.cketh = ckerc20
             .cketh
             .upgrade_minter_to_add_orchestrator_id(
@@ -84,8 +84,11 @@ impl CkErc20Setup {
         ckerc20
     }
 
-    pub fn new_without_ckerc20_active(env: Arc<PocketIc>) -> Self {
-        let cketh = CkEthSetup::new(env.clone());
+    /// The ckETH fixture builds the PocketIC instance (its Ethereum backend decides how), and the
+    /// orchestrator is then created on that same instance so both share one replica.
+    pub fn new_without_ckerc20_active() -> Self {
+        let cketh = CkEthSetup::default();
+        let env = cketh.env.clone();
         let orchestrator = LedgerSuiteOrchestrator::new(
             env.clone(),
             LedgerSuiteOrchestratorInitArg {

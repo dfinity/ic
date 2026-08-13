@@ -145,17 +145,12 @@ impl PocketIcHttpQuery for &CkEthSetup {
 }
 
 impl CkEthSetup {
-    pub fn new(env: Arc<PocketIc>) -> Self {
-        Self::builder().with_env(env).build()
-    }
-
     /// A builder for [`CkEthSetup`], defaulting to today's mocked-fixture behaviour: a fresh
     /// PocketIC instance (fiduciary subnet only), an anonymous controller, and canned JSON-RPC
     /// responses. [`live_scan`] switches it to the live balance-scan harness via
     /// [`CkEthSetupBuilder::with_ethereum_backend`].
     fn builder() -> CkEthSetupBuilder {
         CkEthSetupBuilder {
-            env: None,
             backend: EthereumBackend::Mocked,
         }
     }
@@ -724,20 +719,10 @@ impl CkEthSetup {
 }
 
 struct CkEthSetupBuilder {
-    env: Option<Arc<PocketIc>>,
     backend: EthereumBackend,
 }
 
 impl CkEthSetupBuilder {
-    /// Reuses an existing PocketIC instance instead of building one via [`new_env`], so this
-    /// fixture can be composed with others that need the same instance (e.g. `CkErc20Setup`'s
-    /// orchestrator). Only for the mocked backend: a live instance needs the added NNS subnet and
-    /// to already be live before any canister exists.
-    fn with_env(mut self, env: Arc<PocketIc>) -> Self {
-        self.env = Some(env);
-        self
-    }
-
     fn with_ethereum_backend(mut self, backend: EthereumBackend) -> Self {
         self.backend = backend;
         self
@@ -745,7 +730,7 @@ impl CkEthSetupBuilder {
 
     fn build(self) -> CkEthSetup {
         let live = self.backend.is_live();
-        let env = self.env.unwrap_or_else(|| Arc::new(new_env(&self.backend)));
+        let env = Arc::new(new_env(&self.backend));
         let controller = live.then(live_controller);
         let canisters = create_cketh_canisters(&env, controller);
         if !live {
@@ -780,10 +765,12 @@ fn live_controller() -> Principal {
 /// canister of this fixture exists to schedule a timer whose outcall could stall waiting for an
 /// answer.
 fn new_env(backend: &EthereumBackend) -> PocketIc {
-    let mut builder = pocket_ic_builder().with_icp_config(IcpConfig {
-        canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
-        ..Default::default()
-    });
+    let mut builder = PocketIcBuilder::new()
+        .with_fiduciary_subnet()
+        .with_icp_config(IcpConfig {
+            canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
+            ..Default::default()
+        });
     if backend.is_live() {
         builder = builder.with_nns_subnet();
     }
@@ -796,17 +783,6 @@ fn new_env(backend: &EthereumBackend) -> PocketIc {
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
     Address::from_str(address).unwrap().to_string()
-}
-
-pub fn new_pocket_ic() -> PocketIc {
-    new_env(&EthereumBackend::Mocked)
-}
-
-/// A [`PocketIcBuilder`] with the fiduciary subnet every ckETH fixture needs for the secp256k1
-/// `key_1` used by the minter; callers add anything further (e.g. an NNS subnet for
-/// [`PocketIc::make_live`]) before `build()`.
-fn pocket_ic_builder() -> PocketIcBuilder {
-    PocketIcBuilder::new().with_fiduciary_subnet()
 }
 
 fn ledger_wasm() -> Vec<u8> {
