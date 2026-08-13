@@ -446,7 +446,7 @@ impl DkgKeyManager {
                 transcripts_to_retain.insert(transcript.clone());
             }
 
-            summary_block = pool_reader.get_finalized_block(next_summary_height);
+            next_summary_block = pool_reader.get_finalized_block(next_summary_height);
         }
 
         let crypto = self.crypto.clone();
