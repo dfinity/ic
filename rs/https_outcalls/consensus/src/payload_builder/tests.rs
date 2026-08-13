@@ -35,6 +35,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -8029,22 +8030,75 @@ fn build_async_refund_payload(
     payload.expect("payload was not built")
 }
 
-/// The receipts of replicas that did not contribute to the delivered response are
-/// reported so that the caller is refunded only what they left unspent.
+/// A delivered context is only refundable until it times out: at that point
+/// message routing settles whatever is left of the allowances and drops it, so a
+/// refund would just be spending block space on something that will be a no-op.
 #[test]
-fn async_refund_reports_the_replicas_that_have_not_been_accounted_for() {
+fn async_refund_is_not_reported_once_the_delivered_context_times_out() {
     let num_nodes = 4;
     let callback_id = CallbackId::new(0);
-    // Nodes 0 and 1 signed the response that was delivered, nodes 2 and 3 answered
-    // too late to be part of it.
-    let refunded = [node_test_id(0), node_test_id(1)];
+    let (response, metadata) = test_response_and_metadata(callback_id.get());
+    let shares = metadata_to_shares(num_nodes, &metadata);
 
-    let payload = build_async_refund_payload(num_nodes, callback_id, refunded, num_nodes, &[]);
+    // The context is stamped at `UNIX_EPOCH`, so the block time alone decides
+    // whether it has timed out. Check either side of the boundary, so that the
+    // negative case cannot pass just because nothing was refundable anyway.
+    for (elapsed, expect_refunds) in [
+        (
+            DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT - Duration::from_nanos(1),
+            true,
+        ),
+        (DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT, false),
+    ] {
+        setup_test_with_delivered_contexts(
+            num_nodes,
+            vec![(
+                callback_id,
+                delivered_context(Replication::FullyReplicated, []),
+            )],
+            |payload_builder, canister_http_pool| {
+                {
+                    let mut pool_access = canister_http_pool.write().unwrap();
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(pool_access.deref_mut(), shares[1..].to_vec());
+                }
+                let context = ValidationContext {
+                    time: UNIX_EPOCH + elapsed,
+                    ..default_validation_context()
+                };
+                let payload =
+                    build_and_validate_and_parse_payload_with_context(&payload_builder, &context);
+                assert_eq!(
+                    !payload.async_refunds.is_empty(),
+                    expect_refunds,
+                    "unexpected refunds {:?} after {elapsed:?}",
+                    payload.async_refunds,
+                );
+            },
+        );
+    }
+}
 
-    assert!(payload.responses.is_empty());
+/// A replica is left out for either of two reasons: it was already accounted for by
+/// the delivered response, or it never produced a receipt at all — the latter is
+/// refunded in full when the delivered context times out instead.
+#[test]
+fn async_refund_reports_the_replicas_that_answered_and_are_unaccounted_for() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::new(0);
+    // Node 0 signed the response that was delivered; nodes 1 and 2 answered too
+    // late to be part of it; node 3 never answered at all.
+    let payload = build_async_refund_payload(
+        num_nodes,
+        callback_id,
+        [node_test_id(0)],
+        /* shares_in_pool = */ 3,
+        &[],
+    );
+
     assert_eq!(
         async_refund_signers(&payload, callback_id),
-        BTreeSet::from([node_test_id(2), node_test_id(3)])
+        BTreeSet::from([node_test_id(1), node_test_id(2)])
     );
 }
 
@@ -8060,28 +8114,6 @@ fn async_refund_is_not_reported_when_every_replica_has_been_accounted_for() {
     assert!(payload.async_refunds.is_empty(), "{payload:?}");
     // A payload with nothing to report is empty, i.e. not put into the block at all.
     assert!(payload.is_empty(), "{payload:?}");
-}
-
-/// A replica that has not produced a receipt has nothing to report; it is refunded
-/// in full once the delivered context times out.
-#[test]
-fn async_refund_only_reports_replicas_that_produced_a_receipt() {
-    let num_nodes = 4;
-    let callback_id = CallbackId::new(0);
-
-    // Only nodes 0 and 1 produced a share, and node 0's was the delivered response.
-    let payload = build_async_refund_payload(
-        num_nodes,
-        callback_id,
-        [node_test_id(0)],
-        /* shares_in_pool = */ 2,
-        &[],
-    );
-
-    assert_eq!(
-        async_refund_signers(&payload, callback_id),
-        BTreeSet::from([node_test_id(1)])
-    );
 }
 
 /// A refund reported by a payload above the certified height is not repeated, even
@@ -8329,49 +8361,6 @@ fn validate_payload_fails_for_an_async_refund_with_an_excessive_spend() {
             ),
         ))
     );
-}
-
-/// Each receipt is validated against the context of the callback its signed metadata
-/// names, so receipts for different callbacks may be interleaved freely, and a
-/// receipt for an undelivered callback is caught however it is ordered.
-#[test]
-fn validate_payload_routes_each_async_refund_to_its_own_callback() {
-    let num_nodes = 4;
-    let (delivered, undelivered) = (CallbackId::new(0), CallbackId::new(1));
-    let (_, delivered_metadata) = test_response_and_metadata(delivered.get());
-    let (_, undelivered_metadata) = test_response_and_metadata(undelivered.get());
-    // Node 1's receipt refunds the delivered callback, node 2's an unanswered one.
-    let good = metadata_to_share(1, &delivered_metadata);
-    let bad = metadata_to_share(2, &undelivered_metadata);
-
-    // On its own the delivered callback's receipt validates...
-    assert_matches!(
-        validate_async_refund_payload(
-            num_nodes,
-            delivered,
-            delivered_context(Replication::FullyReplicated, []),
-            vec![good.clone()],
-            &[],
-        ),
-        Ok(())
-    );
-    // ...and adding the other one is rejected, in either order.
-    for refunds in [vec![good.clone(), bad.clone()], vec![bad, good]] {
-        assert_matches!(
-            validate_async_refund_payload(
-                num_nodes,
-                delivered,
-                delivered_context(Replication::FullyReplicated, []),
-                refunds,
-                &[],
-            ),
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::UnknownDeliveredCallbackId(id),
-                ),
-            )) if id == undelivered
-        );
-    }
 }
 
 /// An asynchronous refund reports what its replicas spent, without delivering a

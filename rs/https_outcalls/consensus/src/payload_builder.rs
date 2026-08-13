@@ -41,6 +41,7 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
@@ -387,6 +388,14 @@ impl CanisterHttpPayloadBuilderImpl {
 
             // Collect any asynchronous refunds
             'refunds: for (callback_id, request) in delivered_canister_http_request_contexts {
+                // Skip contexts that have already timed out.
+                if validation_context
+                    .time
+                    .saturating_duration_since(request.time)
+                    >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+                {
+                    continue;
+                }
                 let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
                     continue;
                 };
