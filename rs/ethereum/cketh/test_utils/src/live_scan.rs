@@ -69,13 +69,9 @@ pub struct Holding {
 }
 
 /// A fixed non-anonymous principal used as the canisters' controller and as the minter's stand-in
-/// ledger-suite-orchestrator id, so this harness can register supported tokens itself.
-///
-/// The minter and EVM RPC canister are deliberately controlled by this fixed principal rather than
-/// the anonymous default every other ckETH fixture uses: with the anonymous default, the very first
-/// HTTPS outcall the minter issues after going live reproducibly crashed the PocketIC replica with a
-/// cycle-accounting assertion failure (`Invalid cycle change`). This harness keeps its own
-/// canister-creation/controller setup separate from [`crate::CkEthSetup::new`] for that reason.
+/// ledger-suite-orchestrator id, so this harness can both register supported tokens itself (calling
+/// `add_ckerc20_token` as the orchestrator) and fetch the minter's canister logs in
+/// [`Self::balance_scan_candidates`] (controller-only by default) as that same principal.
 fn controller() -> Principal {
     Principal::from_slice(&[0x0a; 10])
 }
@@ -104,6 +100,11 @@ impl CkErc20LiveScanSetup {
         // A placeholder ckETH ledger: the minter stores its id at init but never calls it on the
         // balance-scan path, so it is left uninstalled.
         let ledger_id = env.create_canister();
+        // Unlike the mocked fixture's `u128::MAX` (never executed as real cycles since it never
+        // goes live), this must leave headroom below the saturating `Cycles` balance ceiling: a
+        // canister that has already saturated cannot observe *any* further cycle addition, and the
+        // first HTTPS outcall a live canister accepts cycles for trips a cycle-accounting assertion
+        // in the replica if its balance cannot move.
         let evm_rpc_id =
             env.create_canister_with_settings(Some(controller()), Some(settings.clone()));
         env.add_cycles(evm_rpc_id, u128::from(u64::MAX));
