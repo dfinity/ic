@@ -1749,9 +1749,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.34"
+version = "0.10.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdec808f2220b263bbc88557a2a44fb6b2db5875c99731ad00aae575ad59215c"
+checksum = "5cdba86ff862a2cc6b244f273a8713ffdf82b84254470e90bd029ee87c283f25"
 dependencies = [
  "anyhow",
  "binrw",
@@ -1772,9 +1772,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.34"
+version = "0.10.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ee4839d8e442990b2853556e57ee9f6f4527371bbbfd7b4dcdd4f3c7d910964"
+checksum = "13501edc1f9c9f057d5d84171a13ee1fe4255705f9027a3fac64b5949cbdd170"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -2146,7 +2146,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9163,7 +9163,7 @@ dependencies = [
  "inferno",
  "libc",
  "log",
- "nix 0.27.1",
+ "nix 0.30.1",
  "once_cell",
  "prost",
  "prost-build",

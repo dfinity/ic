@@ -178,7 +178,7 @@ fn callback_and_signer_of_share(share: &pb::CanisterHttpShare) -> Option<(Callba
     Some((callback_id, signer))
 }
 
-/// Extracts the CanisterId (as u64) from a [`CanisterHttpResponseMessage`]
+/// Extracts the CallbackId (as u64) from a [`CanisterHttpResponseMessage`]
 fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
     match message.message_type {
         Some(MessageType::Response(response)) => response.response.map(|response| response.id),

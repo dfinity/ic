@@ -1805,9 +1805,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.34"
+version = "0.10.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdec808f2220b263bbc88557a2a44fb6b2db5875c99731ad00aae575ad59215c"
+checksum = "5cdba86ff862a2cc6b244f273a8713ffdf82b84254470e90bd029ee87c283f25"
 dependencies = [
  "anyhow",
  "binrw",
@@ -1837,9 +1837,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.34"
+version = "0.10.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ee4839d8e442990b2853556e57ee9f6f4527371bbbfd7b4dcdd4f3c7d910964"
+checksum = "13501edc1f9c9f057d5d84171a13ee1fe4255705f9027a3fac64b5949cbdd170"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -2691,15 +2691,6 @@ name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
-
-[[package]]
-name = "core2"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b49ba7ef1ad6107f8824dbe97de947cbaac53c44e7f9756a1fba0d37c1eec505"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "cpp_demangle"
@@ -7365,12 +7356,12 @@ dependencies = [
  "ic-ethereum-types",
  "ic-http-types",
  "ic-ledger-suite-orchestrator-test-utils",
+ "ic-management-canister-types 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
  "ic-secp256k1",
  "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-stable-structures 0.6.9",
- "ic-state-machine-tests",
  "ic-utils-ensure",
  "icrc-cbor",
  "icrc-ledger-client-cdk",
@@ -7380,6 +7371,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "phantom_newtype",
+ "pocket-ic",
  "proptest",
  "rand 0.8.6",
  "reqwest",
@@ -7408,20 +7400,15 @@ dependencies = [
  "evm_rpc_types",
  "hex",
  "ic-base-types",
- "ic-cdk 0.19.0",
  "ic-cketh-minter",
- "ic-error-types 0.2.0",
  "ic-ethereum-types",
  "ic-http-types",
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
  "ic-ledger-suite-orchestrator-test-utils",
- "ic-management-canister-types-private",
+ "ic-management-canister-types 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-metrics-assert",
- "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
- "ic-types",
- "ic-types-cycles",
  "icrc-ledger-types",
  "num-traits",
  "pocket-ic",
@@ -7536,7 +7523,6 @@ dependencies = [
  "ic-artifact-pool",
  "ic-canonical-state",
  "ic-canonical-state-tree-hash",
- "ic-config",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-test-utils-crypto-returning-ok",
@@ -7552,7 +7538,6 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-consensus",
  "ic-test-utilities-logger",
- "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
@@ -7744,6 +7729,7 @@ dependencies = [
  "ic-consensus-utils",
  "ic-crypto-test-utils-crypto-returning-ok",
  "ic-interfaces",
+ "ic-interfaces-mocks",
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
@@ -10562,13 +10548,13 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.9",
- "ic-state-machine-tests",
  "ic0",
  "icrc-ledger-types",
  "maplit",
  "mockall",
  "num-traits",
  "paste",
+ "pocket-ic",
  "proptest",
  "scopeguard",
  "scraper",
@@ -10583,24 +10569,18 @@ dependencies = [
 name = "ic-ledger-suite-orchestrator-test-utils"
 version = "0.9.0"
 dependencies = [
- "assert_matches",
  "candid",
  "ic-base-types",
  "ic-cdk 0.19.0",
- "ic-http-types",
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
  "ic-management-canister-types 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-management-canister-types-private",
  "ic-metrics-assert",
- "ic-state-machine-tests",
- "ic-test-utilities-load-wasm",
- "ic-types",
  "ic-types-cycles",
  "ic-universal-canister",
  "icrc-ledger-types",
  "paste",
- "proptest",
+ "pocket-ic",
 ]
 
 [[package]]
@@ -17041,25 +17021,25 @@ dependencies = [
 
 [[package]]
 name = "libflate"
-version = "2.2.1"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3248b8d211bd23a104a42d81b4fa8bb8ac4a3b75e7a43d85d2c9ccb6179cd74"
+checksum = "a4da9b700e758e57152a1fd1c52cbdc5727c1aa6d8743dc1acda917398f1d76c"
 dependencies = [
  "adler32",
- "core2",
  "crc32fast",
  "dary_heap",
  "libflate_lz77",
+ "no_std_io2",
 ]
 
 [[package]]
 name = "libflate_lz77"
-version = "2.2.0"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a599cb10a9cd92b1300debcef28da8f70b935ec937f44fcd1b70a7c986a11c5c"
+checksum = "ff7a10e427698aef6eef269482776debfef63384d30f13aad39a1a95e0e098fd"
 dependencies = [
- "core2",
  "hashbrown 0.16.1",
+ "no_std_io2",
  "rle-decode-fast",
 ]
 
@@ -18235,6 +18215,15 @@ dependencies = [
  "serde",
  "slog",
  "url",
+]
+
+[[package]]
+name = "no_std_io2"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "418abd1b6d34fbf6cae440dc874771b0525a604428704c76e48b29a5e67b8003"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -19731,7 +19720,7 @@ dependencies = [
  "inferno",
  "libc",
  "log",
- "nix 0.27.1",
+ "nix 0.30.1",
  "once_cell",
  "prost",
  "prost-build",

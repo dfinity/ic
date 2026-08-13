@@ -11,7 +11,7 @@ use crate::payload_builder::{
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{
     consensus_cost_coefficient, flexible_initial_spent, min_flexible_consensus_cost,
@@ -2013,11 +2013,12 @@ pub(crate) fn test_config_with_http_feature<T>(
             canister_http_pool,
             state_manager,
             ..
-        } = dependencies_with_subnet_params(
+        } = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(1, subnet_record)],
-        );
+        )
+        .build();
 
         let payload_builder = CanisterHttpPayloadBuilderImpl::new(
             canister_http_pool.clone(),
@@ -3365,14 +3366,14 @@ fn into_messages_emits_initial_spend_reports() {
         min_responses: 1,
     };
 
-    let oom_callback = CallbackId::from(600);
-    let (_, oom_metadata) = test_response_and_metadata(oom_callback.get());
+    let ooc_callback = CallbackId::from(600);
+    let (_, ooc_metadata) = test_response_and_metadata(ooc_callback.get());
     // out-of-cycles spend = 150 + 450 = 600, as it delivers no body either.
     let out_of_cycles = CanisterHttpOutOfCycles {
-        callback_id: oom_callback,
+        callback_id: ooc_callback,
         shares: vec![
-            metadata_to_share_with_spent(0, &oom_metadata, Cycles::new(150)),
-            metadata_to_share_with_spent(1, &oom_metadata, Cycles::new(450)),
+            metadata_to_share_with_spent(0, &ooc_metadata, Cycles::new(150)),
+            metadata_to_share_with_spent(1, &ooc_metadata, Cycles::new(450)),
         ],
         min_cost: Cycles::new(1_234),
         unspent_allowance: Cycles::new(56),
@@ -3402,7 +3403,7 @@ fn into_messages_emits_initial_spend_reports() {
             timeout_callback,
             div_callback,
             too_large_callback,
-            oom_callback,
+            ooc_callback,
         ]
         .into_iter()
         .collect()
@@ -3442,7 +3443,7 @@ fn into_messages_emits_initial_spend_reports() {
     assert_eq!(too_large.amount, Cycles::new(600));
     assert_eq!(too_large.nodes, signers);
 
-    let out_of_cycles = report(oom_callback);
+    let out_of_cycles = report(ooc_callback);
     assert_eq!(out_of_cycles.amount, Cycles::new(600));
     assert_eq!(out_of_cycles.nodes, signers);
 }

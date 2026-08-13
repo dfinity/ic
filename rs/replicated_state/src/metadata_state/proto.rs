@@ -236,6 +236,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 item.cost_schedule,
             )),
             subnet_admins: item.subnet_admins.iter().map(|sa| (*sa).into()).collect(),
+            cooling_down: item.cooling_down,
         }
     }
 }
@@ -281,6 +282,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             chain_keys_held,
             cost_schedule,
             subnet_admins,
+            cooling_down: item.cooling_down,
         })
     }
 }

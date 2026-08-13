@@ -385,15 +385,18 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             Some(refund_status) => RefundStatus {
                 refundable_cycles: refund_status
                     .refundable_cycles
-                    .map(Into::into)
+                    .map(Cycles::try_from)
+                    .transpose()?
                     .unwrap_or_default(),
                 per_replica_allowance: refund_status
                     .per_replica_allowance
-                    .map(Into::into)
+                    .map(Cycles::try_from)
+                    .transpose()?
                     .unwrap_or_default(),
                 refunded_cycles: refund_status
                     .refunded_cycles
-                    .map(Into::into)
+                    .map(Cycles::try_from)
+                    .transpose()?
                     .unwrap_or_default(),
                 refunding_nodes: refund_status
                     .refunding_nodes

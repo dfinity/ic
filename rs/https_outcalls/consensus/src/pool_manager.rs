@@ -645,7 +645,7 @@ pub mod test {
     use super::*;
     use assert_matches::assert_matches;
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::crypto::SignVerify;
     use ic_error_types::RejectCode;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
@@ -766,7 +766,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -865,7 +865,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -974,7 +974,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -1075,7 +1075,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -1198,7 +1198,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -1383,7 +1383,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 // Define the delegated node and a different, incorrect signer.
                 let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
@@ -1480,7 +1480,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -1582,7 +1582,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -1754,7 +1754,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -1860,7 +1860,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 // This is the ID of the dishonest replica sending the artifact
                 let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
@@ -1974,7 +1974,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
 
                 let peer_id = node_test_id(1);
                 let callback_id = CallbackId::from(0);
@@ -2069,7 +2069,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 let callback_id = CallbackId::from(0);
                 state_manager
@@ -2161,7 +2161,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -2270,7 +2270,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -2358,7 +2358,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 // There are 2 contexts in the replicated state.
                 let contexts = (3..5)
@@ -2449,7 +2449,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 let stale_callback_id = CallbackId::from(3);
                 let active_callback_id = CallbackId::from(4);
@@ -2550,7 +2550,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 // Delegate the request to this node so it is the authorized signer
                 // and creates a share for the injected response.
@@ -2647,7 +2647,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -2748,7 +2748,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 let committee_member_1_self = replica_config.node_id;
                 let committee_member_2 = ic_test_utilities_types::ids::node_test_id(1);
@@ -2837,7 +2837,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 // Define the delegated node and a different, incorrect signer.
                 let committee_member = ic_test_utilities_types::ids::node_test_id(1);
@@ -2937,7 +2937,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
 
                 let committee_member = replica_config.node_id;
                 let callback_id = CallbackId::from(0);
@@ -3125,7 +3125,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -3295,7 +3295,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 let dummy_node_id = replica_config.node_id; // irrelevant for this test
                 let callback_id = CallbackId::from(5);
@@ -3387,7 +3387,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
 
                 // Use a context with a small per-replica allowance.
                 let request = CanisterHttpRequestContext {
@@ -3488,7 +3488,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
 
                 // A free subnet grants a zero per-replica allowance (nothing is
                 // charged), yet the reported spend is still accumulated for cost
@@ -3601,7 +3601,7 @@ pub mod test {
                     registry,
                     registry_data_provider,
                     ..
-                } = dependencies(pool_config.clone(), 1);
+                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
                 // Register a handful of API boundary nodes, each with a distinct
                 // HTTP endpoint. `get_{system,app}_api_boundary_node_ids` splits the
@@ -3727,7 +3727,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5);
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
 
                 let callback_id = CallbackId::from(0);
                 state_manager
@@ -3813,7 +3813,7 @@ pub mod test {
                         state_manager,
                         registry,
                         ..
-                    } = dependencies(pool_config.clone(), 5);
+                    } = DependenciesBuilder::new(pool_config.clone(), 5).build();
 
                     let callback_id = CallbackId::from(0);
                     let context = test_request_context(
@@ -3921,7 +3921,7 @@ pub mod test {
                         state_manager,
                         registry,
                         ..
-                    } = dependencies(pool_config.clone(), 4);
+                    } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                     let callback_id = CallbackId::from(0);
                     state_manager

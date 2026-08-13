@@ -3430,8 +3430,20 @@ impl ExecutionEnvironment {
         )
     }
 
-    /// Asks the canister if it is willing to accept the provided ingress
-    /// message.
+    /// Runs the ingress filter checks against the provided ingress message: that
+    /// the subnet is accepting ingress messages at all; that the paying canister
+    /// can cover the message's induction cost; and that the target canister
+    /// accepts the message -- for messages addressed to the subnet by validating
+    /// them against the management canister's ingress rules and the provisional
+    /// whitelist, for all other messages by asking the canister itself (i.e. by
+    /// executing its `canister_inspect_message` hook, if exported) and requiring
+    /// that it is running.
+    ///
+    /// This is executed by the replica that received the message from the user,
+    /// before the message enters the ingress pool: on `Ok(())` the message is
+    /// admitted into the pool and gossiped to the rest of the subnet; on `Err(_)`
+    /// it is immediately rejected with the returned error by this replica and
+    /// never enters the pool.
     pub fn should_accept_ingress_message(
         &self,
         state: Arc<ReplicatedState>,
@@ -3440,6 +3452,23 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
+        // While the subnet is cooling down it accepts no ingress messages at all, so
+        // that they don't make it into the ingress pool (and the user gets a
+        // meaningful error). This is only an optimization: messages already in the
+        // pool when the subnet starts cooling down are not affected. The same check
+        // applied during payload building and validation (see
+        // `IngressSelector::validate_ingress_payload()`) is what actually guarantees
+        // that no such message ever makes it into a block.
+        if state.metadata.is_cooling_down() {
+            return Err(UserError::new(
+                ErrorCode::SubnetCoolingDown,
+                format!(
+                    "Subnet {} is cooling down and does not accept ingress messages",
+                    state.metadata.own_subnet_id
+                ),
+            ));
+        }
+
         let canister = |canister_id: CanisterId| -> Result<&CanisterState, UserError> {
             match state.canister_state(&canister_id) {
                 Some(canister) => Ok(canister),
