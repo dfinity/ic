@@ -83,7 +83,6 @@ impl LiveBalanceScanSetup {
         let anvil = Anvil::start();
         let cketh = CkEthSetup::builder()
             .with_ethereum_backend(EthereumBackend::Anvil(anvil.url()))
-            .with_live_mode()
             .build();
         activate_ckerc20(&cketh);
         register_supported_tokens(&cketh);

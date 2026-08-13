@@ -150,13 +150,12 @@ impl CkEthSetup {
 
     /// A builder for [`CkEthSetup`], defaulting to today's mocked-fixture behaviour: a fresh
     /// PocketIC instance (fiduciary subnet only), an anonymous controller, and canned JSON-RPC
-    /// responses. [`live_scan`] extends it for the live balance-scan harness via
-    /// [`CkEthSetupBuilder::with_live_mode`].
+    /// responses. [`live_scan`] switches it to the live balance-scan harness via
+    /// [`CkEthSetupBuilder::with_ethereum_backend`].
     fn builder<'a>() -> CkEthSetupBuilder<'a> {
         CkEthSetupBuilder {
             env: None,
             backend: EthereumBackend::Mocked,
-            live: false,
         }
     }
 
@@ -726,14 +725,13 @@ impl CkEthSetup {
 struct CkEthSetupBuilder<'a> {
     env: Option<Arc<PocketIc>>,
     backend: EthereumBackend<'a>,
-    live: bool,
 }
 
 impl<'a> CkEthSetupBuilder<'a> {
     /// Reuses an existing PocketIC instance instead of building one via [`new_env`], so this
     /// fixture can be composed with others that need the same instance (e.g. `CkErc20Setup`'s
-    /// orchestrator). Not combined with [`Self::with_live_mode`] today: live mode's instance needs
-    /// the added NNS subnet and to already be live before any canister exists.
+    /// orchestrator). Only for the mocked backend: a live instance needs the added NNS subnet and
+    /// to already be live before any canister exists.
     fn with_env(mut self, env: Arc<PocketIc>) -> Self {
         self.env = Some(env);
         self
@@ -744,33 +742,13 @@ impl<'a> CkEthSetupBuilder<'a> {
         self
     }
 
-    /// Switches PocketIC to live mode: an NNS subnet in addition to the fiduciary one, going live
-    /// before any canister exists (see [`new_env`]), a fixed non-anonymous controller (instead of
-    /// every other fixture's anonymous default) that owns every canister this fixture creates (see
-    /// [`live_controller`]), and leaving the ckETH ledger uninstalled — the balance scan never
-    /// calls it, and installing it would need the ledger canister Wasm declared as a Bazel data
-    /// dependency of the anvil-backed test target, which it is not.
-    fn with_live_mode(mut self) -> Self {
-        self.live = true;
-        self
-    }
-
     fn build(self) -> CkEthSetup {
-        debug_assert!(
-            !(self.live && self.env.is_some()),
-            "with_env's instance would be used as-is, but self.live would still select the \
-             controller and skip the ledger install: a live-flagged fixture on a non-live instance"
-        );
-        let env_mode = if self.live {
-            EnvMode::Live
-        } else {
-            EnvMode::Mocked
-        };
-        let env = self.env.unwrap_or_else(|| Arc::new(new_env(env_mode)));
-        let controller = self.live.then(live_controller);
+        let live = self.backend.is_live();
+        let env = self.env.unwrap_or_else(|| Arc::new(new_env(&self.backend)));
+        let controller = live.then(live_controller);
         let canisters = create_cketh_canisters(&env, controller);
-        if !self.live {
-            // Live mode leaves the ckETH ledger uninstalled; see with_live_mode's doc for why.
+        if !live {
+            // The live harness leaves the ckETH ledger uninstalled; see EthereumBackend::Anvil.
             install_ledger(&env, &canisters);
         }
         install_evm_rpc(&env, &canisters, &self.backend);
@@ -795,27 +773,21 @@ fn live_controller() -> Principal {
     Principal::from_slice(&[0x0a; 10])
 }
 
-#[derive(Clone, Copy)]
-enum EnvMode {
-    Mocked,
-    Live,
-}
-
 /// Builds the PocketIC instance for [`CkEthSetupBuilder::build`]: the fiduciary subnet every
-/// ckETH fixture needs for the secp256k1 `key_1` used by the minter, plus — in [`EnvMode::Live`] —
+/// ckETH fixture needs for the secp256k1 `key_1` used by the minter, plus — for a live backend —
 /// an NNS subnet (required by [`PocketIc::make_live`]) and going live immediately, before any
 /// canister of this fixture exists to schedule a timer whose outcall could stall waiting for an
 /// answer.
-fn new_env(mode: EnvMode) -> PocketIc {
+fn new_env(backend: &EthereumBackend) -> PocketIc {
     let mut builder = pocket_ic_builder().with_icp_config(IcpConfig {
         canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
         ..Default::default()
     });
-    if let EnvMode::Live = mode {
+    if backend.is_live() {
         builder = builder.with_nns_subnet();
     }
     let mut env = builder.build();
-    if let EnvMode::Live = mode {
+    if backend.is_live() {
         env.make_live(None);
     }
     env
@@ -826,7 +798,7 @@ pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
 }
 
 pub fn new_pocket_ic() -> PocketIc {
-    new_env(EnvMode::Mocked)
+    new_env(&EthereumBackend::Mocked)
 }
 
 /// A [`PocketIcBuilder`] with the fiduciary subnet every ckETH fixture needs for the secp256k1
@@ -936,16 +908,33 @@ fn install_ledger(env: &PocketIc, canisters: &CkEthCanisters) {
 }
 
 /// The Ethereum chain under test: which JSON-RPC endpoint the EVM RPC canister's outcalls reach,
-/// and the corresponding minter init/upgrade assumptions about that chain's state (the block
-/// height to track, and where its log-scraping cursor starts).
+/// the corresponding minter init/upgrade assumptions about that chain's state (the block height to
+/// track, and where its log-scraping cursor starts), and — since only a chain reachable over the
+/// network needs genuine outcalls — whether the fixture runs on a live PocketIC instance.
 enum EthereumBackend<'a> {
-    /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot.
+    /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot, injected into a regular
+    /// (non-live) PocketIC instance.
     Mocked,
     /// A live anvil node reached over HTTP at `url`: a fresh chain with no finalized blocks yet.
+    ///
+    /// Reaching it takes a live PocketIC instance, which in turn shapes the whole fixture: an NNS
+    /// subnet in addition to the fiduciary one, going live before any canister exists (see
+    /// [`new_env`]), a fixed non-anonymous controller owning every canister created here (instead
+    /// of every other fixture's anonymous default, see [`live_controller`]), and leaving the ckETH
+    /// ledger uninstalled — the balance scan never calls it, and installing it would need the
+    /// ledger canister Wasm declared as a Bazel data dependency of the anvil-backed test target,
+    /// which it is not.
     Anvil(&'a str),
 }
 
 impl EthereumBackend<'_> {
+    fn is_live(&self) -> bool {
+        match self {
+            EthereumBackend::Mocked => false,
+            EthereumBackend::Anvil(_) => true,
+        }
+    }
+
     fn install_args(&self) -> InstallArgs {
         InstallArgs {
             override_provider: match self {
