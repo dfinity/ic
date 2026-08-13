@@ -130,7 +130,7 @@ pub struct PastPayloads {
     pub refunded_nodes: BTreeMap<CallbackId, HashSet<NodeId>>,
 }
 
-/// Collects from the `past_payloads` everything a new payload not repeat:
+/// Collects from the `past_payloads` everything a new payload must not repeat:
 /// the responses already delivered and the asynchronous receipts already
 /// reported.
 pub(crate) fn parse_past_payloads(
@@ -173,9 +173,8 @@ pub(crate) fn parse_past_payloads(
 /// payload validation, so it cannot appear in a past payload.
 fn callback_and_signer_of_share(share: &pb::CanisterHttpShare) -> Option<(CallbackId, NodeId)> {
     let callback_id = CallbackId::new(share.metadata.as_ref()?.id);
-    let signer = share.signature.as_ref()?.signer.clone();
-    let signer = NodeId::from(PrincipalId::try_from(signer).ok()?);
-    Some((callback_id, signer))
+    let signer = PrincipalId::try_from(share.signature.as_ref()?.signer.as_slice()).ok()?;
+    Some((callback_id, NodeId::from(signer)))
 }
 
 /// Extracts the CallbackId (as u64) from a [`CanisterHttpResponseMessage`]

@@ -112,8 +112,8 @@ impl CanisterHttpPoolManagerImpl {
         }
     }
 
-    /// Purge shares of responses for requests that have already been processed.
-    /// I.e. their contexts are no longer part of the replicated state.
+    /// Purge shares of responses for requests that have already been processed,
+    /// i.e. whose contexts are no longer part of the replicated state.
     fn purge_shares_of_processed_requests(
         &self,
         canister_http_pool: &dyn CanisterHttpPool,
@@ -343,7 +343,7 @@ impl CanisterHttpPoolManagerImpl {
                 Err(TryReceiveError::Empty) => break,
                 Ok((response, payment_receipt)) => {
                     // Drop the response if its context is no longer present in the replicated state.
-                    // We continue gossipping a share even if a response to the context has already
+                    // We continue gossiping a share even if a response to the context has already
                     // been delivered, in order to report the amount of cycles spent.
                     let Some(context) = active_contexts
                         .get(&response.id)
@@ -4003,5 +4003,78 @@ pub mod test {
                 });
             });
         }
+    }
+
+    /// No *new* request is made to the HTTP adapter for an outcall that has already
+    /// been responded to: there is nothing left to do for it, and the allowance of a
+    /// replica that never started is refunded in full when the delivered context
+    /// times out.
+    #[test]
+    fn test_no_new_request_is_made_for_a_delivered_context() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
+
+                let context = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::PayAsYouGo,
+                    None,
+                );
+                // A state holding one already responded to request and one still
+                // awaiting a response, so that the assertions below distinguish the
+                // two rather than just observing an idle pool manager.
+                let delivered_id = CallbackId::from(0);
+                let mut state = state_with_delivered_http_calls(BTreeMap::from([(
+                    delivered_id,
+                    context.clone(),
+                )]));
+                let active_id = state
+                    .metadata
+                    .subnet_call_context_manager
+                    .push_context(SubnetCallContext::CanisterHttpRequest(context));
+                assert_ne!(active_id, delivered_id);
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(Height::from(1), Arc::new(state)));
+
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                #[allow(clippy::result_large_err)]
+                shim_mock
+                    .expect_send()
+                    .withf(move |request: &CanisterHttpRequest| request.id == active_id)
+                    .times(1)
+                    .returning(|_| Ok(()));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    Arc::new(Mutex::new(Box::new(shim_mock))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                pool_manager.make_new_requests(&canister_http_pool);
+
+                // Only the request that is still awaiting a response was dispatched.
+                assert_eq!(
+                    *pool_manager.requested_id_cache.borrow(),
+                    BTreeSet::from([active_id])
+                );
+            })
+        });
     }
 }

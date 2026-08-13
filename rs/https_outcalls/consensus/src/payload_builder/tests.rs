@@ -7982,12 +7982,13 @@ fn async_receipt_signers(
         .collect()
 }
 
-/// Builds a payload against a delivered fully-replicated context whose response was
-/// signed by `refunding_nodes`, with `shares_in_pool` many replicas having produced
-/// a share, and returns it.
+/// Builds a payload against a delivered context of the given `replication` whose
+/// response was signed by `refunding_nodes`, with `shares_in_pool` many replicas
+/// having produced a share, and returns it.
 fn build_async_receipt_payload(
     num_nodes: usize,
     callback_id: CallbackId,
+    replication: Replication,
     refunding_nodes: impl IntoIterator<Item = NodeId>,
     shares_in_pool: usize,
     past_payloads: &[PastPayload],
@@ -7997,10 +7998,7 @@ fn build_async_receipt_payload(
     let mut payload = None;
     setup_test_with_delivered_contexts(
         num_nodes,
-        vec![(
-            callback_id,
-            delivered_context(Replication::FullyReplicated, refunding_nodes),
-        )],
+        vec![(callback_id, delivered_context(replication, refunding_nodes))],
         |payload_builder, canister_http_pool| {
             {
                 let mut pool_access = canister_http_pool.write().unwrap();
@@ -8031,9 +8029,14 @@ fn build_async_receipt_payload(
     payload.expect("payload was not built")
 }
 
-/// A delivered context is only refundable until it times out: at that point
-/// message routing settles whatever is left of the allowances and drops it, so a
-/// refund would just be spending block space on something that will be a no-op.
+/// A delivered context is only reported on until it times out: from then on message
+/// routing settles whatever is left of the allowances — refunding every replica that
+/// has not been accounted for in full — and drops the context, so a receipt would
+/// only be spending block space on cycles that are refunded anyway.
+///
+/// The boundary matters: message routing applies the receipts of a block before
+/// timing out the contexts, so a receipt included exactly at the timeout would
+/// still be applied, which is precisely what the payload builder avoids here.
 #[test]
 fn async_receipt_is_not_reported_once_the_delivered_context_times_out() {
     let num_nodes = 4;
@@ -8092,6 +8095,7 @@ fn async_receipt_reports_the_replicas_that_answered_and_are_unaccounted_for() {
     let payload = build_async_receipt_payload(
         num_nodes,
         callback_id,
+        Replication::FullyReplicated,
         [node_test_id(0)],
         /* shares_in_pool = */ 3,
         &[],
@@ -8110,7 +8114,14 @@ fn async_receipt_is_not_reported_when_every_replica_has_been_accounted_for() {
     let callback_id = CallbackId::new(0);
     let all_nodes: Vec<_> = (0..num_nodes as u64).map(node_test_id).collect();
 
-    let payload = build_async_receipt_payload(num_nodes, callback_id, all_nodes, num_nodes, &[]);
+    let payload = build_async_receipt_payload(
+        num_nodes,
+        callback_id,
+        Replication::FullyReplicated,
+        all_nodes,
+        num_nodes,
+        &[],
+    );
 
     assert!(payload.async_receipts.is_empty(), "{payload:?}");
     // A payload with nothing to report is empty, i.e. not put into the block at all.
@@ -8140,6 +8151,7 @@ fn async_receipt_is_not_repeated_after_a_past_payload_reported_it() {
     let payload = build_async_receipt_payload(
         num_nodes,
         callback_id,
+        Replication::FullyReplicated,
         [node_test_id(0)],
         num_nodes,
         &past_payloads,
@@ -8151,6 +8163,108 @@ fn async_receipt_is_not_repeated_after_a_past_payload_reported_it() {
         async_receipt_signers(&payload, callback_id),
         BTreeSet::from([node_test_id(1), node_test_id(3)])
     );
+}
+
+/// The replicas an asynchronous receipt may come from are the ones the request
+/// pins: the whole subnet for a fully replicated request, the designated replica
+/// for a non-replicated one, and the recorded committee for a flexible one.
+#[test]
+fn async_receipts_are_reported_for_the_committee_of_every_replication() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::new(0);
+
+    for (replication, refunding_nodes, expected) in [
+        // The response was signed by node 0; every other replica of the subnet that
+        // answered is still unaccounted for.
+        (
+            Replication::FullyReplicated,
+            vec![node_test_id(0)],
+            BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]),
+        ),
+        // The request timed out before the designated replica answered, so nobody is
+        // accounted for yet — and only that replica can report anything.
+        (
+            Replication::NonReplicated(node_test_id(2)),
+            vec![],
+            BTreeSet::from([node_test_id(2)]),
+        ),
+        // Node 3 is not part of the flexible committee, so its share is ignored even
+        // though it is in the pool.
+        (
+            Replication::Flexible {
+                committee: BTreeSet::from([node_test_id(0), node_test_id(1), node_test_id(2)]),
+                min_responses: 2,
+                max_responses: 3,
+            },
+            vec![node_test_id(0)],
+            BTreeSet::from([node_test_id(1), node_test_id(2)]),
+        ),
+    ] {
+        let payload = build_async_receipt_payload(
+            num_nodes,
+            callback_id,
+            replication.clone(),
+            refunding_nodes,
+            /* shares_in_pool = */ num_nodes,
+            &[],
+        );
+
+        assert_eq!(
+            async_receipt_signers(&payload, callback_id),
+            expected,
+            "unexpected receipts for {replication:?}"
+        );
+    }
+}
+
+/// Receipts count towards the per-block response limit like any other message, and
+/// are collected across delivered contexts until it is reached.
+#[test]
+fn async_receipts_of_many_delivered_contexts_stop_at_the_per_block_limit() {
+    // Enough delivered contexts, each answered by every replica, to produce more
+    // receipts than a single block may carry. The subnet size deliberately does not
+    // divide the limit, so that it is reached part-way through a context.
+    let num_nodes = 3;
+    let num_contexts = CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK / num_nodes + 1;
+    let contexts: Vec<_> = (0..num_contexts as u64)
+        .map(|id| {
+            (
+                CallbackId::new(id),
+                delivered_context(Replication::FullyReplicated, []),
+            )
+        })
+        .collect();
+
+    setup_test_with_delivered_contexts(num_nodes, contexts, |payload_builder, pool| {
+        {
+            let mut pool_access = pool.write().unwrap();
+            for id in 0..num_contexts as u64 {
+                let (_, metadata) = test_response_and_metadata(id);
+                add_received_shares_to_pool(
+                    pool_access.deref_mut(),
+                    metadata_to_shares(num_nodes, &metadata),
+                );
+            }
+        }
+
+        let payload = build_and_validate_and_parse_payload(&payload_builder);
+
+        assert_eq!(
+            payload.async_receipts.len(),
+            CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
+        );
+        // The last context that fits is only partly reported, i.e. collecting stops
+        // mid-context rather than at a context boundary.
+        assert_eq!(
+            payload
+                .async_receipts
+                .iter()
+                .map(|share| share.content.id())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK.div_ceil(num_nodes)
+        );
+    });
 }
 
 /// An asynchronous receipt reported for a callback that has not been responded to is

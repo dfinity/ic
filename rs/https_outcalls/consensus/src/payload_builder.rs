@@ -386,8 +386,12 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
             }
 
-            // Collect any asynchronous receipts
-            'receipts: for (callback_id, request) in delivered_canister_http_request_contexts {
+            // Collect the asynchronous receipts of the requests that have already
+            // been responded to.
+            for (callback_id, request) in delivered_canister_http_request_contexts {
+                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                    break;
+                }
                 // Skip contexts that have already timed out.
                 if validation_context
                     .time
@@ -416,7 +420,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 };
                 for share in find_async_receipts(grouped_shares, &committee, already_refunded) {
                     if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                        break 'receipts;
+                        break;
                     }
                     let share_size = share.count_bytes();
                     let size = NumBytes::new((accumulated_size + share_size) as u64);
