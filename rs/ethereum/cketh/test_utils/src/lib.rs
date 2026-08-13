@@ -807,10 +807,12 @@ enum EnvMode {
 /// canister of this fixture exists to schedule a timer whose outcall could stall waiting for an
 /// answer.
 fn new_env(mode: EnvMode) -> PocketIc {
-    let mut builder = pocket_ic_builder().with_icp_config(IcpConfig {
-        canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
-        ..Default::default()
-    });
+    let mut builder = PocketIcBuilder::new()
+        .with_fiduciary_subnet()
+        .with_icp_config(IcpConfig {
+            canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
+            ..Default::default()
+        });
     if let EnvMode::Live = mode {
         builder = builder.with_nns_subnet();
     }
@@ -827,13 +829,6 @@ pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
 
 pub fn new_pocket_ic() -> PocketIc {
     new_env(EnvMode::Mocked)
-}
-
-/// A [`PocketIcBuilder`] with the fiduciary subnet every ckETH fixture needs for the secp256k1
-/// `key_1` used by the minter; callers add anything further (e.g. an NNS subnet for
-/// [`PocketIc::make_live`]) before `build()`.
-fn pocket_ic_builder() -> PocketIcBuilder {
-    PocketIcBuilder::new().with_fiduciary_subnet()
 }
 
 fn ledger_wasm() -> Vec<u8> {
