@@ -103,6 +103,9 @@ pub struct ReviseElectedGuestosVersionsPayload {
 }
 
 impl ReviseElectedGuestosVersionsPayload {
+    /// Returns true if all required fields for electing a version are Some and false
+    /// if all the fields are None. In all other cases, it returns an Err as
+    ///  the payload is malformed (e.g. some fields are set and some are not).
     pub fn is_electing_a_version(&self) -> Result<bool, String> {
         let elect_params = [
             (
@@ -281,10 +284,13 @@ mod tests {
     fn test_unelecting_a_version_without_launch_measurements_is_valid() {
         let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: None,
+            // None is Ok (in fact, required), because not electing a version.
+            guest_launch_measurements: None,
+            // Since not electing a version, we must at least unelect one to
+            // avoid being a no-op, which is not allowed.
+            replica_versions_to_unelect: vec![REPLICA_VERSION_ID.to_string()],
             release_package_sha256_hex: None,
             release_package_urls: vec![],
-            guest_launch_measurements: None,
-            replica_versions_to_unelect: vec![REPLICA_VERSION_ID.to_string()],
         };
 
         let result = payload.validate();
@@ -299,6 +305,9 @@ mod tests {
     fn test_unelecting_a_version_with_launch_measurements_is_rejected() {
         // Step 1: Prepare the world.
         let payload = ReviseElectedGuestosVersionsPayload {
+            replica_version_to_elect: None,
+            // The previous test shows that None does NOT explode. This test shows
+            // that Some DOES explode.
             guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
             replica_versions_to_unelect: vec![REPLICA_VERSION_ID.to_string()],
             ..Default::default()
@@ -321,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn test_neither_electing_nor_unelecting_is_rejected() {
+    fn test_no_op_is_rejected() {
         // Step 1: Prepare the world.
         let payload = ReviseElectedGuestosVersionsPayload::default();
 
