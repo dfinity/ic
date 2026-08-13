@@ -756,6 +756,11 @@ impl<'a> CkEthSetupBuilder<'a> {
     }
 
     fn build(self) -> CkEthSetup {
+        debug_assert!(
+            !(self.live && self.env.is_some()),
+            "with_env's instance would be used as-is, but self.live would still select the \
+             controller and skip the ledger install: a live-flagged fixture on a non-live instance"
+        );
         let env_mode = if self.live {
             EnvMode::Live
         } else {
