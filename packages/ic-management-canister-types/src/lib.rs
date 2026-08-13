@@ -1809,7 +1809,7 @@ pub enum CanisterLogFilter {
         start: u64,
         /// End of the range (exclusive).
         ///
-        /// If `end` is not above `start`, the range is empty.
+        /// If `end <= start`, the range is empty.
         end: u64,
     },
     /// Filter logs by timestamp range `[start, end)`.
@@ -1819,7 +1819,7 @@ pub enum CanisterLogFilter {
         start: u64,
         /// End of the range (exclusive).
         ///
-        /// If `end` is not above `start`, the range is empty.
+        /// If `end <= start`, the range is empty.
         end: u64,
     },
 }
