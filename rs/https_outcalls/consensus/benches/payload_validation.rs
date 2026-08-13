@@ -469,7 +469,7 @@ impl<'a> PayloadAssembler<'a> {
             divergence_responses,
             flexible_responses,
             flexible_errors: vec![],
-            async_refunds: vec![],
+            async_receipts: vec![],
         };
 
         assert!(

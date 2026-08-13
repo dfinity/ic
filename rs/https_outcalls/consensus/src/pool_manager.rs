@@ -594,7 +594,7 @@ impl CanisterHttpPoolManagerImpl {
 
     /// The callback ids of all requests whose artifacts are still of use: those
     /// still awaiting a response, plus those already responded to but still awaiting
-    /// the [asynchronous refunds](ic_types::batch::CanisterHttpPayload::async_refunds)
+    /// the [asynchronous receipts](ic_types::batch::CanisterHttpPayload::async_receipts)
     /// of the replicas that did not contribute to the response.
     fn known_callback_ids(&self) -> BTreeSet<CallbackId> {
         let state = self.state_reader.get_latest_state();
@@ -706,7 +706,7 @@ pub mod test {
     }
 
     /// A state whose HTTP outcall contexts have all been responded to already, i.e.
-    /// that only keeps them around for their asynchronous refunds.
+    /// that only keeps them around for their asynchronous receipts.
     fn state_with_delivered_http_calls(
         delivered: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     ) -> ReplicatedState {
@@ -3711,11 +3711,11 @@ pub mod test {
     }
 
     // ===================================================================
-    // Asynchronous refunds
+    // Asynchronous receipts
     // ===================================================================
 
     /// A share for an outcall that has already been responded to is still validated:
-    /// it may yet be picked up as an asynchronous refund.
+    /// it may yet be picked up as an asynchronous receipt.
     #[test]
     fn test_share_for_delivered_context_is_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {

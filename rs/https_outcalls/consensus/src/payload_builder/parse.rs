@@ -37,8 +37,8 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
             Some(MessageType::OutOfCycles(out_of_cycles)) => payload
                 .out_of_cycles
                 .push(CanisterHttpOutOfCycles::try_from(out_of_cycles)?),
-            Some(MessageType::AsyncRefund(share)) => payload
-                .async_refunds
+            Some(MessageType::AsyncReceipt(share)) => payload
+                .async_receipts
                 .push(CanisterHttpResponseShare::try_from(share)?),
             None => return Err(ProxyDecodeError::MissingField("message_type")),
         }
@@ -55,7 +55,7 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
         responses,
         flexible_responses,
         flexible_errors,
-        async_refunds,
+        async_receipts,
     } = payload;
 
     let message_iterator =
@@ -108,10 +108,10 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
                     }),
             )
             .chain(
-                async_refunds
+                async_receipts
                     .into_iter()
                     .map(|share| CanisterHttpResponseMessage {
-                        message_type: Some(MessageType::AsyncRefund(pb::CanisterHttpShare::from(
+                        message_type: Some(MessageType::AsyncReceipt(pb::CanisterHttpShare::from(
                             share,
                         ))),
                     }),
@@ -131,7 +131,7 @@ pub struct PastPayloads {
 }
 
 /// Collects from the `past_payloads` everything a new payload not repeat:
-/// the responses already delivered and the asynchronous refunds already
+/// the responses already delivered and the asynchronous receipts already
 /// reported.
 pub(crate) fn parse_past_payloads(
     past_payloads: &[PastPayload],
@@ -150,7 +150,7 @@ pub(crate) fn parse_past_payloads(
                 vec![]
             });
         for message in messages {
-            if let Some(MessageType::AsyncRefund(share)) = &message.message_type {
+            if let Some(MessageType::AsyncReceipt(share)) = &message.message_type {
                 if let Some((callback_id, signer)) = callback_and_signer_of_share(share) {
                     parsed
                         .refunded_nodes
@@ -193,7 +193,7 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
         Some(MessageType::OutOfCycles(out_of_cycles)) => Some(out_of_cycles.callback_id),
         Some(MessageType::Timeout(id)) => Some(id),
         // Handled by `parse_past_payloads`, which does not deliver a response for it.
-        Some(MessageType::AsyncRefund(_)) => None,
+        Some(MessageType::AsyncReceipt(_)) => None,
         None => None,
     }
 }

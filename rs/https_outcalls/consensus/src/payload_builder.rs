@@ -5,7 +5,7 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            FlexibleFindResult, ResponseShareSigInput, find_async_refunds, find_flexible_result,
+            FlexibleFindResult, ResponseShareSigInput, find_async_receipts, find_flexible_result,
             find_fully_replicated_response, find_non_flexible_out_of_cycles,
             find_non_replicated_response, group_shares_by_callback_id,
             grouped_shares_meet_divergence_criteria, response_share_sig_inputs,
@@ -83,7 +83,7 @@ pub struct CanisterHttpBatchStats {
     pub timeouts: usize,
     pub divergence_responses: usize,
     pub out_of_cycles: usize,
-    pub async_refunds: usize,
+    pub async_receipts: usize,
     pub single_signature_responses: usize,
     pub flexible_ok_responses: usize,
     pub flexible_ok_responses_candid_failures: usize,
@@ -181,7 +181,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut out_of_cycles = vec![];
         let mut flexible_responses = vec![];
         let mut flexible_errors = vec![];
-        let mut async_refunds = vec![];
+        let mut async_receipts = vec![];
 
         // Metrics counters
         let mut total_share_count = 0;
@@ -386,8 +386,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
             }
 
-            // Collect any asynchronous refunds
-            'refunds: for (callback_id, request) in delivered_canister_http_request_contexts {
+            // Collect any asynchronous receipts
+            'receipts: for (callback_id, request) in delivered_canister_http_request_contexts {
                 // Skip contexts that have already timed out.
                 if validation_context
                     .time
@@ -414,14 +414,14 @@ impl CanisterHttpPayloadBuilderImpl {
                             .get(callback_id)
                             .is_some_and(|nodes| nodes.contains(node_id))
                 };
-                for share in find_async_refunds(grouped_shares, &committee, already_refunded) {
+                for share in find_async_receipts(grouped_shares, &committee, already_refunded) {
                     if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                        break 'refunds;
+                        break 'receipts;
                     }
                     let share_size = share.count_bytes();
                     let size = NumBytes::new((accumulated_size + share_size) as u64);
                     if size < max_payload_size {
-                        async_refunds.push(share.clone());
+                        async_receipts.push(share.clone());
                         responses_included += 1;
                         accumulated_size += share_size;
                     }
@@ -436,7 +436,7 @@ impl CanisterHttpPayloadBuilderImpl {
             out_of_cycles,
             flexible_responses,
             flexible_errors,
-            async_refunds,
+            async_receipts,
         }
     }
 
@@ -1161,17 +1161,17 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        // Validate asynchronous refunds: receipts of replicas whose spend was not
-        // covered by the already delivered response of their outcall.
-        let mut refunds_by_callback: BTreeMap<CallbackId, Vec<&CanisterHttpResponseShare>> =
+        // Validate asynchronous receipts: the signed spends of replicas that the
+        // already delivered response of their outcall did not account for.
+        let mut receipts_by_callback: BTreeMap<CallbackId, Vec<&CanisterHttpResponseShare>> =
             BTreeMap::new();
-        for share in &payload.async_refunds {
-            refunds_by_callback
+        for share in &payload.async_receipts {
+            receipts_by_callback
                 .entry(share.content.id())
                 .or_default()
                 .push(share);
         }
-        for (callback_id, shares) in refunds_by_callback {
+        for (callback_id, shares) in receipts_by_callback {
             // Only an outcall that has already been responded to can be refunded asynchronously.
             let context = delivered_http_contexts.get(&callback_id).ok_or(
                 CanisterHttpPayloadValidationError::InvalidArtifact(
@@ -1510,8 +1510,8 @@ impl
         }
 
         let mut async_spent: BTreeMap<CallbackId, BTreeMap<NodeId, Cycles>> = BTreeMap::new();
-        for share in messages.async_refunds {
-            stats.async_refunds += 1;
+        for share in messages.async_receipts {
+            stats.async_receipts += 1;
             async_spent
                 .entry(share.content.id())
                 .or_default()

@@ -754,7 +754,7 @@ pub mod canister_http_response_message {
         #[prost(message, tag = "6")]
         OutOfCycles(super::CanisterHttpOutOfCycles),
         #[prost(message, tag = "7")]
-        AsyncRefund(super::CanisterHttpShare),
+        AsyncReceipt(super::CanisterHttpShare),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

@@ -345,7 +345,7 @@ pub(crate) fn find_non_flexible_out_of_cycles(
 /// `already_refunded` tells whether a replica's spend has already been accounted
 /// for, either by the response that was delivered or by an earlier asynchronous
 /// refund.
-pub(crate) fn find_async_refunds<'a>(
+pub(crate) fn find_async_receipts<'a>(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&'a CanisterHttpResponseShare>>,
     committee: &BTreeSet<NodeId>,
     already_refunded: impl Fn(&NodeId) -> bool,
