@@ -251,6 +251,11 @@ impl State {
             })
     }
 
+    /// Whether `erc20_contract_address` is a ckERC20 token supported by the minter.
+    pub fn is_supported_ckerc20(&self, erc20_contract_address: &Address) -> bool {
+        self.ckerc20_tokens.contains_alt(erc20_contract_address)
+    }
+
     /// Quarantine the deposit event to prevent double minting.
     /// WARNING!: It's crucial that this method does not panic,
     /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
@@ -630,6 +635,7 @@ impl State {
         &mut self,
         now: Timestamp,
         account: Account,
+        token: Address,
     ) -> Result<Entry<DepositRequest>, DepositErc20Error> {
         let (master_public_key, chain_code) =
             self.public_key_and_chain_code()
@@ -643,7 +649,7 @@ impl State {
             &account,
         );
         self.automatic_deposits
-            .watch_address_for_account(now, account, address)
+            .watch_deposit(now, account, token, address)
     }
 }
 
