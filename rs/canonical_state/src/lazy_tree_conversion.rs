@@ -911,7 +911,7 @@ impl<'a> CanisterFork<'a> {
                 }
                 METADATA_LABEL => canister_metadata_as_tree(execution_state, self.version),
                 MODULE_HASH_LABEL => {
-                    Blob(execution_state.wasm_binary.binary.module_hash_ref(), None)
+                    blob(move || execution_state.wasm_binary.binary.module_hash().to_vec())
                 }
                 LAST_INSTALL_TIMESTAMP_LABEL => {
                     let timestamp = execution_state
