@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+Enforce that every `hostos_version_id` matches its `HostosVersionRecord`'s registry key.
+
 ## Changed
 
 ## Deprecated

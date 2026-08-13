@@ -33,7 +33,7 @@ pub(crate) fn check_hostos_version_invariants(
     for version in all_versions {
         // Check that every referenced version exists, i.e. we can only set a
         // Node's version to one that has already been added to the registry.
-        let r = get_hostos_version_record(snapshot, version);
+        let r = get_hostos_version_record(snapshot, &version);
 
         // Check whether release package URLs (update image) and corresponding hash are well-formed.
         // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
@@ -42,13 +42,16 @@ pub(crate) fn check_hostos_version_invariants(
             &r.release_package_sha256_hex,
             false,
         );
+
+        // Enforce that the stored version always matches the key
+        assert_eq!(r.hostos_version_id, version);
     }
 
     Ok(())
 }
 
-fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> HostosVersionRecord {
-    get_value_from_snapshot(snapshot, make_hostos_version_key(version.clone()))
+fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: &str) -> HostosVersionRecord {
+    get_value_from_snapshot(snapshot, make_hostos_version_key(version))
         .unwrap_or_else(|| panic!("Could not find HostOS version: {version}"))
 }
 
