@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, HashSet},
     convert::TryFrom,
 };
 
@@ -8,20 +8,18 @@ use crate::invariants::{
         InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
         get_subnet_ids_from_snapshot, get_value_from_snapshot,
     },
-    replica_version::get_all_standard_engine_replica_versions,
+    replica_version::has_launch_measurements,
 };
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId, subnet_id_try_from_protobuf};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::{
     node::v1::{NodeRecord, NodeRewardType},
-    replica_version::v1::ReplicaVersionRecord,
     subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType},
 };
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_keys::{
-    SUBNET_RECORD_KEY_PREFIX, make_default_initial_dkg_subnet_id_key, make_replica_version_key,
-    make_subnet_record_key,
+    SUBNET_RECORD_KEY_PREFIX, make_default_initial_dkg_subnet_id_key, make_subnet_record_key,
 };
 use prost::Message;
 
@@ -161,12 +159,7 @@ pub(crate) fn check_subnet_invariants(
         if let Some(features) = subnet_record.features.as_ref()
             && features.sev_enabled == Some(true)
         {
-            check_sev_subnet_invariants(
-                subnet_id,
-                subnet_members,
-                &subnet_record.replica_version_id,
-                snapshot,
-            )?;
+            check_sev_subnet_invariants(subnet_id, &subnet_record, snapshot)?;
         }
 
         check_subnet_admins_invariant(&subnet_record, subnet_id)?;
@@ -290,10 +283,15 @@ pub(crate) fn get_subnet_records_map(
 /// GuestOS version that has launch measurements.
 fn check_sev_subnet_invariants(
     subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
-    subnet_members: HashSet<NodeId>,
-    replica_version_id: &str,
+    subnet_record: &SubnetRecord,
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
+    let subnet_members: HashSet<NodeId> = subnet_record
+        .membership
+        .iter()
+        .map(|v| NodeId::from(PrincipalId::try_from(v).unwrap()))
+        .collect();
+
     // SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
     let nodes_missing_chip_id: Vec<NodeId> = subnet_members
         .iter()
@@ -328,52 +326,29 @@ fn check_sev_subnet_invariants(
         });
     }
 
-    check_sev_subnet_launch_measurements(subnet_id, replica_version_id, snapshot)?;
+    // A CloudEngine is allowed to leave replica_version_id blank, and then runs
+    // the versions of the StandardEngineReplicaVersionRecord instead. Those are
+    // checked by the standard engine replica version invariants.
+    let subnet_replica_version_id = &subnet_record.replica_version_id;
+    if !subnet_replica_version_id.is_empty() {
+        check_sev_subnet_launch_measurements(subnet_id, subnet_replica_version_id, snapshot)?;
+    }
 
     Ok(())
 }
 
-/// An SEV-enabled subnet must run only GuestOS versions that have launch measurements; otherwise
+/// An SEV-enabled subnet must run only a GuestOS version that has launch measurements; otherwise
 /// its nodes cannot be attested, which defeats the purpose of enabling SEV.
 fn check_sev_subnet_launch_measurements(
-    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
+    subnet_id: SubnetId,
     subnet_replica_version_id: &str,
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let replica_version_ids = if subnet_replica_version_id.is_empty() {
-        // A subnet normally runs the single version that its SubnetRecord names. A
-        // CloudEngine is allowed to leave that field blank, and then runs the versions
-        // of the StandardEngineReplicaVersionRecord instead (both the old and the new
-        // one, because the engines are being upgraded from one to the other).
-        get_all_standard_engine_replica_versions(snapshot)
-    } else {
-        BTreeSet::from([subnet_replica_version_id.to_string()])
-    };
-
-    let versions_missing_launch_measurements = replica_version_ids
-        .into_iter()
-        .filter(|replica_version_id| {
-            let replica_version_record = get_value_from_snapshot::<ReplicaVersionRecord>(
-                snapshot,
-                make_replica_version_key(replica_version_id),
-            );
-
-            let Some(replica_version_record) = replica_version_record else {
-                // A version in use without a ReplicaVersionRecord is reported
-                // by the replica version invariants, so there is no need to report it here too.
-                return false;
-            };
-
-            replica_version_record.guest_launch_measurements.is_none()
-        })
-        .collect::<Vec<String>>();
-
-    if !versions_missing_launch_measurements.is_empty() {
+    if !has_launch_measurements(subnet_replica_version_id, snapshot) {
         return Err(InvariantCheckError {
             msg: format!(
-                "Subnet {subnet_id} is SEV-enabled, but the following GuestOS versions that it \
-                 runs are missing guest launch measurements: \
-                 {versions_missing_launch_measurements:?}"
+                "Subnet {subnet_id} is SEV-enabled, but the GuestOS version that it \
+                 runs is missing guest launch measurements: {subnet_replica_version_id:?}"
             ),
             source: None,
         });

@@ -28,6 +28,7 @@ use ic_registry_transport::pb::v1::{
 use ic_registry_transport::{insert, upsert};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::ReplicaVersion;
+use lazy_static::lazy_static;
 use prost::Message;
 use std::collections::BTreeMap;
 
@@ -36,6 +37,21 @@ pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
     let mutations = invariant_compliant_mutation(mutation_id);
     registry.maybe_apply_mutation_internal(mutations);
     registry
+}
+
+lazy_static! {
+    /// Launch measurements that a test can give an elected GuestOS version.
+    ///
+    /// A SEV-enabled subnet may only run a version that has launch measurements,
+    /// and so may the versions of the StandardEngineReplicaVersionRecord (see
+    /// the SEV subnet and standard engine replica version invariants).
+    pub static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
+        guest_launch_measurements: vec![GuestLaunchMeasurement {
+            // An SEV-SNP measurement is exactly 48 bytes long. The value itself does not matter here.
+            measurement: vec![0x42; 48],
+            metadata: None,
+        }],
+    };
 }
 
 /// Gives the already elected GuestOS version launch measurements.
@@ -57,13 +73,7 @@ pub fn add_guest_launch_measurements_to_replica_version(
     let mut replica_version_record =
         ReplicaVersionRecord::decode(registry_value.value.as_slice()).unwrap();
 
-    replica_version_record.guest_launch_measurements = Some(GuestLaunchMeasurements {
-        guest_launch_measurements: vec![GuestLaunchMeasurement {
-            // An SEV-SNP measurement is exactly 48 bytes long. The value itself does not matter here.
-            measurement: vec![0x42; 48],
-            metadata: None,
-        }],
-    });
+    replica_version_record.guest_launch_measurements = Some(GUEST_LAUNCH_MEASUREMENTS.clone());
 
     registry.maybe_apply_mutation_internal(vec![upsert(
         key.as_bytes(),
