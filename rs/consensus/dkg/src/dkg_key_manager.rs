@@ -426,20 +426,17 @@ impl DkgKeyManager {
         // Create list of transcripts that we need to retain, which is all DKG
         // transcripts in the latest CUP and in all subsequent finalized summary blocks.
         let mut transcripts_to_retain: HashSet<NiDkgTranscript> = HashSet::new();
-        let mut dkg_summary = Some(
+        let mut next_summary_block = Some(
             pool_reader
                 .as_cache()
                 .catch_up_package()
                 .content
                 .block
-                .into_inner()
-                .payload
-                .as_ref()
-                .as_summary()
-                .dkg,
+                .into_inner(),
         );
 
-        while let Some(summary) = dkg_summary {
+        while let Some(summary_block) = next_summary_block {
+            let summary = &summary_block.payload.as_ref().as_summary().dkg;
             let next_summary_height = summary.get_next_start_height();
             for transcript in summary
                 .current_transcripts()
@@ -449,9 +446,7 @@ impl DkgKeyManager {
                 transcripts_to_retain.insert(transcript.clone());
             }
 
-            dkg_summary = pool_reader
-                .get_finalized_block(next_summary_height)
-                .map(|b| b.payload.as_ref().as_summary().dkg);
+            summary_block = pool_reader.get_finalized_block(next_summary_height);
         }
 
         let crypto = self.crypto.clone();
