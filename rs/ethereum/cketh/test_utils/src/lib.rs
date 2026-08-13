@@ -848,6 +848,7 @@ impl EthereumBackend<'_> {
 
     fn ethereum_block_height(&self) -> CandidBlockTag {
         match self {
+            // The mocked responses replay a historical mainnet snapshot, long since finalized.
             EthereumBackend::Mocked => CandidBlockTag::Finalized,
             // A fresh anvil chain has no finalized blocks, so track its "latest" head instead.
             EthereumBackend::Anvil(_) => CandidBlockTag::Latest,
@@ -856,6 +857,7 @@ impl EthereumBackend<'_> {
 
     fn last_scraped_block_number(&self) -> Nat {
         match self {
+            // The block the mocked JSON-RPC responses are canned to scrape logs from onward.
             EthereumBackend::Mocked => LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
             EthereumBackend::Anvil(_) => 0_u8.into(),
         }
