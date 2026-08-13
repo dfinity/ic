@@ -775,11 +775,12 @@ fn evm_rpc_wasm() -> Vec<u8> {
 }
 
 /// The 3 canisters every ckETH fixture creates: the minter, its ckETH ledger and the EVM RPC
-/// canister it calls out to.
+/// canister it calls out to, plus the sender to install/upgrade them as.
 struct CkEthCanisters {
     minter_id: Principal,
     ledger_id: Principal,
     evm_rpc_id: Principal,
+    controller: Option<Principal>,
 }
 
 fn create_cketh_canisters(env: &PocketIc) -> CkEthCanisters {
@@ -794,6 +795,7 @@ fn create_cketh_canisters(env: &PocketIc) -> CkEthCanisters {
         minter_id,
         ledger_id,
         evm_rpc_id,
+        controller: None,
     }
 }
 
@@ -814,7 +816,7 @@ fn install_ledger(env: &PocketIc, canisters: &CkEthCanisters) {
                 .build(),
         ))
         .unwrap(),
-        None,
+        canisters.controller,
     );
 }
 
@@ -875,7 +877,7 @@ fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &EvmRpcBa
         canisters.minter_id,
         minter_wasm(),
         Encode!(&MinterArg::InitArg(args)).unwrap(),
-        None,
+        canisters.controller,
     );
 }
 
@@ -884,7 +886,7 @@ fn install_evm_rpc(env: &PocketIc, canisters: &CkEthCanisters, backend: &EvmRpcB
         canisters.evm_rpc_id,
         evm_rpc_wasm(),
         Encode!(&backend.install_args()).unwrap(),
-        None,
+        canisters.controller,
     );
 }
 

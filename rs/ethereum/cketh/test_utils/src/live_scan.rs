@@ -21,8 +21,8 @@ use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
 };
+use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
-use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
 use pocket_ic::{CanisterSettings, PocketIc};
@@ -33,8 +33,8 @@ use crate::anvil::{
     Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20, erc20_balance_slot, u256_be,
 };
 use crate::{
-    CKETH_MINIMUM_WITHDRAWAL_AMOUNT, ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS,
-    EvmRpcBackend, USDC_ERC20_CONTRACT_ADDRESS, evm_rpc_wasm, minter_wasm, pocket_ic_builder,
+    CkEthCanisters, ERC20_HELPER_CONTRACT_ADDRESS, EvmRpcBackend, USDC_ERC20_CONTRACT_ADDRESS,
+    install_evm_rpc, install_minter, minter_wasm, pocket_ic_builder,
 };
 
 /// USDT's mainnet address, the second token registered so the scan reads more than one token per
@@ -107,18 +107,25 @@ impl CkErc20LiveScanSetup {
         let evm_rpc_id =
             env.create_canister_with_settings(Some(controller()), Some(settings.clone()));
         env.add_cycles(evm_rpc_id, u128::from(u64::MAX));
-        let backend = EvmRpcBackend::Anvil(anvil.url());
-        install_evm_rpc(&env, evm_rpc_id, &backend);
 
         let minter_id = env.create_canister_with_settings(Some(controller()), Some(settings));
         env.add_cycles(minter_id, u128::from(u64::MAX));
+
+        let canisters = CkEthCanisters {
+            minter_id,
+            ledger_id,
+            evm_rpc_id,
+            controller: Some(controller()),
+        };
+        let backend = EvmRpcBackend::Anvil(anvil.url());
+        install_evm_rpc(&env, &canisters, &backend);
 
         // Go live *before* installing the minter: its install schedules immediate refresh and
         // balance-scan timers that issue HTTPS outcalls, which would stall (holding the task guards)
         // if they fired while the outcalls could not be answered.
         let _gateway = env.make_live(None);
 
-        install_minter(&env, minter_id, ledger_id, evm_rpc_id, &backend);
+        install_minter(&env, &canisters, &backend);
         activate_ckerc20(&env, minter_id);
         register_supported_tokens(&env, minter_id);
 
@@ -252,41 +259,6 @@ fn candidates_in_log(line: &str) -> Option<u64> {
         .next()?
         .parse()
         .ok()
-}
-
-fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, backend: &EvmRpcBackend) {
-    env.install_canister(
-        evm_rpc_id,
-        evm_rpc_wasm(),
-        Encode!(&backend.install_args()).unwrap(),
-        Some(controller()),
-    );
-}
-
-fn install_minter(
-    env: &PocketIc,
-    minter_id: Principal,
-    ledger_id: Principal,
-    evm_rpc_id: Principal,
-    backend: &EvmRpcBackend,
-) {
-    let args = MinterInitArgs {
-        ethereum_network: EthereumNetwork::Mainnet,
-        ecdsa_key_name: "key_1".to_string(),
-        ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
-        ledger_id,
-        ethereum_block_height: backend.ethereum_block_height(),
-        minimum_withdrawal_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
-        next_transaction_nonce: Nat::from(0_u8),
-        last_scraped_block_number: backend.last_scraped_block_number(),
-        evm_rpc_id: Some(evm_rpc_id),
-    };
-    env.install_canister(
-        minter_id,
-        minter_wasm(),
-        Encode!(&MinterArg::InitArg(args)).unwrap(),
-        Some(controller()),
-    );
 }
 
 /// Activates the ckERC20 feature by pointing the minter's orchestrator id at [`controller`] (so
