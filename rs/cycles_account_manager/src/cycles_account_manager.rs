@@ -1296,9 +1296,10 @@ impl CyclesAccountManager {
         ic_https_outcalls_pricing::fees::base_fee(request_size, replication, subnet_cycles_config)
     }
 
-    /// Returns the most an HTTP outcall with the given `replication` and
-    /// `max_response_bytes` can ever spend, i.e. its worst-case cost beyond the base
-    /// fee, including the consensus cost of delivering the response.
+    /// Returns the maximum amount of cycles an HTTP outcall with the given
+    /// `replication` and `max_response_bytes` can ever spend, i.e. its worst-case
+    /// cost beyond the base fee, including the consensus cost of delivering the
+    /// response.
     pub fn max_http_request_usage_fee(
         &self,
         replication: &Replication,

@@ -3668,57 +3668,21 @@ fn execute_flexible_canister_http_request() {
 
 #[test]
 fn execute_canister_http_request_refunds_truncated_allowance_remainder() {
-    // The payment beyond the base fee does not generally divide evenly into
-    // per-replica allowances, and only whole allowances are ever refunded through
-    // the refund status. The truncated remainder is therefore not taken out of
-    // the payment, so that it is refunded along with the response instead of
-    // disappearing from the cycles accounting.
+    // Regression test: the payment beyond the base fee does not generally divide
+    // evenly into per-replica allowances, and the truncated remainder must not be
+    // lost. It is not taken out of the payment, so that it is refunded along with
+    // the response.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
-    let build_test = || {
-        ExecutionTestBuilder::new()
-            .with_own_subnet_id(own_subnet)
-            .with_caller(own_subnet, caller_canister)
-            .with_flexible_http_requests_enabled()
-            .build()
-    };
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
 
-    // Probe with an ample payment to learn the base fee and the committee size for
-    // these args.
-    let (base_fee, committee_size) = {
-        let mut probe = build_test();
-        probe.inject_call_to_ic00(
-            Method::FlexibleHttpRequest,
-            flexible_http_request_args(caller_canister).encode(),
-            Cycles::new(100_000_000_000),
-        );
-        probe.execute_all();
-        let context = probe
-            .state()
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .get(&CallbackId::from(0))
-            .unwrap()
-            .clone();
-        let base_fee =
-            probe.http_request_base_fee(context.variable_parts_size(), &context.replication);
-        let committee_size = match &context.replication {
-            Replication::Flexible { committee, .. } => committee.len(),
-            other => panic!("expected flexible replication, got {other:?}"),
-        };
-        (base_fee, committee_size)
-    };
-    // The split only truncates if more than one replica shares the payment.
-    assert!(committee_size > 1);
-
-    // Pay for one full allowance per replica, plus a remainder that is one cycle
-    // short of giving every replica another cycle.
-    let allowance = Cycles::new(1_000);
-    let remainder = Cycles::new(committee_size as u128 - 1);
-    let payment = base_fee.real() + allowance * committee_size + remainder;
-
-    let mut test = build_test();
+    // A payment far below what the committee can possibly spend on this outcall, so
+    // that the payment — rather than the worst-case cost — is split into allowances.
+    let payment = Cycles::new(1_000_000_000);
     test.inject_call_to_ic00(
         Method::FlexibleHttpRequest,
         flexible_http_request_args(caller_canister).encode(),
@@ -3733,6 +3697,21 @@ fn execute_canister_http_request_refunds_truncated_allowance_remainder() {
         .canister_http_request_contexts
         .get(&CallbackId::from(0))
         .unwrap();
+    let committee_size = match &http_request_context.replication {
+        Replication::Flexible { committee, .. } => committee.len(),
+        other => panic!("expected flexible replication, got {other:?}"),
+    };
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let allowance = (payment - base_fee.real()) / committee_size;
+    let remainder = payment - base_fee.real() - allowance * committee_size;
+    // Sanity checks that these args actually exercise a truncated split: the payment
+    // is shared by more than one replica and does not divide evenly among them.
+    assert!(committee_size > 1);
+    assert_ne!(remainder, Cycles::new(0));
+
     // `refundable_cycles` covers exactly the per-replica allowances, ...
     assert_eq!(
         http_request_context.refund_status.per_replica_allowance,
@@ -3745,6 +3724,14 @@ fn execute_canister_http_request_refunds_truncated_allowance_remainder() {
     // ... and the remainder that no allowance covers was never taken out of the
     // payment, so it is refunded when the response is delivered.
     assert_eq!(http_request_context.request.payment, remainder);
+    // Nothing disappears from the cycles accounting: the base fee, the allowances
+    // and what is left of the payment add up to what the caller paid.
+    assert_eq!(
+        base_fee.real()
+            + http_request_context.refund_status.refundable_cycles
+            + http_request_context.request.payment,
+        payment
+    );
     // Only the base fee is charged (and reported as consumed) upfront.
     assert_eq!(
         test.state()

@@ -144,7 +144,7 @@ mod tests {
     use super::*;
     use crate::fees::{
         FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE, PER_DOWNLOADED_BYTE_FEE, PER_RESPONSE_MS_FEE,
-        TRANSFORM_INSTRUCTION_DIVISOR, max_usage_fee,
+        TRANSFORM_INSTRUCTION_DIVISOR, max_consensus_fee, max_usage_fee,
     };
     use ic_types::{
         CanisterId, NodeId, PrincipalId, RegistryVersion,
@@ -385,8 +385,10 @@ mod tests {
         // per-replica allowances, so it has to cover everything this tracker can
         // charge a replica: the largest response the adapter may return, taking the
         // longest it may take, transformed with the whole instruction limit into a
-        // maximally large response. If it didn't, a request paying for the worst case
-        // could still run out of cycles.
+        // maximally large response. On top of that, what the allowances of all
+        // replicas together leave unspent has to cover the consensus fee of
+        // delivering the response(s). If it didn't, a request paying for the worst
+        // case could still run out of cycles.
         let node = NodeId::from(PrincipalId::new_node_test_id(0));
         for replication in [
             Replication::FullyReplicated,
@@ -425,9 +427,26 @@ mod tests {
                     Ok(()),
                     "{replication:?}, {max_response_bytes:?}"
                 );
-                // There should still be allowance left for the consensus cost.
+                // What every replica leaves unspent adds up to at least the consensus
+                // fee of delivering a maximally large response from each of them.
+                let consensus_fee = max_consensus_fee(
+                    replication.kind(),
+                    NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                    subnet_size,
+                );
+                let worst_case = tracker
+                    .spent
+                    .saturating_mul(node_count as u128)
+                    .saturating_add(consensus_fee.get());
+                let allowances = allowance.get().saturating_mul(node_count as u128);
                 assert!(
-                    tracker.spent < allowance.get(),
+                    allowances >= worst_case,
+                    "{replication:?}, {max_response_bytes:?}"
+                );
+                // And they cover no more than that: the only slack is what rounding
+                // the worst case up to a whole number of allowances adds.
+                assert!(
+                    allowances - worst_case < node_count as u128,
                     "{replication:?}, {max_response_bytes:?}"
                 );
             }

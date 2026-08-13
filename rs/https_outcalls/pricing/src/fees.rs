@@ -94,32 +94,32 @@ fn base_fee_amount(
 ) -> Cycles {
     let n = subnet_size.get() as u128;
     let request_bytes = request_size.get() as u128;
-    let per_replica = match replication_kind {
+    let amount = match replication_kind {
         ReplicationKind::FullyReplicated => {
-            HTTP_REQUEST_BASE_FEE
+            n * (HTTP_REQUEST_BASE_FEE
                 + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
                 + HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE * n
-                + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n
+                + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n)
         }
         // Non-replicated is equivalent to flexible replication with min_responses = 1.
-        ReplicationKind::NonReplicated => gossipping_base_fee_per_replica(request_bytes, n, 1),
+        ReplicationKind::NonReplicated => gossipping_base_fee(request_bytes, n, 1),
         ReplicationKind::Flexible { min_responses, .. } => {
-            gossipping_base_fee_per_replica(request_bytes, n, min_responses as u128)
+            gossipping_base_fee(request_bytes, n, min_responses as u128)
         }
     };
 
-    Cycles::new(n * per_replica)
+    Cycles::new(amount)
 }
 
-/// The per-replica part of the base fee of a gossiping (flexible or
-/// non-replicated) outcall of `request_bytes` bytes that requires
-/// `min_responses` responses, on a subnet of `n` nodes.
-fn gossipping_base_fee_per_replica(request_bytes: u128, n: u128, min_responses: u128) -> u128 {
-    HTTP_REQUEST_BASE_FEE
+/// The base fee of a gossiping (flexible or non-replicated) outcall of
+/// `request_bytes` bytes that requires `min_responses` responses, on a subnet of
+/// `n` nodes.
+fn gossipping_base_fee(request_bytes: u128, n: u128, min_responses: u128) -> u128 {
+    n * (HTTP_REQUEST_BASE_FEE
         + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
         + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
         + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * min_responses
-        + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min_responses
+        + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min_responses)
 }
 
 // ============================= Per-replica fees =============================
@@ -223,41 +223,13 @@ fn usage_fee(
     transformed_response_size: NumBytes,
     subnet_size: NumberOfNodes,
 ) -> Cycles {
-    let transformed_bytes = transformed_response_size.get() as u128;
-    // How the responses reach the rest of the subnet, and which of them consensus
-    // delivers, is all the replication kind decides here.
-    let (gossip_fee, consensus_fee) = match replication_kind {
-        // Every replica produces the same response, so it doesn't need to be gossiped
-        // and consensus is reached on that single response.
-        ReplicationKind::FullyReplicated => (0, consensus_fee(transformed_bytes, subnet_size)),
-        // The single replica gossips its own response, which is then delivered.
-        ReplicationKind::NonReplicated => (
-            gossip_usage_fee(transformed_response_size, subnet_size),
-            consensus_fee(transformed_bytes, subnet_size),
-        ),
-        // Every replica gossips its own response, and up to `max_responses` of them
-        // are delivered — those beyond `min_responses` at an extra fee. How many
-        // actually will be is not known here, so all `max_responses` are priced.
-        ReplicationKind::Flexible {
-            min_responses,
-            max_responses,
-            ..
-        } => {
-            let responses = max_responses as u128;
-            (
-                gossip_usage_fee(transformed_response_size, subnet_size),
-                consensus_fee(
-                    responses.saturating_mul(
-                        FLEXIBLE_RESPONSE_SIZE_OVERHEAD.saturating_add(transformed_bytes),
-                    ),
-                    subnet_size,
-                ) + flexible_extra_response_fee(
-                    responses.saturating_sub(min_responses as u128),
-                    subnet_size,
-                ),
-            )
+    let gossip_fee = match replication_kind {
+        ReplicationKind::FullyReplicated => 0,
+        ReplicationKind::NonReplicated | ReplicationKind::Flexible { .. } => {
+            gossip_usage_fee(transformed_response_size, subnet_size)
         }
     };
+    let consensus_fee = max_consensus_fee(replication_kind, transformed_response_size, subnet_size);
 
     let per_replica_fee = network_usage_fee(raw_response_size, http_roundtrip_time)
         .saturating_add(transform_usage_fee(transform_instructions))
@@ -265,6 +237,42 @@ fn usage_fee(
     let replicas = replication_kind.node_count(subnet_size) as u128;
 
     Cycles::new(replicas.saturating_mul(per_replica_fee)) + consensus_fee
+}
+
+/// The most the consensus fee of delivering the response(s) of an outcall of the
+/// given `replication_kind` can be, each response `transformed_response_size` bytes
+/// large.
+///
+/// How many of the responses consensus delivers is not known ahead of time, so a
+/// flexible outcall is priced for all `max_responses` of them, those beyond
+/// `min_responses` at an extra fee.
+pub(crate) fn max_consensus_fee(
+    replication_kind: ReplicationKind,
+    transformed_response_size: NumBytes,
+    subnet_size: NumberOfNodes,
+) -> Cycles {
+    let transformed_bytes = transformed_response_size.get() as u128;
+    match replication_kind {
+        ReplicationKind::FullyReplicated | ReplicationKind::NonReplicated => {
+            consensus_fee(transformed_bytes, subnet_size)
+        }
+        ReplicationKind::Flexible {
+            min_responses,
+            max_responses,
+            ..
+        } => {
+            let responses = max_responses as u128;
+            consensus_fee(
+                responses.saturating_mul(
+                    FLEXIBLE_RESPONSE_SIZE_OVERHEAD.saturating_add(transformed_bytes),
+                ),
+                subnet_size,
+            ) + flexible_extra_response_fee(
+                responses.saturating_sub(min_responses as u128),
+                subnet_size,
+            )
+        }
+    }
 }
 
 // ============================= Maximum usage fee =============================

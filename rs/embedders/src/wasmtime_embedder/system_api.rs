@@ -2038,10 +2038,15 @@ impl CostHttpRequestV2Params {
     }
 }
 
-const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 144;
+/// The Candid encoding of the largest [`CostHttpRequestV2Params`] there is: every
+/// field at its maximum value, with the `outcall_type` variant that encodes largest.
+pub const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 144;
 
 /// How much work decoding [`CostHttpRequestV2Params`] may spend skipping values it
 /// has no type for — i.e. the `reserved` payload of an `outcall_type` variant.
+///
+/// A well form request contains `null` for the reserved payload, which costs
+/// exactly 1 in Candid's cost model (see `DecoderConfig::set_decoding_quota`).
 const MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA: usize = 1;
 
 impl SystemApi for SystemApiImpl {

@@ -8,7 +8,9 @@ use ic_config::{
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_utils::instrumentation::{WasmMemoryType, instruction_to_cost},
-    wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
+    wasmtime_embedder::system_api::{
+        MAX_CALL_TIMEOUT_SECONDS, MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE,
+    },
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
@@ -9493,24 +9495,29 @@ fn invoke_cost_http_request_v2_flexible_without_counts_uses_the_defaults() {
 #[test]
 fn cost_http_request_v2_accepts_maximal_params() {
     // The largest params a caller can send: every value at its maximum, with the
-    // `outcall_type` variant that encodes largest. This is exactly
-    // `MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE` bytes, so it has to pass the size check
+    // `outcall_type` variant that encodes largest.
+    let params = CostHttpRequestV2Params {
+        request_bytes: u64::MAX,
+        http_roundtrip_time_ms: u64::MAX,
+        raw_response_bytes: u64::MAX,
+        transformed_response_bytes: u64::MAX,
+        transform_instructions: u64::MAX,
+        outcall_type: Some(CostHttpRequestOutcallType::Flexible(Some(
+            ReplicationCounts {
+                total_requests: u32::MAX,
+                min_responses: u32::MAX,
+                max_responses: u32::MAX,
+            },
+        ))),
+    };
+    // They encode to exactly the maximum size, so they have to pass the size check
     // and decode within the skipping quota rather than being rejected as too large.
+    assert_eq!(
+        Encode!(&params).unwrap().len(),
+        MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE
+    );
     assert_cost_http_request_v2_params(
-        CostHttpRequestV2Params {
-            request_bytes: u64::MAX,
-            http_roundtrip_time_ms: u64::MAX,
-            raw_response_bytes: u64::MAX,
-            transformed_response_bytes: u64::MAX,
-            transform_instructions: u64::MAX,
-            outcall_type: Some(CostHttpRequestOutcallType::Flexible(Some(
-                ReplicationCounts {
-                    total_requests: u32::MAX,
-                    min_responses: u32::MAX,
-                    max_responses: u32::MAX,
-                },
-            ))),
-        },
+        params,
         ReplicationKind::Flexible {
             total_requests: u32::MAX,
             min_responses: u32::MAX,
@@ -9538,10 +9545,8 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
     let raw_response_bytes = 1_000_000;
     let transformed_response_bytes = 800_000;
     let transform_instructions = 500_000_000;
-    let garbage = "Some garbage to DoS the System API by making Candid decoding more expensive"
-        .repeat(10)
-        .as_bytes()
-        .into();
+    // Some garbage to DoS the System API by making Candid decoding more expensive.
+    let garbage = vec![b'x'; 2 * MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE];
     let params = CostHttpRequestV2ParamsExtended {
         request_bytes,
         http_roundtrip_time_ms,
@@ -9552,6 +9557,7 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
         garbage,
     };
     let params_blob = Encode!(&params).unwrap();
+    assert!(params_blob.len() > 2 * MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE);
 
     let payload = wasm()
         .cost_http_request_v2(&params_blob)
