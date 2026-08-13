@@ -43,10 +43,10 @@ assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
 maplit = { workspace = true }
 mockall = { workspace = true }
 paste = { workspace = true }
+pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = { workspace = true }
 scraper = { workspace = true }
 tokio = { workspace = true }

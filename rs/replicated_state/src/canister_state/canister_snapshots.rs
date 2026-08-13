@@ -2,7 +2,7 @@ use crate::{
     CanisterState, NumWasmPages, PageMap,
     canister_state::{
         WASM_PAGE_SIZE_IN_BYTES,
-        execution_state::{Memory, WasmExecutionMode},
+        execution_state::Memory,
         system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
     },
     page_map::{Buffer, PageAllocatorFileDescriptor, PersistenceError},
@@ -14,8 +14,8 @@ use ic_management_canister_types_private::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
-    MAX_WASM64_MEMORY_IN_BYTES, NumBytes, SnapshotId, Time,
+    CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
+    SnapshotId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -515,7 +515,6 @@ pub struct ValidatedSnapshotMetadata {
 impl ValidatedSnapshotMetadata {
     pub fn validate(
         raw: UploadCanisterSnapshotMetadataArgs,
-        wasm_mode: WasmExecutionMode,
     ) -> Result<Self, MetadataValidationError> {
         if raw.wasm_module_size == 0 {
             return Err(MetadataValidationError::WasmModuleEmpty);
@@ -526,17 +525,8 @@ impl ValidatedSnapshotMetadata {
         if !(raw.wasm_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
             return Err(MetadataValidationError::WasmMemoryNotPageAligned);
         }
-        match wasm_mode {
-            WasmExecutionMode::Wasm32 => {
-                if raw.wasm_memory_size > MAX_WASM_MEMORY_IN_BYTES {
-                    return Err(MetadataValidationError::WasmMemoryTooLarge);
-                }
-            }
-            WasmExecutionMode::Wasm64 => {
-                if raw.wasm_memory_size > MAX_WASM64_MEMORY_IN_BYTES {
-                    return Err(MetadataValidationError::WasmMemoryTooLarge);
-                }
-            }
+        if raw.wasm_memory_size > MAX_WASM64_MEMORY_IN_BYTES {
+            return Err(MetadataValidationError::WasmMemoryTooLarge);
         }
         if !(raw.stable_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
             return Err(MetadataValidationError::StableMemoryNotPageAligned);

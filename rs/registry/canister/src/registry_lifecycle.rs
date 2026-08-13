@@ -8,7 +8,7 @@ use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
 };
-use ic_registry_transport::{pb::v1::RegistryMutation, update};
+use ic_registry_transport::{delete, pb::v1::RegistryMutation, update};
 use ic_types::NodeId;
 use maplit::btreemap;
 use prost::Message;
@@ -39,6 +39,12 @@ pub fn canister_post_upgrade(
         }
 
         let mutations = convert_type1dot1_nodes_to_type4dot5(registry);
+        if !mutations.is_empty() {
+            registry.maybe_apply_mutation_internal(mutations);
+            total_batches += 1;
+        }
+
+        let mutations = remove_blessed_version_list_record(registry);
         if !mutations.is_empty() {
             registry.maybe_apply_mutation_internal(mutations);
             total_batches += 1;
@@ -364,6 +370,22 @@ fn convert_type1dot1_nodes_to_type4dot5(registry: &Registry) -> Vec<RegistryMuta
     }
 
     mutations
+}
+
+/// The blessed version list record is no longer used.
+/// If it still exists, delete it.
+fn remove_blessed_version_list_record(registry: &Registry) -> Vec<RegistryMutation> {
+    if registry
+        .get(
+            "blessed_replica_versions".as_bytes(),
+            registry.latest_version(),
+        )
+        .is_some()
+    {
+        vec![delete("blessed_replica_versions".as_bytes())]
+    } else {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]
