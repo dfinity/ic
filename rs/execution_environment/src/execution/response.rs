@@ -132,9 +132,9 @@ struct ResponseHelper {
     // from `output.num_instructions_left` of a *finished* Wasm execution, while a
     // paused slice only reports its executed instructions to the round limits.
     // Hence such instructions are tracked here in order to be charged if the
-    // execution fails before the Wasm execution finishes. The counter is reset by
-    // `reset_executed_wasm_instructions` once a Wasm execution has finished and is
-    // reflected in the instruction limits of the next one (the cleanup callback).
+    // execution fails before the Wasm execution finishes. The counter is reset
+    // once a Wasm execution has finished and is reflected in the instruction
+    // limits of the next one (the cleanup callback).
     executed_wasm_instructions: NumInstructions,
     applied_subnet_memory_reservation: NumBytes,
     deallocation_sender: DeallocationSender,
@@ -325,15 +325,6 @@ impl ResponseHelper {
             executed_wasm_instructions: self.executed_wasm_instructions
                 + executed_wasm_instructions,
         }
-    }
-
-    /// Resets the instructions executed by a Wasm execution that has been paused
-    /// because those instructions are now reflected in the instruction limits,
-    /// which have just been updated from the output of the finished Wasm execution
-    /// (the response callback). Hence the next Wasm execution (the cleanup
-    /// callback) starts counting from zero.
-    fn reset_executed_wasm_instructions(&mut self) {
-        self.executed_wasm_instructions = NumInstructions::new(0);
     }
 
     /// Replays validation and the initial steps on the given clean canister and
@@ -1152,8 +1143,9 @@ fn execute_response_cleanup(
         .instruction_limits
         .update(instructions_left);
     // The instructions executed by the response callback are reflected in the
-    // instruction limits updated above.
-    helper.reset_executed_wasm_instructions();
+    // instruction limits updated above. Hence the next Wasm execution (the
+    // cleanup callback) starts counting from zero.
+    helper.executed_wasm_instructions = NumInstructions::new(0);
     let func_ref = match original.call_origin {
         CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
             FuncRef::UpdateClosure(cleanup_closure)

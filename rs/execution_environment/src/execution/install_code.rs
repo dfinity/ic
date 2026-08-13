@@ -134,8 +134,8 @@ pub(crate) struct InstallCodeHelper {
     // `execution_parameters` because the instruction limits are updated only
     // when the Wasm execution finishes, so they are tracked here in order to be
     // charged if the execution fails before the Wasm execution finishes. The
-    // counter is reset by `reset_executed_wasm_instructions` once a Wasm execution
-    // has finished and is reflected in the instruction limits of the next one.
+    // counter is reset once a Wasm execution has finished and is reflected in
+    // the instruction limits of the next one.
     executed_wasm_instructions: NumInstructions,
 }
 
@@ -260,15 +260,6 @@ impl InstallCodeHelper {
         }
     }
 
-    /// Resets the instructions executed by a Wasm execution that has been paused
-    /// because those instructions are now reflected in the instruction limits,
-    /// which have just been updated from the output of the finished Wasm
-    /// execution. Hence the next Wasm execution (e.g., `canister_init` after
-    /// `(start)`) starts counting from zero.
-    fn reset_executed_wasm_instructions(&mut self) {
-        self.executed_wasm_instructions = NumInstructions::new(0);
-    }
-
     /// Replays the previous `install_code` steps on the given clean canister.
     /// Returns an error if the cycles balance of the clean canister differs from
     /// the cycles balance at the start of the DTS execution or if any step
@@ -318,8 +309,8 @@ impl InstallCodeHelper {
         }
         debug_assert_eq!(paused_instructions_left, helper.instructions_left());
         // Replaying the steps of a Wasm execution that has already finished resets
-        // this counter (see `reset_executed_wasm_instructions`), so it is restored
-        // after replaying all the steps.
+        // this counter (see `handle_wasm_execution`), so it is restored after
+        // replaying all the steps.
         helper.executed_wasm_instructions = executed_wasm_instructions;
         Ok(helper)
     }
@@ -711,8 +702,10 @@ impl InstallCodeHelper {
             .instruction_limits
             .update(output.num_instructions_left);
         // The instructions of all the slices of this Wasm execution are now
-        // reflected in the instruction limits above.
-        self.reset_executed_wasm_instructions();
+        // reflected in the instruction limits above. Hence the next Wasm
+        // execution (e.g., `canister_init` after `(start)`) starts counting
+        // from zero.
+        self.executed_wasm_instructions = NumInstructions::new(0);
 
         debug_assert!(
             output
