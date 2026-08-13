@@ -175,11 +175,24 @@ impl AutomaticDeposits {
     }
 
     /// Record an [`AutomaticDeposit`]: drop the account's deposit address from the watchlist (if
-    /// still present) and queue each funded token for the account in the sweep queue. A funded
-    /// address leaves the watchlist and is never re-scanned, so every `(account, token)` is queued
-    /// at most once; a second entry for the same token means the same funds were recorded twice and
-    /// traps. Removing the watchlist entry is a no-op on replay (the watchlist is only rebuilt by
-    /// the final snapshot event), which is intended.
+    /// still present) and queue each funded token for the account in the sweep queue. Removing the
+    /// watchlist entry is a no-op on replay (the watchlist is only rebuilt by the final snapshot
+    /// event), which is intended.
+    ///
+    /// # Panics
+    ///
+    /// If `(account, token)` is already queued. A funded address leaves the watchlist and is never
+    /// re-scanned, so each pair reaches the queue at most once; a second entry means the log records
+    /// the same funds twice, leaving `scanned_balance` — what the sweeper acts on — ambiguous.
+    ///
+    /// Note the blast radius: [`apply_state_transition`] runs on replay as well as live, so this
+    /// panic traps `post_upgrade` and no upgrade succeeds until a repairing version ships. That is
+    /// deliberate — a corrupt event log should be loud rather than silently resolved by picking one
+    /// of the two records — and matches how the sibling handlers there treat a log that violates a
+    /// state invariant (see [`replay_events`]).
+    ///
+    /// [`apply_state_transition`]: crate::state::audit::apply_state_transition
+    /// [`replay_events`]: crate::state::audit::replay_events
     pub fn record_automatic_deposit_received(&mut self, deposit: &AutomaticDeposit) {
         let account = Account {
             owner: deposit.owner,
