@@ -83,7 +83,7 @@ pub(crate) fn check_replica_version_invariants(
 
         // Enforce that the stored version always matches the key
         if let Some(replica_version_id) = r.replica_version_id {
-            assert_eq!(&replica_version_id, &version);
+            assert_eq!(replica_version_id, version);
         }
     }
 
