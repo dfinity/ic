@@ -756,7 +756,12 @@ impl<'a> CkEthSetupBuilder<'a> {
     }
 
     fn build(self) -> CkEthSetup {
-        let env = self.env.unwrap_or_else(|| Arc::new(new_env(self.live)));
+        let env_mode = if self.live {
+            EnvMode::Live
+        } else {
+            EnvMode::Mocked
+        };
+        let env = self.env.unwrap_or_else(|| Arc::new(new_env(env_mode)));
         let controller = self.live.then(live_controller);
         let canisters = create_cketh_canisters(&env, controller);
         if !self.live {
@@ -785,20 +790,27 @@ fn live_controller() -> Principal {
     Principal::from_slice(&[0x0a; 10])
 }
 
+#[derive(Clone, Copy)]
+enum EnvMode {
+    Mocked,
+    Live,
+}
+
 /// Builds the PocketIC instance for [`CkEthSetupBuilder::build`]: the fiduciary subnet every
-/// ckETH fixture needs for the secp256k1 `key_1` used by the minter, plus — in live mode — an NNS
-/// subnet (required by [`PocketIc::make_live`]) and going live immediately, before any canister of
-/// this fixture exists to schedule a timer whose outcall could stall waiting for an answer.
-fn new_env(live: bool) -> PocketIc {
+/// ckETH fixture needs for the secp256k1 `key_1` used by the minter, plus — in [`EnvMode::Live`] —
+/// an NNS subnet (required by [`PocketIc::make_live`]) and going live immediately, before any
+/// canister of this fixture exists to schedule a timer whose outcall could stall waiting for an
+/// answer.
+fn new_env(mode: EnvMode) -> PocketIc {
     let mut builder = pocket_ic_builder().with_icp_config(IcpConfig {
         canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
         ..Default::default()
     });
-    if live {
+    if let EnvMode::Live = mode {
         builder = builder.with_nns_subnet();
     }
     let mut env = builder.build();
-    if live {
+    if let EnvMode::Live = mode {
         env.make_live(None);
     }
     env
@@ -809,7 +821,7 @@ pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
 }
 
 pub fn new_pocket_ic() -> PocketIc {
-    new_env(false)
+    new_env(EnvMode::Mocked)
 }
 
 /// A [`PocketIcBuilder`] with the fiduciary subnet every ckETH fixture needs for the secp256k1
