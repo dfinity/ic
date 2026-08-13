@@ -2047,7 +2047,7 @@ pub const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 144;
 ///
 /// A well form request contains `null` for the reserved payload, which costs
 /// exactly 1 in Candid's cost model (see `DecoderConfig::set_decoding_quota`).
-const MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA: usize = 1;
+const MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA: usize = 0;
 
 impl SystemApi for SystemApiImpl {
     fn set_execution_error(&mut self, error: HypervisorError) {
@@ -4670,6 +4670,32 @@ impl SystemApi for SystemApiImpl {
             summarize(heap, dst, size)
         );
 
+        result
+    }
+
+    fn ic0_subnet_self_node_count(&self) -> HypervisorResult<u32> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0.subnet_self_node_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => Ok(self
+                .sandbox_safe_system_state
+                .subnet_cycles_config
+                .subnet_size as u32),
+        };
+
+        trace_syscall!(self, SubnetSelfNodeCount, result);
         result
     }
 }
