@@ -2319,11 +2319,7 @@ impl SystemState {
 
     /// Returns the aborted or paused `Request` at the head of the task queue, if
     /// any.
-    ///
-    /// The call context of such a request is not part of the `CallContextManager`
-    /// (it is created at the beginning of the execution and only persisted if the
-    /// execution completes), even though a response is still owed to the sender.
-    pub(crate) fn aborted_or_paused_request(&self) -> Option<&Request> {
+    fn aborted_or_paused_request(&self) -> Option<&Request> {
         match self.task_queue.paused_or_aborted_task() {
             Some(ExecutionTask::AbortedExecution {
                 input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
