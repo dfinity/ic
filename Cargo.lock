@@ -22246,6 +22246,7 @@ dependencies = [
 name = "sev_guest_testing"
 version = "0.0.0"
 dependencies = [
+ "attestation",
  "attestation_testing",
  "sev",
  "sev_guest_firmware",
