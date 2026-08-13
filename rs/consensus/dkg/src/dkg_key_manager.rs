@@ -10,7 +10,10 @@ use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_types::{
     Height,
-    consensus::{Block, HasHeight, dkg::DkgSummary},
+    consensus::{
+        Block, HasHeight,
+        dkg::{DkgSummary, SplittingArgs},
+    },
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
         errors::load_transcript_error::DkgLoadTranscriptError,
@@ -19,6 +22,7 @@ use ic_types::{
 };
 use prometheus::{HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     sync::{
         Arc,
@@ -227,8 +231,32 @@ impl DkgKeyManager {
         // last seen height.
         let summary_block = cache.summary_block();
         if self.last_dkg_summary_height < Some(summary_block.height) {
-            let summary = summary_block.payload.as_ref().as_summary();
-            self.update_dkg_metrics(&summary.dkg);
+            let summary = if let Some(scheduled) =
+                subnet_splitting::is_split_scheduled(&summary_block)
+            {
+                match self.get_post_split_summary(&summary_block, scheduled) {
+                    Ok(post_split_summary) => {
+                        info!(
+                            self.logger,
+                            "Loading post-split DKG transcripts from summary at height {}",
+                            post_split_summary.height
+                        );
+
+                        Cow::Owned(post_split_summary)
+                    }
+                    Err(err) => {
+                        error!(
+                            self.logger,
+                            "Couldn't get the next DKG summary for the new subnet after the split: {err:?}"
+                        );
+                        return;
+                    }
+                }
+            } else {
+                Cow::Borrowed(&summary_block.payload.as_ref().as_summary().dkg)
+            };
+
+            self.update_dkg_metrics(&summary);
             // Note that the order of these two calls is critical. We remove DKG keys that
             // are no longer relevant by telling the CSP which transcripts are still
             // relevant. However, over time, we may load new transcripts that are relevant.
@@ -241,56 +269,28 @@ impl DkgKeyManager {
             // the next transcript before the previous removal (which would consider the
             // next transcript key irrelevant and remove it).
             self.delete_inactive_keys(pool_reader);
-            self.load_transcripts_from_summary(&summary.dkg);
-            self.last_dkg_summary_height = Some(summary_block.height);
+            self.load_transcripts_from_summary(&summary);
+            self.last_dkg_summary_height = Some(summary.height);
         }
-
-        // Always try to create the summary following a potential subnet split and load its
-        // transcripts. This is needed as a special case, to let the replica sign and verify CUP
-        // shares corresponding to that post-split summary using the new DKG transcripts.
-        self.load_post_split_transcripts_if_necessary(&summary_block);
     }
 
-    fn load_post_split_transcripts_if_necessary(&mut self, summary_block: &Block) {
-        let Some(scheduled) = subnet_splitting::is_split_scheduled(summary_block) else {
-            return;
-        };
-
-        let new_subnet_id = match subnet_splitting::get_post_split_subnet_assignment(
+    fn get_post_split_summary(
+        &mut self,
+        summary_block: &Block,
+        scheduled: SplittingArgs,
+    ) -> Result<DkgSummary, String> {
+        let new_subnet_id = subnet_splitting::get_post_split_subnet_assignment(
             self.replica_config.node_id,
             summary_block,
             self.registry.as_ref(),
             scheduled,
-        ) {
-            Ok(assignment) => assignment.new_subnet_id,
-            Err(err) => {
-                error!(
-                    self.logger,
-                    "Couldn't determine the post-split subnet assignment after the split: {err:?}"
-                );
-                return;
-            }
-        };
+        )
+        .map_err(|err| {
+            format!("Couldn't determine the post-split subnet assignment after the split: {err:?}")
+        })?
+        .new_subnet_id;
 
-        let next_summary = match get_post_split_dkg_summary(
-            new_subnet_id,
-            self.registry.as_ref(),
-            summary_block,
-        ) {
-            Ok(next_summary) => next_summary,
-            Err(err) => {
-                error!(
-                    self.logger,
-                    "Couldn't get the next DKG summary for the new subnet {new_subnet_id:?} \
-                        after the split: {err:?}"
-                );
-                return;
-            }
-        };
-
-        info!(every_n_seconds => 5, self.logger, "Adding post-split DKG transcripts");
-        self.load_transcripts_from_summary(&next_summary);
-        self.last_dkg_summary_height = Some(next_summary.height);
+        get_post_split_dkg_summary(new_subnet_id, self.registry.as_ref(), summary_block)
     }
 
     /// Ensures that the pending transcripts are loaded BEFORE they are needed. For
