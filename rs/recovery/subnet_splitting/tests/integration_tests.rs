@@ -196,16 +196,25 @@ fn load_metrics_e2e_test() {
             };
         }
 
-        // Accept up to 10% error. The precise values are not important here and they're very sensitive
-        // to the changes to the replicated state / execution. It's mostly a sanity check that the
-        // returned values are not too ridiculous and they might have to be updated once in a while.
+        // These are mostly a sanity check that the returned values are not too ridiculous; the
+        // precise values are not important and are very sensitive to changes to the replicated
+        // state / execution, so they may have to be updated once in a while.
+        //
+        // The split-finder balances `instructions_executed` (see the `--load-type` argument
+        // above) and does *not* consider state sizes. When the balanced instructions objective has
+        // more than one optimum, which of the equally-good splits the MILP solver returns — and
+        // hence how the total state is divided between the two subnets — varies across solver
+        // versions and platforms. We therefore keep a tight (10%) bound on `instructions_executed`,
+        // the quantity actually being optimized, but only a loose bound on the per-subnet state
+        // sizes, which is essentially a free variable here.
+        //
         // These metrics are near-symmetric, so they do not pin down the orientation; the
         // orientation is determined and checked for consistency by the exact `assert_eq_oriented`
         // checks below, and these `assert_near` checks pass in either orientation.
-        assert_near!(states_sizes_bytes.source, 4987773, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4220431, 0.1);
-        assert_near!(instructions_executed.source, 145689972, 0.1);
-        assert_near!(instructions_executed.destination, 144345860, 0.1);
+        assert_near!(states_sizes_bytes.source, 5009842, 0.5);
+        assert_near!(states_sizes_bytes.destination, 4235402, 0.5);
+        assert_near!(instructions_executed.source, 145699596, 0.1);
+        assert_near!(instructions_executed.destination, 144352276, 0.1);
         assert_eq_oriented!(canisters_installed, 11, 9);
         assert_eq_oriented!(ingress_messages_executed, 21, 18);
         assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);

@@ -5,10 +5,10 @@ use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, 
 use candid::Principal;
 use ic_btc_checker::{CheckTransactionArgs, CheckTransactionResponse};
 use ic_btc_interface::{Address, Utxo};
-use ic_cdk::bitcoin_canister;
-use ic_cdk::bitcoin_canister::GetCurrentFeePercentilesRequest;
-use ic_cdk::management_canister::SignCallError;
-use ic_cdk::management_canister::{EcdsaCurve, EcdsaKeyId};
+use ic_cdk_bitcoin_canister as bitcoin_canister;
+use ic_cdk_bitcoin_canister::GetCurrentFeePercentilesRequest;
+use ic_cdk_management_canister::SignCallError;
+use ic_cdk_management_canister::{EcdsaCurve, EcdsaKeyId};
 use ic_management_canister_types_private::DerivationPath;
 use std::fmt;
 
@@ -158,13 +158,13 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
     let start_time = runtime.time();
     let mut now = start_time;
-    let request = GetUtxosRequest {
+    let request = GetUtxosRequest(bitcoin_canister::GetUtxosRequest {
         address: address.clone(),
         network: network.into(),
-        filter: Some(bitcoin_canister::UtxosFilter::MinConfirmations(
+        filter: Some(bitcoin_canister::UtxosFilterInRequest::MinConfirmations(
             min_confirmations,
         )),
-    };
+    });
 
     let mut response = bitcoin_get_utxos(&mut now, request.clone(), source, runtime).await?;
 
@@ -173,10 +173,9 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
-        let paged_request = GetUtxosRequest {
-            filter: Some(bitcoin_canister::UtxosFilter::Page(page.to_vec())),
-            ..request.clone()
-        };
+        let mut paged_request = request.clone().0;
+        paged_request.filter = Some(bitcoin_canister::UtxosFilterInRequest::Page(page));
+        let paged_request = GetUtxosRequest(paged_request);
         response = bitcoin_get_utxos(&mut now, paged_request, source, runtime).await?;
         utxos.append(&mut response.utxos);
         num_pages += 1;
@@ -191,7 +190,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
 /// Fetches a subset of UTXOs for the specified address.
 pub async fn bitcoin_get_utxos(request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    bitcoin_canister::bitcoin_get_utxos(request)
+    bitcoin_canister::bitcoin_get_utxos(&request.0)
         .await
         .map(GetUtxosResponse::from)
         .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_utxos", err))
@@ -229,16 +228,14 @@ pub async fn ecdsa_public_key(
     key_name: String,
     derivation_path: DerivationPath,
 ) -> Result<ECDSAPublicKey, CallError> {
-    ic_cdk::management_canister::ecdsa_public_key(
-        &ic_cdk::management_canister::EcdsaPublicKeyArgs {
-            canister_id: None,
-            derivation_path: derivation_path.into_inner(),
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: key_name,
-            },
+    ic_cdk_management_canister::ecdsa_public_key(&ic_cdk_management_canister::EcdsaPublicKeyArgs {
+        canister_id: None,
+        derivation_path: derivation_path.into_inner(),
+        key_id: EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: key_name,
         },
-    )
+    })
     .await
     .map(|response| ECDSAPublicKey {
         public_key: response.public_key,
