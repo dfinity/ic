@@ -6016,7 +6016,7 @@ struct ExecutionAccounting {
     /// already by the prepayment, it thus does not depend on whether the
     /// snapshot is taken before or after the prepayment.
     consumed_cycles: NominalCycles,
-    round_instructions: NumInstructions,
+    total_slice_executed_instructions: NumInstructions,
     executed_instructions: NumInstructions,
 }
 
@@ -6031,7 +6031,7 @@ impl ExecutionAccounting {
                 .get(&CyclesUseCase::Instructions)
                 .cloned()
                 .unwrap_or_default(),
-            round_instructions: test.round_instructions(canister_id),
+            total_slice_executed_instructions: test.total_slice_executed_instructions(canister_id),
             executed_instructions: test.executed_instructions(),
         }
     }
@@ -6075,7 +6075,7 @@ fn paused_execution_fails_to_resume_after_cycles_decrease(
     let executed_instructions = after.executed_instructions - before.executed_instructions;
     assert_eq!(
         executed_instructions,
-        after.round_instructions - before.round_instructions
+        after.total_slice_executed_instructions - before.total_slice_executed_instructions
     );
 
     // The canister is charged exactly the cost of those instructions.

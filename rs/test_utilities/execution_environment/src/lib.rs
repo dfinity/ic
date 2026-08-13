@@ -293,11 +293,11 @@ pub struct ExecutionTest {
     // The number of instructions executed so far by completed message executions,
     // per canister.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
-    // The number of round instructions consumed so far by executing slices of
-    // canister messages and tasks per canister. Unlike `executed_instructions`,
-    // this is accumulated for every executed slice and thus also accounts for
-    // slices of executions that were paused and did not finish (yet).
-    round_instructions: HashMap<CanisterId, NumInstructions>,
+    // The total number of instructions executed so far by slices of canister
+    // messages and tasks, per canister. Unlike `executed_instructions`, this is
+    // accumulated for every executed slice and thus also accounts for slices of
+    // executions that were paused and did not finish (yet).
+    total_slice_executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
     execution_cost: HashMap<CanisterId, CompoundCycles<Instructions>>,
     // Tracks paused subnet message executions per canister.
@@ -450,11 +450,11 @@ impl ExecutionTest {
         self.executed_instructions.values().sum()
     }
 
-    /// Returns the number of round instructions consumed so far by executing
-    /// slices of canister messages and tasks of the given canister, including
-    /// slices of executions that did not finish.
-    pub fn round_instructions(&self, canister_id: CanisterId) -> NumInstructions {
-        self.round_instructions
+    /// Returns the total number of instructions executed so far by slices of
+    /// canister messages and tasks of the given canister, including slices of
+    /// executions that did not finish.
+    pub fn total_slice_executed_instructions(&self, canister_id: CanisterId) -> NumInstructions {
+        self.total_slice_executed_instructions
             .get(&canister_id)
             .copied()
             .unwrap_or_else(|| NumInstructions::new(0))
@@ -1992,7 +1992,7 @@ impl ExecutionTest {
                 let slice_instructions_used =
                     remaining_round_instructions_before - round_limits.instructions;
                 *self
-                    .round_instructions
+                    .total_slice_executed_instructions
                     .entry(canister_id)
                     .or_insert_with(|| NumInstructions::new(0)) +=
                     NumInstructions::from(slice_instructions_used.get() as u64);
@@ -3112,7 +3112,7 @@ impl ExecutionTestBuilder {
             state: Some(state),
             message_id: 0,
             executed_instructions: HashMap::new(),
-            round_instructions: HashMap::new(),
+            total_slice_executed_instructions: HashMap::new(),
             execution_cost: HashMap::new(),
             paused_subnet_messages: HashMap::new(),
             xnet_messages: vec![],
