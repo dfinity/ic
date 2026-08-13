@@ -2047,7 +2047,7 @@ pub const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 144;
 ///
 /// A well form request contains `null` for the reserved payload, which costs
 /// exactly 1 in Candid's cost model (see `DecoderConfig::set_decoding_quota`).
-const MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA: usize = 0;
+const MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA: usize = 1;
 
 impl SystemApi for SystemApiImpl {
     fn set_execution_error(&mut self, error: HypervisorError) {
