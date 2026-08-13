@@ -218,7 +218,7 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     let holdings: Vec<Holding> = deposits
         .iter()
         .map(|&(depositor, token, amount)| Holding {
-            deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT),
+            deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT, token),
             token,
             amount,
         })
@@ -227,23 +227,21 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
 
     let deadline = Duration::from_secs(180);
     assert_matches!(
-        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, deadline).status,
+        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdt, deadline).status,
         DepositStatus::AwaitingSweep(detected)
-            if detected.len() == 1
-                && detected[0].token == SupportedToken::CkUsdt.contract().to_string()
-                && detected[0].scanned_balance == USDT_ABOVE_MINIMUM
-                && detected[0].detected_at_block > 0_u8
+            if detected.token == SupportedToken::CkUsdt.contract().to_string()
+                && detected.scanned_balance == USDT_ABOVE_MINIMUM
+                && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, deadline).status,
+        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdc, deadline).status,
         DepositStatus::AwaitingSweep(detected)
-            if detected.len() == 1
-                && detected[0].token == SupportedToken::CkUsdc.contract().to_string()
-                && detected[0].scanned_balance == USDC_ABOVE_MINIMUM
-                && detected[0].detected_at_block > 0_u8
+            if detected.token == SupportedToken::CkUsdc.contract().to_string()
+                && detected.scanned_balance == USDC_ABOVE_MINIMUM
+                && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, deadline).status,
+        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdt, deadline).status,
         DepositStatus::Scanning { scan_count, last_scanned_block, .. }
             if scan_count >= 1 && last_scanned_block.is_some()
     );

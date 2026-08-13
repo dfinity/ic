@@ -149,10 +149,10 @@ mod deposit_erc20 {
     use ic_cketh_minter::endpoints::DepositStatus;
     use ic_cketh_minter::endpoints::events::EventPayload;
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
-    use ic_cketh_test_utils::DEFAULT_USER_SUBACCOUNT;
     use ic_cketh_test_utils::ckerc20::CkErc20Setup;
-    use ic_cketh_test_utils::new_pocket_ic;
-    use std::collections::BTreeSet;
+    use ic_cketh_test_utils::{
+        DEFAULT_USER_SUBACCOUNT, format_ethereum_address_to_eip_55, new_pocket_ic,
+    };
     use std::sync::Arc;
 
     /// Number of `AutomaticDepositReceived` events currently in the minter's audit log.
@@ -165,31 +165,45 @@ mod deposit_erc20 {
             .count()
     }
 
+    /// EIP-55 address string of the first supported ckERC20 token.
+    fn a_supported_token(ckerc20: &CkErc20Setup) -> String {
+        format_ethereum_address_to_eip_55(&ckerc20.supported_erc20_tokens[0].contract.address)
+    }
+
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
         let ckerc20 = CkErc20Setup::new_without_ckerc20_active(Arc::new(new_pocket_ic()));
         let caller = ckerc20.caller();
         ckerc20
-            .call_minter_deposit_erc20(caller, None)
+            .call_minter_deposit_erc20(
+                caller,
+                None,
+                "0x0000000000000000000000000000000000000000".to_string(),
+            )
             .expect_trap("disabled");
     }
 
     #[test]
     fn should_trap_when_called_from_anonymous_principal() {
         CkErc20Setup::default()
-            .call_minter_deposit_erc20(Principal::anonymous(), None)
+            .call_minter_deposit_erc20(
+                Principal::anonymous(),
+                None,
+                "0x0000000000000000000000000000000000000000".to_string(),
+            )
             .expect_trap("anonymous");
     }
 
     #[test]
     fn should_record_address_to_deposit() {
-        let ckerc20 = CkErc20Setup::default();
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let caller = ckerc20.caller();
+        let token = a_supported_token(&ckerc20);
         let scan_window_nanos = DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64;
 
         let time_before = ckerc20.env.get_time().as_nanos_since_unix_epoch();
         let (ckerc20, response) = ckerc20
-            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
         let time_after = ckerc20.env.get_time().as_nanos_since_unix_epoch();
 
@@ -211,7 +225,7 @@ mod deposit_erc20 {
         );
 
         let (ckerc20, response2) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
+            .call_minter_deposit_erc20(caller, Some([42_u8; 32]), token.clone())
             .expect_deposit_response();
         assert_eq!(
             response, response2,
@@ -223,7 +237,7 @@ mod deposit_erc20 {
             .check_audit_logs_and_upgrade_as_ref(Default::default());
 
         let (ckerc20, response3) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
+            .call_minter_deposit_erc20(caller, Some([42_u8; 32]), token.clone())
             .expect_deposit_response();
 
         assert_eq!(
@@ -235,7 +249,7 @@ mod deposit_erc20 {
         // deposit-address snapshot to the (append-only) event log, so replay
         // must cope with more than one snapshot without dropping addresses.
         let (ckerc20, response_other) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([7_u8; 32]))
+            .call_minter_deposit_erc20(caller, Some([7_u8; 32]), token.clone())
             .expect_deposit_response();
         assert_ne!(
             response.address, response_other.address,
@@ -247,10 +261,10 @@ mod deposit_erc20 {
             .check_audit_logs_and_upgrade_as_ref(Default::default());
 
         let (ckerc20, response_after_second_upgrade) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
+            .call_minter_deposit_erc20(caller, Some([42_u8; 32]), token.clone())
             .expect_deposit_response();
         let (_ckerc20, response_other_after_second_upgrade) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([7_u8; 32]))
+            .call_minter_deposit_erc20(caller, Some([7_u8; 32]), token.clone())
             .expect_deposit_response();
         assert_eq!(
             response, response_after_second_upgrade,
@@ -294,15 +308,11 @@ mod deposit_erc20 {
     fn should_report_balance_scan_progress_via_deposit_erc20() {
         let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let caller = ckerc20.caller();
-        let tokens = ckerc20.supported_erc20_tokens.len();
-        assert!(
-            tokens >= 1,
-            "BUG: expected at least one supported ckERC20 token"
-        );
+        let token = a_supported_token(&ckerc20);
 
-        // A freshly registered address has not been scanned yet.
+        // A freshly registered (address, token) pair has not been scanned yet.
         let (ckerc20, before) = ckerc20
-            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
         assert_matches!(
             before.status,
@@ -314,14 +324,14 @@ mod deposit_erc20 {
         );
 
         // Establish a latest block height, then run one balance-scan tick over the single armed
-        // address (one balance per supported token; the values are irrelevant to scan progress).
+        // pair (one balance; the value is irrelevant to scan progress).
         let scanned_at = 4_500_000_u64;
         ckerc20.refresh_latest_block(scanned_at);
-        ckerc20.run_balance_scan(&vec![2_000_000_u128; tokens]);
+        ckerc20.run_balance_scan(&[2_000_000_u128]);
 
-        // deposit_erc20 now reports the address as scanned once, at that block height.
+        // deposit_erc20 now reports the pair as scanned once, at that block height.
         let (ckerc20, after) = ckerc20
-            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
         assert_eq!(after.address, before.address);
         assert_matches!(
@@ -344,30 +354,24 @@ mod deposit_erc20 {
     fn should_move_funded_addresses_to_the_sweep_queue() {
         let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let caller = ckerc20.caller();
-        let tokens = ckerc20.supported_erc20_tokens.len();
-        assert!(
-            tokens >= 1,
-            "BUG: expected at least one supported ckERC20 token"
-        );
+        let token = a_supported_token(&ckerc20);
 
         // Nothing awaits sweeping before any scan.
         assert_eq!(count_automatic_deposits_received(&ckerc20), 0);
 
         let (ckerc20, before) = ckerc20
-            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
 
-        // A balance well above every supported token's minimum makes the address a candidate for
-        // each token, so it is moved out of the watchlist into the sweep queue (one entry per
-        // token).
+        // A balance well above the token's minimum makes the (address, token) pair a candidate, so
+        // it is moved out of the watchlist into the sweep queue.
         let scanned_at = 4_500_000_u64;
         ckerc20.refresh_latest_block(scanned_at);
-        ckerc20.run_balance_scan(&vec![1_000_000_000_u128; tokens]);
+        ckerc20.run_balance_scan(&[1_000_000_000_u128]);
 
         // The move is event-sourced (metrics are deferred to DEFI-2965, so get_events is the sole
-        // observable): a single AutomaticDepositReceived event for the scanned account, listing every
-        // funded token, recorded the moment the funds were detected (durable even across an ungraceful
-        // trap).
+        // observable): a single AutomaticDepositReceived event for the scanned (account, token) pair,
+        // recorded the moment the funds were detected (durable even across an ungraceful trap).
         let received: Vec<_> = ckerc20
             .cketh
             .get_all_events()
@@ -377,68 +381,46 @@ mod deposit_erc20 {
                     owner,
                     subaccount,
                     address,
-                    deposits,
+                    token: event_token,
+                    scanned_balance,
                     ..
-                } => Some((owner, subaccount, address, deposits)),
+                } => Some((owner, subaccount, address, event_token, scanned_balance)),
                 _ => None,
             })
             .collect();
         assert_eq!(
             received.len(),
             1,
-            "one AutomaticDepositReceived event for the funded account"
+            "one AutomaticDepositReceived event for the funded pair"
         );
-        let (owner, subaccount, address, deposits) = &received[0];
+        let (owner, subaccount, address, event_token, scanned_balance) = &received[0];
         assert_eq!(*owner, caller);
         assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
         assert_eq!(*address, before.address);
-        let distinct_tokens: BTreeSet<&String> = deposits.iter().map(|d| &d.token).collect();
-        assert_eq!(
-            distinct_tokens.len(),
-            tokens,
-            "one deposit entry per funded token"
-        );
+        assert_eq!(*event_token, token);
+        assert_eq!(*scanned_balance, candid::Nat::from(1_000_000_000_u64));
 
-        // deposit_erc20 now reports the detected funds (AwaitingSweep) at the same address, with one
-        // DetectedDeposit per funded token — the scanned balance, at the scan block.
-        let expected_tokens: BTreeSet<String> = ckerc20
-            .supported_erc20_tokens
-            .iter()
-            .map(|t| t.contract.address.clone())
-            .collect();
+        // deposit_erc20 now reports the detected funds (AwaitingSweep) at the same address, with a
+        // single DetectedDeposit — the scanned balance, at the scan block.
         let (ckerc20, detected) = ckerc20
-            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
         assert_eq!(detected.address, before.address);
-        let deposits = match &detected.status {
-            DepositStatus::AwaitingSweep(deposits) => deposits.clone(),
+        let deposit = match &detected.status {
+            DepositStatus::AwaitingSweep(deposit) => deposit.clone(),
             other => panic!("BUG: expected AwaitingSweep, got {other:?}"),
         };
+        assert_eq!(deposit.token, token, "the detected token is reported");
         assert_eq!(
-            deposits.len(),
-            tokens,
-            "one DetectedDeposit per funded token"
+            deposit.scanned_balance,
+            candid::Nat::from(1_000_000_000_u64),
+            "the scanned balance is reported"
         );
         assert_eq!(
-            deposits
-                .iter()
-                .map(|d| d.token.clone())
-                .collect::<BTreeSet<_>>(),
-            expected_tokens,
-            "detected tokens must be the supported ckERC20 contracts"
+            deposit.detected_at_block,
+            candid::Nat::from(scanned_at),
+            "detected at the scan block"
         );
-        for d in &deposits {
-            assert_eq!(
-                d.scanned_balance,
-                candid::Nat::from(1_000_000_000_u64),
-                "the scanned balance is reported"
-            );
-            assert_eq!(
-                d.detected_at_block,
-                candid::Nat::from(scanned_at),
-                "detected at the scan block"
-            );
-        }
 
         // The sweep queue must survive a real pre_upgrade -> post_upgrade cycle: it is rebuilt by
         // replaying the CBOR-encoded AutomaticDepositReceived events (not the watchlist snapshot), which
@@ -454,20 +436,21 @@ mod deposit_erc20 {
         );
 
         // A second deposit_erc20 returns the SAME AwaitingSweep and still does NOT re-arm the
-        // address (a detected address is never put back on the watchlist / re-scanned).
+        // pair (a detected pair is never put back on the watchlist / re-scanned).
         let (_ckerc20, again) = ckerc20
-            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
         assert_eq!(
             again, detected,
-            "a detected address is reported identically and never re-armed"
+            "a detected pair is reported identically and never re-armed"
         );
     }
 
     #[test]
     fn should_not_record_one_event_per_registered_deposit_address() {
-        let mut ckerc20 = CkErc20Setup::default();
+        let mut ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let caller = ckerc20.caller();
+        let token = a_supported_token(&ckerc20);
         let subaccounts: Vec<[u8; 32]> = (0..10_u8).map(|i| [i; 32]).collect();
 
         let events_before = ckerc20.cketh.get_all_events();
@@ -475,7 +458,7 @@ mod deposit_erc20 {
         let mut responses = Vec::with_capacity(subaccounts.len());
         for subaccount in &subaccounts {
             let (setup, response) = ckerc20
-                .call_minter_deposit_erc20(caller, Some(*subaccount))
+                .call_minter_deposit_erc20(caller, Some(*subaccount), token.clone())
                 .expect_deposit_response();
             ckerc20 = setup;
             responses.push(response);
@@ -519,7 +502,7 @@ mod deposit_erc20 {
         let mut responses_after_upgrade = Vec::with_capacity(subaccounts.len());
         for subaccount in &subaccounts {
             let (setup, response) = ckerc20
-                .call_minter_deposit_erc20(caller, Some(*subaccount))
+                .call_minter_deposit_erc20(caller, Some(*subaccount), token.clone())
                 .expect_deposit_response();
             ckerc20 = setup;
             responses_after_upgrade.push(response);
