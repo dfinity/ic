@@ -26,7 +26,7 @@ use ic_cketh_minter::balance_scan::batcher::{
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
-use ic_cketh_test_utils::live_scan::{CkErc20LiveScanSetup, Holding, SupportedToken};
+use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup, SupportedToken};
 use ic_ethereum_types::Address;
 use std::time::Duration;
 
@@ -194,7 +194,7 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     const USDC_ABOVE_MINIMUM: u128 = 15_000_000;
     const USDT_BELOW_MINIMUM: u128 = 1_000_000;
 
-    let setup = CkErc20LiveScanSetup::new_live();
+    let setup = LiveBalanceScanSetup::new_live();
     let deposits = [
         (
             setup.depositor(1),
