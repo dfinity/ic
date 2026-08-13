@@ -790,18 +790,18 @@ fn live_controller() -> Principal {
 /// subnet (required by [`PocketIc::make_live`]) and going live immediately, before any canister of
 /// this fixture exists to schedule a timer whose outcall could stall waiting for an answer.
 fn new_env(live: bool) -> PocketIc {
+    let mut builder = pocket_ic_builder().with_icp_config(IcpConfig {
+        canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
+        ..Default::default()
+    });
     if live {
-        let mut env = pocket_ic_builder().with_nns_subnet().build();
-        let _gateway = env.make_live(None);
-        env
-    } else {
-        pocket_ic_builder()
-            .with_icp_config(IcpConfig {
-                canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
-                ..Default::default()
-            })
-            .build()
+        builder = builder.with_nns_subnet();
     }
+    let mut env = builder.build();
+    if live {
+        env.make_live(None);
+    }
+    env
 }
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
