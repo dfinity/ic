@@ -290,7 +290,8 @@ pub struct ExecutionTest {
     subnet_memory_reservation: NumBytes,
     // The pool of callbacks available on the subnet.
     subnet_available_callbacks: i64,
-    // The number of instructions executed so far per canister.
+    // The number of instructions executed so far by completed message executions,
+    // per canister.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The number of round instructions consumed so far by executing slices of
     // canister messages and tasks per canister. Unlike `executed_instructions`,
