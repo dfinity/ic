@@ -33,7 +33,7 @@ use pocket_ic::common::rest::{
     CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, IcpConfig,
     IcpConfigFlag, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
 };
-use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder, RejectResponse};
+use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -729,14 +729,9 @@ impl CkEthSetupBuilder {
     }
 
     fn build(self) -> CkEthSetup {
-        let live = self.backend.is_live();
         let env = Arc::new(new_env(&self.backend));
-        let controller = live.then(live_controller);
-        let canisters = create_cketh_canisters(&env, controller);
-        if !live {
-            // The live harness leaves the ckETH ledger uninstalled; see EthereumBackend::Anvil.
-            install_ledger(&env, &canisters);
-        }
+        let canisters = create_cketh_canisters(&env);
+        install_ledger(&env, &canisters);
         install_evm_rpc(&env, &canisters, &self.backend);
         install_minter(&env, &canisters, &self.backend);
 
@@ -749,14 +744,6 @@ impl CkEthSetupBuilder {
             support_subaccount: false,
         }
     }
-}
-
-/// A fixed non-anonymous principal used as the live harness's canisters' controller and as the
-/// minter's stand-in ledger-suite-orchestrator id, so [`live_scan`] can both register supported
-/// tokens itself (calling `add_ckerc20_token` as the orchestrator) and fetch the minter's canister
-/// logs (controller-only by default) as that same principal.
-fn live_controller() -> Principal {
-    Principal::from_slice(&[0x0a; 10])
 }
 
 /// Builds the PocketIC instance for [`CkEthSetupBuilder::build`]: the fiduciary subnet every
@@ -815,29 +802,13 @@ fn evm_rpc_wasm() -> Vec<u8> {
     )
 }
 
-/// The minter, its ckETH ledger and the EVM RPC canister it calls out to, plus the sender to
-/// install/upgrade them as (`None`: every other fixture's anonymous default; `Some`: the live
-/// harness' [`live_controller`]). Built by [`create_cketh_canisters`] and installed by
-/// [`install_ledger`]/[`install_minter`]/[`install_evm_rpc`], used by
-/// [`CkEthSetupBuilder::build`] for both modes.
+/// The minter, its ckETH ledger and the EVM RPC canister it calls out to. Built by
+/// [`create_cketh_canisters`] and installed by
+/// [`install_ledger`]/[`install_minter`]/[`install_evm_rpc`], identically for every backend.
 struct CkEthCanisters {
     minter_id: Principal,
     ledger_id: Principal,
     evm_rpc_id: Principal,
-    controller: Option<Principal>,
-}
-
-fn create_canister(env: &PocketIc, controller: Option<Principal>) -> Principal {
-    match controller {
-        None => env.create_canister(),
-        Some(controller) => env.create_canister_with_settings(
-            Some(controller),
-            Some(CanisterSettings {
-                controllers: Some(vec![controller]),
-                ..Default::default()
-            }),
-        ),
-    }
 }
 
 /// Cycles every canister this fixture creates is funded with. `u128::MAX` — the natural "as much as
@@ -847,19 +818,18 @@ fn create_canister(env: &PocketIc, controller: Option<Principal>) -> Principal {
 /// addition. This amount leaves headroom below that ceiling instead.
 const CANISTER_CYCLES: u128 = u64::MAX as u128;
 
-fn create_cketh_canisters(env: &PocketIc, controller: Option<Principal>) -> CkEthCanisters {
+fn create_cketh_canisters(env: &PocketIc) -> CkEthCanisters {
     // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
-    let minter_id = create_canister(env, controller);
+    let minter_id = env.create_canister();
     env.add_cycles(minter_id, CANISTER_CYCLES);
-    let ledger_id = create_canister(env, controller);
+    let ledger_id = env.create_canister();
     env.add_cycles(ledger_id, CANISTER_CYCLES);
-    let evm_rpc_id = create_canister(env, controller);
+    let evm_rpc_id = env.create_canister();
     env.add_cycles(evm_rpc_id, CANISTER_CYCLES);
     CkEthCanisters {
         minter_id,
         ledger_id,
         evm_rpc_id,
-        controller,
     }
 }
 
@@ -880,7 +850,7 @@ fn install_ledger(env: &PocketIc, canisters: &CkEthCanisters) {
                 .build(),
         ))
         .unwrap(),
-        canisters.controller,
+        None,
     );
 }
 
@@ -895,13 +865,9 @@ enum EthereumBackend {
     /// A live anvil node, reached over HTTP at its own URL: a fresh chain with no finalized blocks
     /// yet. Shared with the harness that started the node and keeps it running, hence the [`Arc`].
     ///
-    /// Reaching it takes a live PocketIC instance, which in turn shapes the whole fixture: an NNS
-    /// subnet in addition to the fiduciary one, going live before any canister exists (see
-    /// [`new_env`]), a fixed non-anonymous controller owning every canister created here (instead
-    /// of every other fixture's anonymous default, see [`live_controller`]), and leaving the ckETH
-    /// ledger uninstalled — the balance scan never calls it, and installing it would need the
-    /// ledger canister Wasm declared as a Bazel data dependency of the anvil-backed test target,
-    /// which it is not.
+    /// Reaching it takes a live PocketIC instance, so this variant also adds an NNS subnet to the
+    /// fiduciary one and goes live before any canister exists (see [`new_env`]). The canisters
+    /// themselves are created and installed exactly as for [`EthereumBackend::Mocked`].
     Anvil(Arc<Anvil>),
 }
 
@@ -966,7 +932,7 @@ fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &Ethereum
         canisters.minter_id,
         minter_wasm(),
         Encode!(&MinterArg::InitArg(args)).unwrap(),
-        canisters.controller,
+        None,
     );
 }
 
@@ -975,7 +941,7 @@ fn install_evm_rpc(env: &PocketIc, canisters: &CkEthCanisters, backend: &Ethereu
         canisters.evm_rpc_id,
         evm_rpc_wasm(),
         Encode!(&backend.install_args()).unwrap(),
-        canisters.controller,
+        None,
     );
 }
 

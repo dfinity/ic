@@ -35,7 +35,7 @@ use crate::anvil::{
 };
 use crate::{
     CkEthSetup, ERC20_HELPER_CONTRACT_ADDRESS, EthereumBackend, USDC_ERC20_CONTRACT_ADDRESS,
-    live_controller, minter_wasm,
+    minter_wasm,
 };
 
 /// USDT's mainnet address, the second token registered so the scan reads more than one token per
@@ -195,13 +195,10 @@ impl LiveBalanceScanSetup {
     /// `deposit_erc20` reports that an address was scanned but not whether its balance cleared the
     /// candidate threshold. `0` if no scan has logged a count yet.
     pub fn balance_scan_candidates(&self) -> u64 {
-        // Canister logs are controller-only by default, so query them as the controller.
         self.cketh
-            .env
-            .fetch_canister_logs(self.cketh.minter_id, live_controller())
-            .expect("BUG: fetching the minter's canister logs failed")
+            .minter_canister_logs()
             .into_iter()
-            .filter_map(|record| candidates_in_log(&String::from_utf8_lossy(&record.content)))
+            .filter_map(|log| candidates_in_log(&log.content))
             .max()
             .unwrap_or(0)
     }
@@ -221,11 +218,12 @@ fn candidates_in_log(line: &str) -> Option<u64> {
         .ok()
 }
 
-/// Activates the ckERC20 feature by pointing the minter's orchestrator id at [`live_controller`]
-/// (so this harness can register tokens) and setting the ERC-20 deposit helper contract.
+/// Activates the ckERC20 feature by pointing the minter's orchestrator id at the anonymous
+/// principal (so this harness can register tokens itself, as every canister here is anonymously
+/// controlled) and setting the ERC-20 deposit helper contract.
 fn activate_ckerc20(cketh: &CkEthSetup) {
     let upgrade = UpgradeArg {
-        ledger_suite_orchestrator_id: Some(live_controller()),
+        ledger_suite_orchestrator_id: Some(Principal::anonymous()),
         erc20_helper_contract_address: Some(ERC20_HELPER_CONTRACT_ADDRESS.to_string()),
         ..Default::default()
     };
@@ -235,7 +233,7 @@ fn activate_ckerc20(cketh: &CkEthSetup) {
             cketh.minter_id,
             minter_wasm(),
             Encode!(&MinterArg::UpgradeArg(upgrade)).unwrap(),
-            Some(live_controller()),
+            None,
         )
         .expect("BUG: failed to activate the ckERC20 feature");
 }
@@ -254,7 +252,7 @@ fn register_supported_tokens(cketh: &CkEthSetup) {
             ckerc20_ledger_id: cketh.env.create_canister(),
         };
         cketh
-            .add_ckerc20_token(live_controller(), &arg)
+            .add_ckerc20_token(Principal::anonymous(), &arg)
             .expect("BUG: add_ckerc20_token was rejected");
     }
 }
