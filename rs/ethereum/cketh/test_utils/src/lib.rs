@@ -147,8 +147,8 @@ impl CkEthSetup {
     pub fn new(env: Arc<PocketIc>) -> Self {
         let canisters = create_cketh_canisters(&env);
         install_ledger(&env, &canisters);
-        install_evm_rpc(&env, &canisters, &EvmRpcBackend::Mocked);
-        install_minter(&env, &canisters, &EvmRpcBackend::Mocked);
+        install_evm_rpc(&env, &canisters, &EthereumBackend::Mocked);
+        install_minter(&env, &canisters, &EthereumBackend::Mocked);
 
         let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
         Self {
@@ -820,21 +820,22 @@ fn install_ledger(env: &PocketIc, canisters: &CkEthCanisters) {
     );
 }
 
-/// Where the EVM RPC canister's outcalls are answered, and the Ethereum chain state that follows
-/// from it.
-enum EvmRpcBackend<'a> {
+/// The Ethereum chain under test: which JSON-RPC endpoint the EVM RPC canister's outcalls reach,
+/// and the corresponding minter init/upgrade assumptions about that chain's state (the block
+/// height to track, and where its log-scraping cursor starts).
+enum EthereumBackend<'a> {
     /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot.
     Mocked,
     /// A live anvil node reached over HTTP at `url`: a fresh chain with no finalized blocks yet.
     Anvil(&'a str),
 }
 
-impl EvmRpcBackend<'_> {
+impl EthereumBackend<'_> {
     fn install_args(&self) -> InstallArgs {
         InstallArgs {
             override_provider: match self {
-                EvmRpcBackend::Mocked => None,
-                EvmRpcBackend::Anvil(url) => Some(OverrideProvider {
+                EthereumBackend::Mocked => None,
+                EthereumBackend::Anvil(url) => Some(OverrideProvider {
                     override_url: Some(RegexSubstitution {
                         pattern: ".*".into(),
                         replacement: url.to_string(),
@@ -847,16 +848,16 @@ impl EvmRpcBackend<'_> {
 
     fn ethereum_block_height(&self) -> CandidBlockTag {
         match self {
-            EvmRpcBackend::Mocked => CandidBlockTag::Finalized,
+            EthereumBackend::Mocked => CandidBlockTag::Finalized,
             // A fresh anvil chain has no finalized blocks, so track its "latest" head instead.
-            EvmRpcBackend::Anvil(_) => CandidBlockTag::Latest,
+            EthereumBackend::Anvil(_) => CandidBlockTag::Latest,
         }
     }
 
     fn last_scraped_block_number(&self) -> Nat {
         match self {
-            EvmRpcBackend::Mocked => LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
-            EvmRpcBackend::Anvil(_) => 0_u8.into(),
+            EthereumBackend::Mocked => LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
+            EthereumBackend::Anvil(_) => 0_u8.into(),
         }
     }
 }
@@ -865,7 +866,7 @@ impl EvmRpcBackend<'_> {
 /// derives deposit addresses from.
 const ECDSA_KEY_NAME: &str = "key_1";
 
-fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &EvmRpcBackend) {
+fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &EthereumBackend) {
     let args = MinterInitArgs {
         ecdsa_key_name: ECDSA_KEY_NAME.to_string(),
         ethereum_network: EthereumNetwork::Mainnet,
@@ -885,7 +886,7 @@ fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &EvmRpcBa
     );
 }
 
-fn install_evm_rpc(env: &PocketIc, canisters: &CkEthCanisters, backend: &EvmRpcBackend) {
+fn install_evm_rpc(env: &PocketIc, canisters: &CkEthCanisters, backend: &EthereumBackend) {
     env.install_canister(
         canisters.evm_rpc_id,
         evm_rpc_wasm(),

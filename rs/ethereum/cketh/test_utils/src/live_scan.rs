@@ -33,7 +33,7 @@ use crate::anvil::{
     Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20, erc20_balance_slot, u256_be,
 };
 use crate::{
-    CkEthCanisters, ERC20_HELPER_CONTRACT_ADDRESS, EvmRpcBackend, USDC_ERC20_CONTRACT_ADDRESS,
+    CkEthCanisters, ERC20_HELPER_CONTRACT_ADDRESS, EthereumBackend, USDC_ERC20_CONTRACT_ADDRESS,
     install_evm_rpc, install_minter, minter_wasm, pocket_ic_builder,
 };
 
@@ -118,7 +118,7 @@ impl CkErc20LiveScanSetup {
             evm_rpc_id,
             controller: Some(controller()),
         };
-        let backend = EvmRpcBackend::Anvil(anvil.url());
+        let backend = EthereumBackend::Anvil(anvil.url());
         install_evm_rpc(&env, &canisters, &backend);
 
         // Go live *before* installing the minter: its install schedules immediate refresh and
