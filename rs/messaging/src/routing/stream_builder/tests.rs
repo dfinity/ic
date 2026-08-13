@@ -1157,7 +1157,7 @@ fn build_streams_drops_refunds_at_engine_boundary() {
 
 /// The remote subnet that is cooling down in the tests below.
 const COOLING_DOWN_SUBNET: SubnetId = REMOTE_SUBNET;
-/// A third subnet, never cooling down, used to check that only the streams to
+/// A third subnet, never cooling down, used to check that only the messages to
 /// cooling down subnets are held back.
 const OTHER_SUBNET: SubnetId = SUBNET_3;
 
