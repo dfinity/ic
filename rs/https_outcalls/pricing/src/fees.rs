@@ -942,20 +942,20 @@ mod tests {
         );
     }
 
-    /// [`total_fee`] of the largest outcall a canister can ask the price of: every
-    /// byte and instruction count at `u64::MAX`, every response count at `u32::MAX`.
-    fn total_fee_of_maximal_params(subnet_size: usize) -> Cycles {
+    /// [`total_fee`] of the largest outcall a canister can ask the price of, with the
+    /// given `replication_kind`: every byte and instruction count at `u64::MAX`, and
+    /// (where the kind has them) every response count at `u32::MAX`.
+    fn total_fee_of_maximal_params(
+        replication_kind: ReplicationKind,
+        subnet_size: usize,
+    ) -> Cycles {
         total_fee(
             NumBytes::from(u64::MAX),
             Duration::from_millis(u64::MAX),
             NumBytes::from(u64::MAX),
             NumInstructions::from(u64::MAX),
             NumBytes::from(u64::MAX),
-            ReplicationKind::Flexible {
-                total_requests: u32::MAX,
-                min_responses: u32::MAX,
-                max_responses: u32::MAX,
-            },
+            replication_kind,
             CyclesAccountManagerSubnetConfig::new(
                 subnet_size,
                 CanisterCyclesCostSchedule::Normal,
@@ -967,19 +967,30 @@ mod tests {
 
     #[test]
     fn total_fee_of_maximal_params_saturates_instead_of_overflowing() {
-        // The cost doesn't overflow on realistic subnet sizes
-        for subnet_size in [0, 1, 13, 40, 1_000] {
-            let fee = total_fee_of_maximal_params(subnet_size);
-            assert!(
-                fee < Cycles::new(u128::MAX),
-                "subnet size {subnet_size}: price saturated at {fee}"
+        for replication_kind in [
+            ReplicationKind::FullyReplicated,
+            ReplicationKind::NonReplicated,
+            ReplicationKind::Flexible {
+                total_requests: u32::MAX,
+                min_responses: u32::MAX,
+                max_responses: u32::MAX,
+            },
+        ] {
+            // The cost doesn't overflow on realistic subnet sizes
+            for subnet_size in [0, 1, 13, 40, 1_000] {
+                let fee = total_fee_of_maximal_params(replication_kind, subnet_size);
+                assert!(
+                    fee < Cycles::new(u128::MAX),
+                    "{replication_kind:?} at subnet size {subnet_size}: price saturated at {fee}"
+                );
+            }
+            // The cost saturates at the maximum value
+            assert_eq!(
+                total_fee_of_maximal_params(replication_kind, u32::MAX as usize),
+                Cycles::new(u128::MAX),
+                "{replication_kind:?}"
             );
         }
-        // The cost saturates at the maximum value
-        assert_eq!(
-            total_fee_of_maximal_params(u32::MAX as usize),
-            Cycles::new(u128::MAX)
-        );
     }
 
     #[test]
