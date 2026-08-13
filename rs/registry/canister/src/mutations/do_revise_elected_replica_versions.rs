@@ -278,10 +278,8 @@ mod tests {
         }
     }
 
-    /// Launch measurements are only required when a version is elected. Unelecting
-    /// does not involve any GuestOS image.
     #[test]
-    fn test_unelecting_a_version_without_launch_measurements_is_valid() {
+    fn test_unelecting_a_version_without_electing_one_is_valid() {
         let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: None,
             // None is Ok (in fact, required), because not electing a version.
@@ -298,11 +296,8 @@ mod tests {
         assert_eq!(result, Ok(()));
     }
 
-    /// Launch measurements only mean something for a version that is being
-    /// elected. On an unelect-only payload they would be silently dropped, so they
-    /// are reported as a defect instead.
     #[test]
-    fn test_unelecting_a_version_with_launch_measurements_is_rejected() {
+    fn test_unelecting_a_version_with_partial_election_parameters_is_rejected() {
         // Step 1: Prepare the world.
         let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: None,
