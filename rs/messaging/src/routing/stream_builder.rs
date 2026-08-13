@@ -14,7 +14,7 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CountBytes, SubnetId};
+use ic_types::{CanisterId, CountBytes, SubnetId};
 use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
@@ -75,6 +75,7 @@ const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
 const LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED: &str = "engine_not_allowed";
+const LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN: &str = "retained_cooling_down";
 
 const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "mr_stream_builder_payload_too_large";
 const CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND: &str =
@@ -442,6 +443,10 @@ impl StreamBuilderImpl {
         let refund_limit = self.max_stream_messages / 2;
         self.route_refunds(&mut state, refund_limit, &network_topology, &mut streams);
 
+        // No canister can have the subnet's own principal as its canister ID, so this
+        // identifies the messages taken from the subnet's own output queues.
+        let own_subnet_as_canister_id = CanisterId::from(self.subnet_id);
+
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
         let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
@@ -458,11 +463,24 @@ impl StreamBuilderImpl {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
 
+            let is_from_subnet_queues = msg.sender() == own_subnet_as_canister_id;
+
             match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
-                    let dst_stream_entry = streams.entry(dst_subnet_id);
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
+
+                    // A cooling down destination subnet must not be sent any messages
+                    // from canister output queues. Retain the message (along with
+                    // everything behind it in the same queue) until the destination stops
+                    // cooling down, rather than rejecting or dropping it.
+                    if !is_from_subnet_queues && network_topology.is_cooling_down(&dst_subnet_id) {
+                        self.observe_message_status(&msg, LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN);
+                        output_iter.exclude_queue();
+                        continue;
+                    }
+
+                    let dst_stream_entry = streams.entry(dst_subnet_id);
                     if !is_loopback_stream
                         && is_at_limit(
                             &dst_stream_entry,

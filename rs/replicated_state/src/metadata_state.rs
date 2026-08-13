@@ -427,8 +427,15 @@ pub struct SubnetTopology {
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
 
-    /// Whether the subnet is "cooling down", i.e. quiescing: it inducts no ingress
-    /// messages.
+    /// Whether the subnet is "cooling down", i.e. quiescing: it stops being sent
+    /// new messages and lets the messages already in flight drain. While a subnet
+    /// is cooling down:
+    ///
+    ///  * it inducts no ingress messages;
+    ///  * the messages in canister output queues destined for it are not routed
+    ///    into the outgoing stream to it -- not even on the cooling down subnet
+    ///    itself, into its loopback stream -- but retained in the output queue they
+    ///    came from until it stops cooling down.
     pub cooling_down: bool,
 }
 
