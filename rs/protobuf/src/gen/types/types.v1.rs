@@ -1782,6 +1782,12 @@ pub struct UpgradePayloadRequestProto {
     pub node: ::core::option::Option<NodeId>,
     #[prost(uint64, tag = "2")]
     pub request_height: u64,
+    /// The registry version the requesting node was a member at. Pinned into the
+    /// CUP (as the oldest registry version in use by the replicated state) for as
+    /// long as the permit is outstanding, so that no node unassigns itself while
+    /// another node is rebooting.
+    #[prost(uint64, tag = "3")]
+    pub registry_version: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpgradePayloadAuthorizeProto {
@@ -1812,6 +1818,11 @@ pub struct UpgradePermitAuthShareContent {
     pub node: ::core::option::Option<NodeId>,
     #[prost(uint64, tag = "2")]
     pub request_height: u64,
+    /// Copied from the `UpgradePayloadRequestProto` this share authorizes. Signing
+    /// it makes every permit granter attest to the registry version that will be
+    /// pinned in the CUP while the node is rebooting.
+    #[prost(uint64, tag = "3")]
+    pub registry_version: u64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

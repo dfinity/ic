@@ -16,10 +16,7 @@ use ic_protobuf::{
     },
 };
 
-use crate::{
-    Height,
-    consensus::upgrade::UpgradePermitAction,
-};
+use crate::{Height, RegistryVersion, consensus::upgrade::UpgradePermitAction};
 use super::{iterator_to_bytes, slice_to_messages};
 
 /// Serializes a list of [`UpgradePermitAction`]s to a length-delimited protobuf
@@ -41,14 +38,17 @@ pub fn bytes_to_upgrade_payload(data: &[u8]) -> Result<Vec<UpgradePermitAction>,
 impl From<UpgradePermitAction> for UpgradePayloadContentProto {
     fn from(action: UpgradePermitAction) -> Self {
         let proto_content = match action {
-            UpgradePermitAction::Request { node, request_height } => {
-                UpgradePayloadContentProtoContent::Request(
-                    ic_protobuf::types::v1::UpgradePayloadRequestProto {
-                        node: Some(crate::node_id_into_protobuf(node)),
-                        request_height: request_height.get(),
-                    },
-                )
-            }
+            UpgradePermitAction::Request {
+                node,
+                request_height,
+                registry_version,
+            } => UpgradePayloadContentProtoContent::Request(
+                ic_protobuf::types::v1::UpgradePayloadRequestProto {
+                    node: Some(crate::node_id_into_protobuf(node)),
+                    request_height: request_height.get(),
+                    registry_version: registry_version.get(),
+                },
+            ),
             UpgradePermitAction::Authorize(shares) => {
                 UpgradePayloadContentProtoContent::Authorize(
                     ic_protobuf::types::v1::UpgradePayloadAuthorizeProto {
@@ -86,6 +86,7 @@ impl TryFrom<UpgradePayloadContentProto> for UpgradePermitAction {
             UpgradePayloadContentProtoContent::Request(request) => UpgradePermitAction::Request {
                 node: crate::node_id_try_from_option(request.node)?,
                 request_height: Height::new(request.request_height),
+                registry_version: RegistryVersion::new(request.registry_version),
             },
             UpgradePayloadContentProtoContent::Authorize(authorize) => {
                 UpgradePermitAction::Authorize(crate::consensus::upgrade::UpgradePermitShares {
@@ -120,6 +121,7 @@ mod tests {
         let actions = vec![UpgradePermitAction::Request {
             node: node(3),
             request_height: Height::new(42),
+            registry_version: RegistryVersion::new(11),
         }];
         let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
         let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
@@ -161,6 +163,7 @@ mod tests {
             UpgradePermitAction::Request {
                 node: node(1),
                 request_height: Height::new(10),
+                registry_version: RegistryVersion::new(7),
             },
             UpgradePermitAction::Authorize(crate::consensus::upgrade::UpgradePermitShares {
                 node: node(2),

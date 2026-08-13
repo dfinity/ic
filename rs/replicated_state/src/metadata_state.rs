@@ -24,7 +24,8 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    CountBytes, CryptoHashOfPartialState, Height, NodeId, NumBytes, PrincipalId, SubnetId,
+    CountBytes, CryptoHashOfPartialState, Height, NodeId, NumBytes, PrincipalId, RegistryVersion,
+    SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
@@ -59,14 +60,25 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 /// and the slot is freed for the next block maker to issue a new Request.
 pub const REQUEST_TIMEOUT_BLOCKS: Height = Height::new(20);
 
+/// An outstanding (not yet authorized) reboot permit request.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct UpgradePermitRequest {
+    /// The height of the block that carried the request, used for timeout
+    /// expiry.
+    pub request_height: Height,
+    /// The registry version pinned by this request. See
+    /// [`UpgradeState::oldest_registry_version`].
+    pub registry_version: RegistryVersion,
+}
+
 /// The agreed Phase-2 upgrade state, stored in `SystemMetadata`.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct UpgradeState {
-    /// Nodes that have requested a reboot permit but not yet been authorized,
-    /// mapped to the height at which they requested (for timeout expiry).
-    pub requested: BTreeMap<NodeId, Height>,
-    /// Nodes that have been authorized to reboot (collected enough shares).
-    pub authorized: BTreeSet<NodeId>,
+    /// Nodes that have requested a reboot permit but not yet been authorized.
+    pub requested: BTreeMap<NodeId, UpgradePermitRequest>,
+    /// Nodes that have been authorized to reboot (collected enough shares),
+    /// mapped to the registry version pinned by their request.
+    pub authorized: BTreeMap<NodeId, RegistryVersion>,
 }
 
 impl UpgradeState {
@@ -88,12 +100,34 @@ impl UpgradeState {
                 UpgradePermitAction::Request {
                     node,
                     request_height,
+                    registry_version,
                 } => {
-                    self.requested.insert(*node, *request_height);
+                    self.requested.insert(
+                        *node,
+                        UpgradePermitRequest {
+                            request_height: *request_height,
+                            registry_version: *registry_version,
+                        },
+                    );
                 }
                 UpgradePermitAction::Authorize(shares) => {
-                    self.requested.remove(&shares.node);
-                    self.authorized.insert(shares.node);
+                    // The pinned registry version carries over from the request
+                    // being authorized. Validation guarantees the request
+                    // exists; fall back to the shares' own (signed) version if
+                    // it somehow doesn't, so that the pin is never lost.
+                    let registry_version = self
+                        .requested
+                        .remove(&shares.node)
+                        .map(|request| request.registry_version)
+                        .or_else(|| {
+                            shares
+                                .shares
+                                .first()
+                                .map(|share| share.content.registry_version)
+                        });
+                    if let Some(registry_version) = registry_version {
+                        self.authorized.insert(shares.node, registry_version);
+                    }
                 }
                 UpgradePermitAction::Return { node } => {
                     self.authorized.remove(node);
@@ -102,18 +136,41 @@ impl UpgradeState {
         }
 
         // Expire stale requests and prune departed members.
-        self.requested.retain(|node, req_height| {
-            *req_height >= prune_below_height && members.contains(node)
+        self.requested.retain(|node, request| {
+            request.request_height >= prune_below_height && members.contains(node)
         });
 
         // Prune departed members.
-        self.authorized.retain(|node| members.contains(node));
+        self.authorized.retain(|node, _| members.contains(node));
     }
 
     /// Number of reboot slots in use: outstanding requests + authorized nodes
     /// that haven't returned yet.
     pub fn slots_in_use(&self) -> usize {
         self.requested.len() + self.authorized.len()
+    }
+
+    /// The oldest registry version pinned by an outstanding permit (requested or
+    /// authorized), or `None` if no permit is outstanding.
+    ///
+    /// This is folded into the CUP's
+    /// `oldest_registry_version_in_use_by_replicated_state`, which has two
+    /// effects while a rolling reboot is in progress:
+    ///
+    /// * A node that was removed from the subnet at a later registry version
+    ///   still sees itself as a member at the pinned version, so the
+    ///   orchestrator defers unassignment (`UnassignmentDecision::Later`)
+    ///   instead of wiping its state. The subnet therefore does not shrink
+    ///   while `P` nodes are down rebooting.
+    /// * P2P keeps connections to all nodes registered between the pinned
+    ///   version and the latest one, so a rebooting node can still be reached
+    ///   (and can state-sync) when it comes back up.
+    pub fn oldest_registry_version(&self) -> Option<RegistryVersion> {
+        self.requested
+            .values()
+            .map(|request| request.registry_version)
+            .chain(self.authorized.values().copied())
+            .min()
     }
 
     /// The fault tolerance: `f = ⌊(N−1)/3⌋`.

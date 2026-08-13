@@ -1,6 +1,6 @@
 //! Validation error types for the Phase-2 upgrade payload section.
 
-use ic_types::NodeId;
+use ic_types::{NodeId, RegistryVersion};
 
 /// The reason why an upgrade payload was determined to be invalid. These are
 /// reproducible: the same block will always be rejected.
@@ -8,6 +8,13 @@ use ic_types::NodeId;
 pub enum InvalidUpgradePayloadReason {
     /// A `Request` was issued for a node other than the block maker.
     RequestNodeMismatch { node: NodeId, proposer: NodeId },
+    /// A `Request` pins a registry version other than the one the block is
+    /// validated against.
+    RequestRegistryVersionMismatch {
+        node: NodeId,
+        registry_version: RegistryVersion,
+        expected: RegistryVersion,
+    },
     /// A `Return` was issued for a node other than the block maker.
     ReturnNodeMismatch { node: NodeId, proposer: NodeId },
     /// The number of outstanding reboot requests meets or exceeds the subnet's

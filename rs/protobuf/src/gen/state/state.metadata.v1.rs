@@ -635,8 +635,8 @@ pub struct SystemMetadata {
 pub struct UpgradeState {
     #[prost(message, repeated, tag = "1")]
     pub requested: ::prost::alloc::vec::Vec<upgrade_state::RequestedEntry>,
-    #[prost(message, repeated, tag = "2")]
-    pub authorized: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+    #[prost(message, repeated, tag = "3")]
+    pub authorized: ::prost::alloc::vec::Vec<upgrade_state::AuthorizedEntry>,
 }
 /// Nested message and enum types in `UpgradeState`.
 pub mod upgrade_state {
@@ -646,6 +646,17 @@ pub mod upgrade_state {
         pub node: ::core::option::Option<super::super::super::super::types::v1::NodeId>,
         #[prost(uint64, tag = "2")]
         pub request_height: u64,
+        /// Registry version pinned by this request; see UpgradePayloadRequestProto.
+        #[prost(uint64, tag = "3")]
+        pub registry_version: u64,
+    }
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+    pub struct AuthorizedEntry {
+        #[prost(message, optional, tag = "1")]
+        pub node: ::core::option::Option<super::super::super::super::types::v1::NodeId>,
+        /// Registry version carried over from the request that was authorized.
+        #[prost(uint64, tag = "2")]
+        pub registry_version: u64,
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

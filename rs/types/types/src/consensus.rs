@@ -1776,6 +1776,10 @@ impl ConsensusMessageHashable for EquivocationProof {
 pub struct UpgradePermitAuthorizationContent {
     pub node: NodeId,
     pub request_height: Height,
+    /// Copied from the `Request` action this share authorizes. Signing it makes
+    /// every permit granter attest to the registry version that stays pinned in
+    /// the CUP while `node` is rebooting.
+    pub registry_version: RegistryVersion,
 }
 
 impl SignedBytesWithoutDomainSeparator for UpgradePermitAuthorizationContent {
@@ -1807,6 +1811,7 @@ impl From<UpgradePermitAuthorizationContent> for pb::UpgradePermitAuthShareConte
         pb::UpgradePermitAuthShareContent {
             node: Some(node_id_into_protobuf(content.node)),
             request_height: content.request_height.get(),
+            registry_version: content.registry_version.get(),
         }
     }
 }
@@ -1818,6 +1823,7 @@ impl TryFrom<pb::UpgradePermitAuthShareContent> for UpgradePermitAuthorizationCo
         Ok(UpgradePermitAuthorizationContent {
             node: node_id_try_from_option(content.node)?,
             request_height: Height::from(content.request_height),
+            registry_version: RegistryVersion::from(content.registry_version),
         })
     }
 }

@@ -492,15 +492,21 @@ impl From<&UpgradeState> for pb_metadata::UpgradeState {
             requested: item
                 .requested
                 .iter()
-                .map(|(node, height)| pb_metadata::upgrade_state::RequestedEntry {
+                .map(|(node, request)| pb_metadata::upgrade_state::RequestedEntry {
                     node: Some(node_id_into_protobuf(*node)),
-                    request_height: height.get(),
+                    request_height: request.request_height.get(),
+                    registry_version: request.registry_version.get(),
                 })
                 .collect(),
             authorized: item
                 .authorized
                 .iter()
-                .map(|node| node_id_into_protobuf(*node))
+                .map(
+                    |(node, registry_version)| pb_metadata::upgrade_state::AuthorizedEntry {
+                        node: Some(node_id_into_protobuf(*node)),
+                        registry_version: registry_version.get(),
+                    },
+                )
                 .collect(),
         }
     }
@@ -513,11 +519,18 @@ impl TryFrom<pb_metadata::UpgradeState> for UpgradeState {
         let mut requested = BTreeMap::new();
         for entry in item.requested {
             let node = node_id_try_from_option(entry.node)?;
-            requested.insert(node, Height::from(entry.request_height));
+            requested.insert(
+                node,
+                UpgradePermitRequest {
+                    request_height: Height::from(entry.request_height),
+                    registry_version: RegistryVersion::from(entry.registry_version),
+                },
+            );
         }
-        let mut authorized = BTreeSet::new();
-        for node in item.authorized {
-            authorized.insert(node_id_try_from_option(Some(node))?);
+        let mut authorized = BTreeMap::new();
+        for entry in item.authorized {
+            let node = node_id_try_from_option(entry.node)?;
+            authorized.insert(node, RegistryVersion::from(entry.registry_version));
         }
         Ok(UpgradeState {
             requested,

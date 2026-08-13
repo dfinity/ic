@@ -109,11 +109,12 @@ impl UpgradePayloadBuilder {
         proposal_context: &ProposalContext,
     ) -> Result<(), PayloadValidationError> {
         // The node must have an outstanding (non-expired) request.
-        let Some(&request_height) = upgrade_state.requested.get(&shares.node) else {
+        let Some(&request) = upgrade_state.requested.get(&shares.node) else {
             return Err(invalid_upgrade(
                 InvalidUpgradePayloadReason::AuthorizeNoOutstandingRequest { node: shares.node },
             ));
         };
+        let request_height = request.request_height;
 
         let n = members.len();
         let p = UpgradeState::faults_tolerated(n);
@@ -125,15 +126,23 @@ impl UpgradePayloadBuilder {
 
         let mut signers: BTreeMap<NodeId, ()> = BTreeMap::new();
         for share in &shares.shares {
-            // The share content must match the authorized node + its request height.
+            // The share content must match the authorized node, its request
+            // height and the registry version pinned by the request.
             if share.content.node != shares.node
                 || share.content.request_height != request_height
+                || share.content.registry_version != request.registry_version
             {
                 warn!(
                     self.logger,
                     "upgrade_payload: authorize share content mismatch: \
-                     expected node={:?} height={:?}, got node={:?} height={:?}",
-                    shares.node, request_height, share.content.node, share.content.request_height,
+                     expected node={:?} height={:?} registry_version={:?}, \
+                     got node={:?} height={:?} registry_version={:?}",
+                    shares.node,
+                    request_height,
+                    request.registry_version,
+                    share.content.node,
+                    share.content.request_height,
+                    share.content.registry_version,
                 );
                 return Err(invalid_upgrade(
                     InvalidUpgradePayloadReason::AuthorizeInvalidShare {
@@ -153,6 +162,7 @@ impl UpgradePayloadBuilder {
             let content = UpgradePermitAuthorizationContent {
                 node: share.content.node,
                 request_height: share.content.request_height,
+                registry_version: share.content.registry_version,
             };
             if self
                 .crypto
@@ -191,7 +201,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         height: Height,
         max_size: NumBytes,
         past_payloads: &[PastPayload],
-        _context: &ic_types::batch::ValidationContext,
+        context: &ic_types::batch::ValidationContext,
     ) -> Vec<u8> {
         let members = self.read_node_ids();
 
@@ -209,7 +219,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             "upgrade_payload: height={} needs_reboot={} authorized_contains_self={} authorized={:?} requested={:?} slots={}",
             height,
             needs_reboot,
-            upgrade_state.authorized.contains(&self.node_id),
+            upgrade_state.authorized.contains_key(&self.node_id),
             upgrade_state.authorized,
             upgrade_state.requested,
             upgrade_state.slots_in_use(),
@@ -221,18 +231,23 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         let mut actions = vec![];
 
         // 1. If we are authorized and have finished rebooting, Return.
-        if upgrade_state.authorized.contains(&self.node_id) && !needs_reboot {
+        if upgrade_state.authorized.contains_key(&self.node_id) && !needs_reboot {
             actions.push(UpgradePermitAction::Return { node: self.node_id });
         }
 
-        // 2. If we need a reboot and slots are available, Request.
+        // 2. If we need a reboot and slots are available, Request. The request
+        //    pins the block's registry version: while it is outstanding, the
+        //    CUP will not advance its oldest-registry-version-in-use past it, so
+        //    no node that is a member at this version unassigns itself while we
+        //    are down.
         if needs_reboot
-            && !upgrade_state.authorized.contains(&self.node_id)
+            && !upgrade_state.authorized.contains_key(&self.node_id)
             && upgrade_state.slots_in_use() < UpgradeState::faults_tolerated(members.len())
         {
             actions.push(UpgradePermitAction::Request {
                 node: self.node_id,
                 request_height: height,
+                registry_version: context.registry_version,
             });
         }
 
@@ -271,18 +286,29 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             // `authorized`, so we count authorized nodes plus any Authorize
             // actions already added in this block.
             let mut authorized_after = upgrade_state.authorized.len();
-            for (&req_node, &req_height) in &upgrade_state.requested {
+            for (&req_node, request) in &upgrade_state.requested {
                 if authorized_after >= p {
                     break;
                 }
-                if upgrade_state.authorized.contains(&req_node) {
+                if upgrade_state.authorized.contains_key(&req_node) {
                     continue;
                 }
-                if let Some(shares_map) = collected.get(&(req_node, req_height)) {
-                    if shares_map.len() >= threshold {
+                if let Some(shares_map) = collected.get(&(req_node, request.request_height)) {
+                    // Only shares that agree with the request on the pinned
+                    // registry version are usable: `validate_authorize` rejects
+                    // the whole block otherwise, so a single divergent gossiped
+                    // share must not leak into the payload.
+                    let shares: Vec<_> = shares_map
+                        .values()
+                        .filter(|share| {
+                            share.content.registry_version == request.registry_version
+                        })
+                        .cloned()
+                        .collect();
+                    if shares.len() >= threshold {
                         actions.push(UpgradePermitAction::Authorize(UpgradePermitShares {
                             node: req_node,
-                            shares: shares_map.values().cloned().collect(),
+                            shares,
                         }));
                         authorized_after += 1;
                     }
@@ -323,12 +349,30 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
 
         for action in &actions {
             match action {
-                UpgradePermitAction::Request { node, request_height } => {
+                UpgradePermitAction::Request {
+                    node,
+                    request_height,
+                    registry_version,
+                } => {
                     if *node != proposal_context.proposer {
                         return Err(invalid_upgrade(
                             InvalidUpgradePayloadReason::RequestNodeMismatch {
                                 node: *node,
                                 proposer: proposal_context.proposer,
+                            },
+                        ));
+                    }
+                    // The pinned registry version must be the one the block is
+                    // validated against. Pinning an older version would hold
+                    // back the CUP (and thereby subnet membership changes)
+                    // indefinitely; pinning a newer one would not be verifiable.
+                    let expected = proposal_context.validation_context.registry_version;
+                    if *registry_version != expected {
+                        return Err(invalid_upgrade(
+                            InvalidUpgradePayloadReason::RequestRegistryVersionMismatch {
+                                node: *node,
+                                registry_version: *registry_version,
+                                expected,
                             },
                         ));
                     }
@@ -358,12 +402,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                     }
                 }
                 UpgradePermitAction::Authorize(shares) => {
-                    self.validate_authorize(
-                        shares,
-                        &upgrade_state,
-                        &members,
-                        proposal_context,
-                    )?;
+                    self.validate_authorize(shares, &upgrade_state, &members, proposal_context)?;
                     // Fold so subsequent actions see the updated state.
                     let prune_below = proposal_context
                         .validation_context

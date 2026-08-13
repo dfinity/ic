@@ -17,7 +17,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Height, NodeId};
+use crate::{Height, NodeId, RegistryVersion};
 
 /// A single action in a block's upgrade payload section. A block may carry
 /// multiple actions (e.g. `Request` for the block maker and `Authorize` for
@@ -27,9 +27,17 @@ pub enum UpgradePermitAction {
     /// Request permission to reboot. The block maker requests for itself.
     /// `request_height` is the height of the block containing this request,
     /// used for timeout tracking.
+    ///
+    /// `registry_version` is the registry version of the block carrying the
+    /// request, i.e. a version at which the requester is still a subnet member.
+    /// It is pinned as the oldest registry version in use by the replicated
+    /// state for as long as the permit is outstanding, which keeps every node
+    /// that was a member at that version from unassigning itself while another
+    /// node is rebooting.
     Request {
         node: NodeId,
         request_height: Height,
+        registry_version: RegistryVersion,
     },
     /// Authorize a node to reboot — includes the collected signature shares.
     Authorize(UpgradePermitShares),

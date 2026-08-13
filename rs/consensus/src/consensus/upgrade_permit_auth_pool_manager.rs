@@ -94,16 +94,25 @@ impl UpgradePermitAuthPoolManager {
                 continue;
             };
             for action in actions {
-                let UpgradePermitAction::Request { node, request_height } = action else {
+                let UpgradePermitAction::Request {
+                    node,
+                    request_height,
+                    registry_version: pinned_registry_version,
+                } = action
+                else {
                     continue;
                 };
                 let key = (node, request_height);
                 if signed.contains(&key) {
                     continue;
                 }
+                // The pinned registry version is taken verbatim from the
+                // finalized request block, so every signer attests to the same
+                // value and the block maker can match shares to the request.
                 let content = UpgradePermitAuthorizationContent {
                     node,
                     request_height,
+                    registry_version: pinned_registry_version,
                 };
                 // The share is signed with the registry version pinned to the
                 // block containing the request, so that verifiers resolve the
@@ -169,6 +178,47 @@ impl UpgradePermitAuthPoolManager {
                 ));
                 continue;
             };
+            // The share must agree with the `Request` action it authorizes on
+            // the pinned registry version. Without this check a peer could
+            // gossip a well-signed share carrying a bogus version, which a
+            // block maker would then include in an `Authorize` action that
+            // every validator rejects.
+            let payload = block.payload.as_ref();
+            let upgrade_bytes: &[u8] = if payload.is_summary() {
+                &[]
+            } else {
+                &payload.as_data().batch.upgrade
+            };
+            let request_matches = bytes_to_upgrade_payload(upgrade_bytes)
+                .ok()
+                .is_some_and(|actions| {
+                    actions.iter().any(|action| {
+                        matches!(
+                            action,
+                            UpgradePermitAction::Request {
+                                node,
+                                request_height,
+                                registry_version,
+                            } if *node == share.content.node
+                                && *request_height == share.content.request_height
+                                && *registry_version == share.content.registry_version
+                        )
+                    })
+                });
+            if !request_matches {
+                let id = (&share).into();
+                change_set.push(UpgradePermitAuthChangeAction::HandleInvalid(
+                    id,
+                    format!(
+                        "no matching Request at height {:?} for node {:?} at registry version {:?}",
+                        share.content.request_height,
+                        share.content.node,
+                        share.content.registry_version,
+                    ),
+                ));
+                continue;
+            }
+
             let registry_version = block.context.registry_version;
             match self.crypto.verify_basic_sig(
                 &share.signature.signature,

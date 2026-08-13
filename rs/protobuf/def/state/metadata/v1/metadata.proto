@@ -439,9 +439,20 @@ message UpgradeState {
   message RequestedEntry {
     types.v1.NodeId node = 1;
     uint64 request_height = 2;
+    // Registry version pinned by this request; see UpgradePayloadRequestProto.
+    uint64 registry_version = 3;
+  }
+  message AuthorizedEntry {
+    types.v1.NodeId node = 1;
+    // Registry version carried over from the request that was authorized.
+    uint64 registry_version = 2;
   }
   repeated RequestedEntry requested = 1;
-  repeated types.v1.NodeId authorized = 2;
+  // 2 held a `repeated types.v1.NodeId authorized`, before the pinned registry
+  // version was added. Both encodings are length-delimited, so reusing the tag
+  // would mis-parse rather than fail on an existing checkpoint.
+  reserved 2;
+  repeated AuthorizedEntry authorized = 3;
 }
 
 message CanisterPriority {

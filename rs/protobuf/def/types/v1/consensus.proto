@@ -297,6 +297,11 @@ message UpgradePayloadContentProto {
 message UpgradePayloadRequestProto {
   types.v1.NodeId node = 1;
   uint64 request_height = 2;
+  // The registry version the requesting node was a member at. Pinned into the
+  // CUP (as the oldest registry version in use by the replicated state) for as
+  // long as the permit is outstanding, so that no node unassigns itself while
+  // another node is rebooting.
+  uint64 registry_version = 3;
 }
 
 message UpgradePayloadAuthorizeProto {
@@ -320,4 +325,8 @@ message UpgradePermitAuthShare {
 message UpgradePermitAuthShareContent {
   types.v1.NodeId node = 1;
   uint64 request_height = 2;
+  // Copied from the `UpgradePayloadRequestProto` this share authorizes. Signing
+  // it makes every permit granter attest to the registry version that will be
+  // pinned in the CUP while the node is rebooting.
+  uint64 registry_version = 3;
 }

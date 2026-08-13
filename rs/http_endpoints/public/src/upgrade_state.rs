@@ -50,7 +50,7 @@ pub(crate) async fn upgrade_state(
         })
         .unwrap_or_default();
 
-    let has_permit = upgrade_state.authorized.contains(&state.node_id);
+    let has_permit = upgrade_state.authorized.contains_key(&state.node_id);
 
     Cbor(UpgradeStateResponse { has_permit })
 }

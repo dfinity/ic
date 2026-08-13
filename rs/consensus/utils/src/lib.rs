@@ -435,7 +435,7 @@ pub fn get_subnet_record(
 }
 
 /// Return the oldest registry version that is still referenced by open request contexts included
-/// in the given replicated state.
+/// in the given replicated state, or by an outstanding Phase-2 upgrade reboot permit.
 pub fn get_oldest_state_registry_version(state: &ReplicatedState) -> Option<RegistryVersion> {
     let call_context_manager = &state.metadata.subnet_call_context_manager;
     let oldest_chain_key_version = call_context_manager
@@ -457,10 +457,20 @@ pub fn get_oldest_state_registry_version(state: &ReplicatedState) -> Option<Regi
         .map(|context| context.registry_version)
         .min();
 
+    // While a Phase-2 rolling reboot is in progress, hold the oldest registry
+    // version at the version pinned by the outstanding reboot permits. This
+    // keeps nodes that were removed from the subnet at a later version from
+    // unassigning themselves (the orchestrator sees them as members at the
+    // pinned version and defers), so the subnet does not shrink further while
+    // up to P nodes are already down rebooting. It also keeps P2P connections
+    // to the rebooting nodes alive so they can state-sync on the way back.
+    let oldest_upgrade_permit_version = state.metadata.upgrade_state.oldest_registry_version();
+
     [
         oldest_chain_key_version,
         oldest_setup_initial_dkg_version,
         oldest_canister_http_version,
+        oldest_upgrade_permit_version,
     ]
     .into_iter()
     .flatten()
