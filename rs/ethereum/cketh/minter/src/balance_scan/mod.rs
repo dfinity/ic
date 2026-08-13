@@ -98,9 +98,51 @@ async fn scan<R: Runtime>(
         return;
     }
 
+    // Await everything first, then apply the outcomes in a single `mutate_state`: the state borrow
+    // must never span an await point, and re-reading state after the outcalls is what this scan
+    // deliberately avoids (see `scan_balances`).
+    let outcomes = scan_balances(&due, &erc20_tokens, latest_block, client).await;
+
+    mutate_state(|s| {
+        for outcome in outcomes {
+            match outcome {
+                ScanOutcome::Detected(deposit) => {
+                    process_event(s, EventType::AutomaticDepositReceived(deposit))
+                }
+                ScanOutcome::NothingFound(account) => {
+                    s.automatic_deposits
+                        .record_scan(now, &account, latest_block)
+                }
+            }
+        }
+    });
+}
+
+/// What a completed scan of one account implies, deliberately computed without reading any state:
+/// the `due` entries read before the outcalls are the only source of an account's derived address
+/// and scan count, so a watchlist evicted mid-scan cannot affect the result.
+#[derive(Clone, PartialEq, Debug)]
+enum ScanOutcome {
+    /// Funds at or above a minimum were found, to be event-sourced into the sweep queue.
+    Detected(AutomaticDeposit),
+    /// The address was scanned and holds nothing at or above a minimum, so it advances along the
+    /// backoff schedule.
+    NothingFound(Account),
+}
+
+/// Read every supported ERC-20 balance of the `due` deposit addresses at `latest_block` and turn
+/// the findings into one [`ScanOutcome`] per successfully scanned account.
+///
+/// Accounts whose batch failed yield no outcome at all, so a failed chunk is retried next tick
+/// rather than silently advanced until its next scheduled slot.
+async fn scan_balances<R: Runtime>(
+    due: &BTreeMap<Account, DepositRequest>,
+    erc20_tokens: &[Address],
+    latest_block: BlockNumber,
+    client: EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
+) -> Vec<ScanOutcome> {
     // Funded `(token, balance)` per scanned account (empty vec = scanned but nothing at or above a
-    // minimum). Every account whose batch succeeded gets an entry, so a failed chunk is retried
-    // next tick rather than silently skipped until its next scheduled slot.
+    // minimum).
     let mut scanned: BTreeMap<Account, Vec<(Address, Erc20Value)>> = BTreeMap::new();
     let mut decode_errors = 0_usize;
     let mut call_errors = 0_usize;
@@ -112,7 +154,7 @@ async fn scan<R: Runtime>(
         .iter()
         .map(|(account, request)| DepositAccount::new(*account, request.address))
         .collect();
-    let scan = BalanceScan::new(&addresses_to_scan, &erc20_tokens);
+    let scan = BalanceScan::new(&addresses_to_scan, erc20_tokens);
     for batch in scan.batch(MAX_CALLS_PER_BATCH) {
         let calls = batch.balance_calls();
         let input = batcher::encode_balance_batch(&calls);
@@ -145,13 +187,17 @@ async fn scan<R: Runtime>(
     }
 
     let candidates_found: usize = scanned.values().map(Vec::len).sum();
-
     let addresses_scanned = scanned.len();
-    mutate_state(|s| {
-        for (account, candidates) in &scanned {
+    log!(
+        INFO,
+        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates_found} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
+    );
+
+    scanned
+        .into_iter()
+        .map(|(account, candidates)| {
             if candidates.is_empty() {
-                s.automatic_deposits.record_scan(now, account, latest_block);
-                continue;
+                return ScanOutcome::NothingFound(account);
             }
             // A funded address is event-sourced into the sweep queue (durable the moment funds are
             // detected) instead of being advanced, so it is no longer re-scanned. Its entry as read
@@ -160,30 +206,24 @@ async fn scan<R: Runtime>(
             // still armed: the minter is the only party that saw them, so dropping the detection
             // here would lose it with no trace.
             let request = due
-                .get(account)
+                .get(&account)
                 .expect("BUG: every scanned account was read off the watchlist before scanning");
-            let deposit = AutomaticDeposit {
+            ScanOutcome::Detected(AutomaticDeposit {
                 owner: account.owner,
                 subaccount: account.subaccount,
                 address: request.address,
                 last_scanned_block: latest_block,
                 scan_count: request.scan_count.saturating_add(1),
                 deposits: candidates
-                    .iter()
+                    .into_iter()
                     .map(|(token, scanned_balance)| Erc20Balance {
-                        token: *token,
-                        scanned_balance: *scanned_balance,
+                        token,
+                        scanned_balance,
                     })
                     .collect(),
-            };
-            process_event(s, EventType::AutomaticDepositReceived(deposit));
-        }
-    });
-
-    log!(
-        INFO,
-        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates_found} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
-    );
+            })
+        })
+        .collect()
 }
 
 /// Minimum balance for `token` to count as a scan candidate; a token absent from

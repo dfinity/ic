@@ -365,6 +365,123 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
     }
 }
 
+#[tokio::test]
+async fn should_detect_funded_addresses_from_the_pre_scan_entries_alone() {
+    let latest = BlockNumber::new(1_000);
+    let (token, min) = MIN_DEPOSITS[0];
+    let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
+    // An address scanned seven times already: the detection's address and scan count come from
+    // this entry and nowhere else, so a watchlist evicted mid-scan cannot affect the outcome.
+    let funded = account(1);
+    let unfunded = account(2);
+    let due = BTreeMap::from([
+        (
+            funded,
+            DepositRequest {
+                address: DEPOSIT_ADDRESS,
+                last_scanned_block: Some(BlockNumber::new(900)),
+                scan_count: 7,
+            },
+        ),
+        (
+            unfunded,
+            DepositRequest {
+                address: Address::new([0xa2; 20]),
+                last_scanned_block: None,
+                scan_count: 0,
+            },
+        ),
+    ]);
+
+    let outcomes = scan_balances(
+        &due,
+        &[token],
+        latest,
+        stub_client(vec![ok_balances(&[min, below_min])]),
+    )
+    .await;
+
+    assert_eq!(
+        outcomes,
+        vec![
+            ScanOutcome::Detected(AutomaticDeposit {
+                owner: funded.owner,
+                subaccount: funded.subaccount,
+                address: DEPOSIT_ADDRESS,
+                last_scanned_block: latest,
+                scan_count: 8,
+                deposits: vec![Erc20Balance {
+                    token,
+                    scanned_balance: min,
+                }],
+            }),
+            ScanOutcome::NothingFound(unfunded),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn should_detect_one_balance_per_funded_token_of_an_address() {
+    let latest = BlockNumber::new(1_000);
+    let (token_a, min_a) = MIN_DEPOSITS[0];
+    let (token_b, min_b) = MIN_DEPOSITS[1];
+    let (token_c, min_c) = MIN_DEPOSITS[2];
+    let holder = account(1);
+    let due = BTreeMap::from([(holder, DepositRequest::from(DEPOSIT_ADDRESS))]);
+
+    // A deposit address is token-agnostic, so one address can be funded in several tokens at once.
+    // Only the two at or above their minimum are detected, in token order.
+    let outcomes = scan_balances(
+        &due,
+        &[token_a, token_b, token_c],
+        latest,
+        stub_client(vec![ok_balances(&[
+            min_a,
+            min_b.checked_sub(Erc20Value::from(1_u8)).unwrap(),
+            min_c,
+        ])]),
+    )
+    .await;
+
+    assert_eq!(
+        outcomes,
+        vec![ScanOutcome::Detected(AutomaticDeposit {
+            owner: holder.owner,
+            subaccount: holder.subaccount,
+            address: DEPOSIT_ADDRESS,
+            last_scanned_block: latest,
+            scan_count: 1,
+            deposits: vec![
+                Erc20Balance {
+                    token: token_a,
+                    scanned_balance: min_a,
+                },
+                Erc20Balance {
+                    token: token_c,
+                    scanned_balance: min_c,
+                },
+            ],
+        })]
+    );
+}
+
+#[tokio::test]
+async fn should_yield_no_outcome_for_an_account_whose_chunk_failed() {
+    let latest = BlockNumber::new(1_000);
+    let due = BTreeMap::from([(account(1), DepositRequest::from(DEPOSIT_ADDRESS))]);
+
+    // Neither detected nor advanced: the account is retried on the next tick.
+    let outcomes = scan_balances(
+        &due,
+        &[MIN_DEPOSITS[0].0],
+        latest,
+        stub_client(vec![Err(IcError::CallPerformFailed)]),
+    )
+    .await;
+
+    assert_eq!(outcomes, vec![]);
+}
+
 fn ts() -> Timestamp {
     Timestamp::from_nanos(1_000)
 }

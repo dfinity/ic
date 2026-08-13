@@ -128,8 +128,8 @@ impl AutomaticDeposits {
     ///
     /// Entries are yielded whole, so a caller can keep everything a scan of one needs:
     /// looking an entry up again once the scan completes can come back empty, since a
-    /// scan spans several await points and an entry can be evicted at any of them (see
-    /// [`Self::record_scan`]).
+    /// scan spans several await points and an entry can be evicted at any of them by a
+    /// concurrent [`Self::watch_address_for_account`].
     pub fn addresses_to_scan_iter(
         &self,
         now: Timestamp,
