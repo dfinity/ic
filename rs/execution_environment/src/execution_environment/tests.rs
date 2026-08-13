@@ -6037,20 +6037,21 @@ impl ExecutionAccounting {
     }
 }
 
-/// Decreases the cycles balance of the given canister, which must have a paused
-/// execution, and resumes that execution, which must fail.
+/// Executes the first slice of the next execution of the given canister, which
+/// must pause, then decreases the cycles balance of that canister and resumes
+/// the execution, which must fail.
 ///
 /// Asserts that the failed execution is charged for exactly the instructions it
 /// had already executed: the instructions it reports as used match the round
 /// instructions consumed by its slices, and the cycles charged to the canister
 /// match the cost of exactly those instructions.
-///
-/// `before` must be taken right before the first slice of the paused execution.
-fn resume_paused_execution_after_cycles_decrease(
+fn paused_execution_fails_to_resume_after_cycles_decrease(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
-    before: ExecutionAccounting,
 ) {
+    let before = ExecutionAccounting::take(test, canister_id);
+
+    test.execute_slice(canister_id);
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong,
@@ -6118,9 +6119,7 @@ fn dts_resume_fails_due_to_cycles_decrease() {
 
         let (ingress_id, _) = test.ingress_raw(a_id, method, a);
 
-        let before = ExecutionAccounting::take(&test, a_id);
-        test.execute_slice(a_id);
-        resume_paused_execution_after_cycles_decrease(&mut test, a_id, before);
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, a_id);
 
         let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
         let message = if method == "update" {
@@ -6176,9 +6175,7 @@ fn dts_resume_fails_due_to_cycles_decrease() {
         test.induct_messages();
 
         // Start executing the response|cleanup callback.
-        let before = ExecutionAccounting::take(&test, a_id);
-        test.execute_slice(a_id);
-        resume_paused_execution_after_cycles_decrease(&mut test, a_id, before);
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, a_id);
 
         let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
         let code = if cleanup {
@@ -6231,9 +6228,7 @@ fn dts_resume_fails_due_to_cycles_decrease() {
             .enqueue(ExecutionTask::Heartbeat);
 
         // Start executing the heartbeat.
-        let before = ExecutionAccounting::take(&test, canister_id);
-        test.execute_slice(canister_id);
-        resume_paused_execution_after_cycles_decrease(&mut test, canister_id, before);
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
 
         // A canister task has no ingress status and the failure is not recorded
         // in the canister log, but the state changes of the heartbeat must have
