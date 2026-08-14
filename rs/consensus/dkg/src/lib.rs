@@ -790,7 +790,6 @@ mod tests {
                     replica_config,
                     state_manager,
                     dkg_pool,
-                    replica_config,
                     ..
                 } = DependenciesBuilder::new(pool_config, 2)
                     .with_dkg_interval_length(dkg_interval_length)
@@ -2093,7 +2092,6 @@ mod tests {
                 let target_id = NiDkgTargetId::new([9_u8; 32]);
 
                 let mut deps = DependenciesBuilder::new(pool_config, 2)
-                    .with_replica_version("replica_version_at_genesis")
                     .with_dkg_interval_length(dkg_interval_length)
                     .without_state_manager_expectations()
                     .build();

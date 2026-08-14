@@ -1969,7 +1969,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
                         content_size: limit as u32 + 1,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };

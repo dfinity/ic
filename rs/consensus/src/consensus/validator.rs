@@ -2090,6 +2090,7 @@ pub mod test {
     struct ValidatorAndDependencies {
         validator: Validator,
         payload_builder: Arc<RefMockPayloadBuilder>,
+        membership: Arc<Membership>,
         state_manager: Arc<RefMockStateManager>,
         message_routing: Arc<RefMockMessageRouting>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -2153,7 +2154,7 @@ pub mod test {
 
             let validator = Validator::new(
                 replica_config.clone(),
-                membership,
+                membership.clone(),
                 registry.clone(),
                 crypto,
                 payload_builder.clone(),
@@ -2169,6 +2170,7 @@ pub mod test {
             ValidatorAndDependencies {
                 validator,
                 payload_builder,
+                membership,
                 state_manager,
                 message_routing,
                 registry_data_provider,
