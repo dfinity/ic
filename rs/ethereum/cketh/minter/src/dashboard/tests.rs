@@ -147,8 +147,7 @@ fn should_display_helper_smart_contracts() {
     ) {
         dashboard
             .log_scrapings
-            .set_contract_address(id, contract_address.parse().unwrap())
-            .unwrap();
+            .set_contract_address(id, contract_address.parse().unwrap());
         dashboard
             .log_scrapings
             .set_last_scraped_block_number(id, BlockNumber::from(last_scraped_block_number));

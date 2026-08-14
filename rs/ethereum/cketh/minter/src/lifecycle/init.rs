@@ -62,15 +62,11 @@ impl TryFrom<InitArg> for State {
         let eth_helper_contract_address = ethereum_contract_address
             .map(|a| Address::from_str(&a))
             .transpose()
-            .map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
-            })?;
+            .map_err(|e| InvalidStateError::InvalidContractAddress(format!("ERROR: {e}")))?;
         let sweeper_contract_address = ethereum_sweeper_contract_address
             .map(|a| Address::from_str(&a))
             .transpose()
-            .map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
-            })?;
+            .map_err(|e| InvalidStateError::InvalidContractAddress(format!("ERROR: {e}")))?;
         let last_scraped_block_number = BlockNumber::try_from(last_scraped_block_number)
             .map_err(|e| InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {e}")))?;
         let first_scraped_block_number =
@@ -88,10 +84,7 @@ impl TryFrom<InitArg> for State {
         let mut log_scrapings = LogScrapings::new(last_scraped_block_number);
         if let Some(contract_address) = eth_helper_contract_address {
             log_scrapings
-                .set_contract_address(LogScrapingId::EthDepositWithoutSubaccount, contract_address)
-                .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
-                })?;
+                .set_contract_address(LogScrapingId::EthDepositWithoutSubaccount, contract_address);
         }
         let state = Self {
             ethereum_network,

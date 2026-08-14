@@ -33,7 +33,7 @@ mod init {
                 ethereum_contract_address: Some("invalid".to_string()),
                 ..valid_init_arg()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         assert_matches!(
@@ -43,7 +43,7 @@ mod init {
                 ),
                 ..valid_init_arg()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         assert_matches!(
@@ -51,7 +51,7 @@ mod init {
                 ethereum_sweeper_contract_address: Some("invalid".to_string()),
                 ..valid_init_arg()
             }),
-            Err(InvalidStateError::InvalidSweeperContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         assert_matches!(
@@ -61,7 +61,20 @@ mod init {
                 ),
                 ..valid_init_arg()
             }),
-            Err(InvalidStateError::InvalidSweeperContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        assert_matches!(
+            State::try_from(InitArg {
+                ethereum_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ethereum_sweeper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..valid_init_arg()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         assert_matches!(

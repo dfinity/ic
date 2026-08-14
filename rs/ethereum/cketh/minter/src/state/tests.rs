@@ -344,7 +344,7 @@ mod upgrade {
                 ethereum_contract_address: Some("invalid".to_string()),
                 ..Default::default()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         let mut state = initial_state();
@@ -355,7 +355,7 @@ mod upgrade {
                 ),
                 ..Default::default()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         let mut state = initial_state();
@@ -364,7 +364,7 @@ mod upgrade {
                 ethereum_sweeper_contract_address: Some("invalid".to_string()),
                 ..Default::default()
             }),
-            Err(InvalidStateError::InvalidSweeperContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         let mut state = initial_state();
@@ -375,7 +375,41 @@ mod upgrade {
                 ),
                 ..Default::default()
             }),
-            Err(InvalidStateError::InvalidSweeperContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                erc20_helper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ethereum_sweeper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        state
+            .upgrade(UpgradeArg {
+                ethereum_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            })
+            .expect("valid upgrade args");
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                erc20_helper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_)),
+            "a contract address already set by an earlier upgrade must stay distinct"
         );
     }
 
