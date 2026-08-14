@@ -49,6 +49,7 @@ const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: Cycles = Cycles::new(100
 
 pub(crate) const PER_DOWNLOADED_BYTE_FEE: Cycles = Cycles::new(50);
 pub(crate) const PER_RESPONSE_MS_FEE: Cycles = Cycles::new(300);
+pub(crate) const TRANSFORM_INSTRUCTION_DIVISOR: u128 = 13;
 pub(crate) const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: Cycles = Cycles::new(50);
 
 // ========================== Consensus-fee constants ==========================
@@ -57,15 +58,6 @@ pub(crate) const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: Cycles = Cycles::new(50
 
 const CONSENSUS_PER_NODE_BYTE_FEE: Cycles = Cycles::new(10);
 const CONSENSUS_BYTE_FEE: Cycles = Cycles::new(600);
-
-// ============================ Non-cycle constants ============================
-// Unlike every constant above, these are not cycle amounts and so are not
-// `Cycles`: one is a rate of instructions per cycle, the other a size in bytes.
-
-/// HTTP outcalls are priced consistently against a reference subnet size of 13.
-pub(crate) const TRANSFORM_INSTRUCTION_DIVISOR: u128 = 13;
-/// The per-response overhead, in bytes, that a delivered flexible response adds to
-/// the block on top of its body.
 const FLEXIBLE_RESPONSE_SIZE_OVERHEAD: u128 = 181;
 
 /// The number of nodes of the subnet described by `subnet_cycles_config`.
@@ -454,9 +446,7 @@ fn min_delivery_cost(
         .map(|size| FLEXIBLE_RESPONSE_SIZE_OVERHEAD + *size as u128)
         .sum::<u128>()
         + FLEXIBLE_RESPONSE_SIZE_OVERHEAD * assumed_empty as u128;
-    // `required_responses` is bounded by the committee size, so it always fits a
-    // `u32`; saturating rather than truncating keeps that assumption from turning
-    // a degenerate committee into a wrong fee.
+    // `required_responses` is bounded by the committee size, so it always fits a `u32`
     let extra_responses = u32::try_from(required_responses.saturating_sub(min_responses as usize))
         .unwrap_or(u32::MAX);
     consensus_fee(size_term, subnet_size)
