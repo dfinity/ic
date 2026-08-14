@@ -97,7 +97,6 @@ pub fn start_nns_delegation_manager(
     tls_config: Arc<dyn TlsConfig>,
     cancellation_token: CancellationToken,
 ) -> (JoinHandle<()>, NNSDelegationReader) {
-    let logger = log.clone();
     let manager = DelegationManager {
         config,
         log,
@@ -120,7 +119,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader::new(rx, logger))
+    (join_handle, NNSDelegationReader::new(rx))
 }
 
 struct DelegationManager {
@@ -173,7 +172,7 @@ impl DelegationManager {
             .ok()
     }
 
-    async fn fetch(&self) -> Option<NNSDelegationBuilder> {
+    async fn fetch(&self) -> Option<Arc<NNSDelegationBuilder>> {
         let _timer = self.metrics.fetch_duration.start_timer();
 
         load_root_delegation(
@@ -188,15 +187,17 @@ impl DelegationManager {
             &self.metrics,
         )
         .await
+        .map(Arc::new)
     }
 
     /// Fetches a delegation from the NNS subnet proactively, i.e. without checking if the current
     /// delegation is still valid with respect to the certified state. If the new delegation is
     /// incompatible with the current certified state, it will be held back until the state has
     /// caught up (i.e. returns `None`).
-    async fn proactive_fetch(&self) -> Option<Option<NNSDelegationBuilder>> {
+    async fn proactive_fetch(&self) -> Option<Option<Arc<NNSDelegationBuilder>>> {
         let new_delegation = self.fetch().await;
-        if self.is_delegation_valid_with_respect_to_state(new_delegation.as_ref()) == Some(false) {
+        if self.is_delegation_valid_with_respect_to_state(new_delegation.as_deref()) == Some(false)
+        {
             // If the new delegation is incompatible with our state, hold it back. Once the state
             // will have caught up, `reactive_fetch` will fetch the new delegation.
             // When not being able to determine this (e.g. the call above returned `None`, still
@@ -214,7 +215,7 @@ impl DelegationManager {
     async fn reactive_fetch(
         &self,
         old_delegation: Option<&NNSDelegationBuilder>,
-    ) -> Option<Option<NNSDelegationBuilder>> {
+    ) -> Option<Option<Arc<NNSDelegationBuilder>>> {
         if self.is_delegation_valid_with_respect_to_state(old_delegation) == Some(false) {
             // If the old delegation is incompatible with our state, reactively fetch a new one.
             self.metrics.reactive_fetches.inc();
@@ -224,7 +225,7 @@ impl DelegationManager {
         None
     }
 
-    async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
+    async fn run(self, sender: watch::Sender<Option<Arc<NNSDelegationBuilder>>>) {
         let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
         let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
         // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
@@ -232,11 +233,6 @@ impl DelegationManager {
         // while keeping a consistent duration between ticks.
         proactive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         reactive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        // Since we can't distinguish between yet uninitialized and simply not present
-        // (because we are on the NNS subnet) certification delegation, we explicitely keep
-        // track whether the value has been initialized and notify all receivers when we initialize
-        // it for the first time.
-        let mut initialized = false;
 
         // Keep track of the last delegation we fetched. This is used to compare it with the latest
         // state.
@@ -246,25 +242,17 @@ impl DelegationManager {
             // Fetch the delegation if enough time has passed
             let Some(new_delegation) = select!(
                 _ = proactive_interval.tick() => self.proactive_fetch().await,
-                _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_ref()).await,
+                _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_deref()).await,
             ) else {
                 // No new delegation was fetched. Retry on the next tick.
                 continue;
             };
 
-            sender.send_if_modified(|old_delegation: &mut Option<NNSDelegationBuilder>| {
-                let modified = if &new_delegation != old_delegation {
-                    old_delegation.clone_from(&new_delegation);
-                    self.metrics.updates.inc();
-                    true
-                } else {
-                    false
-                };
-
-                modified || !initialized
+            sender.send_modify(|old_delegation: &mut Option<Arc<NNSDelegationBuilder>>| {
+                old_delegation.clone_from(&new_delegation);
+                self.metrics.updates.inc();
             });
 
-            initialized = true;
             last_delegation = new_delegation;
         }
     }
@@ -512,7 +500,6 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
-        log,
     );
 
     observe_delegation_sizes(&nns_delegation_builder, metrics);
@@ -737,7 +724,6 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::RwLock;
 
-    use crate::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -1232,7 +1218,7 @@ mod tests {
 
         reader.wait_until_initialized().await.unwrap();
 
-        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
+        assert!(reader.builder().is_none());
     }
 
     #[tokio::test]
@@ -1243,12 +1229,13 @@ mod tests {
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
-            let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
-                rt_handle.clone(),
-                Arc::new(RwLock::new(None)),
-                /*delay=*/ None,
-                subnet_id,
-            );
+            let (registry_client, tls_config, state_reader, mutable_state) =
+                set_up_nns_delegation_dependencies(
+                    rt_handle.clone(),
+                    Arc::new(RwLock::new(None)),
+                    /*delay=*/ None,
+                    subnet_id,
+                );
 
             let (_, mut reader) = start_nns_delegation_manager(
                 &MetricsRegistry::new(),
@@ -1266,9 +1253,23 @@ mod tests {
 
             reader.wait_until_initialized().await.unwrap();
 
-            let delegation = reader
-                .get_delegation(CanisterRangesFilter::Flat)
+            let builder = reader
+                .builder()
                 .expect("Should return some delegation on non NNS subnet");
+
+            let network_topology = &mutable_state.read().unwrap().metadata.network_topology;
+            let (delegation, _metadata) = builder
+                .build_verified(
+                    CanisterRangesCheck::AllSubnetRanges,
+                    network_topology.routing_table_for_certification(),
+                    |subnet_id| {
+                        network_topology
+                            .subnets_for_certification()
+                            .get(&subnet_id)
+                            .map(|subnet_topology| subnet_topology.public_key.as_slice())
+                    },
+                )
+                .expect("Should return a valid delegation");
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
                 .expect("Should return a certificate which can be deserialized");
             let tree = LabeledTree::try_from(parsed_delegation.tree)
@@ -1443,12 +1444,13 @@ mod tests {
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
-            let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
-                rt_handle.clone(),
-                Arc::new(RwLock::new(None)),
-                /*delay=*/ None,
-                subnet_id,
-            );
+            let (registry_client, tls_config, _, mutable_state) =
+                set_up_nns_delegation_dependencies(
+                    rt_handle.clone(),
+                    Arc::new(RwLock::new(None)),
+                    /*delay=*/ None,
+                    subnet_id,
+                );
 
             let builder = load_root_delegation(
                 &Config::default(),
@@ -1464,12 +1466,22 @@ mod tests {
             .await;
 
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
-            let parsed_delegation: Certificate = serde_cbor::from_slice(
-                &builder
-                    .build_unverified(CanisterRangesFilter::Flat, &no_op_logger())
-                    .certificate,
-            )
-            .expect("Should return a certificate which can be deserialized");
+
+            let network_topology = &mutable_state.read().unwrap().metadata.network_topology;
+            let (delegation, _metadata) = builder
+                .build_verified(
+                    CanisterRangesCheck::AllSubnetRanges,
+                    network_topology.routing_table_for_certification(),
+                    |subnet_id| {
+                        network_topology
+                            .subnets_for_certification()
+                            .get(&subnet_id)
+                            .map(|subnet_topology| subnet_topology.public_key.as_slice())
+                    },
+                )
+                .expect("Should return a valid delegation");
+            let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
+                .expect("Should return a certificate which can be deserialized");
             let tree = LabeledTree::try_from(parsed_delegation.tree)
                 .expect("The deserialized delegation should contain a correct tree");
             // Verify that the state tree has the a subtree corresponding to the requested subnet

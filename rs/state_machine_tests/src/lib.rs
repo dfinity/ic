@@ -37,8 +37,8 @@ use ic_interfaces::{
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
     execution_environment::{
-        IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
-        TransformExecutionService,
+        CanisterRangesCheck, IngressFilterService, IngressHistoryReader, NNSDelegationBuilder,
+        QueryExecutionInput, QueryExecutionService, TransformExecutionService,
     },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
@@ -173,11 +173,11 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, CallbackId, Certificate, CertificateDelegation, CertificateDelegationMetadata,
-        EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
-        HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource,
-        RawSignedSenderInfo, RejectContext, RequestOrResponse, Response, SignedIngress,
-        SignedSenderInfo, extract_effective_canister_id,
+        Blob, CallbackId, Certificate, CertificateDelegation, EXPECTED_MESSAGE_ID_LENGTH,
+        HttpCallContent, HttpCanisterUpdate, HttpRequestContent, HttpRequestEnvelope, MessageId,
+        Payload as MsgPayload, Query, QuerySource, RawSignedSenderInfo, RejectContext,
+        RequestOrResponse, Response, SignedIngress, SignedSenderInfo,
+        extract_effective_canister_id,
     },
     signature::ThresholdSignature,
     state_manager::StateManagerResult,
@@ -4570,7 +4570,7 @@ impl StateMachine {
         receiver: CanisterId,
         method: impl ToString,
         method_payload: Vec<u8>,
-        delegation: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+        delegation: Option<CertificateDelegation>,
         sender_info: Option<SignedSenderInfo>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
@@ -4588,7 +4588,16 @@ impl StateMachine {
         let query_svc = self.query_handler.lock().unwrap().clone();
         let input = QueryExecutionInput {
             query: user_query,
-            certificate_delegation_with_metadata: delegation,
+            nns_delegation_builder: delegation.map(|delegation| {
+                Arc::new(
+                    NNSDelegationBuilder::try_new(delegation.certificate, self.get_subnet_id())
+                        .expect("failed to parse the delegation certificate"),
+                )
+            }),
+            // Test fixture delegations are not guaranteed to be consistent with the test
+            // state, so don't verify them (preserving the behavior from before
+            // verification was introduced).
+            canister_ranges_check: CanisterRangesCheck::NoCheck,
         };
         if let Ok((result, _)) = self.runtime.block_on(query_svc.oneshot(input)).unwrap() {
             result

@@ -3,9 +3,10 @@
 use crate::{
     ReplicaHealthStatus,
     common::{
-        Cbor, WithTimeout, build_validator, certified_state_unavailable_error,
-        validation_error_to_http_error,
+        Cbor, LOG_EVERY_N_SECONDS, WithTimeout, build_validator, certified_state_unavailable_error,
+        delegation_verification_failure_error, validation_error_to_http_error,
     },
+    metrics::HttpHandlerMetrics,
 };
 
 use axum::{
@@ -25,8 +26,8 @@ use ic_interfaces::{
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, error};
-use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
+use ic_logger::{ReplicaLogger, error, warn};
+use ic_nns_delegation_manager::{CanisterRangesCheck, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     CanisterId, NodeId, PrincipalId, SubnetId,
@@ -60,6 +61,7 @@ pub enum Version {
 #[derive(Clone)]
 pub struct QueryService {
     log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
@@ -75,6 +77,7 @@ pub struct QueryService {
 
 pub struct QueryServiceBuilder {
     log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
@@ -102,6 +105,7 @@ impl QueryService {
 impl QueryServiceBuilder {
     pub fn builder(
         log: ReplicaLogger,
+        metrics: HttpHandlerMetrics,
         node_id: NodeId,
         signer: Arc<dyn BasicSigner<QueryResponseHash>>,
         registry_client: Arc<dyn RegistryClient>,
@@ -113,6 +117,7 @@ impl QueryServiceBuilder {
     ) -> Self {
         Self {
             log,
+            metrics,
             node_id,
             signer,
             health_status: None,
@@ -158,6 +163,7 @@ impl QueryServiceBuilder {
         let log = self.log;
         let state = QueryService {
             log: log.clone(),
+            metrics: self.metrics,
             node_id: self.node_id,
             signer: self.signer,
             health_status: self
@@ -190,6 +196,7 @@ pub(crate) async fn query(
     axum::extract::Path(id): axum::extract::Path<PrincipalId>,
     State(QueryService {
         log,
+        metrics,
         node_id,
         registry_client,
         time_source,
@@ -297,20 +304,22 @@ pub(crate) async fn query(
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
 
-    let delegation_from_nns = match version {
+    // The query handler builds the NNS delegation itself, right before embedding it into
+    // the data certificate, so that it can verify it against the certified state the
+    // certificate is built from.
+    let canister_ranges_check = match version {
         Version::V2 => {
-            nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat)
+            CanisterRangesCheck::CanisterInFlat(CanisterId::unchecked_from_principal(id))
         }
-        Version::V3 => nns_delegation_reader.get_delegation_with_metadata(
-            CanisterRangesFilter::Tree(CanisterId::unchecked_from_principal(id)),
-        ),
-        Version::SubnetV3 => {
-            nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::None)
+        Version::V3 => {
+            CanisterRangesCheck::CanisterInTree(CanisterId::unchecked_from_principal(id))
         }
+        Version::SubnetV3 => CanisterRangesCheck::NoCheck,
     };
     let query_execution_input = QueryExecutionInput {
         query: user_query.clone(),
-        certificate_delegation_with_metadata: delegation_from_nns,
+        nns_delegation_builder: nns_delegation_reader.builder(),
+        canister_ranges_check,
     };
     let query_execution_response = query_execution_service
         .oneshot(query_execution_input)
@@ -320,6 +329,11 @@ pub(crate) async fn query(
     let (response, timestamp) = match query_execution_response {
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
             return certified_state_unavailable_error().into_response();
+        }
+        Err(QueryExecutionError::DelegationInconsistentWithState(err)) => {
+            warn!(every_n_seconds => LOG_EVERY_N_SECONDS, log, "Query delegation verification failed: {err}.");
+            metrics.observe_delegation_verification_failure("query", &err);
+            return delegation_verification_failure_error(err).into_response();
         }
         Ok((response, time)) => (response, time),
     };

@@ -1,4 +1,4 @@
-use crate::HttpError;
+use crate::{HttpError, metrics::HttpHandlerMetrics};
 use axum::{body::Body, extract::FromRequest, response::IntoResponse};
 use bytes::Bytes;
 use http::{
@@ -11,12 +11,16 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{Label, Path, TooLongPathError, sparse_labeled_tree_from_paths};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{ReplicaLogger, info, warn};
+use ic_nns_delegation_manager::{
+    CanisterRangesCheck, DelegationVerificationError, NNSDelegationReader,
+};
 use ic_registry_client_helpers::crypto::{
     CryptoRegistry, root_of_trust::RegistryRootOfTrustProvider,
 };
 use ic_replicated_state::ReplicatedState;
+use ic_types::messages::CertificateDelegation;
 use ic_types::{
     RegistryVersion, SubnetId, Time,
     crypto::threshold_sig::ThresholdSigPublicKey,
@@ -43,6 +47,8 @@ pub const CONTENT_TYPE_TEXT: &str = "text/plain; charset=utf-8";
 /// `max_request_receive_seconds`, then the request will be rejected and
 /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
 const MAX_REQUEST_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
+
+pub(crate) const LOG_EVERY_N_SECONDS: i32 = 10;
 
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
@@ -274,6 +280,21 @@ pub(crate) fn certified_state_unavailable_error() -> HttpError {
     HttpError { status, message }
 }
 
+pub(crate) fn delegation_verification_failure_error(err: DelegationVerificationError) -> HttpError {
+    let status = StatusCode::SERVICE_UNAVAILABLE;
+    let message = match err {
+        DelegationVerificationError::Inconsistent => {
+            "This replica has an outdated delegation. Please try again."
+        }
+        DelegationVerificationError::Validation(_) => {
+            "This replica has an invalid delegation. Please try again."
+        }
+    }
+    .to_string();
+
+    HttpError { status, message }
+}
+
 pub(crate) async fn get_latest_certified_state(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Option<Arc<ReplicatedState>> {
@@ -290,6 +311,46 @@ pub(crate) async fn get_latest_certified_state(
     })
     .await
     .ok()?
+}
+
+pub(crate) fn get_verified_delegation(
+    nns_delegation_reader: &NNSDelegationReader,
+    certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
+    canister_ranges_check: CanisterRangesCheck,
+    log: &ReplicaLogger,
+    metrics: &HttpHandlerMetrics,
+    endpoint_type: &'static str,
+) -> Result<Option<CertificateDelegation>, HttpError> {
+    let delegation_from_nns = match nns_delegation_reader.builder() {
+        None => None,
+        Some(builder) => {
+            let network_topology = &certified_state_reader.get_state().metadata.network_topology;
+            match builder.build_verified(
+                canister_ranges_check,
+                network_topology.routing_table_for_certification(),
+                |subnet_id| {
+                    network_topology
+                        .subnets_for_certification()
+                        .get(&subnet_id)
+                        .map(|subnet_topology| subnet_topology.public_key.as_slice())
+                },
+            ) {
+                Ok((delegation, _metadata)) => Some(delegation),
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => LOG_EVERY_N_SECONDS,
+                        log,
+                        "Failed to verify the NNS delegation (endpoint: {endpoint_type}): {err:?}"
+                    );
+                    metrics.observe_delegation_verification_failure(endpoint_type, &err);
+
+                    return Err(delegation_verification_failure_error(err));
+                }
+            }
+        }
+    };
+
+    Ok(delegation_from_nns)
 }
 
 pub(crate) fn build_validator<T: HttpRequestContent>(

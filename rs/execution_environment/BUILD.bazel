@@ -84,7 +84,9 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
+        "//rs/http_endpoints/nns_delegation_reader/test_utils",
         "//rs/interfaces",
+        "//rs/interfaces/state_manager/mocks",
         "//rs/registry/routing_table",
         "//rs/state_machine_tests",
         "//rs/test_utilities",

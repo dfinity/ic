@@ -1,18 +1,36 @@
 use crate::InternalHttpQueryHandler;
+use crate::query_handler::get_latest_certified_state_and_data_certificate;
+use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
+use ic_base_types::{CanisterId, NumSeconds, PrincipalId, SubnetId};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
+use ic_crypto_tree_hash::{LabeledTree, MixedHashTree, lookup_path};
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::execution_environment::{
+    CanisterRangesCheck, DelegationVerificationError, NNSDelegationBuilder, QueryExecutionError,
+};
+use ic_interfaces_state_manager::StateReader;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_management_canister_types_private::{
     CanisterIdRange, CanisterIdRecord, CanisterMetricsArgs, CanisterMetricsResult,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, ListCanistersResponse, LogVisibilityV2,
     Payload,
 };
+use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
+use ic_registry_routing_table::{CanisterIdRange as RoutingTableCanisterIdRange, RoutingTable};
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::{
+    ReplicatedState, SubnetTopology,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+};
 use ic_test_utilities::universal_canister::{call_args, wasm};
+use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_state::CanisterStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+use ic_types::consensus::certification::Certification;
+use ic_types::messages::Certificate;
 use ic_types::{
     NumInstructions,
     ingress::WasmResult,
@@ -20,6 +38,7 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{assert_gt, assert_lt};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -1667,4 +1686,253 @@ fn composite_query_call_to_management_canister_charges_instructions() {
         )
         .unwrap();
     assert_eq!(reply, WasmResult::Reply(b"done".to_vec()));
+}
+
+// ---------------------------------------------------------------------------
+// NNS delegation vs. certified state:
+// `get_latest_certified_state_and_data_certificate` must only embed the NNS
+// delegation into the data certificate after verifying it against the exact
+// certified state the certificate is built from, and must return an error when
+// the two do not match (e.g. around subnet splits and canister migrations).
+// ---------------------------------------------------------------------------
+
+fn all_canister_ranges_checks() -> Vec<CanisterRangesCheck> {
+    vec![
+        CanisterRangesCheck::NoCheck,
+        CanisterRangesCheck::AllSubnetRanges,
+        CanisterRangesCheck::CanisterInFlat(canister_test_id(0)),
+        CanisterRangesCheck::CanisterInTree(canister_test_id(0)),
+    ]
+}
+
+/// Builds an NNS delegation certifying the given canister ranges for `subnet_id`,
+/// returning the delegation builder together with the raw bytes of the certified
+/// `/subnet/<subnet_id>/public_key` leaf, i.e. the public key which a certified
+/// state must assign to the subnet for the delegation to match it.
+fn fake_delegation_builder(
+    subnet_id: SubnetId,
+    canister_id_ranges: &Vec<(CanisterId, CanisterId)>,
+) -> (Arc<NNSDelegationBuilder>, Vec<u8>) {
+    let (delegation, _nns_root_public_key) =
+        create_fake_certificate_delegation(canister_id_ranges, subnet_id);
+
+    let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate).unwrap();
+    let tree = LabeledTree::try_from(certificate.tree).unwrap();
+    let certified_public_key =
+        match lookup_path(&tree, &[b"subnet", subnet_id.get().as_ref(), b"public_key"]) {
+            Some(LabeledTree::Leaf(public_key)) => public_key.clone(),
+            other => panic!("The fake delegation should certify a public key, got: {other:?}"),
+        };
+
+    let builder = NNSDelegationBuilder::try_new(delegation.certificate, subnet_id)
+        .expect("The fake delegation should parse");
+
+    (Arc::new(builder), certified_public_key)
+}
+
+/// A state reader whose certified state assigns `public_key` and
+/// `canister_id_ranges` to `subnet_id`. The hash tree and the certification
+/// returned alongside the state are dummies: only the network topology matters
+/// for the NNS delegation verification under test.
+fn certified_state_reader_with_subnet_topology(
+    subnet_id: SubnetId,
+    public_key: Vec<u8>,
+    canister_id_ranges: &[(CanisterId, CanisterId)],
+) -> Arc<dyn StateReader<State = ReplicatedState>> {
+    let routing_table: RoutingTable = canister_id_ranges
+        .iter()
+        .map(|(start, end)| {
+            (
+                RoutingTableCanisterIdRange {
+                    start: *start,
+                    end: *end,
+                },
+                subnet_id,
+            )
+        })
+        .collect::<BTreeMap<_, _>>()
+        .try_into()
+        .unwrap();
+
+    let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.subnets_mut().insert(
+            subnet_id,
+            SubnetTopology {
+                public_key,
+                ..SubnetTopology::default()
+            },
+        );
+        network_topology.set_routing_table(routing_table);
+    });
+
+    let mut state_reader = MockStateManager::new();
+    state_reader
+        .expect_read_certified_state()
+        .return_once(move |_| Some((Arc::new(state), MixedHashTree::Empty, Certification::fake())));
+    Arc::new(state_reader)
+}
+
+#[test]
+fn query_handler_embeds_nns_delegation_matching_the_certified_state() {
+    let subnet_id = subnet_test_id(1);
+    let ranges = vec![(canister_test_id(0), canister_test_id(10))];
+    let (builder, certified_public_key) = fake_delegation_builder(subnet_id, &ranges);
+
+    for ranges_check in all_canister_ranges_checks() {
+        // The certified state assigns the subnet exactly the public key and the
+        // canister ranges certified by the delegation.
+        let state_reader = certified_state_reader_with_subnet_topology(
+            subnet_id,
+            certified_public_key.clone(),
+            &ranges,
+        );
+
+        let certified = get_latest_certified_state_and_data_certificate(
+            state_reader,
+            Some(Arc::clone(&builder)),
+            ranges_check,
+            canister_test_id(0),
+        )
+        .unwrap_or_else(|err| {
+            panic!("The delegation matches the certified state, so the {ranges_check:?} check should succeed, got: {err:?}")
+        });
+
+        // The verified delegation is embedded into the data certificate.
+        assert!(
+            certified
+                .data_certificate_with_delegation_metadata
+                .certificate_delegation_metadata
+                .is_some(),
+            "The {ranges_check:?} check should report the metadata of the embedded delegation"
+        );
+        let data_certificate: Certificate = serde_cbor::from_slice(
+            &certified
+                .data_certificate_with_delegation_metadata
+                .data_certificate,
+        )
+        .unwrap();
+        assert!(
+            data_certificate.delegation.is_some(),
+            "The data certificate should embed the delegation after the {ranges_check:?} check"
+        );
+    }
+}
+
+#[test]
+fn query_handler_returns_an_error_when_the_certified_public_key_drifts() {
+    let subnet_id = subnet_test_id(1);
+    let ranges = vec![(canister_test_id(0), canister_test_id(10))];
+    let (builder, _certified_public_key) = fake_delegation_builder(subnet_id, &ranges);
+
+    for ranges_check in all_canister_ranges_checks() {
+        // The certified state assigns the subnet a different public key than the
+        // one certified by the delegation (the canister ranges still match).
+        let state_reader =
+            certified_state_reader_with_subnet_topology(subnet_id, vec![0xFF; 10], &ranges);
+
+        let result = get_latest_certified_state_and_data_certificate(
+            state_reader,
+            Some(Arc::clone(&builder)),
+            ranges_check,
+            canister_test_id(0),
+        )
+        .map(|_| ());
+
+        assert_matches!(
+            result,
+            Err(QueryExecutionError::DelegationInconsistentWithState(
+                DelegationVerificationError::Inconsistent
+            )),
+            "The {ranges_check:?} check should fail when the delegation does not \
+             certify the subnet's public key in the certified state"
+        );
+    }
+}
+
+#[test]
+fn query_handler_returns_an_error_when_the_certified_canister_ranges_drift() {
+    let subnet_id = subnet_test_id(1);
+    let delegation_ranges = vec![(canister_test_id(0), canister_test_id(10))];
+    let (builder, certified_public_key) = fake_delegation_builder(subnet_id, &delegation_ranges);
+
+    // The certified state no longer assigns the delegation's canister ranges to the
+    // subnet; in particular it no longer covers `canister_test_id(0)`.
+    let drifted_state_ranges = [(canister_test_id(20), canister_test_id(30))];
+
+    for ranges_check in all_canister_ranges_checks() {
+        if ranges_check == CanisterRangesCheck::NoCheck {
+            continue;
+        }
+
+        let state_reader = certified_state_reader_with_subnet_topology(
+            subnet_id,
+            certified_public_key.clone(),
+            &drifted_state_ranges,
+        );
+
+        let result = get_latest_certified_state_and_data_certificate(
+            state_reader,
+            Some(Arc::clone(&builder)),
+            ranges_check,
+            canister_test_id(0),
+        )
+        .map(|_| ());
+
+        assert_matches!(
+            result,
+            Err(QueryExecutionError::DelegationInconsistentWithState(
+                DelegationVerificationError::Inconsistent
+            )),
+            "The {ranges_check:?} check should fail when the certified canister \
+             ranges drift away from the delegation"
+        );
+    }
+
+    // `NoCheck` does not compare the canister ranges: as long as the public key
+    // still matches, the delegation is embedded.
+    let state_reader = certified_state_reader_with_subnet_topology(
+        subnet_id,
+        certified_public_key,
+        &drifted_state_ranges,
+    );
+    let result = get_latest_certified_state_and_data_certificate(
+        state_reader,
+        Some(builder),
+        CanisterRangesCheck::NoCheck,
+        canister_test_id(0),
+    );
+    assert!(
+        result.is_ok(),
+        "The NoCheck check should ignore the drifted canister ranges"
+    );
+}
+
+#[test]
+fn query_handler_without_nns_delegation_embeds_no_delegation() {
+    // On the NNS there is no delegation: nothing to verify and nothing to embed.
+    let state_reader =
+        certified_state_reader_with_subnet_topology(subnet_test_id(1), vec![1, 2, 3], &[]);
+
+    let certified = get_latest_certified_state_and_data_certificate(
+        state_reader,
+        None,
+        CanisterRangesCheck::NoCheck,
+        canister_test_id(0),
+    )
+    .unwrap_or_else(|err| panic!("Without a delegation there is nothing to verify: {err:?}"));
+
+    assert!(
+        certified
+            .data_certificate_with_delegation_metadata
+            .certificate_delegation_metadata
+            .is_none()
+    );
+    let data_certificate: Certificate = serde_cbor::from_slice(
+        &certified
+            .data_certificate_with_delegation_metadata
+            .data_certificate,
+    )
+    .unwrap();
+    assert!(data_certificate.delegation.is_none());
 }

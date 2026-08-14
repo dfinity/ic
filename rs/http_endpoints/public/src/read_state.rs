@@ -2,7 +2,10 @@
 
 use crate::{
     HttpError, ReplicaHealthStatus,
-    common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
+    common::{
+        Cbor, WithTimeout, build_validator, get_verified_delegation, into_cbor,
+        validation_error_to_http_error,
+    },
     metrics::HttpHandlerMetrics,
 };
 use axum::{
@@ -22,7 +25,7 @@ use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::ReplicaLogger;
-use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
+use ic_nns_delegation_manager::{CanisterRangesCheck, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
@@ -281,12 +284,27 @@ pub(crate) async fn read_state(
             return (status, message).into_response();
         }
 
-        let delegation_from_nns = match (version, target) {
-            (Version::V2, _) => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
-            (Version::V3, Target::Canister) => nns_delegation_reader
-                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
-            (Version::V3, Target::Subnet) => {
-                nns_delegation_reader.get_delegation(CanisterRangesFilter::None)
+        let canister_ranges_check = match (version, target) {
+            (Version::V2, Target::Canister) => {
+                CanisterRangesCheck::CanisterInFlat(effective_canister_id)
+            }
+            (Version::V2, Target::Subnet) => CanisterRangesCheck::AllSubnetRanges,
+            (Version::V3, Target::Canister) => {
+                CanisterRangesCheck::CanisterInTree(effective_canister_id)
+            }
+            (Version::V3, Target::Subnet) => CanisterRangesCheck::NoCheck,
+        };
+        let delegation_from_nns = match get_verified_delegation(
+            &nns_delegation_reader,
+            certified_state_reader.as_ref(),
+            canister_ranges_check,
+            &log,
+            &metrics,
+            "read_state",
+        ) {
+            Ok(delegation) => delegation,
+            Err(err) => {
+                return err.into_response();
             }
         };
 
