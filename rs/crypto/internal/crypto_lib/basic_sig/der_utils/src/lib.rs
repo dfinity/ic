@@ -99,6 +99,10 @@ pub fn algo_id_and_public_key_bytes_from_der(
     kp.get_algo_id_and_public_key_bytes()
 }
 
+/// The maximum nesting depth of constructed ASN.1 elements accepted in a
+/// DER-encoded key.
+pub const MAX_DER_NESTING_DEPTH: usize = 4;
+
 /// Parser for DER-encoded keys.
 struct KeyDerParser {
     key_der: Vec<u8>,
@@ -120,7 +124,11 @@ impl KeyDerParser {
         let asn1_parts = self.parse_pk()?;
         let key_seq = Self::ensure_single_asn1_sequence(asn1_parts)?;
         if key_seq.len() != 2 {
-            return Err(Self::parsing_error("Expected exactly two ASN.1 blocks."));
+            return Err(Self::parsing_error(&format!(
+                "Expected the SubjectPublicKeyInfo SEQUENCE to contain 2 elements \
+                 (algorithm and subjectPublicKey), got {}",
+                key_seq.len()
+            )));
         }
 
         let algo_id = Self::algorithm_identifier(&key_seq[0])?;
@@ -157,17 +165,28 @@ impl KeyDerParser {
                     (ASN1Block::ObjectIdentifier(_, algo_oid), None) => Ok(
                         PkixAlgorithmIdentifier::new_with_empty_param(algo_oid.clone()),
                     ),
-                    (_, _) => Err(Self::parsing_error(
-                        "algorithm identifier has unexpected type",
-                    )),
+                    (_, _) => Err(Self::parsing_error(&format!(
+                        "Expected the AlgorithmIdentifier SEQUENCE to contain an OBJECT \
+                         IDENTIFIER optionally followed by NULL or another OBJECT IDENTIFIER, \
+                         got {}{}",
+                        Self::asn1_type_name(algo_oid),
+                        algo_params
+                            .map(|params| format!(" followed by {}", Self::asn1_type_name(params)))
+                            .unwrap_or_default()
+                    ))),
                 }
             } else {
-                Err(Self::parsing_error(
-                    "algorithm identifier has unexpected size",
-                ))
+                Err(Self::parsing_error(&format!(
+                    "Expected the AlgorithmIdentifier SEQUENCE to contain 1 or 2 elements \
+                     (algorithm and optional parameters), got {}",
+                    oid_parts.len()
+                )))
             }
         } else {
-            Err(Self::parsing_error("Expected algorithm identifier"))
+            Err(Self::parsing_error(&format!(
+                "Expected the algorithm to be an AlgorithmIdentifier SEQUENCE, got {}",
+                Self::asn1_type_name(oid_seq)
+            )))
         }
     }
 
@@ -175,13 +194,37 @@ impl KeyDerParser {
     fn public_key_bytes(key_part: &ASN1Block) -> Result<Vec<u8>, KeyDerParsingError> {
         if let ASN1Block::BitString(_offset, bits_count, key_bytes) = key_part {
             if *bits_count != key_bytes.len() * 8 {
-                return Err(Self::parsing_error("Inconsistent key length"));
+                return Err(Self::parsing_error(&format!(
+                    "Expected the subjectPublicKey BIT STRING to contain whole octets, \
+                     got {} bits in {} octets",
+                    bits_count,
+                    key_bytes.len()
+                )));
             }
             Ok(key_bytes.to_vec())
         } else {
             Err(Self::parsing_error(&format!(
-                "Expected BitString, got {key_part:?}"
+                "Expected the subjectPublicKey to be a BIT STRING, got {}",
+                Self::asn1_type_name(key_part)
             )))
+        }
+    }
+
+    /// Returns the name of the ASN.1 type of `block`, for use in error
+    /// messages. Only the name is returned, not the contents.
+    fn asn1_type_name(block: &ASN1Block) -> &'static str {
+        match block {
+            ASN1Block::Boolean(..) => "a BOOLEAN",
+            ASN1Block::Integer(..) => "an INTEGER",
+            ASN1Block::BitString(..) => "a BIT STRING",
+            ASN1Block::OctetString(..) => "an OCTET STRING",
+            ASN1Block::Null(..) => "NULL",
+            ASN1Block::ObjectIdentifier(..) => "an OBJECT IDENTIFIER",
+            ASN1Block::Sequence(..) => "a SEQUENCE",
+            ASN1Block::Set(..) => "a SET",
+            ASN1Block::Explicit(..) => "an explicitly tagged value",
+            ASN1Block::Unknown(..) => "a value of an unknown ASN.1 type",
+            _ => "a value of another ASN.1 type",
         }
     }
 
@@ -192,8 +235,81 @@ impl KeyDerParser {
         }
     }
 
+    /// Returns an error if `der` nests constructed ASN.1 elements more than
+    /// [`MAX_DER_NESTING_DEPTH`] levels deep. The scan only walks the
+    /// tag-length headers and leaves the actual decoding (and any other
+    /// structural error) to `simple_asn1`.
+    fn check_der_nesting_depth(der: &[u8]) -> Result<(), KeyDerParsingError> {
+        // Exclusive end offsets of the constructed elements that are currently
+        // open; their number is the current nesting depth.
+        let mut open_elements_end: Vec<usize> = Vec::new();
+        let mut index = 0;
+        while index < der.len() {
+            while let Some(&end) = open_elements_end.last() {
+                if end <= index {
+                    open_elements_end.pop();
+                } else {
+                    break;
+                }
+            }
+
+            // Identifier octets: skip the high-tag-number form if present.
+            let first_identifier_octet = der[index];
+            let constructed = first_identifier_octet & 0x20 != 0;
+            index += 1;
+            if first_identifier_octet & 0x1f == 0x1f {
+                while index < der.len() && der[index] & 0x80 != 0 {
+                    index += 1;
+                }
+                index += 1;
+            }
+
+            // Length octets: short form, or long form giving the octet count.
+            let Some(&first_length_octet) = der.get(index) else {
+                return Ok(());
+            };
+            index += 1;
+            let content_length = if first_length_octet & 0x80 == 0 {
+                first_length_octet as usize
+            } else {
+                let num_length_octets = (first_length_octet & 0x7f) as usize;
+                if num_length_octets == 0 || num_length_octets > core::mem::size_of::<usize>() {
+                    return Ok(());
+                }
+                let mut length = 0;
+                for _ in 0..num_length_octets {
+                    let Some(&octet) = der.get(index) else {
+                        return Ok(());
+                    };
+                    length = (length << 8) | octet as usize;
+                    index += 1;
+                }
+                length
+            };
+
+            let Some(content_end) = index.checked_add(content_length) else {
+                return Ok(());
+            };
+            if content_end > der.len() {
+                return Ok(());
+            }
+            if constructed {
+                if open_elements_end.len() + 1 > MAX_DER_NESTING_DEPTH {
+                    return Err(Self::parsing_error(&format!(
+                        "DER nesting depth exceeds the maximum of {MAX_DER_NESTING_DEPTH}"
+                    )));
+                }
+                open_elements_end.push(content_end);
+            } else {
+                index = content_end;
+            }
+        }
+        Ok(())
+    }
+
     /// parses the entire DER-string provided upon construction.
     fn parse_pk(&self) -> Result<Vec<ASN1Block>, KeyDerParsingError> {
+        Self::check_der_nesting_depth(&self.key_der)?;
         simple_asn1::from_der(&self.key_der)
             .map_err(|e| Self::parsing_error(&format!("Error in DER encoding: {e}")))
     }
@@ -205,12 +321,19 @@ impl KeyDerParser {
         mut parts: Vec<ASN1Block>,
     ) -> Result<Vec<ASN1Block>, KeyDerParsingError> {
         if parts.len() != 1 {
-            return Err(Self::parsing_error("Expected exactly one ASN.1 block."));
+            return Err(Self::parsing_error(&format!(
+                "Expected a single top-level SubjectPublicKeyInfo element, got {}",
+                parts.len()
+            )));
         }
-        if let ASN1Block::Sequence(_offset, part) = parts.remove(0) {
+        let part = parts.remove(0);
+        if let ASN1Block::Sequence(_offset, part) = part {
             Ok(part)
         } else {
-            Err(Self::parsing_error("Expected an ASN.1 sequence."))
+            Err(Self::parsing_error(&format!(
+                "Expected the SubjectPublicKeyInfo to be a SEQUENCE, got {}",
+                Self::asn1_type_name(&part)
+            )))
         }
     }
 }

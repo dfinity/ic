@@ -1,5 +1,5 @@
 {
-  "checksum": "c01a916747d85338109fc87aa59422228ddee3bc1442f690957c1a40eef8749e",
+  "checksum": "49f23508cb5f7f5588dfc22948a52cd7aa920ed8a09fa8b7d24083c0f596e53a",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -10338,7 +10338,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -10425,14 +10425,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.34": {
+    "candid 0.10.35": {
       "name": "candid",
-      "version": "0.10.34",
+      "version": "0.10.35",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.34/download",
-          "sha256": "cdec808f2220b263bbc88557a2a44fb6b2db5875c99731ad00aae575ad59215c"
+          "url": "https://static.crates.io/crates/candid/0.10.35/download",
+          "sha256": "5cdba86ff862a2cc6b244f273a8713ffdf82b84254470e90bd029ee87c283f25"
         }
       },
       "targets": [
@@ -10529,7 +10529,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "candid_derive 0.10.34",
+              "id": "candid_derive 0.10.35",
               "target": "candid_derive"
             },
             {
@@ -10562,7 +10562,7 @@
             ]
           }
         },
-        "version": "0.10.34"
+        "version": "0.10.35"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10570,14 +10570,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "candid_derive 0.10.34": {
+    "candid_derive 0.10.35": {
       "name": "candid_derive",
-      "version": "0.10.34",
+      "version": "0.10.35",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid_derive/0.10.34/download",
-          "sha256": "2ee4839d8e442990b2853556e57ee9f6f4527371bbbfd7b4dcdd4f3c7d910964"
+          "url": "https://static.crates.io/crates/candid_derive/0.10.35/download",
+          "sha256": "13501edc1f9c9f057d5d84171a13ee1fe4255705f9027a3fac64b5949cbdd170"
         }
       },
       "targets": [
@@ -10621,7 +10621,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.34"
+        "version": "0.10.35"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10677,7 +10677,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -10796,7 +10796,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -10917,7 +10917,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -12896,7 +12896,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.48.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
@@ -19561,7 +19561,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -20250,7 +20250,7 @@
               "target": "pretty_assertions"
             },
             {
-              "id": "priority-queue 1.3.2",
+              "id": "priority-queue 2.7.0",
               "target": "priority_queue"
             },
             {
@@ -24188,7 +24188,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -24264,7 +24264,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -32238,7 +32238,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -32486,7 +32486,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -32830,7 +32830,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -32936,7 +32936,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33014,7 +33014,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33101,7 +33101,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33164,7 +33164,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33256,7 +33256,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33419,7 +33419,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33482,7 +33482,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33545,7 +33545,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33708,7 +33708,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33912,7 +33912,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -33980,7 +33980,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -34223,7 +34223,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -34449,7 +34449,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -34531,7 +34531,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -34681,7 +34681,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -34736,7 +34736,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -34791,7 +34791,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -34939,7 +34939,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -35229,7 +35229,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -35288,7 +35288,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -35382,7 +35382,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -35572,7 +35572,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -35727,7 +35727,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -35814,7 +35814,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -36084,7 +36084,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -36155,7 +36155,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.34",
+              "id": "candid 0.10.35",
               "target": "candid"
             },
             {
@@ -46779,8 +46779,6 @@
             "default",
             "ioctl",
             "memoffset",
-            "process",
-            "signal",
             "socket"
           ],
           "selects": {}
@@ -54342,7 +54340,7 @@
               "target": "log"
             },
             {
-              "id": "nix 0.27.1",
+              "id": "nix 0.30.1",
               "target": "nix"
             },
             {
@@ -55086,14 +55084,14 @@
       ],
       "license_file": null
     },
-    "priority-queue 1.3.2": {
+    "priority-queue 2.7.0": {
       "name": "priority-queue",
-      "version": "1.3.2",
+      "version": "2.7.0",
       "package_url": "https://github.com/garro95/priority-queue",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/priority-queue/1.3.2/download",
-          "sha256": "fff39edfcaec0d64e8d0da38564fad195d2d51b680940295fcc307366e101e61"
+          "url": "https://static.crates.io/crates/priority-queue/2.7.0/download",
+          "sha256": "93980406f12d9f8140ed5abe7155acb10bb1e69ea55c88960b9c2f117445ef96"
         }
       },
       "targets": [
@@ -55101,18 +55099,6 @@
           "Library": {
             "crate_name": "priority_queue",
             "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -55129,19 +55115,21 @@
         ],
         "crate_features": {
           "common": [
-            "serde"
+            "default",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.3",
-              "target": "indexmap"
+              "id": "equivalent 1.0.1",
+              "target": "equivalent"
             },
             {
-              "id": "priority-queue 1.3.2",
-              "target": "build_script_build"
+              "id": "indexmap 2.14.0",
+              "target": "indexmap"
             },
             {
               "id": "serde 1.0.228",
@@ -55150,30 +55138,10 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.3.2"
+        "edition": "2021",
+        "version": "2.7.0"
       },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.5.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "LGPL-3.0 OR MPL-2.0",
+      "license": "LGPL-3.0-or-later OR MPL-2.0",
       "license_ids": [
         "LGPL-3.0",
         "MPL-2.0"
@@ -91899,7 +91867,7 @@
     "bytes 1.11.1",
     "cached 0.49.2",
     "canbench-rs 0.7.0",
-    "candid 0.10.34",
+    "candid 0.10.35",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
     "cc 1.2.48",
@@ -92076,7 +92044,7 @@
     "pprof 0.15.0",
     "predicates 3.1.2",
     "pretty_assertions 1.4.0",
-    "priority-queue 1.3.2",
+    "priority-queue 2.7.0",
     "proc-macro2 1.0.106",
     "procfs 0.17.0",
     "prometheus 0.14.0",

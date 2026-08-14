@@ -6,6 +6,7 @@ use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Prime256v1Identity, Secp256k1Identity},
 };
+use ic_crypto_internal_basic_sig_der_utils::MAX_DER_NESTING_DEPTH;
 use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -17,6 +18,7 @@ use ic_system_test_driver::util::{
     UniversalCanister, agent_with_identity, block_on, expiry_time, random_ed25519_identity,
     sign_query, sign_read_state, sign_update,
 };
+use ic_types::PrincipalId;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
     HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
@@ -305,6 +307,28 @@ pub fn request_signature_test(env: TestEnv) {
                 random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
                 rng,
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing a request whose sender_pubkey nests DER elements beyond the accepted depth. \
+                 Should fail."
+            );
+            test_request_with_too_deeply_nested_public_key_der_is_rejected(
+                node_url.as_str(),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing valid requests from the anonymous user again. Should succeed."
+            );
+            test_valid_request_succeeds(
+                node_url.as_str(),
+                AnonymousIdentity,
+                canister.canister_id(),
             )
             .await;
         }
@@ -915,6 +939,154 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
             assert_eq!(res.status(), 400);
         }
     }
+}
+
+// Sends a query, an update and a read_state request whose `sender_pubkey` is a
+// valid DER `NULL` wrapped in more nested `SEQUENCE`s than are accepted. Each
+// must be rejected with HTTP 400. No valid signature is needed: the envelope
+// carries an empty signature and a sender that self-authenticates to the
+// malformed key, which is enough to reach public-key parsing during request
+// authentication.
+async fn test_request_with_too_deeply_nested_public_key_der_is_rejected(
+    url: &str,
+    canister_id: Principal,
+) {
+    const NESTING_DEPTH: usize = MAX_DER_NESTING_DEPTH + 1;
+    let client = reqwest::Client::new();
+
+    let pubkey_der = sequences_around_null(NESTING_DEPTH);
+    let sender = Blob(
+        PrincipalId::new_self_authenticating(&pubkey_der)
+            .as_slice()
+            .to_vec(),
+    );
+    let arg = Blob(wasm().caller().reply_data_append().reply().build());
+    let sent = "failed to send the request";
+
+    // Query.
+    let content = HttpQueryContent::Query {
+        query: HttpUserQuery {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "query".to_string(),
+            arg: arg.clone(),
+            sender: sender.clone(),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+            sender_info: None,
+        },
+    };
+    let envelope = HttpRequestEnvelope {
+        content,
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(pubkey_der.clone())),
+        sender_sig: Some(Blob(vec![])),
+    };
+    for api_version in ALL_QUERY_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/query"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .expect(sent);
+        assert_eq!(res.status(), 400);
+    }
+
+    // Update.
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "update".to_string(),
+            arg: arg.clone(),
+            sender: sender.clone(),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+            sender_info: None,
+        },
+    };
+    let envelope = HttpRequestEnvelope {
+        content,
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(pubkey_der.clone())),
+        sender_sig: Some(Blob(vec![])),
+    };
+    for api_version in ALL_UPDATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/call"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .expect(sent);
+        assert_eq!(res.status(), 400);
+    }
+
+    // Read state.
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: sender.clone(),
+            paths: vec![],
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let envelope = HttpRequestEnvelope {
+        content,
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(pubkey_der.clone())),
+        sender_sig: Some(Blob(vec![])),
+    };
+    for api_version in ALL_READ_STATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/read_state"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .expect(sent);
+        assert_eq!(res.status(), 400);
+    }
+}
+
+// Builds a DER `NULL` wrapped in `depth` definite-length `SEQUENCE`s.
+fn sequences_around_null(depth: usize) -> Vec<u8> {
+    let null = [0x05_u8, 0x00];
+    let mut headers: Vec<Vec<u8>> = Vec::with_capacity(depth);
+    let mut inner_length = null.len();
+    for _ in 0..depth {
+        let mut header = vec![0x30_u8];
+        header.extend_from_slice(&der_definite_length(inner_length));
+        inner_length += header.len();
+        headers.push(header);
+    }
+    let mut der = Vec::with_capacity(inner_length);
+    for header in headers.iter().rev() {
+        der.extend_from_slice(header);
+    }
+    der.extend_from_slice(&null);
+    der
+}
+
+// Encodes `content_length` in the DER definite-length form.
+fn der_definite_length(content_length: usize) -> Vec<u8> {
+    if content_length < 0x80 {
+        return vec![content_length as u8];
+    }
+    let mut length_octets = Vec::new();
+    let mut remaining = content_length;
+    while remaining > 0 {
+        length_octets.insert(0, (remaining & 0xff) as u8);
+        remaining >>= 8;
+    }
+    let mut encoded = vec![0x80 | length_octets.len() as u8];
+    encoded.extend_from_slice(&length_octets);
+    encoded
 }
 
 pub fn sign_query_with_empty_domain_separator(
