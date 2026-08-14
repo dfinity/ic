@@ -25,7 +25,10 @@ rust_library(
 rust_test(
     name = "cycles_test",
     crate = ":cycles",
-    deps = [],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 rust_doc(
