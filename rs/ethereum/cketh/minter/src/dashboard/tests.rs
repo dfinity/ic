@@ -1146,6 +1146,7 @@ fn initial_state() -> State {
         next_transaction_nonce: TransactionNonce::ZERO.into(),
         last_scraped_block_number: candid::Nat::from(INITIAL_LAST_SCRAPED_BLOCK_NUMBER),
         evm_rpc_id: None,
+        ethereum_sweeper_contract_address: None,
     })
     .expect("valid init args")
 }

@@ -109,6 +109,9 @@ type InitArg = record {
     // with the Ethereum blockchain. If not specified, uses the production or
     // staging EVM RPC canister based on the ethereum_network field.
     evm_rpc_id : opt principal;
+
+    // Address of the sweeper smart contract.
+    ethereum_sweeper_contract_address : opt text;
 };
 
 type UpgradeArg = record {
@@ -143,6 +146,9 @@ type UpgradeArg = record {
 
     // Change the last scraped block number of the deposit with subaccount helper smart contract.
     last_deposit_with_subaccount_scraped_block_number : opt nat;
+
+    // Change the sweeper smart contract address.
+    ethereum_sweeper_contract_address : opt text;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };

@@ -25,6 +25,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
+use std::iter::once;
 use strum_macros::EnumIter;
 use transactions::EthTransactions;
 
@@ -113,6 +114,10 @@ pub struct State {
     /// ckERC20 deposit addresses registered via `deposit_erc20`, individually
     /// derived for each user and watched for incoming deposits.
     pub automatic_deposits: AutomaticDeposits,
+
+    /// Address of the sweeper smart contract on Ethereum, which the minter
+    /// delegates to when sweeping funded deposit addresses.
+    pub sweeper_contract_address: Option<Address>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -122,6 +127,7 @@ pub enum InvalidStateError {
     InvalidLedgerId(String),
     InvalidEthereumContractAddress(String),
     InvalidErc20HelperContractAddress(String),
+    InvalidSweeperContractAddress(String),
     InvalidMinimumWithdrawalAmount(String),
     InvalidLastScrapedBlockNumber(String),
     InvalidLastErc20ScrapedBlockNumber(String),
@@ -474,6 +480,7 @@ impl State {
             evm_rpc_id,
             deposit_with_subaccount_helper_contract_address,
             last_deposit_with_subaccount_scraped_block_number,
+            ethereum_sweeper_contract_address,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
@@ -547,6 +554,12 @@ impl State {
         if let Some(evm_id) = evm_rpc_id {
             self.evm_rpc_id = evm_id;
         }
+        if let Some(address) = ethereum_sweeper_contract_address {
+            let address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidSweeperContractAddress(format!("ERROR: {e}"))
+            })?;
+            self.sweeper_contract_address = Some(address);
+        }
         self.validate_config()
     }
 
@@ -583,6 +596,10 @@ impl State {
         );
         ensure_eq!(self.ckerc20_tokens, other.ckerc20_tokens);
         ensure_eq!(self.automatic_deposits, other.automatic_deposits);
+        ensure_eq!(
+            self.sweeper_contract_address,
+            other.sweeper_contract_address
+        );
 
         self.eth_transactions
             .is_equivalent_to(&other.eth_transactions)

@@ -263,6 +263,7 @@ fn install_minter(
         next_transaction_nonce: Nat::from(0_u8),
         last_scraped_block_number: Nat::from(0_u8),
         evm_rpc_id: Some(evm_rpc_id),
+        ethereum_sweeper_contract_address: None,
     };
     env.install_canister(
         minter_id,

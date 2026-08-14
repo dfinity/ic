@@ -32,6 +32,8 @@ pub struct InitArg {
     pub last_scraped_block_number: Nat,
     #[cbor(n(9), with = "icrc_cbor::principal::option")]
     pub evm_rpc_id: Option<Principal>,
+    #[n(10)]
+    pub ethereum_sweeper_contract_address: Option<String>,
 }
 
 impl TryFrom<InitArg> for State {
@@ -47,6 +49,7 @@ impl TryFrom<InitArg> for State {
             next_transaction_nonce,
             last_scraped_block_number,
             evm_rpc_id,
+            ethereum_sweeper_contract_address,
         }: InitArg,
     ) -> Result<Self, Self::Error> {
         use std::str::FromStr;
@@ -57,6 +60,12 @@ impl TryFrom<InitArg> for State {
             InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {e}"))
         })?;
         let eth_helper_contract_address = ethereum_contract_address
+            .map(|a| Address::from_str(&a))
+            .transpose()
+            .map_err(|e| {
+                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
+            })?;
+        let sweeper_contract_address = ethereum_sweeper_contract_address
             .map(|a| Address::from_str(&a))
             .transpose()
             .map_err(|e| {
@@ -110,6 +119,7 @@ impl TryFrom<InitArg> for State {
             erc20_balances: Default::default(),
             log_scrapings,
             automatic_deposits: AutomaticDeposits::default(),
+            sweeper_contract_address,
         };
         state.validate_config()?;
         Ok(state)
