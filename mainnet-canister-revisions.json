@@ -108,8 +108,8 @@
     "tag": "proposal-142801"
   },
   "node-rewards": {
-    "rev": "fc79106bd7662b690ccfce113ce66008fb17eb0a",
-    "sha256": "b5595995dd7791a697f483c297a15b72a37d224afc519f9c95ce0b72359c71be"
+    "rev": "5ec6c4cd04236a30930f57463a272b41ec093127",
+    "sha256": "b646b205a5f967350b71812ca36b3dd6d18dd4074f6ed9060d3874dd6e588bfa"
   },
   "registry": {
     "rev": "3ec5d044f5dc45a93943ec14258891a1c3c272be",
