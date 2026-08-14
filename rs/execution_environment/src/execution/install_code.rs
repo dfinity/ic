@@ -42,30 +42,6 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 #[cfg(test)]
 mod tests;
 
-/// Indicates whether the memory is kept or replaced with new (initial) memory.
-/// Applicable to both the stable memory and the main memory of a canister.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub(crate) enum MemoryHandling {
-    /// Retain the memory.
-    Keep,
-    /// Reset the memory.
-    Replace,
-}
-
-/// Specifies the handling of the canister's memories.
-/// * On install and re-install:
-///   - Replace both the stable memory and the main memory.
-/// * On upgrade:
-///   - For canisters with enhanced orthogonal persistence (Motoko):
-///     Retain both the main memory and the stable memory.
-///   - For all other canisters:
-///     Retain only the stable memory and erase the main memory.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub(crate) struct CanisterMemoryHandling {
-    pub stable_memory_handling: MemoryHandling,
-    pub main_memory_handling: MemoryHandling,
-}
-
 /// The main steps of `install_code` execution that may fail with an error or
 /// change the canister state.
 #[derive(Clone, Debug)]
@@ -73,8 +49,14 @@ pub(crate) struct CanisterMemoryHandling {
 pub(crate) enum InstallCodeStep {
     ValidateInput,
     ReplaceExecutionStateAndAllocations {
+        /// The execution state as returned by
+        /// `Hypervisor::create_execution_state`, i.e. with the memories that
+        /// this `install_code` preserves (if any) already in place. Replaying
+        /// this step hence re-applies those memories as they were at the time
+        /// of the original execution rather than re-deriving them from the
+        /// replayed canister state; the two agree because replaying the
+        /// preceding steps is deterministic.
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        memory_handling: CanisterMemoryHandling,
     },
     ClearCertifiedData,
     ClearLog,
@@ -591,21 +573,21 @@ impl InstallCodeHelper {
         Ok(())
     }
 
-    /// Replaces the execution state of the current canister with the freshly
-    /// created execution state. The stable memory and the main memory are
-    /// conditionally replaced based on the given `memory_handling`.
+    /// Replaces the execution state of the current canister with the newly
+    /// created execution state. Which memories the new execution state carries
+    /// (the initial ones of the new module, the preserved ones of the old
+    /// execution state, or the ones of a snapshot) has already been decided by
+    /// `Hypervisor::create_execution_state`.
     ///
     /// It also updates the compute and memory allocations with the requested
     /// values in `original` context.
     pub fn replace_execution_state_and_allocations(
         &mut self,
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        memory_handling: CanisterMemoryHandling,
     ) -> Result<(), CanisterManagerError> {
         self.steps
             .push(InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 maybe_execution_state: maybe_execution_state.clone(),
-                memory_handling,
             });
 
         let old_memory_usage = self.canister.memory_usage();
@@ -616,22 +598,11 @@ impl InstallCodeHelper {
             .as_ref()
             .map_or(NumBytes::new(0), |es| es.metadata.memory_usage());
 
-        // Replace the execution state and maybe the stable memory.
-        let mut execution_state =
+        // Replace the execution state, dropping the old one.
+        let execution_state =
             maybe_execution_state.map_err(|err| (self.canister.canister_id(), err))?;
 
         let new_wasm_custom_sections_memory_used = execution_state.metadata.memory_usage();
-
-        if let Some(old) = self.canister.execution_state.take() {
-            match memory_handling.stable_memory_handling {
-                MemoryHandling::Keep => execution_state.stable_memory = old.stable_memory,
-                MemoryHandling::Replace => {}
-            }
-            match memory_handling.main_memory_handling {
-                MemoryHandling::Keep => execution_state.wasm_memory = old.wasm_memory,
-                MemoryHandling::Replace => {}
-            }
-        };
 
         self.canister.execution_state = Some(execution_state);
 
@@ -832,10 +803,7 @@ impl InstallCodeHelper {
             InstallCodeStep::ValidateInput => self.validate_input(original),
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 maybe_execution_state,
-                memory_handling,
-            } => {
-                self.replace_execution_state_and_allocations(maybe_execution_state, memory_handling)
-            }
+            } => self.replace_execution_state_and_allocations(maybe_execution_state),
             InstallCodeStep::ClearCertifiedData => {
                 self.clear_certified_data();
                 Ok(())
