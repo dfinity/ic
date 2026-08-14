@@ -292,9 +292,16 @@ pub struct ExecutionTest {
     subnet_memory_reservation: NumBytes,
     // The pool of callbacks available on the subnet.
     subnet_available_callbacks: i64,
-    // The number of instructions executed so far per canister.
+    // The number of instructions executed so far, per canister. This is
+    // accumulated for every executed slice and thus also accounts for slices of
+    // executions that were paused and did not finish (yet). Subnet messages
+    // other than `install_code` are not accounted for at all.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
-    // The total cost of execution so far per canister.
+    // The total cost of execution so far per canister. Unlike
+    // `executed_instructions`, this is accumulated only once a message execution
+    // finishes because the cost of a message must include its base fee exactly
+    // once, i.e. it cannot be charged per slice. Subnet messages other than
+    // `install_code` are not accounted for at all.
     execution_cost: HashMap<CanisterId, CompoundCycles<Instructions>>,
     // Tracks paused subnet message executions per canister.
     // The value is reset when the execution finishes.
@@ -1720,6 +1727,17 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
+            // The instructions of every executed slice are accounted for, even if
+            // the execution was paused and did not finish, whereas the execution
+            // cost is accumulated only once the execution finishes (see below).
+            // For backward compatibility, we only account for the instructions
+            // executed by install code messages.
+            if is_install_code {
+                self.update_executed_instructions(
+                    canister_id,
+                    NumInstructions::from(slice_instructions_used.get() as u64),
+                );
+            }
             match execute_subnet_message_result_type {
                 ExecuteSubnetMessageResultType::Finished => {
                     // cycles charging proceeds by prepaying for the message instruction limit
@@ -1744,9 +1762,10 @@ impl ExecutionTest {
                         // then no instructions should be used.
                         assert_eq!(capped_slice_instructions_used.get(), 0);
                     }
-                    // For backward compatibility, we only perform stats updates for install code messages.
+                    // For backward compatibility, we only account for the
+                    // execution cost of install code messages.
                     if is_install_code {
-                        self.update_execution_stats(
+                        self.update_execution_cost(
                             canister_id,
                             capped_slice_instructions_used,
                             self.get_own_subnet_cycles_config(),
@@ -1907,6 +1926,14 @@ impl ExecutionTest {
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
+                // The instructions of every executed slice are accounted for, even
+                // if the execution was paused and did not finish, whereas the
+                // execution cost is charged only once the execution finishes.
+                self.update_executed_instructions(
+                    canister_id,
+                    NumInstructions::from(slice_instructions_used.get() as u64),
+                );
+
                 match execute_subnet_message_result_type {
                     ExecuteSubnetMessageResultType::Finished => {
                         let paused_subnet_message =
@@ -1936,7 +1963,7 @@ impl ExecutionTest {
                             cycles_used_before,
                             capped_instructions_used,
                         );
-                        self.update_execution_stats(
+                        self.update_execution_cost(
                             canister_id,
                             capped_instructions_used,
                             self.get_own_subnet_cycles_config(),
@@ -1962,6 +1989,7 @@ impl ExecutionTest {
                     compute_allocation_used,
                     subnet_memory_reservation: self.subnet_memory_reservation,
                 };
+                let remaining_round_instructions_before = round_limits.instructions;
                 let result = execute_canister(
                     &self.exec_env,
                     canister,
@@ -1974,10 +2002,20 @@ impl ExecutionTest {
                     state.get_own_subnet_cycles_config(),
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
+                // The instructions of every executed slice are accounted for,
+                // even if the execution was paused and did not finish, whereas
+                // the execution cost is charged only once the execution
+                // finishes.
+                let slice_instructions_used =
+                    remaining_round_instructions_before - round_limits.instructions;
+                self.update_executed_instructions(
+                    canister_id,
+                    NumInstructions::from(slice_instructions_used.get() as u64),
+                );
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = result.instructions_used {
-                    self.update_execution_stats(
+                    self.update_execution_cost(
                         canister_id,
                         instructions_used,
                         state.get_own_subnet_cycles_config(),
@@ -2018,12 +2056,27 @@ impl ExecutionTest {
         executed: NumInstructions,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) {
-        let mgr = &self.cycles_account_manager;
+        self.update_executed_instructions(canister_id, executed);
+        self.update_execution_cost(canister_id, executed, subnet_cycles_config);
+    }
+
+    // Increments the executed instructions counter.
+    fn update_executed_instructions(&mut self, canister_id: CanisterId, executed: NumInstructions) {
         *self
             .executed_instructions
             .entry(canister_id)
             .or_insert(NumInstructions::new(0)) += executed;
+    }
 
+    // Increments the execution cost counter by the cost of the given executed
+    // instructions.
+    fn update_execution_cost(
+        &mut self,
+        canister_id: CanisterId,
+        executed: NumInstructions,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+    ) {
+        let mgr = &self.cycles_account_manager;
         let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
 
         let instruction_cost =

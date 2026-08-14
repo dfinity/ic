@@ -355,6 +355,7 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
     // replica version record
     let replica_version = test_replica_version();
     let replica_version_record = ReplicaVersionRecord {
+        replica_version_id: Some(replica_version.to_string()),
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,

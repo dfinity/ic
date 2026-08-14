@@ -350,6 +350,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = test_replica_version().to_string();
     let replica_version = ReplicaVersionRecord {
+        replica_version_id: Some(replica_version_id.clone()),
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurements: None,
@@ -620,6 +621,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         }],
     });
     let replica_version = ReplicaVersionRecord {
+        replica_version_id: Some(replica_version_id.clone()),
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurements,

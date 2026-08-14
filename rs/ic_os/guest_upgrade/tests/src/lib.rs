@@ -124,6 +124,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             1,
             REPLICA_VERSION,
             ReplicaVersionRecord {
+                replica_version_id: Some(REPLICA_VERSION.to_string()),
                 release_package_sha256_hex: "abc".to_string(),
                 guest_launch_measurements: Some(GuestLaunchMeasurements {
                     guest_launch_measurements: vec![
