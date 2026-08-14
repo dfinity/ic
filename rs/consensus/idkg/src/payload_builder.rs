@@ -362,7 +362,6 @@ fn create_summary_payload_helper(
         .ongoing_xnet_reshares
         .retain(|request, _| !new_key_transcripts.contains(&request.master_key_id));
 
-    idkg_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut idkg_summary, block_reader)?;
 
     Ok(Some(idkg_summary))
@@ -376,7 +375,7 @@ fn update_summary_refs(
     // Gather the refs and update them to point to the new
     // summary block height.
     let prev_refs = summary.active_transcripts();
-    summary.update_refs(height);
+    summary.update_refs(height)?;
 
     // Resolve the transcript refs pointing into the parent chain,
     // copy the resolved transcripts into the summary block.

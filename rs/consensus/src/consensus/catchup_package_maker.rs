@@ -391,6 +391,21 @@ pub(crate) fn create_post_split_summary_block(
             .map_err(|err| format!("Failed to get post-split DKG summary: {err}"))?;
 
     let post_split_height = post_split_dkg_summary.height;
+
+    // Copy over the IDKG summary from the splitting block without forgetting to update all
+    // transcript references
+    let mut idkg = splitting_summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .idkg
+        .clone();
+    if let Some(idkg_payload) = idkg.as_mut() {
+        idkg_payload
+            .update_refs(post_split_height)
+            .map_err(|err| err.to_string())?;
+    }
+
     Ok(Block {
         version: splitting_summary_block.version.clone(),
         // Fake parent
@@ -399,13 +414,7 @@ pub(crate) fn create_post_split_summary_block(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: post_split_dkg_summary,
-                // Copy over the IDKG summary from the splitting block
-                idkg: splitting_summary_block
-                    .payload
-                    .as_ref()
-                    .as_summary()
-                    .idkg
-                    .clone(),
+                idkg,
             }),
         ),
         height: post_split_height,
@@ -459,7 +468,8 @@ mod tests {
         dkg::fake_setup_initial_dkg_context,
         fake_state_with_contexts,
         idkg::{
-            empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
+            create_available_pre_signature_with_key_transcript_and_height, empty_idkg_payload,
+            fake_ecdsa_idkg_master_public_key_id,
             fake_signature_request_context_with_registry_version,
         },
     };
@@ -473,7 +483,7 @@ mod tests {
             BlockPayload, BlockProposal, ConsensusMessageHashable, HasVersion, Payload,
             SummaryPayload,
             dkg::{SplittingArgs, SubnetSplittingStatus},
-            idkg::PreSigId,
+            idkg::{PreSigId, common::TranscriptRef},
         },
         crypto::CryptoHash,
     };
@@ -1265,7 +1275,7 @@ mod tests {
     }
 
     #[test]
-    fn create_post_split_summary_block_copies_idkg_summary() {
+    fn create_post_split_summary_block_copies_idkg_summary_and_updates_refs() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
@@ -1329,7 +1339,16 @@ mod tests {
             let mut payload = block.payload.as_ref().as_summary().clone();
             payload.dkg.subnet_splitting_status =
                 BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
-            let idkg = empty_idkg_payload(SOURCE_SUBNET_ID);
+            // Fill the IDKG summary with dummy, i.e. not necessarily valid, but non-empty
+            // contents, so that there are transcript references to update.
+            let mut idkg = empty_idkg_payload(SOURCE_SUBNET_ID);
+            create_available_pre_signature_with_key_transcript_and_height(
+                &mut idkg,
+                /*caller=*/ 1,
+                fake_ecdsa_idkg_master_public_key_id(),
+                /*key_transcript=*/ None,
+                block.height,
+            );
             payload.idkg = Some(idkg.clone());
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
@@ -1356,9 +1375,40 @@ mod tests {
                 .as_ref()
                 .expect("Post-split summary block should have an IDKG summary");
 
+            // Safety-check: the summary should reference transcripts, and reference them at a
+            // height other than the post-split one, otherwise the assertions below are vacuous.
+            assert!(
+                idkg.active_transcripts()
+                    .iter()
+                    .all(|t_ref| t_ref.height != post_split_block.height),
+                "The transcript references should not already be at the post-split height"
+            );
+            assert!(
+                !idkg.active_transcripts().is_empty() && !idkg.idkg_transcripts.is_empty(),
+                "The IDKG summary should reference transcripts"
+            );
+
+            // Assert that the only difference between the splitting IDKG summary and the
+            // post-split one is the height of the transcript references
+            assert_eq!(
+                idkg.active_transcripts()
+                    .into_iter()
+                    .map(|t_ref| TranscriptRef {
+                        height: post_split_block.height,
+                        ..t_ref
+                    })
+                    .collect::<BTreeSet<_>>(),
+                post_split_idkg.active_transcripts()
+            );
+            // The transcripts themselves should be equal
+            assert_eq!(idkg.idkg_transcripts, post_split_idkg.idkg_transcripts);
+
+            // Sanity-check: the IDKG summary in the post-split block should be equal to the one in
+            // the splitting block after updating transcript references
+            idkg.update_refs(post_split_block.height).unwrap();
             assert_eq!(
                 *post_split_idkg, idkg,
-                "IDKG summary in post-split block should match the splitting block's IDKG summary"
+                "IDKG summary in post-split block should match the splitting block's IDKG summary after updating transcript references"
             );
         })
     }

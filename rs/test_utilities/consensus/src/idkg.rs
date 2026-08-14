@@ -396,6 +396,67 @@ impl From<&ThresholdSchnorrSigInputsOwned> for TestPreSigRef {
     }
 }
 
+pub fn create_available_pre_signature(
+    idkg_payload: &mut IDkgPayload,
+    key_id: IDkgMasterPublicKeyId,
+    caller: u8,
+) -> PreSigId {
+    create_available_pre_signature_with_key_transcript(
+        idkg_payload,
+        caller,
+        key_id,
+        /*key_transcript=*/ None,
+    )
+}
+
+pub fn create_available_pre_signature_with_key_transcript(
+    idkg_payload: &mut IDkgPayload,
+    caller: u8,
+    key_id: IDkgMasterPublicKeyId,
+    key_transcript: Option<UnmaskedTranscript>,
+) -> PreSigId {
+    create_available_pre_signature_with_key_transcript_and_height(
+        idkg_payload,
+        caller,
+        key_id,
+        key_transcript,
+        Height::new(0),
+    )
+}
+
+pub fn create_available_pre_signature_with_key_transcript_and_height(
+    idkg_payload: &mut IDkgPayload,
+    caller: u8,
+    key_id: IDkgMasterPublicKeyId,
+    key_transcript: Option<UnmaskedTranscript>,
+    height: Height,
+) -> PreSigId {
+    let inputs = create_pre_sig_ref_with_height(caller, height, &key_id);
+    let pre_sig_id = idkg_payload.uid_generator.next_pre_signature_id();
+    let mut pre_signature_ref = inputs.pre_signature_ref;
+    if let Some(transcript) = key_transcript {
+        match pre_signature_ref {
+            PreSignatureRef::Ecdsa(ref mut pre_sig) => {
+                pre_sig.key_unmasked_ref = transcript;
+            }
+            PreSignatureRef::Schnorr(ref mut pre_sig) => {
+                pre_sig.key_unmasked_ref = transcript;
+            }
+        }
+    }
+    idkg_payload
+        .available_pre_signatures
+        .insert(pre_sig_id, pre_signature_ref);
+
+    for (t_ref, transcript) in inputs.idkg_transcripts {
+        idkg_payload
+            .idkg_transcripts
+            .insert(t_ref.transcript_id, transcript);
+    }
+
+    pre_sig_id
+}
+
 pub fn empty_idkg_payload(subnet_id: SubnetId) -> IDkgPayload {
     empty_idkg_payload_with_key_ids(subnet_id, vec![fake_ecdsa_idkg_master_public_key_id()])
 }
