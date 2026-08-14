@@ -6068,7 +6068,6 @@ pub mod subnet_memory {
         assert_eq!(balance_of(&env, ledger_id, p1.0), 10_000_000);
     }
 
-
     /// Storage pressure the filler holds while the ledger works normally.
     const PRESSURE_BASE_PAGES: u64 = 3 * GIB / WASM_PAGE_SIZE;
     /// Added while the ledger is suspended in archiving, so that the next page

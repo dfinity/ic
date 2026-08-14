@@ -29,7 +29,9 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_suite_state_machine_helpers::{balance_of, icrc3_get_blocks, list_archives, parse_metric};
+use ic_ledger_suite_state_machine_helpers::{
+    balance_of, icrc3_get_blocks, list_archives, parse_metric,
+};
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -330,11 +332,8 @@ fn archiving_recovers_after_a_trapped_attempt() {
 
     // Raise the reservation limit, as an operator would once alerted, and let
     // the ledger reach the archive trigger threshold again.
-    env.update_settings(
-        &ledger,
-        canister_settings(LEDGER_CYCLES / 2).build(),
-    )
-    .expect("failed to raise the ledger's reserved cycles limit");
+    env.update_settings(&ledger, canister_settings(LEDGER_CYCLES / 2).build())
+        .expect("failed to raise the ledger's reserved cycles limit");
     env.execute_ingress_as(minter(), ledger, "icrc1_transfer", mint_arg(MINT_AMOUNT))
         .expect("failed to mint");
 
@@ -413,7 +412,6 @@ fn transfer_reject_must_not_leave_a_committed_block() {
         }
     }
 }
-
 
 /// Shows how narrow the post-commit window is: it needs the ledger to grow its
 /// memory, which archiving only does when it creates an archive canister.
