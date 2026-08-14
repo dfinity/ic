@@ -6330,14 +6330,19 @@ fn dts_resume_fails_due_to_cycles_decrease() {
     }
 }
 
-/// The cycles added to the cycles balance of a canister while one of its
-/// executions is paused.
+/// The cycles added to the cycles balance of a canister while its execution is
+/// paused.
 const CYCLES_ADDED_WHILE_PAUSED: Cycles = Cycles::new(1_234_567_890);
 
 /// Executes the first slice of the next execution of the given canister, which
 /// must pause, then adds `CYCLES_ADDED_WHILE_PAUSED` to the cycles balance of
 /// that canister if `add_cycles` is set, and finally executes all the remaining
-/// slices of that execution, which must not fail to resume.
+/// slices of that execution.
+///
+/// Asserts that resuming the paused execution did not fail: a failed resume
+/// aborts the paused Wasm execution without executing any further instructions,
+/// so the instructions executed by the remaining slices witness that the Wasm
+/// execution was resumed.
 ///
 /// Returns the cycles balance of the canister after the execution has finished.
 fn paused_execution_resumes_after_cycles_increase(
@@ -6350,6 +6355,7 @@ fn paused_execution_resumes_after_cycles_increase(
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong,
     );
+    let executed_instructions_when_paused = test.canister_executed_instructions(canister_id);
 
     if add_cycles {
         test.canister_state_mut(canister_id)
@@ -6363,6 +6369,10 @@ fn paused_execution_resumes_after_cycles_increase(
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
+    );
+    assert_gt!(
+        test.canister_executed_instructions(canister_id),
+        executed_instructions_when_paused
     );
 
     test.canister_state(canister_id).system_state.balance()

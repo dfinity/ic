@@ -164,8 +164,9 @@ struct PausedInstallCode {
     original_execution_cost: CompoundCycles<Instructions>,
 }
 
-/// Starts an `install_code` execution that is paused after its first slice,
-/// which compiles the Wasm module and executes its `(start)` function.
+/// Starts an `install_code` execution that pauses after its first slice: that
+/// slice compiles the Wasm module and executes its `(start)` function, which
+/// together exceed the slice instruction limit.
 fn install_code_paused_after_first_slice() -> PausedInstallCode {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(DTS_INSTALL_CODE_INSTRUCTION_LIMIT)
