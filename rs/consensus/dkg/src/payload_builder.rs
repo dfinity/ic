@@ -967,6 +967,7 @@ mod tests {
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
         time::UNIX_EPOCH,
     };
+    use rstest::rstest;
     use std::collections::{BTreeMap, BTreeSet};
 
     // Tests creation of local configs.
@@ -1545,28 +1546,29 @@ mod tests {
         block
     }
 
-    #[test]
-    fn test_get_post_split_dkg_summary() {
+    #[rstest]
+    #[case::source(true)]
+    #[case::destination(false)]
+    fn test_get_post_split_dkg_summary(#[case] is_source_subnet: bool) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let source_subnet_id = subnet_test_id(1);
             let destination_subnet_id = subnet_test_id(2);
             let source_nodes: Vec<_> = (0..4).map(node_test_id).collect();
             let destination_nodes: Vec<_> = (4..8).map(node_test_id).collect();
-            let registry_version = 1;
             let dkg_interval_len = 66;
 
             let Dependencies { pool, registry, .. } = DependenciesBuilder::multiple_subnets(
                 pool_config,
                 vec![
                     (
-                        registry_version,
+                        1,
                         source_subnet_id,
                         SubnetRecordBuilder::from(&source_nodes)
                             .with_dkg_interval_length(dkg_interval_len)
                             .build(),
                     ),
                     (
-                        registry_version,
+                        1,
                         destination_subnet_id,
                         SubnetRecordBuilder::from(&destination_nodes)
                             .with_dkg_interval_length(dkg_interval_len)
@@ -1580,8 +1582,13 @@ mod tests {
                 make_splitting_summary_block(&pool, source_subnet_id, destination_subnet_id);
             let last_summary = &splitting_block.payload.as_ref().as_summary().dkg;
 
+            let looked_up_subnet_id = if is_source_subnet {
+                source_subnet_id
+            } else {
+                destination_subnet_id
+            };
             let summary = get_post_split_dkg_summary(
-                destination_subnet_id,
+                looked_up_subnet_id,
                 registry.as_ref(),
                 &splitting_block,
             )
@@ -1600,21 +1607,28 @@ mod tests {
             // should contain only current transcripts.
             assert!(summary.next_transcripts().is_empty());
 
-            let destination_committee = destination_nodes.iter().copied().collect::<BTreeSet<_>>();
+            let expected_committee = if is_source_subnet {
+                source_nodes
+            } else {
+                destination_nodes
+            }
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
             for tag in [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold] {
                 let transcript = summary
                     .current_transcript(&tag)
                     .unwrap_or_else(|| panic!("No current transcript for {tag:?}"));
-                assert_eq!(transcript.committee.get(), &destination_committee);
+                assert_eq!(transcript.committee.get(), &expected_committee);
 
                 let config = summary
                     .configs
                     .values()
                     .find(|config| config.dkg_id().dkg_tag == tag)
                     .unwrap_or_else(|| panic!("No config for {tag:?}"));
-                assert_eq!(config.dkg_id().dealer_subnet, destination_subnet_id);
-                assert_eq!(config.receivers().get(), &destination_committee);
-                assert_eq!(config.dealers().get(), &destination_committee);
+                assert_eq!(config.dkg_id().dealer_subnet, looked_up_subnet_id);
+                assert_eq!(config.receivers().get(), &expected_committee);
+                assert_eq!(config.dealers().get(), &expected_committee);
             }
         });
     }
