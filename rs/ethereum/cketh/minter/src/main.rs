@@ -217,6 +217,15 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     // the state so that the (synchronous) registration below can derive the address.
     state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
+    // Re-check the status after the await: a concurrent balance scan may have detected a deposit and
+    // moved this pair into the sweep queue while we waited for the ECDSA key (only possible right
+    // after an upgrade, before the key is cached). Returning its status here keeps `register_deposit_
+    // address` from trying to re-arm an already-swept pair. From here on the call is synchronous, so
+    // no further scan can interleave before the registration below.
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+    {
+        return Ok(status);
+    }
     mutate_state(|s| s.register_deposit_address(now, account, token))?;
     Ok(
         read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
