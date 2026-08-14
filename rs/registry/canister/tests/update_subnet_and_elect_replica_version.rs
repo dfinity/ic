@@ -17,6 +17,7 @@ use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
 };
 use ic_types::ReplicaVersion;
+use lazy_static::lazy_static;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
@@ -27,25 +28,18 @@ use registry_canister::{
 
 const MOCK_HASH: &str = "acdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdc";
 
-fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
-    Some(GuestLaunchMeasurements {
-        guest_launch_measurements: vec![
-            GuestLaunchMeasurement {
-                measurement: vec![0x42; 48],
-                metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: Some("foo=bar".into()),
-                    vcpu_type: None,
-                }),
-            },
-            GuestLaunchMeasurement {
-                measurement: vec![0x42; 48],
-                metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: Some("hello=world".into()),
-                    vcpu_type: None,
-                }),
-            },
-        ],
-    })
+lazy_static! {
+    static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
+        guest_launch_measurements: vec![GuestLaunchMeasurement {
+            // An SEV-SNP measurement is exactly 48 bytes long. The value itself
+            // does not matter here.
+            measurement: vec![0x42; 48],
+            metadata: Some(GuestLaunchMeasurementMetadata {
+                kernel_cmdline: Some("foo=bar".to_string()),
+                vcpu_type: None,
+            }),
+        }],
+    };
 }
 
 #[test]
@@ -188,7 +182,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             replica_version_to_elect: Some(replica_version_id.into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec![release_package_url.clone()],
-            guest_launch_measurements: guest_launch_measurements_for_test(),
+            guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
             replica_versions_to_unelect: vec![],
         };
         assert!(
@@ -215,7 +209,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             replica_version_to_elect: Some(replica_version_id.into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
-            guest_launch_measurements: guest_launch_measurements_for_test(),
+            guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
             replica_versions_to_unelect: vec![],
         };
         assert!(
@@ -235,9 +229,10 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await,
             ReplicaVersionRecord {
+                replica_version_id: Some(replica_version_id.to_string()),
                 release_package_sha256_hex: MOCK_HASH.into(),
                 release_package_urls: vec![release_package_url.clone()],
-                guest_launch_measurements: guest_launch_measurements_for_test(),
+                guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
             }
         );
 
