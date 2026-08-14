@@ -259,11 +259,12 @@ impl CkEthSetup {
 
     pub fn total_supply(&self) -> Nat {
         Decode!(
-            &assert_reply(
-                self.env
-                    .query(self.ledger_id, "icrc1_total_supply", Encode!().unwrap())
-                    .expect("failed to query the total supply on the ledger")
-            ),
+            &assert_reply(self.env.query_call(
+                self.ledger_id,
+                Principal::anonymous(),
+                "icrc1_total_supply",
+                Encode!().unwrap()
+            )),
             Nat
         )
         .unwrap()
@@ -272,7 +273,7 @@ impl CkEthSetup {
     /// The ledger's minting account: the minter with no subaccount. Transferring there burns.
     pub fn minting_account(&self) -> Account {
         Account {
-            owner: self.minter_id.into(),
+            owner: self.minter_id,
             subaccount: None,
         }
     }
@@ -280,7 +281,7 @@ impl CkEthSetup {
     /// The minter's fee subaccount, where the ckETH taken as withdrawal fees accumulates.
     pub fn fee_account(&self) -> Account {
         Account {
-            owner: self.minter_id.into(),
+            owner: self.minter_id,
             subaccount: Some(CKETH_FEE_SUBACCOUNT),
         }
     }
@@ -362,24 +363,20 @@ impl CkEthSetup {
         amount: u64,
     ) -> Result<Nat, TransferError> {
         Decode!(
-            &assert_reply(
-                self.env
-                    .execute_ingress_as(
-                        PrincipalId::from(Principal::from(self.minter_id)),
-                        self.ledger_id,
-                        "icrc1_transfer",
-                        Encode!(&TransferArg {
-                            from_subaccount: None,
-                            to: to.into(),
-                            fee: None,
-                            created_at_time: None,
-                            memo: None,
-                            amount: Nat::from(amount),
-                        })
-                        .unwrap(),
-                    )
-                    .expect("failed to execute a mint on the ledger")
-            ),
+            &assert_reply(self.env.update_call(
+                self.ledger_id,
+                self.minter_id,
+                "icrc1_transfer",
+                Encode!(&TransferArg {
+                    from_subaccount: None,
+                    to: to.into(),
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                    amount: Nat::from(amount),
+                })
+                .unwrap()
+            )),
             Result<Nat, TransferError>
         )
         .unwrap()
@@ -391,16 +388,12 @@ impl CkEthSetup {
         args: TransferFromArgs,
     ) -> Result<Nat, TransferFromError> {
         Decode!(
-            &assert_reply(
-                self.env
-                    .execute_ingress_as(
-                        PrincipalId::from(Principal::from(self.minter_id)),
-                        self.ledger_id,
-                        "icrc2_transfer_from",
-                        Encode!(&args).unwrap(),
-                    )
-                    .expect("failed to execute icrc2_transfer_from on the ledger")
-            ),
+            &assert_reply(self.env.update_call(
+                self.ledger_id,
+                self.minter_id,
+                "icrc2_transfer_from",
+                Encode!(&args).unwrap()
+            )),
             Result<Nat, TransferFromError>
         )
         .unwrap()
