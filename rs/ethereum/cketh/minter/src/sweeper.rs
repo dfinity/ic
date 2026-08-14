@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::eth_rpc_client::{NoReduction, ToReducedWithStrategy};
 use crate::guard::TimerGuard;
 use crate::ledger_client::LedgerClient;
 use crate::logs::{DEBUG, INFO};
@@ -37,7 +38,14 @@ pub async fn fund_sweeper_address() {
 
     let block_height = read_state(|s| s.ethereum_block_height.clone()).into();
     let sweeper_balance =
-        match crate::eth_rpc_client::get_balance::eth_get_balance(&sweeper, block_height).await {
+        match crate::eth_rpc_client::get_balance::eth_get_balance(&sweeper, block_height)
+            .await
+            // No client-side reduction: the balance is whatever the EVM RPC canister's own
+            // consensus agreed on — a threshold of the providers — and a result it reports as
+            // inconsistent stays an error. Settling for fewer providers than the threshold demands
+            // is not a trade worth making on the number that decides whether ckETH gets burned.
+            .reduce_with_strategy(NoReduction)
+        {
             Ok(balance) => balance,
             Err(e) => {
                 // Not treated as a zero balance: that would burn ckETH for gas already in place.
