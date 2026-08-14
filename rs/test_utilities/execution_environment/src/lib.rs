@@ -1345,9 +1345,9 @@ impl ExecutionTest {
         state.put_canister_state(result.canister);
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.state = Some(state);
-        // The instructions of every executed slice are accounted for, even if the
-        // execution was paused and did not finish, whereas the execution cost is
-        // charged only once the execution finishes.
+        // The executed instructions are accounted for per executed slice, while the
+        // execution cost is accumulated for the whole message. The `unwrap` below
+        // asserts that the task finished within this single slice.
         self.update_executed_instructions(
             canister_id,
             NumInstructions::from(slice_instructions_used.get() as u64),
@@ -1516,9 +1516,10 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
         state.metadata.heap_delta_estimate += heap_delta;
-        // The instructions of every executed slice are accounted for, even if the
-        // execution was paused and did not finish, whereas the execution cost is
-        // charged only once the execution finishes.
+        // The executed instructions are accounted for per executed slice, while the
+        // execution cost is accumulated for the whole message. The response
+        // execution is expected to finish within this single slice (the `Paused`
+        // case above is unreachable).
         self.update_executed_instructions(
             canister_id,
             NumInstructions::from(slice_instructions_used.get() as u64),
