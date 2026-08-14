@@ -2700,6 +2700,42 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
     );
 }
 
+/// Tests that the ingress filter rejects all ingress messages with
+/// `RejectCode::SysTransient` while the subnet is cooling down.
+#[test]
+fn ingress_message_to_cooling_down_subnet_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+
+    // Sanity check: the message is accepted while the subnet is not cooling down.
+    test.should_accept_ingress_message(canister, "update", vec![])
+        .unwrap();
+
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .subnets_mut()
+                .get_mut(&own_subnet_id)
+                .unwrap()
+                .cooling_down = true;
+        });
+
+    // Both canister-addressed and subnet-addressed messages are now rejected.
+    let err = test
+        .should_accept_ingress_message(canister, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetCoolingDown, err.code());
+    assert_eq!(RejectCode::SysTransient, err.reject_code());
+
+    let payload = Encode!(&CanisterIdRecord::from(canister)).unwrap();
+    let err = test
+        .should_accept_ingress_message(CanisterId::ic_00(), Method::CanisterStatus, payload)
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetCoolingDown, err.code());
+}
+
 #[test]
 fn message_to_empty_canister_is_rejected() {
     let mut test = ExecutionTestBuilder::new().build();

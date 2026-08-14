@@ -9,11 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added a new proposal type: `UpdateStandardEngineReplicaVersion`. Change what
-  replica version(s) are run by Cloud Engines.
-
-* Added support for upgrade options to `InstallCode` proposals.
-
 ## Changed
 
 ## Deprecated
@@ -21,5 +16,9 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
+
+* `validate_assign_noid_payload` no longer panics when a node provider has
+  `id = None`. It now skips such providers safely, preventing all
+  `AddNodeOperator` proposal submissions from being blocked.
 
 ## Security

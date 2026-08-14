@@ -467,7 +467,9 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
-            is_composite_query(&original.call_origin),
+            // Composite queries are always executed in the non-replicated mode,
+            // where their responses are handled by the query handler.
+            false,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -523,7 +525,9 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
-            is_composite_query(&original.call_origin),
+            // Composite queries are always executed in the non-replicated mode,
+            // where their responses are handled by the query handler.
+            false,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -720,16 +724,6 @@ struct OriginalContext {
     /// Sender info from the ingress message that created the call context.
     /// `None` for call contexts created by inter-canister calls.
     sender_info: Option<SenderInfo>,
-}
-
-fn is_composite_query(origin: &CallOrigin) -> bool {
-    match origin {
-        CallOrigin::CanisterQuery { .. } => true,
-        CallOrigin::CanisterUpdate { .. }
-        | CallOrigin::Ingress { .. }
-        | CallOrigin::Query { .. }
-        | CallOrigin::SystemTask => false,
-    }
 }
 
 /// Struct used to hold necessary information for the

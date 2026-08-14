@@ -176,6 +176,7 @@ pub fn generate_subnets(
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule,
                 subnet_admins,
+                cooling_down: false,
             },
         );
     }

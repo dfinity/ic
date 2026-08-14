@@ -8,8 +8,8 @@ use ic_protobuf::{
 use ic_types::{
     NumBytes,
     batch::{
-        CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponses,
-        iterator_to_bytes, slice_to_messages,
+        CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
+        FlexibleCanisterHttpResponses, iterator_to_bytes, slice_to_messages,
     },
     messages::CallbackId,
 };
@@ -33,6 +33,9 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
             Some(MessageType::FlexibleError(flex_error)) => payload
                 .flexible_errors
                 .push(FlexibleCanisterHttpError::try_from(flex_error)?),
+            Some(MessageType::OutOfCycles(out_of_cycles)) => payload
+                .out_of_cycles
+                .push(CanisterHttpOutOfCycles::try_from(out_of_cycles)?),
             None => return Err(ProxyDecodeError::MissingField("message_type")),
         }
     }
@@ -44,6 +47,7 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
     let CanisterHttpPayload {
         timeouts,
         divergence_responses,
+        out_of_cycles,
         responses,
         flexible_responses,
         flexible_errors,
@@ -88,6 +92,15 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
                             pb::FlexibleCanisterHttpError::from(flex_error),
                         )),
                     }),
+            )
+            .chain(
+                out_of_cycles
+                    .into_iter()
+                    .map(|out_of_cycles| CanisterHttpResponseMessage {
+                        message_type: Some(MessageType::OutOfCycles(
+                            pb::CanisterHttpOutOfCycles::from(out_of_cycles),
+                        )),
+                    }),
             );
 
     iterator_to_bytes(message_iterator, max_size)
@@ -117,7 +130,7 @@ pub(crate) fn parse_past_payload_ids(
         .collect()
 }
 
-/// Extracts the CanisterId (as u64) from a [`CanisterHttpResponseMessage`]
+/// Extracts the CallbackId (as u64) from a [`CanisterHttpResponseMessage`]
 fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
     match message.message_type {
         Some(MessageType::Response(response)) => response.response.map(|response| response.id),
@@ -129,6 +142,7 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
             .and_then(|share| share.metadata.as_ref().map(|md| md.id)),
         Some(MessageType::FlexibleResponses(flex_responses)) => Some(flex_responses.callback_id),
         Some(MessageType::FlexibleError(flex_error)) => Some(flex_error.callback_id),
+        Some(MessageType::OutOfCycles(out_of_cycles)) => Some(out_of_cycles.callback_id),
         Some(MessageType::Timeout(id)) => Some(id),
         None => None,
     }

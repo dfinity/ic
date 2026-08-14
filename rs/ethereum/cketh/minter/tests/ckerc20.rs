@@ -1,6 +1,5 @@
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
-use ic_base_types::CanisterId;
 use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
@@ -31,10 +30,9 @@ use ic_cketh_test_utils::{
     LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, format_ethereum_address_to_eip_55,
 };
 use ic_ethereum_types::Address;
-use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
+use ic_ledger_suite_orchestrator_test_utils::pocket_ic::flow::call_ledger_icrc1_total_supply;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
-use ic_management_canister_types_private::CanisterStatusType;
-use ic_state_machine_tests::{ErrorCode, WasmResult};
+use ic_management_canister_types::CanisterStatusType;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
@@ -45,13 +43,13 @@ use std::time::Duration;
 fn should_refuse_to_add_ckerc20_token_from_unauthorized_principal() {
     let cketh = CkEthSetup::default();
     let result = cketh.add_ckerc20_token(Principal::anonymous(), &ckusdc());
-    assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("ERROR: ERC-20"));
+    assert_matches!(result, Err(e) if e.error_code == pocket_ic::ErrorCode::CanisterCalledTrap && e.reject_message.contains("ERROR: ERC-20"));
 
     let orchestrator_id: Principal = "nbsys-saaaa-aaaar-qaaga-cai".parse().unwrap();
     let result = cketh
         .upgrade_minter_to_add_orchestrator_id(orchestrator_id)
         .add_ckerc20_token(Principal::anonymous(), &ckusdc());
-    assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("ERROR: only the orchestrator"));
+    assert_matches!(result, Err(e) if e.error_code == pocket_ic::ErrorCode::CanisterCalledTrap && e.reject_message.contains("ERROR: only the orchestrator"));
 
     fn ckusdc() -> AddCkErc20Token {
         AddCkErc20Token {
@@ -97,9 +95,7 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
 
     let mut ckerc20 = CkErc20Setup::default();
     let usdc = usdc();
-    let stop_msg_id = ckerc20
-        .env
-        .stop_canister_non_blocking(ckerc20.cketh.minter_id);
+    let stop_msg_id = ckerc20.cketh.submit_stop_minter();
     assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopping);
 
     ckerc20.orchestrator = ckerc20
@@ -114,16 +110,19 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
         .ledger
         .unwrap();
 
+    // `stop_ongoing_https_outcalls` above guarantees no outcall is left pending (it panics
+    // otherwise), so pocket-ic's own built-in `await_call` can be used as-is here: unlike
+    // elsewhere in this suite, there is nothing left for a test-injected mock response to answer.
     ckerc20.cketh.stop_ongoing_https_outcalls();
-    let stop_res = ckerc20.env.await_ingress(stop_msg_id, 100);
-    assert_matches!(stop_res, Ok(WasmResult::Reply(_)));
+    let stop_res = ckerc20.env.await_call(stop_msg_id);
+    assert_matches!(stop_res, Ok(_));
     assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopped);
-    ckerc20.env.advance_time(RETRY_FREQUENCY);
+    ckerc20.advance_time(RETRY_FREQUENCY);
     ckerc20.env.tick();
 
     ckerc20.cketh.start_minter();
     assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Running);
-    ckerc20.env.advance_time(RETRY_FREQUENCY);
+    ckerc20.advance_time(RETRY_FREQUENCY);
     ckerc20.env.tick();
 
     ckerc20
@@ -147,16 +146,28 @@ fn should_mint_with_ckerc20_setup() {
 mod deposit_erc20 {
     use assert_matches::assert_matches;
     use candid::Principal;
+    use ic_cketh_minter::endpoints::DepositStatus;
     use ic_cketh_minter::endpoints::events::EventPayload;
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::DEFAULT_USER_SUBACCOUNT;
     use ic_cketh_test_utils::ckerc20::CkErc20Setup;
-    use ic_ledger_suite_orchestrator_test_utils::new_state_machine;
+    use ic_cketh_test_utils::new_pocket_ic;
+    use std::collections::BTreeSet;
     use std::sync::Arc;
+
+    /// Number of `AutomaticDepositReceived` events currently in the minter's audit log.
+    fn count_automatic_deposits_received(ckerc20: &CkErc20Setup) -> usize {
+        ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .filter(|event| matches!(event.payload, EventPayload::AutomaticDepositReceived { .. }))
+            .count()
+    }
 
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
-        let ckerc20 = CkErc20Setup::new_without_ckerc20_active(Arc::new(new_state_machine()));
+        let ckerc20 = CkErc20Setup::new_without_ckerc20_active(Arc::new(new_pocket_ic()));
         let caller = ckerc20.caller();
         ckerc20
             .call_minter_deposit_erc20(caller, None)
@@ -183,14 +194,18 @@ mod deposit_erc20 {
         let time_after = ckerc20.env.get_time().as_nanos_since_unix_epoch();
 
         assert_eq!(
-            response.address, "0x9cEc8260d73Be0C2f2cC217808bf21008Bf22E4C",
+            response.address, "0xaEE5aaa7fBfA9802e128D93e12eC4387824E4e4E",
             "BUG: key derivation should be stable"
         );
+        let valid_until = match &response.status {
+            DepositStatus::Scanning { valid_until, .. } => *valid_until,
+            other => panic!("BUG: expected Scanning, got {other:?}"),
+        };
         assert!(
             (time_before + scan_window_nanos..=time_after + scan_window_nanos)
-                .contains(&response.valid_until),
+                .contains(&valid_until),
             "BUG: valid_until {} not in [{}, {}]",
-            response.valid_until,
+            valid_until,
             time_before + scan_window_nanos,
             time_after + scan_window_nanos,
         );
@@ -289,8 +304,14 @@ mod deposit_erc20 {
         let (ckerc20, before) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
-        assert_eq!(before.scan_count, 0);
-        assert_eq!(before.last_scanned_block, None);
+        assert_matches!(
+            before.status,
+            DepositStatus::Scanning {
+                scan_count: 0,
+                last_scanned_block: None,
+                ..
+            }
+        );
 
         // Establish a latest block height, then run one balance-scan tick over the single armed
         // address (one balance per supported token; the values are irrelevant to scan progress).
@@ -299,14 +320,147 @@ mod deposit_erc20 {
         ckerc20.run_balance_scan(&vec![2_000_000_u128; tokens]);
 
         // deposit_erc20 now reports the address as scanned once, at that block height.
-        let (_ckerc20, after) = ckerc20
+        let (ckerc20, after) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
         assert_eq!(after.address, before.address);
-        assert_eq!(after.scan_count, 1);
+        assert_matches!(
+            after.status,
+            DepositStatus::Scanning { scan_count, last_scanned_block, .. }
+                if scan_count == 1 && last_scanned_block == Some(candid::Nat::from(scanned_at))
+        );
+
+        // The balances were below every token's minimum, so nothing was moved to the sweep queue.
+        assert!(
+            ckerc20.cketh.get_all_events().iter().all(|event| !matches!(
+                event.payload,
+                EventPayload::AutomaticDepositReceived { .. }
+            )),
+            "below-minimum balances must not emit an AutomaticDepositReceived event"
+        );
+    }
+
+    #[test]
+    fn should_move_funded_addresses_to_the_sweep_queue() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let tokens = ckerc20.supported_erc20_tokens.len();
+        assert!(
+            tokens >= 1,
+            "BUG: expected at least one supported ckERC20 token"
+        );
+
+        // Nothing awaits sweeping before any scan.
+        assert_eq!(count_automatic_deposits_received(&ckerc20), 0);
+
+        let (ckerc20, before) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+
+        // A balance well above every supported token's minimum makes the address a candidate for
+        // each token, so it is moved out of the watchlist into the sweep queue (one entry per
+        // token).
+        let scanned_at = 4_500_000_u64;
+        ckerc20.refresh_latest_block(scanned_at);
+        ckerc20.run_balance_scan(&vec![1_000_000_000_u128; tokens]);
+
+        // The move is event-sourced (metrics are deferred to DEFI-2965, so get_events is the sole
+        // observable): a single AutomaticDepositReceived event for the scanned account, listing every
+        // funded token, recorded the moment the funds were detected (durable even across an ungraceful
+        // trap).
+        let received: Vec<_> = ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .filter_map(|event| match event.payload {
+                EventPayload::AutomaticDepositReceived {
+                    owner,
+                    subaccount,
+                    address,
+                    deposits,
+                    ..
+                } => Some((owner, subaccount, address, deposits)),
+                _ => None,
+            })
+            .collect();
         assert_eq!(
-            after.last_scanned_block,
-            Some(candid::Nat::from(scanned_at))
+            received.len(),
+            1,
+            "one AutomaticDepositReceived event for the funded account"
+        );
+        let (owner, subaccount, address, deposits) = &received[0];
+        assert_eq!(*owner, caller);
+        assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
+        assert_eq!(*address, before.address);
+        let distinct_tokens: BTreeSet<&String> = deposits.iter().map(|d| &d.token).collect();
+        assert_eq!(
+            distinct_tokens.len(),
+            tokens,
+            "one deposit entry per funded token"
+        );
+
+        // deposit_erc20 now reports the detected funds (AwaitingSweep) at the same address, with one
+        // DetectedDeposit per funded token — the scanned balance, at the scan block.
+        let expected_tokens: BTreeSet<String> = ckerc20
+            .supported_erc20_tokens
+            .iter()
+            .map(|t| t.contract.address.clone())
+            .collect();
+        let (ckerc20, detected) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(detected.address, before.address);
+        let deposits = match &detected.status {
+            DepositStatus::AwaitingSweep(deposits) => deposits.clone(),
+            other => panic!("BUG: expected AwaitingSweep, got {other:?}"),
+        };
+        assert_eq!(
+            deposits.len(),
+            tokens,
+            "one DetectedDeposit per funded token"
+        );
+        assert_eq!(
+            deposits
+                .iter()
+                .map(|d| d.token.clone())
+                .collect::<BTreeSet<_>>(),
+            expected_tokens,
+            "detected tokens must be the supported ckERC20 contracts"
+        );
+        for d in &deposits {
+            assert_eq!(
+                d.scanned_balance,
+                candid::Nat::from(1_000_000_000_u64),
+                "the scanned balance is reported"
+            );
+            assert_eq!(
+                d.detected_at_block,
+                candid::Nat::from(scanned_at),
+                "detected at the scan block"
+            );
+        }
+
+        // The sweep queue must survive a real pre_upgrade -> post_upgrade cycle: it is rebuilt by
+        // replaying the CBOR-encoded AutomaticDepositReceived events (not the watchlist snapshot), which
+        // check_audit_log asserts is_equivalent_to the live state. A wrong minicbor annotation on
+        // AutomaticDeposit would fail here.
+        ckerc20
+            .cketh
+            .check_audit_logs_and_upgrade_as_ref(Default::default());
+        assert_eq!(
+            count_automatic_deposits_received(&ckerc20),
+            1,
+            "AutomaticDepositReceived events must survive the upgrade round-trip"
+        );
+
+        // A second deposit_erc20 returns the SAME AwaitingSweep and still does NOT re-arm the
+        // address (a detected address is never put back on the watchlist / re-scanned).
+        let (_ckerc20, again) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(
+            again, detected,
+            "a detected address is reported identically and never re-armed"
         );
     }
 
@@ -408,9 +562,9 @@ mod withdraw_erc20 {
         CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE,
-        JsonRpcProvider,
+        JsonRpcProvider, new_pocket_ic,
     };
-    use ic_ledger_suite_orchestrator_test_utils::{CKERC20_TRANSFER_FEE, new_state_machine};
+    use ic_ledger_suite_orchestrator_test_utils::CKERC20_TRANSFER_FEE;
     use icrc_ledger_types::icrc3::transactions::Burn;
     use num_bigint::BigUint;
     use num_traits::ToPrimitive;
@@ -422,7 +576,7 @@ mod withdraw_erc20 {
 
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
-        CkErc20Setup::new_without_ckerc20_active(Arc::new(new_state_machine()))
+        CkErc20Setup::new_without_ckerc20_active(Arc::new(new_pocket_ic()))
             .call_minter_withdraw_erc20(
                 Principal::anonymous(),
                 0_u8,
@@ -662,7 +816,7 @@ mod withdraw_erc20 {
                         subaccount: None,
                     },
                     spender: Some(Account {
-                        owner: minter.into(),
+                        owner: minter,
                         subaccount: None,
                     }),
                     memo: Some(Memo::from(BurnMemo::Erc20GasFee {
@@ -691,7 +845,7 @@ mod withdraw_erc20 {
                 },
             ]);
 
-            ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
+            ckerc20.advance_time(PROCESS_REIMBURSEMENT);
             ckerc20.env.tick();
             ckerc20.env.tick();
             let balance_after_reimbursement = ckerc20.cketh.balance_of(caller);
@@ -790,7 +944,7 @@ mod withdraw_erc20 {
             .expect_refresh_gas_fee_estimate(identity)
             .expect_error(insufficient_allowance_error.clone());
 
-        ckerc20.env.advance_time(Duration::from_secs(59));
+        ckerc20.advance_time(Duration::from_secs(59));
 
         let ckerc20 = ckerc20
             .call_minter_withdraw_erc20(
@@ -802,7 +956,7 @@ mod withdraw_erc20 {
             .expect_no_refresh_gas_fee_estimate()
             .expect_error(insufficient_allowance_error.clone());
 
-        ckerc20.env.advance_time(Duration::from_millis(1_001));
+        ckerc20.advance_time(Duration::from_millis(1_001));
 
         ckerc20
             .call_minter_withdraw_erc20(
@@ -948,7 +1102,7 @@ mod withdraw_erc20 {
                 amount: ckerc20_tx_fee.into(),
                 from: cketh_account,
                 spender: Some(Account {
-                    owner: minter.into(),
+                    owner: minter,
                     subaccount: None,
                 }),
                 memo: Some(Memo::from(BurnMemo::Erc20GasFee {
@@ -969,7 +1123,7 @@ mod withdraw_erc20 {
                 amount: ckerc20_withdrawal_amount.into(),
                 from: ckerc20_account,
                 spender: Some(Account {
-                    owner: minter.into(),
+                    owner: minter,
                     subaccount: None,
                 }),
                 memo: Some(Memo::from(BurnMemo::Erc20Convert {
@@ -1056,7 +1210,7 @@ mod withdraw_erc20 {
                 },
             ]);
 
-            ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
+            ckerc20.advance_time(PROCESS_REIMBURSEMENT);
             let cketh_balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
                 ckerc20.cketh_ledger_id(),
                 cketh_account,
@@ -1331,7 +1485,7 @@ mod withdraw_erc20 {
         let ckerc20_tx_fee = DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE;
         let (first_tx, first_tx_sig) = default_erc20_signed_eip_1559_transaction();
         let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
-        let resubmitted_sent_tx = "0x02f8b0018084625900808507af2c9f6282fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480c001a03acbc792d2f821acaab8da81517f1905e30cd3acd2f85d7995c68c0ad1fd8817a0793a076f2163658c833ccddd37ee0a762a18adb423f689db5ffcf528ae667bf0";
+        let resubmitted_sent_tx = "0x02f8b0018084625900808507af2c9f6282fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480c001a06e09ef9986f589954218ef3f4d8959beb931d28e837f7b26845612875bf2b6c0a02595a316273c3ec265988faf4a698f73d86fd8fb7050b1569e453cab743415a2";
         let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
         let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
         assert_eq!(
@@ -1544,7 +1698,7 @@ mod withdraw_erc20 {
         assert_eq!(price, second_price);
 
         // test an error case
-        let not_ledger_id = ckerc20.cketh.minter_id.into();
+        let not_ledger_id = ckerc20.cketh.minter_id;
         ckerc20
             .cketh
             .eip_1559_transaction_price_expecting_err(not_ledger_id);
@@ -1707,12 +1861,8 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
     let caller = ckerc20.caller();
 
-    let stop_res = ckerc20.env.stop_canister(ckerc20.cketh.ledger_id);
-    assert_matches!(
-        stop_res,
-        Ok(WasmResult::Reply(_)),
-        "Failed to stop ckETH ledger"
-    );
+    let stop_res = ckerc20.env.stop_canister(ckerc20.cketh.ledger_id, None);
+    assert_matches!(stop_res, Ok(()), "Failed to stop ckETH ledger");
     ckerc20.stop_ckerc20_ledger(ckusdc.ledger_canister_id);
 
     let deposit_flow = ckerc20.deposit_cketh_and_ckerc20(
@@ -1756,15 +1906,11 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
             )
         });
 
-    let start_res = ckerc20.env.start_canister(ckerc20.cketh.ledger_id);
-    assert_matches!(
-        start_res,
-        Ok(WasmResult::Reply(_)),
-        "Failed to start ckETH ledger"
-    );
+    let start_res = ckerc20.env.start_canister(ckerc20.cketh.ledger_id, None);
+    assert_matches!(start_res, Ok(()), "Failed to start ckETH ledger");
     ckerc20.start_ckerc20_ledger(ckusdc.ledger_canister_id);
 
-    ckerc20.env.advance_time(MINT_RETRY_DELAY);
+    ckerc20.advance_time(MINT_RETRY_DELAY);
     ckerc20.env.tick();
 
     let ckerc20 = ckerc20.check_events().assert_has_unique_events_in_order(&[
@@ -1791,10 +1937,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
         Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)
     );
     assert_eq!(
-        call_ledger_icrc1_total_supply(
-            &ckerc20.env,
-            CanisterId::unchecked_from_principal(ckusdc.ledger_canister_id.into()),
-        ),
+        call_ledger_icrc1_total_supply(&ckerc20.env, ckusdc.ledger_canister_id),
         Nat::from(ONE_USDC)
     );
 }
@@ -1928,7 +2071,7 @@ fn should_retrieve_minter_info() {
                 LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
             ),
             cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
-            evm_rpc_id: Some(ckerc20.cketh.evm_rpc_id.into()),
+            evm_rpc_id: Some(ckerc20.cketh.evm_rpc_id),
         }
     );
 }
@@ -1980,8 +2123,9 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // Set latest_finalized_block so that we scraped twice each time.
     let latest_finalized_block =
         LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range * 2;
-    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    ckerc20.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
         .expect_rpc_calls(&ckerc20);
@@ -2057,8 +2201,9 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // Advance block height and scrape again
     let latest_finalized_block =
         u64::try_from(second_to_block.into_inner()).unwrap() + max_eth_logs_block_range;
-    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    ckerc20.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
         .expect_rpc_calls(&ckerc20);
@@ -2099,7 +2244,7 @@ fn should_not_scrape_when_no_erc20_token() {
 
     // Set latest_finalized_block so that we scrapped twice each time.
     let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range;
-    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    ckerc20.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
