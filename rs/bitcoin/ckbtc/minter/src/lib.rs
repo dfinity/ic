@@ -26,7 +26,7 @@ use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
-pub use ic_btc_interface::{OutPoint, Page, Satoshi, Txid, Utxo};
+pub use ic_btc_interface::{Address, OutPoint, Page, Satoshi, Txid, Utxo};
 
 pub mod address;
 pub mod dashboard;
@@ -96,85 +96,32 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-/// Newtype around [`bitcoin_canister::GetUtxosRequest`].
-///
-/// The request type re-exported by `ic-cdk-bitcoin-canister` (from
-/// `ic-btc-interface`) no longer derives `Clone` or `Ord`, unlike the
-/// `ic_cdk::bitcoin_canister` type it replaced. The minter clones this request
-/// and uses it as a key in [`GetUtxosCache`] (a `BTreeMap`), so we restore
-/// `Clone` and `Ord` here, reproducing the structural behavior of the previous
-/// derived implementations.
-#[derive(Debug, Eq, PartialEq)]
-pub struct GetUtxosRequest(pub bitcoin_canister::GetUtxosRequest);
-
-impl Clone for GetUtxosRequest {
-    fn clone(&self) -> Self {
-        use bitcoin_canister::UtxosFilterInRequest;
-
-        let inner = &self.0;
-        let filter = inner.filter.as_ref().map(|filter| match filter {
-            UtxosFilterInRequest::MinConfirmations(n) => UtxosFilterInRequest::MinConfirmations(*n),
-            UtxosFilterInRequest::min_confirmations(n) => {
-                UtxosFilterInRequest::min_confirmations(*n)
-            }
-            UtxosFilterInRequest::Page(page) => UtxosFilterInRequest::Page(page.clone()),
-            UtxosFilterInRequest::page(page) => UtxosFilterInRequest::page(page.clone()),
-        });
-
-        Self(bitcoin_canister::GetUtxosRequest {
-            address: inner.address.clone(),
-            network: inner.network,
-            filter,
-        })
-    }
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct GetUtxosRequest {
+    pub address: Address,
+    pub network: Network,
+    pub filter: Option<UtxosFilter>,
 }
 
-impl PartialOrd for GetUtxosRequest {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub enum UtxosFilter {
+    MinConfirmations(u32),
+    Page(Page),
 }
 
-impl Ord for GetUtxosRequest {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        get_utxos_request_ordering_key(&self.0).cmp(&get_utxos_request_ordering_key(&other.0))
+impl From<&GetUtxosRequest> for bitcoin_canister::GetUtxosRequest {
+    fn from(request: &GetUtxosRequest) -> Self {
+        Self {
+            address: request.address.clone(),
+            network: request.network.into(),
+            filter: request.filter.clone().map(|filter| match filter {
+                UtxosFilter::MinConfirmations(min_confirmations) => {
+                    bitcoin_canister::UtxosFilterInRequest::MinConfirmations(min_confirmations)
+                }
+                UtxosFilter::Page(page) => bitcoin_canister::UtxosFilterInRequest::Page(page),
+            }),
+        }
     }
-}
-
-/// A total order over [`bitcoin_canister::GetUtxosRequest`] consistent with its
-/// (derived, structural) `Eq`: distinct enum variants map to distinct ranks, so
-/// two keys compare equal exactly when the requests are structurally equal.
-fn get_utxos_request_ordering_key(
-    request: &bitcoin_canister::GetUtxosRequest,
-) -> (&str, u8, u8, u32, &[u8]) {
-    use bitcoin_canister::{NetworkInRequest, UtxosFilterInRequest};
-
-    let network_rank = match request.network {
-        NetworkInRequest::Mainnet => 0,
-        NetworkInRequest::mainnet => 1,
-        NetworkInRequest::Testnet => 2,
-        NetworkInRequest::testnet => 3,
-        NetworkInRequest::Regtest => 4,
-        NetworkInRequest::regtest => 5,
-    };
-
-    // (filter_rank, min_confirmations, page): only one of the latter two carries
-    // information for a given variant; the others stay zero/empty.
-    let (filter_rank, min_confirmations, page): (u8, u32, &[u8]) = match &request.filter {
-        None => (0, 0, &[]),
-        Some(UtxosFilterInRequest::MinConfirmations(n)) => (1, *n, &[]),
-        Some(UtxosFilterInRequest::min_confirmations(n)) => (2, *n, &[]),
-        Some(UtxosFilterInRequest::Page(page)) => (3, 0, page.as_ref()),
-        Some(UtxosFilterInRequest::page(page)) => (4, 0, page.as_ref()),
-    };
-
-    (
-        request.address.as_str(),
-        network_rank,
-        filter_rank,
-        min_confirmations,
-        page,
-    )
 }
 
 pub type GetCurrentFeePercentilesRequest = bitcoin_canister::GetCurrentFeePercentilesRequest;
@@ -189,31 +136,19 @@ pub struct GetUtxosResponse {
 impl From<bitcoin_canister::GetUtxosResponse> for GetUtxosResponse {
     fn from(response: bitcoin_canister::GetUtxosResponse) -> Self {
         Self {
-            utxos: response
-                .utxos
-                .into_iter()
-                .map(|utxo| Utxo {
-                    outpoint: OutPoint {
-                        txid: Txid::try_from(utxo.outpoint.txid.as_ref())
-                            .unwrap_or_else(|_| panic!("Unable to parse TXID")),
-                        vout: utxo.outpoint.vout,
-                    },
-                    value: utxo.value,
-                    height: utxo.height,
-                })
-                .collect(),
-
+            utxos: response.utxos,
             tip_height: response.tip_height,
             next_page: response.next_page,
         }
     }
 }
 
-// Note that both [ic_btc_interface::Network] and
-// [ic_cdk_bitcoin_canister::Network] from ic_cdk
+// Note that [ic_btc_interface::Network]
 // would serialize to lowercase names, but here we keep uppercase names for
 // backward compatibility with the state of already deployed minter canister.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+)]
 pub enum Network {
     Mainnet,
     Testnet,

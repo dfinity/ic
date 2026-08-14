@@ -1,7 +1,9 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
 use crate::tx::FeeRate;
-use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, tx};
+use crate::{
+    CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, UtxosFilter, tx,
+};
 use candid::Principal;
 use ic_btc_checker::{CheckTransactionArgs, CheckTransactionResponse};
 use ic_btc_interface::{Address, Utxo};
@@ -158,13 +160,11 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
     let start_time = runtime.time();
     let mut now = start_time;
-    let request = GetUtxosRequest(bitcoin_canister::GetUtxosRequest {
+    let request = GetUtxosRequest {
         address: address.clone(),
-        network: network.into(),
-        filter: Some(bitcoin_canister::UtxosFilterInRequest::MinConfirmations(
-            min_confirmations,
-        )),
-    });
+        network,
+        filter: Some(UtxosFilter::MinConfirmations(min_confirmations)),
+    };
 
     let mut response = bitcoin_get_utxos(&mut now, request.clone(), source, runtime).await?;
 
@@ -173,9 +173,10 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
-        let mut paged_request = request.clone().0;
-        paged_request.filter = Some(bitcoin_canister::UtxosFilterInRequest::Page(page));
-        let paged_request = GetUtxosRequest(paged_request);
+        let paged_request = GetUtxosRequest {
+            filter: Some(UtxosFilter::Page(page)),
+            ..request.clone()
+        };
         response = bitcoin_get_utxos(&mut now, paged_request, source, runtime).await?;
         utxos.append(&mut response.utxos);
         num_pages += 1;
@@ -190,7 +191,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
 /// Fetches a subset of UTXOs for the specified address.
 pub async fn bitcoin_get_utxos(request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    bitcoin_canister::bitcoin_get_utxos(&request.0)
+    bitcoin_canister::bitcoin_get_utxos(&request.into())
         .await
         .map(GetUtxosResponse::from)
         .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_utxos", err))
