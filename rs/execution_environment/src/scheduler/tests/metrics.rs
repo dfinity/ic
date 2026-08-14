@@ -24,8 +24,8 @@ use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
-    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, labels,
-    metric_vec,
+    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec,
+    metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
@@ -597,44 +597,7 @@ fn observe(state: &ReplicatedState) -> MetricsRegistry {
     registry
 }
 
-/// Asserts that the given gauge vector has a value of 1 for `one` and of 0 for all
-/// the other `label_values`; or 0 for all of them, if `one` is `None`.
-fn assert_gauge_vec(
-    one: Option<&str>,
-    state: &ReplicatedState,
-    name: &str,
-    label_name: &str,
-    label_values: &[&str],
-) {
-    if let Some(one) = one {
-        assert!(label_values.contains(&one), "unexpected label value {one}");
-    }
-    let expected: MetricVec<u64> = label_values
-        .iter()
-        .map(|value| {
-            (
-                labels(&[(label_name, value)]),
-                u64::from(Some(*value) == one),
-            )
-        })
-        .collect();
-    assert_eq!(
-        expected,
-        fetch_int_gauge_vec(&observe(state), name),
-        "unexpected value of `{name}`"
-    );
-}
-
 const INGRESS_HISTORY_LENGTH_BY_STATE: &str = "replicated_state_ingress_history_length_by_state";
-/// All label values of `INGRESS_HISTORY_LENGTH_BY_STATE`.
-const INGRESS_STATES: &[&str] = &[
-    "received",
-    "processing",
-    "completed",
-    "failed",
-    "done",
-    "unknown",
-];
 
 #[test]
 fn replicated_state_metrics_ingress_history_length_by_state() {
@@ -645,11 +608,25 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
         state,
     };
 
-    // Note that `IngressState::Done` is not covered here: it cannot be recorded
-    // directly, only reached by forgetting a terminal status (see below). And
-    // neither is `IngressStatus::Unknown`, which must never be recorded at all
-    // (`IngressHistoryState::insert()` `debug_assert`s against it), so it can only
-    // ever be observed as zero.
+    // A state with an empty ingress history exports a zero for every ingress state.
+    // Note that `IngressStatus::Unknown` must never be recorded at all
+    // (`IngressHistoryState::insert()` `debug_assert`s against it), so zero is the
+    // only value it is ever expected to have.
+    let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    assert_eq!(
+        metric_vec(&[
+            (&[("state", "received")], 0),
+            (&[("state", "processing")], 0),
+            (&[("state", "completed")], 0),
+            (&[("state", "failed")], 0),
+            (&[("state", "done")], 0),
+            (&[("state", "unknown")], 0),
+        ]),
+        fetch_int_gauge_vec(&observe(&state), INGRESS_HISTORY_LENGTH_BY_STATE)
+    );
+
+    // Note that `IngressState::Done` is not covered by the loop below: it cannot be
+    // recorded directly, only reached by forgetting a terminal status (see below).
     for (label_value, ingress_state) in [
         ("received", IngressState::Received),
         ("processing", IngressState::Processing),
@@ -663,12 +640,12 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
         ),
     ] {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        assert_gauge_vec(
-            None,
-            &state,
-            INGRESS_HISTORY_LENGTH_BY_STATE,
-            "state",
-            INGRESS_STATES,
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(
+                &observe(&state),
+                INGRESS_HISTORY_LENGTH_BY_STATE
+            ))
         );
 
         // Recording an ingress message in the given state bumps its count to 1.
@@ -679,12 +656,12 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
             NumBytes::new(u64::MAX),
             |_| {},
         );
-        assert_gauge_vec(
-            Some(label_value),
-            &state,
-            INGRESS_HISTORY_LENGTH_BY_STATE,
-            "state",
-            INGRESS_STATES,
+        assert_eq!(
+            metric_vec(&[(&[("state", label_value)], 1)]),
+            nonzero_values(fetch_int_gauge_vec(
+                &observe(&state),
+                INGRESS_HISTORY_LENGTH_BY_STATE
+            ))
         );
 
         // Making it terminal and pruning it drops the count back to 0. Only a
@@ -703,12 +680,12 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
             .metadata
             .ingress_history
             .prune(Time::from_nanos_since_unix_epoch(u64::MAX));
-        assert_gauge_vec(
-            None,
-            &state,
-            INGRESS_HISTORY_LENGTH_BY_STATE,
-            "state",
-            INGRESS_STATES,
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(
+                &observe(&state),
+                INGRESS_HISTORY_LENGTH_BY_STATE
+            ))
         );
     }
 
@@ -722,24 +699,24 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
         NumBytes::new(0),
         |_| {},
     );
-    assert_gauge_vec(
-        Some("done"),
-        &state,
-        INGRESS_HISTORY_LENGTH_BY_STATE,
-        "state",
-        INGRESS_STATES,
+    assert_eq!(
+        metric_vec(&[(&[("state", "done")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(
+            &observe(&state),
+            INGRESS_HISTORY_LENGTH_BY_STATE
+        ))
     );
 
     state
         .metadata
         .ingress_history
         .prune(Time::from_nanos_since_unix_epoch(u64::MAX));
-    assert_gauge_vec(
-        None,
-        &state,
-        INGRESS_HISTORY_LENGTH_BY_STATE,
-        "state",
-        INGRESS_STATES,
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(
+            &observe(&state),
+            INGRESS_HISTORY_LENGTH_BY_STATE
+        ))
     );
 }
 
@@ -747,7 +724,6 @@ fn replicated_state_metrics_ingress_history_length_by_state() {
 fn replicated_state_metrics_subnet_queue_messages() {
     const INPUT: &str = "execution_subnet_input_queue_messages";
     const OUTPUT: &str = "execution_subnet_output_queue_messages";
-    const KINDS: &[&str] = &["ingress", "canister"];
     let own_subnet = subnet_test_id(1);
     let subnet_canister = CanisterId::from(own_subnet);
     let remote_canister = canister_test_id(10);
@@ -756,7 +732,10 @@ fn replicated_state_metrics_subnet_queue_messages() {
     // An ingress message to the subnet.
     //
     let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
-    assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
+    assert_eq!(
+        metric_vec(&[(&[("kind", "ingress")], 0), (&[("kind", "canister")], 0)]),
+        fetch_int_gauge_vec(&observe(&state), INPUT)
+    );
 
     state.subnet_queues_mut().push_ingress(
         IngressBuilder::new()
@@ -764,19 +743,28 @@ fn replicated_state_metrics_subnet_queue_messages() {
             .method_name("method")
             .build(),
     );
-    assert_gauge_vec(Some("ingress"), &state, INPUT, "kind", KINDS);
+    assert_eq!(
+        metric_vec(&[(&[("kind", "ingress")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
 
     assert_eq!(
         1,
         state.subnet_queues_retain_ingress_messages(|_| false).len()
     );
-    assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
 
     //
     // A request to the subnet, and the response to it.
     //
     let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
-    assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
     assert_eq!(Some(0), fetch_int_gauge(&observe(&state), OUTPUT));
 
     let mut subnet_available_guaranteed_response_memory = i64::MAX / 2;
@@ -791,13 +779,19 @@ fn replicated_state_metrics_subnet_queue_messages() {
             &mut subnet_available_guaranteed_response_memory,
         )
         .unwrap();
-    assert_gauge_vec(Some("canister"), &state, INPUT, "kind", KINDS);
+    assert_eq!(
+        metric_vec(&[(&[("kind", "canister")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
     assert_eq!(Some(0), fetch_int_gauge(&observe(&state), OUTPUT));
 
     // Popping the request drops the input count back to 0; responding to it bumps
     // the output count to 1.
     assert!(state.pop_subnet_input().is_some());
-    assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
 
     state.subnet_queues_mut().push_output_response(Arc::new(
         ResponseBuilder::new()

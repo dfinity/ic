@@ -28,7 +28,9 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities_metrics::{MetricVec, fetch_gauge, fetch_int_gauge_vec, labels};
+use ic_test_utilities_metrics::{
+    MetricVec, fetch_gauge, fetch_int_gauge_vec, metric_vec, nonzero_values,
+};
 use ic_test_utilities_types::ids::{
     SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
     user_test_id,
@@ -863,39 +865,9 @@ fn system_metadata_online_split() {
 }
 
 const SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts";
-/// All label values of `SUBNET_CALL_CONTEXTS`.
-const SUBNET_CALL_TYPES: &[&str] = &[
-    "setup_initial_dkg",
-    "sign_with_threshold",
-    "canister_http_request",
-    "delivered_canister_http_request",
-    "reshare_chain_key",
-    "bitcoin_get_successors",
-    "bitcoin_send_transaction_internal",
-    "raw_rand",
-    "install_code",
-    "stop_canister",
-];
 
-/// Asserts that `SUBNET_CALL_CONTEXTS` has a value of 1 for `one` and of 0 for all
-/// the other call types; or 0 for all of them, if `one` is `None`.
-fn assert_subnet_call_contexts(one: Option<&str>, state: &ReplicatedState) {
-    assert_gauge_vec(one, state, SUBNET_CALL_CONTEXTS, "type", SUBNET_CALL_TYPES);
-}
-
-/// Asserts that the given gauge vector has a value of 1 for `one` and of 0 for all
-/// the other `label_values`; or 0 for all of them, if `one` is `None`.
-fn assert_gauge_vec(
-    one: Option<&str>,
-    state: &ReplicatedState,
-    name: &str,
-    label_name: &str,
-    label_values: &[&str],
-) {
-    if let Some(one) = one {
-        assert!(label_values.contains(&one), "unexpected label value {one}");
-    }
-
+/// Observes the replicated state metrics of `state` into a fresh registry.
+fn observe(state: &ReplicatedState) -> MetricsRegistry {
     let registry = MetricsRegistry::new();
     ReplicatedStateMetrics::new(&registry).observe(
         state.metadata.own_subnet_id,
@@ -903,21 +875,7 @@ fn assert_gauge_vec(
         0.into(),
         &no_op_logger(),
     );
-
-    let expected: MetricVec<u64> = label_values
-        .iter()
-        .map(|value| {
-            (
-                labels(&[(label_name, value)]),
-                u64::from(Some(*value) == one),
-            )
-        })
-        .collect();
-    assert_eq!(
-        expected,
-        fetch_int_gauge_vec(&registry, name),
-        "unexpected value of `{name}`"
-    );
+    registry
 }
 
 /// Tests that each subnet call type is counted under its own label value: pushing
@@ -949,6 +907,23 @@ fn subnet_call_contexts_metric() {
         subnet_size: NumberOfNodes::from(13),
         cost_schedule: CanisterCyclesCostSchedule::Normal,
     };
+
+    // A state with no subnet calls exports a zero for every call type.
+    assert_eq!(
+        metric_vec(&[
+            (&[("type", "setup_initial_dkg")], 0),
+            (&[("type", "sign_with_threshold")], 0),
+            (&[("type", "canister_http_request")], 0),
+            (&[("type", "delivered_canister_http_request")], 0),
+            (&[("type", "reshare_chain_key")], 0),
+            (&[("type", "bitcoin_get_successors")], 0),
+            (&[("type", "bitcoin_send_transaction_internal")], 0),
+            (&[("type", "raw_rand")], 0),
+            (&[("type", "install_code")], 0),
+            (&[("type", "stop_canister")], 0),
+        ]),
+        fetch_int_gauge_vec(&observe(&fresh_state()), SUBNET_CALL_CONTEXTS)
+    );
 
     // All the call types that are pushed and retrieved by callback ID.
     for (call_type, context) in [
@@ -1018,13 +993,19 @@ fn subnet_call_contexts_metric() {
         ),
     ] {
         let mut state = fresh_state();
-        assert_subnet_call_contexts(None, &state);
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
 
         let callback_id = state
             .metadata
             .subnet_call_context_manager
             .push_context(context);
-        assert_subnet_call_contexts(Some(call_type), &state);
+        assert_eq!(
+            metric_vec(&[(&[("type", call_type)], 1)]),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
 
         assert!(
             state
@@ -1033,19 +1014,28 @@ fn subnet_call_contexts_metric() {
                 .retrieve_context(callback_id, &no_op_logger())
                 .is_some()
         );
-        assert_subnet_call_contexts(None, &state);
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
     }
 
     // Delivered canister HTTP requests are only ever moved here from
     // `canister_http_request_contexts`, and are dropped once they time out.
     let mut state = fresh_state();
-    assert_subnet_call_contexts(None, &state);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
     state
         .metadata
         .subnet_call_context_manager
         .delivered_canister_http_request_contexts
         .insert(CallbackId::new(1), canister_http_request_context());
-    assert_subnet_call_contexts(Some("delivered_canister_http_request"), &state);
+    assert_eq!(
+        metric_vec(&[(&[("type", "delivered_canister_http_request")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
     assert_eq!(
         1,
         state
@@ -1056,17 +1046,26 @@ fn subnet_call_contexts_metric() {
             )
             .len()
     );
-    assert_subnet_call_contexts(None, &state);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
 
     // `RawRand` requests are popped off the front of the queue and executed at the
     // beginning of every round.
     let mut state = fresh_state();
-    assert_subnet_call_contexts(None, &state);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
     state
         .metadata
         .subnet_call_context_manager
         .push_raw_rand_request(request(), ExecutionRound::from(1), UNIX_EPOCH);
-    assert_subnet_call_contexts(Some("raw_rand"), &state);
+    assert_eq!(
+        metric_vec(&[(&[("type", "raw_rand")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
     assert!(
         state
             .metadata
@@ -1075,11 +1074,17 @@ fn subnet_call_contexts_metric() {
             .pop_front()
             .is_some()
     );
-    assert_subnet_call_contexts(None, &state);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
 
     // Install code calls are removed by call ID.
     let mut state = fresh_state();
-    assert_subnet_call_contexts(None, &state);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
     let call_id = state
         .metadata
         .subnet_call_context_manager
@@ -1088,7 +1093,10 @@ fn subnet_call_contexts_metric() {
             time: UNIX_EPOCH,
             effective_canister_id: canister_test_id(2),
         });
-    assert_subnet_call_contexts(Some("install_code"), &state);
+    assert_eq!(
+        metric_vec(&[(&[("type", "install_code")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
     assert!(
         state
             .metadata
@@ -1096,11 +1104,17 @@ fn subnet_call_contexts_metric() {
             .remove_install_code_call(call_id)
             .is_some()
     );
-    assert_subnet_call_contexts(None, &state);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
 
     // As are stop canister calls.
     let mut state = fresh_state();
-    assert_subnet_call_contexts(None, &state);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
     let call_id = state
         .metadata
         .subnet_call_context_manager
@@ -1109,7 +1123,10 @@ fn subnet_call_contexts_metric() {
             time: UNIX_EPOCH,
             effective_canister_id: canister_test_id(2),
         });
-    assert_subnet_call_contexts(Some("stop_canister"), &state);
+    assert_eq!(
+        metric_vec(&[(&[("type", "stop_canister")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
     assert!(
         state
             .metadata
@@ -1117,7 +1134,10 @@ fn subnet_call_contexts_metric() {
             .remove_stop_canister_call(call_id)
             .is_some()
     );
-    assert_subnet_call_contexts(None, &state);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
 }
 
 #[test]
