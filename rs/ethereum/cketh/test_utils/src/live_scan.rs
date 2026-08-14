@@ -84,9 +84,7 @@ impl LiveBalanceScanSetup {
     /// from this point on.
     pub fn new_live() -> Self {
         let anvil = Arc::new(Anvil::start());
-        let cketh = CkEthSetup::builder()
-            .with_ethereum_backend(EthereumBackend::Anvil(Arc::clone(&anvil)))
-            .build();
+        let cketh = CkEthSetup::new(EthereumBackend::Anvil(Arc::clone(&anvil)));
         let ckerc20 = CkErc20Setup::with_cketh(cketh).add_supported_erc20_tokens();
 
         ckerc20.env.auto_progress();
