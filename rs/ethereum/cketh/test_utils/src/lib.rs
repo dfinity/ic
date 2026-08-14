@@ -15,7 +15,6 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
-    CKETH_FEE_SUBACCOUNT,
     endpoints::{CandidBlockTag, Eip1559TransactionPrice},
     lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs},
 };
@@ -26,9 +25,7 @@ use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusT
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::cast::ToPrimitive;
 use pocket_ic::common::rest::{
     CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, IcpConfig,
@@ -257,35 +254,6 @@ impl CkEthSetup {
         .unwrap()
     }
 
-    pub fn total_supply(&self) -> Nat {
-        Decode!(
-            &assert_reply(self.env.query_call(
-                self.ledger_id,
-                Principal::anonymous(),
-                "icrc1_total_supply",
-                Encode!().unwrap()
-            )),
-            Nat
-        )
-        .unwrap()
-    }
-
-    /// The ledger's minting account: the minter with no subaccount. Transferring there burns.
-    pub fn minting_account(&self) -> Account {
-        Account {
-            owner: self.minter_id,
-            subaccount: None,
-        }
-    }
-
-    /// The minter's fee subaccount, where the ckETH taken as withdrawal fees accumulates.
-    pub fn fee_account(&self) -> Account {
-        Account {
-            owner: self.minter_id,
-            subaccount: Some(CKETH_FEE_SUBACCOUNT),
-        }
-    }
-
     pub fn eip_1559_transaction_price(
         &self,
         ledger_id: Option<Principal>,
@@ -351,50 +319,6 @@ impl CkEthSetup {
                 Encode!().unwrap()
             )),
             MinterInfo
-        )
-        .unwrap()
-    }
-
-    /// Mints `amount` into `to` by transferring out of the ledger's minting account, which is the
-    /// minter itself. Lets a test start from a funded account without driving a whole deposit.
-    pub fn call_ledger_mint(
-        &self,
-        to: impl Into<Account>,
-        amount: u64,
-    ) -> Result<Nat, TransferError> {
-        Decode!(
-            &assert_reply(self.env.update_call(
-                self.ledger_id,
-                self.minter_id,
-                "icrc1_transfer",
-                Encode!(&TransferArg {
-                    from_subaccount: None,
-                    to: to.into(),
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(amount),
-                })
-                .unwrap()
-            )),
-            Result<Nat, TransferError>
-        )
-        .unwrap()
-    }
-
-    /// Calls `icrc2_transfer_from` on the ckETH ledger as the minter.
-    pub fn call_ledger_transfer_from(
-        &self,
-        args: TransferFromArgs,
-    ) -> Result<Nat, TransferFromError> {
-        Decode!(
-            &assert_reply(self.env.update_call(
-                self.ledger_id,
-                self.minter_id,
-                "icrc2_transfer_from",
-                Encode!(&args).unwrap()
-            )),
-            Result<Nat, TransferFromError>
         )
         .unwrap()
     }
