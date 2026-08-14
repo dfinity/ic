@@ -143,16 +143,29 @@ pub(crate) fn max_downloaded_bytes(budget: Cycles) -> NumBytes {
     NumBytes::from(u64::try_from(budget.get() / PER_DOWNLOADED_BYTE_FEE.get()).unwrap_or(u64::MAX))
 }
 
+/// The longest response time [`network_usage_fee`] prices within `budget`, i.e.
+/// the inverse of its per-millisecond term.
+pub(crate) fn max_response_time(budget: Cycles) -> Duration {
+    Duration::from_millis(
+        u64::try_from(budget.get() / PER_RESPONSE_MS_FEE.get()).unwrap_or(u64::MAX),
+    )
+}
+
 /// The fee for running the transform function for `instructions`.
 pub(crate) fn transform_usage_fee(instructions: NumInstructions) -> Cycles {
     Cycles::from((instructions.get() as u128) / TRANSFORM_INSTRUCTION_DIVISOR)
 }
 
-/// The most instructions [`transform_usage_fee`] prices within `budget`, i.e. its inverse.
+/// The most instructions [`transform_usage_fee`] prices within `budget`, i.e. the
+/// largest transform the budget affords.
 pub(crate) fn max_transform_instructions(budget: Cycles) -> NumInstructions {
-    NumInstructions::from(
-        u64::try_from((budget * TRANSFORM_INSTRUCTION_DIVISOR).get()).unwrap_or(u64::MAX),
-    )
+    // The fee rounds the instruction count down to a whole number of cycles, so
+    // the budget also affords the divisor's worth of instructions that costs
+    // nothing on top of it.
+    let instructions = (budget * TRANSFORM_INSTRUCTION_DIVISOR)
+        .get()
+        .saturating_add(TRANSFORM_INSTRUCTION_DIVISOR - 1);
+    NumInstructions::from(u64::try_from(instructions).unwrap_or(u64::MAX))
 }
 
 /// The fee for gossiping a transformed response of `transformed_response_size` to
@@ -891,11 +904,7 @@ mod tests {
     }
 
     #[test]
-    fn max_transform_instructions_spends_a_budget_exactly() {
-        // The mirror image of the network fee: here it is the fee that divides and
-        // the limit that multiplies, so this is the direction that is exact — the
-        // instructions a budget buys cost precisely that budget, with nothing left
-        // over.
+    fn max_transform_instructions_is_the_largest_transform_a_budget_affords() {
         for budget in [0, 1, 12, 13, 14, 1_000, 5_000_000_000].map(Cycles::new) {
             let instructions = max_transform_instructions(budget);
             assert_eq!(
@@ -904,9 +913,7 @@ mod tests {
                 "budget {budget} is not spent exactly by {instructions} instructions"
             );
             assert!(
-                transform_usage_fee(NumInstructions::from(
-                    instructions.get() + TRANSFORM_INSTRUCTION_DIVISOR as u64
-                )) > budget,
+                transform_usage_fee(NumInstructions::from(instructions.get() + 1)) > budget,
                 "budget {budget}: {instructions} is not the largest affordable transform"
             );
         }
@@ -915,6 +922,34 @@ mod tests {
         let saturated = max_transform_instructions(Cycles::new(u128::MAX));
         assert_eq!(saturated, NumInstructions::from(u64::MAX));
         assert!(transform_usage_fee(saturated) < Cycles::new(u128::MAX));
+    }
+
+    #[test]
+    fn max_response_time_is_the_longest_response_a_budget_affords() {
+        for budget in [0, 1, 299, 300, 301, 18_000_000, 100_000_000].map(Cycles::new) {
+            let time = max_response_time(budget);
+            assert!(
+                network_usage_fee(NumBytes::from(0), time) <= budget,
+                "a response taking {time:?} costs more than the budget {budget}"
+            );
+            assert!(
+                network_usage_fee(NumBytes::from(0), time + Duration::from_millis(1)) > budget,
+                "budget {budget}: {time:?} is not the longest affordable response"
+            );
+        }
+        // 18_000_000 is the latency term every worst case is priced with, and it
+        // buys exactly the 60 s cap — so an allowance covering the worst case is
+        // never rationed below the full response time.
+        assert_eq!(
+            max_response_time(Cycles::new(18_000_000)),
+            MAX_RESPONSE_TIME
+        );
+        // Past what a `Duration` of whole milliseconds can hold, the time is bounded
+        // by that conversion rather than by the budget.
+        assert_eq!(
+            max_response_time(Cycles::new(u128::MAX)),
+            Duration::from_millis(u64::MAX)
+        );
     }
 
     /// The terms shared by every worst case at N = 13: the 60 s latency cap and the

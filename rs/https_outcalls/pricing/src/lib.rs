@@ -29,7 +29,7 @@ pub trait BudgetTracker: Send {
     /// Deducts the cost of the instructions consumed by the transformation.
     ///
     /// # Invariants
-    ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
+    ///  - This method returns `Ok(())` if `usage <= get_transform_limit()`.
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
     /// Deducts the cost of the final (post-transform) response that this replica
     /// produced and that will be gossiped to peers. This cost does not apply to fully-replicated
@@ -51,7 +51,10 @@ pub trait BudgetTracker: Send {
 /// response, as measured by the client. The server already enforces a 30s
 /// timeout (see `DEFAULT_HTTP_REQUEST_TIMEOUT_SECS`), so this is a safety margin
 /// above it.
-pub(crate) const MAX_RESPONSE_TIME: Duration = Duration::from_secs(60);
+///
+/// This is the ceiling on [`AdapterLimits::max_response_time`]; a tracker may
+/// hand out less than this, but never more.
+pub const MAX_RESPONSE_TIME: Duration = Duration::from_secs(60);
 
 pub struct AdapterLimits {
     /// The maximum size of the HTTP response, including the headers and the body.

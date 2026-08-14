@@ -9,8 +9,8 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
 use crate::fees::{
-    gossip_usage_fee, max_downloaded_bytes, max_transform_instructions, network_usage_fee,
-    transform_usage_fee,
+    gossip_usage_fee, max_downloaded_bytes, max_response_time, max_transform_instructions,
+    network_usage_fee, transform_usage_fee,
 };
 use crate::{AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError};
 
@@ -94,18 +94,19 @@ impl PayAsYouGoTracker {
 
 impl BudgetTracker for PayAsYouGoTracker {
     fn get_adapter_limits(&self) -> AdapterLimits {
-        let max_response_size = if self.is_free {
-            // A free cost schedule never charges, so the budget never constrains
-            // the download; the caller's own limit is all that applies.
-            self.max_response_size
-        } else {
-            // Never above what the caller asked for, even when it could afford more.
-            self.max_response_size
-                .min(max_downloaded_bytes(self.remaining()))
-        };
+        // A free cost schedule never charges, so the budget never constrains the
+        // outcall; only the caller's own limit and the protocol maximum apply.
+        if self.is_free {
+            return AdapterLimits {
+                max_response_size: self.max_response_size,
+                max_response_time: MAX_RESPONSE_TIME,
+            };
+        }
+        let remaining = self.remaining();
         AdapterLimits {
-            max_response_size,
-            max_response_time: MAX_RESPONSE_TIME,
+            // Never above what the caller asked for, even when it could afford more.
+            max_response_size: self.max_response_size.min(max_downloaded_bytes(remaining)),
+            max_response_time: MAX_RESPONSE_TIME.min(max_response_time(remaining)),
         }
     }
 
@@ -404,6 +405,20 @@ mod tests {
                     Ok(()),
                     "{case}: a transform at the instruction limit"
                 );
+
+                // The time limit draws on the same allowance as the size limit, so
+                // it is affordable on its own rather than on top of the download
+                // above.
+                let mut tracker = PayAsYouGoTracker::new(&ctx);
+                let response_time = tracker.get_adapter_limits().max_response_time;
+                assert_eq!(
+                    tracker.subtract_network_usage(NetworkUsage {
+                        response_size: NumBytes::from(0),
+                        response_time,
+                    }),
+                    Ok(()),
+                    "{case}: a download at the time limit"
+                );
             }
         }
     }
@@ -432,14 +447,20 @@ mod tests {
     }
 
     #[test]
-    fn zero_allowance_on_a_charging_subnet_buys_no_bytes_or_instructions() {
+    fn zero_allowance_on_a_charging_subnet_buys_nothing_that_costs_a_cycle() {
         let ctx = context(flexible(13), 0);
         let tracker = PayAsYouGoTracker::new(&ctx);
 
         let limits = tracker.get_adapter_limits();
         assert_eq!(limits.max_response_size, NumBytes::from(0));
-        assert_eq!(limits.max_response_time, MAX_RESPONSE_TIME);
-        assert_eq!(tracker.get_transform_limit(), NumInstructions::from(0));
+        assert_eq!(limits.max_response_time, Duration::ZERO);
+        // Not zero, but everything a zero budget can pay for: the transform fee
+        // rounds down, so the first `TRANSFORM_INSTRUCTION_DIVISOR` instructions
+        // are free.
+        assert_eq!(
+            tracker.get_transform_limit(),
+            NumInstructions::from(TRANSFORM_INSTRUCTION_DIVISOR as u64 - 1)
+        );
     }
 
     #[test]
@@ -458,60 +479,89 @@ mod tests {
     }
 
     #[test]
-    fn latency_is_granted_in_full_and_charged_afterwards() {
-        // However little is left, the full response time is granted rather than
-        // reserved for — so every allowance buys bytes, and none is spent up front
-        // on latency the response will probably not use.
+    fn bytes_and_latency_are_each_offered_the_whole_allowance() {
+        // Neither term reserves anything for the other: the download may use all
+        // 1_000 cycles on bytes, or all 1_000 on latency. Partitioning them would
+        // spend part of every allowance up front on latency the response will
+        // probably not use.
         let ctx = context(Replication::FullyReplicated, 1_000);
         let mut tracker = PayAsYouGoTracker::new(&ctx);
 
         let limits = tracker.get_adapter_limits();
-        assert_eq!(limits.max_response_time, MAX_RESPONSE_TIME);
-        // 1_000 / 50, the whole allowance spent on bytes.
+        // 1_000 / 50 bytes, or 1_000 / 300 ms.
         assert_eq!(limits.max_response_size, NumBytes::from(20));
+        assert_eq!(limits.max_response_time, Duration::from_millis(3));
 
-        // The other side of the bargain: a response slow enough to outrun the
-        // allowance is rejected after the fact rather than prevented up front.
-        // 300 * 10 = 3_000 > 1_000.
+        // A response that uses both to the full is charged for both,
+        // and is rejected after the fact rather than prevented
+        // up front. 50 * 20 + 300 * 3 = 1_900 > 1_000.
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
-                response_size: NumBytes::from(0),
-                response_time: Duration::from_millis(10),
+                response_size: limits.max_response_size,
+                response_time: limits.max_response_time,
             }),
             Err(PricingError::InsufficientCycles)
         );
     }
 
     #[test]
+    fn the_time_limit_forbids_exactly_the_unaffordable_responses() {
+        for allowance in [0, 1, 1_000, 300_000, 18_000_000, 1_000_000_000] {
+            let ctx = context(Replication::FullyReplicated, allowance);
+            let limit = PayAsYouGoTracker::new(&ctx)
+                .get_adapter_limits()
+                .max_response_time;
+            for millis in [0, 1, 2, 10, 1_000, 59_999, 60_000] {
+                let response_time = Duration::from_millis(millis);
+                let mut tracker = PayAsYouGoTracker::new(&ctx);
+                let affordable = tracker
+                    .subtract_network_usage(NetworkUsage {
+                        response_size: NumBytes::from(0),
+                        response_time,
+                    })
+                    .is_ok();
+                assert_eq!(
+                    affordable,
+                    response_time <= limit,
+                    "allowance {allowance}: a {millis} ms response is affordable: \
+                     {affordable}, but the limit is {limit:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn transform_limit_is_tight() {
         // The limit is not merely safe but exact: an allowance of 1_000 buys
-        // 1_000 * 13 instructions, and one divisor's worth more costs one cycle
-        // more than the allowance.
+        // 1_000 * 13 instructions plus the 12 the last cycle already paid for,
+        // and a single instruction more costs one cycle more than the allowance.
         let ctx = context(Replication::FullyReplicated, 1_000);
         let mut tracker = PayAsYouGoTracker::new(&ctx);
 
         let limit = tracker.get_transform_limit();
-        assert_eq!(limit, NumInstructions::from(13_000));
+        assert_eq!(limit, NumInstructions::from(13_012));
         assert_eq!(
-            tracker.subtract_transform_usage(NumInstructions::from(
-                limit.get() + TRANSFORM_INSTRUCTION_DIVISOR as u64
-            )),
+            tracker.subtract_transform_usage(NumInstructions::from(limit.get() + 1)),
             Err(PricingError::InsufficientCycles)
         );
     }
 
     #[test]
     fn limits_shrink_as_the_allowance_is_spent() {
-        let ctx = context(flexible(13), 300_000_000);
+        // An allowance small enough that every limit is set by the budget rather
+        // than by the constant it is capped at.
+        let ctx = context(flexible(13), 3_000_000);
         let mut tracker = PayAsYouGoTracker::new(&ctx);
         assert!(tracker.get_transform_limit() < MAX_INSTRUCTIONS_PER_QUERY_MESSAGE);
 
         let transform_limit_before = tracker.get_transform_limit();
+        let limits_before = tracker.get_adapter_limits();
+        assert!(limits_before.max_response_time < MAX_RESPONSE_TIME);
 
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
-                response_size: NumBytes::from(1_000_000),
-                response_time: Duration::from_millis(10_000),
+                response_size: NumBytes::from(1_000),
+                response_time: Duration::from_millis(1_000),
             }),
             Ok(())
         );
@@ -519,6 +569,12 @@ mod tests {
         assert!(
             tracker.get_transform_limit() < transform_limit_before,
             "the transform limit should reflect the spent network usage"
+        );
+        let limits_after = tracker.get_adapter_limits();
+        assert!(
+            limits_after.max_response_size < limits_before.max_response_size
+                && limits_after.max_response_time < limits_before.max_response_time,
+            "the adapter limits should reflect the spent network usage"
         );
     }
 
