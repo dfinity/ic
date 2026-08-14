@@ -29,11 +29,11 @@ use ic_ethereum_types::Address;
 /// cap. Payloads stay small — 64 bytes of calldata and 32 bytes of return per call, so 1_000 calls
 /// is ~64 KiB in / ~32 KiB out, far below the 2 MiB HTTPS-outcall limit.
 ///
-/// Not set arbitrarily high: a batch advances all-or-nothing (see [`balance_scan`]), so a
-/// whole-call failure re-does the entire chunk on the next tick — and a batch that ever exceeds a
-/// provider's gas cap fails *every* time, permanently stalling its addresses. 1_000 keeps a
-/// comfortable margin against that for the current token set; re-measure (and lower if needed) if
-/// the supported tokens grow or skew more gas-heavy.
+/// Not set arbitrarily high: [`scan_balances`] splits the registered pairs into chunks of this size
+/// and advances each chunk all-or-nothing, so a whole-call failure re-does that chunk on the next
+/// tick — and a chunk that ever exceeds a provider's gas cap fails *every* time, permanently
+/// stalling its pairs. 1_000 keeps a comfortable margin against that for the current token set;
+/// re-measure (and lower if needed) if the supported tokens grow or skew more gas-heavy.
 const MAX_CALLS_PER_BATCH: usize = 1_000;
 
 pub async fn balance_scan() {

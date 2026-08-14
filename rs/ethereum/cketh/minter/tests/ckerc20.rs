@@ -254,7 +254,7 @@ mod deposit_erc20 {
         );
 
         let (ckerc20, response2) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([42_u8; 32]), token.clone())
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
         assert_eq!(
             response, response2,
@@ -266,7 +266,7 @@ mod deposit_erc20 {
             .check_audit_logs_and_upgrade_as_ref(Default::default());
 
         let (ckerc20, response3) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([42_u8; 32]), token.clone())
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
 
         assert_eq!(
@@ -290,7 +290,7 @@ mod deposit_erc20 {
             .check_audit_logs_and_upgrade_as_ref(Default::default());
 
         let (ckerc20, response_after_second_upgrade) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([42_u8; 32]), token.clone())
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
         let (_ckerc20, response_other_after_second_upgrade) = ckerc20
             .call_minter_deposit_erc20(caller, Some([7_u8; 32]), token.clone())

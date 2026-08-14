@@ -153,7 +153,7 @@ fn should_reject_new_pair_when_watchlist_is_full() {
     let account = account(capacity as u64);
     let rejected = deposits.watch_deposit(ts(0), account, usdc(), deposit_address(&account));
 
-    assert_eq!(rejected, Err(DepositErc20Error::TooManyActiveAddresses));
+    assert_eq!(rejected, Err(DepositErc20Error::TooManyActiveDeposits));
     assert_eq!(deposits.watchlist_snapshot().registrations.len(), capacity);
 }
 

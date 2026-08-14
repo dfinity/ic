@@ -282,7 +282,7 @@ pub enum DepositErc20Error {
     TooManyTokensForAccount,
     /// The maximum number of concurrently armed deposits (`(account, token)` pairs) has been
     /// reached.
-    TooManyActiveAddresses,
+    TooManyActiveDeposits,
     /// The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable(String),
 }

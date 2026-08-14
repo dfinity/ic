@@ -65,7 +65,7 @@ impl AutomaticDeposits {
     /// already-stored request and its original validity window without re-arming it, fails with
     /// [`DepositErc20Error::TooManyTokensForAccount`] when the account already has
     /// [`MAX_TOKENS_PER_ACCOUNT`] tokens armed, and with
-    /// [`DepositErc20Error::TooManyActiveAddresses`] when the watchlist is full of live entries.
+    /// [`DepositErc20Error::TooManyActiveDeposits`] when the watchlist is full of live entries.
     ///
     /// # Panics
     ///
@@ -98,7 +98,7 @@ impl AutomaticDeposits {
                     .expect("BUG: the entry is live right after insert or AlreadyPresent");
                 Ok(entry.clone())
             }
-            Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveAddresses),
+            Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveDeposits),
         }
     }
 

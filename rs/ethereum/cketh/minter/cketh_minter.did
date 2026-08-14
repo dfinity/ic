@@ -441,7 +441,7 @@ type DepositErc20Error = variant {
     // The account already has the maximum number of ERC-20 tokens armed.
     TooManyTokensForAccount;
     // The maximum number of concurrently armed deposits (account, token pairs) has been reached.
-    TooManyActiveAddresses;
+    TooManyActiveDeposits;
     // The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable : text;
 };

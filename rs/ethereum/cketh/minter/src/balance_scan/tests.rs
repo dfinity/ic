@@ -218,8 +218,8 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
     let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
     seed_state(Some(latest), token, &[holder], now);
 
-    // Capture the due targets, then wipe the watchlist — as a concurrent arming/expiry could between
-    // reading the targets and applying the scan's outcome.
+    // Capture the due targets, then wipe the watchlist — as a concurrent arming/expiry could evict
+    // between reading the targets and applying the scan's outcome.
     let targets = due_targets(now, latest);
     seed_state(Some(latest), token, &[], now);
 
