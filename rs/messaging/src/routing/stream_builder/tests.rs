@@ -1422,6 +1422,7 @@ mod cooling_down {
     fn build_streams_routes_messages_to_other_subnets_while_one_is_cooling_down() {
         with_test_replica_logger(|log| {
             let retained = request_from_sender(COOLING_DOWN_CANISTER, NO_DEADLINE, Cycles::zero());
+            // The sender's second call, so it must carry callback ID 2.
             let routed =
                 request_from_sender_with_callback(OTHER_CANISTER, NO_DEADLINE, Cycles::zero(), 2);
 
