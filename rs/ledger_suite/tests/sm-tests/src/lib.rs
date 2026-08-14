@@ -3397,6 +3397,51 @@ where
     assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
 }
 
+/// A spend needs no allowance only when the spender *is* the account it spends from — which the
+/// ledger decides on the whole account, subaccount included. Owning the principal is not enough,
+/// so a caller holding funds under a subaccount must name that subaccount to reach them.
+pub fn test_transfer_from_self_subaccount<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let to = PrincipalId::new_user_test_id(2);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, 100_000)]);
+
+    // Same owner, but the spender is {owner, None} while the funds are under {owner, SUBACCOUNT}:
+    // two different accounts, so this needs an allowance it does not have.
+    let mut transfer_from_args = default_transfer_from_args(from, to.0, 30_000);
+    transfer_from_args.spender_subaccount = None;
+    assert_eq!(
+        send_transfer_from(&env, canister_id, owner.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0_u8)
+        })
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 0);
+
+    // Naming the account's own subaccount makes it a self-spend, which needs no allowance.
+    transfer_from_args.spender_subaccount = Some(SUBACCOUNT);
+    let block_index = send_transfer_from(&env, canister_id, owner.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(
+        block_index, 1,
+        "the rejected spend must not have written a block"
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000 - 30_000 - FEE);
+    assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+}
+
 pub fn test_transfer_from_minter<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
