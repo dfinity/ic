@@ -288,7 +288,7 @@ impl AutomaticDeposits {
             return Some(DepositErc20Response {
                 address: entry.address.to_string(),
                 status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                    token: token.to_string(),
+                    erc20_contract_address: token.to_string(),
                     scanned_balance: entry.scanned_balance.into(),
                     detected_at_block: entry.last_scanned_block.into(),
                 }),

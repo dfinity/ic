@@ -737,7 +737,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         .map(|r| CandidDepositAddressRegistration {
                             owner: r.owner,
                             subaccount: r.subaccount,
-                            token: r.token.to_string(),
+                            erc20_contract_address: r.token.to_string(),
                             address: r.address.to_string(),
                             expires_at_nanos: r.expires_at_nanos.as_nanos(),
                             last_scanned_block: r.last_scanned_block.map(Into::into),
@@ -749,7 +749,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     owner: deposit.owner,
                     subaccount: deposit.subaccount,
                     address: deposit.address.to_string(),
-                    token: deposit.token.to_string(),
+                    erc20_contract_address: deposit.token.to_string(),
                     last_scanned_block: deposit.last_scanned_block.into(),
                     scan_count: deposit.scan_count.into(),
                     scanned_balance: deposit.scanned_balance.into(),

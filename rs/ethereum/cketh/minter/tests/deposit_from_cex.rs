@@ -229,14 +229,14 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     assert_matches!(
         setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdt, deadline).status,
         DepositStatus::AwaitingSweep(detected)
-            if detected.token == SupportedToken::CkUsdt.contract().to_string()
+            if detected.erc20_contract_address == SupportedToken::CkUsdt.contract().to_string()
                 && detected.scanned_balance == USDT_ABOVE_MINIMUM
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
         setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdc, deadline).status,
         DepositStatus::AwaitingSweep(detected)
-            if detected.token == SupportedToken::CkUsdc.contract().to_string()
+            if detected.erc20_contract_address == SupportedToken::CkUsdc.contract().to_string()
                 && detected.scanned_balance == USDC_ABOVE_MINIMUM
                 && detected.detected_at_block > 0_u8
     );

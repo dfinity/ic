@@ -267,8 +267,8 @@ pub enum DepositStatus {
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DetectedDeposit {
     /// The ERC-20 token contract whose balance was found.
-    pub token: String,
-    /// The balance scanned for `token`; may change before the sweep.
+    pub erc20_contract_address: String,
+    /// The balance scanned for `erc20_contract_address`; may change before the sweep.
     pub scanned_balance: Nat,
     /// The Ethereum block at which the balance was detected.
     pub detected_at_block: Nat,
@@ -577,7 +577,7 @@ pub mod events {
             owner: Principal,
             subaccount: Option<[u8; 32]>,
             address: String,
-            token: String,
+            erc20_contract_address: String,
             last_scanned_block: Nat,
             scan_count: u64,
             scanned_balance: Nat,
@@ -588,7 +588,7 @@ pub mod events {
     pub struct DepositAddressRegistration {
         pub owner: Principal,
         pub subaccount: Option<[u8; 32]>,
-        pub token: String,
+        pub erc20_contract_address: String,
         pub address: String,
         pub expires_at_nanos: u64,
         pub last_scanned_block: Option<Nat>,

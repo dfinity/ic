@@ -381,7 +381,7 @@ mod deposit_erc20 {
                     owner,
                     subaccount,
                     address,
-                    token: event_token,
+                    erc20_contract_address: event_token,
                     scanned_balance,
                     ..
                 } => Some((owner, subaccount, address, event_token, scanned_balance)),
@@ -410,7 +410,10 @@ mod deposit_erc20 {
             DepositStatus::AwaitingSweep(deposit) => deposit.clone(),
             other => panic!("BUG: expected AwaitingSweep, got {other:?}"),
         };
-        assert_eq!(deposit.token, token, "the detected token is reported");
+        assert_eq!(
+            deposit.erc20_contract_address, token,
+            "the detected token is reported"
+        );
         assert_eq!(
             deposit.scanned_balance,
             candid::Nat::from(1_000_000_000_u64),

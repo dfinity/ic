@@ -621,7 +621,7 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
         Some(DepositErc20Response {
             address: deposit_address(&account(0)).to_string(),
             status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                token: usdc().to_string(),
+                erc20_contract_address: usdc().to_string(),
                 scanned_balance: Nat::from(10_u8),
                 detected_at_block: Nat::from(900_u16),
             }),
