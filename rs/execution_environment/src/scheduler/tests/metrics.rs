@@ -586,7 +586,7 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
 }
 
 /// Observes the replicated state metrics of `state` into a fresh registry.
-fn observe_replicated_state(state: &ReplicatedState) -> MetricsRegistry {
+fn observe(state: &ReplicatedState) -> MetricsRegistry {
     let registry = MetricsRegistry::new();
     ReplicatedStateMetrics::new(&registry).observe(
         state.metadata.own_subnet_id,
@@ -595,15 +595,6 @@ fn observe_replicated_state(state: &ReplicatedState) -> MetricsRegistry {
         &no_op_logger(),
     );
     registry
-}
-
-/// Asserts that the given gauge has the given value.
-fn assert_gauge(expected: u64, state: &ReplicatedState, name: &str) {
-    assert_eq!(
-        Some(expected),
-        fetch_int_gauge(&observe_replicated_state(state), name),
-        "unexpected value of `{name}`"
-    );
 }
 
 /// Asserts that the given gauge vector has a value of 1 for `one` and of 0 for all
@@ -629,7 +620,7 @@ fn assert_gauge_vec(
         .collect();
     assert_eq!(
         expected,
-        fetch_int_gauge_vec(&observe_replicated_state(state), name),
+        fetch_int_gauge_vec(&observe(state), name),
         "unexpected value of `{name}`"
     );
 }
@@ -786,7 +777,7 @@ fn replicated_state_metrics_subnet_queue_messages() {
     //
     let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
     assert_gauge_vec(None, &state, INPUT, "kind", KINDS);
-    assert_gauge(0, &state, OUTPUT);
+    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), OUTPUT));
 
     let mut subnet_available_guaranteed_response_memory = i64::MAX / 2;
     state
@@ -801,7 +792,7 @@ fn replicated_state_metrics_subnet_queue_messages() {
         )
         .unwrap();
     assert_gauge_vec(Some("canister"), &state, INPUT, "kind", KINDS);
-    assert_gauge(0, &state, OUTPUT);
+    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), OUTPUT));
 
     // Popping the request drops the input count back to 0; responding to it bumps
     // the output count to 1.
@@ -815,11 +806,11 @@ fn replicated_state_metrics_subnet_queue_messages() {
             .originator_reply_callback(CallbackId::from(1))
             .build(),
     ));
-    assert_gauge(1, &state, OUTPUT);
+    assert_eq!(Some(1), fetch_int_gauge(&observe(&state), OUTPUT));
 
     // And popping the response drops it back to 0.
     assert_eq!(1, state.output_into_iter().count());
-    assert_gauge(0, &state, OUTPUT);
+    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), OUTPUT));
 }
 
 #[test]
@@ -827,13 +818,13 @@ fn replicated_state_metrics_pending_refunds() {
     const NAME: &str = "replicated_state_pending_refunds";
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-    assert_gauge(0, &state, NAME);
+    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), NAME));
 
     state.add_refund(canister_test_id(1), Cycles::new(13));
-    assert_gauge(1, &state, NAME);
+    assert_eq!(Some(1), fetch_int_gauge(&observe(&state), NAME));
 
     state.take_refunds(|_| true);
-    assert_gauge(0, &state, NAME);
+    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), NAME));
 }
 
 #[test]
