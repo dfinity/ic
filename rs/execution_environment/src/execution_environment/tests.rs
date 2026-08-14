@@ -17,8 +17,11 @@ use ic_management_canister_types_private::{
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterStatus, ReplicatedState, SystemState,
-    canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
+    CanisterStatus, ExecutionTask, ReplicatedState, SystemState,
+    canister_state::{
+        DEFAULT_QUEUE_CAPACITY, NextExecution, WASM_PAGE_SIZE_IN_BYTES,
+        execution_state::WasmExecutionMode,
+    },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
     testing::{CanisterQueuesTesting, SystemStateTesting},
@@ -31,7 +34,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
-    CanisterId, CountBytes, PrincipalId, RegistryVersion,
+    CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, PricingVersion, Replication, Transform},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -6037,4 +6040,231 @@ fn list_canisters_via_ingress_fails_at_execution() {
         err.description()
             .contains("list_canisters cannot be called by a user")
     );
+}
+
+/// Snapshot of the cycles and instruction counters of a canister that are needed
+/// to check the accounting of a paused execution that fails to resume.
+#[derive(Clone, Copy)]
+struct ExecutionAccounting {
+    /// The counter metric is used because it only records the cycles consumed
+    /// for instructions when the prepaid execution cycles are refunded at the
+    /// end of a message execution: unlike the gauge metric, which is bumped
+    /// already by the prepayment, it thus does not depend on whether the
+    /// snapshot is taken before or after the prepayment.
+    consumed_cycles: NominalCycles,
+    /// The instructions executed by all the slices of the canister, including
+    /// slices of an execution that was paused and did not finish (yet).
+    executed_instructions: NumInstructions,
+}
+
+impl ExecutionAccounting {
+    fn take(test: &ExecutionTest, canister_id: CanisterId) -> Self {
+        Self {
+            consumed_cycles: test
+                .canister_state(canister_id)
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_as_counters()
+                .get(&CyclesUseCase::Instructions)
+                .cloned()
+                .unwrap_or_default(),
+            executed_instructions: test.canister_executed_instructions(canister_id),
+        }
+    }
+}
+
+/// Executes the first slice of the next execution of the given canister, which
+/// must pause, then decreases the cycles balance of that canister and resumes
+/// the execution, which must fail.
+///
+/// Asserts that the canister is charged for exactly the instructions that the
+/// slices of the failed execution had executed.
+fn paused_execution_fails_to_resume_after_cycles_decrease(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+) {
+    let before = ExecutionAccounting::take(test, canister_id);
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(Cycles::new(1));
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let after = ExecutionAccounting::take(test, canister_id);
+
+    // The cycles consumed for instructions, which the execution derives from the
+    // instructions it reports as used, match the cost of the instructions
+    // executed by the slices: resuming failed before resuming the Wasm
+    // execution, so no further instructions were executed after the last pause.
+    let executed_instructions = after.executed_instructions - before.executed_instructions;
+    let expected_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            executed_instructions,
+            test.get_own_subnet_cycles_config(),
+            WasmExecutionMode::Wasm32,
+        )
+        .nominal();
+    assert_eq!(
+        after.consumed_cycles - before.consumed_cycles,
+        expected_cost
+    );
+}
+
+/// Every kind of paused execution re-creates its helper from the current clean
+/// canister state when it is resumed, so it relies on the cycles balance of that
+/// state not changing while the execution is paused. This test covers all of
+/// them: update calls, replicated queries, response callbacks, cleanup
+/// callbacks, and canister tasks (heartbeat). The `install_code` case is covered
+/// by `dts_install_code_resume_fails_due_to_cycles_decrease`.
+#[test]
+fn dts_resume_fails_due_to_cycles_decrease() {
+    // 1. Update calls and replicated queries.
+    for method in ["update", "query"] {
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(1_000_000)
+            .with_slice_instruction_limit(200_000)
+            .with_manual_execution()
+            .build();
+
+        let a_id = test.universal_canister().unwrap();
+
+        let a = wasm()
+            .instruction_counter_is_at_least(200_000)
+            .message_payload()
+            .append_and_reply()
+            .build();
+
+        let (ingress_id, _) = test.ingress_raw(a_id, method, a);
+
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, a_id);
+
+        let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+        let message = if method == "update" {
+            "an update call"
+        } else {
+            "a replicated query"
+        };
+        err.assert_contains(
+            ErrorCode::CanisterWasmEngineError,
+            &format!(
+                "Error from Canister {a_id}: Canister encountered a Wasm engine error: \
+                 Failed to apply system changes: Mismatch in cycles \
+                 balance when resuming {message}"
+            ),
+        );
+    }
+
+    // 2. Response and cleanup callbacks. The response callback traps in the
+    //    cleanup case, so that the long-running callback is the cleanup one.
+    for cleanup in [false, true] {
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(100_000_000)
+            .with_slice_instruction_limit(1_000_000)
+            .with_manual_execution()
+            .build();
+
+        let a_id = test.universal_canister().unwrap();
+        let b_id = test.universal_canister().unwrap();
+
+        let b = wasm().message_payload().append_and_reply().build();
+
+        let long_execution = wasm()
+            .instruction_counter_is_at_least(1_000_000)
+            .message_payload()
+            .append_and_reply()
+            .build();
+        let call_args = if cleanup {
+            call_args()
+                .other_side(b)
+                .on_reply(wasm().trap())
+                .on_cleanup(long_execution)
+        } else {
+            call_args().other_side(b).on_reply(long_execution)
+        };
+        let a = wasm().call_simple(b_id, "update", call_args).build();
+
+        let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+        // Canister A calls canister B, which replies.
+        test.execute_message(a_id);
+        test.induct_messages();
+        test.execute_message(b_id);
+        test.induct_messages();
+
+        // Start executing the response|cleanup callback.
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, a_id);
+
+        let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+        let code = if cleanup {
+            // The error of the trapping response callback takes precedence.
+            ErrorCode::CanisterCalledTrap
+        } else {
+            ErrorCode::CanisterWasmEngineError
+        };
+        assert_eq!(err.code(), code);
+        assert!(
+            err.description().contains(
+                "Failed to apply system changes: Mismatch in cycles \
+                 balance when resuming a response call"
+            ),
+            "unexpected error: {err}"
+        );
+    }
+
+    // 3. Canister tasks, e.g. the heartbeat.
+    {
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(100_000_000)
+            .with_slice_instruction_limit(1_000_000)
+            .with_manual_execution()
+            .build();
+
+        let canister_id = test.universal_canister().unwrap();
+        let (ingress_id, _) = test.ingress_raw(
+            canister_id,
+            "update",
+            wasm()
+                .set_heartbeat(
+                    // The stable memory is grown before the execution is paused
+                    // so that the resume can be checked to drop that change.
+                    wasm()
+                        .stable_grow(1)
+                        .instruction_counter_is_at_least(1_000_000)
+                        .build(),
+                )
+                .reply()
+                .build(),
+        );
+        test.execute_message(canister_id);
+        check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+        let stable_memory_size = test.execution_state(canister_id).stable_memory.size;
+
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .enqueue(ExecutionTask::Heartbeat);
+
+        // Start executing the heartbeat.
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
+
+        // A canister task has no ingress status and the failure is not recorded
+        // in the canister log, but the state changes of the heartbeat must have
+        // been dropped along with the failed execution.
+        assert_eq!(
+            test.execution_state(canister_id).stable_memory.size,
+            stable_memory_size
+        );
+    }
 }

@@ -1226,7 +1226,7 @@ crate.spec(
         "serde",
     ],
     package = "priority-queue",
-    version = "^1.3.1",
+    version = "^2.7.0",
 )
 crate.spec(
     package = "proc-macro2",
@@ -1722,6 +1722,7 @@ crate.spec(
     features = [
         "full",
     ],
+    # Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
     git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
     rev = "cddf1c64011d00f36016146e8447bef99531030c",

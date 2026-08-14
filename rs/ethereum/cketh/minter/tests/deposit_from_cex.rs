@@ -21,9 +21,11 @@
 //! [`ic_cketh_test_utils::anvil`]; `anvil` and `solc` are vendored via Bazel
 //! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
 
+use assert_matches::assert_matches;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
+use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
 use ic_cketh_test_utils::live_scan::{CkErc20LiveScanSetup, Holding, SupportedToken};
@@ -223,23 +225,27 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
         .collect();
     setup.credit_deposits(&holdings);
 
-    // deposit_erc20 reports each address as scanned; a failed batch would never advance any of them.
-    for &(depositor, _, _) in &deposits {
-        let progress = setup.await_scan(depositor, DEPOSIT_SUBACCOUNT, Duration::from_secs(180));
-        assert!(
-            progress.scan_count >= 1,
-            "each address should report a scan"
-        );
-        assert!(
-            progress.last_scanned_block.is_some(),
-            "a scanned address should report the block it was scanned at"
-        );
-    }
-
-    assert_eq!(
-        setup.balance_scan_candidates(),
-        2,
-        "only the 20 USDT and 15 USDC deposits clear the per-token minimum; the 1 USDT does not"
+    let deadline = Duration::from_secs(180);
+    assert_matches!(
+        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, deadline).status,
+        DepositStatus::AwaitingSweep(detected)
+            if detected.len() == 1
+                && detected[0].token == SupportedToken::CkUsdt.contract().to_string()
+                && detected[0].scanned_balance == USDT_ABOVE_MINIMUM
+                && detected[0].detected_at_block > 0_u8
+    );
+    assert_matches!(
+        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, deadline).status,
+        DepositStatus::AwaitingSweep(detected)
+            if detected.len() == 1
+                && detected[0].token == SupportedToken::CkUsdc.contract().to_string()
+                && detected[0].scanned_balance == USDC_ABOVE_MINIMUM
+                && detected[0].detected_at_block > 0_u8
+    );
+    assert_matches!(
+        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, deadline).status,
+        DepositStatus::Scanning { scan_count, last_scanned_block, .. }
+            if scan_count >= 1 && last_scanned_block.is_some()
     );
 }
 
