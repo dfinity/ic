@@ -155,7 +155,7 @@ pub fn node_test_id(i: u64) -> NodeId {
 }
 
 pub fn test_replica_version() -> ReplicaVersion {
-    ReplicaVersion::from_str("test_replica_version").unwrap()
+    ReplicaVersion::from_str("cafebabe0000ffff0000ffff0000ffff0000ffff").unwrap()
 }
 
 /// Converts a [`NodeId`] to a [`u64`].
