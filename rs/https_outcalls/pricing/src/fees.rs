@@ -49,6 +49,7 @@ const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: Cycles = Cycles::new(100
 
 pub(crate) const PER_DOWNLOADED_BYTE_FEE: Cycles = Cycles::new(50);
 pub(crate) const PER_RESPONSE_MS_FEE: Cycles = Cycles::new(300);
+/// HTTP outcalls are priced consistently against a reference subnet size of 13.
 pub(crate) const TRANSFORM_INSTRUCTION_DIVISOR: u128 = 13;
 pub(crate) const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: Cycles = Cycles::new(50);
 
