@@ -1345,86 +1345,51 @@ mod cketh_evm_rpc {
     }
 }
 
-/// The fee subaccount is the minter's own, so burning from it is a self-spend: the ledger accepts
-/// `{minter, 0fee}` as the spender without an allowance. These two tests pin that, since the
-/// sweeper funding in `ledger_client` depends on it.
-mod fee_account {
-    use super::*;
+/// Burning from the minter's own fee subaccount, end to end: a self-spend needing no allowance,
+/// paying no fee, and reducing total supply because the destination is the minting account. That
+/// combination is what the sweeper funding in `ledger_client` relies on.
+///
+/// The underlying ledger rule — that a spender may spend from an account only when it names the
+/// account's own subaccount — belongs to every ledger, and is covered generically in the ledger
+/// state machine tests (DEFI-2978) rather than here.
+#[test]
+fn should_burn_from_fee_account_without_an_allowance() {
     use ic_cketh_minter::CKETH_FEE_SUBACCOUNT;
-    use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+    use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 
     const FUNDING_AMOUNT: u64 = 1_000_000_000_000_000_000;
 
-    fn burn_from_fee_account(
-        cketh: &CkEthSetup,
-        amount: u64,
-        spender_subaccount: Option<[u8; 32]>,
-    ) -> Result<Nat, TransferFromError> {
-        cketh.call_ledger_transfer_from(TransferFromArgs {
-            spender_subaccount,
-            from: cketh.fee_account(),
-            to: cketh.minting_account(),
-            amount: Nat::from(amount),
-            fee: None,
-            memo: None,
-            created_at_time: None,
-        })
-    }
+    let cketh = CkEthSetup::default();
+    cketh
+        .call_ledger_mint(cketh.fee_account(), FUNDING_AMOUNT)
+        .expect("minting into the fee account must succeed");
 
-    fn setup_with_funded_fee_account() -> CkEthSetup {
-        let cketh = CkEthSetup::default();
-        cketh
-            .call_ledger_mint(cketh.fee_account(), FUNDING_AMOUNT)
-            .expect("minting into the fee account must succeed");
-        cketh
-    }
+    let supply_before = cketh.total_supply();
+    let burn_amount = FUNDING_AMOUNT / 4;
 
-    #[test]
-    fn should_burn_from_fee_account_without_an_allowance() {
-        let cketh = setup_with_funded_fee_account();
-        assert_eq!(
-            cketh.balance_of(cketh.fee_account()),
-            Nat::from(FUNDING_AMOUNT)
-        );
+    let result = cketh.call_ledger_transfer_from(TransferFromArgs {
+        spender_subaccount: Some(CKETH_FEE_SUBACCOUNT),
+        from: cketh.fee_account(),
+        to: cketh.minting_account(),
+        amount: Nat::from(burn_amount),
+        fee: None,
+        memo: None,
+        created_at_time: None,
+    });
 
-        let supply_before = cketh.total_supply();
-        let burn_amount = FUNDING_AMOUNT / 4;
-
-        let result = burn_from_fee_account(&cketh, burn_amount, Some(CKETH_FEE_SUBACCOUNT));
-
-        assert!(
-            result.is_ok(),
-            "burning from the fee account while naming it as the spender must need no allowance, \
-             got {result:?}"
-        );
-        assert_eq!(
-            cketh.balance_of(cketh.fee_account()),
-            Nat::from(FUNDING_AMOUNT - burn_amount),
-            "the fee account must be debited by exactly the burned amount (burns are fee-free)"
-        );
-        assert_eq!(
-            cketh.total_supply(),
-            supply_before - Nat::from(burn_amount),
-            "a transfer to the minting account must reduce total supply, i.e. be a real burn"
-        );
-    }
-
-    #[test]
-    fn should_reject_burning_from_fee_account_with_the_default_spender_subaccount() {
-        let cketh = setup_with_funded_fee_account();
-
-        let result = burn_from_fee_account(&cketh, FUNDING_AMOUNT / 4, None);
-
-        assert_matches!(
-            result,
-            Err(TransferFromError::InsufficientAllowance { .. }),
-            "spending {{minter, None}} against {{minter, 0fee}} must be rejected for want of an \
-             allowance"
-        );
-        assert_eq!(
-            cketh.balance_of(cketh.fee_account()),
-            Nat::from(FUNDING_AMOUNT),
-            "a rejected burn must not move funds"
-        );
-    }
+    assert!(
+        result.is_ok(),
+        "burning from the fee account while naming it as the spender must need no allowance, \
+         got {result:?}"
+    );
+    assert_eq!(
+        cketh.balance_of(cketh.fee_account()),
+        Nat::from(FUNDING_AMOUNT - burn_amount),
+        "the fee account must be debited by exactly the burned amount (burns are fee-free)"
+    );
+    assert_eq!(
+        cketh.total_supply(),
+        supply_before - Nat::from(burn_amount),
+        "a transfer to the minting account must reduce total supply, i.e. be a real burn"
+    );
 }
