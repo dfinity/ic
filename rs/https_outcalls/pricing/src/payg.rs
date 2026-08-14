@@ -34,11 +34,11 @@ pub struct PayAsYouGoTracker {
     is_free: bool,
     /// The cycles budget available to this replica (already net of the base
     /// cost, which was subtracted when the context was created).
-    allowance: u128,
+    allowance: Cycles,
     /// The maximum size of the HTTP response, including headers and body.
     max_response_size: NumBytes,
     /// The cycles charged so far against `allowance`.
-    spent: u128,
+    spent: Cycles,
 }
 
 impl PayAsYouGoTracker {
@@ -55,11 +55,11 @@ impl PayAsYouGoTracker {
                 CanisterCyclesCostSchedule::Free => true,
                 CanisterCyclesCostSchedule::Normal => false,
             },
-            allowance: context.refund_status.per_replica_allowance.get(),
+            allowance: context.refund_status.per_replica_allowance,
             max_response_size: context
                 .max_response_bytes
                 .unwrap_or(NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)),
-            spent: 0,
+            spent: Cycles::zero(),
         }
     }
 
@@ -68,17 +68,17 @@ impl PayAsYouGoTracker {
     ///
     /// Meaningless on a free cost schedule, where nothing is ever charged and the
     /// allowance is zero.
-    fn remaining(&self) -> u128 {
-        self.allowance.saturating_sub(self.spent)
+    fn remaining(&self) -> Cycles {
+        self.allowance - self.spent
     }
 
     /// Charges `amount` against the budget. Returns an error if the total spent
     /// now exceeds the available allowance (never on a free cost schedule).
-    fn charge(&mut self, amount: u128) -> Result<(), PricingError> {
+    fn charge(&mut self, amount: Cycles) -> Result<(), PricingError> {
         // Always accumulate the spend, including on a free cost schedule, so
         // free subnets can report the real per-replica cost for canister cost
         // accounting.
-        self.spent = self.spent.saturating_add(amount);
+        self.spent += amount;
         // A free cost schedule charges nothing for resources, so it never runs
         // out of cycles.
         if self.is_free {
@@ -153,12 +153,12 @@ impl BudgetTracker for PayAsYouGoTracker {
         // reported (so canister cost metrics reflect the actual work), bounded
         // by `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
         let cap = if self.is_free {
-            MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get()
+            MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET
         } else {
             self.allowance
         };
         CanisterHttpPaymentReceipt {
-            spent: Cycles::new(self.spent.min(cap)),
+            spent: self.spent.min(cap),
         }
     }
 }
@@ -250,7 +250,7 @@ mod tests {
         // (the full allowance is refunded downstream).
         let ctx = context(Replication::FullyReplicated, 1_000_000);
         let tracker = PayAsYouGoTracker::new(&ctx);
-        assert_eq!(tracker.spent, 0);
+        assert_eq!(tracker.spent, Cycles::zero());
         assert_eq!(tracker.create_payment_receipt().spent, Cycles::zero());
     }
 
@@ -277,17 +277,14 @@ mod tests {
             tracker.subtract_transform_usage(NumInstructions::from(instructions)),
             Ok(())
         );
-        let transform = instructions as u128 / TRANSFORM_INSTRUCTION_DIVISOR;
+        let transform = Cycles::new(instructions as u128 / TRANSFORM_INSTRUCTION_DIVISOR);
 
         // For fully-replicated requests the gossip term is a
         // consensus cost and must not be charged here.
         assert_eq!(tracker.subtract_gossip_usage(NumBytes::from(5_000)), Ok(()));
 
         assert_eq!(tracker.spent, network + transform);
-        assert_eq!(
-            tracker.create_payment_receipt().spent,
-            Cycles::new(network + transform)
-        );
+        assert_eq!(tracker.create_payment_receipt().spent, network + transform);
     }
 
     #[test]
@@ -357,7 +354,7 @@ mod tests {
             tracker.subtract_transform_usage(NumInstructions::from(instructions)),
             Ok(())
         );
-        let transform = instructions as u128 / TRANSFORM_INSTRUCTION_DIVISOR;
+        let transform = Cycles::new(instructions as u128 / TRANSFORM_INSTRUCTION_DIVISOR);
 
         let transformed_size = 1_000_000_u64;
         assert_eq!(
@@ -370,13 +367,10 @@ mod tests {
         let expected = network + transform + gossip;
         // Nothing is charged (no error), yet the full spend is tracked and
         // reported, exceeding the zero allowance.
-        assert!(expected > 0);
-        assert!(expected < MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get());
+        assert!(expected > Cycles::zero());
+        assert!(expected < MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET);
         assert_eq!(tracker.spent, expected);
-        assert_eq!(
-            tracker.create_payment_receipt().spent,
-            Cycles::new(expected)
-        );
+        assert_eq!(tracker.create_payment_receipt().spent, expected);
     }
 
     /// A non-replicated request, whose single replica also gossips its response.
@@ -545,7 +539,7 @@ mod tests {
             tracker.subtract_gossip_usage(NumBytes::from(u64::MAX)),
             Ok(())
         );
-        assert!(tracker.spent > MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get());
+        assert!(tracker.spent > MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET);
         assert_eq!(
             tracker.create_payment_receipt().spent,
             MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET
@@ -607,11 +601,8 @@ mod tests {
                     NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
                     subnet_size,
                 );
-                let worst_case = tracker
-                    .spent
-                    .saturating_mul(node_count as u128)
-                    .saturating_add(consensus_fee.get());
-                let allowances = allowance.get().saturating_mul(node_count as u128);
+                let worst_case = tracker.spent * node_count + consensus_fee;
+                let allowances = allowance * node_count;
                 assert!(
                     allowances >= worst_case,
                     "{replication:?}, {max_response_bytes:?}"
@@ -619,7 +610,7 @@ mod tests {
                 // And they cover no more than that: the only slack is what rounding
                 // the worst case up to a whole number of allowances adds.
                 assert!(
-                    allowances - worst_case < node_count as u128,
+                    allowances - worst_case < Cycles::from(node_count as u64),
                     "{replication:?}, {max_response_bytes:?}"
                 );
             }
