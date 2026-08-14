@@ -25,6 +25,7 @@ use assert_matches::assert_matches;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
+use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
@@ -53,27 +54,27 @@ fn should_read_erc20_balances_across_tokens_and_holders() {
     let calls = vec![
         BalanceOfCall {
             token: token_a,
-            holder: h1,
+            holder: DepositAddress::new(h1),
         },
         BalanceOfCall {
             token: token_a,
-            holder: h2,
+            holder: DepositAddress::new(h2),
         },
         BalanceOfCall {
             token: token_a,
-            holder: h3,
+            holder: DepositAddress::new(h3),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h1,
+            holder: DepositAddress::new(h1),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h2,
+            holder: DepositAddress::new(h2),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h3,
+            holder: DepositAddress::new(h3),
         },
     ];
 
@@ -96,7 +97,7 @@ fn should_read_erc20_balances_across_tokens_and_holders() {
 
     // The batcher must agree with anvil's own view of every balance.
     for call in &calls {
-        let expected = anvil.erc20_balance(&call.token, &call.holder);
+        let expected = anvil.erc20_balance(&call.token, call.holder.as_address());
         let single = anvil
             .eth_call_create(&dev, &encode_balance_batch(std::slice::from_ref(call)))
             .expect("single-call batch reverted");
@@ -122,7 +123,7 @@ fn should_read_many_balances_in_a_single_call() {
         .iter()
         .map(|holder| BalanceOfCall {
             token,
-            holder: *holder,
+            holder: DepositAddress::new(*holder),
         })
         .collect();
 
@@ -142,8 +143,8 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
     let anvil = Anvil::start();
     let dev = address_from_hex(DEV_ACCOUNT);
     let token = deploy_mock_erc20(&anvil, &dev);
-    let holder = Address::new([0x11; 20]);
-    anvil.fund(&token, &dev, &holder, 500);
+    let holder = DepositAddress::new(Address::new([0x11; 20]));
+    anvil.fund(&token, &dev, holder.as_address(), 500);
 
     // A "token" with no code: STATICCALL succeeds with empty return data, which
     // is not the 32 bytes the batcher requires, so it reverts the whole call

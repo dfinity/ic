@@ -2,6 +2,7 @@ use super::{
     AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositKey, DepositRequest,
     MAX_ACTIVE_DEPOSITS, MAX_TOKENS_PER_ACCOUNT, SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry,
 };
+use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
@@ -671,7 +672,7 @@ fn automatic_deposit(
 }
 
 fn sweep_entry(
-    address: Address,
+    address: DepositAddress,
     last_scanned_block: BlockNumber,
     scan_count: u32,
     scanned_balance: u128,
@@ -715,13 +716,13 @@ fn entry(account: &Account, expires_at: Timestamp) -> Entry<DepositRequest> {
 /// The deposit address is a deterministic function of the account, so a given
 /// account always maps to the same address (mirroring the production key
 /// derivation).
-fn deposit_address(account: &Account) -> Address {
+fn deposit_address(account: &Account) -> DepositAddress {
     let mut preimage = account.owner.as_slice().to_vec();
     preimage.extend_from_slice(account.effective_subaccount());
     let hash = Keccak256::hash(&preimage);
     let mut bytes = [0_u8; 20];
     bytes.copy_from_slice(&hash[12..32]);
-    Address::new(bytes)
+    DepositAddress::new(Address::new(bytes))
 }
 
 fn registration(

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
@@ -70,7 +71,7 @@ impl AutomaticDeposits {
         now: Timestamp,
         account: Account,
         token: Address,
-        address: Address,
+        address: DepositAddress,
     ) -> Result<Entry<DepositRequest>, DepositErc20Error> {
         let key = DepositKey::new(account, token);
         if self.watchlist.get_entry(now, &key).is_none()
@@ -344,7 +345,7 @@ impl DepositKey {
 #[derive(Clone, Copy, Debug)]
 pub struct ScanTarget {
     key: DepositKey,
-    address: Address,
+    address: DepositAddress,
     scan_count: u32,
 }
 
@@ -361,7 +362,7 @@ impl ScanTarget {
         self.key.token
     }
 
-    pub fn address(&self) -> Address {
+    pub fn address(&self) -> DepositAddress {
         self.address
     }
 
@@ -374,7 +375,7 @@ impl ScanTarget {
 #[derive(Clone, PartialEq, Debug)]
 struct SweepEntry {
     /// The deposit address the funds sit at.
-    address: Address,
+    address: DepositAddress,
     /// The block whose scan found the funds.
     last_scanned_block: BlockNumber,
     /// How many times the pair was scanned, including the finding scan.
@@ -385,15 +386,15 @@ struct SweepEntry {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DepositRequest {
-    pub address: Address,
+    pub address: DepositAddress,
     /// Latest block number at which this pair's balance was scanned; None if never scanned.
     pub last_scanned_block: Option<BlockNumber>,
     /// How many times this pair has been scanned (indexes the backoff schedule).
     pub scan_count: u32,
 }
 
-impl From<Address> for DepositRequest {
-    fn from(address: Address) -> Self {
+impl From<DepositAddress> for DepositRequest {
+    fn from(address: DepositAddress) -> Self {
         Self {
             address,
             last_scanned_block: None,

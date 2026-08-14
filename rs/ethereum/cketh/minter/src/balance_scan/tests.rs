@@ -1,4 +1,5 @@
 use super::*;
+use crate::deposit_address::DepositAddress;
 use crate::state::automatic_deposits::{DepositKey, DepositRequest};
 use crate::test_fixtures;
 use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
@@ -73,10 +74,10 @@ async fn should_skip_without_scanning() {
     struct Case {
         name: &'static str,
         latest_block: Option<BlockNumber>,
-        holders: Vec<(Account, Address)>,
+        holders: Vec<(Account, DepositAddress)>,
     }
 
-    let holder = (account(1), Address::new([0xa1; 20]));
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
     let cases = vec![
         Case {
             name: "latest block height unknown",
@@ -112,8 +113,8 @@ async fn should_advance_scanned_non_candidate_pairs() {
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
     let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
-    let a = (account(1), Address::new([0xa1; 20]));
-    let b = (account(2), Address::new([0xa2; 20]));
+    let a = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    let b = (account(2), DepositAddress::new(Address::new([0xa2; 20])));
     seed_state(Some(latest), token, &[a, b], now);
 
     // Both balances are below the minimum, so neither is a candidate: they advance the schedule
@@ -142,7 +143,7 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
             let i = i as u64;
             let mut address = [0_u8; 20];
             address[..8].copy_from_slice(&i.to_be_bytes());
-            (account(i), Address::new(address))
+            (account(i), DepositAddress::new(Address::new(address)))
         })
         .collect();
     seed_state(Some(latest), token, &holders, now);
@@ -194,7 +195,7 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
     for case in cases {
         let now = ts();
         let latest = BlockNumber::new(1_000);
-        let holder = (account(1), Address::new([0xa1; 20]));
+        let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
         seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
         scan(now, stub_client(vec![case.response])).await;
@@ -214,7 +215,7 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
-    let holder = (account(1), Address::new([0xa1; 20]));
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
     seed_state(Some(latest), token, &[holder], now);
 
     // Capture the due targets, then wipe the watchlist — as a concurrent arming/expiry could between
@@ -246,7 +247,7 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
     let below = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
-    let holder = (account(1), Address::new([0xa1; 20]));
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
     seed_state(Some(latest), token, &[holder], now);
 
     let targets = due_targets(now, latest);
@@ -262,7 +263,7 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
 async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
-    let holder = (account(1), Address::new([0xa1; 20]));
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
     seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
     let targets = due_targets(now, latest);
@@ -291,7 +292,7 @@ fn ts() -> Timestamp {
 fn seed_state(
     latest_block: Option<BlockNumber>,
     token: Address,
-    holders: &[(Account, Address)],
+    holders: &[(Account, DepositAddress)],
     now: Timestamp,
 ) {
     let mut state = test_fixtures::initial_state();

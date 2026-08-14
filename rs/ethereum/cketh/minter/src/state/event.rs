@@ -1,3 +1,4 @@
+use crate::deposit_address::DepositAddress;
 use crate::erc20::CkErc20Token;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
@@ -212,7 +213,7 @@ pub struct AutomaticDeposit {
     #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<[u8; 32]>,
     #[n(2)]
-    pub address: Address,
+    pub address: DepositAddress,
     #[n(3)]
     pub token: Address,
     #[n(4)]
@@ -232,7 +233,7 @@ pub struct DepositAddressRegistration {
     #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<[u8; 32]>,
     #[n(2)]
-    pub address: Address,
+    pub address: DepositAddress,
     #[n(3)]
     pub token: Address,
     #[n(4)]
