@@ -18,36 +18,50 @@ fn account(owner: u64) -> Account {
     }
 }
 
-#[test]
-fn should_count_candidates_at_and_above_the_per_token_minimum() {
-    let (token, min) = MIN_DEPOSITS[0]; // ckUSDC
-    let calls = vec![
-        BalanceOfCall {
-            token,
-            holder: DEPOSIT_ADDRESS,
-        };
-        4
-    ];
-    let balances = vec![
-        min,                                              // == min      -> candidate
-        min.checked_sub(Erc20Value::from(1_u8)).unwrap(), // < min      -> excluded
-        min.checked_add(Erc20Value::from(1_u8)).unwrap(), // > min      -> candidate
-        Erc20Value::from(0_u8),                           // failed/zero -> excluded
-    ];
-
-    assert_eq!(count_candidates(&calls, &balances), 2);
+fn deposit_account(account: Account, address: Address) -> DepositAccount {
+    DepositAccount::new(account, address)
 }
 
 #[test]
-fn should_not_count_candidates_for_an_unsupported_token() {
-    // TOKEN_A is absent from MIN_DEPOSITS, so even a huge balance is never a candidate.
-    let calls = vec![BalanceOfCall {
-        token: TOKEN_A,
-        holder: DEPOSIT_ADDRESS,
-    }];
-    let balances = vec![Erc20Value::from(u128::MAX)];
+fn should_attribute_each_decoded_balance_to_its_account_and_token() {
+    let tokens = vec![TOKEN_A, TOKEN_B];
+    let accounts = vec![
+        deposit_account(account(1), Address::new([0xa1; 20])),
+        deposit_account(account(2), Address::new([0xa2; 20])),
+    ];
+    let scan = BalanceScan::new(&accounts, &tokens);
+    // One balance per call, holder-major/token-minor: [a1/A, a1/B, a2/A, a2/B]. A wrong holder
+    // index would misattribute a balance to the wrong account or token.
+    let balances = vec![
+        Erc20Value::from(10_u8),
+        Erc20Value::from(20_u8),
+        Erc20Value::from(30_u8),
+        Erc20Value::from(40_u8),
+    ];
 
-    assert_eq!(count_candidates(&calls, &balances), 0);
+    let collected: Vec<(Account, Address, Erc20Value)> = scan
+        .collect_balances(balances)
+        .into_iter()
+        .map(|r| (r.account.account(), r.token, r.balance))
+        .collect();
+
+    assert_eq!(
+        collected,
+        vec![
+            (account(1), TOKEN_A, Erc20Value::from(10_u8)),
+            (account(1), TOKEN_B, Erc20Value::from(20_u8)),
+            (account(2), TOKEN_A, Erc20Value::from(30_u8)),
+            (account(2), TOKEN_B, Erc20Value::from(40_u8)),
+        ]
+    );
+}
+
+#[test]
+fn unsupported_token_has_an_unreachable_minimum_deposit() {
+    // A token absent from MIN_DEPOSITS gets Erc20Value::MAX as its threshold, so no real balance
+    // (below the u256 max) ever clears it and it is never a candidate.
+    assert_eq!(min_deposit(&TOKEN_A), Erc20Value::MAX);
+    assert!(Erc20Value::from(u128::MAX) < min_deposit(&TOKEN_A));
 }
 
 #[test]
@@ -97,13 +111,14 @@ fn should_have_a_min_deposit_for_every_deployed_supported_token() {
 
 #[test]
 fn should_build_one_call_per_address_and_token_in_order() {
-    let holders = vec![DEPOSIT_ADDRESS, Address::new([0x99; 20])];
+    let addresses = vec![
+        deposit_account(account(1), DEPOSIT_ADDRESS),
+        deposit_account(account(2), Address::new([0x99; 20])),
+    ];
     let tokens = vec![TOKEN_A, TOKEN_B];
 
-    let calls = balance_of_calls(&holders, &tokens);
-
     assert_eq!(
-        calls,
+        BalanceScan::new(&addresses, &tokens).balance_calls(),
         vec![
             BalanceOfCall {
                 token: TOKEN_A,
@@ -127,43 +142,105 @@ fn should_build_one_call_per_address_and_token_in_order() {
 
 #[test]
 fn should_build_no_calls_when_no_addresses_or_no_tokens() {
-    assert!(balance_of_calls(&[], &[TOKEN_A]).is_empty());
-    assert!(balance_of_calls(&[DEPOSIT_ADDRESS], &[]).is_empty());
+    assert!(BalanceScan::new(&[], &[TOKEN_A]).balance_calls().is_empty());
+    let addresses = vec![deposit_account(account(1), DEPOSIT_ADDRESS)];
+    assert!(BalanceScan::new(&addresses, &[]).balance_calls().is_empty());
+
+    // Batching a token-less scan yields a call-less batch rather than dividing by zero. `scan`
+    // never gets here — it returns early when no ERC-20 contract is supported.
+    let batches: Vec<Vec<BalanceOfCall>> = BalanceScan::new(&addresses, &[])
+        .batches(MAX_CALLS_PER_BATCH)
+        .map(|batch| batch.balance_calls())
+        .collect();
+    assert_eq!(batches, vec![Vec::<BalanceOfCall>::new()]);
+}
+
+#[test]
+fn should_overshoot_a_batch_smaller_than_the_token_count() {
+    let addresses = vec![
+        deposit_account(account(1), DEPOSIT_ADDRESS),
+        deposit_account(account(2), Address::new([0x99; 20])),
+    ];
+    let tokens = vec![TOKEN_A, TOKEN_B];
+
+    // A batch of 1 call cannot hold a single address' 2 token calls. Rather than splitting the
+    // address (which a failing batch could then advance half-read) or refusing to scan at all,
+    // each batch holds one whole address and overshoots the requested size.
+    let batches: Vec<Vec<BalanceOfCall>> = BalanceScan::new(&addresses, &tokens)
+        .batches(1)
+        .map(|batch| batch.balance_calls())
+        .collect();
+
+    assert_eq!(
+        batches,
+        vec![
+            vec![
+                BalanceOfCall {
+                    token: TOKEN_A,
+                    holder: DEPOSIT_ADDRESS
+                },
+                BalanceOfCall {
+                    token: TOKEN_B,
+                    holder: DEPOSIT_ADDRESS
+                },
+            ],
+            vec![
+                BalanceOfCall {
+                    token: TOKEN_A,
+                    holder: Address::new([0x99; 20])
+                },
+                BalanceOfCall {
+                    token: TOKEN_B,
+                    holder: Address::new([0x99; 20])
+                },
+            ],
+        ]
+    );
 }
 
 #[test]
 fn should_never_split_an_address_across_batches() {
     // Scan-state is tracked per address, not per (address, token): `record_scan` advances a whole
-    // address once its batch succeeds. `plan_batches` must therefore keep every `balanceOf` for an
-    // address in the same batch — otherwise a failing batch could advance an address whose balances
-    // were only partially read — even when a single address's token calls alone exceed the cap.
+    // address once its batch succeeds. Chunking *by address* must therefore keep every `balanceOf`
+    // for an address in the same batch — otherwise a failing batch could advance an address whose
+    // balances were only partially read — even when a single address's token calls alone exceed the
+    // cap.
     fn address_at(index: u64) -> Address {
         let mut bytes = [0_u8; 20];
         bytes[..8].copy_from_slice(&index.to_be_bytes());
         Address::new(bytes)
     }
 
-    let addresses: Vec<(Account, Address)> = (0..5)
-        .map(|i| (account(i), address_at(1_000 + i)))
+    let accounts: Vec<DepositAccount> = (0..5)
+        .map(|i| deposit_account(account(i), address_at(1_000 + i)))
         .collect();
 
-    for num_tokens in [1, 2, 7, MAX_CALLS_PER_BATCH, MAX_CALLS_PER_BATCH + 1] {
+    // Batch sizes holding ~2 addresses, so the 5 addresses span several batches — plus the two
+    // rows where a single address' calls alone meet or exceed the cap, and every batch must hold
+    // exactly one whole address rather than split it.
+    for (num_tokens, batch_size) in [
+        (1_usize, 2_usize),
+        (2, 4),
+        (7, 14),
+        (MAX_CALLS_PER_BATCH, MAX_CALLS_PER_BATCH),
+        (MAX_CALLS_PER_BATCH + 1, MAX_CALLS_PER_BATCH),
+    ] {
         let tokens: Vec<Address> = (0..num_tokens as u64).map(address_at).collect();
-
-        let batches = plan_batches(&addresses, &tokens);
+        let scan = BalanceScan::new(&accounts, &tokens);
 
         let mut seen: BTreeSet<Address> = BTreeSet::new();
-        for batch in &batches {
-            let batch_holders: Vec<Address> = batch.addresses.iter().map(|(_, h)| *h).collect();
-            for holder in &batch_holders {
+        for batch in scan.batches(batch_size) {
+            let calls = batch.balance_calls();
+            let mut holders: Vec<Address> = calls.iter().map(|call| call.holder).collect();
+            holders.dedup();
+            for holder in &holders {
                 // Batches never intersect: an address belongs to exactly one batch.
                 assert!(
                     !seen.contains(holder),
                     "num_tokens={num_tokens}: address {holder:?} appears in more than one batch"
                 );
                 // The batch queries every token for the address, and only for its own addresses.
-                let queried: Vec<Address> = batch
-                    .calls
+                let queried: Vec<Address> = calls
                     .iter()
                     .filter(|call| call.holder == *holder)
                     .map(|call| call.token)
@@ -174,17 +251,14 @@ fn should_never_split_an_address_across_batches() {
                 );
             }
             assert!(
-                batch
-                    .calls
-                    .iter()
-                    .all(|call| batch_holders.contains(&call.holder)),
+                calls.iter().all(|call| holders.contains(&call.holder)),
                 "num_tokens={num_tokens}: batch issues a call for an address outside it"
             );
-            seen.extend(batch_holders);
+            seen.extend(holders);
         }
         assert_eq!(
             seen.len(),
-            addresses.len(),
+            accounts.len(),
             "num_tokens={num_tokens}: every address must be scanned in exactly one batch"
         );
     }
@@ -238,24 +312,25 @@ async fn should_skip_without_scanning() {
 }
 
 #[tokio::test]
-async fn should_advance_scanned_addresses() {
+async fn should_advance_scanned_non_candidate_addresses() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
     let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
-    let candidate = (account(1), Address::new([0xa1; 20]));
-    let non_candidate = (account(2), Address::new([0xa2; 20]));
-    seed_state(Some(latest), Some(token), &[candidate, non_candidate], now);
+    let a = (account(1), Address::new([0xa1; 20]));
+    let b = (account(2), Address::new([0xa2; 20]));
+    seed_state(Some(latest), Some(token), &[a, b], now);
 
-    // Single chunk, holders in call order: first at the minimum (candidate), second below it.
-    scan(now, stub_client(vec![ok_balances(&[min, below_min])])).await;
+    // Both balances are below the minimum, so neither is a candidate: they advance the schedule
+    // and nothing is moved to the sweep queue.
+    scan(now, stub_client(vec![ok_balances(&[below_min, below_min])])).await;
 
-    // Both scanned addresses are advanced along the schedule at the scanned block.
-    for (account, _) in [candidate, non_candidate] {
+    for (account, _) in [a, b] {
         let entry = live_entry(now, &account);
         assert_eq!(entry.scan_count, 1);
         assert_eq!(entry.last_scanned_block, Some(latest));
     }
+    assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 0);
 }
 
 #[tokio::test]
@@ -263,8 +338,9 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
-    // One token, so addresses_per_chunk == MAX_CALLS_PER_BATCH; this many holders spills into a
-    // second chunk.
+    let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
+    // One token, so a batch holds up to MAX_CALLS_PER_BATCH addresses; this many holders spills
+    // into a second chunk.
     let extra = 50_usize;
     let holders: Vec<_> = (0..MAX_CALLS_PER_BATCH + extra)
         .map(|i| {
@@ -276,12 +352,13 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
         .collect();
     seed_state(Some(latest), Some(token), &holders, now);
 
-    // Two responses, one per chunk, sized to the chunk's call count.
+    // Two responses, one per chunk, sized to the chunk's call count. Below-min balances so the
+    // whole set advances (no sweep events), letting the test assert the chunk split directly.
     scan(
         now,
         stub_client(vec![
-            ok_balances(&vec![min; MAX_CALLS_PER_BATCH]),
-            ok_balances(&vec![min; extra]),
+            ok_balances(&vec![below_min; MAX_CALLS_PER_BATCH]),
+            ok_balances(&vec![below_min; extra]),
         ]),
     )
     .await;
@@ -335,6 +412,123 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
         );
         assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
     }
+}
+
+#[tokio::test]
+async fn should_detect_funded_addresses_from_the_pre_scan_entries_alone() {
+    let latest = BlockNumber::new(1_000);
+    let (token, min) = MIN_DEPOSITS[0];
+    let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
+    // An address scanned seven times already: the detection's address and scan count come from
+    // this entry and nowhere else, so a watchlist evicted mid-scan cannot affect the outcome.
+    let funded = account(1);
+    let unfunded = account(2);
+    let due = BTreeMap::from([
+        (
+            funded,
+            DepositRequest {
+                address: DEPOSIT_ADDRESS,
+                last_scanned_block: Some(BlockNumber::new(900)),
+                scan_count: 7,
+            },
+        ),
+        (
+            unfunded,
+            DepositRequest {
+                address: Address::new([0xa2; 20]),
+                last_scanned_block: None,
+                scan_count: 0,
+            },
+        ),
+    ]);
+
+    let outcomes = scan_balances(
+        &due,
+        &[token],
+        latest,
+        stub_client(vec![ok_balances(&[min, below_min])]),
+    )
+    .await;
+
+    assert_eq!(
+        outcomes,
+        vec![
+            ScanOutcome::Detected(AutomaticDeposit {
+                owner: funded.owner,
+                subaccount: funded.subaccount,
+                address: DEPOSIT_ADDRESS,
+                last_scanned_block: latest,
+                scan_count: 8,
+                deposits: vec![Erc20Balance {
+                    token,
+                    scanned_balance: min,
+                }],
+            }),
+            ScanOutcome::NothingFound(unfunded),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn should_detect_one_balance_per_funded_token_of_an_address() {
+    let latest = BlockNumber::new(1_000);
+    let (token_a, min_a) = MIN_DEPOSITS[0];
+    let (token_b, min_b) = MIN_DEPOSITS[1];
+    let (token_c, min_c) = MIN_DEPOSITS[2];
+    let holder = account(1);
+    let due = BTreeMap::from([(holder, DepositRequest::from(DEPOSIT_ADDRESS))]);
+
+    // A deposit address is token-agnostic, so one address can be funded in several tokens at once.
+    // Only the two at or above their minimum are detected, in token order.
+    let outcomes = scan_balances(
+        &due,
+        &[token_a, token_b, token_c],
+        latest,
+        stub_client(vec![ok_balances(&[
+            min_a,
+            min_b.checked_sub(Erc20Value::from(1_u8)).unwrap(),
+            min_c,
+        ])]),
+    )
+    .await;
+
+    assert_eq!(
+        outcomes,
+        vec![ScanOutcome::Detected(AutomaticDeposit {
+            owner: holder.owner,
+            subaccount: holder.subaccount,
+            address: DEPOSIT_ADDRESS,
+            last_scanned_block: latest,
+            scan_count: 1,
+            deposits: vec![
+                Erc20Balance {
+                    token: token_a,
+                    scanned_balance: min_a,
+                },
+                Erc20Balance {
+                    token: token_c,
+                    scanned_balance: min_c,
+                },
+            ],
+        })]
+    );
+}
+
+#[tokio::test]
+async fn should_yield_no_outcome_for_an_account_whose_chunk_failed() {
+    let latest = BlockNumber::new(1_000);
+    let due = BTreeMap::from([(account(1), DepositRequest::from(DEPOSIT_ADDRESS))]);
+
+    // Neither detected nor advanced: the account is retried on the next tick.
+    let outcomes = scan_balances(
+        &due,
+        &[MIN_DEPOSITS[0].0],
+        latest,
+        stub_client(vec![Err(IcError::CallPerformFailed)]),
+    )
+    .await;
+
+    assert_eq!(outcomes, vec![]);
 }
 
 fn ts() -> Timestamp {
