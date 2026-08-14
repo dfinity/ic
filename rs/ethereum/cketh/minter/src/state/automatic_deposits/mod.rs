@@ -66,6 +66,10 @@ impl AutomaticDeposits {
     /// [`DepositErc20Error::TooManyTokensForAccount`] when the account already has
     /// [`MAX_TOKENS_PER_ACCOUNT`] tokens armed, and with
     /// [`DepositErc20Error::TooManyActiveAddresses`] when the watchlist is full of live entries.
+    ///
+    /// # Panics
+    ///
+    /// If the pair already has funds queued for sweeping.
     pub fn watch_deposit(
         &mut self,
         now: Timestamp,
@@ -74,6 +78,10 @@ impl AutomaticDeposits {
         address: DepositAddress,
     ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
         let request = DepositRequest::new(account, token);
+        assert!(
+            !self.sweep.contains_key(&request),
+            "BUG: cannot arm {request:?}, it already has funds queued for sweeping"
+        );
         if self.watchlist.get_entry(now, &request).is_none()
             && self.armed_token_count(now, &account) >= MAX_TOKENS_PER_ACCOUNT
         {

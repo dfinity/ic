@@ -543,6 +543,26 @@ fn funding_one_token_leaves_the_account_other_tokens_armed() {
 }
 
 #[test]
+#[should_panic(expected = "it already has funds queued for sweeping")]
+fn watch_deposit_traps_on_a_pair_awaiting_sweep() {
+    let mut deposits = AutomaticDeposits::default();
+    deposits
+        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .unwrap();
+    deposits.record_automatic_deposit_received(&automatic_deposit(
+        account(0),
+        usdc(),
+        10,
+        BlockNumber::new(900),
+        3,
+    ));
+    assert_eq!(deposits.watchlist_len(), 0);
+    assert_eq!(deposits.sweep_len(), 1);
+
+    let _ = deposits.watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)));
+}
+
+#[test]
 #[should_panic(expected = "sweep queue already has an entry")]
 fn record_automatic_deposit_received_traps_on_a_duplicate_pair() {
     let mut deposits = AutomaticDeposits::default();
