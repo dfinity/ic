@@ -3442,21 +3442,26 @@ pub fn test_transfer_from_self_subaccount<T>(
     assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
 }
 
-/// A self-spend may also burn, which is how a caller holding tokens under a subaccount gives them
-/// up: the destination is the minting account, so the ledger charges no fee and reduces the supply
-/// instead of crediting anyone.
+/// Burns from `{P, Some(s)}` with the spender naming that same subaccount, and reports what the
+/// ledger made of it — the two ledgers disagree, so the caller states which outcome its own owes.
 ///
-/// ICRC ledgers only. The ICP ledger checks an allowance for a burn even when the spender is the
-/// account itself (`rs/ledger_suite/icp/src/lib.rs`, `Operation::Burn`), so the same call fails
-/// there with `InsufficientAllowance` — note that it exempts the self-spend when *consuming* the
-/// allowance, just not when checking it.
+/// ICRC ledgers accept it: burning is how an account holding tokens under a subaccount gives them
+/// up, and naming the account's own subaccount makes it a self-spend. The ICP ledger rejects it,
+/// because `Operation::Burn` (`rs/ledger_suite/icp/src/lib.rs`) checks an allowance for any spender
+/// — exempting the self-spend only when *consuming* one, not when checking.
+///
+/// Either way the books must stay consistent, which is asserted here: an accepted burn is fee-free
+/// and reduces the supply, a rejected one moves nothing at all.
 pub fn test_transfer_from_self_subaccount_burn<T>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
-) where
+) -> Result<BlockIndex, TransferFromError>
+where
     T: CandidType,
 {
     const SUBACCOUNT: [u8; 32] = [42; 32];
+    const INITIAL_BALANCE: u64 = 100_000;
+    const BURN_AMOUNT: u64 = 20_000;
 
     let owner = PrincipalId::new_user_test_id(1);
     let from = Account {
@@ -3464,26 +3469,43 @@ pub fn test_transfer_from_self_subaccount_burn<T>(
         subaccount: Some(SUBACCOUNT),
     };
 
-    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, 100_000)]);
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, INITIAL_BALANCE)]);
 
     let minter = minting_account(&env, canister_id).expect("the ledger has a minting account");
     let supply_before = total_supply(&env, canister_id);
-    let mut burn_args = default_transfer_from_args(from, minter, 20_000);
+    let mut burn_args = default_transfer_from_args(from, minter, BURN_AMOUNT);
     burn_args.spender_subaccount = Some(SUBACCOUNT);
     burn_args.fee = None;
 
-    send_transfer_from(&env, canister_id, owner.0, &burn_args).expect("burn failed");
+    let result = send_transfer_from(&env, canister_id, owner.0, &burn_args);
 
-    assert_eq!(
-        balance_of(&env, canister_id, from),
-        100_000 - 20_000,
-        "a burn is fee-free, so only the burned amount leaves the account"
-    );
-    assert_eq!(
-        total_supply(&env, canister_id),
-        supply_before - 20_000,
-        "burning must reduce the supply rather than move the tokens"
-    );
+    match result {
+        Ok(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE - BURN_AMOUNT,
+                "a burn is fee-free, so only the burned amount leaves the account"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before - BURN_AMOUNT,
+                "burning must reduce the supply rather than move the tokens"
+            );
+        }
+        Err(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE,
+                "a rejected burn must not move funds"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before,
+                "a rejected burn must not change the supply"
+            );
+        }
+    }
+    result
 }
 
 pub fn test_transfer_from_minter<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)

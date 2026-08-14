@@ -482,7 +482,8 @@ fn test_transfer_from_self_subaccount_burn() {
     ic_ledger_suite_state_machine_tests::test_transfer_from_self_subaccount_burn(
         ledger_wasm(),
         encode_init_args,
-    );
+    )
+    .expect("an ICRC ledger accepts a self-spend burn, needing no allowance");
 }
 
 #[test]
