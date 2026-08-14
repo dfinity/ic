@@ -729,7 +729,7 @@ impl CkEthSetupBuilder {
     }
 
     fn build(self) -> CkEthSetup {
-        let env = Arc::new(new_env(&self.backend));
+        let env = Arc::new(new_env());
         let canisters = create_cketh_canisters(&env);
         install_ledger(&env, &canisters);
         install_evm_rpc(&env, &canisters, &self.backend);
@@ -746,26 +746,19 @@ impl CkEthSetupBuilder {
     }
 }
 
-/// Builds the PocketIC instance for [`CkEthSetupBuilder::build`]: the fiduciary subnet every
-/// ckETH fixture needs for the secp256k1 `key_1` used by the minter, plus — for a live backend —
-/// an NNS subnet (required by [`PocketIc::make_live`]) and going live immediately, before any
-/// canister of this fixture exists to schedule a timer whose outcall could stall waiting for an
-/// answer.
-fn new_env(backend: &EthereumBackend) -> PocketIc {
-    let mut builder = PocketIcBuilder::new()
+/// Builds the PocketIC instance for [`CkEthSetupBuilder::build`]: the fiduciary subnet every ckETH
+/// fixture needs for the secp256k1 `key_1` used by the minter. Always a non-live (manual-round)
+/// instance, even for [`EthereumBackend::Anvil`]: [`crate::live_scan`] builds its whole fixture here
+/// first and only switches to live outcalls once construction is complete, so `await_call` ticks
+/// deterministically for every setup call in between.
+fn new_env() -> PocketIc {
+    PocketIcBuilder::new()
         .with_fiduciary_subnet()
         .with_icp_config(IcpConfig {
             canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
             ..Default::default()
-        });
-    if backend.is_live() {
-        builder = builder.with_nns_subnet();
-    }
-    let mut env = builder.build();
-    if backend.is_live() {
-        env.make_live(None);
-    }
-    env
+        })
+        .build()
 }
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
@@ -855,30 +848,20 @@ fn install_ledger(env: &PocketIc, canisters: &CkEthCanisters) {
 }
 
 /// The Ethereum chain under test: which JSON-RPC endpoint the EVM RPC canister's outcalls reach,
-/// the corresponding minter init/upgrade assumptions about that chain's state (the block height to
-/// track, and where its log-scraping cursor starts), and — since only a chain reachable over the
-/// network needs genuine outcalls — whether the fixture runs on a live PocketIC instance.
+/// and the corresponding minter init/upgrade assumptions about that chain's state (the block height
+/// to track, and where its log-scraping cursor starts).
 enum EthereumBackend {
-    /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot, injected into a regular
-    /// (non-live) PocketIC instance.
+    /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot.
     Mocked,
     /// A live anvil node, reached over HTTP at its own URL: a fresh chain with no finalized blocks
     /// yet. Shared with the harness that started the node and keeps it running, hence the [`Arc`].
-    ///
-    /// Reaching it takes a live PocketIC instance, so this variant also adds an NNS subnet to the
-    /// fiduciary one and goes live before any canister exists (see [`new_env`]). The canisters
-    /// themselves are created and installed exactly as for [`EthereumBackend::Mocked`].
+    /// The canisters themselves are created and installed exactly as for
+    /// [`EthereumBackend::Mocked`]; [`crate::live_scan`] is the one that switches the PocketIC
+    /// instance to live outcalls, once its whole fixture is built.
     Anvil(Arc<Anvil>),
 }
 
 impl EthereumBackend {
-    fn is_live(&self) -> bool {
-        match self {
-            EthereumBackend::Mocked => false,
-            EthereumBackend::Anvil(_) => true,
-        }
-    }
-
     fn install_args(&self) -> InstallArgs {
         InstallArgs {
             override_provider: match self {

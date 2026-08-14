@@ -1,21 +1,22 @@
-//! Wraps the shared [`crate::CkEthSetup`] fixture, built in live mode, into a harness for the
-//! ckERC20 balance scan, driving *real* canister outcalls against a local anvil node that
-//! [`LiveBalanceScanSetup`] owns (see [`crate::anvil`]).
+//! Wraps the shared [`crate::ckerc20::CkErc20Setup`] fixture — itself built on the shared
+//! [`crate::CkEthSetup`] fixture — into a harness for the ckERC20 balance scan, driving *real*
+//! canister outcalls against a local anvil node that [`LiveBalanceScanSetup`] owns (see
+//! [`crate::anvil`]).
 //!
-//! Unlike [`crate::ckerc20::CkErc20Setup`] — which also runs on PocketIC but answers the EVM RPC
-//! canister's JSON-RPC outcalls with canned canister-http mocks ([`crate::mock::MockJsonRpcProviders`])
-//! — this harness runs PocketIC in *live* mode so the EVM RPC canister makes genuine outcalls
-//! through the IC's HTTPS-outcalls feature, and installs it with an `overrideProvider` that
-//! rewrites every provider URL to the harness' anvil node (reached over HTTP, mirroring the
-//! `evm_rpc_local` configuration of the EVM RPC canister). The minter therefore reads real
-//! Ethereum state from anvil, exercising the balance scan end to end: minter → EVM RPC canister →
-//! anvil.
+//! The whole fixture — minter, EVM RPC canister, ledger-suite-orchestrator, and the ckUSDC/ckUSDT
+//! ledger and index canisters the orchestrator spawns — is built on an ordinary (non-live) PocketIC
+//! instance, exactly as [`crate::ckerc20::CkErc20Setup`]'s mocked fixture is: `await_call` ticks
+//! deterministically, and every setup call completes in a bounded number of rounds. Only once
+//! construction is complete does [`LiveBalanceScanSetup::new_live`] switch the instance to
+//! auto-progress, so the EVM RPC canister's outcalls reach anvil for real from that point on.
+//! Building the fixture itself against an auto-progressing (wall-clock-paced) instance instead made
+//! every setup call race a round deadline it did not control, which reproducibly failed under CPU
+//! contention.
 //!
-//! Only the minter and the EVM RPC canister are installed. The full ckERC20 feature is activated by
-//! pointing the minter's ledger-suite-orchestrator id at a principal this harness controls, so
-//! supported tokens can be registered directly via `add_ckerc20_token` without a real orchestrator
-//! or any spawned ledgers — the balance scan only needs the token contract addresses in the
-//! minter's state.
+//! The EVM RPC canister is installed with an `overrideProvider` that rewrites every provider URL to
+//! the harness' anvil node (reached over HTTP, mirroring the `evm_rpc_local` configuration of the
+//! EVM RPC canister), so the minter reads real Ethereum state from anvil once live: minter → EVM RPC
+//! canister → anvil.
 
 use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
@@ -76,16 +77,19 @@ pub struct LiveBalanceScanSetup {
 }
 
 impl LiveBalanceScanSetup {
-    /// Starts a local anvil node, builds the shared [`CkEthSetup`] fixture against it — which makes
-    /// the PocketIC instance live, so the EVM RPC canister's outcalls reach anvil for real — and
-    /// wraps it in the full [`CkErc20Setup`], whose orchestrator registers ckUSDC/ckUSDT at the
-    /// mainnet addresses the balance scan reads.
+    /// Starts a local anvil node and builds the full [`CkErc20Setup`] fixture against it — minter,
+    /// EVM RPC canister, orchestrator, and the ckUSDC/ckUSDT ledger and index canisters it spawns —
+    /// on an ordinary (non-live) PocketIC instance, then switches that instance to live outcalls
+    /// now that construction is complete, so the EVM RPC canister's outcalls reach anvil for real
+    /// from this point on.
     pub fn new_live() -> Self {
         let anvil = Arc::new(Anvil::start());
         let cketh = CkEthSetup::builder()
             .with_ethereum_backend(EthereumBackend::Anvil(Arc::clone(&anvil)))
             .build();
         let ckerc20 = CkErc20Setup::with_cketh(cketh).add_supported_erc20_tokens();
+
+        ckerc20.env.auto_progress();
 
         Self { ckerc20, anvil }
     }
