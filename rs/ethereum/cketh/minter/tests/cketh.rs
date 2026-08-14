@@ -1358,13 +1358,6 @@ mod cketh_evm_rpc {
     }
 }
 
-/// Burning from the minter's own fee subaccount, end to end: a self-spend needing no allowance,
-/// paying no fee, and reducing total supply because the destination is the minting account. That
-/// combination is what the sweeper funding in `ledger_client` relies on.
-///
-/// The underlying ledger rule — that a spender may spend from an account only when it names the
-/// account's own subaccount — belongs to every ledger, and is covered generically in the ledger
-/// state machine tests (DEFI-2978) rather than here.
 #[test]
 fn should_burn_from_fee_account_without_an_allowance() {
     use ic_cketh_minter::CKETH_FEE_SUBACCOUNT;
