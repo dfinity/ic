@@ -171,7 +171,6 @@ pub enum TxFinalizedStatus {
         effective_transaction_fee: Option<Nat>,
     },
     PendingReimbursement(EthTransaction),
-    Failed(EthTransaction),
     Reimbursed {
         transaction_hash: String,
         reimbursed_amount: Nat,
@@ -192,9 +191,6 @@ impl Display for RetrieveEthStatus {
                 } => write!(f, "Confirmed({transaction_hash})"),
                 TxFinalizedStatus::PendingReimbursement(tx) => {
                     write!(f, "PendingReimbursement({})", tx.transaction_hash)
-                }
-                TxFinalizedStatus::Failed(tx) => {
-                    write!(f, "Failed({})", tx.transaction_hash)
                 }
                 TxFinalizedStatus::Reimbursed {
                     reimbursed_in_block,

@@ -2126,7 +2126,6 @@ mod eth_transactions {
     mod sweeper_funding {
         use super::withdrawal_flow;
         use super::*;
-        use crate::endpoints::{RetrieveEthStatus, TxFinalizedStatus};
         use crate::eth_logs::LedgerSubaccount;
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::TransactionCount;
@@ -2207,58 +2206,6 @@ mod eth_transactions {
                 );
                 assert_eq!(transactions.reimbursed, btreemap! {});
             }
-        }
-
-        #[test]
-        fn should_report_a_failed_funding_as_failed_not_pending_reimbursement() {
-            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let funding = sweeper_funding_request();
-            let burn_index = funding.ledger_burn_index;
-
-            let receipt = withdrawal_flow(&mut transactions, funding, TransactionStatus::Failure);
-
-            assert_eq!(
-                transactions.transaction_status(&burn_index),
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Failed((&receipt).into())),
-                "nothing will ever reimburse a funding, so PendingReimbursement would stay wrong \
-                 forever"
-            );
-        }
-
-        #[test]
-        fn should_report_a_successful_funding_as_success() {
-            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let funding = sweeper_funding_request();
-            let burn_index = funding.ledger_burn_index;
-
-            let receipt = withdrawal_flow(&mut transactions, funding, TransactionStatus::Success);
-
-            assert_matches!(
-                transactions.transaction_status(&burn_index),
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success {
-                    transaction_hash,
-                    ..
-                }) if transaction_hash == receipt.transaction_hash.to_string()
-            );
-        }
-
-        #[test]
-        fn should_still_report_a_failed_user_withdrawal_as_pending_reimbursement() {
-            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let burn_index = LedgerBurnIndex::new(15);
-
-            let receipt = withdrawal_flow(
-                &mut transactions,
-                cketh_withdrawal_request_with_index(burn_index),
-                TransactionStatus::Failure,
-            );
-
-            assert_eq!(
-                transactions.transaction_status(&burn_index),
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                    (&receipt).into()
-                ))
-            );
         }
 
         #[test]

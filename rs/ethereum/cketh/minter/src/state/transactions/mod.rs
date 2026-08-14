@@ -1000,18 +1000,14 @@ impl EthTransactions {
                 );
             }
             if tx.transaction_status() == &TransactionStatus::Failure {
-                let failure = EthTransaction {
-                    transaction_hash: tx.transaction_hash().to_string(),
-                };
-                // A request that cannot be reimbursed must not report a pending reimbursement:
-                // nothing will ever settle it, so the status would stay wrong forever.
-                let status = match self.processed_withdrawal_requests.get(burn_index) {
-                    Some(request) if !request.is_reimbursable() => {
-                        TxFinalizedStatus::Failed(failure)
-                    }
-                    _ => TxFinalizedStatus::PendingReimbursement(failure),
-                };
-                return (RetrieveEthStatus::TxFinalized(status), Some(tx.as_ref()));
+                return (
+                    RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
+                        EthTransaction {
+                            transaction_hash: tx.transaction_hash().to_string(),
+                        },
+                    )),
+                    Some(tx.as_ref()),
+                );
             }
 
             return (

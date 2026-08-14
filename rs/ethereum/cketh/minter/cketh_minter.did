@@ -273,8 +273,6 @@ type TxFinalizedStatus = variant {
     };
     // Transaction failed and will be reimbursed,
     PendingReimbursement : EthTransaction;
-    // Transaction failed and will not be reimbursed.
-    Failed : EthTransaction;
 };
 
 // Retrieve the status of a withdrawal request.
