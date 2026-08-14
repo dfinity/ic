@@ -289,8 +289,7 @@ mod test {
     use super::*;
     use std::collections::BTreeSet;
 
-    /// Holds a `Cycles` encoded via [`serde_as_u64_pair`], standing in for the
-    /// real types that must use it (e.g. `CanisterHttpPaymentReceipt`).
+    /// Holds a `Cycles` encoded via [`serde_as_u64_pair`].
     #[derive(Debug, PartialEq, Deserialize, Serialize)]
     struct AsU64Pair(#[serde(with = "serde_as_u64_pair")] Cycles);
 
