@@ -1802,12 +1802,26 @@ pub enum SnapshotDataOffset {
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
 pub enum CanisterLogFilter {
-    /// Filter logs by index range (inclusive).
+    /// Filter logs by index range `[start, end)`.
     #[serde(rename = "by_idx")]
-    ByIdx { start: u64, end: u64 },
-    /// Filter logs by timestamp range (inclusive).
+    ByIdx {
+        /// Start of the range (inclusive).
+        start: u64,
+        /// End of the range (exclusive).
+        ///
+        /// If `end <= start`, the range is empty.
+        end: u64,
+    },
+    /// Filter logs by timestamp range `[start, end)`.
     #[serde(rename = "by_timestamp_nanos")]
-    ByTimestampNanos { start: u64, end: u64 },
+    ByTimestampNanos {
+        /// Start of the range (inclusive).
+        start: u64,
+        /// End of the range (exclusive).
+        ///
+        /// If `end <= start`, the range is empty.
+        end: u64,
+    },
 }
 
 /// # Fetch Canister Logs Args.

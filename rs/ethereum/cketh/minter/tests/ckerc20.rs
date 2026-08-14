@@ -146,10 +146,22 @@ fn should_mint_with_ckerc20_setup() {
 mod deposit_erc20 {
     use assert_matches::assert_matches;
     use candid::Principal;
+    use ic_cketh_minter::endpoints::DepositStatus;
     use ic_cketh_minter::endpoints::events::EventPayload;
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::DEFAULT_USER_SUBACCOUNT;
     use ic_cketh_test_utils::ckerc20::CkErc20Setup;
+    use std::collections::BTreeSet;
+
+    /// Number of `AutomaticDepositReceived` events currently in the minter's audit log.
+    fn count_automatic_deposits_received(ckerc20: &CkErc20Setup) -> usize {
+        ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .filter(|event| matches!(event.payload, EventPayload::AutomaticDepositReceived { .. }))
+            .count()
+    }
 
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
@@ -183,11 +195,15 @@ mod deposit_erc20 {
             response.address, "0xaEE5aaa7fBfA9802e128D93e12eC4387824E4e4E",
             "BUG: key derivation should be stable"
         );
+        let valid_until = match &response.status {
+            DepositStatus::Scanning { valid_until, .. } => *valid_until,
+            other => panic!("BUG: expected Scanning, got {other:?}"),
+        };
         assert!(
             (time_before + scan_window_nanos..=time_after + scan_window_nanos)
-                .contains(&response.valid_until),
+                .contains(&valid_until),
             "BUG: valid_until {} not in [{}, {}]",
-            response.valid_until,
+            valid_until,
             time_before + scan_window_nanos,
             time_after + scan_window_nanos,
         );
@@ -286,8 +302,14 @@ mod deposit_erc20 {
         let (ckerc20, before) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
-        assert_eq!(before.scan_count, 0);
-        assert_eq!(before.last_scanned_block, None);
+        assert_matches!(
+            before.status,
+            DepositStatus::Scanning {
+                scan_count: 0,
+                last_scanned_block: None,
+                ..
+            }
+        );
 
         // Establish a latest block height, then run one balance-scan tick over the single armed
         // address (one balance per supported token; the values are irrelevant to scan progress).
@@ -296,14 +318,147 @@ mod deposit_erc20 {
         ckerc20.run_balance_scan(&vec![2_000_000_u128; tokens]);
 
         // deposit_erc20 now reports the address as scanned once, at that block height.
-        let (_ckerc20, after) = ckerc20
+        let (ckerc20, after) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
         assert_eq!(after.address, before.address);
-        assert_eq!(after.scan_count, 1);
+        assert_matches!(
+            after.status,
+            DepositStatus::Scanning { scan_count, last_scanned_block, .. }
+                if scan_count == 1 && last_scanned_block == Some(candid::Nat::from(scanned_at))
+        );
+
+        // The balances were below every token's minimum, so nothing was moved to the sweep queue.
+        assert!(
+            ckerc20.cketh.get_all_events().iter().all(|event| !matches!(
+                event.payload,
+                EventPayload::AutomaticDepositReceived { .. }
+            )),
+            "below-minimum balances must not emit an AutomaticDepositReceived event"
+        );
+    }
+
+    #[test]
+    fn should_move_funded_addresses_to_the_sweep_queue() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let tokens = ckerc20.supported_erc20_tokens.len();
+        assert!(
+            tokens >= 1,
+            "BUG: expected at least one supported ckERC20 token"
+        );
+
+        // Nothing awaits sweeping before any scan.
+        assert_eq!(count_automatic_deposits_received(&ckerc20), 0);
+
+        let (ckerc20, before) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+
+        // A balance well above every supported token's minimum makes the address a candidate for
+        // each token, so it is moved out of the watchlist into the sweep queue (one entry per
+        // token).
+        let scanned_at = 4_500_000_u64;
+        ckerc20.refresh_latest_block(scanned_at);
+        ckerc20.run_balance_scan(&vec![1_000_000_000_u128; tokens]);
+
+        // The move is event-sourced (metrics are deferred to DEFI-2965, so get_events is the sole
+        // observable): a single AutomaticDepositReceived event for the scanned account, listing every
+        // funded token, recorded the moment the funds were detected (durable even across an ungraceful
+        // trap).
+        let received: Vec<_> = ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .filter_map(|event| match event.payload {
+                EventPayload::AutomaticDepositReceived {
+                    owner,
+                    subaccount,
+                    address,
+                    deposits,
+                    ..
+                } => Some((owner, subaccount, address, deposits)),
+                _ => None,
+            })
+            .collect();
         assert_eq!(
-            after.last_scanned_block,
-            Some(candid::Nat::from(scanned_at))
+            received.len(),
+            1,
+            "one AutomaticDepositReceived event for the funded account"
+        );
+        let (owner, subaccount, address, deposits) = &received[0];
+        assert_eq!(*owner, caller);
+        assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
+        assert_eq!(*address, before.address);
+        let distinct_tokens: BTreeSet<&String> = deposits.iter().map(|d| &d.token).collect();
+        assert_eq!(
+            distinct_tokens.len(),
+            tokens,
+            "one deposit entry per funded token"
+        );
+
+        // deposit_erc20 now reports the detected funds (AwaitingSweep) at the same address, with one
+        // DetectedDeposit per funded token — the scanned balance, at the scan block.
+        let expected_tokens: BTreeSet<String> = ckerc20
+            .supported_erc20_tokens
+            .iter()
+            .map(|t| t.contract.address.clone())
+            .collect();
+        let (ckerc20, detected) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(detected.address, before.address);
+        let deposits = match &detected.status {
+            DepositStatus::AwaitingSweep(deposits) => deposits.clone(),
+            other => panic!("BUG: expected AwaitingSweep, got {other:?}"),
+        };
+        assert_eq!(
+            deposits.len(),
+            tokens,
+            "one DetectedDeposit per funded token"
+        );
+        assert_eq!(
+            deposits
+                .iter()
+                .map(|d| d.token.clone())
+                .collect::<BTreeSet<_>>(),
+            expected_tokens,
+            "detected tokens must be the supported ckERC20 contracts"
+        );
+        for d in &deposits {
+            assert_eq!(
+                d.scanned_balance,
+                candid::Nat::from(1_000_000_000_u64),
+                "the scanned balance is reported"
+            );
+            assert_eq!(
+                d.detected_at_block,
+                candid::Nat::from(scanned_at),
+                "detected at the scan block"
+            );
+        }
+
+        // The sweep queue must survive a real pre_upgrade -> post_upgrade cycle: it is rebuilt by
+        // replaying the CBOR-encoded AutomaticDepositReceived events (not the watchlist snapshot), which
+        // check_audit_log asserts is_equivalent_to the live state. A wrong minicbor annotation on
+        // AutomaticDeposit would fail here.
+        ckerc20
+            .cketh
+            .check_audit_logs_and_upgrade_as_ref(Default::default());
+        assert_eq!(
+            count_automatic_deposits_received(&ckerc20),
+            1,
+            "AutomaticDepositReceived events must survive the upgrade round-trip"
+        );
+
+        // A second deposit_erc20 returns the SAME AwaitingSweep and still does NOT re-arm the
+        // address (a detected address is never put back on the watchlist / re-scanned).
+        let (_ckerc20, again) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(
+            again, detected,
+            "a detected address is reported identically and never re-armed"
         );
     }
 

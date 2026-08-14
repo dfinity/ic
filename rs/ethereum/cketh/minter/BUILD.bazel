@@ -324,6 +324,7 @@ rust_test(
         ":minter",
         "//packages/ic-ethereum-types",
         "//rs/ethereum/cketh/test_utils",
+        "@crate_index//:assert_matches",
     ],
 )
 

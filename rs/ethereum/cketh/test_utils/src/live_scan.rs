@@ -21,7 +21,7 @@
 use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::{
-    DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
+    DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, DepositStatus,
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
@@ -49,7 +49,7 @@ pub enum SupportedToken {
 impl SupportedToken {
     const ALL: [SupportedToken; 2] = [SupportedToken::CkUsdc, SupportedToken::CkUsdt];
 
-    fn contract(self) -> Address {
+    pub fn contract(self) -> Address {
         let address = match self {
             SupportedToken::CkUsdc => USDC_ERC20_CONTRACT_ADDRESS,
             SupportedToken::CkUsdt => USDT_ERC20_CONTRACT_ADDRESS,
@@ -162,12 +162,11 @@ impl LiveBalanceScanSetup {
     }
 
     /// Waits until the minter's periodic balance scan has scanned `caller`'s deposit address —
-    /// observed through `deposit_erc20`'s own scan progress — and returns that progress. A failing
-    /// batch never advances an address, so `scan_count >= 1` already proves the `eth_call` against
-    /// anvil succeeded and decoded. Panics if no scan completes within `deadline`.
-    ///
-    /// Whether the address' balance made it a deposit *candidate* is not surfaced by
-    /// `deposit_erc20`; read that from [`Self::balance_scan_candidates`].
+    /// observed through `deposit_erc20`'s own status — and returns that response. An address counts
+    /// as scanned once its status is `Scanning` with `scan_count >= 1` (a below-minimum address,
+    /// advanced in place) or `AwaitingSweep` (a funded address, detected and queued). Either proves
+    /// the `eth_call` against anvil succeeded and decoded, since a failing batch never advances or
+    /// queues an address. Panics if no scan completes within `deadline`.
     pub fn await_scan(
         &self,
         caller: Principal,
@@ -177,7 +176,11 @@ impl LiveBalanceScanSetup {
         let start = Instant::now();
         loop {
             let progress = self.deposit_erc20(caller, subaccount);
-            if progress.scan_count >= 1 {
+            let scanned = match &progress.status {
+                DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
+                DepositStatus::AwaitingSweep(_) => true,
+            };
+            if scanned {
                 return progress;
             }
             assert!(
@@ -187,32 +190,4 @@ impl LiveBalanceScanSetup {
             std::thread::sleep(Duration::from_secs(2));
         }
     }
-
-    /// The greatest number of deposit candidates any balance scan reported, parsed from the
-    /// minter's `[balance_scan]` logs — the scan only logs the count, it is not otherwise exposed.
-    /// `deposit_erc20` reports that an address was scanned but not whether its balance cleared the
-    /// candidate threshold. `0` if no scan has logged a count yet.
-    pub fn balance_scan_candidates(&self) -> u64 {
-        self.ckerc20
-            .cketh
-            .minter_canister_logs()
-            .into_iter()
-            .filter_map(|log| candidates_in_log(&log.content))
-            .max()
-            .unwrap_or(0)
-    }
-}
-
-/// Extracts `N` from a `[balance_scan]: ... found N candidate(s) ...` log line, or `None` for any
-/// other line.
-fn candidates_in_log(line: &str) -> Option<u64> {
-    if !line.contains("[balance_scan]") {
-        return None;
-    }
-    line.split("found ")
-        .nth(1)?
-        .split_whitespace()
-        .next()?
-        .parse()
-        .ok()
 }
