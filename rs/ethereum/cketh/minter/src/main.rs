@@ -290,6 +290,7 @@ async fn get_minter_info() -> MinterInfo {
             eth_helper_contract_address,
             erc20_helper_contract_address,
             deposit_with_subaccount_helper_contract_address,
+            sweeper_contract_address: s.sweeper_contract_address.map(|a| a.to_string()),
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.clone()),
