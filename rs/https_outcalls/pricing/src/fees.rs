@@ -133,9 +133,22 @@ pub(crate) fn network_usage_fee(response_size: NumBytes, response_time: Duration
         .saturating_add(PER_RESPONSE_MS_FEE.saturating_mul(response_time.as_millis()))
 }
 
+/// The largest response [`network_usage_fee`] prices within `budget`, i.e. the
+/// inverse of its per-byte term.
+pub(crate) fn max_downloaded_bytes(budget: u128) -> NumBytes {
+    NumBytes::from(u64::try_from(budget / PER_DOWNLOADED_BYTE_FEE).unwrap_or(u64::MAX))
+}
+
 /// The fee for running the transform function for `instructions`.
 pub(crate) fn transform_usage_fee(instructions: NumInstructions) -> u128 {
     (instructions.get() as u128) / TRANSFORM_INSTRUCTION_DIVISOR
+}
+
+/// The most instructions [`transform_usage_fee`] prices within `budget`, i.e. its inverse.
+pub(crate) fn max_transform_instructions(budget: u128) -> NumInstructions {
+    NumInstructions::from(
+        u64::try_from(budget.saturating_mul(TRANSFORM_INSTRUCTION_DIVISOR)).unwrap_or(u64::MAX),
+    )
 }
 
 /// The fee for gossiping a transformed response of `transformed_response_size` to
@@ -838,6 +851,69 @@ mod tests {
             0,
         );
         assert_eq!(spent, Cycles::zero());
+    }
+
+    #[test]
+    fn max_downloaded_bytes_recovers_the_size_the_network_fee_priced() {
+        for size in [0, 1, 49, 50, 51, 1_000, 2_000_000, u64::MAX] {
+            let size = NumBytes::from(size);
+            assert_eq!(
+                max_downloaded_bytes(network_usage_fee(size, Duration::ZERO)),
+                size,
+                "a response of {size} does not survive the round trip"
+            );
+        }
+    }
+
+    #[test]
+    fn max_downloaded_bytes_is_the_largest_size_a_budget_affords() {
+        for budget in [0, 1, 49, 50, 51, 1_000, 100_000_000] {
+            let size = max_downloaded_bytes(budget);
+            assert!(
+                network_usage_fee(size, Duration::ZERO) <= budget,
+                "a response of {size} costs more than the budget {budget}"
+            );
+            assert!(
+                network_usage_fee(NumBytes::from(size.get() + 1), Duration::ZERO) > budget,
+                "budget {budget}: {size} is not the largest affordable response"
+            );
+        }
+        // Except past what `NumBytes` can hold, where the size is bounded by the
+        // type rather than by the budget: a larger response would still be
+        // affordable, there just isn't one.
+        assert_eq!(max_downloaded_bytes(u128::MAX), NumBytes::from(u64::MAX));
+        // Exact whenever the budget is a whole number of bytes.
+        assert_eq!(
+            network_usage_fee(max_downloaded_bytes(1_000), Duration::ZERO),
+            1_000
+        );
+    }
+
+    #[test]
+    fn max_transform_instructions_spends_a_budget_exactly() {
+        // The mirror image of the network fee: here it is the fee that divides and
+        // the limit that multiplies, so this is the direction that is exact — the
+        // instructions a budget buys cost precisely that budget, with nothing left
+        // over.
+        for budget in [0, 1, 12, 13, 14, 1_000, 5_000_000_000] {
+            let instructions = max_transform_instructions(budget);
+            assert_eq!(
+                transform_usage_fee(instructions),
+                budget,
+                "budget {budget} is not spent exactly by {instructions} instructions"
+            );
+            assert!(
+                transform_usage_fee(NumInstructions::from(
+                    instructions.get() + TRANSFORM_INSTRUCTION_DIVISOR as u64
+                )) > budget,
+                "budget {budget}: {instructions} is not the largest affordable transform"
+            );
+        }
+        // Except once the instruction count saturates: past what `NumInstructions`
+        // can hold the budget is no longer spent exactly, only never exceeded.
+        let saturated = max_transform_instructions(u128::MAX);
+        assert_eq!(saturated, NumInstructions::from(u64::MAX));
+        assert!(transform_usage_fee(saturated) < u128::MAX);
     }
 
     /// The terms shared by every worst case at N = 13: the 60 s latency cap and the
