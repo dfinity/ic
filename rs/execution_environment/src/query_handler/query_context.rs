@@ -929,7 +929,7 @@ impl<'a> QueryContext<'a> {
         };
 
         // Reject the calls to all the management canister methods that cannot be
-        // executed in the non-replicated mode, as well as the calls to methods not
+        // executed in non-replicated mode, as well as the calls to methods not
         // exported by the management canister at all, with the same error as for
         // such a query sent by an end user to the management canister.
         let method = match parse_query_method(&request.method_name) {

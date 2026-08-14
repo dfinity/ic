@@ -531,8 +531,8 @@ impl SystemStateModifications {
                 // neither validated nor routed here, no matter its receiver: if it is
                 // addressed to `IC_00`, it is executed by the query handler against the
                 // state of the own subnet (or rejected by it if the method cannot be
-                // executed in the non-replicated mode; note that composite queries are
-                // always executed in the non-replicated mode); if it provides a subnet ID
+                // executed in non-replicated mode; note that composite queries are
+                // always executed in non-replicated mode); if it provides a subnet ID
                 // directly as the receiver, it is rejected by the query handler with
                 // `CanisterNotFound` since only requests addressed to `IC_00` are executed
                 // as management canister calls in a composite query.
