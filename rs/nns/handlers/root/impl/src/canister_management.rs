@@ -163,8 +163,9 @@ async fn try_to_create_and_install_canister(
     Call::unbounded_wait(CanisterId::ic_00().get().0, "install_code")
         .with_arg(install_args)
         .await
-        .map(|_reply| ())
-        .map_err(|err| format_call_error(err.into()))?;
+        .map_err(IcCdkCallError::from)
+        .and_then(|response| response.candid_tuple::<()>().map_err(IcCdkCallError::from))
+        .map_err(format_call_error)?;
 
     Ok(id.get_canister_id())
 }
@@ -347,8 +348,14 @@ fn format_call_error(err: IcCdkCallError) -> String {
         IcCdkCallError::CandidDecodeFailed(err) => {
             (RejectCode::CanisterError as i32, err.to_string())
         }
-        // The call never left this canister, so it may well succeed if retried.
-        err => (RejectCode::SysTransient as i32, err.to_string()),
+        // Neither of these ever left this canister, so the call may well succeed
+        // if retried.
+        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+        IcCdkCallError::CallPerformFailed(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
     };
 
     format!("error code {code}: {message}")
