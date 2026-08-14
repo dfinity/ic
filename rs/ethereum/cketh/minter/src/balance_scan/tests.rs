@@ -1,6 +1,6 @@
 use super::*;
 use crate::deposit_address::DepositAddress;
-use crate::state::automatic_deposits::{DepositKey, DepositRequest};
+use crate::state::automatic_deposits::{DepositRequest, ScanProgress};
 use crate::test_fixtures;
 use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
 use ic_canister_runtime::{IcError, StubRuntime};
@@ -255,7 +255,9 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
 
     assert_eq!(
         outcomes,
-        vec![ScanOutcome::NothingFound(DepositKey::new(holder.0, token))]
+        vec![ScanOutcome::NothingFound(DepositRequest::new(
+            holder.0, token
+        ))]
     );
 }
 
@@ -331,10 +333,10 @@ fn ok_balances(balances: &[Erc20Value]) -> Result<MultiRpcResult<Hex>, IcError> 
     Ok(MultiRpcResult::Consistent(Ok(Hex::from(blob))))
 }
 
-fn live_entry(now: Timestamp, account: &Account, token: Address) -> DepositRequest {
+fn live_entry(now: Timestamp, account: &Account, token: Address) -> ScanProgress {
     read_state(|s| {
         s.automatic_deposits
-            .get_entry(now, &DepositKey::new(*account, token))
+            .get_entry(now, &DepositRequest::new(*account, token))
             .cloned()
     })
     .expect("BUG: expected a live watchlist entry")

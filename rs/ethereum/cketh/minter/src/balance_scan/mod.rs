@@ -8,7 +8,7 @@ use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::audit::process_event;
-use crate::state::automatic_deposits::{DepositKey, ScanTarget};
+use crate::state::automatic_deposits::{DepositRequest, ScanTarget};
 use crate::state::event::{AutomaticDeposit, EventType};
 use crate::state::{TaskType, mutate_state, read_state};
 use crate::timed_sized_map::Timestamp;
@@ -90,8 +90,9 @@ async fn scan<R: Runtime>(
                 ScanOutcome::Detected(deposit) => {
                     process_event(s, EventType::AutomaticDepositReceived(deposit))
                 }
-                ScanOutcome::NothingFound(key) => {
-                    s.automatic_deposits.record_scan(now, &key, latest_block)
+                ScanOutcome::NothingFound(request) => {
+                    s.automatic_deposits
+                        .record_scan(now, &request, latest_block)
                 }
             }
         }
@@ -107,7 +108,7 @@ enum ScanOutcome {
     Detected(AutomaticDeposit),
     /// The pair was scanned and holds nothing at or above its minimum, so it advances along the
     /// backoff schedule.
-    NothingFound(DepositKey),
+    NothingFound(DepositRequest),
 }
 
 /// Read the balance of every `due` `(address, token)` pair at `latest_block` and turn each finding
@@ -181,7 +182,7 @@ fn scan_outcome(
     latest_block: BlockNumber,
 ) -> ScanOutcome {
     if balance < min_deposit(&target.token()) {
-        return ScanOutcome::NothingFound(target.key());
+        return ScanOutcome::NothingFound(target.request());
     }
     ScanOutcome::Detected(AutomaticDeposit {
         owner: target.account().owner,

@@ -1,6 +1,6 @@
 use super::{
-    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositKey, DepositRequest,
-    MAX_ACTIVE_DEPOSITS, MAX_TOKENS_PER_ACCOUNT, SCAN_GAP_SECS, SECS_PER_BLOCK, SweepEntry,
+    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSITS,
+    MAX_TOKENS_PER_ACCOUNT, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry,
 };
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
@@ -17,7 +17,7 @@ fn should_watch_a_pair_for_the_scan_window() {
     struct Case {
         name: &'static str,
         arms: Vec<(Timestamp, Account, Address)>,
-        expected: Result<Entry<DepositRequest>, DepositErc20Error>,
+        expected: Result<Entry<ScanProgress>, DepositErc20Error>,
         live_lookups: Vec<(Account, Address)>,
         expected_len: usize,
     }
@@ -67,7 +67,7 @@ fn should_watch_a_pair_for_the_scan_window() {
         );
         for (account, token) in &case.live_lookups {
             assert_eq!(
-                deposits.get_entry(ts(0), &key(*account, *token)),
+                deposits.get_entry(ts(0), &request(*account, *token)),
                 case.expected.as_ref().ok(),
                 "case: {}",
                 case.name
@@ -88,17 +88,17 @@ fn should_treat_the_same_account_with_different_tokens_as_distinct_pairs() {
         .unwrap();
 
     assert_eq!(deposits.watchlist_len(), 2);
-    assert!(deposits.get_entry(ts(0), &key(a, usdc())).is_some());
-    assert!(deposits.get_entry(ts(0), &key(a, usdt())).is_some());
+    assert!(deposits.get_entry(ts(0), &request(a, usdc())).is_some());
+    assert!(deposits.get_entry(ts(0), &request(a, usdt())).is_some());
     // Both pairs share the one deposit address derived for the account.
     assert_eq!(
         deposits
-            .get_entry(ts(0), &key(a, usdc()))
+            .get_entry(ts(0), &request(a, usdc()))
             .unwrap()
             .value
             .address,
         deposits
-            .get_entry(ts(0), &key(a, usdt()))
+            .get_entry(ts(0), &request(a, usdt()))
             .unwrap()
             .value
             .address,
@@ -360,7 +360,7 @@ fn should_reproduce_equal_watchlist_across_snapshot_round_trip() {
     deposits
         .watch_deposit(ts(20), account(2), usdc(), deposit_address(&account(2)))
         .unwrap();
-    deposits.record_scan(ts(30), &key(account(1), usdc()), BlockNumber::new(500));
+    deposits.record_scan(ts(30), &request(account(1), usdc()), BlockNumber::new(500));
 
     let registry = deposits.watchlist_snapshot();
     assert_eq!(registry.registrations.len(), 3);
@@ -436,7 +436,7 @@ fn record_scan_advances_the_schedule() {
         1
     );
 
-    deposits.record_scan(ts(0), &key(account(0), usdc()), BlockNumber::new(1_000));
+    deposits.record_scan(ts(0), &request(account(0), usdc()), BlockNumber::new(1_000));
 
     // The scan bookkeeping is advanced, and survives into the snapshot.
     let snapshot = deposits.watchlist_snapshot();
@@ -471,7 +471,7 @@ fn record_scan_is_a_noop_for_an_expired_pair() {
     // Past the scan window the entry is no longer live; record_scan must not touch it.
     deposits.record_scan(
         ts(window_nanos() + 1),
-        &key(account(0), usdc()),
+        &request(account(0), usdc()),
         BlockNumber::new(1_000),
     );
 
@@ -496,14 +496,17 @@ fn record_automatic_deposit_received_removes_the_pair_and_queues_it() {
     ));
 
     // The watchlist entry is gone (removed by the move).
-    assert_eq!(deposits.get_entry(ts(0), &key(account(0), usdc())), None);
+    assert_eq!(
+        deposits.get_entry(ts(0), &request(account(0), usdc())),
+        None
+    );
     assert_eq!(deposits.watchlist_len(), 0);
 
     // One sweep entry for the pair, carrying the deposit address, finding block, scan_count, and
     // the scanned balance.
     assert_eq!(deposits.sweep_len(), 1);
     assert_eq!(
-        deposits.sweep.get(&key(account(0), usdc())),
+        deposits.sweep.get(&request(account(0), usdc())),
         Some(&sweep_entry(
             deposit_address(&account(0)),
             BlockNumber::new(900),
@@ -533,8 +536,8 @@ fn funding_one_token_leaves_the_account_other_tokens_armed() {
     ));
 
     // Only the funded token left the watchlist; its sibling keeps scanning.
-    assert_eq!(deposits.get_entry(ts(0), &key(a, usdc())), None);
-    assert!(deposits.get_entry(ts(0), &key(a, usdt())).is_some());
+    assert_eq!(deposits.get_entry(ts(0), &request(a, usdc())), None);
+    assert!(deposits.get_entry(ts(0), &request(a, usdt())).is_some());
     assert_eq!(deposits.watchlist_len(), 1);
     assert_eq!(deposits.sweep_len(), 1);
 }
@@ -566,7 +569,7 @@ fn record_automatic_deposit_received_inserts_unconditionally_without_a_watchlist
     assert_eq!(deposits.watchlist_len(), 0);
     assert_eq!(deposits.sweep_len(), 1);
     assert_eq!(
-        deposits.sweep.get(&key(account(0), usdc())),
+        deposits.sweep.get(&request(account(0), usdc())),
         Some(&sweep_entry(
             deposit_address(&account(0)),
             BlockNumber::new(900),
@@ -649,8 +652,8 @@ fn usdt() -> Address {
     token(0xbb)
 }
 
-fn key(account: Account, token: Address) -> DepositKey {
-    DepositKey::new(account, token)
+fn request(account: Account, token: Address) -> DepositRequest {
+    DepositRequest::new(account, token)
 }
 
 fn automatic_deposit(
@@ -706,9 +709,9 @@ fn owner() -> Principal {
     Principal::from_text("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap()
 }
 
-fn entry(account: &Account, expires_at: Timestamp) -> Entry<DepositRequest> {
+fn entry(account: &Account, expires_at: Timestamp) -> Entry<ScanProgress> {
     Entry {
-        value: DepositRequest::from(deposit_address(account)),
+        value: ScanProgress::from(deposit_address(account)),
         expires_at,
     }
 }

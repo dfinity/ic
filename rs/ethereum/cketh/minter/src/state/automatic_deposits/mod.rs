@@ -51,10 +51,10 @@ const MAX_TOKENS_PER_ACCOUNT: usize = 5;
 /// is future work (DEFI-2927).
 #[derive(Clone, PartialEq, Debug)]
 pub struct AutomaticDeposits {
-    watchlist: TimedSizedMap<DepositKey, DepositRequest>,
+    watchlist: TimedSizedMap<DepositRequest, ScanProgress>,
     /// Funded `(account, token)` pairs moved out of the watchlist, awaiting sweeping,
-    /// keyed by the funded [`DepositKey`]; each holds one [`SweepEntry`].
-    sweep: BTreeMap<DepositKey, SweepEntry>,
+    /// keyed by the funded [`DepositRequest`]; each holds one [`SweepEntry`].
+    sweep: BTreeMap<DepositRequest, SweepEntry>,
 }
 
 impl AutomaticDeposits {
@@ -72,21 +72,21 @@ impl AutomaticDeposits {
         account: Account,
         token: Address,
         address: DepositAddress,
-    ) -> Result<Entry<DepositRequest>, DepositErc20Error> {
-        let key = DepositKey::new(account, token);
-        if self.watchlist.get_entry(now, &key).is_none()
+    ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
+        let request = DepositRequest::new(account, token);
+        if self.watchlist.get_entry(now, &request).is_none()
             && self.armed_token_count(now, &account) >= MAX_TOKENS_PER_ACCOUNT
         {
             return Err(DepositErc20Error::TooManyTokensForAccount);
         }
         match self
             .watchlist
-            .insert(now, key, DepositRequest::from(address))
+            .insert(now, request, ScanProgress::from(address))
         {
             Ok(_) | Err(InsertError::AlreadyPresent { .. }) => {
                 let entry = self
                     .watchlist
-                    .get_entry(now, &key)
+                    .get_entry(now, &request)
                     .expect("BUG: the entry is live right after insert or AlreadyPresent");
                 Ok(entry.clone())
             }
@@ -98,7 +98,7 @@ impl AutomaticDeposits {
     fn armed_token_count(&self, now: Timestamp, account: &Account) -> usize {
         self.watchlist
             .iter()
-            .filter(|(key, entry)| &key.account == account && entry.expires_at >= now)
+            .filter(|(request, entry)| &request.account == account && entry.expires_at >= now)
             .count()
     }
 
@@ -122,7 +122,7 @@ impl AutomaticDeposits {
             .expect("BUG: deposit address registry capacity must be non-zero");
         let entries = registry.registrations.iter().map(|deposit| {
             (
-                DepositKey::new(
+                DepositRequest::new(
                     Account {
                         owner: deposit.owner,
                         subaccount: deposit.subaccount,
@@ -130,7 +130,7 @@ impl AutomaticDeposits {
                     deposit.erc20_contract_address,
                 ),
                 Entry {
-                    value: DepositRequest {
+                    value: ScanProgress {
                         address: deposit.address,
                         last_scanned_block: deposit.last_scanned_block,
                         scan_count: deposit.scan_count,
@@ -155,15 +155,15 @@ impl AutomaticDeposits {
         now: Timestamp,
         latest_block: BlockNumber,
     ) -> impl Iterator<Item = ScanTarget> + '_ {
-        self.watchlist.iter().filter_map(move |(key, entry)| {
+        self.watchlist.iter().filter_map(move |(request, entry)| {
             if entry.expires_at < now {
                 return None;
             }
-            let request = &entry.value;
-            let due = match request.last_scanned_block {
+            let progress = &entry.value;
+            let due = match progress.last_scanned_block {
                 None => true,
                 Some(last_scanned_block) => {
-                    let index = (request.scan_count as usize).saturating_sub(1);
+                    let index = (progress.scan_count as usize).saturating_sub(1);
                     index < SCAN_GAP_SECS.len() && {
                         let elapsed_blocks = latest_block
                             .checked_sub(last_scanned_block)
@@ -176,26 +176,30 @@ impl AutomaticDeposits {
                 }
             };
             due.then_some(ScanTarget {
-                key: *key,
-                address: request.address,
-                scan_count: request.scan_count,
+                request: *request,
+                address: progress.address,
+                scan_count: progress.scan_count,
             })
         })
     }
 
     /// The live watchlist entry for the `(account, token)` pair, or `None` if the pair is not
     /// currently armed (absent or expired as of `now`).
-    pub fn get_entry(&self, now: Timestamp, key: &DepositKey) -> Option<&Entry<DepositRequest>> {
-        self.watchlist.get_entry(now, key)
+    pub fn get_entry(
+        &self,
+        now: Timestamp,
+        request: &DepositRequest,
+    ) -> Option<&Entry<ScanProgress>> {
+        self.watchlist.get_entry(now, request)
     }
 
     /// Record that the pair's deposit address was scanned at `block`, advancing it along the
     /// backoff schedule (`last_scanned_block = block`, `scan_count += 1`). No-op if the pair is
     /// no longer live as of `now` (expired or evicted).
-    pub fn record_scan(&mut self, now: Timestamp, key: &DepositKey, block: BlockNumber) {
-        if let Some(request) = self.watchlist.get_value_mut(now, key) {
-            request.last_scanned_block = Some(block);
-            request.scan_count = request.scan_count.saturating_add(1);
+    pub fn record_scan(&mut self, now: Timestamp, request: &DepositRequest, block: BlockNumber) {
+        if let Some(progress) = self.watchlist.get_value_mut(now, request) {
+            progress.last_scanned_block = Some(block);
+            progress.scan_count = progress.scan_count.saturating_add(1);
         }
     }
 
@@ -222,10 +226,10 @@ impl AutomaticDeposits {
             owner: deposit.owner,
             subaccount: deposit.subaccount,
         };
-        let key = DepositKey::new(account, deposit.erc20_contract_address);
-        self.watchlist.remove(&key);
+        let request = DepositRequest::new(account, deposit.erc20_contract_address);
+        self.watchlist.remove(&request);
         let previous = self.sweep.insert(
-            key,
+            request,
             SweepEntry {
                 address: deposit.address,
                 last_scanned_block: deposit.last_scanned_block,
@@ -249,10 +253,10 @@ impl AutomaticDeposits {
         let registrations = self
             .watchlist
             .iter_by_expiry()
-            .map(|(key, deposit)| DepositAddressRegistration {
-                owner: key.account.owner,
-                subaccount: key.account.subaccount,
-                erc20_contract_address: key.token,
+            .map(|(request, deposit)| DepositAddressRegistration {
+                owner: request.account.owner,
+                subaccount: request.account.subaccount,
+                erc20_contract_address: request.token,
                 address: deposit.value.address,
                 expires_at_nanos: deposit.expires_at,
                 last_scanned_block: deposit.value.last_scanned_block,
@@ -284,8 +288,8 @@ impl AutomaticDeposits {
         account: &Account,
         token: Address,
     ) -> Option<DepositErc20Response> {
-        let key = DepositKey::new(*account, token);
-        if let Some(entry) = self.sweep.get(&key) {
+        let request = DepositRequest::new(*account, token);
+        if let Some(entry) = self.sweep.get(&request) {
             return Some(DepositErc20Response {
                 address: entry.address.to_string(),
                 status: DepositStatus::AwaitingSweep(DetectedDeposit {
@@ -295,14 +299,15 @@ impl AutomaticDeposits {
                 }),
             });
         }
-        self.get_entry(now, &key).map(|entry| DepositErc20Response {
-            address: entry.value.address.to_string(),
-            status: DepositStatus::Scanning {
-                valid_until: entry.expires_at.as_nanos(),
-                last_scanned_block: entry.value.last_scanned_block.map(Into::into),
-                scan_count: entry.value.scan_count as u64,
-            },
-        })
+        self.get_entry(now, &request)
+            .map(|entry| DepositErc20Response {
+                address: entry.value.address.to_string(),
+                status: DepositStatus::Scanning {
+                    valid_until: entry.expires_at.as_nanos(),
+                    last_scanned_block: entry.value.last_scanned_block.map(Into::into),
+                    scan_count: entry.value.scan_count as u64,
+                },
+            })
     }
 }
 
@@ -315,16 +320,19 @@ impl Default for AutomaticDeposits {
     }
 }
 
-/// The unit of registration, scanning, and sweeping: a user `account` paired with the ERC-20
-/// `token` contract it wants to deposit. All of an account's tokens share one derived deposit
-/// address, but each pair is armed, scanned, and swept independently.
+/// What `deposit_erc20` asks for, and the unit of registration, scanning, and sweeping: a user
+/// `account` paired with the ERC-20 `token` contract it intends to deposit. Nothing has been
+/// deposited yet — the request only arms the pair so a later deposit to it is noticed.
+///
+/// All of an account's tokens share one derived deposit address, but each pair is armed, scanned,
+/// and swept independently.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub struct DepositKey {
+pub struct DepositRequest {
     account: Account,
     token: Address,
 }
 
-impl DepositKey {
+impl DepositRequest {
     pub fn new(account: Account, token: Address) -> Self {
         Self { account, token }
     }
@@ -338,28 +346,28 @@ impl DepositKey {
     }
 }
 
-/// A [`DepositKey`] due for a balance scan, carrying everything a scan of it needs read off the
+/// A [`DepositRequest`] due for a balance scan, carrying everything a scan of it needs read off the
 /// watchlist up front: the deposit `address` derived for its account and the `scan_count` before
 /// this scan. Self-contained so the scanner never re-reads the watchlist (which a concurrent
 /// arming could have evicted from) after its outcalls.
 #[derive(Clone, Copy, Debug)]
 pub struct ScanTarget {
-    key: DepositKey,
+    request: DepositRequest,
     address: DepositAddress,
     scan_count: u32,
 }
 
 impl ScanTarget {
-    pub fn key(&self) -> DepositKey {
-        self.key
+    pub fn request(&self) -> DepositRequest {
+        self.request
     }
 
     pub fn account(&self) -> Account {
-        self.key.account
+        self.request.account
     }
 
     pub fn token(&self) -> Address {
-        self.key.token
+        self.request.token
     }
 
     pub fn address(&self) -> DepositAddress {
@@ -371,7 +379,7 @@ impl ScanTarget {
     }
 }
 
-/// A funded token awaiting sweeping at a [`DepositKey`]'s deposit address.
+/// A funded token awaiting sweeping at a [`DepositRequest`]'s deposit address.
 #[derive(Clone, PartialEq, Debug)]
 struct SweepEntry {
     /// The deposit address the funds sit at.
@@ -384,8 +392,10 @@ struct SweepEntry {
     scanned_balance: Erc20Value,
 }
 
+/// The watchlist value held against one [`DepositRequest`]: the deposit address derived for its
+/// account, and how far the balance scan has got with the pair.
 #[derive(Clone, PartialEq, Debug)]
-pub struct DepositRequest {
+pub struct ScanProgress {
     pub address: DepositAddress,
     /// Latest block number at which this pair's balance was scanned; None if never scanned.
     pub last_scanned_block: Option<BlockNumber>,
@@ -393,7 +403,7 @@ pub struct DepositRequest {
     pub scan_count: u32,
 }
 
-impl From<DepositAddress> for DepositRequest {
+impl From<DepositAddress> for ScanProgress {
     fn from(address: DepositAddress) -> Self {
         Self {
             address,
