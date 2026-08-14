@@ -720,7 +720,11 @@ crate.spec(
 )
 crate.spec(
     package = "ic-cdk",
-    version = "^0.19.0",
+    version = "^0.20.2",
+)
+crate.spec(
+    package = "ic-cdk-bitcoin-canister",
+    version = "^0.2.0",
 )
 crate.spec(
     package = "ic-cdk-executor",
