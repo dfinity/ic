@@ -18,8 +18,8 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    MetricVec, fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
-    nonzero_values,
+    MetricVec, fetch_histogram_stats, fetch_int_counter, fetch_int_counter_vec,
+    fetch_int_gauge_vec, metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::ids::{
@@ -1283,14 +1283,11 @@ fn response_from_sender(
 
 /// The matrix of canister messages from `SENDER_CANISTER` to `receiver` covered by
 /// the cooling down tests: a request or a response; unbounded-wait or bounded-wait;
-/// with no cycles or 1T cycles attached. Each message is paired with its
-/// `METRIC_ROUTED_MESSAGES` type label.
+/// with no cycles or 1T cycles attached.
 ///
 /// None of these dimensions makes any difference to a message headed for a cooling
 /// down subnet; contrast with `is_illegal_engine_msg` in `build_streams_impl()`.
-fn cooling_down_message_matrix(
-    receiver: CanisterId,
-) -> impl Iterator<Item = (&'static str, RequestOrResponse)> {
+fn cooling_down_message_matrix(receiver: CanisterId) -> impl Iterator<Item = RequestOrResponse> {
     [NO_DEADLINE, SOME_DEADLINE]
         .into_iter()
         .flat_map(|deadline| {
@@ -1300,14 +1297,8 @@ fn cooling_down_message_matrix(
         })
         .flat_map(move |(deadline, cycles)| {
             [
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    request_from_sender(receiver, deadline, cycles),
-                ),
-                (
-                    LABEL_VALUE_TYPE_RESPONSE,
-                    response_from_sender(receiver, deadline, cycles),
-                ),
+                request_from_sender(receiver, deadline, cycles),
+                response_from_sender(receiver, deadline, cycles),
             ]
         })
 }
@@ -1352,12 +1343,10 @@ fn output_queue_contents(
         .collect()
 }
 
-/// Asserts that exactly one message was routed, with the given type and status.
-fn assert_one_routed_message(msg_type: &str, status: &str, metrics_registry: &MetricsRegistry) {
-    assert_routed_messages_eq(
-        metric_vec(&[(&[(LABEL_TYPE, msg_type), (LABEL_STATUS, status)], 1)]),
-        metrics_registry,
-    );
+/// Retrieves the `METRIC_COOLING_DOWN_SKIPPED_QUEUES` counter's value.
+fn fetch_cooling_down_skipped_queues(metrics_registry: &MetricsRegistry) -> u64 {
+    fetch_int_counter(metrics_registry, METRIC_COOLING_DOWN_SKIPPED_QUEUES)
+        .unwrap_or_else(|| panic!("Counter not found: {METRIC_COOLING_DOWN_SKIPPED_QUEUES}"))
 }
 
 /// Tests that a canister message to a cooling down subnet is retained in the
@@ -1376,7 +1365,7 @@ fn build_streams_retains_messages_to_cooling_down_subnet() {
         // A canister hosted by the cooling down subnet; and the subnet itself, i.e.
         // its management canister.
         for receiver in [DESTINATION_CANISTER, CanisterId::from(cooling_down_subnet)] {
-            for (msg_type, msg) in cooling_down_message_matrix(receiver) {
+            for msg in cooling_down_message_matrix(receiver) {
                 with_test_replica_logger(|log| {
                     let (stream_builder, mut provided_state, metrics_registry) =
                         if cooling_down_subnet == LOCAL_SUBNET {
@@ -1404,11 +1393,8 @@ fn build_streams_retains_messages_to_cooling_down_subnet() {
                             .has_input()
                     );
 
-                    assert_one_routed_message(
-                        msg_type,
-                        LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN,
-                        &metrics_registry,
-                    );
+                    assert_routed_messages_eq(MetricVec::new(), &metrics_registry);
+                    assert_eq!(1, fetch_cooling_down_skipped_queues(&metrics_registry));
                     assert_eq_critical_errors(0, 0, 0, &metrics_registry);
 
                     // And it is routed as soon as the subnet stops cooling down.
@@ -1452,24 +1438,16 @@ fn build_streams_routes_messages_to_other_subnets_while_one_is_cooling_down() {
             routed_messages(&result_state, OTHER_SUBNET)
         );
         assert_routed_messages_eq(
-            metric_vec(&[
-                (
-                    &[
-                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
-                        (LABEL_STATUS, LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN),
-                    ],
-                    1,
-                ),
-                (
-                    &[
-                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
-                        (LABEL_STATUS, LABEL_VALUE_STATUS_SUCCESS),
-                    ],
-                    1,
-                ),
-            ]),
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_SUCCESS),
+                ],
+                1,
+            )]),
             &metrics_registry,
         );
+        assert_eq!(1, fetch_cooling_down_skipped_queues(&metrics_registry));
         assert_eq_critical_errors(0, 0, 0, &metrics_registry);
     });
 }

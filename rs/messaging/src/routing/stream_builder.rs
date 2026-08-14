@@ -42,6 +42,9 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Misrouted messages currently in streams, by remote subnet.
     pub stream_misrouted_messages: IntGaugeVec,
+    /// Canister output queues skipped because their destination subnet was
+    /// cooling down.
+    pub cooling_down_skipped_queues: IntCounter,
     /// Critical error for payloads above the maximum supported size.
     pub critical_error_payload_too_large: IntCounter,
     /// Critical error for responses dropped due to destination not found.
@@ -63,6 +66,7 @@ const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_STREAM_MISROUTED_MESSAGES: &str = "mr_stream_misrouted_messages";
+const METRIC_COOLING_DOWN_SKIPPED_QUEUES: &str = "mr_cooling_down_skipped_queues";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -75,7 +79,6 @@ const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
 const LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED: &str = "engine_not_allowed";
-const LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN: &str = "retained_cooling_down";
 
 const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "mr_stream_builder_payload_too_large";
 const CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND: &str =
@@ -127,6 +130,12 @@ impl StreamBuilderMetrics {
             "Count of misrouted messages in streams, by remote subnet. Only populated for subnets currently involved in a canister migration.",
             &[LABEL_REMOTE],
         );
+        let cooling_down_skipped_queues = metrics_registry.int_counter(
+            METRIC_COOLING_DOWN_SKIPPED_QUEUES,
+            "Canister output queues skipped because their destination subnet was cooling down. \
+            Counted once per queue per round, so the same queue is counted repeatedly for as \
+            long as the destination subnet keeps cooling down.",
+        );
         let critical_error_payload_too_large =
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
         let critical_error_response_destination_not_found =
@@ -168,6 +177,7 @@ impl StreamBuilderMetrics {
             routed_messages,
             routed_payload_sizes,
             stream_misrouted_messages,
+            cooling_down_skipped_queues,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
             critical_error_induct_response_failed,
@@ -475,7 +485,7 @@ impl StreamBuilderImpl {
                     // everything behind it in the same queue) until the destination stops
                     // cooling down, rather than rejecting or dropping it.
                     if !is_from_subnet_queues && network_topology.is_cooling_down(&dst_subnet_id) {
-                        self.observe_message_status(&msg, LABEL_VALUE_STATUS_RETAINED_COOLING_DOWN);
+                        self.metrics.cooling_down_skipped_queues.inc();
                         output_iter.exclude_queue();
                         continue;
                     }
