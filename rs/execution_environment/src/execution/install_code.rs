@@ -267,7 +267,7 @@ impl InstallCodeHelper {
     }
 
     /// Replays the previous `install_code` steps on the given clean canister.
-    /// Returns an error if the cycles balance of the clean canister differs from
+    /// Returns an error if the cycles balance of the clean canister dropped below
     /// the cycles balance at the start of the DTS execution or if any step
     /// fails. Otherwise, it returns an instance of the helper that can be used
     /// to continue the `install_code` execution.
@@ -299,9 +299,13 @@ impl InstallCodeHelper {
                 .saturating_sub(executed_wasm_instructions.get()),
         );
 
-        // The cycles balance of the clean canister must not change during the
-        // DTS execution.
-        if helper.initial_cycles_balance != paused.initial_cycles_balance {
+        // The cycles balance of the clean canister must not decrease during the
+        // DTS execution: the recorded steps are replayed on the clean canister
+        // state and a lower balance might no longer be able to cover them.
+        // An increase is safe: all cycles changes of the DTS execution are
+        // applied relative to the balance of the clean canister state and hence
+        // the additional cycles are preserved.
+        if helper.initial_cycles_balance < paused.initial_cycles_balance {
             let msg = "Mismatch in cycles balance when resuming an install code".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             let err = (clean_canister.canister_id(), err).into();
