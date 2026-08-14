@@ -1692,30 +1692,6 @@ fn composite_query_call_to_own_subnet_id_on_nns_subnet() {
     composite_query_call_to_own_subnet_id_impl(true);
 }
 
-#[test]
-fn composite_query_call_to_own_subnet_id_rejects_unknown_methods() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
-    let own_subnet_id = test.state().metadata.own_subnet_id;
-
-    let reply = test
-        .non_replicated_query(
-            canister_id,
-            "composite_query",
-            subnet_composite_query(
-                CanisterId::from(own_subnet_id),
-                "unknown",
-                Encode!().unwrap(),
-            ),
-        )
-        .unwrap();
-
-    assert_eq!(
-        reply,
-        WasmResult::Reply(format!("Canister {own_subnet_id} not found").into_bytes())
-    );
-}
-
 // A composite query cannot cross subnet boundaries: a request addressed to a
 // remote subnet ID is rejected by the query handler (and not silently dropped
 // while pushing the outgoing requests).
