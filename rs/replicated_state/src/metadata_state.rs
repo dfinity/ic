@@ -1773,7 +1773,7 @@ pub struct IngressHistoryState {
     /// Transient: memory usage of the ingress history.
     memory_usage: usize,
     /// Transient: number of entries in each `IngressState`.
-    state_counts: IngressStateCounts,
+    state_counts: IngressHistoryStats,
 }
 
 impl Default for IngressHistoryState {
@@ -1783,7 +1783,7 @@ impl Default for IngressHistoryState {
             pruning_times: Arc::new(BTreeMap::new()),
             next_terminal_time: UNIX_EPOCH,
             memory_usage: 0,
-            state_counts: IngressStateCounts::default(),
+            state_counts: IngressHistoryStats::default(),
         }
     }
 }
@@ -1797,7 +1797,7 @@ impl Default for IngressHistoryState {
 /// way the counts always add up to `IngressHistoryState::len()` and a non-zero
 /// `unknown` count reveals that something did record one.
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
-pub struct IngressStateCounts {
+pub struct IngressHistoryStats {
     pub received: usize,
     pub processing: usize,
     pub completed: usize,
@@ -1806,7 +1806,7 @@ pub struct IngressStateCounts {
     pub unknown: usize,
 }
 
-impl IngressStateCounts {
+impl IngressHistoryStats {
     /// Returns the counts as `(state name, count)` pairs.
     pub fn iter(&self) -> impl Iterator<Item = (&'static str, usize)> {
         [
@@ -2069,7 +2069,7 @@ impl IngressHistoryState {
     }
 
     /// Returns the number of statuses in the ingress history, by `IngressState`.
-    pub fn state_counts(&self) -> IngressStateCounts {
+    pub fn state_counts(&self) -> IngressHistoryStats {
         self.state_counts
     }
 
@@ -2079,8 +2079,8 @@ impl IngressHistoryState {
 
     fn compute_state_counts(
         statuses: &BTreeMap<MessageId, Arc<IngressStatus>>,
-    ) -> IngressStateCounts {
-        let mut state_counts = IngressStateCounts::default();
+    ) -> IngressHistoryStats {
+        let mut state_counts = IngressHistoryStats::default();
         for status in statuses.values() {
             state_counts.on_insert(status);
         }

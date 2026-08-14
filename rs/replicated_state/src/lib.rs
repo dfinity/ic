@@ -75,7 +75,7 @@ pub use canister_state::{
 pub use canister_states::CanisterStates;
 pub use metadata_state::subnet_schedule::{CanisterPriority, SubnetSchedule};
 pub use metadata_state::{
-    FullTopology, IngressHistoryState, IngressStateCounts, NetworkTopology, OwnSubnetInfo, Stream,
+    FullTopology, IngressHistoryState, IngressHistoryStats, NetworkTopology, OwnSubnetInfo, Stream,
     SubnetTopology, SystemMetadata,
 };
 pub use page_map::{PageIndex, PageMap};
