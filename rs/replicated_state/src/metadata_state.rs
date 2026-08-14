@@ -430,11 +430,12 @@ pub struct SubnetTopology {
     /// Whether the subnet is "cooling down", i.e. quiescing. While a subnet is
     /// cooling down:
     ///
-    ///  * it inducts no ingress messages;
-    ///  * the messages in canister output queues destined for it are not routed
-    ///    into the outgoing stream to it -- not even on the cooling down subnet
-    ///    itself, into its loopback stream -- but retained in the output queue they
-    ///    came from until it stops cooling down.
+    ///  * it inducts no ingress messages, so the ingress history becomes free of
+    ///    expiring message statuses;
+    ///  * (on all subnets) no messages are routed to a cooling down subnet --
+    ///    including into the cooling down subnet's own loopback stream -- but
+    ///    retained in their respective output queues, so that the respective
+    ///    streams can be emptied.
     pub cooling_down: bool,
 }
 
