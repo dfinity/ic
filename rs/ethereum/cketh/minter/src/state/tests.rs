@@ -1524,6 +1524,108 @@ mod eth_balance {
         );
     }
 
+    /// Funding takes its own arm in the balance accounting, so the ckETH and ckERC20 cases above
+    /// cannot reach it. What is asserted is the same shape as a ckETH withdrawal — a success debits
+    /// the transferred ETH plus the fee actually paid, a failure debits only that fee — because
+    /// funding is an ordinary withdrawal to the accounting. What differs is that nothing is ever
+    /// reimbursed, which is why the failing case must still leave the fee counters moving.
+    #[test]
+    fn should_update_after_successful_and_failed_sweeper_funding() {
+        let mut state_before_funding = initial_state();
+        apply_state_transition(
+            &mut state_before_funding,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+        let eth_balance_before_funding = state_before_funding.eth_balance.clone();
+
+        let funding_amount = Wei::new(10_000_000_000_000_000);
+        let funding_request = SweeperFundingRequest {
+            withdrawal_amount: funding_amount,
+            destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: None,
+            created_at: 1699527697000000000,
+        };
+        let funding_flow = WithdrawalFlow {
+            tx_fee: GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
+                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+            },
+            gas_limit: GasAmount::from(21_000_u32),
+            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
+            tx_status: TransactionStatus::Success,
+            ..WithdrawalFlow::for_request(funding_request)
+        };
+
+        let mut state_after_successful_funding = state_before_funding.clone();
+        let receipt_succeeded = funding_flow
+            .clone()
+            .apply(&mut state_after_successful_funding);
+        let after_success = state_after_successful_funding.eth_balance.clone();
+
+        // Asserted as the identity the accounting has to satisfy rather than as a fixed number: the
+        // funding ceiling covers both the ETH delivered and the fee, so whatever part of the fee
+        // went unspent is exactly what stays with the minter.
+        let unspent = after_success
+            .total_unspent_tx_fees
+            .checked_sub(eth_balance_before_funding.total_unspent_tx_fees)
+            .unwrap();
+        assert_eq!(
+            after_success.eth_balance,
+            eth_balance_before_funding
+                .eth_balance
+                .checked_sub(
+                    funding_amount
+                        .checked_sub(unspent)
+                        .expect("the unspent fee is part of the funding")
+                )
+                .unwrap(),
+            "a successful funding debits what it moved plus the fee it paid"
+        );
+        assert_eq!(
+            after_success.total_effective_tx_fees,
+            eth_balance_before_funding
+                .total_effective_tx_fees
+                .checked_add(receipt_succeeded.effective_transaction_fee())
+                .unwrap(),
+            "the fee actually paid must be counted"
+        );
+        assert!(
+            unspent > Wei::ZERO,
+            "this fixture over-provisions the fee, so some of it must be recorded as unspent"
+        );
+
+        let mut state_after_failed_funding = state_before_funding.clone();
+        let receipt_failed = WithdrawalFlow {
+            tx_status: TransactionStatus::Failure,
+            ..funding_flow
+        }
+        .apply(&mut state_after_failed_funding);
+        let after_failure = state_after_failed_funding.eth_balance.clone();
+
+        assert_eq!(
+            after_failure.eth_balance,
+            eth_balance_before_funding
+                .eth_balance
+                .checked_sub(receipt_failed.effective_transaction_fee())
+                .unwrap(),
+            "a failed funding moved no ETH, so only the fee is debited"
+        );
+        assert_eq!(
+            after_failure.total_effective_tx_fees, after_success.total_effective_tx_fees,
+            "the same fee was paid either way"
+        );
+        assert_eq!(
+            after_failure.total_unspent_tx_fees, after_success.total_unspent_tx_fees,
+            "and the same amount of it went unspent"
+        );
+    }
+
     #[test]
     fn should_update_after_successful_and_failed_erc20_withdrawal() {
         let mut state_before_withdrawal = initial_erc20_state();
