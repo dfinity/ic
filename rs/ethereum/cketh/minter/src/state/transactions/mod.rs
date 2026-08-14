@@ -852,10 +852,16 @@ impl EthTransactions {
             }
             WithdrawalRequest::SweeperFunding(request) => {
                 if receipt.status == TransactionStatus::Failure {
+                    // Funding is a plain value transfer to an address derived from the minter's
+                    // own key, so there is no code for it to revert in: reaching this means an
+                    // assumption broke. Logged rather than trapped, since the accounting holds
+                    // either way — the burn simply stays unspent.
                     log!(
                         INFO,
-                        "[record_finalized_transaction]: sweeper funding {} of {} to {} FAILED \
-                         (tx {}); the burn is NOT reimbursed and stays available as prepaid gas",
+                        "[record_finalized_transaction]: UNEXPECTED: sweeper funding {} of {} to \
+                         {} FAILED (tx {}), which should be impossible for a transfer to an \
+                         address the minter controls; the burn is NOT reimbursed and stays \
+                         available as prepaid gas",
                         ledger_burn_index,
                         request.withdrawal_amount,
                         request.destination,
@@ -1000,6 +1006,12 @@ impl EthTransactions {
                 );
             }
             if tx.transaction_status() == &TransactionStatus::Failure {
+                // A sweeper funding request is never reimbursed, so this status is imprecise for
+                // one. Tolerated rather than given a status of its own, which would mean adding a
+                // variant to `retrieve_eth_status`' return type and breaking existing clients:
+                // funding cannot fail in the first place, being a plain value transfer to an
+                // address derived from the minter's own key. Revisit if funding ever goes through
+                // a contract, where a revert becomes possible.
                 return (
                     RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
                         EthTransaction {
