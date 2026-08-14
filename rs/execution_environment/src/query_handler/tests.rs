@@ -9,10 +9,11 @@ use ic_management_canister_types_private::{
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, ListCanistersResponse, LogVisibilityV2,
     Payload,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_state::CanisterStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
     NumInstructions,
     ingress::WasmResult,
@@ -425,6 +426,112 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
             generate_call_to(&canisters, num_calls as usize).build(),
         );
         match &test {
+            Ok(_) => panic!("Query with {num_calls} calls should have failed!"),
+            Err(err) => assert_eq!(
+                err.code(),
+                ErrorCode::QueryCallGraphTotalInstructionLimitExceeded
+            ),
+        }
+    }
+}
+
+#[test]
+fn query_instructions_limit_from_resource_limits_can_raise_above_default() {
+    // The static replica default is tiny; the registry raises the per-query limit well above it.
+    // A query that would exceed the tiny default must succeed under the (larger) registry limit,
+    // proving the registry value overrides the default upward (not just via a minimum).
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit_per_query_message(4)
+        .with_resource_limits(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::from(5_000_000_000)),
+            ..Default::default()
+        })
+        .build();
+
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test.query(
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(1),
+                ingress_expiry: 0,
+                nonce: None,
+                sender_info: None,
+            },
+            receiver: canister,
+            method_name: "query".to_string(),
+            method_payload: wasm().stable_grow(10).reply_data(b"ok".as_ref()).build(),
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+        /*certificate_delegation_metadata=*/ None,
+    );
+    assert_eq!(result, Ok(WasmResult::Reply(b"ok".to_vec())));
+}
+
+#[test]
+fn composite_query_callgraph_max_instructions_from_resource_limits_is_enforced() {
+    const NUM_CANISTERS: u64 = 6;
+    const NUM_SUCCESSFUL_QUERIES: u64 = 5; // Number of calls expected to succeed
+
+    // The single `maximum_query_instructions` registry field also bounds the composite-query call
+    // graph total (rather than the static hypervisor config); the query handler must honor it.
+    let mut test = ExecutionTestBuilder::new()
+        .with_resource_limits(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::from(
+                NUM_SUCCESSFUL_QUERIES * INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
+            )),
+            ..Default::default()
+        })
+        .build();
+
+    let mut canisters = vec![];
+    for _ in 0..NUM_CANISTERS {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    // Generate call tree of depth 1: canister 0 calls into each of canisters 1..num_calls
+    // sequentially, staying under the depth limit but hitting the total-instruction limit.
+    fn generate_call_to(
+        canisters: &[ic_types::CanisterId],
+        canister_idx: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        assert_lt!(canister_idx, canisters.len());
+
+        let reply = if canister_idx <= 1 {
+            wasm().stable_size().reply_int()
+        } else {
+            generate_call_to(canisters, canister_idx - 1)
+        };
+
+        wasm().stable_grow(10).composite_query(
+            canisters[canister_idx],
+            call_args()
+                .other_side(wasm().reply_data(b"ignore".as_ref()))
+                .on_reply(reply),
+        )
+    }
+
+    // Below the configured limit: should succeed.
+    for num_calls in 1..NUM_SUCCESSFUL_QUERIES {
+        let result = test.non_replicated_query(
+            canisters[0],
+            "composite_query",
+            generate_call_to(&canisters, num_calls as usize).build(),
+        );
+        assert!(
+            result.is_ok(),
+            "Query with {num_calls} calls failed, when it should have succeeded: {result:?}"
+        );
+    }
+    // At/above the configured limit: should fail with the total-instruction-limit error.
+    for num_calls in NUM_SUCCESSFUL_QUERIES..NUM_CANISTERS {
+        let result = test.non_replicated_query(
+            canisters[0],
+            "composite_query",
+            generate_call_to(&canisters, num_calls as usize).build(),
+        );
+        match &result {
             Ok(_) => panic!("Query with {num_calls} calls should have failed!"),
             Err(err) => assert_eq!(
                 err.code(),
@@ -1293,6 +1400,46 @@ fn query_call_exceeds_instructions_limit() {
     );
 }
 
+#[test]
+fn query_instructions_limit_from_resource_limits_is_enforced() {
+    let instructions_limit = 4;
+    // The per-query instruction limit is configured via the subnet record's `ResourceLimits`
+    // (rather than the static scheduler config); the query handler must honor it.
+    let mut test = ExecutionTestBuilder::new()
+        .with_resource_limits(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::from(instructions_limit)),
+            ..Default::default()
+        })
+        .build();
+
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let output = test
+        .query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                    sender_info: None,
+                },
+                receiver: canister,
+                method_name: "query".to_string(),
+                method_payload: wasm().stable_grow(10).build(),
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+            /*certificate_delegation_metadata=*/ None,
+        )
+        .unwrap_err();
+    output.assert_contains(
+            ErrorCode::CanisterInstructionLimitExceeded,
+            &format!(
+                "Error from Canister {canister}: Canister exceeded the limit of {instructions_limit} instructions for single message execution."
+            )
+    );
+}
+
 // Subnet with a Normal cost schedule has no subnet admins concept; any caller
 // must be rejected with CanisterRejectedMessage.
 #[test]
@@ -1365,18 +1512,25 @@ fn test_list_canisters_success() {
     );
 }
 
-/// Returns a composite query calling the given management canister method
-/// with the given payload and replying with the reply or the reject message.
-fn ic00_composite_query(method_name: &str, payload: Vec<u8>) -> Vec<u8> {
+/// Returns a composite query calling the given method of the given receiver
+/// (`IC_00` or a subnet ID) with the given payload and replying with the reply
+/// or the reject message.
+fn subnet_composite_query(receiver: CanisterId, method_name: &str, payload: Vec<u8>) -> Vec<u8> {
     wasm()
         .call_simple(
-            CanisterId::ic_00(),
+            receiver,
             method_name,
             call_args()
                 .other_side(payload)
                 .on_reject(wasm().reject_message().append_and_reply()),
         )
         .build()
+}
+
+/// Returns a composite query calling the given management canister method
+/// with the given payload and replying with the reply or the reject message.
+fn ic00_composite_query(method_name: &str, payload: Vec<u8>) -> Vec<u8> {
+    subnet_composite_query(CanisterId::ic_00(), method_name, payload)
 }
 
 #[test]
@@ -1586,19 +1740,131 @@ fn composite_query_call_to_management_canister_rejects_unknown_methods() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
-    let err = test
+    let reply = test
         .non_replicated_query(
             canister_id,
             "composite_query",
             ic00_composite_query("unknown", Encode!().unwrap()),
         )
-        .unwrap_err();
+        .unwrap();
 
-    // Calls to methods not exported by the management canister are rejected
-    // before the request is even pushed onto the output queue and thus the
-    // reject response is not propagated to the caller.
-    // TODO(EXC-1655): fix reject response propagation.
-    assert_eq!(err.code(), ErrorCode::CanisterDidNotReply);
+    // The call is rejected with the same error as a query sent by an end user
+    // to the management canister.
+    assert_eq!(
+        reply,
+        WasmResult::Reply(b"Query method unknown not found.".to_vec())
+    );
+}
+
+// Calls to the management canister made from a reply callback of a composite
+// query must be handled in exactly the same way as calls made from the
+// composite query method itself.
+#[test]
+fn composite_query_call_to_management_canister_from_callback_rejects_unknown_methods() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    // Canister A calls the management canister in the reply callback of a
+    // nested composite query call to canister B.
+    let reply = test
+        .non_replicated_query(
+            canister_a,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    canister_b,
+                    call_args()
+                        .other_side(wasm().reply_data(b"pong"))
+                        .on_reply(ic00_composite_query("unknown", Encode!().unwrap())),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        reply,
+        WasmResult::Reply(b"Query method unknown not found.".to_vec())
+    );
+}
+
+// A management canister call may also provide the target subnet ID directly in
+// the request. Such a call is not executed as a management canister call by the
+// query handler; it is rejected with `CanisterNotFound` and, in particular, the
+// reject response is propagated to the caller.
+//
+// Outside of composite queries, such a call is only allowed for NNS canisters
+// and rejected for all other canisters, and hence both cases are covered here.
+fn composite_query_call_to_own_subnet_id_impl(own_subnet_is_nns: bool) {
+    let subnet_id = subnet_test_id(1);
+    let mut builder = ExecutionTestBuilder::new().with_own_subnet_id(subnet_id);
+    if own_subnet_is_nns {
+        builder = builder.with_nns_subnet_id(subnet_id);
+    }
+    let mut test = builder.build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    assert_eq!(own_subnet_id, subnet_id);
+    // The caller is an NNS canister if and only if the own subnet is the NNS subnet.
+    assert_eq!(
+        own_subnet_id == test.state().metadata.network_topology.nns_subnet_id,
+        own_subnet_is_nns
+    );
+
+    let reply = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            subnet_composite_query(
+                CanisterId::from(own_subnet_id),
+                "canister_status",
+                CanisterIdRecord::from(canister_id).encode(),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(
+        reply,
+        WasmResult::Reply(format!("Canister {own_subnet_id} not found").into_bytes())
+    );
+}
+
+#[test]
+fn composite_query_call_to_own_subnet_id() {
+    composite_query_call_to_own_subnet_id_impl(false);
+}
+
+#[test]
+fn composite_query_call_to_own_subnet_id_on_nns_subnet() {
+    composite_query_call_to_own_subnet_id_impl(true);
+}
+
+// A composite query cannot cross subnet boundaries: a request addressed to a
+// remote subnet ID is rejected by the query handler (and not silently dropped
+// while pushing the outgoing requests).
+#[test]
+fn composite_query_call_to_remote_subnet_id() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let nns_subnet_id = test.state().metadata.network_topology.nns_subnet_id;
+    assert_ne!(nns_subnet_id, test.state().metadata.own_subnet_id);
+
+    let reply = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            subnet_composite_query(
+                CanisterId::from(nns_subnet_id),
+                "canister_status",
+                CanisterIdRecord::from(canister_id).encode(),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(
+        reply,
+        WasmResult::Reply(format!("Canister {nns_subnet_id} not found").into_bytes())
+    );
 }
 
 #[test]

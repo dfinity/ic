@@ -809,7 +809,7 @@ fn state_equivalence() {
         Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
         TransactionSignature,
     };
-    use ic_cdk::management_canister::EcdsaPublicKeyResult;
+    use ic_cdk_management_canister::EcdsaPublicKeyResult;
     use icrc_ledger_types::icrc1::account::Account;
     use maplit::{btreemap, btreeset};
 
