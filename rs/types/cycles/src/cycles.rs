@@ -287,6 +287,54 @@ fn try_from_le_bytes(bytes: Vec<u8>) -> Result<Cycles, ProxyDecodeError> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::collections::BTreeSet;
+
+    /// Holds a `Cycles` encoded via [`serde_as_u64_pair`], standing in for the
+    /// real types that must use it (e.g. `CanisterHttpPaymentReceipt`).
+    #[derive(Debug, PartialEq, Deserialize, Serialize)]
+    struct AsU64Pair(#[serde(with = "serde_as_u64_pair")] Cycles);
+
+    /// A handful of amounts either side of the `u64::MAX` boundary.
+    const AMOUNTS: [Cycles; 5] = [
+        Cycles::zero(),
+        Cycles::new(1),
+        Cycles::new(u64::MAX as u128),
+        Cycles::new(u64::MAX as u128 + 1),
+        Cycles::new(u128::MAX),
+    ];
+
+    /// The derived `Serialize` impl is transparent, i.e. it emits the inner
+    /// `u128`, and CBOR cannot represent integers above `u64::MAX`.
+    #[test]
+    fn cbor_cannot_encode_large_cycles_transparently() {
+        assert!(serde_cbor::to_vec(&Cycles::new(u64::MAX as u128)).is_ok());
+        assert!(serde_cbor::to_vec(&Cycles::new(u64::MAX as u128 + 1)).is_err());
+        assert!(serde_cbor::to_vec(&Cycles::new(u128::MAX)).is_err());
+    }
+
+    /// [`serde_as_u64_pair`] must round-trip the whole `Cycles` range through
+    /// CBOR. That is what makes it usable in CBOR-encoded signed bytes.
+    #[test]
+    fn serde_as_u64_pair_round_trips_through_cbor() {
+        for amount in AMOUNTS {
+            let bytes = serde_cbor::to_vec(&AsU64Pair(amount))
+                .unwrap_or_else(|err| panic!("failed to encode {amount}: {err}"));
+            let decoded: AsU64Pair = serde_cbor::from_slice(&bytes)
+                .unwrap_or_else(|err| panic!("failed to decode {amount}: {err}"));
+            assert_eq!(AsU64Pair(amount), decoded);
+        }
+    }
+
+    /// Distinct amounts must have distinct encodings: types signing over a
+    /// `Cycles` rely on [`serde_as_u64_pair`] to produce unambiguous bytes.
+    #[test]
+    fn serde_as_u64_pair_encodings_are_distinct() {
+        let encodings: BTreeSet<_> = AMOUNTS
+            .iter()
+            .map(|amount| serde_cbor::to_vec(&AsU64Pair(*amount)).unwrap())
+            .collect();
+        assert_eq!(encodings.len(), AMOUNTS.len());
+    }
 
     #[test]
     fn test_addition() {
