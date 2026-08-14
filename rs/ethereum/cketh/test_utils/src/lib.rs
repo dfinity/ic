@@ -157,28 +157,30 @@ impl CkEthSetup {
         install_evm_rpc(&env, &canisters, &backend);
         install_minter(&env, &canisters, &backend);
 
-        let cketh = Self {
+        // Deliberately no call to the minter here, not even to check its address against
+        // `MINTER_ADDRESS`: `minter_address` is an update call, and a fixture that has executed a
+        // round lets the install-time timers fire before the test drives them, which the flows rely
+        // on doing themselves. `should_derive_the_expected_minter_address` checks the constant.
+        Self {
             env,
             caller: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID),
             ledger_id: canisters.ledger_id,
             minter_id: canisters.minter_id,
             evm_rpc_id: canisters.evm_rpc_id,
             support_subaccount: false,
-        };
-
-        assert_eq!(
-            Address::from_str(MINTER_ADDRESS).unwrap(),
-            Address::from_str(&cketh.minter_address()).unwrap()
-        );
-
-        cketh.settle_initial_sweeper_funding_check();
-        cketh
+        }
     }
 
     /// Answers the balance read that an install schedules, reporting a sweeper balance above the
-    /// low-water mark so no funding is due. Every mocked test needs it: an unanswered outcall stays
-    /// in flight forever, which skews pending-outcall assertions and stops the minter from stopping.
-    fn settle_initial_sweeper_funding_check(&self) {
+    /// low-water mark so no funding is due.
+    ///
+    /// Opt-in, and deliberately not called from [`Self::new`]: settling it there would have to tick,
+    /// and a fixture that has executed a round lets the install-time timers fire before the test
+    /// drives them, which the flows rely on doing themselves. Left in flight the read is harmless —
+    /// the funding check runs once per `SWEEPER_FUNDING_INTERVAL`, so it does not come back during a
+    /// mocked test — so call this only when an outcall in flight would get in the way: stopping the
+    /// minter, or asserting on the set of pending outcalls.
+    pub fn settle_initial_sweeper_funding_check(&self) {
         const TOPPED_UP: &str = "0x16345785d8a0000"; // 0.1 ETH
         // Waits for the outcall rather than ticking a fixed number of times, so a check that stops
         // firing fails here instead of surfacing in whichever test runs next.

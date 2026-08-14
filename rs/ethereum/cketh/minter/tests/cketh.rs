@@ -882,6 +882,10 @@ fn should_be_able_to_stop_canister_during_scraping() {
         debug_http_outcalls(&cketh.env)
     );
 
+    // The install-time funding check's balance read is an open call context of its own, and this
+    // test asserts the canister reaches Stopped with nothing left in flight.
+    cketh.settle_initial_sweeper_funding_check();
+
     // At this point:
     // - 1 block range has been scraped
     // - The minter has made an HTTP outcall for the 2nd block range
@@ -1379,4 +1383,17 @@ mod cketh_evm_rpc {
             }
         }
     }
+}
+
+/// The address the minter derives from its threshold-ECDSA key is hard-coded across these tests,
+/// so a change to the key derivation or to the canister id would otherwise surface as unrelated
+/// failures wherever the constant is used.
+#[test]
+fn should_derive_the_expected_minter_address() {
+    let cketh = CkEthSetup::default();
+
+    assert_eq!(
+        Address::from_str(MINTER_ADDRESS).unwrap(),
+        Address::from_str(&cketh.minter_address()).unwrap()
+    );
 }
