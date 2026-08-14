@@ -163,9 +163,7 @@ pub struct CanisterMemoryHandling {
 ///
 /// `Hypervisor::create_execution_state` always builds the initial memories of
 /// the new Wasm module (the module's declared minimum memory with its data
-/// segments applied); this type tells it what to do with them afterwards. It is
-/// a mandatory argument so that no caller can forget to restore the memories
-/// that the operation is supposed to preserve.
+/// segments applied); this type tells it what to do with them afterwards.
 #[derive(Debug)]
 // The `Explicit` variant is much larger than the others, but a `MemorySource`
 // is constructed once per operation and consumed right away.

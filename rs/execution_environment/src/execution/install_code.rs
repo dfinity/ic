@@ -575,8 +575,8 @@ impl InstallCodeHelper {
 
     /// Replaces the execution state of the current canister with the newly
     /// created execution state. Which memories the new execution state carries
-    /// (the initial ones of the new module, the preserved ones of the old
-    /// execution state, or the ones of a snapshot) has already been decided by
+    /// (the initial ones of the new module or the preserved ones of the old
+    /// execution state) has already been decided by
     /// `Hypervisor::create_execution_state`.
     ///
     /// It also updates the compute and memory allocations with the requested
