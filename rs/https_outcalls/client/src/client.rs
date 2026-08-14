@@ -395,15 +395,25 @@ async fn execute_http_request(
 
     let (grpc_result, elapsed) =
         timeout_with_capped_metric(max_response_time, adapter_client.https_outcall(proto_req))
-            .await
-            .map_err(|_| CanisterHttpReject {
-                reject_code: RejectCode::SysTransient,
-                message: "Deadline Exceeded".to_string(),
-            })?;
-    let adapter_response = grpc_result.map_err(|grpc_status| CanisterHttpReject {
-        reject_code: grpc_status_code_to_reject(grpc_status.code()),
-        message: grpc_status.message().to_string(),
-    })?;
+            .await;
+
+    let Ok(grpc_result) = grpc_result else {
+        charge_network_usage(budget, NumBytes::from(0), elapsed)?;
+        return Err(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "Deadline Exceeded".to_string(),
+        });
+    };
+    let adapter_response = match grpc_result {
+        Ok(adapter_response) => adapter_response,
+        Err(grpc_status) => {
+            charge_network_usage(budget, NumBytes::from(0), elapsed)?;
+            return Err(CanisterHttpReject {
+                reject_code: grpc_status_code_to_reject(grpc_status.code()),
+                message: grpc_status.message().to_string(),
+            });
+        }
+    };
     let HttpsOutcallResult {
         metrics: adapter_metrics,
         result,
@@ -411,15 +421,7 @@ async fn execute_http_request(
 
     let downloaded_bytes = NumBytes::from(adapter_metrics.map_or(0, |m| m.downloaded_bytes));
 
-    budget
-        .subtract_network_usage(NetworkUsage {
-            response_size: downloaded_bytes,
-            response_time: elapsed,
-        })
-        .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
-            reject_code: RejectCode::CanisterReject,
-            message: "Insufficient cycles".to_string(),
-        })?;
+    charge_network_usage(budget, downloaded_bytes, elapsed)?;
 
     let response = match result {
         Some(https_outcall_result::Result::Response(https_outcall_response)) => {
@@ -578,21 +580,35 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
     }
 }
 
+/// Charges an outcall attempt's network usage.
+fn charge_network_usage(
+    budget: &mut dyn BudgetTracker,
+    response_size: NumBytes,
+    response_time: Duration,
+) -> Result<(), CanisterHttpReject> {
+    budget
+        .subtract_network_usage(NetworkUsage {
+            response_size,
+            response_time,
+        })
+        .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
+            reject_code: RejectCode::CanisterReject,
+            message: "Insufficient cycles".to_string(),
+        })
+}
+
 /// Wraps a future in a timeout and caps the elapsed time to the limit.
 /// The returned duration is always less than or equal to the limit.
 async fn timeout_with_capped_metric<F>(
     limit: Duration,
     future: F,
-) -> Result<(F::Output, Duration), tokio::time::error::Elapsed>
+) -> (Result<F::Output, tokio::time::error::Elapsed>, Duration)
 where
     F: std::future::Future,
 {
     let start = Instant::now();
-    let result = timeout(limit, future).await?;
-
-    let elapsed = std::cmp::min(start.elapsed(), limit);
-
-    Ok((result, elapsed))
+    let result = timeout(limit, future).await;
+    (result, std::cmp::min(start.elapsed(), limit))
 }
 
 #[cfg(test)]
