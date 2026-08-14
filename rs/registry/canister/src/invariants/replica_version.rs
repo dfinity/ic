@@ -584,9 +584,10 @@ mod tests {
     fn check_replica_version(hash: &str, urls: Vec<String>) {
         let registry = invariant_compliant_registry(0);
 
-        let key = make_replica_version_key(test_replica_version());
+        let replica_version = test_replica_version().to_string();
+        let key = make_replica_version_key(&replica_version);
         let value = ReplicaVersionRecord {
-            replica_version_id: Some(ReplicaVersion::default().to_string()),
+            replica_version_id: Some(replica_version),
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -634,9 +635,10 @@ mod tests {
     fn panic_when_measurements_are_empty() {
         let registry = invariant_compliant_registry(0);
 
-        let key = make_replica_version_key(test_replica_version());
+        let replica_version = test_replica_version().to_string();
+        let key = make_replica_version_key(&replica_version);
         let value = ReplicaVersionRecord {
-            replica_version_id: Some(ReplicaVersion::default().to_string()),
+            replica_version_id: Some(replica_version),
             release_package_sha256_hex: MOCK_HASH.into(),
             release_package_urls: vec![MOCK_URL.into()],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
