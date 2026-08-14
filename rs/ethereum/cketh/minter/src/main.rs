@@ -22,7 +22,7 @@ use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
     EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
 };
-use ic_cketh_minter::guard::retrieve_withdraw_guard;
+use ic_cketh_minter::guard::{deposit_erc20_guard, retrieve_withdraw_guard};
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
@@ -179,6 +179,14 @@ async fn minter_address() -> String {
 async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
+    // Held for the whole call, including across the ECDSA public key fetch below, so that the
+    // status check and the registration that follows it cannot be interleaved with another
+    // `deposit_erc20` from the same principal.
+    let _guard = deposit_erc20_guard(caller).unwrap_or_else(|e| {
+        ic_cdk::trap(format!(
+            "Failed retrieving guard for principal {caller}: {e:?}"
+        ))
+    });
     let token = Address::from_str(&arg.erc20_contract_address)
         .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: invalid ERC-20 contract address: {e}")));
     if !read_state(|s| s.is_supported_ckerc20(&token)) {

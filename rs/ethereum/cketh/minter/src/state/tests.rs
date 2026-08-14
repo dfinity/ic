@@ -1072,6 +1072,7 @@ fn state_equivalence() {
         },
         eth_transactions: eth_transactions.clone(),
         pending_withdrawal_principals: Default::default(),
+        pending_deposit_principals: Default::default(),
         active_tasks: Default::default(),
         http_request_counter: 100,
         eth_balance: Default::default(),
