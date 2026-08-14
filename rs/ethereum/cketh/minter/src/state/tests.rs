@@ -995,24 +995,30 @@ fn state_equivalence() {
     let automatic_deposits = {
         let mut deposits = AutomaticDeposits::default();
         deposits
-            .watch_address_for_account(
+            .watch_deposit(
                 Timestamp::from_nanos(1),
                 Account {
                     owner: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
                     subaccount: Some([0_u8; 32]),
                 },
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                    .parse()
+                    .unwrap(),
                 "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0"
                     .parse()
                     .unwrap(),
             )
             .unwrap();
         deposits
-            .watch_address_for_account(
+            .watch_deposit(
                 Timestamp::from_nanos(2),
                 Account {
                     owner: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
                     subaccount: Some([1_u8; 32]),
                 },
+                "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+                    .parse()
+                    .unwrap(),
                 "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25"
                     .parse()
                     .unwrap(),
@@ -1066,6 +1072,7 @@ fn state_equivalence() {
         },
         eth_transactions: eth_transactions.clone(),
         pending_withdrawal_principals: Default::default(),
+        pending_deposit_principals: Default::default(),
         active_tasks: Default::default(),
         http_request_counter: 100,
         eth_balance: Default::default(),

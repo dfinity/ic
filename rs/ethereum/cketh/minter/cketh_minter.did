@@ -384,7 +384,13 @@ type WithdrawalError = variant {
 };
 
 // Argument for the deposit_erc20 endpoint.
-type DepositErc20Arg = record { mode : DepositMode };
+type DepositErc20Arg = record {
+    // The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC).
+    // Traps if it cannot be parsed as an Ethereum address. Must be a ckERC20
+    // token supported by the minter.
+    erc20_contract_address : text;
+    mode : DepositMode;
+};
 
 // How the fee for a ckERC20 deposit address registration is settled.
 type DepositMode = variant {
@@ -417,24 +423,27 @@ type DepositStatus = variant {
         // How many times the address' balance has been scanned so far.
         scan_count : nat64;
     };
-    // Funds were detected at or above the minimum and queued for sweeping, one
-    // entry per funded token.
-    AwaitingSweep : vec DetectedDeposit;
+    // Funds were detected at or above the minimum and queued for sweeping.
+    AwaitingSweep : DetectedDeposit;
 };
 
 // A funded token detected at a deposit address and queued for sweeping.
 type DetectedDeposit = record {
     // The ERC-20 token contract whose balance was found.
-    token : text;
-    // The balance scanned for `token`; may change before the sweep.
+    erc20_contract_address : text;
+    // The balance scanned for `erc20_contract_address`; may change before the sweep.
     scanned_balance : nat;
     // The Ethereum block at which the balance was detected.
     detected_at_block : nat;
 };
 
 type DepositErc20Error = variant {
-    // The maximum number of concurrently armed deposit addresses has been reached.
-    TooManyActiveAddresses;
+    // The erc20_contract_address is not a ckERC20 token supported by the minter.
+    TokenNotSupported : record {supported_tokens : vec CkErc20Token};
+    // The account already has the maximum number of ERC-20 tokens armed.
+    TooManyTokensForAccount;
+    // The maximum number of concurrently armed deposits (account, token pairs) has been reached.
+    TooManyActiveDeposits;
     // The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable : text;
 };
@@ -658,6 +667,7 @@ type Event = record {
             registrations : vec record {
                 owner : principal;
                 subaccount : opt Subaccount;
+                erc20_contract_address : text;
                 address : text;
                 expires_at_nanos : nat64;
                 last_scanned_block : opt nat;
@@ -668,9 +678,10 @@ type Event = record {
             owner : principal;
             subaccount : opt Subaccount;
             address : text;
+            erc20_contract_address : text;
             last_scanned_block : nat;
             scan_count : nat64;
-            deposits : vec record { token : text; scanned_balance : nat };
+            scanned_balance : nat;
         };
     };
 };
