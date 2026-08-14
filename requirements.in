@@ -1,7 +1,7 @@
 cbor>=1.0.0
 cbor2>=5.9.0
 configargparse
-cryptography>=48.0.1
+cryptography>=50.0.0
 cvss>=2.5
 fabric
 idracredfishsupport>=0.0.8

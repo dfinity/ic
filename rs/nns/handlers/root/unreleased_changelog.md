@@ -9,10 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* Support for upgrade options. We are mostly interested in
-  wasm_memory_persistence, since that is needed to upgrade modern Motoko
-  canisters that use Enhanced Orthogonal Persistence.
-
 ## Changed
 
 ## Deprecated

@@ -35,6 +35,13 @@ pub struct SubnetTopology {
     pub canister_cycles_cost_schedule: i32,
     #[prost(message, repeated, tag = "8")]
     pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    /// Whether the subnet is "cooling down", i.e. quiescing: it inducts no ingress
+    /// messages.
+    ///
+    /// See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+    /// semantics.
+    #[prost(bool, tag = "9")]
+    pub cooling_down: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -651,6 +658,14 @@ pub struct SplitFrom {
     /// subnet that this was split from.
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubnetMerged {
+    /// Whether the subnet is the result of a subnet merge. Because `false` is
+    /// encoded as an empty message, the enclosing file is not written at all in
+    /// that case.
+    #[prost(bool, tag = "1")]
+    pub merged: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

@@ -1523,7 +1523,7 @@ fn cycles_burn128_clamps_to_available_cycles() {
     let mut heap = vec![0; 16];
     api.ic0_canister_liquid_cycle_balance128(0, &mut heap)
         .unwrap();
-    let liquid_cycles = Cycles::from(&heap);
+    let liquid_cycles = Cycles::try_from(&heap).unwrap();
     // Sanity check.
     assert!(liquid_cycles < INITIAL_CYCLES);
     let freeze_limit = INITIAL_CYCLES - liquid_cycles;
@@ -1534,7 +1534,7 @@ fn cycles_burn128_clamps_to_available_cycles() {
         .unwrap();
 
     // Only the available cycle balance was burned.
-    assert_eq!(liquid_cycles, Cycles::from(&heap));
+    assert_eq!(liquid_cycles, Cycles::try_from(&heap).unwrap());
 
     // The balance is equal to the freeze limit.
     let system_state_modifications = api.take_system_state_modifications();
@@ -1911,19 +1911,22 @@ fn test_ic0_cycles_burn() {
     for _ in 0..2 {
         let mut heap = vec![0; 16];
         api.ic0_cycles_burn128(removed, 0, &mut heap).unwrap();
-        assert_eq!(removed, Cycles::from(&heap));
+        assert_eq!(removed, Cycles::try_from(&heap).unwrap());
     }
 
     let mut heap = vec![0; 16];
     api.ic0_cycles_burn128(removed, 0, &mut heap).unwrap();
     // The remaining balance is lower than the amount requested to be burned,
     // hence the system will remove as many cycles as it can.
-    assert_eq!(Cycles::new(1_000_000_000_000), Cycles::from(&heap));
+    assert_eq!(
+        Cycles::new(1_000_000_000_000),
+        Cycles::try_from(&heap).unwrap()
+    );
 
     let mut heap = vec![0; 16];
     api.ic0_cycles_burn128(removed, 0, &mut heap).unwrap();
     // There are no more cycles that can be burned.
-    assert_eq!(Cycles::new(0), Cycles::from(&heap));
+    assert_eq!(Cycles::new(0), Cycles::try_from(&heap).unwrap());
 }
 
 #[test]

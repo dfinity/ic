@@ -59,7 +59,8 @@ use ic_types::messages::{
 };
 use ic_types::{
     CanisterId, CanisterTimer, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
-    NumBytes, NumInstructions, PrincipalId, SnapshotId, Time,
+    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
+    NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_types_cycles::{
     CanisterCreation, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
@@ -778,6 +779,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1043,6 +1045,7 @@ impl CanisterManager {
             deleted_call_context_responses: rejects,
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1087,6 +1090,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1120,6 +1124,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject,
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1659,6 +1664,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1690,6 +1696,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         }
     }
 
@@ -1804,6 +1811,7 @@ impl CanisterManager {
                     deleted_call_context_responses: vec![],
                     stop_call_id_to_remove: None,
                     stop_contexts_to_reject: vec![],
+                    snapshot_to_make_immutable: None,
                 });
             }
             ChunkValidationResult::ValidationError(err) => {
@@ -1851,6 +1859,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -1892,6 +1901,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2171,6 +2181,7 @@ impl CanisterManager {
             deleted_call_context_responses,
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2382,6 +2393,34 @@ impl CanisterManager {
                         });
             }
 
+            // The snapshot's Wasm and stable memory must fit within the limits
+            // for the loaded module's execution mode.
+            let wasm_memory_limit = match new_execution_state.wasm_execution_mode {
+                WasmExecutionMode::Wasm32 => MAX_WASM_MEMORY_IN_BYTES,
+                WasmExecutionMode::Wasm64 => MAX_WASM64_MEMORY_IN_BYTES,
+            };
+            let snapshot_wasm_memory_bytes =
+                execution_snapshot.wasm_memory.size.get() as u64 * WASM_PAGE_SIZE_IN_BYTES as u64;
+            if snapshot_wasm_memory_bytes > wasm_memory_limit {
+                return Err(CanisterManagerError::CanisterSnapshotInconsistent {
+                    message: format!(
+                        "Snapshot Wasm memory ({snapshot_wasm_memory_bytes} bytes) exceeds the \
+                         limit allowed for the snapshot module's execution mode \
+                         ({wasm_memory_limit} bytes)."
+                    ),
+                });
+            }
+            let snapshot_stable_memory_bytes =
+                execution_snapshot.stable_memory.size.get() as u64 * WASM_PAGE_SIZE_IN_BYTES as u64;
+            if snapshot_stable_memory_bytes > MAX_STABLE_MEMORY_IN_BYTES {
+                return Err(CanisterManagerError::CanisterSnapshotInconsistent {
+                    message: format!(
+                        "Snapshot stable memory ({snapshot_stable_memory_bytes} bytes) exceeds the \
+                         limit allowed ({MAX_STABLE_MEMORY_IN_BYTES} bytes)."
+                    ),
+                });
+            }
+
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
 
             if canister_id == snapshot_canister_id {
@@ -2526,6 +2565,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: Some(snapshot_id),
         })
     }
 
@@ -2598,6 +2638,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2727,6 +2768,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2755,17 +2797,11 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
 
         // validate args:
-        let wasm_mode = canister
-            .execution_state
-            .as_ref()
-            .map(|x| x.wasm_execution_mode)
-            .unwrap_or_else(|| WasmExecutionMode::Wasm32);
-        let valid_args =
-            ValidatedSnapshotMetadata::validate(args.clone(), wasm_mode).map_err(|e| {
-                CanisterManagerError::CanisterSnapshotInconsistent {
-                    message: format!("Snapshot Metadata contains invalid data: {e:?}"),
-                }
-            })?;
+        let valid_args = ValidatedSnapshotMetadata::validate(args.clone()).map_err(|e| {
+            CanisterManagerError::CanisterSnapshotInconsistent {
+                message: format!("Snapshot Metadata contains invalid data: {e:?}"),
+            }
+        })?;
 
         let replace_snapshot_size = match args.replace_snapshot() {
             Some(replace_snapshot_id) => self.get_snapshot(canister, replace_snapshot_id)?.size(),
@@ -2848,6 +2884,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
@@ -2872,8 +2909,11 @@ impl CanisterManager {
 
         let snapshot = self.get_snapshot(canister, snapshot_id)?;
 
-        // Ensure the snapshot was created via metadata upload, not from the canister.
-        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
+        // Ensure the snapshot was created via metadata upload, not from the
+        // canister, and has not been restored onto a canister.
+        if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved)
+            || snapshot.restored()
+        {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
         }
 
@@ -2966,6 +3006,7 @@ impl CanisterManager {
                             deleted_call_context_responses: vec![],
                             stop_call_id_to_remove: None,
                             stop_contexts_to_reject: vec![],
+                            snapshot_to_make_immutable: None,
                         });
                     }
                     ChunkValidationResult::ValidationError(err) => {
@@ -3008,6 +3049,7 @@ impl CanisterManager {
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
+            snapshot_to_make_immutable: None,
         })
     }
 
