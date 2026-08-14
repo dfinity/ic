@@ -86,7 +86,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
     }
 
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-        dogecoin_canister::dogecoin_get_utxos(&request.0)
+        dogecoin_canister::dogecoin_get_utxos(&request.into())
             .await
             .map(GetUtxosResponse::from)
             .map_err(|err| CallError::from_cdk_call_error("dogecoin_get_utxos", err))
