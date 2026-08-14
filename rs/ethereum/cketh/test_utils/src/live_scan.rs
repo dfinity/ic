@@ -20,6 +20,7 @@ use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
+    DepositStatus,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
@@ -51,7 +52,7 @@ pub enum SupportedToken {
 impl SupportedToken {
     const ALL: [SupportedToken; 2] = [SupportedToken::CkUsdc, SupportedToken::CkUsdt];
 
-    fn contract(self) -> Address {
+    pub fn contract(self) -> Address {
         let address = match self {
             SupportedToken::CkUsdc => USDC_ERC20_CONTRACT_ADDRESS,
             SupportedToken::CkUsdt => USDT_ERC20_CONTRACT_ADDRESS,
@@ -134,17 +135,28 @@ impl CkErc20LiveScanSetup {
         PrincipalId::new_user_test_id(seed).into()
     }
 
-    /// Registers a deposit address for `caller`'s `subaccount` and returns the Ethereum address the
-    /// minter derived for it.
-    pub fn register_deposit_address(&self, caller: Principal, subaccount: [u8; 32]) -> Address {
-        Address::from_str(&self.deposit_erc20(caller, subaccount).address)
+    /// Registers a `(caller/subaccount, token)` deposit and returns the Ethereum address the minter
+    /// derived for it (shared across the caller's tokens).
+    pub fn register_deposit_address(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        token: SupportedToken,
+    ) -> Address {
+        Address::from_str(&self.deposit_erc20(caller, subaccount, token).address)
             .expect("BUG: minter returned an invalid deposit address")
     }
 
-    /// Calls `deposit_erc20` as `caller`, which registers (idempotently) that user's deposit
-    /// address for balance scanning and reports its scan progress.
-    pub fn deposit_erc20(&self, caller: Principal, subaccount: [u8; 32]) -> DepositErc20Response {
+    /// Calls `deposit_erc20` as `caller`, which registers (idempotently) that user's
+    /// `(address, token)` pair for balance scanning and reports its scan progress.
+    pub fn deposit_erc20(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        token: SupportedToken,
+    ) -> DepositErc20Response {
         let arg = DepositErc20Arg {
+            erc20_contract_address: token.contract().to_string(),
             mode: DepositMode::Unsponsored {
                 subaccount: Some(subaccount),
             },
@@ -181,8 +193,8 @@ impl CkErc20LiveScanSetup {
                 &u256_be(holding.amount),
             );
         }
-        // Every registered address is scanned against both tokens, so a token without code would
-        // revert the whole scan even for addresses that do not hold it.
+        // Every token appearing in a registered pair is read in the shared batch, so a token
+        // without code would revert the whole scan even for pairs that do not hold it.
         for token in SupportedToken::ALL {
             self.anvil.set_code(&token.contract(), &runtime);
         }
@@ -197,22 +209,26 @@ impl CkErc20LiveScanSetup {
     }
 
     /// Waits until the minter's periodic balance scan has scanned `caller`'s deposit address —
-    /// observed through `deposit_erc20`'s own scan progress — and returns that progress. A failing
-    /// batch never advances an address, so `scan_count >= 1` already proves the `eth_call` against
-    /// anvil succeeded and decoded. Panics if no scan completes within `deadline`.
-    ///
-    /// Whether the address' balance made it a deposit *candidate* is not surfaced by
-    /// `deposit_erc20`; read that from [`Self::balance_scan_candidates`].
+    /// observed through `deposit_erc20`'s own status — and returns that response. An address counts
+    /// as scanned once its status is `Scanning` with `scan_count >= 1` (a below-minimum address,
+    /// advanced in place) or `AwaitingSweep` (a funded address, detected and queued). Either proves
+    /// the `eth_call` against anvil succeeded and decoded, since a failing batch never advances or
+    /// queues an address. Panics if no scan completes within `deadline`.
     pub fn await_scan(
         &self,
         caller: Principal,
         subaccount: [u8; 32],
+        token: SupportedToken,
         deadline: Duration,
     ) -> DepositErc20Response {
         let start = Instant::now();
         loop {
-            let progress = self.deposit_erc20(caller, subaccount);
-            if progress.scan_count >= 1 {
+            let progress = self.deposit_erc20(caller, subaccount, token);
+            let scanned = match &progress.status {
+                DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
+                DepositStatus::AwaitingSweep(_) => true,
+            };
+            if scanned {
                 return progress;
             }
             assert!(
@@ -222,35 +238,6 @@ impl CkErc20LiveScanSetup {
             std::thread::sleep(Duration::from_secs(2));
         }
     }
-
-    /// The greatest number of deposit candidates any balance scan reported, parsed from the
-    /// minter's `[balance_scan]` logs — the scan only logs the count, it is not otherwise exposed.
-    /// `deposit_erc20` reports that an address was scanned but not whether its balance cleared the
-    /// candidate threshold. `0` if no scan has logged a count yet.
-    pub fn balance_scan_candidates(&self) -> u64 {
-        // Canister logs are controller-only by default, so query them as the controller.
-        self.env
-            .fetch_canister_logs(self.minter_id, controller())
-            .expect("BUG: fetching the minter's canister logs failed")
-            .into_iter()
-            .filter_map(|record| candidates_in_log(&String::from_utf8_lossy(&record.content)))
-            .max()
-            .unwrap_or(0)
-    }
-}
-
-/// Extracts `N` from a `[balance_scan]: ... found N candidate(s) ...` log line, or `None` for any
-/// other line.
-fn candidates_in_log(line: &str) -> Option<u64> {
-    if !line.contains("[balance_scan]") {
-        return None;
-    }
-    line.split("found ")
-        .nth(1)?
-        .split_whitespace()
-        .next()?
-        .parse()
-        .ok()
 }
 
 fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, anvil_url: &str) {

@@ -253,7 +253,7 @@ crate.spec(
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.34",
+    version = "^0.10.35",
 )
 crate.spec(
     package = "cargo_metadata",
@@ -720,7 +720,11 @@ crate.spec(
 )
 crate.spec(
     package = "ic-cdk",
-    version = "^0.19.0",
+    version = "^0.20.2",
+)
+crate.spec(
+    package = "ic-cdk-bitcoin-canister",
+    version = "^0.2.0",
 )
 crate.spec(
     package = "ic-cdk-executor",
@@ -858,7 +862,7 @@ crate.spec(
 )
 crate.spec(
     package = "indoc",
-    version = "^1.0.9",
+    version = "^2.0.7",
 )
 crate.spec(
     package = "inferno",
@@ -1014,7 +1018,7 @@ crate.spec(
 )
 crate.spec(
     package = "maxminddb",
-    version = "^0.24",
+    version = "^0.29",
 )
 crate.spec(
     package = "memchr",
@@ -1207,7 +1211,7 @@ crate.spec(
     # https://github.com/tikv/pprof-rs
     git = "https://github.com/dfinity/pprof-rs",
     package = "pprof",
-    rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
+    rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771",
 )
 crate.spec(
     package = "predicates",
@@ -1222,7 +1226,7 @@ crate.spec(
         "serde",
     ],
     package = "priority-queue",
-    version = "^1.3.1",
+    version = "^2.7.0",
 )
 crate.spec(
     package = "proc-macro2",
@@ -1718,6 +1722,7 @@ crate.spec(
     features = [
         "full",
     ],
+    # Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
     git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
     rev = "cddf1c64011d00f36016146e8447bef99531030c",
@@ -1813,7 +1818,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-tungstenite",
-    version = "^0.26.0",
+    version = "^0.29",
 )
 crate.spec(
     features = [
@@ -1898,7 +1903,7 @@ crate.spec(
 )
 crate.spec(
     package = "tracing-serde",
-    version = "^0.1.3",
+    version = "^0.2",
 )
 crate.spec(
     package = "tracing-slog",

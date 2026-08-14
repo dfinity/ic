@@ -635,7 +635,7 @@ byteorder = "^1.3.4"
 bytes = "1.9.0"
 cached = { version = "0.49", default-features = false }
 canbench-rs = "0.7.0"
-candid = { version = "0.10.34" }
+candid = { version = "0.10.35" }
 candid_parser = { version = "0.1.2" }
 cargo_metadata = "^0.14.2"
 chrono = { version = "0.4.42", default-features = false, features = [
@@ -716,7 +716,8 @@ ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.3"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
-ic-cdk = "0.19.0"
+ic-cdk = "0.20.2"
+ic-cdk-bitcoin-canister = "0.2.0"
 ic-cdk-management-canister = "0.1.1"
 ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
@@ -744,7 +745,7 @@ ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
 indicatif = "^0.17.3"
-indoc = "1.0.9"
+indoc = "2.0.7"
 inferno = "0.12.0"
 inotify = { version = "0.11.2", default-features = false, features = [
     "stream",
@@ -767,7 +768,7 @@ leb128 = "0.2.5"
 libc = "0.2.158"
 log = "0.4"
 libcryptsetup-rs = "0.15"
-libflate = "2.1.0"
+libflate = "2.3.1"
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
@@ -813,14 +814,14 @@ pem = { version = "^3", default-features = false, features = ["std"] }
 pin-project-lite = "^0.2"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
-pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a", default-features = false, features = [
+pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771", default-features = false, features = [
     "criterion",
     "flamegraph",
     "prost-codec",
 ] }
 predicates = "3.1.2"
 pretty_assertions = "1.4.0"
-priority-queue = "1.3.1"
+priority-queue = "2.7.0"
 proc-macro2 = "1.0.89"
 procfs = { version = "^0.17", default-features = false }
 prometheus = { version = "0.14.0", features = ["process"] }
@@ -977,6 +978,7 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.26.4"
+warp = { version = "0.3.7", features = ["tls"] }
 wasm-encoder = { version = "0.252.0", features = ["wasmparser"] }
 wasm-smith = { version = "0.252.0", default-features = false, features = ["wasmparser"] }
 wasmparser = "0.252.0"

@@ -228,7 +228,7 @@ pub fn execute_call_or_task(
             };
             let paused_execution = Box::new(PausedCallOrTaskExecution {
                 paused_wasm_execution,
-                paused_helper: helper.pause(),
+                paused_helper: helper.pause(slice.executed_instructions),
                 original,
             });
             ExecuteMessageResult::Paused {
@@ -322,6 +322,7 @@ struct OriginalContext {
 struct PausedCallOrTaskHelper {
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
+    executed_wasm_instructions: NumInstructions,
 }
 
 /// A helper that implements and keeps track of update call steps.
@@ -330,6 +331,15 @@ struct CallOrTaskHelper {
     canister: CanisterState,
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
+    /// Instructions already executed by this message, if previously paused.
+    ///
+    /// *Finished* Wasm executions are charged based on
+    /// `output.num_instructions_left` (see `finish`). Paused slices only update
+    /// the round limits. If resuming a paused execution fails, there is no
+    /// `output.num_instructions_left` to derive the charge from. Hence, we track
+    /// the executed instructions, to make it possible to charge for failed
+    /// resumptions.
+    executed_wasm_instructions: NumInstructions,
     deallocation_sender: DeallocationSender,
 }
 
@@ -412,17 +422,23 @@ impl CallOrTaskHelper {
             canister,
             call_context_id,
             initial_cycles_balance,
+            executed_wasm_instructions: NumInstructions::new(0),
             deallocation_sender: deallocation_sender.clone(),
         })
     }
 
     /// Returns a struct with all the necessary information to replay the
     /// performed update call steps in subsequent rounds.
-    fn pause(self) -> PausedCallOrTaskHelper {
+    /// The given `slice_executed_instructions` are the instructions executed by
+    /// the slice of the Wasm execution that is being paused; they are added to
+    /// the instructions executed by its earlier slices.
+    fn pause(self, slice_executed_instructions: NumInstructions) -> PausedCallOrTaskHelper {
         self.deallocation_sender.send(Box::new(self.canister));
         PausedCallOrTaskHelper {
             call_context_id: self.call_context_id,
             initial_cycles_balance: self.initial_cycles_balance,
+            executed_wasm_instructions: self.executed_wasm_instructions
+                + slice_executed_instructions,
         }
     }
 
@@ -435,7 +451,8 @@ impl CallOrTaskHelper {
         paused: PausedCallOrTaskHelper,
         deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
-        let helper = Self::new(clean_canister, original, deallocation_sender)?;
+        let mut helper = Self::new(clean_canister, original, deallocation_sender)?;
+        helper.executed_wasm_instructions = paused.executed_wasm_instructions;
         if helper.initial_cycles_balance != paused.initial_cycles_balance {
             let msg = match original.call_or_task {
                 CanisterCallOrTask::Update(_) => {
@@ -721,6 +738,7 @@ impl PausedExecution for PausedCallOrTaskExecution {
             self.original.method,
             clean_canister.canister_id(),
         );
+        let executed_wasm_instructions = self.paused_helper.executed_wasm_instructions;
         let helper = match CallOrTaskHelper::resume(
             &clean_canister,
             &self.original,
@@ -737,16 +755,20 @@ impl PausedExecution for PausedCallOrTaskExecution {
                     err,
                 );
                 self.paused_wasm_execution.abort();
-                return finish_err(
-                    clean_canister,
+                // The instructions already executed by the paused Wasm execution
+                // are still charged: they have been executed and hence consumed
+                // round instructions, but the paused Wasm execution never
+                // finishes and hence yields no `num_instructions_left` to derive
+                // them from.
+                let instructions_left = NumInstructions::new(
                     self.original
                         .execution_parameters
                         .instruction_limits
-                        .message(),
-                    err,
-                    self.original,
-                    round,
+                        .message()
+                        .get()
+                        .saturating_sub(executed_wasm_instructions.get()),
                 );
+                return finish_err(clean_canister, instructions_left, err, self.original, round);
             }
         };
 
@@ -764,7 +786,7 @@ impl PausedExecution for PausedCallOrTaskExecution {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedCallOrTaskExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     original: self.original,
                 });
                 ExecuteMessageResult::Paused {
