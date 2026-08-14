@@ -18,6 +18,13 @@ use thousands::Separable;
 ///
 /// NOTE: This is distinct from `NominalCycles` which should be used to update metrics
 /// related to cycles accounting.
+///
+/// NOTE: The derived `Serialize` impl is transparent, i.e. it emits the inner
+/// `u128`. CBOR (see `serde_cbor`) cannot represent integers above `u64::MAX`,
+/// so serializing a `Cycles` larger than that with `serde_cbor` *fails*. Types
+/// that hold a `Cycles` and are CBOR-encoded must therefore annotate the field
+/// with `#[serde(with = "ic_types_cycles::serde_as_u64_pair")]`, which encodes
+/// the full `u128` range as a pair of `u64`s.
 #[derive(
     Copy,
     Clone,
@@ -244,6 +251,27 @@ impl TryFrom<pbCyclesAccount> for Cycles {
 
     fn try_from(value: pbCyclesAccount) -> Result<Self, Self::Error> {
         try_from_le_bytes(value.cycles_balance)
+    }
+}
+
+/// Serializes [`Cycles`] as a `(high, low)` pair of `u64`s instead of as a bare
+/// `u128`, for use with `#[serde(with = "...")]`.
+///
+/// The derived, transparent `Serialize` impl emits a `u128`, which CBOR cannot
+/// represent beyond `u64::MAX`: `serde_cbor` fails with "The number can't be
+/// stored in CBOR". Any type holding a `Cycles` that is CBOR-encoded must use
+/// this module.
+pub mod serde_as_u64_pair {
+    use super::Cycles;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(cycles: &Cycles, serializer: S) -> Result<S::Ok, S::Error> {
+        cycles.into_parts().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Cycles, D::Error> {
+        let (high, low) = <(u64, u64)>::deserialize(deserializer)?;
+        Ok(Cycles::from_parts(high, low))
     }
 }
 
