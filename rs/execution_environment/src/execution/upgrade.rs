@@ -193,7 +193,7 @@ pub(crate) fn execute_upgrade(
                     ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedPreUpgradeExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     context,
                     original,
                 });
@@ -393,7 +393,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     context_sender,
                     context_arg: context.arg,
                     original,
@@ -515,7 +515,7 @@ fn upgrade_stage_4a_call_post_upgrade(
                 ingress_status_with_processing_state(&original.message, original.time);
             let paused_execution = Box::new(PausedPostUpgradeExecution {
                 paused_wasm_execution,
-                paused_helper: helper.pause(),
+                paused_helper: helper.pause(slice.executed_instructions),
                 original,
             });
             DtsInstallCodeResult::Paused {
@@ -634,7 +634,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPreUpgradeExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
@@ -746,7 +746,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
@@ -854,7 +854,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPostUpgradeExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {

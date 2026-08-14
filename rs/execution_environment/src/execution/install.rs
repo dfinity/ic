@@ -204,7 +204,7 @@ pub(crate) fn execute_install(
                     ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     context_sender,
                     context_arg: context.arg,
                     original,
@@ -322,7 +322,7 @@ fn install_stage_2b_continue_install_after_start(
             let ingress_status =
                 ingress_status_with_processing_state(&original.message, original.time);
             let paused_execution = Box::new(PausedInitExecution {
-                paused_helper: helper.pause(),
+                paused_helper: helper.pause(slice.executed_instructions),
                 paused_wasm_execution,
                 original,
             });
@@ -440,7 +440,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedInitExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
@@ -550,7 +550,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                 );
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
