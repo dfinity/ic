@@ -1369,14 +1369,14 @@ mod tests {
     use rstest::rstest;
     use strum::IntoEnumIterator;
 
-    /// Producing the signed bytes of a [`CanisterHttpResponseReceipt`] must never
-    /// panic, for any `spent` amount in the whole `Cycles` (`u128`) range.
+    /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
+    /// any `spent` amount in the whole `Cycles` (`u128`) range.
     ///
     /// CBOR cannot represent a bare integer above `u64::MAX`, so a receipt holding
     /// a transparently serialized `Cycles` used to panic while being signed or
     /// verified.
     #[test]
-    fn signed_bytes_of_exhaustive_receipts_do_not_panic() {
+    fn signed_bytes_of_exhaustive_receipts_round_trip() {
         use crate::exhaustive::ExhaustiveSet;
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
@@ -1388,6 +1388,10 @@ mod tests {
             let mut bytes = Vec::new();
             receipt.write_signed_bytes_without_domain_separator(&mut bytes);
             assert!(!bytes.is_empty());
+
+            let decoded: CanisterHttpResponseReceipt = serde_cbor::from_slice(&bytes)
+                .unwrap_or_else(|err| panic!("failed to decode {receipt:?}: {err}"));
+            assert_eq!(receipt, decoded);
         }
     }
 
