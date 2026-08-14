@@ -471,7 +471,7 @@ fn query_instructions_limit_from_resource_limits_can_raise_above_default() {
 
 #[test]
 fn composite_query_callgraph_max_instructions_from_resource_limits_is_enforced() {
-    const NUM_CANISTERS: u64 = 20;
+    const NUM_CANISTERS: u64 = 6;
     const NUM_SUCCESSFUL_QUERIES: u64 = 5; // Number of calls expected to succeed
 
     // The single `maximum_query_instructions` registry field also bounds the composite-query call

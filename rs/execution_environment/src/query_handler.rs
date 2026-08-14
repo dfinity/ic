@@ -255,7 +255,7 @@ impl InternalHttpQueryHandler {
         let max_instructions_per_query = match max_instructions {
             // A caller-provided limit (currently only the HTTP outcalls transform budget) is
             // authoritative for that call.
-            Some(max_ins) => max_ins,
+            Some(max_instructions) => max_instructions,
             // Otherwise the subnet's registry-configured limit overrides the replica default
             // (up or down); when unset, the replica default is used.
             None => resource_limits.maximum_query_instructions_or(self.max_instructions_per_query),
