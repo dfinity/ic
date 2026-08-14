@@ -384,7 +384,8 @@ type WithdrawalError = variant {
 // Argument for the deposit_erc20 endpoint.
 type DepositErc20Arg = record {
     // The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC).
-    // Must be a ckERC20 token supported by the minter.
+    // Traps if it cannot be parsed as an Ethereum address. Must be a ckERC20
+    // token supported by the minter.
     erc20_contract_address : text;
     mode : DepositMode;
 };
@@ -435,10 +436,8 @@ type DetectedDeposit = record {
 };
 
 type DepositErc20Error = variant {
-    // The erc20_contract_address could not be parsed as an Ethereum address.
-    InvalidErc20ContractAddress : text;
     // The erc20_contract_address is not a ckERC20 token supported by the minter.
-    UnsupportedCkErc20Token;
+    TokenNotSupported : record {supported_tokens : vec CkErc20Token};
     // The account already has the maximum number of ERC-20 tokens armed.
     TooManyTokensForAccount;
     // The maximum number of concurrently armed deposits (account, token pairs) has been reached.

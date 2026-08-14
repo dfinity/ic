@@ -180,9 +180,16 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
     let token = Address::from_str(&arg.erc20_contract_address)
-        .map_err(DepositErc20Error::InvalidErc20ContractAddress)?;
+        .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: invalid ERC-20 contract address: {e}")));
     if !read_state(|s| s.is_supported_ckerc20(&token)) {
-        return Err(DepositErc20Error::UnsupportedCkErc20Token);
+        let supported_tokens: BTreeSet<_> = read_state(|s| {
+            s.supported_ck_erc20_tokens()
+                .map(|token| token.into())
+                .collect()
+        });
+        return Err(DepositErc20Error::TokenNotSupported {
+            supported_tokens: Vec::from_iter(supported_tokens),
+        });
     }
     let subaccount = match arg.mode {
         DepositMode::Unsponsored { subaccount } => subaccount,

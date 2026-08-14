@@ -146,8 +146,8 @@ fn should_mint_with_ckerc20_setup() {
 mod deposit_erc20 {
     use assert_matches::assert_matches;
     use candid::Principal;
-    use ic_cketh_minter::endpoints::DepositStatus;
     use ic_cketh_minter::endpoints::events::EventPayload;
+    use ic_cketh_minter::endpoints::{DepositErc20Error, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::ckerc20::CkErc20Setup;
     use ic_cketh_test_utils::{
@@ -184,14 +184,43 @@ mod deposit_erc20 {
     }
 
     #[test]
-    fn should_trap_when_called_from_anonymous_principal() {
-        CkErc20Setup::default()
+    fn should_reject_invalid_requests() {
+        const NOT_SUPPORTED_ERC20_CONTRACT_ADDRESS: &str =
+            "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let supported_tokens = ckerc20
+            .cketh
+            .get_minter_info()
+            .supported_ckerc20_tokens
+            .unwrap();
+        assert!(
+            !supported_tokens
+                .iter()
+                .any(|token| token.erc20_contract_address == NOT_SUPPORTED_ERC20_CONTRACT_ADDRESS),
+            "BUG: {NOT_SUPPORTED_ERC20_CONTRACT_ADDRESS} is supported by the minter"
+        );
+
+        let ckerc20 = ckerc20
             .call_minter_deposit_erc20(
                 Principal::anonymous(),
                 None,
-                "0x0000000000000000000000000000000000000000".to_string(),
+                supported_tokens[0].clone().erc20_contract_address,
             )
             .expect_trap("anonymous");
+
+        let ckerc20 = ckerc20
+            .call_minter_deposit_erc20(caller, None, "not an address".to_string())
+            .expect_trap("invalid ERC-20 contract address");
+
+        ckerc20
+            .call_minter_deposit_erc20(
+                caller,
+                None,
+                NOT_SUPPORTED_ERC20_CONTRACT_ADDRESS.to_string(),
+            )
+            .expect_error(DepositErc20Error::TokenNotSupported { supported_tokens });
     }
 
     #[test]

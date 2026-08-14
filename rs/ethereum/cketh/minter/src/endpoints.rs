@@ -215,8 +215,8 @@ pub struct WithdrawalArg {
 /// Argument for the `deposit_erc20` endpoint.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DepositErc20Arg {
-    /// The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC). Must be a
-    /// ckERC20 token supported by the minter.
+    /// The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC). Traps if it
+    /// cannot be parsed as an Ethereum address. Must be a ckERC20 token supported by the minter.
     pub erc20_contract_address: String,
     pub mode: DepositMode,
 }
@@ -276,10 +276,8 @@ pub struct DetectedDeposit {
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositErc20Error {
-    /// The `erc20_contract_address` could not be parsed as an Ethereum address.
-    InvalidErc20ContractAddress(String),
     /// The `erc20_contract_address` is not a ckERC20 token supported by the minter.
-    UnsupportedCkErc20Token,
+    TokenNotSupported { supported_tokens: Vec<CkErc20Token> },
     /// The account already has the maximum number of ERC-20 tokens armed.
     TooManyTokensForAccount,
     /// The maximum number of concurrently armed deposits (`(account, token)` pairs) has been
