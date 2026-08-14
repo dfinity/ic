@@ -1444,6 +1444,9 @@ fn should_forget_the_sweeper_balance_observation_across_an_upgrade() {
     const TICKS_FOR_THE_CALLBACK: usize = 20;
 
     let cketh = CkEthSetup::default();
+    // Answering the install-time read is what produces the observation this test then watches being
+    // forgotten. The post-upgrade read is deliberately left unanswered further down.
+    cketh.settle_initial_sweeper_funding_check();
     for _ in 0..TICKS_FOR_THE_CALLBACK {
         cketh.env.tick();
     }
