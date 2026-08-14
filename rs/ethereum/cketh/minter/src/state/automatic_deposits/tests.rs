@@ -414,7 +414,7 @@ fn scan_state(
     DepositAddressRegistration {
         owner: account.owner,
         subaccount: account.subaccount,
-        token,
+        erc20_contract_address: token,
         address: deposit_address(&account),
         expires_at_nanos: expires_at,
         last_scanned_block,
@@ -664,7 +664,7 @@ fn automatic_deposit(
         owner: account.owner,
         subaccount: account.subaccount,
         address: deposit_address(&account),
-        token,
+        erc20_contract_address: token,
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),
@@ -733,7 +733,7 @@ fn registration(
     DepositAddressRegistration {
         owner: account.owner,
         subaccount: account.subaccount,
-        token,
+        erc20_contract_address: token,
         address: deposit_address(&account),
         expires_at_nanos: expires_at,
         last_scanned_block: None,

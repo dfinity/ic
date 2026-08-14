@@ -187,7 +187,7 @@ fn scan_outcome(
         owner: target.account().owner,
         subaccount: target.account().subaccount,
         address: target.address(),
-        token: target.token(),
+        erc20_contract_address: target.token(),
         last_scanned_block: latest_block,
         scan_count: target.scan_count().saturating_add(1),
         scanned_balance: balance,

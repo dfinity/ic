@@ -127,7 +127,7 @@ impl AutomaticDeposits {
                         owner: deposit.owner,
                         subaccount: deposit.subaccount,
                     },
-                    deposit.token,
+                    deposit.erc20_contract_address,
                 ),
                 Entry {
                     value: DepositRequest {
@@ -222,7 +222,7 @@ impl AutomaticDeposits {
             owner: deposit.owner,
             subaccount: deposit.subaccount,
         };
-        let key = DepositKey::new(account, deposit.token);
+        let key = DepositKey::new(account, deposit.erc20_contract_address);
         self.watchlist.remove(&key);
         let previous = self.sweep.insert(
             key,
@@ -236,7 +236,7 @@ impl AutomaticDeposits {
         assert!(
             previous.is_none(),
             "BUG: sweep queue already has an entry for account {account:?} token {}",
-            deposit.token
+            deposit.erc20_contract_address
         );
     }
 
@@ -252,7 +252,7 @@ impl AutomaticDeposits {
             .map(|(key, deposit)| DepositAddressRegistration {
                 owner: key.account.owner,
                 subaccount: key.account.subaccount,
-                token: key.token,
+                erc20_contract_address: key.token,
                 address: deposit.value.address,
                 expires_at_nanos: deposit.expires_at,
                 last_scanned_block: deposit.value.last_scanned_block,

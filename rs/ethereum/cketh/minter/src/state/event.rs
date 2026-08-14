@@ -215,12 +215,12 @@ pub struct AutomaticDeposit {
     #[n(2)]
     pub address: DepositAddress,
     #[n(3)]
-    pub token: Address,
+    pub erc20_contract_address: Address,
     #[n(4)]
     pub last_scanned_block: BlockNumber,
     #[n(5)]
     pub scan_count: u32,
-    /// The balance detected for `token` at `last_scanned_block`.
+    /// The balance detected for `erc20_contract_address` at `last_scanned_block`.
     #[n(6)]
     pub scanned_balance: Erc20Value,
 }
@@ -235,7 +235,7 @@ pub struct DepositAddressRegistration {
     #[n(2)]
     pub address: DepositAddress,
     #[n(3)]
-    pub token: Address,
+    pub erc20_contract_address: Address,
     #[n(4)]
     pub expires_at_nanos: Timestamp,
     /// Latest block number at which this pair's balance was scanned; `None` if

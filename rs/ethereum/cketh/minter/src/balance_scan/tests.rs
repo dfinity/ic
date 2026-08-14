@@ -233,7 +233,7 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
             owner: holder.0.owner,
             subaccount: holder.0.subaccount,
             address: holder.1,
-            token,
+            erc20_contract_address: token,
             last_scanned_block: latest,
             scan_count: 1,
             scanned_balance: min,
