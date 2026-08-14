@@ -10,7 +10,7 @@ use std::sync::Arc;
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ReplicaVersion {
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc_str")]
     version_id: Arc<str>,
 }
 
