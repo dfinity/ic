@@ -311,13 +311,13 @@ impl DkgKeyManager {
             let current_transcripts_with_load_deadlines = summary
                 .current_transcripts()
                 .values()
-                .map(|t| (current_interval_start, t.clone()));
+                .map(|t| (current_interval_start, t));
 
             // For next transcripts, we take the start of the next interval as a deadline.
             let next_transcripts_with_load_deadlines = summary
                 .next_transcripts()
                 .values()
-                .map(|t| (next_interval_start, t.clone()));
+                .map(|t| (next_interval_start, t));
 
             current_transcripts_with_load_deadlines.chain(next_transcripts_with_load_deadlines)
         };
@@ -334,6 +334,7 @@ impl DkgKeyManager {
 
             let crypto = self.crypto.clone();
             let logger = self.logger.clone();
+            let transcript = transcript.clone();
             let (tx, rx) = sync_channel(0);
             self.pending_transcript_loads
                 .insert(transcript.dkg_id.clone(), (deadline, rx));
