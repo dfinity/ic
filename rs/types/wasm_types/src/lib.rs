@@ -160,7 +160,7 @@ impl CanisterModule {
 
     /// Returns the Sha256 hash of this Wasm module.
     pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
-        self.module_hash_ref().clone()
+        *self.module_hash_ref()
     }
 
     /// Returns the loading status of the module storage.
