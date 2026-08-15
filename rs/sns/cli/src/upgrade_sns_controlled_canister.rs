@@ -9,7 +9,7 @@ use clap::Parser;
 use core::convert::From;
 use cycles_minting_canister::{CanisterSettings, CreateCanister, SubnetSelection};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types_private::{CanisterInstallMode, WasmMemoryPersistence};
 use ic_nervous_system_agent::{
     CallCanisters, CanisterInfo, Request,
     management_canister::{self, delete_canister, stop_canister},
@@ -17,10 +17,12 @@ use ic_nervous_system_agent::{
     sns::{self, Sns, governance::SubmittedProposal, root::SnsCanisters},
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
+use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
 use ic_sns_governance_api::pb::v1::{
     ChunkedCanisterWasm, Proposal, ProposalData, ProposalId, UpgradeSnsControlledCanister,
     get_proposal_response,
     proposal::{self, Action},
+    upgrade_sns_controlled_canister,
 };
 use ic_wasm::{metadata, utils::parse_wasm};
 use itertools::{Either, Itertools};
@@ -70,6 +72,49 @@ pub struct UpgradeSnsControlledCanisterArgs {
     /// Human-readable text explaining why this upgrade is being done (may be markdown).
     #[clap(long)]
     pub summary: String,
+
+    /// Whether to skip the canister's pre_upgrade hook. Only valid when the
+    /// canister is being upgraded (as opposed to reinstalled).
+    // This is not Option<bool>, because `--skip-pre-upgrade true` looks stupid.
+    // At the same time, it is fine that we do not support both `None` and
+    // `Some(false)`, because those end up having the same behavior.
+    #[clap(long)]
+    pub skip_pre_upgrade: bool,
+
+    /// Whether to retain (keep) or drop (replace) the canister's main memory
+    /// before running the new code (between pre- and post-upgrade). Required
+    /// when upgrading a canister whose current/old WASM module has the
+    /// `icp:private enhanced-orthogonal-persistence` custom section (this
+    /// happens with modern Motoko canisters, which use Enhanced Orthogonal
+    /// Persistence).
+    #[clap(long)]
+    pub wasm_memory_persistence: Option<WasmMemoryPersistence>,
+}
+
+/// Constructs a CanisterUpgradeOptions from its flag values.
+///
+/// Returns None if skip_pre_upgrade is false and wasm_memory_persistence is
+/// None, i.e. there is nothing to say.
+fn assemble_canister_upgrade_options(
+    // These parameter types match the corresponding flags.
+    skip_pre_upgrade: bool,
+    wasm_memory_persistence: Option<WasmMemoryPersistence>,
+) -> Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions> {
+    let has_option = skip_pre_upgrade || wasm_memory_persistence.is_some();
+    if !has_option {
+        return None;
+    }
+
+    let skip_pre_upgrade = if skip_pre_upgrade { Some(true) } else { None };
+
+    let wasm_memory_persistence = wasm_memory_persistence.map(|wasm_memory_persistence| {
+        WasmMemoryPersistenceProto::from(&wasm_memory_persistence) as i32
+    });
+
+    Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    })
 }
 
 /// The arguments used to configure the refund_after_sns_controlled_canister_upgrade command.
@@ -357,6 +402,8 @@ pub async fn exec<C: CallCanisters>(
         candid_arg,
         proposal_url,
         summary,
+        skip_pre_upgrade,
+        wasm_memory_persistence,
     } = args;
 
     let caller_principal = PrincipalId(agent.caller()?);
@@ -482,6 +529,10 @@ pub async fn exec<C: CallCanisters>(
                     store_canister_id: Some(store_canister_id.get()),
                     chunk_hashes_list,
                 }),
+                canister_upgrade_options: assemble_canister_upgrade_options(
+                    skip_pre_upgrade,
+                    wasm_memory_persistence,
+                ),
             },
         )),
     };
