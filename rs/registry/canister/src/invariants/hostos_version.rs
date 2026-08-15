@@ -62,3 +62,31 @@ fn get_all_hostos_versions_of_nodes(snapshot: &RegistrySnapshot) -> BTreeSet<Str
         .filter_map(|node_record| node_record.hostos_version_id)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::common::test_helpers::invariant_compliant_registry;
+
+    use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
+    use ic_registry_keys::make_hostos_version_key;
+    use ic_registry_transport::upsert;
+    use prost::Message;
+
+    #[test]
+    #[should_panic(
+        expected = "The registry key and internal `hostos_version_id` must be consistent."
+    )]
+    fn panic_with_inner_version_mismatch() {
+        let registry = invariant_compliant_registry(0);
+
+        let key = make_hostos_version_key("FOO".to_string());
+        let value = HostosVersionRecord {
+            hostos_version_id: "BAR".to_string(),
+            ..Default::default()
+        }
+        .encode_to_vec();
+
+        let mutation = vec![upsert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
+    }
+}
