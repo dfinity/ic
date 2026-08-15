@@ -60,7 +60,7 @@ pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<Node
 }
 
 /// Returns all replica version records in the snapshot.
-pub(crate) fn get_all_replica_version_records(
+pub(crate) fn get_all_replica_version_records_with_keys(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<String, ReplicaVersionRecord> {
     let mut replica_versions = BTreeMap::new();
@@ -112,14 +112,17 @@ pub(crate) fn get_all_chain_key_signing_subnet_list_records(
 }
 
 // Retrieve all HostOS version records
-pub(crate) fn get_all_hostos_version_records(
+pub(crate) fn get_all_hostos_version_records_with_keys(
     snapshot: &RegistrySnapshot,
-) -> BTreeSet<HostosVersionRecord> {
-    let mut result = BTreeSet::new();
+) -> BTreeMap<String, HostosVersionRecord> {
+    let mut result = BTreeMap::new();
     for (k, v) in snapshot {
-        if k.starts_with(HOSTOS_VERSION_KEY_PREFIX.as_bytes()) {
-            let hostos_version_record = HostosVersionRecord::decode(v.as_slice()).unwrap();
-            result.insert(hostos_version_record);
+        if let Some(key) = str::from_utf8(k)
+            .unwrap()
+            .strip_prefix(HOSTOS_VERSION_KEY_PREFIX)
+        {
+            let record = HostosVersionRecord::decode(v.as_slice()).unwrap();
+            result.insert(key.to_owned(), record);
         }
     }
 
