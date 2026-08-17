@@ -1075,7 +1075,7 @@ mod tests {
     #[test]
     fn test_halting_due_to_protocol_upgrade() {
         test_halting(
-            ic_test_utilities_types::ids::test_replica_version(),
+            ReplicaVersion::try_from("0xBEEF").unwrap(),
             /*halt_at_cup_height=*/ false,
         )
     }
@@ -1084,10 +1084,7 @@ mod tests {
     // making only empty blocks.
     #[test]
     fn test_halting_due_to_registry_instruction() {
-        test_halting(
-            ic_test_utilities_types::ids::test_replica_version(),
-            /*halt_at_cup_height=*/ true,
-        )
+        test_halting(test_replica_version(), /*halt_at_cup_height=*/ true)
     }
 
     fn test_halting(replica_version: ReplicaVersion, halt_at_cup_height: bool) {

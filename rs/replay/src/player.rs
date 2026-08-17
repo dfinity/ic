@@ -73,7 +73,6 @@ use ic_types::{
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
-use std::str::FromStr;
 use std::{
     collections::{HashMap, HashSet},
     convert::Infallible,
@@ -224,35 +223,36 @@ impl Player {
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
         let time_source = Arc::new(SysTimeSource::new());
 
-        let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
-            let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
-            // We don't want to modify the original consensus pool during the subnet
-            // recovery.
-            artifact_pool_config.persistent_pool_read_only = true;
-            let consensus_pool = ConsensusPoolImpl::from_uncached(
-                NodeId::from(PrincipalId::new_anonymous()),
-                UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
-                MetricsRegistry::new(),
-                log.clone(),
-                time_source,
+        // Without a consensus pool there is nothing to replay.
+        if !cfg.artifact_pool.consensus_pool_path.exists() {
+            panic!(
+                "No consensus pool found at {:?}",
+                cfg.artifact_pool.consensus_pool_path
             );
-            Some(consensus_pool)
-        } else {
-            None
-        };
+        }
+        let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
+        // We don't want to modify the original consensus pool during the subnet
+        // recovery.
+        artifact_pool_config.persistent_pool_read_only = true;
+        let consensus_pool = ConsensusPoolImpl::from_uncached(
+            NodeId::from(PrincipalId::new_anonymous()),
+            UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
+            MetricsRegistry::new(),
+            log.clone(),
+            time_source,
+        );
 
-        let replica_version = if let Some(pool) = &consensus_pool {
-            // Use the replica version from the finalized tip in the pool.
-            PoolReader::new(pool).get_finalized_tip().version().clone()
-        } else {
-            ReplicaVersion::from_str("unknown").unwrap()
-        };
+        // Use the replica version from the finalized tip in the pool.
+        let replica_version = PoolReader::new(&consensus_pool)
+            .get_finalized_tip()
+            .version()
+            .clone();
 
         Player::new_with_params(
             cfg,
             registry,
             subnet_id,
-            consensus_pool,
+            Some(consensus_pool),
             None,
             replica_version,
             log,
@@ -497,7 +497,6 @@ impl Player {
             self.message_routing.as_ref(),
             pool_reader,
             membership,
-            &self.replica_version,
             Some(target_height),
         );
         self.wait_for_state(last_batch_height);
@@ -699,7 +698,6 @@ impl Player {
         message_routing: &dyn MessageRouting,
         pool: &PoolReader<'_>,
         membership: &Membership,
-        replica_version: &ReplicaVersion,
         replay_target_height: Option<Height>,
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
@@ -710,7 +708,7 @@ impl Player {
                 pool,
                 &*self.registry,
                 self.subnet_id,
-                replica_version,
+                &self.replica_version,
                 &self.log,
                 replay_target_height,
             ) {
@@ -1011,7 +1009,6 @@ impl Player {
                 self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
                 self.membership.as_ref().unwrap(),
-                &self.replica_version,
                 replay_target_height,
             );
             self.wait_for_state(last_batch_height);
