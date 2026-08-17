@@ -33,7 +33,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{ReplicaLogger, error, info};
-use ic_management_canister_types_private::{CanisterHttpRequestArgs, Payload as Ic00Payload};
+use ic_management_canister_types_private::{
+    CanisterHttpRequestArgs, CanisterHttpResponsePayload, IC_00, Payload as Ic00Payload,
+    TransformArgs,
+};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -42,7 +45,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, NumInstructions, NumMessages, NumSlices, Time,
     batch::QueryStats,
-    canister_http::{QueryOutcallOutcome, QueryOutcallRequest},
+    canister_http::{QueryOutcallOutcome, QueryOutcallRequest, Transform},
     ingress::WasmResult,
     messages::{
         CallContextId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext, Request,
@@ -100,6 +103,7 @@ pub(super) struct PendingOutcall {
     /// Carries the sender, callback id and deadline the response is addressed by.
     pub(super) request: Arc<Request>,
     pub(super) outcall: QueryOutcallRequest,
+    pub(super) transform: Option<Transform>,
     reservation: OutcallReservation,
     /// Held only for its `Drop`, which releases the slot however the suspension
     /// ends.
@@ -108,6 +112,7 @@ pub(super) struct PendingOutcall {
 
 /// The outcome of running a query: either it finished, or it is suspended
 /// waiting for an HTTP outcall.
+#[allow(clippy::large_enum_variant)]
 pub(super) enum RunOutcome {
     Finished(Result<WasmResult, UserError>),
     Suspended(SuspendedCallGraph, PendingOutcall),
@@ -413,7 +418,7 @@ impl QueryContext {
     ) -> RunOutcome {
         let measurement_scope =
             MeasurementScope::nested(&metrics.query_spawned_calls, measurement_scope);
-        let callee_result = self.finish_http_outcall(&pending, result);
+        let callee_result = self.finish_http_outcall(&pending, result, &measurement_scope);
         // The query holds a thread again.
         drop(pending);
 
@@ -1157,13 +1162,11 @@ impl QueryContext {
         };
         outcall.allowance = reservation.allowance;
 
-        // Applying the transform requires executing it inside this context,
-        // which is not implemented yet.
-        if transform.is_some() {
-            return reject(
-                RejectCode::SysTransient,
-                "A transform function for an HTTP outcall from a query is not supported yet.",
-            );
+        // Before performing the outcall rather than after paying for it.
+        if let Some(transform) = &transform
+            && let Err(err) = self.validate_transform_method(request.sender, &transform.method_name)
+        {
+            return reject_with_error(err);
         }
 
         let Some(permit) = self.suspension_limiter.try_acquire(request.sender) else {
@@ -1178,6 +1181,7 @@ impl QueryContext {
         ExecutionResult::Suspended(PendingOutcall {
             request: Arc::clone(request),
             outcall,
+            transform,
             reservation,
             _permit: permit,
         })
@@ -1225,12 +1229,40 @@ impl QueryContext {
         self.round_limits.instructions += as_round_instructions(refund);
     }
 
+    /// Checks that `method_name` is a plain query method of `canister_id`, i.e.
+    /// usable as an HTTP outcall transform.
+    fn validate_transform_method(
+        &self,
+        canister_id: CanisterId,
+        method_name: &str,
+    ) -> Result<(), UserError> {
+        let canister = self.state.get_ref().get_active_canister(&canister_id)?;
+        match wasm_query_method(canister, method_name.to_string())
+            .map_err(|err| err.into_user_error(&canister_id))?
+        {
+            WasmMethod::Query(_) => Ok(()),
+            // Reuse the replicated path's code and message, so that a canister
+            // making this mistake sees the same thing in both modes. The code's
+            // name is a misnomer here -- this is not replicated mode -- but
+            // matching behaviour matters more than the name.
+            // TODO: rename the error code to say what it means.
+            WasmMethod::CompositeQuery(_) => Err(UserError::new(
+                ErrorCode::CompositeQueryCalledInReplicatedMode,
+                "Composite query cannot be used as transform in canister http outcalls.",
+            )),
+            WasmMethod::Update(_) | WasmMethod::System(_) => {
+                unreachable!("Expected a Wasm query method")
+            }
+        }
+    }
+
     /// Turns the result of an HTTP outcall into the response to the
     /// `http_request` call that asked for it.
     pub(super) fn finish_http_outcall(
         &mut self,
         pending: &PendingOutcall,
         outcome: QueryOutcallOutcome,
+        measurement_scope: &MeasurementScope,
     ) -> QueryResponse {
         // Return what the outcall did not spend, so the rest of the query can use
         // it. Charging the reservation up front bounds what an outcall may cost;
@@ -1238,10 +1270,90 @@ impl QueryContext {
         self.refund_outcall_reservation(&pending.reservation, outcome.spent);
 
         let payload = match outcome.result {
-            Ok(response) => Payload::Data(response.encode()),
+            Ok(response) => match &pending.transform {
+                None => Payload::Data(response.encode()),
+                Some(transform) => {
+                    self.apply_transform(pending, transform, response, measurement_scope)
+                }
+            },
             Err(reject) => Payload::Reject(RejectContext::from(&reject)),
         };
         request_to_response(&pending.request, payload)
+    }
+
+    /// Applies an HTTP outcall's transform function inside this query context.
+    ///
+    /// The transform runs as a `Pure` query, which is what the replicated path
+    /// does too, and buys three properties here: its instructions come out of the
+    /// same call graph budget, it cannot make calls -- so it cannot reach the
+    /// management canister and start another outcall -- and its state changes are
+    /// discarded.
+    ///
+    /// It executes against a clone taken from the state snapshot rather than the
+    /// in-flight canister state, so that it observes committed state only, as it
+    /// would on the replicated path.
+    fn apply_transform(
+        &mut self,
+        pending: &PendingOutcall,
+        transform: &Transform,
+        response: CanisterHttpResponsePayload,
+        measurement_scope: &MeasurementScope,
+    ) -> Payload {
+        let reject = |reject_code: RejectCode, message: String| {
+            Payload::Reject(RejectContext::new(reject_code, message))
+        };
+
+        // `validate_transform_principal` requires the transform to belong to the
+        // calling canister, so this is always the caller.
+        let canister_id = pending.request.sender;
+        let canister = match self.state.get_ref().get_active_canister(&canister_id) {
+            Ok(canister) => canister.clone(),
+            Err(err) => return Payload::Reject(RejectContext::from(err)),
+        };
+
+        let method_payload = TransformArgs {
+            response,
+            context: transform.context.clone(),
+        }
+        .encode();
+
+        let (_canister, result) = self.execute_query(
+            canister,
+            WasmMethod::Query(transform.method_name.clone()),
+            &method_payload,
+            NonReplicatedQueryKind::Pure {
+                caller: IC_00.get(),
+                sender_info: None,
+            },
+            measurement_scope,
+        );
+
+        let transformed = match result {
+            Ok(Some(WasmResult::Reply(data))) => data,
+            Ok(Some(WasmResult::Reject(message))) => {
+                return reject(RejectCode::CanisterReject, message);
+            }
+            // A `Pure` query cannot make calls, so it cannot leave the call
+            // context open; not replying is a failure to produce a response.
+            Ok(None) => {
+                return reject(
+                    RejectCode::CanisterError,
+                    format!("Canister {canister_id} did not produce a response"),
+                );
+            }
+            Err(err) => return Payload::Reject(RejectContext::from(err)),
+        };
+
+        // The same limit the replicated path applies, on the encoded reply.
+        let max_response_bytes = pending.outcall.max_response_bytes.get();
+        if transformed.len() as u64 > max_response_bytes {
+            return reject(
+                RejectCode::SysFatal,
+                format!("Transformed http response exceeds limit: {max_response_bytes}"),
+            );
+        }
+
+        Payload::Data(transformed)
     }
 
     /// What is left of this query context's walltime budget.

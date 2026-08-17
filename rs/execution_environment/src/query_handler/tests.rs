@@ -19,6 +19,7 @@ use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
     NumInstructions,
+    batch::QueryStats,
     canister_http::CanisterHttpReject,
     ingress::WasmResult,
     messages::{Query, QuerySource},
@@ -2070,6 +2071,38 @@ fn query_outcall_args(is_replicated: Option<bool>) -> Vec<u8> {
     .encode()
 }
 
+fn query_outcall_args_with_transform(canister_id: PrincipalId, method: &str) -> Vec<u8> {
+    query_outcall_args_with_transform_and_limit(canister_id, method, None)
+}
+
+fn query_outcall_args_with_transform_and_limit(
+    canister_id: PrincipalId,
+    method: &str,
+    max_response_bytes: Option<u64>,
+) -> Vec<u8> {
+    use ic_management_canister_types_private::{
+        BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+    };
+
+    CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes,
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: canister_id.into(),
+                method: method.to_string(),
+            }),
+            context: vec![],
+        }),
+        is_replicated: Some(false),
+        pricing_version: None,
+    }
+    .encode()
+}
+
 fn http_response(body: &[u8]) -> CanisterHttpResponsePayload {
     CanisterHttpResponsePayload {
         status: 200,
@@ -2389,33 +2422,230 @@ fn nested_composite_query_can_make_an_http_outcall() {
     );
 }
 
-/// A transform is accepted by the argument validation but cannot be applied yet.
+/// The transform's reply is what reaches the calling canister, not the raw
+/// response.
 #[test]
-fn composite_query_http_outcall_with_a_transform_is_not_supported_yet() {
-    use ic_management_canister_types_private::{
-        BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
-    };
+fn composite_query_http_outcall_applies_the_transform() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    // Stored by an update: a query's changes are discarded.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_transform(wasm().reply_data(b"transformed"))
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"raw")));
 
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query(
+                "http_request",
+                query_outcall_args_with_transform(canister_id.get(), "transform"),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(b"transformed".to_vec()));
+}
+
+/// A query outcall's transform counts towards query stats.
+///
+/// A replicated outcall's is left out, to avoid double-charging if query
+/// charging ever arrives; here nothing charges it directly, so leaving it out
+/// would undercount.
+#[test]
+fn composite_query_http_outcall_transform_counts_towards_query_stats() {
+    fn stats_with_transform(transform: bool) -> QueryStats {
+        let mut test = ExecutionTestBuilder::new()
+            .with_query_http_requests_enabled()
+            .with_query_stats()
+            .build();
+        let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+        test.ingress(
+            canister_id,
+            "update",
+            wasm()
+                .set_transform(wasm().reply_data(b"transformed"))
+                .reply()
+                .build(),
+        )
+        .unwrap();
+        test.push_query_outcall_response(Ok(http_response(b"raw")));
+
+        let args = if transform {
+            query_outcall_args_with_transform(canister_id.get(), "transform")
+        } else {
+            query_outcall_args(Some(false))
+        };
+        test.non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", args),
+        )
+        .unwrap();
+
+        test.query_stats_for_testing(&canister_id)
+            .expect("the canister executed a query, so it must have stats")
+    }
+
+    let without = stats_with_transform(false);
+    let with = stats_with_transform(true);
+
+    assert_eq!(
+        with.num_calls,
+        without.num_calls + 1,
+        "the transform is one more execution attributed to the canister"
+    );
+    assert_gt!(
+        with.num_instructions,
+        without.num_instructions,
+        "the transform's instructions must be counted"
+    );
+}
+
+#[test]
+fn composite_query_http_outcall_transform_must_belong_to_the_caller() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let other = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query(
+                "http_request",
+                query_outcall_args_with_transform(other.get(), "transform"),
+            ),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(message) = result else {
+        panic!("expected a reply carrying the reject message");
+    };
+    let message = String::from_utf8(message).unwrap();
+    assert!(
+        message.contains("transform principal id expected to be"),
+        "unexpected message: {message}"
+    );
+    assert!(
+        test.query_outcalls().is_empty(),
+        "a rejected outcall must not reach the adapter"
+    );
+}
+
+/// A composite query cannot be a transform, and saying so before the outcall
+/// avoids charging for one that cannot be used.
+#[test]
+fn composite_query_http_outcall_transform_cannot_be_a_composite_query() {
     let mut test = query_outcall_test();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
-    let args = CanisterHttpRequestArgs {
-        url: "https://example.com".to_string(),
-        max_response_bytes: None,
-        headers: BoundedHttpHeaders::new(vec![]),
-        body: None,
-        method: HttpMethod::GET,
-        transform: Some(TransformContext {
-            function: TransformFunc(candid::Func {
-                principal: canister_id.get().into(),
-                method: "transform".to_string(),
-            }),
-            context: vec![],
-        }),
-        is_replicated: Some(false),
-        pricing_version: None,
-    }
-    .encode();
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query(
+                "http_request",
+                query_outcall_args_with_transform(canister_id.get(), "composite_query"),
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(
+        result,
+        WasmResult::Reply(
+            b"Composite query cannot be used as transform in canister http outcalls.".to_vec()
+        )
+    );
+    assert!(
+        test.query_outcalls().is_empty(),
+        "a rejected outcall must not reach the adapter"
+    );
+}
+
+#[test]
+fn composite_query_http_outcall_transform_that_does_not_exist_is_rejected() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query(
+                "http_request",
+                query_outcall_args_with_transform(canister_id.get(), "no_such_method"),
+            ),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(message) = result else {
+        panic!("expected a reply carrying the reject message");
+    };
+    let message = String::from_utf8(message).unwrap();
+    assert!(
+        message.contains("not found") || message.contains("no_such_method"),
+        "unexpected message: {message}"
+    );
+    assert!(test.query_outcalls().is_empty());
+}
+
+#[test]
+fn composite_query_http_outcall_transform_that_traps_is_rejected() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().set_transform(wasm().trap()).reply().build(),
+    )
+    .unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"raw")));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query(
+                "http_request",
+                query_outcall_args_with_transform(canister_id.get(), "transform"),
+            ),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(message) = result else {
+        panic!("expected a reply carrying the reject message");
+    };
+    let message = String::from_utf8(message).unwrap();
+    assert!(message.contains("trapped"), "unexpected message: {message}");
+}
+
+/// A transform cannot smuggle back a response larger than the size limit.
+#[test]
+fn composite_query_http_outcall_oversized_transform_reply_is_rejected() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_transform(wasm().reply_data(&vec![0_u8; 2_048]))
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"raw")));
+
+    // A `max_response_bytes` smaller than the transform's reply.
+    let args =
+        query_outcall_args_with_transform_and_limit(canister_id.get(), "transform", Some(1_024));
 
     let result = test
         .non_replicated_query(
@@ -2427,13 +2657,7 @@ fn composite_query_http_outcall_with_a_transform_is_not_supported_yet() {
 
     assert_eq!(
         result,
-        WasmResult::Reply(
-            b"A transform function for an HTTP outcall from a query is not supported yet.".to_vec()
-        )
-    );
-    assert!(
-        test.query_outcalls().is_empty(),
-        "a rejected outcall must not reach the adapter"
+        WasmResult::Reply(b"Transformed http response exceeds limit: 1024".to_vec())
     );
 }
 
