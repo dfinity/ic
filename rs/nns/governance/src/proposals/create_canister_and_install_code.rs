@@ -178,6 +178,7 @@ impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
             snapshot_visibility,
             wasm_memory_limit,
             wasm_memory_threshold,
+            reserved_cycles_limit,
         } = original;
 
         let controllers = controllers.as_ref().map(|c| c.controllers.clone());
@@ -205,7 +206,7 @@ impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
             compute_allocation: compute_allocation.map(Nat::from),
             memory_allocation: memory_allocation.map(Nat::from),
             freezing_threshold: freezing_threshold.map(Nat::from),
-            reserved_cycles_limit: None,
+            reserved_cycles_limit: reserved_cycles_limit.map(Nat::from),
             log_visibility,
             snapshot_visibility,
             wasm_memory_limit: wasm_memory_limit.map(Nat::from),
@@ -285,5 +286,28 @@ impl From<CreateCanisterAndInstallCode> for SelfDescribingValue {
             .add_field("wasm_module_hash", wasm_module_hash)
             .add_field("install_arg_hash", install_arg_hash)
             .build()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reserved_cycles_limit_passes_through_to_root_settings() {
+        // Step 1: Prepare the world.
+        let canister_settings = crate::pb::v1::CanisterSettings {
+            reserved_cycles_limit: Some(1 << 29),
+            ..Default::default()
+        };
+
+        // Step 2: Run the code under test.
+        let root_settings = RootCanisterSettings::try_from(&canister_settings).unwrap();
+
+        // Step 3: Verify result(s).
+        assert_eq!(
+            root_settings.reserved_cycles_limit,
+            Some(Nat::from(1_u64 << 29)),
+        );
     }
 }
