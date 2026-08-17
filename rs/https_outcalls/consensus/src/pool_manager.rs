@@ -713,7 +713,9 @@ pub mod test {
         let mut replicated_state = ReplicatedState::new(subnet_test_id(0), SubnetType::System);
         let contexts = &mut replicated_state.metadata.subnet_call_context_manager;
         // Hand out callback ids up to the largest delivered one, so that shares for
-        // them are not mistaken for shares belonging to a future state.
+        // them are not mistaken for shares belonging to a future state. Pushing a
+        // context is the only way to advance the private `next_callback_id`, so the
+        // contexts it parks in the active collection are cleared out again below.
         if let Some((max_id, context)) = delivered.iter().next_back() {
             for _ in 0..=max_id.get() {
                 contexts.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
