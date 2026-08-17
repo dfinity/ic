@@ -9,7 +9,7 @@ use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_xnet::XNetEndpoint;
-use ic_https_outcalls_adapter_client::setup_canister_http_client;
+use ic_https_outcalls_adapter_client::{setup_canister_http_channel, setup_canister_http_client};
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
@@ -193,6 +193,14 @@ pub fn construct_ic_stack(
     let max_canister_http_requests_in_flight =
         config.hypervisor.max_canister_http_requests_in_flight;
 
+    // Lazy, so every component needing the adapter shares one connection.
+    let canister_http_channel = setup_canister_http_channel(
+        rt_handle_main.clone(),
+        metrics_registry,
+        &config.adapters_config,
+        log,
+    );
+
     let subnet_config = SubnetConfig::new(subnet_type);
 
     let execution_services = ExecutionServices::setup_execution(
@@ -305,10 +313,10 @@ pub fn construct_ic_stack(
     // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
     let canister_http_adapter_client = setup_canister_http_client(
         rt_handle_main.clone(),
-        metrics_registry,
-        config.adapters_config,
+        canister_http_channel,
         execution_services.transform_execution_service,
         max_canister_http_requests_in_flight,
+        metrics_registry,
         log.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
