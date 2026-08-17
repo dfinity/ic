@@ -204,6 +204,7 @@ impl ConsensusImpl {
             chain_key_payload_builder,
             Arc::new(upgrade_section::UpgradePayloadBuilder::new(
                 replica_config.node_id,
+                membership.clone(),
                 state_manager.clone(),
                 upgrade_permit_auth_pool.clone() as Arc<RwLock<dyn UpgradePermitAuthPool>>,
                 crypto.clone(),

@@ -18,9 +18,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::membership::Membership;
+use crate::consensus::upgrade_section::subnet_membership;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer};
-use ic_interfaces::upgrade_permit_auth::{UpgradePermitAuthChangeAction, UpgradePermitAuthChangeSet, UpgradePermitAuthPool as _, UpgradePermitAuthPool};
+use ic_interfaces::upgrade_permit_auth::{
+    UpgradePermitAuthChangeAction, UpgradePermitAuthChangeSet, UpgradePermitAuthPool,
+};
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::consensus::{
     UpgradePermitAuthorizationContent, UpgradePermitAuthorizationShare,
@@ -37,6 +42,7 @@ pub struct UpgradePermitAuthPoolManager {
     node_id: NodeId,
     crypto: Arc<dyn ConsensusCrypto>,
     consensus_pool_cache: Arc<dyn ConsensusBlockCache>,
+    membership: Arc<Membership>,
     /// Requests we've already signed (node, request_height).
     signed_requests: Mutex<BTreeSet<(NodeId, Height)>>,
     /// Last finalized height we scanned for requests.
@@ -50,15 +56,25 @@ impl UpgradePermitAuthPoolManager {
         node_id: NodeId,
         crypto: Arc<dyn ConsensusCrypto>,
         consensus_pool_cache: Arc<dyn ConsensusBlockCache>,
+        membership: Arc<Membership>,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
             node_id,
             crypto,
             consensus_pool_cache,
+            membership,
             signed_requests: Mutex::new(BTreeSet::new()),
             last_scanned: Mutex::new(Height::from(0)),
             logger,
+        }
+    }
+
+    fn tip_membership(&self) -> Option<BTreeSet<NodeId>> {
+        let latest_version = self.membership.registry_client.get_latest_version();
+        match self.membership.get_nodes_at_version(latest_version) {
+            Ok(nodes) if !nodes.is_empty() => Some(nodes.into_iter().collect()),
+            _ => None,
         }
     }
 
@@ -93,10 +109,22 @@ impl UpgradePermitAuthPoolManager {
             let Ok(actions) = bytes_to_upgrade_payload(upgrade_bytes) else {
                 continue;
             };
+            // Membership at the request block's own height and registry
+            // version, the pair under which the request was validated.
+            let membership =
+                subnet_membership(&self.membership, height, block.context.registry_version, &self.logger);
+            // Sign only if we are staying in the subnet for the foreseeable
+            // future.
+            if !membership.staying(&self.node_id) {
+                continue;
+            }
             for action in actions {
                 let UpgradePermitAction::Request { node, request_height } = action else {
                     continue;
                 };
+                if !membership.staying(&node) {
+                    continue;
+                }
                 let key = (node, request_height);
                 if signed.contains(&key) {
                     continue;
@@ -105,9 +133,6 @@ impl UpgradePermitAuthPoolManager {
                     node,
                     request_height,
                 };
-                // The share is signed with the registry version pinned to the
-                // block containing the request, so that verifiers resolve the
-                // signer's public key at the same version.
                 let registry_version = block.context.registry_version;
                 match self.crypto.sign(&content, self.node_id, registry_version) {
                     Ok(signature) => {
@@ -140,6 +165,7 @@ impl UpgradePermitAuthPoolManager {
         pool: &dyn UpgradePermitAuthPool,
     ) -> UpgradePermitAuthChangeSet {
         let chain = self.consensus_pool_cache.finalized_chain();
+        let tip_membership = self.tip_membership();
         let unvalidated: Vec<UpgradePermitAuthorizationShare> =
             pool.get_unvalidated_shares().cloned().collect();
         let mut change_set = vec![];
@@ -154,10 +180,17 @@ impl UpgradePermitAuthPoolManager {
         }
 
         for share in unvalidated {
-            // The public key used to verify the share is bound to the registry
-            // version of the block at the share's request_height. If that block
-            // is no longer in the finalized chain cache, the share is stale and
-            // cannot be verified.
+            if tip_membership
+                .as_ref()
+                .is_some_and(|members| !members.contains(&share.signature.signer))
+            {
+                let id = (&share).into();
+                change_set.push(UpgradePermitAuthChangeAction::HandleInvalid(
+                    id,
+                    "signer is not a subnet member at the latest registry version".to_string(),
+                ));
+                continue;
+            }
             let Ok(block) = chain.get_block_by_height(share.content.request_height) else {
                 let id = (&share).into();
                 change_set.push(UpgradePermitAuthChangeAction::HandleInvalid(

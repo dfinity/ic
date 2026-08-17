@@ -116,9 +116,11 @@ impl UpgradeState {
         self.requested.len() + self.authorized.len()
     }
 
-    /// The fault tolerance: `f = ⌊(N−1)/3⌋`.
-    pub fn faults_tolerated(num_members: usize) -> usize {
-        (num_members.max(1) - 1) / 3
+    /// Max parallel reboots (P): min(3, ceil((N−1)/6)), clamped to f.
+    pub fn max_parallel_reboots(num_members: usize) -> usize {
+        let f = ic_types::consensus::get_faults_tolerated(num_members);
+        let p = (num_members.max(1) - 1 + 5) / 6;
+        p.min(f).min(3)
     }
 }
 

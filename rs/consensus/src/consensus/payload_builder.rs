@@ -442,24 +442,26 @@ pub(crate) mod test {
             const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
             const INGRESS_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
 
+            // Section order at height 1 (7 sections, rotate_right(1)):
+            // Upgrade, Ingress, Bitcoin, XNet, CanisterHttp, QueryStats, ChainKey.
+            // The upgrade mock is a no-op (0 bytes).
             let payload_builder = set_up_payload_builder(
                 registry,
                 MocksSettings {
                     chain_key_payload_to_return: vec![0; CHAIN_KEY_PAYLOAD_SIZE.get() as usize],
-                    expected_chain_key_payload_size_limit: MAX_BLOCK_SIZE,
+                    expected_chain_key_payload_size_limit: MAX_BLOCK_SIZE
+                        - INGRESS_PAYLOAD_SIZE
+                        - BITCOIN_PAYLOAD_SIZE
+                        - XNET_PAYLOAD_SIZE
+                        - CANISTER_HTTP_PAYLOAD_SIZE
+                        - QUERY_STATS_PAYLOAD_SIZE,
                     ingress_payload_size_to_return: INGRESS_PAYLOAD_SIZE,
-                    expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - CHAIN_KEY_PAYLOAD_SIZE,
+                    expected_ingress_payload_size_limit: MAX_BLOCK_SIZE,
                     bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
-                    expected_bitcoin_payload_size_limit: MAX_BLOCK_SIZE
-                        - CHAIN_KEY_PAYLOAD_SIZE
-                        - INGRESS_PAYLOAD_SIZE,
+                    expected_bitcoin_payload_size_limit: MAX_BLOCK_SIZE - INGRESS_PAYLOAD_SIZE,
                     xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
                     expected_xnet_payload_size_limit: NumBytes::new(
-                        95 * (MAX_BLOCK_SIZE
-                            - CHAIN_KEY_PAYLOAD_SIZE
-                            - INGRESS_PAYLOAD_SIZE
-                            - BITCOIN_PAYLOAD_SIZE)
-                            .get()
+                        95 * (MAX_BLOCK_SIZE - INGRESS_PAYLOAD_SIZE - BITCOIN_PAYLOAD_SIZE).get()
                             / 100,
                     ),
                     http_outcalls_payload_to_return: vec![
@@ -467,13 +469,11 @@ pub(crate) mod test {
                         CANISTER_HTTP_PAYLOAD_SIZE.get() as usize
                     ],
                     expected_http_outcalls_size_limit: MAX_BLOCK_SIZE
-                        - CHAIN_KEY_PAYLOAD_SIZE
                         - INGRESS_PAYLOAD_SIZE
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE,
                     query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
                     expected_query_stats_size_limit: MAX_BLOCK_SIZE
-                        - CHAIN_KEY_PAYLOAD_SIZE
                         - INGRESS_PAYLOAD_SIZE
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE

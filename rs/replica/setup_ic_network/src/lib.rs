@@ -19,7 +19,7 @@ use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -705,6 +705,11 @@ fn start_consensus(
             node_id,
             Arc::clone(&consensus_crypto),
             consensus_pool.read().unwrap().get_block_cache(),
+            Arc::new(Membership::new(
+                Arc::clone(&consensus_pool_cache),
+                Arc::clone(&registry_client),
+                subnet_id,
+            )),
             log.clone(),
         ),
         Arc::clone(&time_source) as Arc<_>,

@@ -27,7 +27,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, PrincipalId, SubnetId,
+    Height, NodeId, PlatformVersion, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
     consensus::{
         Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
@@ -125,7 +125,11 @@ impl ReplayValidator {
             Height::from(0),
         ));
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
-        let replica_cfg = ReplicaConfig::new(node_id, subnet_id);
+        let replica_cfg = ReplicaConfig {
+            node_id,
+            subnet_id,
+            platform_version: PlatformVersion::default(),
+        };
         let thread_pool = ThreadPoolBuilder::new()
             .num_threads(MAX_VALIDATION_THREADS)
             .build()
