@@ -201,7 +201,7 @@ mod tests {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         Height, RegistryVersion,
         batch::BatchPayload,
