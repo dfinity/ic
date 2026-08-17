@@ -19,16 +19,15 @@ use std::time::Duration;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
-use crate::consensus::upgrade_section::subnet_membership;
+use crate::consensus::upgrade_protocol::{subnet_membership, validate_share, SubnetMembership};
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer};
 use ic_interfaces::upgrade_permit_auth::{
     UpgradePermitAuthChangeAction, UpgradePermitAuthChangeSet, UpgradePermitAuthPool,
 };
-use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::consensus::{
-    UpgradePermitAuthorizationContent, UpgradePermitAuthorizationShare,
+    Block, UpgradePermitAuthorizationContent, UpgradePermitAuthorizationShare,
     upgrade::UpgradePermitAction,
 };
 use ic_replicated_state::metadata_state::REQUEST_TIMEOUT_BLOCKS;
@@ -70,12 +69,16 @@ impl UpgradePermitAuthPoolManager {
         }
     }
 
-    fn tip_membership(&self) -> Option<BTreeSet<NodeId>> {
-        let latest_version = self.membership.registry_client.get_latest_version();
-        match self.membership.get_nodes_at_version(latest_version) {
-            Ok(nodes) if !nodes.is_empty() => Some(nodes.into_iter().collect()),
-            _ => None,
-        }
+    /// Membership at the given finalized block's own height and registry
+    /// version, the pair under which the block's upgrade actions were
+    /// validated.
+    fn block_membership(&self, block: &Block) -> SubnetMembership {
+        subnet_membership(
+            &self.membership,
+            block.height,
+            block.context.registry_version,
+            &self.logger,
+        )
     }
 
     /// Scan finalized blocks for new `Request` actions and sign an auth share
@@ -111,8 +114,7 @@ impl UpgradePermitAuthPoolManager {
             };
             // Membership at the request block's own height and registry
             // version, the pair under which the request was validated.
-            let membership =
-                subnet_membership(&self.membership, height, block.context.registry_version, &self.logger);
+            let membership = self.block_membership(block);
             // Sign only if we are staying in the subnet for the foreseeable
             // future.
             if !membership.staying(&self.node_id) {
@@ -165,7 +167,6 @@ impl UpgradePermitAuthPoolManager {
         pool: &dyn UpgradePermitAuthPool,
     ) -> UpgradePermitAuthChangeSet {
         let chain = self.consensus_pool_cache.finalized_chain();
-        let tip_membership = self.tip_membership();
         let unvalidated: Vec<UpgradePermitAuthorizationShare> =
             pool.get_unvalidated_shares().cloned().collect();
         let mut change_set = vec![];
@@ -180,17 +181,6 @@ impl UpgradePermitAuthPoolManager {
         }
 
         for share in unvalidated {
-            if tip_membership
-                .as_ref()
-                .is_some_and(|members| !members.contains(&share.signature.signer))
-            {
-                let id = (&share).into();
-                change_set.push(UpgradePermitAuthChangeAction::HandleInvalid(
-                    id,
-                    "signer is not a subnet member at the latest registry version".to_string(),
-                ));
-                continue;
-            }
             let Ok(block) = chain.get_block_by_height(share.content.request_height) else {
                 let id = (&share).into();
                 change_set.push(UpgradePermitAuthChangeAction::HandleInvalid(
@@ -202,27 +192,26 @@ impl UpgradePermitAuthPoolManager {
                 ));
                 continue;
             };
-            let registry_version = block.context.registry_version;
-            match self.crypto.verify_basic_sig(
-                &share.signature.signature,
-                &share.content,
-                share.signature.signer,
-                registry_version,
+            // Membership at the request block's own height and registry
+            // version.
+            let membership = self.block_membership(block);
+            match validate_share(
+                &share,
+                share.content.node,
+                share.content.request_height,
+                &membership.staying_members,
+                block.context.registry_version,
+                self.crypto.as_ref(),
             ) {
-                Ok(()) => {
+                Ok(_) => {
                     change_set.push(UpgradePermitAuthChangeAction::MoveToValidated(share));
                 }
-                Err(e) => {
-                    warn!(
-                        self.logger,
-                        "upgrade_permit_auth: invalid signature from {:?}: {:?}",
-                        share.signature.signer,
-                        e
-                    );
+                Err(reason) => {
+                    warn!(self.logger, "permit_auth: dropping invalid share: {:?}", reason);
                     let id = (&share).into();
                     change_set.push(UpgradePermitAuthChangeAction::HandleInvalid(
                         id,
-                        format!("signature verification failed: {:?}", e),
+                        format!("invalid share: {:?}", reason),
                     ));
                 }
             }

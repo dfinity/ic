@@ -20,6 +20,7 @@ mod random_tape_maker;
 mod share_aggregator;
 mod status;
 pub mod upgrade_permit_auth_pool_manager;
+mod upgrade_protocol;
 pub mod upgrade_section;
 pub mod validator;
 
