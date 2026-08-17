@@ -510,16 +510,20 @@ impl State {
             self.cketh_minimum_withdrawal_amount = minimum_withdrawal_amount;
         }
         if let Some(address) = ethereum_contract_address {
-            let eth_helper_contract_address = Address::from_str(&address)
-                .map_err(|e| InvalidStateError::InvalidContractAddress(format!("ERROR: {e}")))?;
+            let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!("ethereum_contract_address: {e}"))
+            })?;
             self.log_scrapings.set_contract_address(
                 LogScrapingId::EthDepositWithoutSubaccount,
                 eth_helper_contract_address,
             );
         }
         if let Some(address) = erc20_helper_contract_address {
-            let erc20_helper_contract_address = Address::from_str(&address)
-                .map_err(|e| InvalidStateError::InvalidContractAddress(format!("ERROR: {e}")))?;
+            let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!(
+                    "erc20_helper_contract_address: {e}"
+                ))
+            })?;
             self.log_scrapings.set_contract_address(
                 LogScrapingId::Erc20DepositWithoutSubaccount,
                 erc20_helper_contract_address,
@@ -534,8 +538,11 @@ impl State {
             );
         }
         if let Some(address) = deposit_with_subaccount_helper_contract_address {
-            let address = Address::from_str(&address)
-                .map_err(|e| InvalidStateError::InvalidContractAddress(format!("ERROR: {e}")))?;
+            let address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!(
+                    "deposit_with_subaccount_helper_contract_address: {e}"
+                ))
+            })?;
             self.log_scrapings
                 .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, address);
         }
@@ -557,8 +564,11 @@ impl State {
             self.evm_rpc_id = evm_id;
         }
         if let Some(address) = ethereum_sweeper_contract_address {
-            let address = Address::from_str(&address)
-                .map_err(|e| InvalidStateError::InvalidContractAddress(format!("ERROR: {e}")))?;
+            let address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!(
+                    "ethereum_sweeper_contract_address: {e}"
+                ))
+            })?;
             self.sweeper_contract_address = Some(address);
         }
         self.validate_config()

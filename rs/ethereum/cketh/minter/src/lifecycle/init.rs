@@ -62,11 +62,17 @@ impl TryFrom<InitArg> for State {
         let eth_helper_contract_address = ethereum_contract_address
             .map(|a| Address::from_str(&a))
             .transpose()
-            .map_err(|e| InvalidStateError::InvalidContractAddress(format!("ERROR: {e}")))?;
+            .map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!("ethereum_contract_address: {e}"))
+            })?;
         let sweeper_contract_address = ethereum_sweeper_contract_address
             .map(|a| Address::from_str(&a))
             .transpose()
-            .map_err(|e| InvalidStateError::InvalidContractAddress(format!("ERROR: {e}")))?;
+            .map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!(
+                    "ethereum_sweeper_contract_address: {e}"
+                ))
+            })?;
         let last_scraped_block_number = BlockNumber::try_from(last_scraped_block_number)
             .map_err(|e| InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {e}")))?;
         let first_scraped_block_number =
