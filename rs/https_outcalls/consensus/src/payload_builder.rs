@@ -390,6 +390,7 @@ impl CanisterHttpPayloadBuilderImpl {
             // been responded to.
             for (callback_id, request) in delivered_canister_http_request_contexts {
                 if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                    // Break early to avoid iterating through all open contexts.
                     break;
                 }
                 // Skip contexts that have already timed out.
