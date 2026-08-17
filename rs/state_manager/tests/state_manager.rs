@@ -8480,6 +8480,71 @@ fn can_rename_canister() {
     can_rename_canister_impl(CertificationScope::Full);
 }
 
+/// Simplified version of canister deletion that only does the parts relevant to the state manager.
+fn delete_canister(state: &mut ReplicatedState, canister_id: CanisterId) {
+    state.remove_canister(&canister_id).unwrap();
+    state
+        .metadata
+        .unflushed_checkpoint_ops
+        .delete_canister(canister_id);
+}
+
+#[test]
+fn deleted_canister_is_removed_from_tip() {
+    fn deleted_canister_is_removed_from_tip_impl(certification_scope: CertificationScope) {
+        state_manager_test(|_metrics, state_manager| {
+            let canister_id = canister_test_id(100);
+
+            // Install a canister and give it some initial state.
+            let (_height, mut state) = state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_id);
+            let canister_state = state.canister_state_make_mut(&canister_id).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
+            state_manager.commit_and_certify(state, CertificationScope::Full, None);
+            state_manager.flush_tip_channel();
+
+            let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+                state_manager.state_layout().raw_path().join("tip"),
+                Height(0),
+            )
+            .unwrap();
+            assert_eq!(tip.canister_ids().unwrap(), vec![canister_id]);
+
+            let (_height, mut state) = state_manager.take_tip();
+            delete_canister(&mut state, canister_id);
+
+            // Trigger a flush either at the checkpoint or by committing exactly
+            // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
+            if certification_scope == CertificationScope::Full {
+                state_manager.commit_and_certify(state, certification_scope.clone(), None);
+            } else {
+                state_manager.commit_and_certify(
+                    state,
+                    certification_scope.clone(),
+                    Some(BatchSummary {
+                        next_checkpoint_height: Height(
+                            2 + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+                        ),
+                        current_interval_length: Height(500),
+                    }),
+                );
+            }
+            state_manager.flush_tip_channel();
+
+            // The canister directory is gone from the tip, even without a checkpoint.
+            assert!(tip.canister_ids().unwrap().is_empty());
+            let (_height, state) = state_manager.take_tip();
+            assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+        });
+    }
+    deleted_canister_is_removed_from_tip_impl(CertificationScope::Metadata);
+    deleted_canister_is_removed_from_tip_impl(CertificationScope::Full);
+}
+
 #[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn stream_store_encode_decode(
     #[strategy(arb_stream(

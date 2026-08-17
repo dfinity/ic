@@ -532,6 +532,19 @@ impl TipHandler {
         Ok(())
     }
 
+    /// Deletes the directory of the given canister from tip.
+    ///
+    /// This is a no-op if the canister has no directory in tip, e.g. because it was
+    /// created and deleted without any of its `PageMap`s having been flushed.
+    pub fn delete_canister_directory(
+        &mut self,
+        height: Height,
+        canister_id: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        tip.canister(&canister_id)?.delete_dir()
+    }
+
     /// Moves the entire canister directory from one canister id to another.
     pub fn move_canister_directory(
         &mut self,
@@ -2405,6 +2418,25 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
             name_stem: LOG_MEMORY_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
+        }
+    }
+}
+
+impl<P> CanisterLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Removes the entire directory of the canister. Does nothing if the directory
+    /// does not exist.
+    pub fn delete_dir(&self) -> Result<(), LayoutError> {
+        match std::fs::remove_dir_all(self.raw_path()) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(LayoutError::IoError {
+                path: self.raw_path(),
+                message: "Cannot remove canister.".to_string(),
+                io_err: err,
+            }),
         }
     }
 }

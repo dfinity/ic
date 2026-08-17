@@ -1362,8 +1362,13 @@ impl CanisterManager {
         // - its state is permanently deleted, and
         // - its cycles are discarded.
 
-        // Remove the canister from `ReplicatedState`.
+        // Remove the canister from `ReplicatedState`; and record the removal, so that
+        // the canister's directory is also deleted from the tip.
         let canister_to_delete = state.remove_canister(&canister_id_to_delete).unwrap();
+        state
+            .metadata
+            .unflushed_checkpoint_ops
+            .delete_canister(canister_id_to_delete);
         let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
 
         round_limits.subnet_available_memory.increment(
