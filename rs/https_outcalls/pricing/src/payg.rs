@@ -607,9 +607,9 @@ mod tests {
         // `max_usage_fee` bounds how much of a request's payment is withheld as
         // per-replica allowances, so it has to cover everything this tracker can
         // charge a replica: the largest response the adapter may return, taking the
-        // longest it may take, transformed with the whole instruction limit into a
-        // maximally large response. On top of that, what the allowances of all
-        // replicas together leave unspent has to cover the consensus fee of
+        // longest it may take, transformed with the whole instruction limit into the
+        // largest response that may be delivered. On top of that, what the allowances
+        // of all replicas together leave unspent has to cover the consensus fee of
         // delivering the response(s). If it didn't, a request paying for the worst
         // case could still run out of cycles.
         let node = NodeId::from(PrincipalId::new_node_test_id(0));
@@ -628,6 +628,10 @@ mod tests {
                     ..context(replication.clone(), allowance.get())
                 };
                 assert_eq!(ctx.subnet_size, subnet_size);
+                // The largest response the validators would accept, which is what the
+                // worst case has to be funded for.
+                let delivered =
+                    NumBytes::from(ctx.max_http_outcall_content_size(/* is_reject = */ false));
                 let mut tracker = PayAsYouGoTracker::new(&ctx);
 
                 let limits = tracker.get_adapter_limits();
@@ -646,17 +650,13 @@ mod tests {
                     "{replication:?}, {max_response_bytes:?}"
                 );
                 assert_eq!(
-                    tracker.subtract_gossip_usage(NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)),
+                    tracker.subtract_gossip_usage(delivered),
                     Ok(()),
                     "{replication:?}, {max_response_bytes:?}"
                 );
                 // What every replica leaves unspent adds up to at least the consensus
-                // fee of delivering a maximally large response from each of them.
-                let consensus_fee = max_consensus_fee(
-                    replication.kind(),
-                    NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
-                    subnet_size,
-                );
+                // fee of delivering the largest response from each of them.
+                let consensus_fee = max_consensus_fee(replication.kind(), delivered, subnet_size);
                 let worst_case = tracker.spent * node_count + consensus_fee;
                 let allowances = allowance * node_count;
                 assert!(

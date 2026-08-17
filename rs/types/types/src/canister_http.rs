@@ -1245,11 +1245,20 @@ impl CanisterHttpRequestContext {
         if is_reject {
             MAX_CANISTER_HTTP_REJECT_BYTES
         } else {
-            self.max_response_bytes
-                .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
-                + CANDID_OVERHEAD_RESERVE_BYTES
+            max_http_outcall_response_size(self.max_response_bytes)
         }
     }
+}
+
+/// The largest [`CanisterHttpResponseContent::Success`] an outcall with the given
+/// `max_response_bytes` may deliver.
+///
+/// A response is delivered Candid-encoded, so it may exceed `max_response_bytes` by
+/// [`CANDID_OVERHEAD_RESERVE_BYTES`].
+pub fn max_http_outcall_response_size(max_response_bytes: Option<NumBytes>) -> u64 {
+    max_response_bytes
+        .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
+        .saturating_add(CANDID_OVERHEAD_RESERVE_BYTES)
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
