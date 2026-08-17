@@ -47,14 +47,9 @@ pub trait BudgetTracker: Send {
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt;
 }
 
-/// The maximum duration the adapter is allowed to take to fully receive a
-/// response, as measured by the client. The server already enforces a 30s
-/// timeout (see `DEFAULT_HTTP_REQUEST_TIMEOUT_SECS`), so this is a safety margin
-/// above it.
-///
-/// This is the ceiling on [`AdapterLimits::max_response_time`]; a tracker may
-/// hand out less than this, but never more.
-pub const MAX_RESPONSE_TIME: Duration = Duration::from_secs(60);
+/// The ceiling on [`AdapterLimits::max_response_time`]; a tracker may hand out
+/// less than this, but never more.
+pub use ic_types::canister_http::MAX_HTTP_OUTCALL_RESPONSE_TIME as MAX_RESPONSE_TIME;
 
 pub struct AdapterLimits {
     /// The maximum size of the HTTP response, including the headers and the body.

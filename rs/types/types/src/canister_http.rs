@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     consensus::get_faults_tolerated,
     crypto::{BasicSigOf, CryptoHashOf},
@@ -57,8 +57,9 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS,
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO, CanisterHttpRequestArgs,
-    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod,
-    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext,
+    CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION,
+    FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod, PRICING_VERSION_LEGACY,
+    PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -86,6 +87,12 @@ pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 /// Limiting the number of responses can improve performance, as otherwise validation times
 /// could become too large.
 pub const CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK: usize = 500;
+
+/// The maximum duration the adapter is allowed to take to fully receive a
+/// response, as measured by the client. The adapter already enforces a 30s
+/// timeout, so this is a safety margin above it. Re-exported by
+/// `ic-https-outcalls-pricing` as `MAX_RESPONSE_TIME`.
+pub const MAX_HTTP_OUTCALL_RESPONSE_TIME: Duration = Duration::from_secs(60);
 
 /// Maximum number of request bytes for a canister http request.
 pub const MAX_CANISTER_HTTP_REQUEST_BYTES: u64 = 2_000_000;
@@ -883,6 +890,8 @@ pub enum CanisterHttpRequestContextError {
     NoNodesAvailableForDelegation,
     DeterministicResponseCountRequired,
     InvalidReplicationCounts(String),
+    /// A query outcall did not ask for a non-replicated request.
+    NonReplicatedRequestRequired,
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -950,6 +959,12 @@ impl From<CanisterHttpRequestContextError> for UserError {
             CanisterHttpRequestContextError::InvalidReplicationCounts(msg) => {
                 UserError::new(ErrorCode::CanisterRejectedMessage, msg)
             }
+            CanisterHttpRequestContextError::NonReplicatedRequestRequired => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "An HTTP outcall made from a query must be non-replicated, \
+                i.e. `is_replicated` must be set to `false`."
+                    .to_string(),
+            ),
         }
     }
 }
@@ -966,6 +981,84 @@ pub struct CanisterHttpRequest {
     /// The addresses should be sent in the following format: `socks5://[<ip>]:<port>`, for example:
     /// `socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080`
     pub socks_proxy_addrs: Vec<String>,
+}
+
+/// A non-replicated HTTP outcall performed by a single node on behalf of a
+/// canister executing a query.
+///
+/// Carries every limit the client enforces: unlike a replicated outcall, there
+/// is no [`CanisterHttpRequestContext`] in the replicated state to consult.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct QueryOutcallRequest {
+    pub requester: CanisterId,
+    pub url: String,
+    pub http_method: CanisterHttpMethod,
+    pub headers: Vec<CanisterHttpHeader>,
+    pub body: Option<Vec<u8>>,
+    pub max_response_bytes: NumBytes,
+    /// What remains of the query call graph's walltime budget, so it shrinks as
+    /// the query progresses.
+    pub max_response_time: Duration,
+    /// What the outcall may spend, in cycles so that the pricing formulas apply
+    /// unchanged. The unspent part returns to the query's instruction budget.
+    pub allowance: Cycles,
+}
+
+/// What a query's HTTP outcall produced, and what it cost.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct QueryOutcallOutcome {
+    /// Raw, before any transform.
+    pub result: Result<CanisterHttpResponsePayload, CanisterHttpReject>,
+    /// Reported on the reject path too: a failed outcall may still have
+    /// downloaded bytes and taken time.
+    pub spent: Cycles,
+}
+
+impl QueryOutcallRequest {
+    /// Validates `args` as a non-replicated HTTP outcall performed by
+    /// `requester` from within a query, and returns the outcall together with
+    /// the transform to apply to its response, if any.
+    ///
+    /// Reuses the validators of the replicated path in
+    /// [`CanisterHttpRequestContext::generate_from_args`], so both reject the
+    /// same arguments with the same [`UserError`].
+    ///
+    /// `max_response_time` is clamped to [`MAX_HTTP_OUTCALL_RESPONSE_TIME`];
+    /// `allowance` is left at zero for the caller to set, since what the outcall
+    /// may spend depends on the size of the request being built here.
+    pub fn try_from_args(
+        requester: CanisterId,
+        args: CanisterHttpRequestArgs,
+        max_response_time: Duration,
+    ) -> Result<(Self, Option<Transform>), CanisterHttpRequestContextError> {
+        validate_transform_principal(&args.transform, requester.get())?;
+        validate_url_length(&args.url)?;
+        validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
+
+        let max_response_bytes = validate_max_response_bytes(args.max_response_bytes)?
+            .unwrap_or_else(|| NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES));
+
+        if args.is_replicated != Some(false) {
+            return Err(CanisterHttpRequestContextError::NonReplicatedRequestRequired);
+        }
+
+        // `args.pricing_version` is ignored: a query outcall is always priced
+        // with the pay-as-you-go formulas, and the replicated path does not
+        // validate the field either -- it falls back to its default.
+        Ok((
+            Self {
+                requester,
+                url: args.url,
+                http_method: args.method.into(),
+                headers: args.headers.get().iter().cloned().map(From::from).collect(),
+                body: args.body,
+                max_response_bytes,
+                max_response_time: max_response_time.min(MAX_HTTP_OUTCALL_RESPONSE_TIME),
+                allowance: Cycles::zero(),
+            },
+            args.transform.map(From::from),
+        ))
+    }
 }
 
 /// The content of a response after the transformation
@@ -2308,6 +2401,258 @@ mod tests {
             &mut ReproducibleRng::new(),
             PricingVersion::PayAsYouGo,
         )
+    }
+
+    /// The requester is the sender of the ic00 request, i.e. the calling
+    /// canister, which is also the only principal a transform may point at.
+    fn query_outcall_requester() -> CanisterId {
+        CanisterId::from(42)
+    }
+
+    fn try_query_outcall(
+        args: CanisterHttpRequestArgs,
+    ) -> Result<(QueryOutcallRequest, Option<Transform>), CanisterHttpRequestContextError> {
+        QueryOutcallRequest::try_from_args(query_outcall_requester(), args, Duration::from_secs(10))
+    }
+
+    #[test]
+    fn query_outcall_requires_explicit_non_replication() {
+        for is_replicated in [None, Some(true)] {
+            let args = dummy_args(HttpMethod::GET, is_replicated);
+            assert_matches!(
+                try_query_outcall(args),
+                Err(CanisterHttpRequestContextError::NonReplicatedRequestRequired),
+                "is_replicated {is_replicated:?} must be rejected"
+            );
+        }
+
+        let args = dummy_args(HttpMethod::GET, Some(false));
+        assert_matches!(try_query_outcall(args), Ok(_));
+    }
+
+    /// Every HTTP method is available to a query outcall: it is served by a
+    /// single node making a single request, which is exactly the determinism
+    /// condition the replicated path's PUT/DELETE/PATCH restriction asks for.
+    #[test]
+    fn query_outcall_allows_every_http_method() {
+        for method in [
+            HttpMethod::GET,
+            HttpMethod::HEAD,
+            HttpMethod::POST,
+            HttpMethod::PUT,
+            HttpMethod::DELETE,
+            HttpMethod::PATCH,
+        ] {
+            let args = dummy_args(method, Some(false));
+            let expected: CanisterHttpMethod = method.into();
+            assert_matches!(
+                try_query_outcall(args),
+                Ok((outcall, _)) if outcall.http_method == expected,
+                "method {method:?} must be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn query_outcall_defaults_max_response_bytes_to_the_maximum() {
+        let args = dummy_args(HttpMethod::GET, Some(false));
+        let (outcall, _) = try_query_outcall(args).unwrap();
+        assert_eq!(
+            outcall.max_response_bytes,
+            NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)
+        );
+    }
+
+    #[test]
+    fn query_outcall_rejects_oversized_max_response_bytes() {
+        let mut args = dummy_args(HttpMethod::GET, Some(false));
+        args.max_response_bytes = Some(MAX_CANISTER_HTTP_RESPONSE_BYTES);
+        assert_matches!(try_query_outcall(args), Ok(_));
+
+        let mut args = dummy_args(HttpMethod::GET, Some(false));
+        args.max_response_bytes = Some(MAX_CANISTER_HTTP_RESPONSE_BYTES + 1);
+        assert_matches!(
+            try_query_outcall(args),
+            Err(CanisterHttpRequestContextError::MaxResponseBytes(_))
+        );
+    }
+
+    #[test]
+    fn query_outcall_clamps_response_time_to_the_maximum() {
+        let args = dummy_args(HttpMethod::GET, Some(false));
+        let (outcall, _) = QueryOutcallRequest::try_from_args(
+            query_outcall_requester(),
+            args,
+            MAX_HTTP_OUTCALL_RESPONSE_TIME + Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(outcall.max_response_time, MAX_HTTP_OUTCALL_RESPONSE_TIME);
+
+        let args = dummy_args(HttpMethod::GET, Some(false));
+        let (outcall, _) = QueryOutcallRequest::try_from_args(
+            query_outcall_requester(),
+            args,
+            Duration::from_secs(3),
+        )
+        .unwrap();
+        assert_eq!(outcall.max_response_time, Duration::from_secs(3));
+    }
+
+    /// The replicated path does not validate this field either: an unusable
+    /// value falls back to the default. Ignoring it is parity, not leniency.
+    #[test]
+    fn query_outcall_ignores_pricing_version() {
+        for pricing_version in [
+            None,
+            Some(PRICING_VERSION_LEGACY),
+            Some(PRICING_VERSION_PAY_AS_YOU_GO),
+            Some(u32::MAX),
+        ] {
+            let mut args = dummy_args(HttpMethod::GET, Some(false));
+            args.pricing_version = pricing_version;
+            assert_matches!(
+                try_query_outcall(args),
+                Ok(_),
+                "pricing_version {pricing_version:?} must be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn query_outcall_requires_the_transform_to_belong_to_the_requester() {
+        let mut args = dummy_args(HttpMethod::GET, Some(false));
+        args.transform = Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: query_outcall_requester().get().into(),
+                method: "transform".to_string(),
+            }),
+            context: vec![],
+        });
+        assert_matches!(
+            try_query_outcall(args),
+            Ok((_, Some(transform))) if transform.method_name == "transform"
+        );
+
+        let mut args = dummy_args(HttpMethod::GET, Some(false));
+        args.transform = Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: CanisterId::from(43).get().into(),
+                method: "transform".to_string(),
+            }),
+            context: vec![],
+        });
+        assert_matches!(
+            try_query_outcall(args),
+            Err(CanisterHttpRequestContextError::TransformPrincipalId(_))
+        );
+    }
+
+    /// The two paths must reject identical arguments identically: a canister
+    /// cannot tell from the error whether a query or an update served it.
+    #[test]
+    fn query_outcall_errors_match_the_replicated_path() {
+        use CanisterHttpRequestContextError as Error;
+
+        let node_ids = BTreeSet::from([node_test_id(1)]);
+        let requester = query_outcall_requester();
+        let request = Request {
+            sender: requester,
+            ..dummy_request()
+        };
+
+        let headers = |count: usize, name_len: usize, value_len: usize| {
+            BoundedHttpHeaders::new(
+                (0..count)
+                    .map(|_| HttpHeader {
+                        name: "n".repeat(name_len),
+                        value: "v".repeat(value_len),
+                    })
+                    .collect(),
+            )
+        };
+
+        let assert_parity = |break_args: &dyn Fn(&mut CanisterHttpRequestArgs)| {
+            let args = || {
+                let mut args = dummy_args(HttpMethod::GET, Some(false));
+                break_args(&mut args);
+                args
+            };
+
+            let query_error =
+                QueryOutcallRequest::try_from_args(requester, args(), Duration::from_secs(10))
+                    .expect_err("expected the query path to reject these arguments");
+            // Exhaustive, so a new error variant has to be classified here
+            // rather than leaving this test green.
+            match &query_error {
+                Error::MaxResponseBytes(_)
+                | Error::TransformPrincipalId(_)
+                | Error::UrlTooLong(_)
+                | Error::TooManyHeaders(_)
+                | Error::TooLongHeaderName(_)
+                | Error::TooLongHeaderValue(_)
+                | Error::TooLargeHeaders(_)
+                | Error::TooLargeRequest(_) => {}
+                Error::NoNodesAvailableForDelegation
+                | Error::DeterministicResponseCountRequired
+                | Error::InvalidReplicationCounts(_)
+                | Error::NonReplicatedRequestRequired => {
+                    panic!("{query_error:?} is not a failure the two paths share")
+                }
+            }
+
+            let replicated_error = CanisterHttpRequestContext::generate_from_args(
+                UNIX_EPOCH,
+                &request,
+                args(),
+                &node_ids,
+                RegistryVersion::from(1),
+                CanisterCyclesCostSchedule::Normal,
+                &mut ReproducibleRng::new(),
+                true,
+            )
+            .expect_err("expected the replicated path to reject these arguments");
+
+            assert_eq!(
+                UserError::from(query_error),
+                UserError::from(replicated_error)
+            );
+        };
+
+        assert_parity(&|args| args.url = "a".repeat(MAX_CANISTER_HTTP_URL_SIZE + 1));
+        assert_parity(&|args| args.max_response_bytes = Some(MAX_CANISTER_HTTP_RESPONSE_BYTES + 1));
+        assert_parity(&|args| {
+            args.transform = Some(TransformContext {
+                function: TransformFunc(candid::Func {
+                    principal: CanisterId::from(43).get().into(),
+                    method: "transform".to_string(),
+                }),
+                context: vec![],
+            })
+        });
+        assert_parity(&|args| args.headers = headers(MAX_CANISTER_HTTP_HEADER_NUM + 1, 1, 1));
+        assert_parity(&|args| {
+            args.headers = headers(1, MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1, 1)
+        });
+        assert_parity(&|args| {
+            args.headers = headers(1, 1, MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1)
+        });
+        assert_parity(&|args| {
+            let value_len = MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
+            args.headers = headers(
+                MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / value_len + 1,
+                0,
+                value_len,
+            )
+        });
+        assert_parity(&|args| {
+            args.body = Some(vec![0; MAX_CANISTER_HTTP_REQUEST_BYTES as usize + 1])
+        });
+        // Also when more than one argument is wrong, which is what keeps the
+        // query-only check from pre-empting a shared one.
+        assert_parity(&|args| {
+            args.is_replicated = None;
+            args.max_response_bytes = Some(MAX_CANISTER_HTTP_RESPONSE_BYTES + 1);
+        });
     }
 }
 

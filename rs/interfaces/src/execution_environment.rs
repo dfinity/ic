@@ -11,6 +11,7 @@ use ic_types::{
     ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion, ReplicaVersion,
     Time,
     batch::ChainKeyData,
+    canister_http::{QueryOutcallOutcome, QueryOutcallRequest},
     ingress::{IngressStatus, WasmResult},
     messages::{
         CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
@@ -563,6 +564,14 @@ pub struct TransformExecutionInput {
 /// Interface for the component to execute canister http transform.
 pub type TransformExecutionService =
     BoxCloneService<TransformExecutionInput, QueryExecutionResponse, Infallible>;
+
+/// Interface for the component that performs non-replicated HTTP outcalls on
+/// behalf of canisters executing a query.
+///
+/// The outcome carries the raw response, *before* any transform: a query
+/// outcall's transform runs in the query context that requested it.
+pub type QueryOutcallService =
+    BoxCloneService<QueryOutcallRequest, QueryOutcallOutcome, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Eq, PartialEq, Debug)]
