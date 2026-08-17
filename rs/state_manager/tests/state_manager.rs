@@ -8507,15 +8507,16 @@ fn deleted_canister_is_removed_from_tip() {
             state_manager.commit_and_certify(state, CertificationScope::Full, None);
             state_manager.flush_tip_channel();
 
+            let (height, mut state) = state_manager.take_tip();
             let tip = CheckpointLayout::<ReadOnly>::new_untracked(
                 state_manager.state_layout().raw_path().join("tip"),
-                Height(0),
+                height,
             )
             .unwrap();
             assert_eq!(tip.canister_ids().unwrap(), vec![canister_id]);
 
-            let (_height, mut state) = state_manager.take_tip();
             delete_canister(&mut state, canister_id);
+            assert!(!state.system_metadata().unflushed_checkpoint_ops.is_empty());
 
             // Trigger a flush either at the checkpoint or by committing exactly
             // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
@@ -8537,6 +8538,7 @@ fn deleted_canister_is_removed_from_tip() {
 
             // The canister directory is gone from the tip, even without a checkpoint.
             assert!(tip.canister_ids().unwrap().is_empty());
+            // And the checkpoint op has been flushed.
             let (_height, state) = state_manager.take_tip();
             assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
         });

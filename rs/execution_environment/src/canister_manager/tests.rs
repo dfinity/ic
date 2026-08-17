@@ -2055,8 +2055,8 @@ fn delete_canister_records_unflushed_checkpoint_op() {
     let _ = test.stop_canister(canister_id);
     test.process_stopping_canisters();
 
-    // Ignore any checkpoint ops accumulated while creating and stopping the canister.
-    test.state_mut().metadata.unflushed_checkpoint_ops.take();
+    // Creating and stopping a canister does not require any checkpoint ops.
+    assert!(test.state().metadata.unflushed_checkpoint_ops.is_empty());
 
     test.delete_canister(canister_id).unwrap();
 
