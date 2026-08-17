@@ -171,15 +171,6 @@ impl UpgradePermitAuthPoolManager {
             pool.get_unvalidated_shares().cloned().collect();
         let mut change_set = vec![];
 
-        if !unvalidated.is_empty() {
-            info!(
-                self.logger,
-                "permit_auth: validating {} gossiped shares, validated pool has {}",
-                unvalidated.len(),
-                pool.get_validated_shares().count()
-            );
-        }
-
         for share in unvalidated {
             let Ok(block) = chain.get_block_by_height(share.content.request_height) else {
                 let id = (&share).into();

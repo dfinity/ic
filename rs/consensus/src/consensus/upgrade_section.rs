@@ -6,18 +6,17 @@
 //! - `Authorize`: block maker includes collected auth shares (≥ N−P) to authorize a node
 //! - `Return`: block maker releases its slot after rebooting
 //!
-//! This is a thin adapter over [`crate::consensus::upgrade_protocol`], which
-//! holds the shared protocol logic (membership, state reconstruction, action
-//! building/validation); the committed anchor state is read from the state
-//! manager (certified replicated state).
+//! Holds the block-facing protocol logic: state reconstruction (certified
+//! anchor folded with the certification-gap payloads), action building, and
+//! action validation. The kernel shared with the share signer (membership
+//! views, share validation) lives in
+//! [`crate::consensus::upgrade_protocol`].
 
-use crate::consensus::upgrade_protocol::{
-    build_actions, invalid_upgrade, reconstruct_state, subnet_membership, validate_actions,
-};
+use crate::consensus::upgrade_protocol::{SubnetMembership, subnet_membership, validate_share};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext};
-use ic_interfaces::consensus::PayloadValidationError;
+use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationError};
 use ic_interfaces::upgrade::InvalidUpgradePayloadReason;
 use ic_interfaces::upgrade_permit_auth::UpgradePermitAuthPool;
 use ic_interfaces_state_manager::StateReader;
@@ -25,7 +24,10 @@ use ic_logger::{ReplicaLogger, info};
 use ic_replicated_state::ReplicatedState;
 use ic_replicated_state::metadata_state::UpgradeState;
 use ic_types::batch::{bytes_to_upgrade_payload, upgrade_payload_to_bytes};
+use ic_types::consensus::UpgradePermitAuthorizationShare;
+use ic_types::consensus::upgrade::{UpgradePermitAction, UpgradePermitShares};
 use ic_types::{Height, NodeId, NumBytes, PlatformVersion};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
 
 /// Builds the upgrade section of a data block's `BatchPayload`.
@@ -61,12 +63,28 @@ impl UpgradePayloadBuilder {
         }
     }
 
-    /// The committed upgrade state from the latest certified replicated state.
-    fn certified_upgrade_state(&self) -> UpgradeState {
-        self.state_reader
+    /// The upgrade state at `height`: the committed anchor from the latest
+    /// certified replicated state, folded with the certification-gap
+    /// payloads and pruned of expired requests and departed members
+    /// (`members`: nodes still in the committee).
+    fn upgrade_state_at(
+        &self,
+        past_payloads: &[PastPayload],
+        members: &BTreeSet<NodeId>,
+        height: Height,
+    ) -> UpgradeState {
+        let mut state = self
+            .state_reader
             .get_latest_certified_state()
             .map(|s| s.get_ref().system_metadata().upgrade_state.clone())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        for pp in past_payloads {
+            if let Ok(actions) = bytes_to_upgrade_payload(pp.payload) {
+                state.apply(&actions, pp.height, members);
+            }
+        }
+        state.apply(&[], height, members);
+        state
     }
 }
 
@@ -87,51 +105,60 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         let limits = membership.limits();
         let needs_reboot =
             self.platform_version.guestos_version != self.platform_version.binary_version;
-        let anchor = self.certified_upgrade_state();
-        let upgrade_state = reconstruct_state(
-            &anchor,
-            past_payloads,
-            &membership.staying_members,
-            height,
-        );
+        let upgrade_state =
+            self.upgrade_state_at(past_payloads, &membership.current_members, height);
 
-        info!(
-            self.logger,
-            "upgrade_payload: height={} needs_reboot={} authorized_contains_self={} authorized={:?} requested={:?} slots={}",
-            height,
-            needs_reboot,
-            upgrade_state.authorized.contains(&self.node_id),
-            upgrade_state.authorized,
-            upgrade_state.requested,
-            upgrade_state.slots_in_use(),
-        );
+        let mut actions = vec![];
 
-        let pool_shares: Vec<_> = {
+        if upgrade_state.authorized.contains(&self.node_id) && !needs_reboot {
+            actions.push(UpgradePermitAction::Return { node: self.node_id });
+        }
+
+        if needs_reboot
+            && !upgrade_state.authorized.contains(&self.node_id)
+            && upgrade_state.slots_in_use() < limits.max_parallel_reboots
+        {
+            actions.push(UpgradePermitAction::Request {
+                node: self.node_id,
+                request_height: height,
+            });
+        }
+
+        // Authorize outstanding requests with enough collected shares, up to
+        // P. The pool holds one share per (signer, content), so the group
+        // size is the number of distinct signers; the validator re-checks
+        // every share.
+        let mut collected: BTreeMap<(NodeId, Height), Vec<UpgradePermitAuthorizationShare>> =
+            BTreeMap::new();
+        {
             let pool = self.pool.read().unwrap();
-            pool.get_validated_shares().cloned().collect()
-        };
-        let actions = build_actions(
-            self.node_id,
-            needs_reboot,
-            height,
-            &membership,
-            &upgrade_state,
-            &pool_shares,
-            &self.logger,
-        );
-
-        info!(
-            self.logger,
-            "upgrade_payload: height={} staying={} n={} p={} slots={} requested={} authorized={} actions={:?}",
-            height,
-            membership.staying_members.len(),
-            limits.subnet_size,
-            limits.max_parallel_reboots,
-            upgrade_state.slots_in_use(),
-            upgrade_state.requested.len(),
-            upgrade_state.authorized.len(),
-            actions,
-        );
+            for share in pool.get_validated_shares() {
+                collected
+                    .entry((share.content.node, share.content.request_height))
+                    .or_default()
+                    .push(share.clone());
+            }
+        }
+        let mut budget = limits
+            .max_parallel_reboots
+            .saturating_sub(upgrade_state.authorized.len());
+        for (&req_node, &req_height) in &upgrade_state.requested {
+            if budget == 0 {
+                break;
+            }
+            if upgrade_state.authorized.contains(&req_node) {
+                continue;
+            }
+            if let Some(shares) = collected.get(&(req_node, req_height)) {
+                if shares.len() >= limits.authorization_threshold {
+                    actions.push(UpgradePermitAction::Authorize(UpgradePermitShares {
+                        node: req_node,
+                        shares: shares.clone(),
+                    }));
+                    budget -= 1;
+                }
+            }
+        }
 
         upgrade_payload_to_bytes(actions, max_size)
     }
@@ -146,27 +173,89 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         if payload.is_empty() {
             return Ok(());
         }
-        let actions = bytes_to_upgrade_payload(payload)
-            .map_err(|e| invalid_upgrade(InvalidUpgradePayloadReason::DecodeFailed(e.to_string())))?;
+        let actions = bytes_to_upgrade_payload(payload).map_err(|e| {
+            invalid_upgrade(InvalidUpgradePayloadReason::DecodeFailed(e.to_string()))
+        })?;
+        let registry_version = proposal_context.validation_context.registry_version;
+        let membership =
+            subnet_membership(&self.membership, height, registry_version, &self.logger);
+        let limits = membership.limits();
+        let upgrade_state =
+            self.upgrade_state_at(past_payloads, &membership.current_members, height);
+        let mut slots_used = upgrade_state.slots_in_use();
 
-        let membership = subnet_membership(
-            &self.membership,
-            height,
-            proposal_context.validation_context.registry_version,
-            &self.logger,
-        );
-        let anchor = self.certified_upgrade_state();
-        validate_actions(
-            height,
-            proposal_context.proposer,
-            &membership,
-            &anchor,
-            past_payloads,
-            &actions,
-            proposal_context.validation_context.registry_version,
-            self.crypto.as_ref(),
-        )
+        for action in &actions {
+            match action {
+                UpgradePermitAction::Request { node, .. } => {
+                    if *node != proposal_context.proposer {
+                        return Err(invalid_upgrade(
+                            InvalidUpgradePayloadReason::RequestNodeMismatch {
+                                node: *node,
+                                proposer: proposal_context.proposer,
+                            },
+                        ));
+                    }
+                    if slots_used >= limits.max_parallel_reboots {
+                        return Err(invalid_upgrade(
+                            InvalidUpgradePayloadReason::SlotsExhausted {
+                                slots_in_use: slots_used,
+                                capacity: limits.max_parallel_reboots,
+                            },
+                        ));
+                    }
+                    slots_used += 1;
+                }
+                UpgradePermitAction::Return { node } => {
+                    if *node != proposal_context.proposer {
+                        return Err(invalid_upgrade(
+                            InvalidUpgradePayloadReason::ReturnNodeMismatch {
+                                node: *node,
+                                proposer: proposal_context.proposer,
+                            },
+                        ));
+                    }
+                }
+                UpgradePermitAction::Authorize(shares) => {
+                    let Some(&request_height) = upgrade_state.requested.get(&shares.node) else {
+                        return Err(invalid_upgrade(
+                            InvalidUpgradePayloadReason::AuthorizeNoOutstandingRequest {
+                                node: shares.node,
+                            },
+                        ));
+                    };
+                    let mut signers = BTreeSet::new();
+                    for share in &shares.shares {
+                        let signer = validate_share(
+                            share,
+                            shares.node,
+                            request_height,
+                            &membership.staying_members,
+                            registry_version,
+                            self.crypto.as_ref(),
+                        )
+                        .map_err(invalid_upgrade)?;
+                        signers.insert(signer);
+                    }
+                    if signers.len() < limits.authorization_threshold {
+                        return Err(invalid_upgrade(
+                            InvalidUpgradePayloadReason::AuthorizeInsufficientShares {
+                                collected: signers.len(),
+                                threshold: limits.authorization_threshold,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
+}
+
+fn invalid_upgrade(reason: InvalidUpgradePayloadReason) -> PayloadValidationError {
+    ic_interfaces::validation::ValidationError::InvalidArtifact(
+        InvalidPayloadReason::InvalidUpgradePayload(reason),
+    )
 }
 
 /// A stub builder for tests/state-machine-tests that produces empty upgrade sections.
@@ -204,8 +293,9 @@ impl BatchPayloadBuilder for UpgradePayloadBuilderStub {
         _past_payloads: &[PastPayload],
     ) -> Result<(), PayloadValidationError> {
         if !payload.is_empty() {
-            bytes_to_upgrade_payload(payload)
-                .map_err(|e| invalid_upgrade(InvalidUpgradePayloadReason::DecodeFailed(e.to_string())))?;
+            bytes_to_upgrade_payload(payload).map_err(|e| {
+                invalid_upgrade(InvalidUpgradePayloadReason::DecodeFailed(e.to_string()))
+            })?;
         }
         Ok(())
     }
@@ -253,7 +343,10 @@ mod tests {
                 subnet_test_id(0),
                 records,
             );
-            let state = Arc::new(ReplicatedState::new(subnet_test_id(0), SubnetType::Application));
+            let state = Arc::new(ReplicatedState::new(
+                subnet_test_id(0),
+                SubnetType::Application,
+            ));
             deps.state_manager
                 .get_mut()
                 .expect_get_latest_certified_state()
@@ -342,25 +435,87 @@ mod tests {
         apply_membership_delta(&setup, 2, (0..3).map(node_test_id).collect());
 
         let request_height = Height::new(10);
+        let past_bytes = upgrade_payload_to_bytes(
+            vec![UpgradePermitAction::Request {
+                node: node_test_id(0),
+                request_height,
+            }],
+            MAX_SIZE,
+        );
+        let past_payloads = vec![PastPayload {
+            height: request_height,
+            time: UNIX_EPOCH,
+            block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+            payload: &past_bytes,
+        }];
         let payload = upgrade_payload_to_bytes(
-            vec![
-                UpgradePermitAction::Request {
-                    node: node_test_id(0),
-                    request_height,
-                },
-                UpgradePermitAction::Authorize(UpgradePermitShares {
-                    node: node_test_id(0),
-                    shares: vec![share(1, 0, request_height), share(2, 0, request_height), share(3, 0, request_height)],
-                }),
-            ],
+            vec![UpgradePermitAction::Authorize(UpgradePermitShares {
+                node: node_test_id(0),
+                shares: vec![
+                    share(1, 0, request_height),
+                    share(2, 0, request_height),
+                    share(3, 0, request_height),
+                ],
+            })],
             MAX_SIZE,
         );
 
         // At the block's version V1 all three signers are staying members: accept.
-        assert!(validate(&setup.builder, Height::new(10), RegistryVersion::new(1), 0, &payload, &[]).is_ok());
+        assert!(
+            validate(
+                &setup.builder,
+                Height::new(11),
+                RegistryVersion::new(1),
+                0,
+                &payload,
+                &past_payloads
+            )
+            .is_ok()
+        );
         // At V2 node 3 is not staying even though the committee still
         // contains it: reject.
-        assert!(validate(&setup.builder, Height::new(10), RegistryVersion::new(2), 0, &payload, &[]).is_err());
+        assert!(
+            validate(
+                &setup.builder,
+                Height::new(11),
+                RegistryVersion::new(2),
+                0,
+                &payload,
+                &past_payloads
+            )
+            .is_err()
+        );
+
+        // A request from the block itself cannot be authorized in the same
+        // block: shares only exist for requests in earlier blocks.
+        let same_block = upgrade_payload_to_bytes(
+            vec![
+                UpgradePermitAction::Request {
+                    node: node_test_id(0),
+                    request_height: Height::new(11),
+                },
+                UpgradePermitAction::Authorize(UpgradePermitShares {
+                    node: node_test_id(0),
+                    shares: vec![
+                        share(1, 0, Height::new(11)),
+                        share(2, 0, Height::new(11)),
+                        share(3, 0, Height::new(11)),
+                    ],
+                }),
+            ],
+            MAX_SIZE,
+        );
+        assert!(
+            validate(
+                &setup.builder,
+                Height::new(11),
+                RegistryVersion::new(1),
+                0,
+                &same_block,
+                &[]
+            )
+            .is_err()
+        );
     }
 
     /// The committee only changes at DKG interval boundaries (CUP/summary
@@ -370,12 +525,22 @@ mod tests {
     fn test_read_membership_at_pinned_version() {
         let setup = test_setup(vec![(1, subnet_record((0..4).map(node_test_id).collect()))]);
 
-        let v1 = subnet_membership(&setup.membership, Height::new(10), RegistryVersion::new(1), &no_op_logger());
+        let v1 = subnet_membership(
+            &setup.membership,
+            Height::new(10),
+            RegistryVersion::new(1),
+            &no_op_logger(),
+        );
         assert_eq!(v1.current_members.len(), 4);
         assert_eq!(v1.staying_members.len(), 4);
 
         apply_membership_delta(&setup, 2, (0..3).map(node_test_id).collect());
-        let v2 = subnet_membership(&setup.membership, Height::new(10), RegistryVersion::new(2), &no_op_logger());
+        let v2 = subnet_membership(
+            &setup.membership,
+            Height::new(10),
+            RegistryVersion::new(2),
+            &no_op_logger(),
+        );
         assert_eq!(v2.current_members.len(), 4);
         assert_eq!(v2.staying_members.len(), 3);
         assert!(!v2.staying_members.contains(&node_test_id(3)));
@@ -413,9 +578,29 @@ mod tests {
         // At height 30 the request from height 5 has expired (30 - 20 > 5):
         // the slot is free again.
         let payload = request_at(Height::new(30));
-        assert!(validate(&setup.builder, Height::new(30), RegistryVersion::new(1), 0, &payload, &past_payloads).is_ok());
+        assert!(
+            validate(
+                &setup.builder,
+                Height::new(30),
+                RegistryVersion::new(1),
+                0,
+                &payload,
+                &past_payloads
+            )
+            .is_ok()
+        );
         // At height 24 (24 - 20 <= 5) it still holds the only slot.
         let payload = request_at(Height::new(24));
-        assert!(validate(&setup.builder, Height::new(24), RegistryVersion::new(1), 0, &payload, &past_payloads).is_err());
+        assert!(
+            validate(
+                &setup.builder,
+                Height::new(24),
+                RegistryVersion::new(1),
+                0,
+                &payload,
+                &past_payloads
+            )
+            .is_err()
+        );
     }
 }

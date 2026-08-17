@@ -12,8 +12,6 @@ use ic_query_stats::deliver_query_stats;
 use ic_replicated_state::{NetworkTopology, OwnSubnetInfo, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
 use ic_types::{ExecutionRound, SubnetId};
-use ic_replicated_state::metadata_state::REQUEST_TIMEOUT_BLOCKS;
-use num_traits::SaturatingSub;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -147,10 +145,9 @@ impl StateMachine for StateMachineImpl {
                 }
             };
 
-        let prune_below = batch.batch_number.saturating_sub(&REQUEST_TIMEOUT_BLOCKS);
         state.metadata.upgrade_state.apply(
             &batch_messages.upgrade,
-            prune_below,
+            batch.batch_number,
             &registry_settings.node_ids,
         );
 

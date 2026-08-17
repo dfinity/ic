@@ -12,6 +12,7 @@ use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use num_traits::SaturatingSub;
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
     IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
@@ -70,16 +71,16 @@ pub struct UpgradeState {
 }
 
 impl UpgradeState {
-    /// Apply a block's upgrade actions to this state. Also prunes expired
-    /// requests and permits for nodes that left the membership.
+    /// Apply a block's upgrade actions to this state, as of the block
+    /// `height`. Also prunes requests that expired (requested more than
+    /// `REQUEST_TIMEOUT_BLOCKS` below `height`) and permits of nodes that
+    /// left the membership.
     ///
-    /// `prune_below_height` is the oldest request height still considered
-    /// valid; requests made below this height are expired and removed.
     /// `members` is the current subnet membership.
     pub fn apply(
         &mut self,
         actions: &[UpgradePermitAction],
-        prune_below_height: Height,
+        height: Height,
         members: &BTreeSet<NodeId>,
     ) {
         // Apply each action in order.
@@ -102,6 +103,7 @@ impl UpgradeState {
         }
 
         // Expire stale requests and prune departed members.
+        let prune_below_height = height.saturating_sub(&REQUEST_TIMEOUT_BLOCKS);
         self.requested.retain(|node, req_height| {
             *req_height >= prune_below_height && members.contains(node)
         });
