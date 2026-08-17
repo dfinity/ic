@@ -52,12 +52,18 @@ impl RejectionCode {
 /// reports back over Candid.
 fn map_call_error(err: CallError) -> (RejectionCode, String) {
     match err {
+        // The call was rejected and the system assigned a reject code; report it.
         CallError::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
         ),
-        // Nothing reached the callee, so there is no reject code to report.
-        other => (RejectionCode::Unknown, other.to_string()),
+        // The callee replied, but the response could not be decoded into the
+        // expected type, so the callee did not honor its interface: a canister-side error.
+        CallError::CandidDecodeFailed(e) => (RejectionCode::CanisterError, e.to_string()),
+        // Neither of these produced a response from the callee, so there is no
+        // callee-assigned reject code to report; surface them as `Unknown`.
+        CallError::InsufficientLiquidCycleBalance(e) => (RejectionCode::Unknown, e.to_string()),
+        CallError::CallPerformFailed(e) => (RejectionCode::Unknown, e.to_string()),
     }
 }
 

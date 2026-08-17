@@ -340,19 +340,24 @@ pub async fn create_canister_and_install_code(
 /// that the deprecated `ic_cdk::api::call` did.
 fn format_call_error(err: IcCdkCallError) -> String {
     let (code, message) = match err {
+        // The system (or the callee) already rejected the call and assigned a reject
+        // code; surface it unchanged.
         IcCdkCallError::CallRejected(rejected) => (
             rejected.raw_reject_code() as i32,
             rejected.reject_message().to_string(),
         ),
-        // A response that cannot be decoded means the callee misbehaved.
+        // The callee replied, but its response did not decode into the expected type,
+        // so it did not honor its interface: treat it as a canister-side error.
         IcCdkCallError::CandidDecodeFailed(err) => {
             (RejectCode::CanisterError as i32, err.to_string())
         }
-        // Neither of these ever left this canister, so the call may well succeed
-        // if retried.
+        // This canister lacks the liquid cycles to perform the call, so the call was
+        // never sent; an immediate retry cannot add cycles, hence fatal, not transient.
         IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
+            (RejectCode::SysFatal as i32, err.to_string())
         }
+        // `ic0.call_perform` could not enqueue the call (e.g. a full output queue),
+        // a transient system condition that a later retry may clear.
         IcCdkCallError::CallPerformFailed(err) => {
             (RejectCode::SysTransient as i32, err.to_string())
         }
