@@ -8,6 +8,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
 };
+use ic_https_outcalls_socks_proxy::{RegistrySocksProxyProvider, SocksProxyProvider};
 use ic_interfaces::{
     canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::PoolMutationsProducer,
 };
@@ -16,8 +17,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
-use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
@@ -53,9 +52,9 @@ pub struct CanisterHttpPoolManagerImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     membership: Arc<Membership>,
     replica_config: ReplicaConfig,
-    subnet_type: SubnetType,
+    socks_proxy: Arc<dyn SocksProxyProvider>,
     requested_id_cache: RefCell<BTreeSet<CallbackId>>,
-    metrics: CanisterHttpPoolManagerMetrics,
+    metrics: Arc<CanisterHttpPoolManagerMetrics>,
     log: ReplicaLogger,
 }
 
@@ -77,16 +76,24 @@ impl CanisterHttpPoolManagerImpl {
             registry_client.clone(),
             replica_config.subnet_id,
         ));
+        let metrics = Arc::new(CanisterHttpPoolManagerMetrics::new(&metrics_registry));
+        let socks_proxy = Arc::new(
+            RegistrySocksProxyProvider::new(registry_client.clone(), subnet_type, log.clone())
+                .with_error_observer({
+                    let metrics = Arc::clone(&metrics);
+                    Arc::new(move |label: &str| metrics.observe_pool_manager_error(label))
+                }),
+        );
 
         Self {
             state_reader,
             http_adapter_shim,
             crypto,
             replica_config,
-            subnet_type,
+            socks_proxy,
             membership,
             registry_client,
-            metrics: CanisterHttpPoolManagerMetrics::new(&metrics_registry),
+            metrics,
             log,
             requested_id_cache: RefCell::new(BTreeSet::new()),
         }
@@ -157,62 +164,6 @@ impl CanisterHttpPoolManagerImpl {
                     }),
             )
             .collect()
-    }
-
-    fn get_socks_proxy_addrs(&self) -> Vec<String> {
-        let latest_registry_version = self.registry_client.get_latest_version();
-
-        let allowed_boundary_nodes = match self.subnet_type {
-            SubnetType::System => self
-                .registry_client
-                .get_system_api_boundary_node_ids(latest_registry_version),
-            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
-                self.registry_client
-                    .get_app_api_boundary_node_ids(latest_registry_version)
-            }
-        };
-
-        let allowed_boundary_nodes = allowed_boundary_nodes.unwrap_or_else(|e| {
-            warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
-            self.metrics
-                .observe_pool_manager_error("boundary_node_ids_lookup_failed");
-            Vec::new()
-        });
-        let num_boundary_nodes = allowed_boundary_nodes.len();
-
-        let addrs = allowed_boundary_nodes
-            .into_iter()
-            .filter_map(|id| {
-                self.registry_client
-                    .get_node_record(id, latest_registry_version)
-                    .map_err(|e| {
-                        warn!(
-                            self.log,
-                            "Failed to get node record for node ID {:?}: {:?}", id, e
-                        );
-                    })
-                    .ok()
-                    .and_then(|opt_record| {
-                        opt_record.or_else(|| {
-                            warn!(self.log, "No node record found for node ID {:?}", id);
-                            None
-                        })
-                    })
-                    .and_then(|record| {
-                        record.http.or_else(|| {
-                            warn!(self.log, "HTTP information missing for node ID {:?}", id);
-                            None
-                        })
-                    })
-                    .map(|http_info| format!("socks5h://[{0}]:1080", http_info.ip_addr))
-            })
-            .collect::<Vec<String>>();
-
-        if addrs.len() != num_boundary_nodes {
-            self.metrics
-                .observe_pool_manager_error("socks_proxy_addrs_unresolved");
-        }
-        addrs
     }
 
     /// Returns whether `node_id` belongs to the committee responsible for the
@@ -288,7 +239,7 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        let socks_proxy_addrs = self.get_socks_proxy_addrs();
+        let socks_proxy_addrs = self.socks_proxy.socks_proxy_addrs();
 
         for (id, context) in http_requests {
             // Only make a request if this node belongs to the request's committee
@@ -684,9 +635,6 @@ pub mod test {
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
-    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
-    use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
@@ -695,7 +643,7 @@ pub mod test {
     use ic_types::ReplicaVersion;
     use ic_types::crypto::crypto_hash;
     use ic_types::{
-        Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
+        Height, NumBytes, NumberOfNodes, RegistryVersion,
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,
         time::UNIX_EPOCH,
@@ -704,7 +652,6 @@ pub mod test {
     use mockall::predicate::*;
     use mockall::*;
     use std::{collections::BTreeMap, str::FromStr};
-    use strum::IntoEnumIterator;
 
     mock! {
         pub NonBlockingChannel<Request: 'static> {
@@ -3700,131 +3647,6 @@ pub mod test {
                     "free-subnet share was wrongly rejected: {:?}",
                     changes[0]
                 );
-            })
-        });
-    }
-
-    /// `get_socks_proxy_addrs` must route the SOCKS proxy through the API
-    /// boundary nodes that match the subnet type: `System` subnets use the
-    /// *system* API boundary nodes, while all other subnet types use the *app*
-    /// API boundary nodes.
-    #[test]
-    fn test_get_socks_proxy_addrs_selects_boundary_nodes_by_subnet_type() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    registry_data_provider,
-                    ..
-                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
-
-                // Register a handful of API boundary nodes, each with a distinct
-                // HTTP endpoint. `get_{system,app}_api_boundary_node_ids` splits the
-                // sorted node IDs in half, so we need several nodes to obtain a
-                // non-empty, disjoint system/app split.
-                let registry_version = RegistryVersion::from(2);
-                let boundary_nodes: Vec<(NodeId, String)> = (1..=4)
-                    .map(|i| (node_test_id(i), format!("2001:db8::{i}")))
-                    .collect();
-
-                for (node_id, ip_addr) in &boundary_nodes {
-                    registry_data_provider
-                        .add(
-                            &make_api_boundary_node_record_key(*node_id),
-                            registry_version,
-                            Some(ApiBoundaryNodeRecord::default()),
-                        )
-                        .unwrap();
-                    registry_data_provider
-                        .add(
-                            &make_node_record_key(*node_id),
-                            registry_version,
-                            Some(NodeRecord {
-                                http: Some(ConnectionEndpoint {
-                                    ip_addr: ip_addr.clone(),
-                                    port: 8080,
-                                }),
-                                ..Default::default()
-                            }),
-                        )
-                        .unwrap();
-                }
-                registry.update_to_latest_version();
-
-                // Derive the SOCKS proxy address that the pool manager is expected to
-                // emit for a given boundary node.
-                let socks_addr = |node_id: &NodeId| {
-                    let ip_addr = &boundary_nodes
-                        .iter()
-                        .find(|(id, _)| id == node_id)
-                        .expect("unknown boundary node id")
-                        .1;
-                    format!("socks5h://[{ip_addr}]:1080")
-                };
-                let expected_system: Vec<String> = registry
-                    .get_system_api_boundary_node_ids(registry_version)
-                    .unwrap()
-                    .iter()
-                    .map(socks_addr)
-                    .collect();
-                let expected_app: Vec<String> = registry
-                    .get_app_api_boundary_node_ids(registry_version)
-                    .unwrap()
-                    .iter()
-                    .map(socks_addr)
-                    .collect();
-
-                // The two sets must be non-empty and disjoint, otherwise the test
-                // could not tell which group of boundary nodes was contacted.
-                assert!(!expected_system.is_empty());
-                assert!(!expected_app.is_empty());
-                assert!(expected_system.iter().all(|a| !expected_app.contains(a)));
-
-                // System subnets contact the system boundary nodes; every other
-                // subnet type contacts the app boundary nodes.
-                let cases = SubnetType::iter()
-                    .map(|subnet_type| {
-                        let expected = match subnet_type {
-                            SubnetType::System => expected_system.clone(),
-                            SubnetType::Application
-                            | SubnetType::VerifiedApplication
-                            | SubnetType::CloudEngine => expected_app.clone(),
-                        };
-                        (subnet_type, expected)
-                    })
-                    .collect::<Vec<_>>();
-
-                for (subnet_type, mut expected) in cases {
-                    let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                        Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::<
-                            CanisterHttpRequest,
-                        >::new())));
-
-                    let pool_manager = CanisterHttpPoolManagerImpl::new(
-                        state_manager.clone() as Arc<_>,
-                        shim,
-                        crypto.clone(),
-                        pool.get_cache(),
-                        replica_config.clone(),
-                        subnet_type,
-                        Arc::clone(&registry) as Arc<_>,
-                        MetricsRegistry::new(),
-                        log.clone(),
-                    );
-
-                    let mut actual = pool_manager.get_socks_proxy_addrs();
-                    actual.sort();
-                    expected.sort();
-
-                    assert_eq!(
-                        actual, expected,
-                        "subnet type {subnet_type:?} contacted the wrong API boundary nodes"
-                    );
-                }
             })
         });
     }

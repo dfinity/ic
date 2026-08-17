@@ -1,0 +1,23 @@
+[package]
+name = "ic-https-outcalls-socks-proxy"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-types = { path = "../../types/types" }
+slog = { workspace = true }
+
+[dev-dependencies]
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+strum = { workspace = true }

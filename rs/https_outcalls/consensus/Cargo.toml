@@ -12,6 +12,7 @@ hex = { workspace = true }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-https-outcalls-pricing = { path = "../pricing" }
+ic-https-outcalls-socks-proxy = { path = "../socks_proxy" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -37,7 +38,6 @@ ic-consensus-mocks = { path = "../../consensus/mocks" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
-ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
@@ -53,7 +53,6 @@ criterion = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
 rand_chacha = { workspace = true }
-strum = { workspace = true }
 
 [features]
 proptest = []
