@@ -6,7 +6,7 @@ use crate::{
     },
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader, subnet_splitting};
 use ic_interfaces::{
     crypto::{ErrorReproducibility, NiDkgAlgorithm},
     dkg::DkgPool,
@@ -29,7 +29,7 @@ use ic_types::{
         catchup::CatchUpPackageType,
         dkg::{
             DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary, Message,
-            PostSplitArgs, RemoteTranscriptResult, SubnetSplittingStatus,
+            PostSplitArgs, RemoteTranscriptResult, SplittingArgs, SubnetSplittingStatus,
         },
         get_faults_tolerated,
     },
@@ -542,6 +542,13 @@ pub(super) fn create_summary_payload(
         &vet_key_ids,
     )?;
 
+    let subnet_splitting_status = get_subnet_splitting_status(
+        subnet_id,
+        registry_client,
+        registry_version,
+        validation_context.registry_version,
+    )?;
+
     Ok(DkgSummary::new(
         local_configs,
         current_transcripts,
@@ -551,7 +558,37 @@ pub(super) fn create_summary_payload(
         next_interval_length,
         height,
         remote_dkg_attempts,
+        subnet_splitting_status,
     ))
+}
+
+/// Returns the subnet splitting status to be recorded in the summary created at
+/// `looked_up_registry_version`, given that the last summary block referenced
+/// `last_summary_registry_version`.
+fn get_subnet_splitting_status(
+    subnet_id: SubnetId,
+    registry_client: &dyn RegistryClient,
+    last_summary_registry_version: RegistryVersion,
+    looked_up_registry_version: RegistryVersion,
+) -> Result<SubnetSplittingStatus, DkgPayloadCreationError> {
+    let status = subnet_splitting::get_status(
+        registry_client,
+        subnet_id,
+        last_summary_registry_version,
+        looked_up_registry_version,
+    )
+    .map_err(|err| DkgPayloadCreationError::SubnetSplittingStatusError(err.to_string()))?;
+
+    Ok(match status {
+        subnet_splitting::Status::NotScheduled => SubnetSplittingStatus::NotScheduled,
+        subnet_splitting::Status::Scheduled {
+            destination_subnet_id,
+            scheduled_at: _,
+        } => SubnetSplittingStatus::Scheduled(SplittingArgs {
+            destination_subnet_id,
+            source_subnet_id: subnet_id,
+        }),
+    })
 }
 
 /// Return the set of next transcripts for all tags. If for some tag
@@ -684,14 +721,13 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
         })?;
     let next_interval_length = interval_length;
 
-    let _subnet_splitting_status = match cup_type {
+    let subnet_splitting_status = match cup_type {
         CatchUpPackageType::Normal => SubnetSplittingStatus::NotScheduled,
         CatchUpPackageType::PostSplit { new_subnet_id } => {
             SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
         }
     };
 
-    // TODO: Pass `subnet_splitting_status` when enabling subnet splitting
     Ok(DkgSummary::new(
         configs,
         transcripts,
@@ -703,6 +739,7 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
         next_interval_length,
         height,
         BTreeMap::new(), // remote_dkg_attempts
+        subnet_splitting_status,
     ))
 }
 
@@ -948,7 +985,11 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+    use ic_protobuf::registry::subnet::v1::{
+        SubnetSplittingArgs as SubnetSplittingArgsProto, catch_up_package_contents::CupType,
+    };
     use ic_registry_client_helpers::subnet::SubnetRegistry;
+    use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         ReshareChainKeyContext, SetupInitialDkgContext, SubnetCallContext,
     };
