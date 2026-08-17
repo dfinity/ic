@@ -57,6 +57,14 @@ const RESPONSES_RETRY_TIMEOUT_SEC: u64 = 120;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        // When this test reboots a node, the orchestrator can restart the replica at the
+        // same instant the node is shutting down, while the dedicated `/var/lib/ic/crypto`
+        // volume is being unmounted. The replica then transiently sees the bare mount point
+        // with default `0o755` permissions and panics in `setup_crypto_provider` with
+        // "Crypto state directory ... allowing general access". This panic is benign: the
+        // node completes the reboot and recovers. Exempt it from the unallowed-log-pattern
+        // check so it doesn't cause spurious flakiness.
+        .add_unallowed_log_pattern_except("panicked", "rs/replica/src/setup.rs")
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
