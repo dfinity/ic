@@ -87,6 +87,15 @@ pub fn base_fee(
     )
 }
 
+/// What the request itself costs, independent of how many nodes handle it: a
+/// flat fee plus the size of what is uploaded.
+///
+/// This is the part of the [`base_fee`] a single node performing the outcall
+/// incurs on its own; the remaining terms price gossip and agreement.
+pub(crate) fn request_fee(request_size: NumBytes) -> Cycles {
+    HTTP_REQUEST_BASE_FEE + HTTP_REQUEST_PER_BYTE_FEE * request_size.get()
+}
+
 /// The [`base_fee`], on a subnet of `subnet_size` nodes.
 fn base_fee_amount(
     request_size: NumBytes,
@@ -94,19 +103,17 @@ fn base_fee_amount(
     subnet_size: NumberOfNodes,
 ) -> Cycles {
     let n = subnet_size.get() as u64;
-    let request_bytes = request_size.get();
     match replication_kind {
         ReplicationKind::FullyReplicated => {
-            (HTTP_REQUEST_BASE_FEE
-                + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
+            (request_fee(request_size)
                 + HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE * n
                 + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n)
                 * n
         }
         // Non-replicated is equivalent to flexible replication with min_responses = 1.
-        ReplicationKind::NonReplicated => gossipping_base_fee(request_bytes, subnet_size, 1),
+        ReplicationKind::NonReplicated => gossipping_base_fee(request_size, subnet_size, 1),
         ReplicationKind::Flexible { min_responses, .. } => {
-            gossipping_base_fee(request_bytes, subnet_size, min_responses)
+            gossipping_base_fee(request_size, subnet_size, min_responses)
         }
     }
 }
@@ -115,14 +122,13 @@ fn base_fee_amount(
 /// `request_bytes` bytes that requires `min_responses` responses, on a subnet of
 /// `subnet_size` nodes.
 fn gossipping_base_fee(
-    request_bytes: u64,
+    request_size: NumBytes,
     subnet_size: NumberOfNodes,
     min_responses: u32,
 ) -> Cycles {
     let n = subnet_size.get() as u64;
     let min_responses = min_responses as u64;
-    (HTTP_REQUEST_BASE_FEE
-        + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
+    (request_fee(request_size)
         + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
         + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * min_responses
         + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min_responses)

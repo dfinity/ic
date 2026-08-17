@@ -3,6 +3,7 @@ pub mod fees;
 mod legacy;
 mod metrics;
 mod payg;
+pub mod query;
 
 use std::time::Duration;
 
@@ -22,6 +23,13 @@ use payg::PayAsYouGoTracker;
 pub trait BudgetTracker: Send {
     /// Returns the maximum network resources the Adapter is allowed to consume.
     fn get_adapter_limits(&self) -> AdapterLimits;
+
+    /// The ceiling [`Self::get_adapter_limits`] clamps the affordable deadline
+    /// against. A deadline below it was imposed by the allowance, which is how a
+    /// client tells "ran out of cycles" from "the server was slow".
+    fn max_response_time_ceiling(&self) -> Duration {
+        MAX_RESPONSE_TIME
+    }
     /// Deducts the cost of the network resources consumed by the request.
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
     /// Returns the maximum instructions allowed for the transformation function.

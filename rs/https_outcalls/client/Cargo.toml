@@ -16,6 +16,7 @@ ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-https-outcalls-service = { path = "../service" }
+ic-https-outcalls-socks-proxy = { path = "../socks_proxy" }
 ic-https-outcalls-pricing = { path = "../pricing" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-interfaces = { path = "../../interfaces" }
@@ -23,6 +24,7 @@ ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
 slog = { workspace = true }

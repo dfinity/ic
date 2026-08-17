@@ -1,7 +1,11 @@
 mod client;
 mod metrics;
+mod query_outcall;
+#[cfg(test)]
+mod test_support;
 
 pub use crate::client::CanisterHttpAdapterClientImpl;
+pub use crate::query_outcall::setup_query_outcall_service;
 
 use crate::client::BrokenCanisterHttpClient;
 use ic_adapter_metrics_client::AdapterMetrics;

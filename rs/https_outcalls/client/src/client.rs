@@ -2,7 +2,7 @@ use crate::metrics::Metrics;
 use candid::Encode;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_pricing::{
-    AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError, PricingFactory,
+    AdapterLimits, BudgetTracker, NetworkUsage, PricingError, PricingFactory,
 };
 use ic_https_outcalls_service::{
     CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
@@ -354,7 +354,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 /// resources consumed against `budget`. Returns the raw adapter response,
 /// the number of bytes downloaded as reported by the adapter, and the
 /// elapsed wall-clock duration as measured by the client.
-async fn execute_http_request(
+pub(crate) async fn execute_http_request(
     adapter_client: &mut HttpsOutcallsServiceClient<Channel>,
     url: String,
     http_method: CanisterHttpMethod,
@@ -368,6 +368,7 @@ async fn execute_http_request(
         max_response_size,
         max_response_time,
     } = budget.get_adapter_limits();
+    let time_ceiling = budget.max_response_time_ceiling();
 
     let proto_req = HttpsOutcallRequest {
         url,
@@ -401,10 +402,10 @@ async fn execute_http_request(
             reject_code: grpc_status_code_to_reject(grpc_status.code()),
             message: grpc_status.message().to_string(),
         }),
-        // A deadline below the protocol maximum is one the request's allowance
-        // imposed, so exceeding it means the request ran out of cycles to pay for
-        // more time rather than that the server was slow.
-        Err(_deadline) if max_response_time < MAX_RESPONSE_TIME => Err(CanisterHttpReject {
+        // A deadline below the ceiling is one the request's allowance imposed, so
+        // exceeding it means the request ran out of cycles to pay for more time
+        // rather than that the server was slow.
+        Err(_deadline) if max_response_time < time_ceiling => Err(CanisterHttpReject {
             reject_code: RejectCode::CanisterReject,
             message: "Insufficient cycles".to_string(),
         }),
@@ -462,7 +463,7 @@ async fn execute_http_request(
 
 /// Convert the raw adapter response into a [`CanisterHttpResponsePayload`]
 /// and validate its headers and body.
-fn validate_response(
+pub(crate) fn validate_response(
     response: HttpsOutcallResponse,
 ) -> Result<CanisterHttpResponsePayload, CanisterHttpReject> {
     let HttpsOutcallResponse {
@@ -609,11 +610,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_https_outcalls_pricing::CanisterCyclesCostSchedule;
-    use ic_https_outcalls_service::{
-        HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult,
-        https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
+    use crate::test_support::{
+        create_result_from_response, setup_adapter_mock, setup_hanging_adapter_mock,
     };
+    use ic_https_outcalls_pricing::query::QueryOutcallBudget;
+    use ic_https_outcalls_pricing::{CanisterCyclesCostSchedule, MAX_RESPONSE_TIME};
+    use ic_https_outcalls_service::HttpsOutcallResponse;
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
@@ -628,86 +630,10 @@ mod tests {
         canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
         time::current_time,
     };
-    use std::convert::TryFrom;
+    use ic_types_cycles::Cycles;
     use std::time::Duration;
-    use tonic::{
-        Request, Response, Status,
-        transport::{Channel, Endpoint, Server, Uri},
-    };
-    use tower::{Service, ServiceExt, service_fn, util::BoxCloneService};
+    use tower::{Service, ServiceExt, util::BoxCloneService};
     use tower_test::mock::Handle;
-
-    #[derive(Clone)]
-    pub struct SingleResponseAdapter {
-        /// `None` never responds at all, so that only the client's deadline can
-        /// end the call.
-        response: Option<Result<HttpsOutcallResult, (Code, String)>>,
-    }
-
-    impl SingleResponseAdapter {
-        fn new(response: Result<HttpsOutcallResult, (Code, String)>) -> Self {
-            Self {
-                response: Some(response),
-            }
-        }
-
-        fn hanging() -> Self {
-            Self { response: None }
-        }
-    }
-
-    #[tonic::async_trait]
-    impl HttpsOutcallsService for SingleResponseAdapter {
-        async fn https_outcall(
-            &self,
-            _request: Request<HttpsOutcallRequest>,
-        ) -> Result<Response<HttpsOutcallResult>, Status> {
-            match self.response.clone() {
-                Some(Ok(resp)) => Ok(Response::new(resp)),
-                Some(Err((code, msg))) => Err(Status::new(code, msg)),
-                None => std::future::pending().await,
-            }
-        }
-    }
-
-    async fn setup_adapter_mock(
-        adapter_response: Result<HttpsOutcallResult, (Code, String)>,
-    ) -> Channel {
-        serve_mock_adapter(SingleResponseAdapter::new(adapter_response)).await
-    }
-
-    async fn setup_hanging_adapter_mock() -> Channel {
-        serve_mock_adapter(SingleResponseAdapter::hanging()).await
-    }
-
-    /// Serves `mock_adapter` over a fresh in-memory gRPC connection and returns the
-    /// client end of it.
-    async fn serve_mock_adapter(mock_adapter: SingleResponseAdapter) -> Channel {
-        let (client, server) = tokio::io::duplex(1024);
-        tokio::spawn(async move {
-            Server::builder()
-                .add_service(HttpsOutcallsServiceServer::new(mock_adapter))
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
-                .await
-        });
-
-        let mut client = Some(client);
-        Endpoint::try_from("http://[::]:50051")
-            .unwrap()
-            .connect_with_connector(service_fn(move |_: Uri| {
-                let client = client.take();
-
-                async move {
-                    if let Some(client) = client {
-                        Ok(hyper_util::rt::TokioIo::new(client))
-                    } else {
-                        Err(std::io::Error::other("Client already taken"))
-                    }
-                }
-            }))
-            .await
-            .unwrap()
-    }
 
     /// A [`BudgetTracker`] that grants a fixed deadline and records the network
     /// usage it is charged, so that the accounting of an outcall attempt can be
@@ -908,11 +834,47 @@ mod tests {
         (BoxCloneService::new(infallible_service), handle)
     }
 
-    fn create_result_from_response(response: HttpsOutcallResponse) -> HttpsOutcallResult {
-        HttpsOutcallResult {
-            metrics: None,
-            result: Some(https_outcall_result::Result::Response(response)),
-        }
+    /// An exhausted budget outranks an adapter error: the charge happens
+    /// first, and the resources were consumed either way.
+    #[tokio::test]
+    async fn an_exhausted_budget_outranks_an_adapter_error() {
+        const DOWNLOADED_BYTES: u64 = 1234;
+
+        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResult {
+            metrics: Some(ic_https_outcalls_service::CanisterHttpAdapterMetrics {
+                downloaded_bytes: DOWNLOADED_BYTES,
+            }),
+            result: Some(https_outcall_result::Result::Error(
+                ic_https_outcalls_service::CanisterHttpError {
+                    kind: CanisterHttpErrorKind::Connection.into(),
+                    message: "connection refused".to_string(),
+                },
+            )),
+        }))
+        .await;
+        let mut adapter_client = HttpsOutcallsServiceClient::new(mock_grpc_channel);
+
+        // An allowance that the downloaded bytes above cannot fit in.
+        let mut budget = QueryOutcallBudget::new(
+            Cycles::new(1),
+            NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+            Duration::from_secs(60),
+        );
+
+        let reject = execute_http_request(
+            &mut adapter_client,
+            "http://notused.com".to_string(),
+            CanisterHttpMethod::GET,
+            vec![],
+            None,
+            vec![],
+            &mut budget,
+            None,
+        )
+        .await
+        .expect_err("the budget was exhausted");
+
+        assert_eq!(reject.message, "Insufficient cycles");
     }
 
     /// Test canister http client send/receive without transform.
