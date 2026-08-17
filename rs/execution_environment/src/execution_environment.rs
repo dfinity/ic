@@ -6,7 +6,7 @@ use crate::canister_manager::types::{
 };
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
-use crate::execution::common::{list_canisters, validate_controller};
+use crate::execution::common::{canister_info, list_canisters, validate_controller};
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
 use crate::execution_environment_metrics::{
@@ -33,12 +33,12 @@ use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType,
-    ClearChunkStoreArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs,
-    IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType, ClearChunkStoreArgs,
+    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -2832,23 +2832,7 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(canister_id, state)?;
-        let canister_history = canister.system_state.get_canister_history();
-        let total_num_changes = canister_history.get_total_num_changes();
-        let changes = canister_history
-            .get_changes(num_requested_changes.unwrap_or(0) as usize)
-            .map(|e| (*e.clone()).clone())
-            .collect();
-        let module_hash = canister
-            .execution_state
-            .as_ref()
-            .map(|es| es.wasm_binary.binary.module_hash().to_vec());
-        let controllers = canister
-            .controllers()
-            .iter()
-            .copied()
-            .collect::<Vec<PrincipalId>>();
-        let res = CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers);
-        Ok(res.encode())
+        Ok(canister_info(canister, num_requested_changes).encode())
     }
 
     fn get_canister_metadata(
