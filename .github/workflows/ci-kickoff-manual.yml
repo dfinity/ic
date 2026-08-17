@@ -35,11 +35,13 @@ jobs:
           COMMIT_SHA: ${{ inputs.commit-sha }}
         with:
           script: |
-            const prNumber = Number(process.env.PR_NUMBER);
-            if (!Number.isInteger(prNumber) || prNumber <= 0) {
-              core.setFailed(`Invalid pr-number input: ${process.env.PR_NUMBER}`);
+            // Match on the raw string: Number() would also accept forms like
+            // '0x10', '1e3' or ' 12 ', which would target a different PR.
+            if (!/^[1-9][0-9]*$/.test(process.env.PR_NUMBER || '')) {
+              core.setFailed(`pr-number must be a positive decimal integer, got: ${process.env.PR_NUMBER}`);
               return;
             }
+            const prNumber = Number(process.env.PR_NUMBER);
             const sha = (process.env.COMMIT_SHA || '').toLowerCase();
             if (!/^[0-9a-f]{40}$/.test(sha)) {
               core.setFailed('commit-sha must be a full 40-character commit SHA');
@@ -164,16 +166,23 @@ jobs:
     steps:
       - name: Add PR Comment
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          PR_NUMBER: ${{ inputs.pr-number }}
+          COMMIT_SHA: ${{ inputs.commit-sha }}
         with:
           script: |
-            let message = 'Run on ${{ inputs.commit-sha }} URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
+            // Both inputs were validated by verify-inputs-and-get-pr-refs, which
+            // this job depends on.
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}` +
+                           `/actions/runs/${context.runId}`;
+            const message = `Run on ${process.env.COMMIT_SHA} URL: ${runUrl}\n\n`;
 
-            github.rest.issues.createComment({
-              issue_number: ${{ inputs.pr-number }},
+            await github.rest.issues.createComment({
+              issue_number: Number(process.env.PR_NUMBER),
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: message
-            })
+            });
 
   notify-slack-new-workflow-run:
     name: Notify Slack for new External Contributor Workflow Run
