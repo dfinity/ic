@@ -8315,6 +8315,26 @@ fn validate_async_receipt_payload(
     refunds: Vec<CanisterHttpResponseShare>,
     past_payloads: &[PastPayload],
 ) -> Result<(), PayloadValidationError> {
+    validate_async_receipt_payload_at(
+        num_nodes,
+        callback_id,
+        context,
+        refunds,
+        past_payloads,
+        &default_validation_context(),
+    )
+}
+
+/// Same as [`validate_async_receipt_payload`], but for a block proposed in the
+/// given `validation_context` rather than the default one.
+fn validate_async_receipt_payload_at(
+    num_nodes: usize,
+    callback_id: CallbackId,
+    context: CanisterHttpRequestContext,
+    refunds: Vec<CanisterHttpResponseShare>,
+    past_payloads: &[PastPayload],
+    validation_context: &ValidationContext,
+) -> Result<(), PayloadValidationError> {
     let payload = CanisterHttpPayload {
         async_receipts: refunds,
         ..Default::default()
@@ -8326,13 +8346,50 @@ fn validate_async_receipt_payload(
         |payload_builder, _pool| {
             result = Some(payload_builder.validate_payload(
                 Height::new(1),
-                &test_proposal_context(&default_validation_context()),
+                &test_proposal_context(validation_context),
                 &payload_to_bytes_max_4mb(payload),
                 past_payloads,
             ));
         },
     );
     result.expect("validation did not run")
+}
+
+#[test]
+fn validate_payload_fails_for_an_async_receipt_of_a_timed_out_delivered_context() {
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+
+    // The context is stamped at `UNIX_EPOCH`, so the block time alone decides
+    // whether it has timed out.
+    let validate_at = |elapsed| {
+        validate_async_receipt_payload_at(
+            4,
+            callback_id,
+            delivered_context(Replication::FullyReplicated, []),
+            vec![metadata_to_share(1, &metadata)],
+            &[],
+            &ValidationContext {
+                time: UNIX_EPOCH + elapsed,
+                ..default_validation_context()
+            },
+        )
+    };
+
+    // Just short of the timeout the very same receipt is still accepted, so the
+    // rejection below cannot be down to anything else about it.
+    assert_matches!(
+        validate_at(DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT - Duration::from_nanos(1)),
+        Ok(())
+    );
+    assert_matches!(
+        validate_at(DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::DeliveredCallbackTimedOut(id),
+            ),
+        )) if id == callback_id
+    );
 }
 
 fn assert_already_refunded(result: Result<(), PayloadValidationError>, expected_signer: NodeId) {

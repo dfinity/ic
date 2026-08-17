@@ -51,6 +51,10 @@ pub enum InvalidCanisterHttpPayloadReason {
     /// know as an already responded to request, i.e. one that is not among the
     /// `delivered_canister_http_request_contexts`.
     UnknownDeliveredCallbackId(CallbackId),
+    /// An asynchronous receipt refers to an already responded to request whose
+    /// delivered context has timed out, i.e. one that message routing settles and
+    /// drops in this very block, leaving nothing left to refund.
+    DeliveredCallbackTimedOut(CallbackId),
     /// An asynchronous receipt reports a replica whose spend has already been
     /// accounted for, either in the certified state or in a past payload.
     AlreadyRefunded {

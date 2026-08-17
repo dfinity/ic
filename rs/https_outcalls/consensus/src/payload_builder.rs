@@ -393,11 +393,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     break;
                 }
                 // Skip contexts that have already timed out.
-                if validation_context
-                    .time
-                    .saturating_duration_since(request.time)
-                    >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
-                {
+                if delivered_context_timed_out(request, validation_context) {
                     continue;
                 }
                 let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
@@ -1182,6 +1178,12 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownDeliveredCallbackId(callback_id),
                 ),
             )?;
+            // Reject if the context for this share has already timed out.
+            if delivered_context_timed_out(context, validation_context) {
+                return invalid_artifact(
+                    InvalidCanisterHttpPayloadReason::DeliveredCallbackTimedOut(callback_id),
+                );
+            }
             let committee = self.request_committee(context).map_err(|err| {
                 warn!(self.log, "Failed to get membership: {:?}", err);
                 CanisterHttpPayloadValidationError::ValidationFailed(
@@ -1784,6 +1786,18 @@ fn divergence_response_into_reject(
             ),
         )),
     ))
+}
+
+/// Returns true if a delivered context has timed out, meaning no further
+/// asynchronous receipts are accepted.
+fn delivered_context_timed_out(
+    context: &CanisterHttpRequestContext,
+    validation_context: &ValidationContext,
+) -> bool {
+    validation_context
+        .time
+        .saturating_duration_since(context.time)
+        >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
 }
 
 fn validation_failed(
