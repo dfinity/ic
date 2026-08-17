@@ -1209,11 +1209,24 @@ impl LocalBackend {
 
         // Primary boot disk (qcow2 overlay), then any extra (raw) disks. Disks go
         // on later root ports so they never take the NICs' bus numbers.
+        //
+        // `detect-zeroes=unmap` keeps upgrade tests from filling the host's disk.
+        // A GuestOS upgrade `dd`s the whole update image onto the inactive slot
+        // (see `manageboot.sh`), and that image is mostly holes: ~11 GiB of
+        // `boot.img` + `root.img` for ~1.2 GiB of content. Without zero
+        // detection every one of those zero blocks allocates a qcow2 cluster, so
+        // a single 4-node upgrade/downgrade test — which writes both slots on
+        // every node — grows its overlays by ~87 GiB. Paired with the
+        // `discard=unmap` on the same drive, zero writes instead become unmaps,
+        // bringing that down to ~11 GiB. That is safe over a backing
+        // file: the overlay is qcow2 v3 (`compat=1.1`), so qcow2 records a *zero
+        // cluster* rather than deallocating, and reads keep returning zeros
+        // instead of falling through to the base image.
         let rp = root_port!();
         arg!(
             "-drive",
             format!(
-                "if=none,id=disk0,file={},format=qcow2,cache=none,discard=unmap",
+                "if=none,id=disk0,file={},format=qcow2,cache=none,discard=unmap,detect-zeroes=unmap",
                 primary_disk.display()
             )
         );
