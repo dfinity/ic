@@ -427,8 +427,15 @@ pub struct SubnetTopology {
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
 
-    /// Whether the subnet is "cooling down", i.e. quiescing: it inducts no ingress
-    /// messages.
+    /// Whether the subnet is "cooling down", i.e. quiescing. While a subnet is
+    /// cooling down:
+    ///
+    ///  * it inducts no ingress messages, so the ingress history becomes free of
+    ///    expiring message statuses;
+    ///  * (on all subnets) no messages are routed to a cooling down subnet --
+    ///    including into the cooling down subnet's own loopback stream -- but
+    ///    retained in their respective output queues, so that the respective
+    ///    streams can be emptied.
     pub cooling_down: bool,
 }
 
