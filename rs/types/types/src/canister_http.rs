@@ -1015,6 +1015,26 @@ pub struct QueryOutcallOutcome {
 }
 
 impl QueryOutcallRequest {
+    /// The size of the request's unbounded parts.
+    ///
+    /// Mirrors [`CanisterHttpRequestContext::variable_parts_size`], so that both
+    /// paths price the same request identically. The transform is passed
+    /// separately because a query outcall carries it alongside the request rather
+    /// than inside it.
+    pub fn variable_parts_size(&self, transform: Option<&Transform>) -> NumBytes {
+        let size = self.url.len()
+            + self
+                .headers
+                .iter()
+                .map(|header| header.name.len() + header.value.len())
+                .sum::<usize>()
+            + self.body.as_ref().map_or(0, |body| body.len())
+            + transform.map_or(0, |transform| {
+                transform.method_name.len() + transform.context.len()
+            });
+        NumBytes::from(size as u64)
+    }
+
     /// Validates `args` as a non-replicated HTTP outcall performed by
     /// `requester` from within a query, and returns the outcall together with
     /// the transform to apply to its response, if any.

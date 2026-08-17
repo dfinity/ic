@@ -6,12 +6,26 @@ use ic_types::messages::Request;
 
 use crate::metrics::MeasurementScope;
 
-use super::query_context::{ExecutionResult, QueryContext, QueryResponse};
+use super::query_context::{ExecutionResult, PendingOutcall, QueryContext, QueryResponse};
 
 /// Represents a node in the query call graph together with the edges that are
 /// not visited yet. Specifically, the canister state and the call origin
 /// represent the node. The outgoing requests represent the edges.
 struct PendingCall(CanisterState, CallOrigin, VecDeque<Arc<Request>>);
+
+/// The saved state of a traversal interrupted by an HTTP outcall: the node that
+/// requested it is on top of the stack, so the outcall's result is exactly the
+/// pending callee result of the node the loop pops first.
+pub(super) struct SuspendedCallGraph {
+    call_stack: Vec<PendingCall>,
+}
+
+/// The outcome of a traversal: either it produced a response, or it is waiting
+/// for an HTTP outcall.
+pub(super) enum CallGraphOutcome {
+    Finished(QueryResponse),
+    Suspended(SuspendedCallGraph, PendingOutcall),
+}
 
 /// Performs depth-first search (DFS) traversal of the query call graph of the
 /// given query calls (requests) of the given call context. A call context is
@@ -48,11 +62,26 @@ pub(super) fn evaluate_query_call_graph(
     call_origin: CallOrigin,
     requests: VecDeque<Arc<Request>>,
     measurement_scope: &MeasurementScope,
-) -> QueryResponse {
+) -> CallGraphOutcome {
     run_call_graph(
         query_context,
         vec![PendingCall(canister, call_origin, requests)],
         None,
+        measurement_scope,
+    )
+}
+
+/// Resumes a traversal interrupted by an HTTP outcall.
+pub(super) fn resume_query_call_graph(
+    query_context: &mut QueryContext,
+    suspended: SuspendedCallGraph,
+    callee_result: QueryResponse,
+    measurement_scope: &MeasurementScope,
+) -> CallGraphOutcome {
+    run_call_graph(
+        query_context,
+        suspended.call_stack,
+        Some(callee_result),
         measurement_scope,
     )
 }
@@ -66,7 +95,7 @@ fn run_call_graph(
     mut call_stack: Vec<PendingCall>,
     mut callee_result: Option<QueryResponse>,
     measurement_scope: &MeasurementScope,
-) -> QueryResponse {
+) -> CallGraphOutcome {
     let max_query_call_graph_depth = query_context.max_query_call_graph_depth();
 
     while let Some(PendingCall(canister, call_origin, mut requests)) = call_stack.pop() {
@@ -79,21 +108,21 @@ fn run_call_graph(
                 ErrorCode::QueryCallGraphTooDeep,
                 "Composite query calls exceeded the maximum call depth.",
             );
-            return QueryResponse::UserError(error);
+            return CallGraphOutcome::Finished(QueryResponse::UserError(error));
         }
         if query_context.instruction_limit_reached() {
             let error = UserError::new(
                 ErrorCode::QueryCallGraphTotalInstructionLimitExceeded,
                 "Composite query calls exceeded the instruction limit.",
             );
-            return QueryResponse::UserError(error);
+            return CallGraphOutcome::Finished(QueryResponse::UserError(error));
         }
         if query_context.time_limit_reached() {
             let error = UserError::new(
                 ErrorCode::QueryTimeLimitExceeded,
                 "Composite query call exceeded the time limit.",
             );
-            return QueryResponse::UserError(error);
+            return CallGraphOutcome::Finished(QueryResponse::UserError(error));
         }
 
         // Process the result of the previously visited node.
@@ -117,7 +146,12 @@ fn run_call_graph(
                         callee_result = Some(result);
                     }
                     ExecutionResult::SystemError(err) => {
-                        return QueryResponse::UserError(err);
+                        return CallGraphOutcome::Finished(QueryResponse::UserError(err));
+                    }
+                    ExecutionResult::Suspended(_) => {
+                        // A callback wanting an outcall emits a request for
+                        // it; only the branch below suspends.
+                        unreachable!("Unexpected suspension while executing a response callback.");
                     }
                 }
             }
@@ -138,7 +172,15 @@ fn run_call_graph(
                             callee_result = Some(result);
                         }
                         ExecutionResult::SystemError(err) => {
-                            return QueryResponse::UserError(err);
+                            return CallGraphOutcome::Finished(QueryResponse::UserError(err));
+                        }
+                        ExecutionResult::Suspended(pending) => {
+                            // The caller is already back on the stack, so the
+                            // stack alone is the resume point.
+                            return CallGraphOutcome::Suspended(
+                                SuspendedCallGraph { call_stack },
+                                pending,
+                            );
                         }
                     }
                 }
@@ -156,5 +198,5 @@ fn run_call_graph(
     // Each iteration of the loop above either pushes an entry onto the call
     // stack or sets the callee result. At this point the call stack is empty,
     // so the callee result must have been set and `unwrap` is safe here.
-    callee_result.unwrap()
+    CallGraphOutcome::Finished(callee_result.unwrap())
 }

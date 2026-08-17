@@ -36,8 +36,8 @@ use ic_logger::{
     replica_logger::{no_op_logger, test_logger},
 };
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsArgs,
-    CanisterMetricsResult, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CanisterHttpResponsePayload, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2,
+    CanisterMetricsArgs, CanisterMetricsResult, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob, InstallCodeArgs,
     InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
@@ -75,7 +75,7 @@ use ic_types::messages::{Blob, RawSignedSenderInfo, SignedIngressContent, Signed
 use ic_types::{
     CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
-    canister_http::Replication,
+    canister_http::{CanisterHttpReject, QueryOutcallOutcome, QueryOutcallRequest, Replication},
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -99,11 +99,11 @@ use num_traits::ops::saturating::SaturatingAdd;
 use prometheus::IntCounter;
 use slog::Level;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     convert::TryFrom,
     os::unix::prelude::FileExt,
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tempfile::NamedTempFile;
@@ -337,6 +337,11 @@ pub struct ExecutionTest {
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
     query_handler: InternalHttpQueryHandler,
+    /// Canned results for HTTP outcalls made by queries, consumed in order.
+    query_outcall_responses:
+        Mutex<VecDeque<Result<CanisterHttpResponsePayload, CanisterHttpReject>>>,
+    /// The HTTP outcalls that queries requested, in order.
+    query_outcalls: Mutex<Vec<QueryOutcallRequest>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics_registry: MetricsRegistry,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -2260,14 +2265,49 @@ impl ExecutionTest {
             data_certificate,
             certificate_delegation_metadata,
         };
-        self.query_handler.query(
+        self.query_handler.query_with_outcall_handler_for_testing(
             query,
             Labeled::new(Height::from(0), state),
             Some(data_certificate_with_delegation_metadata),
             true,
             None,
             None,
+            &mut |outcall| {
+                self.query_outcalls.lock().unwrap().push(outcall);
+                let result = self
+                    .query_outcall_responses
+                    .lock()
+                    .unwrap()
+                    .pop_front()
+                    .expect(
+                        "A query made an HTTP outcall but no result was queued for it. \
+                         Queue one with `ExecutionTest::push_query_outcall_response`.",
+                    );
+                // A canned answer costs nothing: there is no real outcall for the
+                // query's reservation to be charged for. A test that cares about
+                // the charge sets `spent` through its own service instead.
+                QueryOutcallOutcome {
+                    result,
+                    spent: Cycles::zero(),
+                }
+            },
         )
+    }
+
+    /// Queues the result that the next HTTP outcall made by a query will receive.
+    pub fn push_query_outcall_response(
+        &self,
+        response: Result<CanisterHttpResponsePayload, CanisterHttpReject>,
+    ) {
+        self.query_outcall_responses
+            .lock()
+            .unwrap()
+            .push_back(response);
+    }
+
+    /// The HTTP outcalls that queries have requested so far, in order.
+    pub fn query_outcalls(&self) -> Vec<QueryOutcallRequest> {
+        self.query_outcalls.lock().unwrap().clone()
     }
 
     /// Returns a reference to the query handler of this test.
@@ -2429,6 +2469,11 @@ impl ExecutionTest {
 ///
 /// Invariant: `subnet_config` must match the `subnet_type`. If `subnet_type` is
 /// updated, then `subnet_config` must be updated accordingly.
+/// The composite-query walltime limit tests get by default. Deliberately large,
+/// so that a slow CI machine does not make time-limit failures look like logic
+/// failures.
+const DEFAULT_MAX_QUERY_CALL_WALLTIME: Duration = Duration::from_secs(60);
+
 pub struct ExecutionTestBuilder {
     execution_config: Config,
     subnet_config: SubnetConfig,
@@ -2472,7 +2517,7 @@ impl Default for ExecutionTestBuilder {
                 composite_queries: FlagStatus::Enabled,
                 // Use a large time limit for composite queries in tests to
                 // avoid flakiness due to slow CI machines.
-                max_query_call_walltime: Duration::from_secs(60),
+                max_query_call_walltime: DEFAULT_MAX_QUERY_CALL_WALLTIME,
                 ..Config::default()
             },
             subnet_config,
@@ -2763,6 +2808,24 @@ impl ExecutionTestBuilder {
     pub fn without_http_requests_subnet_feature(mut self) -> Self {
         self.http_requests_subnet_feature = Some(false);
         self
+    }
+
+    pub fn with_max_concurrent_query_outcalls(
+        mut self,
+        max_concurrent_query_outcalls: usize,
+    ) -> Self {
+        self.execution_config.max_concurrent_query_outcalls = max_concurrent_query_outcalls;
+        self
+    }
+
+    pub fn with_max_query_call_walltime(mut self, max_query_call_walltime: Duration) -> Self {
+        self.execution_config.max_query_call_walltime = max_query_call_walltime;
+        self
+    }
+
+    /// The `max_query_call_walltime` a test gets unless it sets its own.
+    pub fn default_max_query_call_walltime() -> Duration {
+        DEFAULT_MAX_QUERY_CALL_WALLTIME
     }
 
     pub fn without_composite_queries(mut self) -> Self {
@@ -3260,6 +3323,8 @@ impl ExecutionTestBuilder {
             caller_canister_id: self.caller_canister_id,
             exec_env: execution_services.execution_environment,
             query_handler: execution_services.query_execution_service,
+            query_outcall_responses: Mutex::new(VecDeque::new()),
+            query_outcalls: Mutex::new(Vec::new()),
             cycles_account_manager: execution_services.cycles_account_manager,
             metrics_registry,
             ingress_history_writer: execution_services.ingress_history_writer,

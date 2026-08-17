@@ -1,7 +1,10 @@
-use super::query_call_graph::evaluate_query_call_graph;
+use super::query_call_graph::{
+    CallGraphOutcome, SuspendedCallGraph, evaluate_query_call_graph, resume_query_call_graph,
+};
 use super::subnet_query::{
     CompositeQueryMethod, execute_subnet_query, parse_composite_query_method,
 };
+use super::suspension_limiter::{SuspendedQueryLimiter, SuspensionPermit};
 use crate::{
     CanisterManager, NonReplicatedQueryKind, RoundInstructions,
     execution::common::{self, validate_method},
@@ -23,6 +26,7 @@ use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, ExecutionParameters, InstructionLimits,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_https_outcalls_pricing::query as query_outcall_pricing;
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory,
     SystemApiCallCounters,
@@ -38,7 +42,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, NumInstructions, NumMessages, NumSlices, Time,
     batch::QueryStats,
-    canister_http::QueryOutcallRequest,
+    canister_http::{QueryOutcallOutcome, QueryOutcallRequest},
     ingress::WasmResult,
     messages::{
         CallContextId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext, Request,
@@ -53,6 +57,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Held back from an outcall's deadline so the response callback can still run:
+/// the traversal re-checks the walltime before running it.
+const WALLTIME_RESERVED_FOR_OUTCALL_RESPONSE: Duration = Duration::from_millis(500);
+
 /// The response of a query. If the query originated from a user, then it
 /// contains either `UserResponse` or `UserError`. If the query originated from
 /// a canister, then it contains `CanisterResponse`.
@@ -65,11 +73,74 @@ pub(super) enum QueryResponse {
 /// The result of execution of a query or a response callback.
 /// The execution either produces a response or returns a possibly empty set of
 /// outgoing calls with the new canister state and the call origin.
+///
+/// Only executing a query *call* can produce [`Self::Suspended`]: a response
+/// callback that wants an outcall emits a request for it, which the traversal
+/// hands back to the request path on its next iteration.
 #[allow(clippy::large_enum_variant)]
 pub(super) enum ExecutionResult {
     Response(QueryResponse),
     Calls(CanisterState, CallOrigin, VecDeque<Arc<Request>>),
     SystemError(UserError),
+    Suspended(PendingOutcall),
+}
+
+/// Instructions taken out of the call graph's budget for one HTTP outcall, so
+/// that the client can spend them off-thread while the query is suspended.
+pub(super) struct OutcallReservation {
+    allowance: Cycles,
+    /// `allowance` in instructions. Only this part comes back; the rest paid for
+    /// uploading the request.
+    refundable: NumInstructions,
+}
+
+/// An accepted HTTP outcall, and everything needed to turn its result into the
+/// response to the `http_request` call that asked for it.
+pub(super) struct PendingOutcall {
+    /// Carries the sender, callback id and deadline the response is addressed by.
+    pub(super) request: Arc<Request>,
+    pub(super) outcall: QueryOutcallRequest,
+    reservation: OutcallReservation,
+    /// Held only for its `Drop`, which releases the slot however the suspension
+    /// ends.
+    pub(super) _permit: SuspensionPermit,
+}
+
+/// The outcome of running a query: either it finished, or it is suspended
+/// waiting for an HTTP outcall.
+pub(super) enum RunOutcome {
+    Finished(Result<WasmResult, UserError>),
+    Suspended(SuspendedCallGraph, PendingOutcall),
+}
+
+/// Converts the outcome of a call graph traversal rooted at a user query into
+/// the outcome of that query.
+fn user_outcome(outcome: CallGraphOutcome) -> RunOutcome {
+    match outcome {
+        CallGraphOutcome::Finished(QueryResponse::UserResponse(wasm_result)) => {
+            RunOutcome::Finished(Ok(wasm_result))
+        }
+        CallGraphOutcome::Finished(QueryResponse::UserError(err)) => RunOutcome::Finished(Err(err)),
+        CallGraphOutcome::Finished(QueryResponse::CanisterResponse(_)) => {
+            unreachable!("A user query cannot produce a canister response.");
+        }
+        CallGraphOutcome::Suspended(suspended, pending) => {
+            RunOutcome::Suspended(suspended, pending)
+        }
+    }
+}
+
+/// Builds the response to `request` carrying `payload`, so that the resume path
+/// produces one byte-identical to the synchronous path's.
+pub(super) fn request_to_response(request: &Request, payload: Payload) -> QueryResponse {
+    QueryResponse::CanisterResponse(Response {
+        originator: request.sender,
+        respondent: request.receiver,
+        originator_reply_callback: request.sender_reply_callback,
+        response_payload: payload,
+        refund: Cycles::zero(),
+        deadline: request.deadline,
+    })
 }
 
 /// Returns either `WasmMethod::CompositeQuery` or `WasmMethod::Query` depending
@@ -132,6 +203,7 @@ pub(super) struct QueryContext {
     max_query_outcalls_per_query: usize,
     /// The number of HTTP outcalls requested in this query context.
     query_outcalls: usize,
+    suspension_limiter: Arc<SuspendedQueryLimiter>,
     cycles_account_manager: Arc<CyclesAccountManager>,
     /// An optional atomic to observe the number of instructions used in the query.
     /// This should only be populated for http outcalls transformations.
@@ -159,6 +231,7 @@ impl QueryContext {
         composite_queries: FlagStatus,
         query_http_requests: FlagStatus,
         max_query_outcalls_per_query: usize,
+        suspension_limiter: Arc<SuspendedQueryLimiter>,
         canister_id: CanisterId,
         metrics: Arc<QueryHandlerMetrics>,
         local_query_execution_stats: Option<Arc<QueryStatsCollector>>,
@@ -204,6 +277,7 @@ impl QueryContext {
             query_http_requests,
             max_query_outcalls_per_query,
             query_outcalls: 0,
+            suspension_limiter,
             cycles_account_manager,
             instruction_observation,
         }
@@ -224,15 +298,25 @@ impl QueryContext {
         query: Query,
         metrics: &'b QueryHandlerMetrics,
         measurement_scope: &MeasurementScope<'b>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> RunOutcome {
+        match self.run_inner(query, metrics, measurement_scope) {
+            Ok(outcome) => outcome,
+            Err(err) => RunOutcome::Finished(Err(err)),
+        }
+    }
+
+    fn run_inner<'b>(
+        &mut self,
+        query: Query,
+        metrics: &'b QueryHandlerMetrics,
+        measurement_scope: &MeasurementScope<'b>,
+    ) -> Result<RunOutcome, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
         let call_origin = CallOrigin::Query(query.source().into(), query.method_name.clone());
 
-        let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
-            Ok(method) => method,
-            Err(err) => return Err(err.into_user_error(&canister_id)),
-        };
+        let method = wasm_query_method(old_canister, query.method_name.to_string())
+            .map_err(|err| err.into_user_error(&canister_id))?;
 
         let query_kind = match &method {
             WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
@@ -274,12 +358,12 @@ impl QueryContext {
             )
         };
 
-        let result = match result {
+        let outcome = match result {
             // If the canister produced a result or if execution failed then it
             // does not matter whether or not it produced any outgoing requests.
             // We can simply return the response we have.
-            Err(err) => Err(err),
-            Ok(Some(wasm_result)) => Ok(wasm_result),
+            Err(err) => RunOutcome::Finished(Err(err)),
+            Ok(Some(wasm_result)) => RunOutcome::Finished(Ok(wasm_result)),
             Ok(None) => {
                 // The query did not produce any response. We need to evaluate
                 // the query call graph. Note that if the call graph is empty,
@@ -287,22 +371,15 @@ impl QueryContext {
                 let measurement_scope =
                     MeasurementScope::nested(&metrics.query_spawned_calls, measurement_scope);
                 let mut requests = VecDeque::new();
-                let result = match self.extract_query_requests(&mut canister, &mut requests) {
-                    Err(err) => QueryResponse::UserError(err),
-                    Ok(()) => evaluate_query_call_graph(
+                match self.extract_query_requests(&mut canister, &mut requests) {
+                    Err(err) => RunOutcome::Finished(Err(err)),
+                    Ok(()) => user_outcome(evaluate_query_call_graph(
                         self,
                         canister,
                         call_origin,
                         requests,
                         &measurement_scope,
-                    ),
-                };
-                match result {
-                    QueryResponse::UserResponse(wasm_result) => Ok(wasm_result),
-                    QueryResponse::UserError(err) => Err(err),
-                    QueryResponse::CanisterResponse(_) => {
-                        unreachable!("A user query cannot produce a canister response.");
-                    }
+                    )),
                 }
             }
         };
@@ -322,7 +399,30 @@ impl QueryContext {
             QuerySource::User { .. } => (),
         }
 
-        result
+        Ok(outcome)
+    }
+
+    /// Resumes a query suspended on an HTTP outcall.
+    pub(super) fn resume<'b>(
+        &mut self,
+        suspended: SuspendedCallGraph,
+        pending: PendingOutcall,
+        result: QueryOutcallOutcome,
+        metrics: &'b QueryHandlerMetrics,
+        measurement_scope: &MeasurementScope<'b>,
+    ) -> RunOutcome {
+        let measurement_scope =
+            MeasurementScope::nested(&metrics.query_spawned_calls, measurement_scope);
+        let callee_result = self.finish_http_outcall(&pending, result);
+        // The query holds a thread again.
+        drop(pending);
+
+        user_outcome(resume_query_call_graph(
+            self,
+            suspended,
+            callee_result,
+            &measurement_scope,
+        ))
     }
 
     // A helper function that extracts the query calls of the given canister and
@@ -828,18 +928,6 @@ impl QueryContext {
         request: Arc<Request>,
         measurement_scope: &MeasurementScope,
     ) -> ExecutionResult {
-        // A handy function to create a `Response` using parameters from the `Request`
-        let to_query_result = |payload: Payload| {
-            QueryResponse::CanisterResponse(Response {
-                originator: request.sender,
-                respondent: request.receiver,
-                originator_reply_callback: request.sender_reply_callback,
-                response_payload: payload,
-                refund: Cycles::zero(),
-                deadline: request.deadline,
-            })
-        };
-
         let canister_id = request.receiver;
 
         // Requests to the management canister made by a composite query are not
@@ -848,8 +936,22 @@ impl QueryContext {
         // request is not treated as a management canister call: it is rejected
         // below with `CanisterNotFound`, as no canister with that ID exists.
         if canister_id == CanisterId::ic_00() {
-            return self.handle_ic00_request(&request, to_query_result);
+            return self.handle_ic00_request(&request);
         }
+
+        self.handle_canister_request(request, measurement_scope)
+    }
+
+    /// Executes a query call addressed to a canister on this subnet.
+    fn handle_canister_request(
+        &mut self,
+        request: Arc<Request>,
+        measurement_scope: &MeasurementScope,
+    ) -> ExecutionResult {
+        // A handy function to create a `Response` using parameters from the `Request`
+        let to_query_result = |payload: Payload| request_to_response(&request, payload);
+
+        let canister_id = request.receiver;
 
         // Add the canister to the set of evaluated canisters early, i.e. before any errors.
         self.add_evaluated_canister_stats(canister_id, &QueryStats::default());
@@ -932,14 +1034,11 @@ impl QueryContext {
     /// only target canisters hosted by the own subnet. Calls to management
     /// canister methods that cannot be executed in the non-replicated mode
     /// are rejected.
-    fn handle_ic00_request(
-        &mut self,
-        request: &Request,
-        to_query_result: impl Fn(Payload) -> QueryResponse,
-    ) -> ExecutionResult {
+    fn handle_ic00_request(&mut self, request: &Arc<Request>) -> ExecutionResult {
         // Results of query contexts calling the management canister are not cached.
         self.ic00_calls += 1;
 
+        let to_query_result = |payload: Payload| request_to_response(request, payload);
         let reject = |err: UserError| {
             ExecutionResult::Response(to_query_result(Payload::Reject(RejectContext::from(err))))
         };
@@ -952,7 +1051,7 @@ impl QueryContext {
             match parse_composite_query_method(&request.method_name, self.query_http_requests) {
                 Ok(CompositeQueryMethod::User(method)) => method,
                 Ok(CompositeQueryMethod::HttpRequest) => {
-                    return self.start_http_outcall(request, to_query_result);
+                    return self.start_http_outcall(request);
                 }
                 Err(err) => return reject(err),
             };
@@ -986,21 +1085,20 @@ impl QueryContext {
         }
     }
 
-    /// Validates a non-replicated HTTP outcall and enforces the limits, then
-    /// rejects: performing it requires suspending the query.
-    fn start_http_outcall(
-        &mut self,
-        request: &Request,
-        to_query_result: impl Fn(Payload) -> QueryResponse,
-    ) -> ExecutionResult {
+    /// Accepts a non-replicated HTTP outcall, suspending the query until it
+    /// completes.
+    fn start_http_outcall(&mut self, request: &Arc<Request>) -> ExecutionResult {
         let reject_with_error = |err: UserError| {
-            ExecutionResult::Response(to_query_result(Payload::Reject(RejectContext::from(err))))
+            ExecutionResult::Response(request_to_response(
+                request,
+                Payload::Reject(RejectContext::from(err)),
+            ))
         };
         let reject = |reject_code: RejectCode, message: &str| {
-            ExecutionResult::Response(to_query_result(Payload::Reject(RejectContext::new(
-                reject_code,
-                message.to_string(),
-            ))))
+            ExecutionResult::Response(request_to_response(
+                request,
+                Payload::Reject(RejectContext::new(reject_code, message.to_string())),
+            ))
         };
 
         // Reported the same way as the config flag: which of the two is off is
@@ -1030,21 +1128,120 @@ impl QueryContext {
             Err(err) => return reject_with_error(err),
         };
 
-        let (_outcall, _transform) = match QueryOutcallRequest::try_from_args(
-            request.sender,
-            args,
-            self.remaining_walltime(),
-        ) {
-            Ok(outcall) => outcall,
-            Err(err) => return reject_with_error(err.into()),
+        let remaining = self.remaining_walltime();
+        let Some(outcall_budget) = remaining.checked_sub(WALLTIME_RESERVED_FOR_OUTCALL_RESPONSE)
+        else {
+            return reject(
+                RejectCode::SysTransient,
+                "The query call's time budget is exhausted.",
+            );
+        };
+
+        let (mut outcall, transform) =
+            match QueryOutcallRequest::try_from_args(request.sender, args, outcall_budget) {
+                Ok(outcall) => outcall,
+                Err(err) => return reject_with_error(err.into()),
+            };
+
+        // Up front, because the traversal only re-checks its budget on the next
+        // iteration, by which time the outcall would already have been made.
+        let reservation = self.reserve_instructions_for_outcall(
+            query_outcall_pricing::request_cost(outcall.variable_parts_size(transform.as_ref())),
+            query_outcall_pricing::max_network_cost(outcall.max_response_bytes, outcall_budget),
+        );
+        let Some(reservation) = reservation else {
+            return ExecutionResult::SystemError(UserError::new(
+                ErrorCode::QueryCallGraphTotalInstructionLimitExceeded,
+                "Composite query calls exceeded the instruction limit.",
+            ));
+        };
+        outcall.allowance = reservation.allowance;
+
+        // Applying the transform requires executing it inside this context,
+        // which is not implemented yet.
+        if transform.is_some() {
+            return reject(
+                RejectCode::SysTransient,
+                "A transform function for an HTTP outcall from a query is not supported yet.",
+            );
+        }
+
+        let Some(permit) = self.suspension_limiter.try_acquire(request.sender) else {
+            return reject(
+                RejectCode::SysTransient,
+                "Too many queries are waiting for an HTTP outcall; please retry.",
+            );
         };
 
         self.query_outcalls += 1;
 
-        reject(
-            RejectCode::SysTransient,
-            "HTTP outcalls from queries are not implemented yet.",
-        )
+        ExecutionResult::Suspended(PendingOutcall {
+            request: Arc::clone(request),
+            outcall,
+            reservation,
+            _permit: permit,
+        })
+    }
+
+    /// Reserves up to `cost` for an outcall, or `None` if the budget cannot cover
+    /// any of it.
+    fn reserve_instructions_for_outcall(
+        &mut self,
+        request_cost: Cycles,
+        max_network_cost: Cycles,
+    ) -> Option<OutcallReservation> {
+        let request = query_outcall_pricing::instructions_for(request_cost);
+        let wanted = NumInstructions::from(
+            request
+                .get()
+                .saturating_add(query_outcall_pricing::instructions_for(max_network_cost).get()),
+        );
+        let available = NumInstructions::from(self.round_limits.instructions.get().max(0) as u64);
+        // Reserve less than the worst case if that is all there is; the client
+        // then bounds the request by what the reservation can buy.
+        let reserved = wanted.min(available);
+        // Uploading the request is unavoidable, so a budget that cannot cover it
+        // cannot make the outcall at all -- and one that covers nothing beyond it
+        // would leave the adapter a zero-byte response to fetch.
+        if reserved <= request {
+            return None;
+        }
+
+        self.round_limits.instructions -= as_round_instructions(reserved);
+        let refundable = NumInstructions::from(reserved.get() - request.get());
+        Some(OutcallReservation {
+            allowance: query_outcall_pricing::cycles_for(refundable),
+            refundable,
+        })
+    }
+
+    /// Returns the unspent part of a reservation to the call graph's budget.
+    fn refund_outcall_reservation(&mut self, reservation: &OutcallReservation, spent: Cycles) {
+        let spent = query_outcall_pricing::instructions_for(spent);
+        // Bounded by the refundable part, so the budget cannot grow beyond where
+        // it started and the request's own cost is never returned.
+        let refund =
+            NumInstructions::from(reservation.refundable.get().saturating_sub(spent.get()));
+        self.round_limits.instructions += as_round_instructions(refund);
+    }
+
+    /// Turns the result of an HTTP outcall into the response to the
+    /// `http_request` call that asked for it.
+    pub(super) fn finish_http_outcall(
+        &mut self,
+        pending: &PendingOutcall,
+        outcome: QueryOutcallOutcome,
+    ) -> QueryResponse {
+        // Return what the outcall did not spend, so the rest of the query can use
+        // it. Charging the reservation up front bounds what an outcall may cost;
+        // this makes it pay only for what it used.
+        self.refund_outcall_reservation(&pending.reservation, outcome.spent);
+
+        let payload = match outcome.result {
+            Ok(response) => Payload::Data(response.encode()),
+            Err(reject) => Payload::Reject(RejectContext::from(&reject)),
+        };
+        request_to_response(&pending.request, payload)
     }
 
     /// What is left of this query context's walltime budget.
@@ -1314,5 +1511,6 @@ mod send_assertions {
     #[test]
     fn query_context_is_send_and_static() {
         assert_send_static::<super::QueryContext>();
+        assert_send_static::<super::super::SuspendedQuery>();
     }
 }

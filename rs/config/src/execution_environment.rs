@@ -15,18 +15,19 @@ const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Enab
 
 const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Enabled;
 
-/// Enables non-replicated HTTP outcalls (`http_request` with
-/// `is_replicated = false`) from composite queries.
+/// Enables non-replicated HTTP outcalls from composite queries.
 const QUERY_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Disabled;
 
-/// The maximum number of HTTP outcalls a single query call graph may make.
-///
-/// The cost of an outcall is charged against the call graph's instruction
-/// budget, which is the primary bound. This is a backstop for the cases that
-/// budget does not cover: a subnet whose cost schedule makes instructions free,
-/// and a canister asking for a small `max_response_bytes` so that each outcall
-/// is cheap.
+/// Backstop for what the instruction charge does not bound: outcalls that are
+/// individually cheap stay cheap however many there are.
 pub const MAX_QUERY_OUTCALLS_PER_QUERY: usize = 20;
+
+/// A suspended query holds no thread, but pins the state snapshot it executes
+/// against, blocking garbage collection for that height.
+pub const MAX_CONCURRENT_QUERY_OUTCALLS: usize = 100;
+
+/// Keeps one busy canister from consuming the whole node's allowance.
+pub const MAX_CONCURRENT_QUERY_OUTCALLS_PER_CANISTER: usize = 10;
 
 pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4 * KIB;
 pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = 4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT; // header, index table, data region
@@ -364,6 +365,13 @@ pub struct Config {
 
     /// The maximum number of HTTP outcalls a single query call graph may make.
     pub max_query_outcalls_per_query: usize,
+
+    /// The maximum number of queries suspended for an HTTP outcall at once.
+    pub max_concurrent_query_outcalls: usize,
+
+    /// The maximum number of queries of one canister suspended for an HTTP
+    /// outcall at once.
+    pub max_concurrent_query_outcalls_per_canister: usize,
 }
 
 impl Default for Config {
@@ -449,6 +457,8 @@ impl Default for Config {
             flexible_http_requests: FLEXIBLE_HTTP_REQUESTS_FEATURE,
             query_http_requests: QUERY_HTTP_REQUESTS_FEATURE,
             max_query_outcalls_per_query: MAX_QUERY_OUTCALLS_PER_QUERY,
+            max_concurrent_query_outcalls: MAX_CONCURRENT_QUERY_OUTCALLS,
+            max_concurrent_query_outcalls_per_canister: MAX_CONCURRENT_QUERY_OUTCALLS_PER_CANISTER,
         }
     }
 }

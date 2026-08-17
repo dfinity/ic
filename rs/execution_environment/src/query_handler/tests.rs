@@ -2,14 +2,16 @@ use crate::InternalHttpQueryHandler;
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
+use ic_error_types::RejectCode;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterIdRange, CanisterIdRecord, CanisterInfoRequest, CanisterInfoResponse,
-    CanisterMetricsArgs, CanisterMetricsResult, CanisterSettingsArgsBuilder,
+    CanisterHttpResponsePayload, CanisterIdRange, CanisterIdRecord, CanisterInfoRequest,
+    CanisterInfoResponse, CanisterMetricsArgs, CanisterMetricsResult, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, FetchCanisterLogsRequest,
     FetchCanisterLogsResponse, ListCanistersResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_resource_limits::ResourceLimits;
+use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_metrics::fetch_histogram_stats;
@@ -17,12 +19,14 @@ use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
     NumInstructions,
+    canister_http::CanisterHttpReject,
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
+use std::time::Duration;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -2030,6 +2034,24 @@ fn composite_query_call_to_management_canister_charges_instructions() {
     assert_eq!(reply, WasmResult::Reply(b"done".to_vec()));
 }
 
+fn query_outcall_args_with_body(is_replicated: Option<bool>, body: Vec<u8>) -> Vec<u8> {
+    use ic_management_canister_types_private::{
+        BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod,
+    };
+
+    CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: None,
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: Some(body),
+        method: HttpMethod::POST,
+        transform: None,
+        is_replicated,
+        pricing_version: None,
+    }
+    .encode()
+}
+
 fn query_outcall_args(is_replicated: Option<bool>) -> Vec<u8> {
     use ic_management_canister_types_private::{
         BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod,
@@ -2046,6 +2068,14 @@ fn query_outcall_args(is_replicated: Option<bool>) -> Vec<u8> {
         pricing_version: None,
     }
     .encode()
+}
+
+fn http_response(body: &[u8]) -> CanisterHttpResponsePayload {
+    CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: body.to_vec(),
+    }
 }
 
 fn query_outcall_test() -> ExecutionTest {
@@ -2194,6 +2224,7 @@ fn composite_query_http_outcall_respects_the_per_query_limit() {
         .with_max_query_outcalls_per_query(1)
         .build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"first")));
 
     let result = test
         .non_replicated_query(
@@ -2205,7 +2236,7 @@ fn composite_query_http_outcall_respects_the_per_query_limit() {
                     "http_request",
                     call_args()
                         .other_side(query_outcall_args(Some(false)))
-                        .on_reject(
+                        .on_reply(
                             wasm().call_simple(
                                 CanisterId::ic_00(),
                                 "http_request",
@@ -2213,7 +2244,8 @@ fn composite_query_http_outcall_respects_the_per_query_limit() {
                                     .other_side(query_outcall_args(Some(false)))
                                     .on_reject(wasm().reject_message().append_and_reply()),
                             ),
-                        ),
+                        )
+                        .on_reject(wasm().reject_message().append_and_reply()),
                 )
                 .build(),
         )
@@ -2229,11 +2261,225 @@ fn composite_query_http_outcall_respects_the_per_query_limit() {
     );
 }
 
-/// Validation happens, but performing the outcall requires suspending the query,
-/// which is not implemented yet.
+/// The outcall's response reaches the calling canister's reply callback.
 #[test]
-fn composite_query_http_outcall_is_not_implemented_yet() {
+fn composite_query_http_outcall_delivers_the_response() {
     let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"hello")));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", query_outcall_args(Some(false))),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(reply) = result else {
+        panic!("expected a reply");
+    };
+    let response = Decode!(&reply, CanisterHttpResponsePayload).unwrap();
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body, b"hello".to_vec());
+
+    // The outcall the query asked for carried what the arguments said.
+    let outcalls = test.query_outcalls();
+    assert_eq!(outcalls.len(), 1);
+    assert_eq!(outcalls[0].url, "https://example.com");
+    assert_eq!(outcalls[0].requester, canister_id);
+}
+
+/// A failed outcall reaches the reject callback rather than failing the query.
+#[test]
+fn composite_query_http_outcall_reject_reaches_the_reject_callback() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Err(CanisterHttpReject {
+        reject_code: RejectCode::SysTransient,
+        message: "connection refused".to_string(),
+    }));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", query_outcall_args(Some(false))),
+        )
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(b"connection refused".to_vec()));
+}
+
+/// Two outcalls in sequence, the second from the first's reply callback.
+#[test]
+fn composite_query_can_make_two_sequential_http_outcalls() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"first")));
+    test.push_query_outcall_response(Ok(http_response(b"second")));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            wasm()
+                .call_simple(
+                    CanisterId::ic_00(),
+                    "http_request",
+                    call_args()
+                        .other_side(query_outcall_args(Some(false)))
+                        .on_reply(ic00_composite_query(
+                            "http_request",
+                            query_outcall_args(Some(false)),
+                        ))
+                        .on_reject(wasm().reject_message().append_and_reply()),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(reply) = result else {
+        panic!("expected a reply");
+    };
+    let response = Decode!(&reply, CanisterHttpResponsePayload).unwrap();
+    assert_eq!(response.body, b"second".to_vec());
+    assert_eq!(test.query_outcalls().len(), 2);
+}
+
+/// An outcall from a nested composite query: the response travels back up the
+/// call graph the suspension was captured from.
+#[test]
+fn nested_composite_query_can_make_an_http_outcall() {
+    let mut test = query_outcall_test();
+    let outer = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let inner = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"nested")));
+
+    let result = test
+        .non_replicated_query(
+            outer,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    inner,
+                    call_args()
+                        .other_side(ic00_composite_query(
+                            "http_request",
+                            query_outcall_args(Some(false)),
+                        ))
+                        .on_reply(wasm().message_payload().append_and_reply())
+                        .on_reject(wasm().reject_message().append_and_reply()),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(reply) = result else {
+        panic!("expected a reply");
+    };
+    let response = Decode!(&reply, CanisterHttpResponsePayload).unwrap();
+    assert_eq!(response.body, b"nested".to_vec());
+
+    let outcalls = test.query_outcalls();
+    assert_eq!(outcalls.len(), 1);
+    assert_eq!(
+        outcalls[0].requester, inner,
+        "the outcall is made on behalf of the canister that asked for it"
+    );
+}
+
+/// A transform is accepted by the argument validation but cannot be applied yet.
+#[test]
+fn composite_query_http_outcall_with_a_transform_is_not_supported_yet() {
+    use ic_management_canister_types_private::{
+        BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+    };
+
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let args = CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: None,
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: canister_id.get().into(),
+                method: "transform".to_string(),
+            }),
+            context: vec![],
+        }),
+        is_replicated: Some(false),
+        pricing_version: None,
+    }
+    .encode();
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", args),
+        )
+        .unwrap();
+
+    assert_eq!(
+        result,
+        WasmResult::Reply(
+            b"A transform function for an HTTP outcall from a query is not supported yet.".to_vec()
+        )
+    );
+    assert!(
+        test.query_outcalls().is_empty(),
+        "a rejected outcall must not reach the adapter"
+    );
+}
+
+/// A query with too little walltime left is not suspended: the outcall would be
+/// killed on resumption anyway.
+///
+/// Which of the two refusals fires depends on machine speed, so the assertion is
+/// on what matters: no outcall is attempted.
+///
+/// Which of the two refusals fires depends on machine speed, so the assertion is
+/// on what matters: no outcall is attempted.
+#[test]
+fn composite_query_http_outcall_is_refused_when_the_time_budget_is_exhausted() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_http_requests_enabled()
+        .with_max_query_call_walltime(Duration::from_millis(1))
+        .build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test.non_replicated_query(
+        canister_id,
+        "composite_query",
+        ic00_composite_query("http_request", query_outcall_args(Some(false))),
+    );
+
+    assert!(
+        test.query_outcalls().is_empty(),
+        "no outcall may be started without time to deliver its result"
+    );
+    match result {
+        Ok(WasmResult::Reply(reply)) => assert_eq!(
+            String::from_utf8(reply).unwrap(),
+            "The query call's time budget is exhausted."
+        ),
+        Err(err) => assert_eq!(err.code(), ErrorCode::QueryTimeLimitExceeded),
+        other => panic!("unexpected result: {other:?}"),
+    }
+}
+
+/// At the suspension limit the outcall is refused rather than queued.
+#[test]
+fn composite_query_http_outcall_is_refused_at_the_suspension_limit() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_http_requests_enabled()
+        .with_max_concurrent_query_outcalls(0)
+        .build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let result = test
@@ -2246,6 +2492,271 @@ fn composite_query_http_outcall_is_not_implemented_yet() {
 
     assert_eq!(
         result,
-        WasmResult::Reply(b"HTTP outcalls from queries are not implemented yet.".to_vec())
+        WasmResult::Reply(
+            b"Too many queries are waiting for an HTTP outcall; please retry.".to_vec()
+        )
+    );
+    assert!(test.query_outcalls().is_empty());
+}
+
+/// The deadline leaves room for the response callback.
+#[test]
+fn composite_query_http_outcall_reserves_time_for_its_response() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"hello")));
+
+    test.non_replicated_query(
+        canister_id,
+        "composite_query",
+        ic00_composite_query("http_request", query_outcall_args(Some(false))),
+    )
+    .unwrap();
+
+    let outcalls = test.query_outcalls();
+    assert_lt!(
+        outcalls[0].max_response_time,
+        ExecutionTestBuilder::default_max_query_call_walltime()
+    );
+}
+
+/// Never cached: the result depends on a remote server, not only on the state
+/// the cache keys on.
+#[test]
+fn composite_query_http_outcall_result_is_not_cached() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"first")));
+    test.push_query_outcall_response(Ok(http_response(b"second")));
+
+    let payload = ic00_composite_query("http_request", query_outcall_args(Some(false)));
+    let first = test
+        .non_replicated_query(canister_id, "composite_query", payload.clone())
+        .unwrap();
+    let second = test
+        .non_replicated_query(canister_id, "composite_query", payload)
+        .unwrap();
+
+    // The second was not served from the cache, so it saw the second response.
+    let WasmResult::Reply(first) = first else {
+        panic!("expected a reply")
+    };
+    let WasmResult::Reply(second) = second else {
+        panic!("expected a reply")
+    };
+    assert_eq!(
+        Decode!(&first, CanisterHttpResponsePayload).unwrap().body,
+        b"first".to_vec()
+    );
+    assert_eq!(
+        Decode!(&second, CanisterHttpResponsePayload).unwrap().body,
+        b"second".to_vec()
+    );
+    assert_eq!(test.query_outcalls().len(), 2);
+}
+
+/// A subnet that charges nothing in cycles still charges the query's
+/// instruction budget: the only bound that scales with what an outcall pulls
+/// in.
+#[test]
+fn composite_query_http_outcall_is_charged_on_a_free_subnet() {
+    fn instructions_left_after_outcall(cost_schedule: CanisterCyclesCostSchedule) -> Cycles {
+        let mut test = ExecutionTestBuilder::new()
+            .with_query_http_requests_enabled()
+            .with_cost_schedule(cost_schedule)
+            .build();
+        let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+        test.push_query_outcall_response(Ok(http_response(b"hello")));
+
+        test.non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", query_outcall_args(Some(false))),
+        )
+        .unwrap();
+
+        let outcalls = test.query_outcalls();
+        assert_eq!(outcalls.len(), 1);
+        outcalls[0].allowance
+    }
+
+    let free = instructions_left_after_outcall(CanisterCyclesCostSchedule::Free);
+    assert_gt!(
+        free,
+        Cycles::zero(),
+        "a free subnet must still reserve instructions for the outcall"
+    );
+
+    // Not equal: the reservation prices the *remaining* walltime, which differs
+    // slightly between runs.
+    let normal = instructions_left_after_outcall(CanisterCyclesCostSchedule::Normal);
+    assert_lt!(
+        free.get().abs_diff(normal.get()),
+        normal.get() / 100,
+        "the reservation must not depend on what the subnet charges \
+         (free {free}, normal {normal})"
+    );
+}
+
+/// A system subnet, whose instruction execution fee is zero, can still make
+/// outcalls: deriving the cycles-to-instructions rate from that fee would
+/// collapse the reservation to zero and refuse every one.
+#[test]
+fn composite_query_http_outcall_works_on_a_zero_fee_subnet() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_http_requests_enabled()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"hello")));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", query_outcall_args(Some(false))),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(reply) = result else {
+        panic!("expected a reply");
+    };
+    assert_eq!(
+        Decode!(&reply, CanisterHttpResponsePayload).unwrap().body,
+        b"hello".to_vec()
+    );
+
+    let outcalls = test.query_outcalls();
+    assert_eq!(outcalls.len(), 1);
+    assert_gt!(
+        outcalls[0].allowance,
+        Cycles::zero(),
+        "the outcall must get a real allowance, not a zero one"
+    );
+}
+
+/// A budget too small for the response asked for shrinks the outcall rather
+/// than refusing it. Compared against an ample budget, so the test need not
+/// restate the fee formula.
+/// The uploaded request is charged for, not just the downloaded response.
+///
+/// With the budget clamping the reservation, what is left for the response is
+/// what the request did not take.
+#[test]
+fn composite_query_http_outcall_charges_for_the_uploaded_request() {
+    fn allowance_with_body(body: Vec<u8>) -> Cycles {
+        let mut test = ExecutionTestBuilder::new()
+            .with_query_http_requests_enabled()
+            // Tight enough to clamp the reservation; an ample budget would buy
+            // the full worst case either way.
+            .with_max_query_call_graph_instructions(NumInstructions::from(200_000_000))
+            .build();
+        let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+        test.push_query_outcall_response(Ok(http_response(b"hello")));
+
+        test.non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query(
+                "http_request",
+                query_outcall_args_with_body(Some(false), body),
+            ),
+        )
+        .unwrap();
+
+        let outcalls = test.query_outcalls();
+        assert_eq!(outcalls.len(), 1);
+        outcalls[0].allowance
+    }
+
+    let small = allowance_with_body(vec![0; 16]);
+    let large = allowance_with_body(vec![0; 100_000]);
+
+    assert_lt!(
+        large,
+        small,
+        "uploading 100 KB must leave less for the response than uploading 16 bytes"
+    );
+}
+
+#[test]
+fn composite_query_http_outcall_is_bounded_by_the_instruction_budget() {
+    fn allowance_with_budget(budget: NumInstructions) -> Cycles {
+        let mut test = ExecutionTestBuilder::new()
+            .with_query_http_requests_enabled()
+            .with_max_query_call_graph_instructions(budget)
+            .build();
+        let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+        test.push_query_outcall_response(Ok(http_response(b"hello")));
+
+        test.non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", query_outcall_args(Some(false))),
+        )
+        .unwrap();
+
+        let outcalls = test.query_outcalls();
+        assert_eq!(outcalls.len(), 1);
+        outcalls[0].allowance
+    }
+
+    let ample = allowance_with_budget(NumInstructions::from(5_000_000_000));
+    // Above `instruction_overhead_per_query_call` (50M), so the query itself
+    // runs, but far short of what a 2 MB response costs.
+    let scarce = allowance_with_budget(NumInstructions::from(120_000_000));
+
+    assert_lt!(
+        scarce,
+        ample,
+        "a scarce budget should have bounded what the outcall may spend"
+    );
+}
+
+/// What an outcall does not spend comes back to the query's budget.
+///
+/// Two outcalls, with a budget that covers one full reservation but not two. The
+/// canned responses cost nothing, so with the reservation returned the second
+/// outcall gets an allowance close to the first's; without it, only the
+/// leftovers.
+#[test]
+fn composite_query_http_outcall_returns_what_it_does_not_spend() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_http_requests_enabled()
+        .with_max_query_call_graph_instructions(NumInstructions::from(250_000_000))
+        .build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    test.push_query_outcall_response(Ok(http_response(b"first")));
+    test.push_query_outcall_response(Ok(http_response(b"second")));
+
+    test.non_replicated_query(
+        canister_id,
+        "composite_query",
+        wasm()
+            .call_simple(
+                CanisterId::ic_00(),
+                "http_request",
+                call_args()
+                    .other_side(query_outcall_args(Some(false)))
+                    .on_reply(ic00_composite_query(
+                        "http_request",
+                        query_outcall_args(Some(false)),
+                    ))
+                    .on_reject(wasm().reject_message().append_and_reply()),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let outcalls = test.query_outcalls();
+    assert_eq!(outcalls.len(), 2);
+    // The two are not equal: the second reservation covers less time, because the
+    // query's walltime budget has been running down. But it is the same order of
+    // magnitude, whereas without the refund it would be a small fraction.
+    assert_gt!(
+        outcalls[1].allowance,
+        outcalls[0].allowance / 2_u64,
+        "the second outcall got only the leftovers, so the first reservation was \
+         not returned"
     );
 }

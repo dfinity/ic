@@ -6,6 +6,7 @@ mod query_call_graph;
 mod query_context;
 mod query_scheduler;
 mod subnet_query;
+mod suspension_limiter;
 #[cfg(test)]
 mod tests;
 
@@ -13,7 +14,7 @@ use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
     CanisterManager,
     hypervisor::Hypervisor,
-    metrics::{MeasurementScope, QueryHandlerMetrics},
+    metrics::{MeasurementScope, QUERY_HANDLER_CRITICAL_ERROR, QueryHandlerMetrics},
 };
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
@@ -25,7 +26,7 @@ use ic_interfaces::execution_environment::{
     TransformExecutionInput, TransformExecutionService,
 };
 use ic_interfaces_state_manager::{Labeled, StateReader};
-use ic_logger::ReplicaLogger;
+use ic_logger::{ReplicaLogger, error};
 use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
@@ -34,7 +35,8 @@ use ic_types::QueryStatsEpoch;
 use ic_types::batch::QueryStats;
 use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
-    CanisterId, NumInstructions,
+    CanisterId, NumInstructions, Time,
+    canister_http::{QueryOutcallOutcome, QueryOutcallRequest},
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query, QuerySource},
 };
@@ -53,6 +55,27 @@ use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::QueryScheduler;
+
+/// A query suspended waiting for an HTTP outcall. `Send + 'static`, so it can
+/// move off a query-execution thread and back.
+pub(crate) struct SuspendedQuery {
+    context: query_context::QueryContext,
+    call_graph: query_call_graph::SuspendedCallGraph,
+    pending: query_context::PendingOutcall,
+    /// A query that called the management canister is never cached, but the
+    /// miss is still recorded.
+    cache_entry_key: Option<query_cache::EntryKey>,
+    batch_time: Time,
+}
+
+/// The outcome of one execution step of a query.
+pub(crate) enum QueryStep {
+    Finished(Result<WasmResult, UserError>),
+    Suspended {
+        suspended: Box<SuspendedQuery>,
+        outcall: QueryOutcallRequest,
+    },
+}
 
 pub struct DataCertificateWithDelegationMetadata {
     pub data_certificate: Vec<u8>,
@@ -113,6 +136,7 @@ pub struct InternalHttpQueryHandler {
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_query_execution_stats: Arc<QueryStatsCollector>,
     query_cache: query_cache::QueryCache,
+    suspension_limiter: Arc<suspension_limiter::SuspendedQueryLimiter>,
 }
 
 impl InternalHttpQueryHandler {
@@ -130,6 +154,9 @@ impl InternalHttpQueryHandler {
         let query_cache_capacity = config.query_cache_capacity;
         let query_max_expiry_time = config.query_cache_max_expiry_time;
         let query_data_certificate_expiry_time = config.query_cache_data_certificate_expiry_time;
+        let max_concurrent_query_outcalls = config.max_concurrent_query_outcalls;
+        let max_concurrent_query_outcalls_per_canister =
+            config.max_concurrent_query_outcalls_per_canister;
         Self {
             log,
             hypervisor,
@@ -146,6 +173,10 @@ impl InternalHttpQueryHandler {
                 query_max_expiry_time,
                 query_data_certificate_expiry_time,
             ),
+            suspension_limiter: Arc::new(suspension_limiter::SuspendedQueryLimiter::new(
+                max_concurrent_query_outcalls,
+                max_concurrent_query_outcalls_per_canister,
+            )),
         }
     }
 
@@ -168,8 +199,9 @@ impl InternalHttpQueryHandler {
         self.local_query_execution_stats.set_epoch(epoch);
     }
 
-    /// Handle a query of type `Query`.
-    pub fn query(
+    /// Starts executing a query, returning either its result or, if it made an
+    /// HTTP outcall, the suspension to hand to [`Self::resume_query`].
+    pub(crate) fn start_query(
         &self,
         query: Query,
         state: Labeled<Arc<ReplicatedState>>,
@@ -177,7 +209,7 @@ impl InternalHttpQueryHandler {
         enable_query_stats_tracking: bool,
         instruction_observation: Option<Arc<AtomicU64>>,
         max_instructions: Option<NumInstructions>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> QueryStep {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
         // While the subnet is cooling down it rejects all query calls, the ones
@@ -187,18 +219,24 @@ impl InternalHttpQueryHandler {
         if matches!(query.source, QuerySource::User { .. })
             && state.get_ref().metadata.is_cooling_down()
         {
-            return Err(UserError::new(
-                ErrorCode::SubnetCoolingDown,
-                format!(
-                    "Subnet {} is cooling down and does not accept query calls",
-                    state.get_ref().metadata.own_subnet_id
-                ),
-            ));
+            return QueryStep::Finished {
+                result: Err(UserError::new(
+                    ErrorCode::SubnetCoolingDown,
+                    format!(
+                        "Subnet {} is cooling down and does not accept query calls",
+                        state.get_ref().metadata.own_subnet_id
+                    ),
+                )),
+                batch_time: state.get_ref().metadata.batch_time,
+            };
         }
 
         // Serve the query locally if it is addressed to the management canister.
         if query.receiver == CanisterId::ic_00() {
-            let method = subnet_query::parse_user_query_method(&query.method_name)?;
+            let method = match subnet_query::parse_user_query_method(&query.method_name) {
+                Ok(method) => method,
+                Err(err) => return QueryStep::Finished(Err(err)),
+            };
             let since = Instant::now(); // Start logging execution time.
             let result = subnet_query::execute_subnet_query(
                 &self.canister_manager,
@@ -213,7 +251,7 @@ impl InternalHttpQueryHandler {
                 since.elapsed().as_secs_f64(),
                 &result,
             );
-            return result.map(WasmResult::Reply);
+            return QueryStep::Finished(result.map(WasmResult::Reply));
         }
 
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
@@ -239,7 +277,7 @@ impl InternalHttpQueryHandler {
                 self.query_cache
                     .get_valid_result(&key, state, query_stats_collector.as_deref())
             {
-                return result;
+                return QueryStep::Finished(result);
             }
             Some(key)
         } else {
@@ -302,6 +340,7 @@ impl InternalHttpQueryHandler {
             self.config.composite_queries,
             self.config.query_http_requests,
             self.config.max_query_outcalls_per_query,
+            Arc::clone(&self.suspension_limiter),
             query.receiver,
             Arc::clone(&self.metrics),
             query_stats_collector,
@@ -309,9 +348,137 @@ impl InternalHttpQueryHandler {
             instruction_observation,
         );
 
-        let result = context.run(query, &self.metrics, &measurement_scope);
+        let batch_time = state.get_ref().metadata.batch_time;
+        let outcome = context.run(query, &self.metrics, &measurement_scope);
 
-        self.finalize(&mut context, result, cache_entry_key)
+        self.step_from_outcome(context, outcome, cache_entry_key, batch_time)
+    }
+
+    /// Resumes a suspended query. It carries the state snapshot it started
+    /// with, so it cannot observe a different height on resumption.
+    pub(crate) fn resume_query(
+        &self,
+        suspended: Box<SuspendedQuery>,
+        result: QueryOutcallOutcome,
+    ) -> QueryStep {
+        let SuspendedQuery {
+            mut context,
+            call_graph,
+            pending,
+            cache_entry_key,
+            batch_time,
+        } = *suspended;
+
+        // A fresh scope per step: one spanning the outcall would fold the wait
+        // into the execution histograms.
+        let measurement_scope = MeasurementScope::root(&self.metrics.query);
+        let outcome = context.resume(
+            call_graph,
+            pending,
+            result,
+            &self.metrics,
+            &measurement_scope,
+        );
+
+        self.step_from_outcome(context, outcome, cache_entry_key, batch_time)
+    }
+
+    fn step_from_outcome(
+        &self,
+        mut context: query_context::QueryContext,
+        outcome: query_context::RunOutcome,
+        cache_entry_key: Option<query_cache::EntryKey>,
+        batch_time: Time,
+    ) -> QueryStep {
+        match outcome {
+            query_context::RunOutcome::Finished(result) => {
+                QueryStep::Finished(self.finalize(&mut context, result, cache_entry_key))
+            }
+            query_context::RunOutcome::Suspended(call_graph, pending) => {
+                let outcall = pending.outcall.clone();
+                QueryStep::Suspended {
+                    suspended: Box::new(SuspendedQuery {
+                        context,
+                        call_graph,
+                        pending,
+                        cache_entry_key,
+                        batch_time,
+                    }),
+                    outcall,
+                }
+            }
+        }
+    }
+
+    /// Executes a query that is not allowed to suspend, for callers with no way
+    /// to perform an outcall.
+    pub fn query(
+        &self,
+        query: Query,
+        state: Labeled<Arc<ReplicatedState>>,
+        data_certificate_with_delegation_metadata: Option<DataCertificateWithDelegationMetadata>,
+        enable_query_stats_tracking: bool,
+        instruction_observation: Option<Arc<AtomicU64>>,
+        max_instructions: Option<NumInstructions>,
+    ) -> Result<WasmResult, UserError> {
+        match self.start_query(
+            query,
+            state,
+            data_certificate_with_delegation_metadata,
+            enable_query_stats_tracking,
+            instruction_observation,
+            max_instructions,
+        ) {
+            QueryStep::Finished(result) => result,
+            QueryStep::Suspended { .. } => {
+                error!(
+                    self.log,
+                    "[EXC-BUG] A query suspended for an HTTP outcall in a context that cannot \
+                     resume it. This is a bug @{}",
+                    QUERY_HANDLER_CRITICAL_ERROR
+                );
+                self.metrics.query_critical_error.inc();
+                Err(UserError::new(
+                    ErrorCode::QueryCallGraphInternal,
+                    "HTTP outcalls from queries are not supported in this execution context",
+                ))
+            }
+        }
+    }
+
+    /// Runs a query to completion, resolving its outcalls with `outcall_handler`.
+    ///
+    /// Test-only, exercising suspend/resume with no runtime and no adapter. Not
+    /// `#[cfg(test)]` because the test utilities live in another crate.
+    #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn query_with_outcall_handler_for_testing(
+        &self,
+        query: Query,
+        state: Labeled<Arc<ReplicatedState>>,
+        data_certificate_with_delegation_metadata: Option<DataCertificateWithDelegationMetadata>,
+        enable_query_stats_tracking: bool,
+        instruction_observation: Option<Arc<AtomicU64>>,
+        max_instructions: Option<NumInstructions>,
+        outcall_handler: &mut dyn FnMut(QueryOutcallRequest) -> QueryOutcallOutcome,
+    ) -> Result<WasmResult, UserError> {
+        let mut step = self.start_query(
+            query,
+            state,
+            data_certificate_with_delegation_metadata,
+            enable_query_stats_tracking,
+            instruction_observation,
+            max_instructions,
+        );
+        loop {
+            match step {
+                QueryStep::Finished(result) => return result,
+                QueryStep::Suspended { suspended, outcall } => {
+                    let result = outcall_handler(outcall);
+                    step = self.resume_query(suspended, result);
+                }
+            }
+        }
     }
 
     /// Records a finished execution's errors and metrics, and offers its result

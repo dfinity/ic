@@ -18,6 +18,7 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
+ic-https-outcalls-pricing = { path = "../https_outcalls/pricing" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-limits = { path = "../limits" }
