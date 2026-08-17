@@ -5,8 +5,8 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            FlexibleFindResult, ResponseShareSigInput, find_async_receipts, find_flexible_result,
-            find_fully_replicated_response, find_non_flexible_out_of_cycles,
+            FlexibleFindResult, RefundedNodes, ResponseShareSigInput, find_async_receipts,
+            find_flexible_result, find_fully_replicated_response, find_non_flexible_out_of_cycles,
             find_non_replicated_response, group_shares_by_callback_id,
             grouped_shares_meet_divergence_criteria, response_share_sig_inputs,
             validate_flexible_response_with_proof, validate_response_share,
@@ -408,13 +408,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 };
                 // Skip shares for nodes that have already issued a refund for this request,
                 // according to the certified state or any past payload above it.
-                let already_refunded = |node_id: &NodeId| {
-                    request.refund_status.refunding_nodes.contains(node_id)
-                        || refunded_nodes
-                            .get(callback_id)
-                            .is_some_and(|nodes| nodes.contains(node_id))
-                };
-                for share in find_async_receipts(grouped_shares, &committee, already_refunded) {
+                let already_refunded = RefundedNodes::new(*callback_id, request, &refunded_nodes);
+                for share in find_async_receipts(grouped_shares, &committee, &already_refunded) {
                     if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
                         break;
                     }
@@ -1192,17 +1187,14 @@ impl CanisterHttpPayloadBuilderImpl {
             })?;
 
             // A replica may only be refunded once.
+            let already_refunded = RefundedNodes::new(callback_id, context, &refunded_nodes);
             let mut seen_signers = HashSet::new();
             for &share in &shares {
                 validate_response_share(share, callback_id, &committee, &mut seen_signers, context)
                     .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
                 let signer = share.signature.signer;
-                if context.refund_status.refunding_nodes.contains(&signer)
-                    || refunded_nodes
-                        .get(&callback_id)
-                        .is_some_and(|nodes| nodes.contains(&signer))
-                {
+                if already_refunded.contains(&signer) {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::AlreadyRefunded {
                         callback_id,
                         signer,
