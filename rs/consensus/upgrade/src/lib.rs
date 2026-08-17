@@ -22,23 +22,23 @@ use std::collections::BTreeSet;
 pub mod payload_builder;
 pub mod pool_manager;
 
-pub(crate) struct SubnetMembership {
+pub struct SubnetMembership {
     /// The actual current members: registry membership at the CUP/summary
     /// version for the block height (changes only at DKG interval boundaries).
-    pub(crate) current_members: BTreeSet<NodeId>,
+    pub current_members: BTreeSet<NodeId>,
     /// Current members staying even at the new CUP: still present at the
     /// block's registry version.
-    pub(crate) staying_members: BTreeSet<NodeId>,
+    pub staying_members: BTreeSet<NodeId>,
 }
 
 impl SubnetMembership {
     /// Is the node a current member staying even at the new CUP?
-    pub(crate) fn staying(&self, node: &NodeId) -> bool {
+    pub fn staying(&self, node: &NodeId) -> bool {
         self.staying_members.contains(node)
     }
 
     /// Capacity quantities derived from the current subnet size.
-    pub(crate) fn limits(&self) -> PermitLimits {
+    pub fn limits(&self) -> PermitLimits {
         let subnet_size = self.current_members.len();
         let max_parallel_reboots = UpgradeState::max_parallel_reboots(subnet_size);
         PermitLimits {
@@ -48,15 +48,15 @@ impl SubnetMembership {
     }
 }
 
-pub(crate) struct PermitLimits {
+pub struct PermitLimits {
     /// The maximum number of nodes that may reboot in parallel (P ≤ f).
-    pub(crate) max_parallel_reboots: usize,
+    pub max_parallel_reboots: usize,
     /// The number of distinct shares required to authorize a reboot (N−P).
-    pub(crate) authorization_threshold: usize,
+    pub authorization_threshold: usize,
 }
 
 /// Subnet membership at the block height and registry version.
-pub(crate) fn subnet_membership(
+pub fn subnet_membership(
     membership: &Membership,
     block_height: Height,
     block_registry_version: RegistryVersion,
@@ -91,7 +91,7 @@ pub(crate) fn subnet_membership(
 /// Check one share: the content must match `(requestor_node, request_height)`,
 /// the signer must be a staying member, and the signature must verify against
 /// the signer's node key at `registry_version`. Returns the signer.
-pub(crate) fn validate_share(
+pub fn validate_share(
     share: &UpgradePermitAuthorizationShare,
     requestor_node: NodeId,
     request_height: Height,

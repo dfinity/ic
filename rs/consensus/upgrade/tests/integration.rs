@@ -10,14 +10,18 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_mocks::dependencies_with_subnet_records_with_raw_state_manager;
 use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilder;
 use ic_consensus_upgrade::pool_manager::UpgradePermitAuthPoolManager;
+use ic_consensus_upgrade::subnet_membership;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext};
+use ic_interfaces::consensus::PayloadValidationError;
 use ic_interfaces::p2p::consensus::{MutablePool, PoolMutationsProducer, UnvalidatedArtifact};
 use ic_interfaces::upgrade_permit_auth::UpgradePermitAuthPool;
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::UpgradeState;
 use ic_replicated_state::ReplicatedState;
@@ -25,14 +29,18 @@ use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::artifact_pool_config::with_test_pool_config;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
-use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::batch::{
     bytes_to_upgrade_payload, upgrade_payload_to_bytes, BatchPayload, ValidationContext,
 };
-use ic_types::consensus::upgrade::UpgradePermitAction;
-use ic_types::consensus::{BlockPayload, BlockProposal, DataPayload, Payload};
-use ic_types::crypto::{CryptoHash, CryptoHashOf};
+use ic_types::consensus::upgrade::{UpgradePermitAction, UpgradePermitShares};
+use ic_types::consensus::{
+    BlockPayload, BlockProposal, DataPayload, Payload, UpgradePermitAuthorizationContent,
+    UpgradePermitAuthorizationShare,
+};
+use ic_types::crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf};
+use ic_types::signature::BasicSignature;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{Height, NodeId, NumBytes, PlatformVersion, RegistryVersion, ReplicaVersion};
 
@@ -48,6 +56,8 @@ struct TestFixture {
     membership: Arc<Membership>,
     state_manager: Arc<RefMockStateManager>,
     crypto: Arc<dyn ConsensusCrypto>,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry: Arc<FakeRegistryClient>,
     needs_reboot: PlatformVersion,
     rebooted: PlatformVersion,
     pools: Vec<Arc<RwLock<UpgradePermitAuthPoolImpl>>>,
@@ -69,22 +79,25 @@ impl TestFixture {
             crypto,
             membership,
             state_manager,
+            registry_data_provider,
+            registry,
             pool,
             ..
         } = deps;
         let state = Arc::new(ReplicatedState::new(subnet_test_id(0), SubnetType::Application));
         // `get_state_at` is called by the DKG payload builder when the pool
         // fabricates blocks; `get_latest_certified_state` by the upgrade
-        // payload builder.
+        // payload builder. Tests that only resolve membership or validate
+        // synthetic payloads may call neither.
         state_manager
             .get_mut()
             .expect_get_state_at()
-            .times(1..)
+            .times(0..)
             .return_const(Ok(Labeled::new(Height::new(0), state.clone())));
         state_manager
             .get_mut()
             .expect_get_latest_certified_state()
-            .times(1..)
+            .times(0..)
             .return_const(Some(Labeled::new(Height::new(0), state)));
 
         let block_cache = pool.get_block_cache();
@@ -124,6 +137,8 @@ impl TestFixture {
             membership,
             state_manager,
             crypto,
+            registry_data_provider,
+            registry,
             pools,
             managers,
             committed: UpgradeState::default(),
@@ -195,19 +210,28 @@ impl TestFixture {
         self.blocks.push((height, block));
     }
 
-    /// Validate the actions as the block of `proposer` from the perspective
-    /// of every node; all must accept.
-    fn validates_all(&self, proposer: usize, actions: &[UpgradePermitAction]) {
+    /// Validate the actions as the block of `proposer` at the given
+    /// registry version, from the perspective of every node.
+    fn validation_results(
+        &self,
+        proposer: usize,
+        actions: &[UpgradePermitAction],
+        registry_version: RegistryVersion,
+    ) -> Vec<(NodeId, Result<(), PayloadValidationError>)> {
         let payload = upgrade_payload_to_bytes(actions.to_vec(), MAX_SIZE);
         let past: Vec<_> = self
             .blocks
             .iter()
             .map(|(height, payload)| past_payload(*height, payload))
             .collect();
-        let context = context();
-        for validator in 0..self.nodes.len() {
-            self.builder(validator, self.rebooted.clone())
-                .validate_payload(
+        let context = ValidationContext {
+            certified_height: Height::new(0),
+            registry_version,
+            time: UNIX_EPOCH,
+        };
+        (0..self.nodes.len())
+            .map(|validator| {
+                let result = self.builder(validator, self.rebooted.clone()).validate_payload(
                     self.next_height(),
                     &ProposalContext {
                         proposer: self.nodes[proposer],
@@ -215,16 +239,35 @@ impl TestFixture {
                     },
                     &payload,
                     &past,
+                );
+                (self.nodes[validator], result)
+            })
+            .collect()
+    }
+
+    /// Validate the actions as the block of `proposer` at the current
+    /// registry version; every node must accept.
+    fn validates_all(&self, proposer: usize, actions: &[UpgradePermitAction]) {
+        for (node, result) in self.validation_results(proposer, actions, RegistryVersion::new(1)) {
+            result.unwrap_or_else(|e| {
+                panic!(
+                    "node {:?} must validate node {:?}'s block: {:?}",
+                    node, self.nodes[proposer], e
                 )
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "node {:?} must validate node {:?}'s block: {:?}",
-                        self.nodes[validator],
-                        self.nodes[proposer],
-                        e
-                    )
-                });
+            });
         }
+    }
+
+    /// Apply a registry delta after pool creation, so the committee (frozen
+    /// in the genesis CUP) stays behind the registry.
+    fn apply_membership_delta(&self, version: u64, nodes: Vec<NodeId>) {
+        add_subnet_record(
+            &self.registry_data_provider,
+            version,
+            subnet_test_id(0),
+            SubnetRecordBuilder::from(&nodes).build(),
+        );
+        self.registry.update_to_latest_version();
     }
 
     /// Deliver all validated shares to the other nodes' pools, and let the
@@ -339,6 +382,21 @@ fn assert_return(actions: &[UpgradePermitAction], node: NodeId) {
     );
 }
 
+/// A share `signer` has signed for `node`'s request at `request_height`.
+/// Signatures are not verified by the test crypto.
+fn share(signer: u64, node: u64, request_height: Height) -> UpgradePermitAuthorizationShare {
+    UpgradePermitAuthorizationShare {
+        content: UpgradePermitAuthorizationContent {
+            node: node_test_id(node),
+            request_height,
+        },
+        signature: BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![])),
+            signer: node_test_id(signer),
+        },
+    }
+}
+
 /// End-to-end permit lifecycle with realistic block-maker rotation: the
 /// requester never authorizes itself — the next block maker is still
 /// collecting shares, and the one after carries the authorization.
@@ -401,6 +459,16 @@ fn test_request_expires() {
         fx.finalize(actions);
         assert!(fx.committed().requested.contains_key(&fx.node(0)));
 
+        // While the request still holds the only slot, every validator
+        // rejects a second request.
+        let second = vec![UpgradePermitAction::Request {
+            node: fx.node(0),
+            request_height: fx.next_height(),
+        }];
+        for (node, result) in fx.validation_results(0, &second, RegistryVersion::new(1)) {
+            assert!(result.is_err(), "node {:?} must reject the second request", node);
+        }
+
         // No shares are gathered; empty blocks pass the timeout.
         for _ in 0..21 {
             fx.finalize(vec![]);
@@ -410,5 +478,91 @@ fn test_request_expires() {
         // The slot is free again, so node 0 can re-request.
         let actions = fx.build(0, fx.needs_reboot.clone());
         assert_request(&actions, fx.node(0));
+    });
+}
+
+/// The block's registry version pins the membership: validators with a
+/// newer registry (a node removal landed) still accept a block whose context
+/// pins the older version, and reject it at the newer one.
+#[test]
+fn test_block_registry_version_pins_membership() {
+    with_test_pool_config(|pool_config| {
+        let mut fx = TestFixture::new(4, pool_config);
+        // Committee frozen at V1 with 4 nodes; the removal lands at V2.
+        fx.apply_membership_delta(2, (0..3).map(node_test_id).collect());
+
+        // A request from node 0 finalized at V1.
+        let h1 = fx.next_height();
+        let request = vec![UpgradePermitAction::Request {
+            node: fx.node(0),
+            request_height: h1,
+        }];
+        fx.validates_all(0, &request);
+        fx.finalize(request);
+
+        let authorize = vec![UpgradePermitAction::Authorize(UpgradePermitShares {
+            node: fx.node(0),
+            shares: vec![share(1, 0, h1), share(2, 0, h1), share(3, 0, h1)],
+        })];
+        // At the block's version V1 all three signers are staying: accept.
+        for (node, result) in fx.validation_results(0, &authorize, RegistryVersion::new(1)) {
+            result.unwrap_or_else(|e| panic!("node {:?} must validate at V1: {:?}", node, e));
+        }
+        // At V2 node 3 is not staying even though the committee still
+        // contains it: everyone rejects.
+        for (node, result) in fx.validation_results(0, &authorize, RegistryVersion::new(2)) {
+            assert!(result.is_err(), "node {:?} must reject at V2", node);
+        }
+
+        // A request from the block itself cannot be authorized in the same
+        // block: shares only exist for requests in earlier blocks.
+        let h2 = fx.next_height();
+        let same_block = vec![
+            UpgradePermitAction::Request {
+                node: fx.node(0),
+                request_height: h2,
+            },
+            UpgradePermitAction::Authorize(UpgradePermitShares {
+                node: fx.node(0),
+                shares: vec![share(1, 0, h2), share(2, 0, h2), share(3, 0, h2)],
+            }),
+        ];
+        for (node, result) in fx.validation_results(0, &same_block, RegistryVersion::new(1)) {
+            assert!(
+                result.is_err(),
+                "node {:?} must reject the same-block authorize",
+                node
+            );
+        }
+    });
+}
+
+/// The committee only changes at DKG interval boundaries (CUP/summary
+/// version); a removal is reflected in the staying set once the block's
+/// registry version includes it.
+#[test]
+fn test_membership_at_pinned_version() {
+    with_test_pool_config(|pool_config| {
+        let fx = TestFixture::new(4, pool_config);
+
+        let v1 = subnet_membership(
+            &fx.membership,
+            Height::new(10),
+            RegistryVersion::new(1),
+            &no_op_logger(),
+        );
+        assert_eq!(v1.current_members.len(), 4);
+        assert_eq!(v1.staying_members.len(), 4);
+
+        fx.apply_membership_delta(2, (0..3).map(node_test_id).collect());
+        let v2 = subnet_membership(
+            &fx.membership,
+            Height::new(10),
+            RegistryVersion::new(2),
+            &no_op_logger(),
+        );
+        assert_eq!(v2.current_members.len(), 4);
+        assert_eq!(v2.staying_members.len(), 3);
+        assert!(!v2.staying_members.contains(&fx.node(3)));
     });
 }
