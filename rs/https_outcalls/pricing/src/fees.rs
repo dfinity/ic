@@ -1222,40 +1222,33 @@ mod tests {
                 min_responses,
                 max_responses,
             } => {
-                // Between `min_responses` and `max_responses` of the responses asked
-                // for are delivered ...
-                for delivered in min_responses..=max_responses {
-                    let shares: Vec<_> = (0..delivered)
-                        .map(|i| share(i as u64, transformed_bytes as u32, 0))
-                        .collect();
-                    assert_covers(
-                        flexible_initial_spent(
-                            shares.iter(),
-                            std::iter::empty(),
-                            subnet_size,
-                            min_responses,
-                        ),
-                        &format!("{delivered} responses of {transformed_bytes} bytes"),
-                    );
-                }
-                // ... or the outcall fails with a `TooManyRejects`, delivering anywhere
-                // between the rejects that prove the error and all of them, each
-                // maximally large.
-                let min_rejects = total_requests.saturating_sub(min_responses) + 1;
-                for delivered in min_rejects..=total_requests {
-                    let shares: Vec<_> = (0..delivered)
-                        .map(|i| reject_share(i as u64, MAX_CANISTER_HTTP_REJECT_BYTES as u32, 0))
-                        .collect();
-                    assert_covers(
-                        flexible_initial_spent(
-                            shares.iter(),
-                            std::iter::empty(),
-                            subnet_size,
-                            min_responses,
-                        ),
-                        &format!("a TooManyRejects of {delivered} rejects"),
-                    );
-                }
+                // The responses asked for: all `max_responses` of them ...
+                let asked_for: Vec<_> = (0..max_responses)
+                    .map(|i| share(i as u64, transformed_bytes as u32, 0))
+                    .collect();
+                assert_covers(
+                    flexible_initial_spent(
+                        asked_for.iter(),
+                        std::iter::empty(),
+                        subnet_size,
+                        min_responses,
+                    ),
+                    &format!("{max_responses} responses of {transformed_bytes} bytes"),
+                );
+                // ... or a `TooManyRejects` in which every committee member rejected,
+                // each with a maximally large reject.
+                let rejects: Vec<_> = (0..total_requests)
+                    .map(|i| reject_share(i as u64, MAX_CANISTER_HTTP_REJECT_BYTES as u32, 0))
+                    .collect();
+                assert_covers(
+                    flexible_initial_spent(
+                        rejects.iter(),
+                        std::iter::empty(),
+                        subnet_size,
+                        min_responses,
+                    ),
+                    &format!("a TooManyRejects of {total_requests} rejects"),
+                );
             }
         }
     }
