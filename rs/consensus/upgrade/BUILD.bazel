@@ -36,11 +36,13 @@ rust_test(
     crate = ":upgrade",
     deps = [
         # Keep sorted.
+        "//rs/artifact_pool",
         "//rs/consensus/mocks",
         "//rs/consensus/utils",
         "//rs/interfaces",
         "//rs/interfaces/state_manager",
         "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
         "//rs/protobuf",
         "//rs/registry/fake",
         "//rs/registry/proto_data_provider",
@@ -51,5 +53,33 @@ rust_test(
         "//rs/test_utilities/types",
         "//rs/types/types",
         "@crate_index//:num-traits",
+    ],
+)
+
+rust_test(
+    name = "consensus_upgrade_integration_test",
+    srcs = ["tests/integration.rs"],
+    deps = [
+        # Keep sorted.
+        ":upgrade",
+        "//rs/artifact_pool",
+        "//rs/config",
+        "//rs/consensus/mocks",
+        "//rs/consensus/utils",
+        "//rs/interfaces",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/fake",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/test_utilities",
+        "//rs/test_utilities/artifact_pool",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/types",
+        "//rs/types/types",
     ],
 )

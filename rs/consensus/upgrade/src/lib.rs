@@ -42,7 +42,6 @@ impl SubnetMembership {
         let subnet_size = self.current_members.len();
         let max_parallel_reboots = UpgradeState::max_parallel_reboots(subnet_size);
         PermitLimits {
-            subnet_size,
             max_parallel_reboots,
             authorization_threshold: subnet_size.saturating_sub(max_parallel_reboots),
         }
@@ -50,8 +49,6 @@ impl SubnetMembership {
 }
 
 pub(crate) struct PermitLimits {
-    /// The number of current subnet members (N).
-    pub(crate) subnet_size: usize,
     /// The maximum number of nodes that may reboot in parallel (P ≤ f).
     pub(crate) max_parallel_reboots: usize,
     /// The number of distinct shares required to authorize a reboot (N−P).

@@ -13,6 +13,7 @@ ic-consensus-idkg = { path = "./idkg" }
 ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
 ic-consensus-chain-key = { path = "./chain_key" }
+ic-consensus-upgrade = { path = "./upgrade" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../../packages/ic-error-types" }

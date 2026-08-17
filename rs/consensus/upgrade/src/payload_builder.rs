@@ -349,7 +349,9 @@ mod tests {
             deps.state_manager
                 .get_mut()
                 .expect_get_latest_certified_state()
-                .times(1..)
+                // Tests that only resolve membership (e.g. the pinned-version
+                // test) never read the certified state.
+                .times(0..)
                 .return_const(Some(Labeled::new(Height::new(0), state)));
             TestSetup {
                 builder: UpgradePayloadBuilder::new(
