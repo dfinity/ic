@@ -962,13 +962,6 @@ impl SchedulerTestBuilder {
         }
     }
 
-    pub fn with_replica_version(self, replica_version: ReplicaVersion) -> Self {
-        Self {
-            replica_version,
-            ..self
-        }
-    }
-
     pub fn with_cost_schedule(self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
         Self {
             cost_schedule,
