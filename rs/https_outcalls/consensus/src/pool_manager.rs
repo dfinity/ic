@@ -116,6 +116,7 @@ impl CanisterHttpPoolManagerImpl {
     /// i.e. whose contexts are no longer part of the replicated state.
     fn purge_shares_of_processed_requests(
         &self,
+        state: &ReplicatedState,
         canister_http_pool: &dyn CanisterHttpPool,
     ) -> CanisterHttpChangeSet {
         let _time = self
@@ -124,8 +125,11 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["purge_shares"])
             .start_timer();
 
-        let known_callback_ids = self.known_callback_ids();
-        let next_callback_id = self.next_callback_id();
+        let known_callback_ids = Self::known_callback_ids(state);
+        let next_callback_id = state
+            .metadata
+            .subnet_call_context_manager
+            .next_callback_id();
 
         let ids_to_remove_from_cache: Vec<_> = self
             .requested_id_cache
@@ -256,15 +260,18 @@ impl CanisterHttpPoolManagerImpl {
     }
 
     /// Inform the HttpAdapterShim of any new requests that must be made.
-    fn make_new_requests(&self, canister_http_pool: &dyn CanisterHttpPool) {
+    fn make_new_requests(
+        &self,
+        state: &ReplicatedState,
+        canister_http_pool: &dyn CanisterHttpPool,
+    ) {
         let _time = self
             .metrics
             .op_duration
             .with_label_values(&["make_new_requests"])
             .start_timer();
 
-        let http_requests = &self
-            .latest_state()
+        let http_requests = &state
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
@@ -324,7 +331,7 @@ impl CanisterHttpPoolManagerImpl {
 
     /// Create any shares that should be made from responses provided by the
     /// HttpAdapterShim.
-    fn create_shares_from_responses(&self) -> CanisterHttpChangeSet {
+    fn create_shares_from_responses(&self, state: &ReplicatedState) -> CanisterHttpChangeSet {
         let _time = self
             .metrics
             .op_duration
@@ -332,7 +339,6 @@ impl CanisterHttpPoolManagerImpl {
             .start_timer();
         let mut change_set = Vec::new();
 
-        let state = self.latest_state();
         let subnet_call_context_manager = &state.metadata.subnet_call_context_manager;
         let active_contexts = &subnet_call_context_manager.canister_http_request_contexts;
         let delivered_contexts =
@@ -415,19 +421,22 @@ impl CanisterHttpPoolManagerImpl {
     }
 
     /// Validate any shares found in the unvalidated section of the canister http pool.
-    fn validate_shares(&self, canister_http_pool: &dyn CanisterHttpPool) -> CanisterHttpChangeSet {
+    fn validate_shares(
+        &self,
+        state: &ReplicatedState,
+        canister_http_pool: &dyn CanisterHttpPool,
+    ) -> CanisterHttpChangeSet {
         let _time = self
             .metrics
             .op_duration
             .with_label_values(&["validate_shares"])
             .start_timer();
 
-        let state = self.latest_state();
         let subnet_call_context_manager = &state.metadata.subnet_call_context_manager;
         let active_contexts = &subnet_call_context_manager.canister_http_request_contexts;
         let delivered_contexts =
             &subnet_call_context_manager.delivered_canister_http_request_contexts;
-        let next_callback_id = self.next_callback_id();
+        let next_callback_id = subnet_call_context_manager.next_callback_id();
 
         let key_from_share =
             |share: &CanisterHttpResponseShare| (share.signature.signer, share.content.id());
@@ -571,19 +580,20 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["generate_change_set"])
             .start_timer();
         let mut change_set = Vec::new();
+        let state = self.latest_state();
 
         // Whenever we have artifacts to purge, we insert the purge change actions before everything
         // else, to avoid having in the validated pool artifacts belonging to different epochs and
         // hence preserving the expected maximal number of artifacts in the pool.
-        change_set.extend(self.purge_shares_of_processed_requests(canister_http_pool));
+        change_set.extend(self.purge_shares_of_processed_requests(&state, canister_http_pool));
 
         // Make any requests that need to be made and create shares from responses
         // that are now available.
-        self.make_new_requests(canister_http_pool);
-        change_set.extend(self.create_shares_from_responses());
+        self.make_new_requests(&state, canister_http_pool);
+        change_set.extend(self.create_shares_from_responses(&state));
 
         // Attempt to validate unvalidated shares
-        change_set.extend(self.validate_shares(canister_http_pool));
+        change_set.extend(self.validate_shares(&state, canister_http_pool));
 
         self.metrics
             .in_client_requests
@@ -596,9 +606,8 @@ impl CanisterHttpPoolManagerImpl {
     /// still awaiting a response, plus those already responded to but still awaiting
     /// the [asynchronous receipts](ic_types::batch::CanisterHttpPayload::async_receipts)
     /// of the replicas that did not contribute to the response.
-    fn known_callback_ids(&self) -> BTreeSet<CallbackId> {
-        let state = self.state_reader.get_latest_state();
-        let subnet_call_context_manager = &state.get_ref().metadata.subnet_call_context_manager;
+    fn known_callback_ids(state: &ReplicatedState) -> BTreeSet<CallbackId> {
+        let subnet_call_context_manager = &state.metadata.subnet_call_context_manager;
         subnet_call_context_manager
             .canister_http_request_contexts
             .keys()
@@ -613,15 +622,6 @@ impl CanisterHttpPoolManagerImpl {
 
     fn latest_state(&self) -> Arc<ReplicatedState> {
         self.state_reader.get_latest_state().get_ref().clone()
-    }
-
-    fn next_callback_id(&self) -> CallbackId {
-        self.state_reader
-            .get_latest_state()
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .next_callback_id()
     }
 }
 
@@ -848,7 +848,8 @@ pub mod test {
                     log,
                 );
 
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // Make sure the changes are empty (share was filtered out)
                 assert!(changes.is_empty());
@@ -955,7 +956,8 @@ pub mod test {
                     log,
                 );
 
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
             })
@@ -1057,7 +1059,8 @@ pub mod test {
                     log,
                 );
 
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // The share is dropped silently (removed, not marked invalid).
                 assert_eq!(changes.len(), 1);
@@ -1177,7 +1180,8 @@ pub mod test {
                     log,
                 );
 
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // Make sure the second share is sorted out as invalid, for the right reason.
                 if let CanisterHttpChangeAction::HandleInvalid(_, err) = &changes[0] {
@@ -1280,7 +1284,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(&changes[0], CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Artifact should contain response");
                 }
@@ -1305,7 +1310,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(
                         &changes[0],
@@ -1334,7 +1340,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(
                         &changes[0],
@@ -1362,7 +1369,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(
                         &changes[0],
@@ -1457,7 +1465,8 @@ pub mod test {
                 );
 
                 // 4. ACTION: Our replica attempts to validate the artifact.
-                let change_set = pool_manager.validate_shares(&canister_http_pool);
+                let change_set =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // 5. ASSERTION: The artifact must be invalidated with the specific reason.
                 assert_eq!(change_set.len(), 1, "Expected exactly one change action");
@@ -1561,7 +1570,8 @@ pub mod test {
                     log,
                 );
 
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // The change action should be HandleInvalid because a fully replicated request's
                 // artifact must not contain a response in the unvalidated pool.
@@ -1672,7 +1682,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     // The error from `validate_response_size` itself.
                     let validation_err = format!(
@@ -1736,7 +1747,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
                 }
@@ -1841,7 +1853,8 @@ pub mod test {
                 });
 
                 // 4. VALIDATE: Call validate_shares and check the result.
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // 5. ASSERT: The artifact should be successfully validated and moved to the validated pool.
                 assert_eq!(changes.len(), 1);
@@ -1942,7 +1955,8 @@ pub mod test {
                 );
 
                 // 4. ACTION: Our replica attempts to validate the artifact.
-                let change_set = pool_manager.validate_shares(&canister_http_pool);
+                let change_set =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // 5. ASSERTION: The artifact is now correctly invalidated by the validate_content_size check.
                 assert_eq!(change_set.len(), 1, "Expected exactly one change action");
@@ -2040,7 +2054,8 @@ pub mod test {
                     log,
                 );
 
-                let change_set = pool_manager.validate_shares(&canister_http_pool);
+                let change_set =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 let expected_error = format!(
                     "Http Response for request ID {} is too large: Response size {} exceeds the maximum allowed size of {}",
@@ -2133,7 +2148,9 @@ pub mod test {
                     .insert(callback_id);
 
                 assert!(
-                    pool_manager.create_shares_from_responses().is_empty(),
+                    pool_manager
+                        .create_shares_from_responses(&pool_manager.latest_state())
+                        .is_empty(),
                     "an oversized response must not be signed",
                 );
                 // The request is deliberately *not* re-requested: the adapter would
@@ -2254,7 +2271,8 @@ pub mod test {
                 });
 
                 // 3. Call validate_shares and assert that the share is considered VALID.
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
             })
@@ -2516,7 +2534,8 @@ pub mod test {
                     .borrow_mut()
                     .insert(stale_callback_id);
 
-                let change_set = pool_manager.create_shares_from_responses();
+                let change_set =
+                    pool_manager.create_shares_from_responses(&pool_manager.latest_state());
 
                 // Only the response for the active context produces a share; the
                 // stale one is dropped.
@@ -2611,7 +2630,8 @@ pub mod test {
                 );
 
                 // 3. Call the function and get the change set.
-                let change_set = pool_manager.create_shares_from_responses();
+                let change_set =
+                    pool_manager.create_shares_from_responses(&pool_manager.latest_state());
 
                 // 4. Assert that the correct change action for gossiping the response was produced.
                 assert_eq!(change_set.len(), 1);
@@ -2914,7 +2934,8 @@ pub mod test {
                 );
 
                 // 4. ACTION: Our replica attempts to validate the artifact.
-                let change_set = pool_manager.validate_shares(&canister_http_pool);
+                let change_set =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // 5. ASSERTION: The artifact must be invalidated with the specific reason.
                 assert_eq!(change_set.len(), 1);
@@ -3022,7 +3043,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(
                         &changes[0],
@@ -3049,7 +3071,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(
                         &changes[0],
@@ -3077,7 +3100,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(
                         &changes[0],
@@ -3104,7 +3128,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(
                         &changes[0],
@@ -3216,7 +3241,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     let validation_err = format!(
                         "Response size {} exceeds the maximum allowed size of {}",
@@ -3278,7 +3304,8 @@ pub mod test {
                         timestamp: UNIX_EPOCH,
                     });
 
-                    let changes = pool_manager.validate_shares(&canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                     assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
                 }
@@ -3357,7 +3384,8 @@ pub mod test {
                 );
 
                 // 3. Call the function and get the change set.
-                let change_set = pool_manager.create_shares_from_responses();
+                let change_set =
+                    pool_manager.create_shares_from_responses(&pool_manager.latest_state());
 
                 // 4. Assert that the correct change action for gossiping the response was produced.
                 assert_eq!(change_set.len(), 1);
@@ -3467,7 +3495,8 @@ pub mod test {
                     log,
                 );
 
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 assert_eq!(changes.len(), 1);
                 assert_matches!(
@@ -3573,7 +3602,8 @@ pub mod test {
                     log,
                 );
 
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 // The share must not be invalidated for overspending.
                 assert_eq!(changes.len(), 1);
@@ -3790,7 +3820,8 @@ pub mod test {
                     log,
                 );
 
-                let changes = pool_manager.validate_shares(&canister_http_pool);
+                let changes =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
                 assert_matches!(
                     changes.as_slice(),
@@ -3885,8 +3916,10 @@ pub mod test {
                         log,
                     );
 
-                    let changes =
-                        pool_manager.purge_shares_of_processed_requests(&canister_http_pool);
+                    let changes = pool_manager.purge_shares_of_processed_requests(
+                        &pool_manager.latest_state(),
+                        &canister_http_pool,
+                    );
 
                     if delivered {
                         assert!(changes.is_empty(), "{changes:?}");
@@ -3980,7 +4013,8 @@ pub mod test {
                         .borrow_mut()
                         .insert(callback_id);
 
-                    let change_set = pool_manager.create_shares_from_responses();
+                    let change_set =
+                        pool_manager.create_shares_from_responses(&pool_manager.latest_state());
 
                     match replication {
                         // A peer recomputes the response itself, so only the receipt
@@ -4074,7 +4108,7 @@ pub mod test {
 
                 let canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                pool_manager.make_new_requests(&canister_http_pool);
+                pool_manager.make_new_requests(&pool_manager.latest_state(), &canister_http_pool);
 
                 // Only the request that is still awaiting a response was dispatched.
                 assert_eq!(
