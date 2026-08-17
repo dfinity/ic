@@ -169,7 +169,7 @@ pub struct CanisterMemoryHandling {
 // is constructed once per operation and consumed right away.
 #[allow(clippy::large_enum_variant)]
 pub enum MemorySource<'a> {
-    /// Install and re-install: keep the initial memories of the new module.
+    /// Install and re-install: use the newly installed module's initial memories.
     Fresh,
     /// Upgrade: carry over the memories of `old` as directed by `handling`.
     Preserve {
