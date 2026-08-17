@@ -171,8 +171,9 @@ fn main() -> Result<()> {
             &UPD_IMG_DEFAULT_URL.replace("<REPLICA_VERSION>", valid_args.replica_version.as_ref()),
         )?;
         valid_args.release_package_download_url = Some(url);
-        valid_args.release_package_sha256_hex =
-            Some(fetch_replica_version_sha256(valid_args.replica_version.clone())?);
+        valid_args.release_package_sha256_hex = Some(fetch_replica_version_sha256(
+            valid_args.replica_version.clone(),
+        )?);
     }
 
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
