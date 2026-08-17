@@ -2073,6 +2073,7 @@ fn should_retrieve_minter_info() {
                 ERC20_HELPER_CONTRACT_ADDRESS
             )),
             deposit_with_subaccount_helper_contract_address: None,
+            sweeper_contract_address: None,
             supported_ckerc20_tokens: Some(supported_ckerc20_tokens),
             minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
