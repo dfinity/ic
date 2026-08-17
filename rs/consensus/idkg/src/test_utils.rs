@@ -21,7 +21,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
-pub(crate) use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::*, idkg::*};
+use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::*, idkg::*};
 use ic_test_utilities_types::ids::{NODE_1, NODE_2, node_test_id};
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
@@ -33,6 +33,7 @@ use ic_types::{
         MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
         SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening, TranscriptAttributes,
         TranscriptLookupError, TranscriptRef, UnmaskedTranscript, VetKdKeyShare,
+        common::PreSignatureRef,
     },
     crypto::{
         AlgorithmId,
@@ -1135,6 +1136,67 @@ pub(crate) fn create_reshare_request(
 
 pub(crate) fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
     TempCryptoComponent::builder().build_arc()
+}
+
+pub fn create_available_pre_signature(
+    idkg_payload: &mut IDkgPayload,
+    key_id: IDkgMasterPublicKeyId,
+    caller: u8,
+) -> PreSigId {
+    create_available_pre_signature_with_key_transcript(
+        idkg_payload,
+        caller,
+        key_id,
+        /*key_transcript=*/ None,
+    )
+}
+
+pub fn create_available_pre_signature_with_key_transcript(
+    idkg_payload: &mut IDkgPayload,
+    caller: u8,
+    key_id: IDkgMasterPublicKeyId,
+    key_transcript: Option<UnmaskedTranscript>,
+) -> PreSigId {
+    create_available_pre_signature_with_key_transcript_and_height(
+        idkg_payload,
+        caller,
+        key_id,
+        key_transcript,
+        Height::new(0),
+    )
+}
+
+pub fn create_available_pre_signature_with_key_transcript_and_height(
+    idkg_payload: &mut IDkgPayload,
+    caller: u8,
+    key_id: IDkgMasterPublicKeyId,
+    key_transcript: Option<UnmaskedTranscript>,
+    height: Height,
+) -> PreSigId {
+    let inputs = create_pre_sig_ref_with_height(caller, height, &key_id);
+    let pre_sig_id = idkg_payload.uid_generator.next_pre_signature_id();
+    let mut pre_signature_ref = inputs.pre_signature_ref;
+    if let Some(transcript) = key_transcript {
+        match pre_signature_ref {
+            PreSignatureRef::Ecdsa(ref mut pre_sig) => {
+                pre_sig.key_unmasked_ref = transcript;
+            }
+            PreSignatureRef::Schnorr(ref mut pre_sig) => {
+                pre_sig.key_unmasked_ref = transcript;
+            }
+        }
+    }
+    idkg_payload
+        .available_pre_signatures
+        .insert(pre_sig_id, pre_signature_ref);
+
+    for (t_ref, transcript) in inputs.idkg_transcripts {
+        idkg_payload
+            .idkg_transcripts
+            .insert(t_ref.transcript_id, transcript);
+    }
+
+    pre_sig_id
 }
 
 pub(crate) fn set_up_idkg_payload(
