@@ -13,6 +13,13 @@
 //! every setup call race a round deadline it did not control, which reproducibly failed under CPU
 //! contention.
 //!
+//! Nothing gets lost in the switch: the minter's startup timers already schedule outcalls during
+//! that non-live phase, but PocketIC's auto-progress dispatch (`ProcessCanisterHttpInternal`)
+//! re-scans every canister's current `canister_http_request_contexts()` each round and sends
+//! whichever of them it has not already handed to the adapter, so outcalls created before
+//! [`auto_progress`](pocket_ic::PocketIc::auto_progress) starts are simply picked up and answered
+//! for real on its first round rather than dropped.
+//!
 //! The EVM RPC canister is installed with an `overrideProvider` that rewrites every provider URL to
 //! the harness' anvil node (reached over HTTP, mirroring the `evm_rpc_local` configuration of the
 //! EVM RPC canister), so the minter reads real Ethereum state from anvil once live: minter → EVM RPC

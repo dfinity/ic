@@ -94,8 +94,8 @@ impl CkErc20Setup {
         Self::without_ckerc20_active(CkEthSetup::default())
     }
 
-    /// The ckETH fixture builds the PocketIC instance (its Ethereum backend decides how), and the
-    /// orchestrator is then created on that same instance so both share one replica.
+    /// The ckETH fixture builds the PocketIC instance; the orchestrator is then created on that
+    /// same instance so both share one replica.
     fn without_ckerc20_active(cketh: CkEthSetup) -> Self {
         let env = cketh.env.clone();
         let orchestrator = LedgerSuiteOrchestrator::new(

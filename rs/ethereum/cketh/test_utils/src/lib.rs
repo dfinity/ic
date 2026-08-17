@@ -145,9 +145,9 @@ impl PocketIcHttpQuery for &CkEthSetup {
 }
 
 impl CkEthSetup {
-    /// Builds a fresh PocketIC instance (fiduciary subnet only, non-live, anonymous controller) and
-    /// installs the minter, its ckETH ledger and the EVM RPC canister on it against `backend`.
-    /// [`Default`] uses [`EthereumBackend::Mocked`]; [`live_scan`] passes
+    /// Builds a fresh PocketIC instance (fiduciary subnet only, non-live) and installs the minter,
+    /// its ckETH ledger and the EVM RPC canister on it — each under the anonymous controller —
+    /// against `backend`. [`Default`] uses [`EthereumBackend::Mocked`]; [`live_scan`] passes
     /// [`EthereumBackend::Anvil`] for the live balance-scan harness.
     fn new(backend: EthereumBackend) -> Self {
         let env = Arc::new(new_env());
@@ -780,18 +780,20 @@ fn evm_rpc_wasm() -> Vec<u8> {
 
 /// The minter, its ckETH ledger and the EVM RPC canister it calls out to. Built by
 /// [`create_cketh_canisters`] and installed by
-/// [`install_ledger`]/[`install_minter`]/[`install_evm_rpc`], identically for every backend.
+/// [`install_ledger`]/[`install_minter`]/[`install_evm_rpc`] in the same order for every backend;
+/// only the init args differ.
 struct CkEthCanisters {
     minter_id: Principal,
     ledger_id: Principal,
     evm_rpc_id: Principal,
 }
 
-/// Cycles every canister this fixture creates is funded with. `u128::MAX` — the natural "as much as
-/// possible" choice — reproducibly crashes the live harness' PocketIC replica with a
-/// cycle-accounting assertion failure (`Invalid cycle change`) on the minter's first HTTPS outcall:
-/// a canister already at the saturating `Cycles` balance ceiling cannot observe any further
-/// addition. This amount leaves headroom below that ceiling instead.
+/// Cycles every canister this fixture creates is funded with — mocked and live fixtures alike,
+/// deliberately the same amount rather than a second constant scoped to the live backend.
+/// `u128::MAX`, the natural "as much as possible" choice, reproducibly crashes the live harness'
+/// PocketIC replica with a cycle-accounting assertion failure (`Invalid cycle change`) on the
+/// minter's first HTTPS outcall, because a canister already at the saturating `Cycles` balance
+/// ceiling cannot observe any further addition; this amount leaves headroom below that ceiling.
 const CANISTER_CYCLES: u128 = u64::MAX as u128;
 
 fn create_cketh_canisters(env: &PocketIc) -> CkEthCanisters {
@@ -837,10 +839,12 @@ enum EthereumBackend {
     /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot.
     Mocked,
     /// A live anvil node, reached over HTTP at its own URL: a fresh chain with no finalized blocks
-    /// yet. Shared with the harness that started the node and keeps it running, hence the [`Arc`].
-    /// The canisters themselves are created and installed exactly as for
-    /// [`EthereumBackend::Mocked`]; [`crate::live_scan`] is the one that switches the PocketIC
-    /// instance to live outcalls, once its whole fixture is built.
+    /// yet. `Arc` because this is a clone shared with the harness that started the node and keeps
+    /// it running for the fixture's lifetime; this particular clone is dropped once
+    /// [`CkEthSetup::new`] returns, having done its job of computing the install args below. The
+    /// canisters themselves are created and installed in the same order as for
+    /// [`EthereumBackend::Mocked`] — only their init args differ; [`crate::live_scan`] is the one
+    /// that switches the PocketIC instance to live outcalls, once its whole fixture is built.
     Anvil(Arc<Anvil>),
 }
 
