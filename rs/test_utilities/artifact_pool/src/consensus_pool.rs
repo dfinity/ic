@@ -316,9 +316,7 @@ impl TestConsensusPool {
 
     pub fn make_next_beacon(&self) -> RandomBeacon {
         let beacon = self.validated().random_beacon().get_highest().unwrap();
-        let mut beacon = RandomBeacon::from_parent(&beacon);
-        beacon.content.version = self.replica_version.clone();
-        beacon
+        RandomBeacon::from_parent(&beacon)
     }
 
     pub fn make_next_tape(&self) -> RandomTape {

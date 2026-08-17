@@ -291,10 +291,6 @@ mod tests {
         parent: &Block,
         dkg_payload: DkgDataPayload,
     ) -> BlockProposal {
-        let replica_version = dkg_payload
-            .messages
-            .first()
-            .map_or_else(test_replica_version, |m| m.content.version.clone());
         let block = Block::new(
             crypto_hash(parent),
             Payload::new(
@@ -308,7 +304,7 @@ mod tests {
             parent.height.increment(),
             Rank(0),
             parent.context.clone(),
-            replica_version,
+            parent.version.clone(),
         );
         BlockProposal::fake(
             block,

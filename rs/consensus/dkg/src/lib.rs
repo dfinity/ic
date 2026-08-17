@@ -418,7 +418,6 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::create_dealing_with_replica_version;
     use crate::test_utils::{
         complement_state_manager_with_dkg_contexts,
         complement_state_manager_with_setup_initial_dkg_request, create_dealing,
@@ -2133,11 +2132,7 @@ mod tests {
                     dkg_tag: NiDkgTag::LowThreshold,
                     target_subnet: NiDkgTargetSubnet::Remote(target_id),
                 };
-                let remote_message = create_dealing_with_replica_version(
-                    1,
-                    remote_dkg_id,
-                    deps.replica_config.replica_version.clone(),
-                );
+                let remote_message = create_dealing(1, remote_dkg_id);
                 let other_target_id = NiDkgTargetId::new([10_u8; 32]);
                 let deferred_remote_dkg_id = NiDkgId {
                     start_block_height: start_height,
@@ -2145,11 +2140,7 @@ mod tests {
                     dkg_tag: NiDkgTag::LowThreshold,
                     target_subnet: NiDkgTargetSubnet::Remote(other_target_id),
                 };
-                let deferred_remote_message = create_dealing_with_replica_version(
-                    42,
-                    deferred_remote_dkg_id,
-                    deps.replica_config.replica_version.clone(),
-                );
+                let deferred_remote_message = create_dealing(42, deferred_remote_dkg_id);
                 dkg_pool.insert(UnvalidatedArtifact {
                     message: remote_message.clone(),
                     peer_id: node_test_id(1),

@@ -13,7 +13,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    Height, NumberOfNodes, RegistryVersion, ReplicaVersion,
+    Height, NumberOfNodes, RegistryVersion,
     consensus::{
         BlockPayload,
         dkg::{DealingContent, DealingMessages, Message, RemoteTranscriptResult},
@@ -158,16 +158,6 @@ pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> Message {
         dkg_id,
         test_replica_version(),
     );
-    Message::fake(content, node_test_id(node_idx))
-}
-
-/// Create a dealing from the node `node_idx`
-pub(super) fn create_dealing_with_replica_version(
-    node_idx: u64,
-    dkg_id: NiDkgId,
-    replica_version: ReplicaVersion,
-) -> Message {
-    let content = DealingContent::new(dummy_dealing(node_idx as u8), dkg_id, replica_version);
     Message::fake(content, node_test_id(node_idx))
 }
 
