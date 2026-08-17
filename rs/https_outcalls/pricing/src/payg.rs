@@ -618,7 +618,7 @@ mod tests {
             Replication::NonReplicated(node),
             flexible(4),
         ] {
-            for max_response_bytes in [None, Some(NumBytes::from(1_000))] {
+            for max_response_bytes in [None, Some(NumBytes::from(0)), Some(NumBytes::from(1_000))] {
                 let subnet_size = NumberOfNodes::from(13);
                 let node_count = replication.node_count(subnet_size);
                 let allowance =
@@ -628,10 +628,12 @@ mod tests {
                     ..context(replication.clone(), allowance.get())
                 };
                 assert_eq!(ctx.subnet_size, subnet_size);
-                // The largest response the validators would accept, which is what the
-                // worst case has to be funded for.
-                let delivered =
-                    NumBytes::from(ctx.max_http_outcall_content_size(/* is_reject = */ false));
+                // The largest response of either kind the validators would accept,
+                // which is what the worst case has to be funded for.
+                let delivered = NumBytes::from(
+                    ctx.max_http_outcall_content_size(/* is_reject = */ false)
+                        .max(ctx.max_http_outcall_content_size(/* is_reject = */ true)),
+                );
                 let mut tracker = PayAsYouGoTracker::new(&ctx);
 
                 let limits = tracker.get_adapter_limits();

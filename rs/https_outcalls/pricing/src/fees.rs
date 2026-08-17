@@ -296,20 +296,19 @@ pub(crate) fn max_consensus_fee(
             min_responses,
             max_responses,
         } => {
-            let flexible_fee = |responses: u32, response_bytes: u128| {
+            let flexible_fee = |responses: u32, bytes_each: u128| {
                 consensus_fee(
-                    (responses as u128).saturating_mul(
-                        FLEXIBLE_RESPONSE_SIZE_OVERHEAD.saturating_add(response_bytes),
-                    ),
+                    (responses as u128)
+                        .saturating_mul(FLEXIBLE_RESPONSE_SIZE_OVERHEAD.saturating_add(bytes_each)),
                     subnet_size,
                 ) + flexible_extra_response_fee(
                     responses.saturating_sub(min_responses),
                     subnet_size,
                 )
             };
-            let ok_response = flexible_fee(max_responses, response_bytes);
+            let ok_responses = flexible_fee(max_responses, response_bytes);
             let too_many_rejects = flexible_fee(total_requests, reject_bytes);
-            ok_response.max(too_many_rejects)
+            ok_responses.max(too_many_rejects)
         }
     }
 }

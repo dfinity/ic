@@ -95,7 +95,7 @@ pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
 /// Maximum size of a canister http reject message.
 pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 
-/// The [`CanisterHttpResponseContent::count_bytes`] of the largest
+/// The [`count_bytes`](CanisterHttpReject::count_bytes) of the largest
 /// [`CanisterHttpReject`] there is: a reject code plus a message of the maximum
 /// length.
 ///
@@ -104,7 +104,7 @@ pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 /// [`CanisterHttpRequestContext::max_http_outcall_content_size`]), so this is the
 /// response size any outcall may end up delivering, whatever size it asked for.
 pub const MAX_CANISTER_HTTP_REJECT_BYTES: u64 =
-    (size_of::<RejectCode>() + MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES) as u64;
+    CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES) as u64;
 
 /// Bytes reserved on top of a request's `max_response_bytes` for the Candid
 /// encoding of the response, since `max_response_bytes` is enforced on the
@@ -1029,7 +1029,7 @@ impl From<&CanisterHttpReject> for RejectContext {
 
 impl CanisterHttpReject {
     /// Same calculation as `Self::count_bytes` but from decomposed parts.
-    pub fn count_bytes_from_parts(message_len: usize) -> usize {
+    pub const fn count_bytes_from_parts(message_len: usize) -> usize {
         size_of::<RejectCode>() + message_len
     }
 }
