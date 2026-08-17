@@ -17,4 +17,9 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* `insert_upgrade_path_entries` now actually replaces an SNS-specific
+  emergency upgrade step when called again for the same SNS and starting
+  version, instead of silently keeping the old step while reporting
+  success.
+
 ## Security
