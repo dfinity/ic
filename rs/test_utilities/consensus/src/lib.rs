@@ -18,6 +18,7 @@ use ic_replicated_state::{
     },
 };
 use ic_test_utilities_state::ReplicatedStateBuilder;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_types::{
     Height, Time,
     batch::ValidationContext,
@@ -228,7 +229,7 @@ pub fn make_genesis(summary: DkgSummary) -> CatchUpPackage {
         .unwrap()
         .dkg_id
         .clone();
-    let replica_version = ic_test_utilities_types::ids::test_replica_version();
+    let replica_version = test_replica_version();
     let block = Block::new(
         Id::from(CryptoHash(Vec::new())),
         Payload::new(

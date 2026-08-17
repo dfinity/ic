@@ -40,8 +40,8 @@ pub(crate) fn get_status(
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
     pool: &PoolReader<'_>,
-    logger: &ReplicaLogger,
     replica_version: &ReplicaVersion,
+    logger: &ReplicaLogger,
 ) -> Option<Status> {
     if should_halt(
         height,
@@ -49,8 +49,8 @@ pub(crate) fn get_status(
         registry_client,
         subnet_id,
         pool,
-        logger,
         replica_version,
+        logger,
     )
     .warn_if_none(logger, "Failed to check if the subnet is halting!")?
     {
@@ -62,8 +62,8 @@ pub(crate) fn get_status(
             registry_client,
             subnet_id,
             pool,
-            logger,
             replica_version,
+            logger,
         )
         .warn_if_none(logger, "Failed to check if the subnet is halted!")
             == Some(true)
@@ -83,8 +83,8 @@ pub(crate) fn should_halt(
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
     pool: &PoolReader<'_>,
-    logger: &ReplicaLogger,
     my_replica_version: &ReplicaVersion,
+    logger: &ReplicaLogger,
 ) -> Option<bool> {
     let registry_version = pool.registry_version(height).warn_if_none(
         logger,
@@ -345,8 +345,8 @@ mod tests {
                     registry_client.as_ref(),
                     test_case.subnet_id,
                     &PoolReader::new(&pool),
-                    &logger,
                     &current_replica_version,
+                    &logger,
                 );
 
                 assert_eq!(status, test_case.expected_status);

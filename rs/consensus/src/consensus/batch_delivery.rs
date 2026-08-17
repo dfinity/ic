@@ -52,8 +52,8 @@ pub fn deliver_batches(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    log: &ReplicaLogger,
     replica_version: &ReplicaVersion,
+    log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
     // deliver all bathes up to the height `min(h, finalized_height)`.
@@ -65,8 +65,8 @@ pub fn deliver_batches(
         pool,
         registry_client,
         subnet_id,
-        log,
         replica_version,
+        log,
         max_batch_height_to_deliver,
         /*result_processor=*/ None,
     )
@@ -82,8 +82,8 @@ pub(crate) fn deliver_batches_with_result_processor(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    log: &ReplicaLogger,
     current_replica_version: &ReplicaVersion,
+    log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
     // deliver all bathes up to the height `min(h, finalized_height)`.
@@ -165,8 +165,8 @@ pub(crate) fn deliver_batches_with_result_processor(
                 registry_client,
                 subnet_id,
                 pool,
-                log,
                 current_replica_version,
+                log,
             ) {
                 Some(Status::Halting | Status::Halted) => {
                     debug!(

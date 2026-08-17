@@ -262,8 +262,8 @@ fn get_adjusted_notary_delay(
         state_reader,
         membership,
         rank,
-        log,
         replica_version,
+        log,
     ) {
         NotaryDelay::CanNotarizeAfter(duration) => Some(duration),
         NotaryDelay::ReachedMaxNotarizationCertificationGap {
@@ -305,8 +305,8 @@ fn get_adjusted_notary_delay_from_settings(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     membership: &Membership,
     rank: Rank,
-    logger: &ReplicaLogger,
     replica_version: &ReplicaVersion,
+    logger: &ReplicaLogger,
 ) -> NotaryDelay {
     let NotarizationDelaySettings {
         unit_delay,
@@ -361,8 +361,8 @@ fn get_adjusted_notary_delay_from_settings(
             membership.registry_client.as_ref(),
             membership.subnet_id,
             pool,
-            logger,
             replica_version,
+            logger,
         ) == Some(true)
     };
 
@@ -729,8 +729,8 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
-                    &logger,
                     &replica_config.replica_version,
+                    &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCertificationGap { .. }
             );
@@ -755,8 +755,8 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
-                    &logger,
                     &replica_config.replica_version,
+                    &logger,
                 ),
                 NotaryDelay::CanNotarizeAfter(Duration::from_secs(0))
             );
@@ -783,8 +783,8 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
-                    &logger,
                     &replica_config.replica_version,
+                    &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
             );
@@ -825,8 +825,8 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &logger,
                 &replica_config.replica_version,
+                &logger,
             );
             assert_eq!(
                 notary_delay,
@@ -841,8 +841,8 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &logger,
                 &replica_config.replica_version,
+                &logger,
             );
             assert_eq!(
                 notary_delay,
@@ -857,8 +857,8 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &logger,
                 &replica_config.replica_version,
+                &logger,
             );
             assert_eq!(
                 notary_delay,
@@ -874,8 +874,8 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &logger,
                 &replica_config.replica_version,
+                &logger,
             );
             assert_eq!(
                 notary_delay,
@@ -893,8 +893,8 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &logger,
                 &replica_config.replica_version,
+                &logger,
             );
             assert_eq!(
                 notary_delay,
@@ -963,8 +963,8 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &logger,
                 &replica_config.replica_version,
+                &logger,
             );
             assert_eq!(
                 notary_delay,
@@ -985,8 +985,8 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &logger,
                 &replica_config.replica_version,
+                &logger,
             );
             assert_eq!(
                 notary_delay,

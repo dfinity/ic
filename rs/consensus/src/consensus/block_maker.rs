@@ -379,8 +379,8 @@ impl BlockMaker {
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
                         pool,
-                        &self.log,
                         &self.replica_config.replica_version,
+                        &self.log,
                     )? {
                         // Don't propose any block if the replica is halted.
                         Status::Halted => {
@@ -743,7 +743,7 @@ mod tests {
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_consensus::fake::FromParent;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         consensus::{
             CatchUpContent, CatchUpPackage, HasHeight, HasVersion, HashedRandomBeacon, dkg,
@@ -769,7 +769,7 @@ mod tests {
                 registry,
                 crypto,
                 time_source,
-                mut replica_config,
+                replica_config,
                 state_manager,
                 payload_builder,
                 dkg_pool,
@@ -793,15 +793,14 @@ mod tests {
                     ),
                 ],
             )
-            .build();
-
             // The block-making schedule depends on the random state set up by dependencies.
             // For this test, we simulate the blockmaker running on node with ID 1.
-
-            // TODO: once we have an easier way to pass parameters to
-            // dependencies_with_subnet_params, pass the NodeID, so it's consistently applied to
-            // all test components.
-            replica_config.node_id = node_test_id(1);
+            .with_replica_config(ReplicaConfig {
+                node_id: node_test_id(1),
+                subnet_id,
+                replica_version: test_replica_version(),
+            })
+            .build();
 
             pool.advance_round_normal_operation_n(4);
 
@@ -1225,7 +1224,7 @@ mod tests {
             assert!(proposal.is_some());
             let proposal = proposal.unwrap();
             let block = proposal.content.as_ref();
-            // blocks still uses default version, not the new version.
+            // The block still uses the old version, not the new version.
             assert_eq!(block.version(), &replica_config.replica_version);
             // registry version 10 becomes effective.
             assert_eq!(

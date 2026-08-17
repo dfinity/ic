@@ -283,7 +283,7 @@ mod tests {
     //! only compare these functions against themselves and would not.)
     use super::*;
     use ic_types::{
-        NodeId, PrincipalId, ReplicaVersion,
+        NodeId, PrincipalId,
         canister_http::{
             CanisterHttpPaymentReceipt, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
             CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
@@ -292,6 +292,7 @@ mod tests {
         messages::CallbackId,
         signature::BasicSignature,
     };
+    use ic_types_test_utils::ids::test_replica_version;
     use std::collections::BTreeMap;
 
     fn node(i: u64) -> NodeId {
@@ -304,7 +305,7 @@ mod tests {
             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
             content_size,
             is_reject: false,
-            replica_version: ReplicaVersion::try_from("test_replica_version").unwrap(),
+            replica_version: test_replica_version(),
         }
     }
 

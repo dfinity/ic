@@ -101,8 +101,8 @@ impl Finalizer {
             pool,
             &*self.registry_client,
             self.replica_config.subnet_id,
-            &self.log,
             &self.replica_config.replica_version,
+            &self.log,
             None,
             Some(&|result, block_stats, batch_stats| {
                 self.process_batch_delivery_result(result, block_stats, batch_stats)

@@ -129,7 +129,7 @@ fn consensus_produces_expected_batches() {
             replica_config.subnet_id,
             vec![(
                 1,
-                SubnetRecordBuilder::from(&[node_test_id(0)])
+                SubnetRecordBuilder::from(&[node_id])
                     .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                     .with_replica_version(replica_config.replica_version.as_ref())
                     .build(),

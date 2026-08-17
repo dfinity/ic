@@ -1226,8 +1226,8 @@ impl Validator {
             self.registry_client.as_ref(),
             self.replica_config.subnet_id,
             pool_reader,
-            &self.log,
             &self.replica_config.replica_version,
+            &self.log,
         ) else {
             return Err(ValidationFailure::FailedToGetConsensusStatus.into());
         };
@@ -2948,8 +2948,8 @@ pub mod test {
                     registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
-                    &no_op_logger(),
-                    &replica_config.replica_version
+                    &replica_config.replica_version,
+                    &no_op_logger()
                 ),
                 Some(Status::Halting | Status::Halted)
             );
@@ -4433,13 +4433,6 @@ pub mod test {
             assert_ne!(block.signature.signer, incorrect_signer);
             block.signature.signer = incorrect_signer;
             pool.insert_unvalidated(block);
-
-            dbg!(
-                pool.validated()
-                    .block_proposal()
-                    .get_all()
-                    .collect::<Vec<_>>()
-            );
 
             // Incorrect block proposals should not get validated
             assert_matches!(

@@ -9786,6 +9786,7 @@ dependencies = [
  "ic-metrics",
  "ic-types",
  "ic-types-cycles",
+ "ic-types-test-utils",
  "prometheus",
  "slog",
 ]
@@ -15131,7 +15132,6 @@ dependencies = [
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rstest",
- "rusty-fork",
  "serde",
  "serde_bytes",
  "serde_cbor",

@@ -271,8 +271,6 @@ impl Player {
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
-        println!("Setting default replica version {replica_version}");
-
         let registry_version = registry.get_latest_version();
         let subnet_type = match registry.get_subnet_record(subnet_id, registry_version) {
             Ok(Some(record)) => {
@@ -712,8 +710,8 @@ impl Player {
                 pool,
                 &*self.registry,
                 self.subnet_id,
-                &self.log,
                 replica_version,
+                &self.log,
                 replay_target_height,
             ) {
                 Ok(h) => break h,

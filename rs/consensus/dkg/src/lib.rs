@@ -1544,8 +1544,8 @@ mod tests {
                     let state_manager_2 = dependencies_2.state_manager.clone();
                     let subnet_id_1 = dependencies_1.replica_config.subnet_id;
                     let subnet_id_2 = dependencies_2.replica_config.subnet_id;
-                    let replica_config_1 = dependencies_1.replica_config;
-                    let replica_config_2 = dependencies_2.replica_config;
+                    let replica_version_1 = dependencies_1.replica_config.replica_version;
+                    let replica_version_2 = dependencies_2.replica_config.replica_version;
                     let mut pool_1 = dependencies_1.pool;
                     let mut pool_2 = dependencies_2.pool;
 
@@ -1591,7 +1591,7 @@ mod tests {
                     let dkg_1 = DkgImpl::new(
                         node_test_id(1),
                         subnet_id_1,
-                        replica_config_1.replica_version,
+                        replica_version_1,
                         registry_1,
                         state_manager_1,
                         crypto_1,
@@ -1604,7 +1604,7 @@ mod tests {
                     let dkg_2 = DkgImpl::new(
                         node_test_id(2),
                         subnet_id_2,
-                        replica_config_2.replica_version,
+                        replica_version_2,
                         registry_2,
                         state_manager_2,
                         crypto_2.clone(),

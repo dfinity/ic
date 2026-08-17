@@ -129,7 +129,7 @@ impl ReplayValidator {
         let replica_cfg = ReplicaConfig {
             node_id,
             subnet_id,
-            replica_version: replica_version.clone(),
+            replica_version,
         };
         let thread_pool = ThreadPoolBuilder::new()
             .num_threads(MAX_VALIDATION_THREADS)

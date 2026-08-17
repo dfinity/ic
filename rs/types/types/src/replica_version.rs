@@ -7,17 +7,14 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
+pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ReplicaVersion {
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc_str")]
     version_id: Arc<str>,
 }
-
-pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct DefaultVersionAlreadySetError;
 
 impl std::fmt::Display for ReplicaVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
