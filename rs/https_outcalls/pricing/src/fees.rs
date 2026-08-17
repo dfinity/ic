@@ -1167,50 +1167,38 @@ mod tests {
         );
     }
 
-    /// Asserts that the [`usage_fee`] of an outcall with the given `replication_kind`
-    /// and a transformed response of `transformed_bytes` covers every result the outcall
-    /// could deliver: the collective spend of all participating replicas, plus the
-    /// collective initial spend of the delivered response(s) as
-    /// [`flexible_initial_spent`] / [`non_flexible_initial_spent`] compute it.
-    fn assert_usage_fee_covers_every_result(
+    /// Asserts that the consensus fee an outcall with the given `replication_kind` and
+    /// transformed response size is priced for — [`max_consensus_fee`] — covers what
+    /// delivering a result actually charges for it.
+    ///
+    /// These are two independent computations of the same cost: [`max_consensus_fee`]
+    /// prices the outcall before anything is known about its outcome, while
+    /// [`flexible_initial_spent`] / [`non_flexible_initial_spent`] charge for the
+    /// response(s) that ended up in the block.
+    fn assert_priced_consensus_fee_covers_every_result(
         replication_kind: ReplicationKind,
         transformed_bytes: u64,
         subnet_size: NumberOfNodes,
     ) {
-        let raw_response_size = NumBytes::from(100_000);
-        let quote = usage_fee(
+        let priced = max_consensus_fee(
             replication_kind,
-            MAX_RESPONSE_TIME,
-            raw_response_size,
-            MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
             NumBytes::from(transformed_bytes),
             subnet_size,
         );
-        let nodes = replication_kind.node_count(subnet_size);
-        let gossips = !matches!(replication_kind, ReplicationKind::FullyReplicated);
-        // The gossip fee is priced for at least the max reject size
-        let gossiped = NumBytes::from(transformed_bytes.max(MAX_CANISTER_HTTP_REJECT_BYTES));
-        let spends = (network_usage_fee(raw_response_size, MAX_RESPONSE_TIME)
-            + transform_usage_fee(MAX_INSTRUCTIONS_PER_QUERY_MESSAGE)
-            + if gossips {
-                gossip_usage_fee(gossiped, subnet_size)
-            } else {
-                Cycles::zero()
-            })
-            * nodes;
-        let assert_covers = |consensus_cost: Cycles, what: &str| {
+        let assert_covers = |charged: Cycles, what: &str| {
             assert!(
-                quote >= spends + consensus_cost,
+                priced >= charged,
                 "{replication_kind:?} at {transformed_bytes} transformed bytes, N = {subnet_size}: \
-                 quote {quote} does not cover {what} ({spends} + {consensus_cost})"
+                 priced {priced} does not cover the {charged} charged for {what}"
             );
         };
 
         match replication_kind {
             ReplicationKind::FullyReplicated | ReplicationKind::NonReplicated => {
                 // The one agreed-on response is either the one that was asked for or a reject.
+                let signers = replication_kind.node_count(subnet_size);
                 for content_size in [transformed_bytes, MAX_CANISTER_HTTP_REJECT_BYTES] {
-                    let proof = proof(content_size as u32, &vec![0; nodes]);
+                    let proof = proof(content_size as u32, &vec![0; signers]);
                     assert_covers(
                         non_flexible_initial_spent(&proof, subnet_size),
                         &format!("a response of {content_size} bytes"),
@@ -1254,7 +1242,7 @@ mod tests {
     }
 
     #[test]
-    fn usage_fee_covers_every_result_an_outcall_could_deliver() {
+    fn the_priced_consensus_fee_covers_every_result_an_outcall_could_deliver() {
         const SIZES: [u64; 5] = [
             0,
             1_000,
@@ -1262,15 +1250,13 @@ mod tests {
             100_000,
             MAX_CANISTER_HTTP_RESPONSE_BYTES,
         ];
-        // Every combination of response counts, on subnets small enough to enumerate
-        // them all.
-        for subnet_size in [1, 4, 13].map(NumberOfNodes::from) {
+        for subnet_size in [1, 4, 7, 13, 34, 40].map(NumberOfNodes::from) {
             for transformed_bytes in SIZES {
                 for replication_kind in [
                     ReplicationKind::FullyReplicated,
                     ReplicationKind::NonReplicated,
                 ] {
-                    assert_usage_fee_covers_every_result(
+                    assert_priced_consensus_fee_covers_every_result(
                         replication_kind,
                         transformed_bytes,
                         subnet_size,
@@ -1279,7 +1265,7 @@ mod tests {
                 for total_requests in 1..=subnet_size.get() {
                     for min_responses in 0..=total_requests {
                         for max_responses in min_responses..=total_requests {
-                            assert_usage_fee_covers_every_result(
+                            assert_priced_consensus_fee_covers_every_result(
                                 ReplicationKind::Flexible {
                                     total_requests,
                                     min_responses,
@@ -1291,23 +1277,6 @@ mod tests {
                         }
                     }
                 }
-            }
-        }
-        // And the extremes of a whole-subnet committee on a larger subnet: needing a
-        // single response (so a `TooManyRejects` delivers the most rejects it ever can)
-        // or all of them.
-        let subnet_size = NumberOfNodes::from(40);
-        for transformed_bytes in SIZES {
-            for (min_responses, max_responses) in [(1, 1), (1, 40), (40, 40)] {
-                assert_usage_fee_covers_every_result(
-                    ReplicationKind::Flexible {
-                        total_requests: 40,
-                        min_responses,
-                        max_responses,
-                    },
-                    transformed_bytes,
-                    subnet_size,
-                );
             }
         }
     }
