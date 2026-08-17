@@ -4,7 +4,7 @@ use ic_types::NodeId;
 
 /// The reason why an upgrade payload was determined to be invalid. These are
 /// reproducible: the same block will always be rejected.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum InvalidUpgradePayloadReason {
     /// A `Request` was issued for a node other than the block maker.
     RequestNodeMismatch { node: NodeId, proposer: NodeId },

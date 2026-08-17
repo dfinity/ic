@@ -14,17 +14,19 @@ use ic_consensus_upgrade::subnet_membership;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext};
-use ic_interfaces::consensus::PayloadValidationError;
+use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationError};
 use ic_interfaces::p2p::consensus::{MutablePool, PoolMutationsProducer, UnvalidatedArtifact};
+use ic_interfaces::upgrade::InvalidUpgradePayloadReason;
 use ic_interfaces::upgrade_permit_auth::UpgradePermitAuthPool;
+use ic_interfaces::validation::ValidationError;
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::UpgradeState;
 use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metadata_state::UpgradeState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::artifact_pool_config::with_test_pool_config;
 use ic_test_utilities::state_manager::RefMockStateManager;
@@ -32,7 +34,7 @@ use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::batch::{
-    bytes_to_upgrade_payload, upgrade_payload_to_bytes, BatchPayload, ValidationContext,
+    BatchPayload, ValidationContext, bytes_to_upgrade_payload, upgrade_payload_to_bytes,
 };
 use ic_types::consensus::upgrade::{UpgradePermitAction, UpgradePermitShares};
 use ic_types::consensus::{
@@ -84,7 +86,10 @@ impl TestFixture {
             pool,
             ..
         } = deps;
-        let state = Arc::new(ReplicatedState::new(subnet_test_id(0), SubnetType::Application));
+        let state = Arc::new(ReplicatedState::new(
+            subnet_test_id(0),
+            SubnetType::Application,
+        ));
         // `get_state_at` is called by the DKG payload builder when the pool
         // fabricates blocks; `get_latest_certified_state` by the upgrade
         // payload builder. Tests that only resolve membership or validate
@@ -155,7 +160,19 @@ impl TestFixture {
     }
 
     fn validated_shares(&self, node: usize) -> usize {
-        self.pools[node].read().unwrap().get_validated_shares().count()
+        self.pools[node]
+            .read()
+            .unwrap()
+            .get_validated_shares()
+            .count()
+    }
+
+    fn unvalidated_shares(&self, node: usize) -> usize {
+        self.pools[node]
+            .read()
+            .unwrap()
+            .get_unvalidated_shares()
+            .count()
     }
 
     fn next_height(&self) -> Height {
@@ -231,31 +248,54 @@ impl TestFixture {
         };
         (0..self.nodes.len())
             .map(|validator| {
-                let result = self.builder(validator, self.rebooted.clone()).validate_payload(
-                    self.next_height(),
-                    &ProposalContext {
-                        proposer: self.nodes[proposer],
-                        validation_context: &context,
-                    },
-                    &payload,
-                    &past,
-                );
+                let result = self
+                    .builder(validator, self.rebooted.clone())
+                    .validate_payload(
+                        self.next_height(),
+                        &ProposalContext {
+                            proposer: self.nodes[proposer],
+                            validation_context: &context,
+                        },
+                        &payload,
+                        &past,
+                    );
                 (self.nodes[validator], result)
             })
             .collect()
     }
 
-    /// Validate the actions as the block of `proposer` at the current
-    /// registry version; every node must accept.
-    fn validates_all(&self, proposer: usize, actions: &[UpgradePermitAction]) {
-        for (node, result) in self.validation_results(proposer, actions, RegistryVersion::new(1)) {
-            result.unwrap_or_else(|e| {
-                panic!(
-                    "node {:?} must validate node {:?}'s block: {:?}",
-                    node, self.nodes[proposer], e
-                )
-            });
+    /// Validate the actions as the block of `proposer` at the given
+    /// registry version. All validators must return the same verdict, which
+    /// is returned.
+    fn validates_all(
+        &self,
+        proposer: usize,
+        actions: &[UpgradePermitAction],
+        registry_version: RegistryVersion,
+    ) -> Result<(), PayloadValidationError> {
+        let mut results = self.validation_results(proposer, actions, registry_version);
+        let (_, first) = results.pop().unwrap();
+        for (node, result) in &results {
+            match (result, &first) {
+                (Ok(_), Ok(_)) => {}
+                (
+                    Err(PayloadValidationError::InvalidArtifact(
+                        InvalidPayloadReason::InvalidUpgradePayload(reason1),
+                    )),
+                    Err(PayloadValidationError::InvalidArtifact(
+                        InvalidPayloadReason::InvalidUpgradePayload(reason2),
+                    )),
+                ) => {
+                    assert_eq!(
+                        reason1, reason2,
+                        "node {:?} disagrees with the other validators",
+                        node
+                    );
+                }
+                (a, b) => panic!("Unexpected validation outcome: {a:?} {b:?}"),
+            }
         }
+        first
     }
 
     /// Apply a registry delta after pool creation, so the committee (frozen
@@ -300,10 +340,16 @@ impl TestFixture {
     /// Let every manager process the finalized blocks: sign shares for new
     /// requests and validate gossiped ones.
     fn run_managers(&self) {
-        for (i, manager) in self.managers.iter().enumerate() {
-            let change_set = manager.on_state_change(&*self.pools[i].read().unwrap());
-            self.pools[i].write().unwrap().apply(change_set);
+        for node in 0..self.nodes.len() {
+            self.run_manager(node);
         }
+    }
+
+    /// Let a single node's manager process the finalized blocks and its
+    /// pool's unvalidated shares.
+    fn run_manager(&self, node: usize) {
+        let change_set = self.managers[node].on_state_change(&*self.pools[node].read().unwrap());
+        self.pools[node].write().unwrap().apply(change_set);
     }
 }
 
@@ -328,7 +374,15 @@ fn finalize_upgrade_block(pool: &mut TestConsensusPool, upgrade: Vec<u8>) -> (He
     let height = block.height;
     let proposal = BlockProposal::fake(block, signer);
     pool.advance_round_with_block(&proposal);
-    let upgrade = proposal.content.get_value().payload.as_ref().as_data().batch.upgrade.clone();
+    let upgrade = proposal
+        .content
+        .get_value()
+        .payload
+        .as_ref()
+        .as_data()
+        .batch
+        .upgrade
+        .clone();
     (height, upgrade)
 }
 
@@ -397,6 +451,23 @@ fn share(signer: u64, node: u64, request_height: Height) -> UpgradePermitAuthori
     }
 }
 
+/// Assert that the common validation verdict is a rejection carrying the
+/// given [`InvalidUpgradePayloadReason`] pattern.
+macro_rules! assert_invalid_upgrade {
+    ($result:expr, $variant:pat) => {
+        assert!(
+            matches!(
+                $result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidUpgradePayload($variant)
+                ))
+            ),
+            "unexpected verdict: {:?}",
+            $result
+        );
+    };
+}
+
 /// End-to-end permit lifecycle with realistic block-maker rotation: the
 /// requester never authorizes itself — the next block maker is still
 /// collecting shares, and the one after carries the authorization.
@@ -429,7 +500,8 @@ fn test_permit_lifecycle() {
         // (cross-node) validates the block.
         let actions = fx.build(2, fx.rebooted.clone());
         assert_authorize(&actions, fx.node(0), 3);
-        fx.validates_all(2, &actions);
+        fx.validates_all(2, &actions, RegistryVersion::new(1))
+            .expect("all nodes must validate the authorize block");
         fx.finalize(actions);
         assert!(fx.committed().authorized.contains(&fx.node(0)));
 
@@ -437,7 +509,8 @@ fn test_permit_lifecycle() {
         // once it is the block maker again, returns its permit.
         let actions = fx.build(0, fx.rebooted.clone());
         assert_return(&actions, fx.node(0));
-        fx.validates_all(0, &actions);
+        fx.validates_all(0, &actions, RegistryVersion::new(1))
+            .expect("all nodes must validate the return block");
         fx.finalize(actions);
         assert!(fx.committed().authorized.is_empty());
 
@@ -465,9 +538,10 @@ fn test_request_expires() {
             node: fx.node(0),
             request_height: fx.next_height(),
         }];
-        for (node, result) in fx.validation_results(0, &second, RegistryVersion::new(1)) {
-            assert!(result.is_err(), "node {:?} must reject the second request", node);
-        }
+        assert_invalid_upgrade!(
+            fx.validates_all(0, &second, RegistryVersion::new(1)),
+            InvalidUpgradePayloadReason::SlotsExhausted { .. }
+        );
 
         // No shares are gathered; empty blocks pass the timeout.
         for _ in 0..21 {
@@ -491,49 +565,49 @@ fn test_block_registry_version_pins_membership() {
         // Committee frozen at V1 with 4 nodes; the removal lands at V2.
         fx.apply_membership_delta(2, (0..3).map(node_test_id).collect());
 
-        // A request from node 0 finalized at V1.
+        // A request from the block itself cannot be authorized in the same
+        // block: shares only exist for requests in earlier blocks. (Checked
+        // first, while no slot is in use — otherwise the request would fail
+        // the slot check instead.)
         let h1 = fx.next_height();
+        let same_block = vec![
+            UpgradePermitAction::Request {
+                node: fx.node(0),
+                request_height: h1,
+            },
+            UpgradePermitAction::Authorize(UpgradePermitShares {
+                node: fx.node(0),
+                shares: vec![share(1, 0, h1), share(2, 0, h1), share(3, 0, h1)],
+            }),
+        ];
+        assert_invalid_upgrade!(
+            fx.validates_all(0, &same_block, RegistryVersion::new(1)),
+            InvalidUpgradePayloadReason::AuthorizeNoOutstandingRequest { .. }
+        );
+
+        // A request from node 0 finalized at V1.
+        let h2 = fx.next_height();
         let request = vec![UpgradePermitAction::Request {
             node: fx.node(0),
-            request_height: h1,
+            request_height: h2,
         }];
-        fx.validates_all(0, &request);
+        fx.validates_all(0, &request, RegistryVersion::new(1))
+            .expect("all nodes must validate the request at V1");
         fx.finalize(request);
 
         let authorize = vec![UpgradePermitAction::Authorize(UpgradePermitShares {
             node: fx.node(0),
-            shares: vec![share(1, 0, h1), share(2, 0, h1), share(3, 0, h1)],
+            shares: vec![share(1, 0, h2), share(2, 0, h2), share(3, 0, h2)],
         })];
         // At the block's version V1 all three signers are staying: accept.
-        for (node, result) in fx.validation_results(0, &authorize, RegistryVersion::new(1)) {
-            result.unwrap_or_else(|e| panic!("node {:?} must validate at V1: {:?}", node, e));
-        }
+        fx.validates_all(0, &authorize, RegistryVersion::new(1))
+            .expect("all nodes must validate the authorize at V1");
         // At V2 node 3 is not staying even though the committee still
         // contains it: everyone rejects.
-        for (node, result) in fx.validation_results(0, &authorize, RegistryVersion::new(2)) {
-            assert!(result.is_err(), "node {:?} must reject at V2", node);
-        }
-
-        // A request from the block itself cannot be authorized in the same
-        // block: shares only exist for requests in earlier blocks.
-        let h2 = fx.next_height();
-        let same_block = vec![
-            UpgradePermitAction::Request {
-                node: fx.node(0),
-                request_height: h2,
-            },
-            UpgradePermitAction::Authorize(UpgradePermitShares {
-                node: fx.node(0),
-                shares: vec![share(1, 0, h2), share(2, 0, h2), share(3, 0, h2)],
-            }),
-        ];
-        for (node, result) in fx.validation_results(0, &same_block, RegistryVersion::new(1)) {
-            assert!(
-                result.is_err(),
-                "node {:?} must reject the same-block authorize",
-                node
-            );
-        }
+        assert_invalid_upgrade!(
+            fx.validates_all(0, &authorize, RegistryVersion::new(2)),
+            InvalidUpgradePayloadReason::AuthorizeInvalidShare { .. }
+        );
     });
 }
 
@@ -564,5 +638,138 @@ fn test_membership_at_pinned_version() {
         assert_eq!(v2.current_members.len(), 4);
         assert_eq!(v2.staying_members.len(), 3);
         assert!(!v2.staying_members.contains(&fx.node(3)));
+    });
+}
+
+#[test]
+fn test_validator_rejections() {
+    with_test_pool_config(|pool_config| {
+        let mut fx = TestFixture::new(4, pool_config);
+
+        // A request for another node must come from that node.
+        let actions = vec![UpgradePermitAction::Request {
+            node: fx.node(1),
+            request_height: fx.next_height(),
+        }];
+        assert_invalid_upgrade!(
+            fx.validates_all(0, &actions, RegistryVersion::new(1)),
+            InvalidUpgradePayloadReason::RequestNodeMismatch { .. }
+        );
+
+        // Likewise for returns.
+        let actions = vec![UpgradePermitAction::Return { node: fx.node(1) }];
+        assert_invalid_upgrade!(
+            fx.validates_all(0, &actions, RegistryVersion::new(1)),
+            InvalidUpgradePayloadReason::ReturnNodeMismatch { .. }
+        );
+
+        // An authorization needs an outstanding request.
+        let actions = vec![UpgradePermitAction::Authorize(UpgradePermitShares {
+            node: fx.node(1),
+            shares: vec![
+                share(0, 1, Height::new(1)),
+                share(2, 1, Height::new(1)),
+                share(3, 1, Height::new(1)),
+            ],
+        })];
+        assert_invalid_upgrade!(
+            fx.validates_all(0, &actions, RegistryVersion::new(1)),
+            InvalidUpgradePayloadReason::AuthorizeNoOutstandingRequest { .. }
+        );
+
+        // ... and enough distinct signers (threshold is N−P = 3).
+        let h1 = fx.next_height();
+        let request = vec![UpgradePermitAction::Request {
+            node: fx.node(0),
+            request_height: h1,
+        }];
+        fx.validates_all(0, &request, RegistryVersion::new(1))
+            .expect("all nodes must validate the request");
+        fx.finalize(request);
+        let actions = vec![UpgradePermitAction::Authorize(UpgradePermitShares {
+            node: fx.node(0),
+            shares: vec![share(1, 0, h1), share(2, 0, h1)],
+        })];
+        assert_invalid_upgrade!(
+            fx.validates_all(0, &actions, RegistryVersion::new(1)),
+            InvalidUpgradePayloadReason::AuthorizeInsufficientShares { .. }
+        );
+    });
+}
+
+/// A Return from a node that holds no permit is a benign no-op: removing a
+/// non-existent entry changes no state, and rejecting it would couple Return
+/// validity to folded-state details without buying any safety.
+#[test]
+fn test_return_without_permit_is_noop() {
+    with_test_pool_config(|pool_config| {
+        let mut fx = TestFixture::new(4, pool_config);
+
+        let actions = vec![UpgradePermitAction::Return { node: fx.node(0) }];
+        fx.validates_all(0, &actions, RegistryVersion::new(1))
+            .expect("return without a permit must be accepted");
+        fx.finalize(actions);
+        assert!(fx.committed().authorized.is_empty());
+        assert!(fx.committed().requested.is_empty());
+    });
+}
+
+/// A gossiped share whose request height has no finalized block is dropped
+/// as invalid.
+#[test]
+fn test_gossiped_share_without_request_block_is_dropped() {
+    with_test_pool_config(|pool_config| {
+        let fx = TestFixture::new(4, pool_config);
+
+        // A share arrives at node 1 referencing a height with no finalized
+        // block.
+        fx.pools[1].write().unwrap().insert(UnvalidatedArtifact {
+            message: share(2, 0, Height::new(10_000)),
+            peer_id: fx.node(2),
+            timestamp: UNIX_EPOCH,
+        });
+        assert_eq!(fx.unvalidated_shares(1), 1);
+
+        fx.run_manager(1);
+        assert_eq!(fx.unvalidated_shares(1), 0);
+        assert_eq!(fx.validated_shares(1), 0);
+    });
+}
+
+/// A gossiped share from a node that is not a staying member fails
+/// validation and is dropped.
+#[test]
+fn test_gossiped_share_from_non_staying_signer_is_dropped() {
+    with_test_pool_config(|pool_config| {
+        let mut fx = TestFixture::new(4, pool_config);
+
+        // A request from node 0 finalizes, so a block exists at its height.
+        let h1 = fx.next_height();
+        let request = vec![UpgradePermitAction::Request {
+            node: fx.node(0),
+            request_height: h1,
+        }];
+        fx.finalize(request);
+
+        // Node 9 is not a member of the subnet: its share for node 0's
+        // request fails validation even though the request block exists.
+        fx.pools[1].write().unwrap().insert(UnvalidatedArtifact {
+            message: share(9, 0, h1),
+            peer_id: node_test_id(9),
+            timestamp: UNIX_EPOCH,
+        });
+        assert_eq!(fx.unvalidated_shares(1), 1);
+
+        fx.run_manager(1);
+        assert_eq!(fx.unvalidated_shares(1), 0);
+        // The bogus share is gone; only node 1's own signature for the
+        // request remains (the manager signs while validating gossip).
+        let signers: Vec<_> = fx.pools[1]
+            .read()
+            .unwrap()
+            .get_validated_shares()
+            .map(|share| share.signature.signer)
+            .collect();
+        assert_eq!(signers, vec![fx.node(1)]);
     });
 }

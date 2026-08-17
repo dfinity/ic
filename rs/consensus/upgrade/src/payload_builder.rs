@@ -28,6 +28,7 @@ use ic_types::consensus::upgrade::{UpgradePermitAction, UpgradePermitShares};
 use ic_types::{Height, NodeId, NumBytes, PlatformVersion};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
+use ic_interfaces::validation::ValidationError;
 
 /// Builds the upgrade section of a data block's `BatchPayload`.
 pub struct UpgradePayloadBuilder {
@@ -252,7 +253,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
 }
 
 fn invalid_upgrade(reason: InvalidUpgradePayloadReason) -> PayloadValidationError {
-    ic_interfaces::validation::ValidationError::InvalidArtifact(
+    ValidationError::InvalidArtifact(
         InvalidPayloadReason::InvalidUpgradePayload(reason),
     )
 }

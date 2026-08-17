@@ -17,21 +17,21 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::{SubnetMembership, subnet_membership, validate_share};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
-use crate::{subnet_membership, validate_share, SubnetMembership};
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer};
 use ic_interfaces::upgrade_permit_auth::{
     UpgradePermitAuthChangeAction, UpgradePermitAuthChangeSet, UpgradePermitAuthPool,
 };
 use ic_logger::{ReplicaLogger, info, warn};
+use ic_replicated_state::metadata_state::REQUEST_TIMEOUT_BLOCKS;
+use ic_types::batch::bytes_to_upgrade_payload;
 use ic_types::consensus::{
     Block, UpgradePermitAuthorizationContent, UpgradePermitAuthorizationShare,
     upgrade::UpgradePermitAction,
 };
-use ic_replicated_state::metadata_state::REQUEST_TIMEOUT_BLOCKS;
-use ic_types::batch::bytes_to_upgrade_payload;
 use ic_types::{Height, NodeId};
 use num_traits::SaturatingSub;
 
@@ -121,7 +121,11 @@ impl UpgradePermitAuthPoolManager {
                 continue;
             }
             for action in actions {
-                let UpgradePermitAction::Request { node, request_height } = action else {
+                let UpgradePermitAction::Request {
+                    node,
+                    request_height,
+                } = action
+                else {
                     continue;
                 };
                 if !membership.staying(&node) {
@@ -142,7 +146,8 @@ impl UpgradePermitAuthPoolManager {
                         info!(
                             self.logger,
                             "permit_auth: signed share for node {:?} at height {:?}",
-                            node, request_height
+                            node,
+                            request_height
                         );
                         change_set.push(UpgradePermitAuthChangeAction::AddToValidated(
                             UpgradePermitAuthorizationShare { content, signature },
@@ -151,8 +156,7 @@ impl UpgradePermitAuthPoolManager {
                     Err(e) => {
                         warn!(
                             self.logger,
-                            "permit_auth: failed to sign share for node {:?}: {:?}",
-                            node, e
+                            "permit_auth: failed to sign share for node {:?}: {:?}", node, e
                         );
                     }
                 }
@@ -198,7 +202,10 @@ impl UpgradePermitAuthPoolManager {
                     change_set.push(UpgradePermitAuthChangeAction::MoveToValidated(share));
                 }
                 Err(reason) => {
-                    warn!(self.logger, "permit_auth: dropping invalid share: {:?}", reason);
+                    warn!(
+                        self.logger,
+                        "permit_auth: dropping invalid share: {:?}", reason
+                    );
                     let id = (&share).into();
                     change_set.push(UpgradePermitAuthChangeAction::HandleInvalid(
                         id,
@@ -218,26 +225,21 @@ impl UpgradePermitAuthPoolManager {
         let current_height = self.consensus_pool_cache.finalized_chain().tip().height;
         let expiry_threshold = current_height.saturating_sub(&REQUEST_TIMEOUT_BLOCKS);
 
-        let mut change_set = vec![];
-        for share in pool.get_validated_shares() {
-            if share.content.request_height < expiry_threshold {
-                change_set.push(UpgradePermitAuthChangeAction::RemoveValidated(
-                    share.into(),
-                ));
-            }
-        }
-        for share in pool.get_unvalidated_shares() {
-            if share.content.request_height < expiry_threshold {
-                change_set.push(UpgradePermitAuthChangeAction::RemoveUnvalidated(
-                    share.into(),
-                ));
-            }
-        }
-        change_set
+        let expired_validated = pool
+            .get_validated_shares()
+            .filter(|share| share.content.request_height < expiry_threshold)
+            .map(|share| UpgradePermitAuthChangeAction::RemoveValidated(share.into()));
+
+        let expired_unvalidated = pool
+            .get_unvalidated_shares()
+            .filter(|share| share.content.request_height < expiry_threshold)
+            .map(|share| UpgradePermitAuthChangeAction::RemoveUnvalidated(share.into()));
+
+        expired_validated.chain(expired_unvalidated).collect()
     }
 }
 
-impl <T: UpgradePermitAuthPool> PoolMutationsProducer<T> for UpgradePermitAuthPoolManager {
+impl<T: UpgradePermitAuthPool> PoolMutationsProducer<T> for UpgradePermitAuthPoolManager {
     type Mutations = UpgradePermitAuthChangeSet;
 
     fn on_state_change(&self, pool: &T) -> Self::Mutations {
@@ -251,7 +253,9 @@ impl <T: UpgradePermitAuthPool> PoolMutationsProducer<T> for UpgradePermitAuthPo
 /// Bouncer that accepts all upgrade permit auth shares.
 pub struct UpgradePermitAuthBouncer;
 
-impl<Pool> BouncerFactory<ic_types::artifact::UpgradePermitAuthId, Pool> for UpgradePermitAuthBouncer {
+impl<Pool> BouncerFactory<ic_types::artifact::UpgradePermitAuthId, Pool>
+    for UpgradePermitAuthBouncer
+{
     fn new_bouncer(&self, _pool: &Pool) -> Bouncer<ic_types::artifact::UpgradePermitAuthId> {
         Box::new(|_id| BouncerValue::Wants)
     }
