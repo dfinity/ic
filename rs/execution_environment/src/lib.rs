@@ -27,7 +27,9 @@ pub use execution_environment::{
     as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-pub use hypervisor::{Hypervisor, HypervisorMetrics};
+pub use hypervisor::{
+    CanisterMemoryHandling, Hypervisor, HypervisorMetrics, MemoryHandling, MemorySource,
+};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;

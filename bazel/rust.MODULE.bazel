@@ -970,6 +970,10 @@ crate.spec(
     version = "^0.5.0",
 )
 crate.spec(
+    package = "libsystemd",
+    version = "0.7.2",
+)
+crate.spec(
     package = "little-loadshedder",
     version = "^0.2.0",
 )
@@ -1703,10 +1707,6 @@ crate.spec(
     version = "0.37",
 )
 crate.spec(
-    package = "systemd",
-    version = "0.10",
-)
-crate.spec(
     package = "sys-mount",
     version = "3.0",
 )
@@ -2231,10 +2231,6 @@ crate.annotation(
 crate.annotation(
     crate = "libcryptsetup-rs-sys",
     link_deps = ["@@//third_party:cryptsetup"],
-)
-crate.annotation(
-    crate = "libsystemd-sys",
-    link_deps = ["@@//third_party:systemd"],
 )
 crate.annotation(
     crate = "virt-sys",

@@ -897,6 +897,7 @@ fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &Ethereum
         minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
         last_scraped_block_number: backend.last_scraped_block_number(),
         evm_rpc_id: Some(canisters.evm_rpc_id),
+        ethereum_sweeper_contract_address: None,
     };
     env.install_canister(
         canisters.minter_id,

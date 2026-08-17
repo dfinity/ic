@@ -116,6 +116,10 @@ pub struct State {
     /// ckERC20 deposit addresses registered via `deposit_erc20`, individually
     /// derived for each user and watched for incoming deposits.
     pub automatic_deposits: AutomaticDeposits,
+
+    /// Address of the sweeper smart contract on Ethereum, which the minter
+    /// delegates to when sweeping funded deposit addresses.
+    pub sweeper_contract_address: Option<Address>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -123,8 +127,7 @@ pub enum InvalidStateError {
     InvalidTransactionNonce(String),
     InvalidEcdsaKeyName(String),
     InvalidLedgerId(String),
-    InvalidEthereumContractAddress(String),
-    InvalidErc20HelperContractAddress(String),
+    InvalidContractAddress(String),
     InvalidMinimumWithdrawalAmount(String),
     InvalidLastScrapedBlockNumber(String),
     InvalidLastErc20ScrapedBlockNumber(String),
@@ -184,6 +187,36 @@ impl State {
                 otherwise ledger can return a BadBurn error that should be returned to the user"
                     .to_string(),
             ));
+        }
+
+        // Every contract the minter interacts with must have a distinct, non-zero address. Carry a
+        // human label for each so both the zero and the duplicate error name which contract(s) are
+        // at fault (the `seen` map keeps the earlier label to name the other side of a collision).
+        let labelled_contracts = self
+            .log_scrapings
+            .iter()
+            .filter_map(|(id, scraping)| {
+                scraping
+                    .contract_address()
+                    .map(|addr| (id.to_string(), addr))
+            })
+            .chain(
+                self.sweeper_contract_address
+                    .as_ref()
+                    .map(|addr| ("sweeper".to_string(), addr)),
+            );
+        let mut seen_contract_addresses: BTreeMap<&Address, String> = BTreeMap::new();
+        for (label, address) in labelled_contracts {
+            if address == &Address::ZERO {
+                return Err(InvalidStateError::InvalidContractAddress(format!(
+                    "the {label} contract address must not be zero"
+                )));
+            }
+            if let Some(previous) = seen_contract_addresses.insert(address, label.clone()) {
+                return Err(InvalidStateError::InvalidContractAddress(format!(
+                    "the {previous} and {label} contract addresses must be distinct (both are {address})"
+                )));
+            }
         }
         Ok(())
     }
@@ -482,6 +515,7 @@ impl State {
             evm_rpc_id,
             deposit_with_subaccount_helper_contract_address,
             last_deposit_with_subaccount_scraped_block_number,
+            ethereum_sweeper_contract_address,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
@@ -496,29 +530,23 @@ impl State {
         }
         if let Some(address) = ethereum_contract_address {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
+                InvalidStateError::InvalidContractAddress(format!("ethereum_contract_address: {e}"))
             })?;
-            self.log_scrapings
-                .set_contract_address(
-                    LogScrapingId::EthDepositWithoutSubaccount,
-                    eth_helper_contract_address,
-                )
-                .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
-                })?;
+            self.log_scrapings.set_contract_address(
+                LogScrapingId::EthDepositWithoutSubaccount,
+                eth_helper_contract_address,
+            );
         }
         if let Some(address) = erc20_helper_contract_address {
             let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {e}"))
+                InvalidStateError::InvalidContractAddress(format!(
+                    "erc20_helper_contract_address: {e}"
+                ))
             })?;
-            self.log_scrapings
-                .set_contract_address(
-                    LogScrapingId::Erc20DepositWithoutSubaccount,
-                    erc20_helper_contract_address,
-                )
-                .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
-                })?;
+            self.log_scrapings.set_contract_address(
+                LogScrapingId::Erc20DepositWithoutSubaccount,
+                erc20_helper_contract_address,
+            );
         }
         if let Some(block_number) = last_erc20_scraped_block_number {
             self.log_scrapings.set_last_scraped_block_number(
@@ -530,13 +558,12 @@ impl State {
         }
         if let Some(address) = deposit_with_subaccount_helper_contract_address {
             let address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {e}"))
+                InvalidStateError::InvalidContractAddress(format!(
+                    "deposit_with_subaccount_helper_contract_address: {e}"
+                ))
             })?;
             self.log_scrapings
-                .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, address)
-                .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
-                })?;
+                .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, address);
         }
         if let Some(block_number) = last_deposit_with_subaccount_scraped_block_number {
             self.log_scrapings.set_last_scraped_block_number(
@@ -554,6 +581,14 @@ impl State {
         }
         if let Some(evm_id) = evm_rpc_id {
             self.evm_rpc_id = evm_id;
+        }
+        if let Some(address) = ethereum_sweeper_contract_address {
+            let address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!(
+                    "ethereum_sweeper_contract_address: {e}"
+                ))
+            })?;
+            self.sweeper_contract_address = Some(address);
         }
         self.validate_config()
     }
@@ -591,6 +626,10 @@ impl State {
         );
         ensure_eq!(self.ckerc20_tokens, other.ckerc20_tokens);
         ensure_eq!(self.automatic_deposits, other.automatic_deposits);
+        ensure_eq!(
+            self.sweeper_contract_address,
+            other.sweeper_contract_address
+        );
 
         self.eth_transactions
             .is_equivalent_to(&other.eth_transactions)
