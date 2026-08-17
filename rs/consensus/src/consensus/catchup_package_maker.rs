@@ -399,13 +399,8 @@ pub(crate) fn create_post_split_summary_block(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: post_split_dkg_summary,
-                // Copy over the IDKG summary from the splitting block
-                idkg: splitting_summary_block
-                    .payload
-                    .as_ref()
-                    .as_summary()
-                    .idkg
-                    .clone(),
+                // Splitting a chain-key enabled subnet is not supported yet
+                idkg: None,
             }),
         ),
         height: post_split_height,
@@ -1261,105 +1256,6 @@ mod tests {
                     "A node outside of both subnets should not create a CUP share"
                 );
             })
-        })
-    }
-
-    #[test]
-    fn create_post_split_summary_block_copies_idkg_summary() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies {
-                mut pool,
-                registry,
-                registry_data_provider,
-                ..
-            } = DependenciesBuilder::multiple_subnets(
-                pool_config,
-                vec![
-                    (
-                        INITIAL_REGISTRY_VERSION.get(),
-                        SOURCE_SUBNET_ID,
-                        SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
-                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
-                            .build(),
-                    ),
-                    (
-                        SPLITTING_REGISTRY_VERSION.get(),
-                        SOURCE_SUBNET_ID,
-                        SubnetRecordBuilder::from(&[NODE_1, NODE_2])
-                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
-                            .build(),
-                    ),
-                    (
-                        SPLITTING_REGISTRY_VERSION.get(),
-                        DESTINATION_SUBNET_ID,
-                        SubnetRecordBuilder::from(&[NODE_3, NODE_4])
-                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
-                            .build(),
-                    ),
-                ],
-            )
-            .with_replica_config(ReplicaConfig {
-                node_id: NODE_1,
-                subnet_id: SOURCE_SUBNET_ID,
-            })
-            .build();
-            // Manually insert DKG transcripts at the splitting version to simulate what the
-            // registry would do. The setup above only inserts the transcripts at the initial
-            // version.
-            insert_initial_dkg_transcript(
-                SPLITTING_REGISTRY_VERSION.get(),
-                SOURCE_SUBNET_ID,
-                &SubnetRecordBuilder::from(&[NODE_1, NODE_2])
-                    .with_dkg_interval_length(INTERVAL_LENGTH.get())
-                    .build(),
-                &registry_data_provider,
-            );
-            registry.reload();
-
-            pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
-
-            let subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
-                source_subnet_id: SOURCE_SUBNET_ID,
-                destination_subnet_id: DESTINATION_SUBNET_ID,
-            });
-
-            let mut proposal = pool.make_next_block();
-            let block = proposal.content.as_mut();
-            block.context.registry_version = SPLITTING_REGISTRY_VERSION;
-            let mut payload = block.payload.as_ref().as_summary().clone();
-            payload.dkg.subnet_splitting_status =
-                BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
-            let idkg = empty_idkg_payload(SOURCE_SUBNET_ID);
-            payload.idkg = Some(idkg.clone());
-            block.payload = Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(payload),
-            );
-            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
-            pool.insert_validated(proposal.clone());
-            pool.notarize(&proposal);
-            pool.finalize(&proposal);
-
-            let splitting_block = proposal.content.as_ref();
-            let post_split_block = create_post_split_summary_block(
-                splitting_block,
-                SOURCE_SUBNET_ID,
-                registry.as_ref(),
-            )
-            .expect("create_post_split_summary_block should succeed");
-
-            let post_split_idkg = post_split_block
-                .payload
-                .as_ref()
-                .as_summary()
-                .idkg
-                .as_ref()
-                .expect("Post-split summary block should have an IDKG summary");
-
-            assert_eq!(
-                *post_split_idkg, idkg,
-                "IDKG summary in post-split block should match the splitting block's IDKG summary"
-            );
         })
     }
 }
