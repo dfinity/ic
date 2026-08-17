@@ -12,8 +12,8 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
-    CompilationCostHandling, ExecutionEnvironment, ExecutionServicesForTesting, RoundLimits,
-    as_round_instructions,
+    CompilationCostHandling, ExecutionEnvironment, ExecutionServicesForTesting, MemorySource,
+    RoundLimits, as_round_instructions,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -142,6 +142,7 @@ where
             UNIX_EPOCH,
             &mut round_limits,
             CompilationCostHandling::CountFullAmount,
+            MemorySource::Fresh,
         )
         .1
         .expect("Failed to create execution state");
