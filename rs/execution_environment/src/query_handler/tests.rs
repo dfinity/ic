@@ -2029,3 +2029,223 @@ fn composite_query_call_to_management_canister_charges_instructions() {
         .unwrap();
     assert_eq!(reply, WasmResult::Reply(b"done".to_vec()));
 }
+
+fn query_outcall_args(is_replicated: Option<bool>) -> Vec<u8> {
+    use ic_management_canister_types_private::{
+        BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod,
+    };
+
+    CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: None,
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: None,
+        is_replicated,
+        pricing_version: None,
+    }
+    .encode()
+}
+
+fn query_outcall_test() -> ExecutionTest {
+    ExecutionTestBuilder::new()
+        .with_query_http_requests_enabled()
+        .build()
+}
+
+/// A user query to the management canister must never make an outcall: there is
+/// no calling canister, so the node would fetch a URL on behalf of nobody.
+#[test]
+fn user_query_to_management_canister_cannot_make_an_http_outcall() {
+    let mut test = query_outcall_test();
+
+    let result = test.non_replicated_query(
+        CanisterId::ic_00(),
+        "http_request",
+        query_outcall_args(Some(false)),
+    );
+
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterMethodNotFound,
+            "Query method http_request not found."
+        ))
+    );
+}
+
+/// `QueryMethod` lists what a user query may address to the management
+/// canister. Adding `http_request` there would open an HTTP proxy.
+#[test]
+fn query_method_enum_does_not_contain_http_request() {
+    use ic_management_canister_types_private::QueryMethod;
+    use std::str::FromStr;
+    use strum::IntoEnumIterator;
+
+    assert!(QueryMethod::from_str("http_request").is_err());
+    assert_eq!(
+        QueryMethod::iter().collect::<Vec<_>>(),
+        vec![
+            QueryMethod::FetchCanisterLogs,
+            QueryMethod::CanisterStatus,
+            QueryMethod::CanisterInfo,
+            QueryMethod::ListCanisters,
+            QueryMethod::CanisterMetrics,
+        ]
+    );
+}
+
+/// While disabled, the rejection is indistinguishable from any other unknown
+/// method.
+#[test]
+fn composite_query_http_outcall_is_not_a_method_when_disabled() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test.non_replicated_query(
+        canister_id,
+        "composite_query",
+        ic00_composite_query("http_request", query_outcall_args(Some(false))),
+    );
+
+    assert_eq!(
+        result,
+        Ok(WasmResult::Reply(
+            b"Query method http_request not found.".to_vec()
+        ))
+    );
+}
+
+#[test]
+fn composite_query_http_outcall_requires_the_subnet_feature() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_http_requests_enabled()
+        .without_http_requests_subnet_feature()
+        .build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test.non_replicated_query(
+        canister_id,
+        "composite_query",
+        ic00_composite_query("http_request", query_outcall_args(Some(false))),
+    );
+
+    assert_eq!(
+        result,
+        Ok(WasmResult::Reply(
+            b"This API is not enabled on this subnet".to_vec()
+        ))
+    );
+}
+
+#[test]
+fn composite_query_http_outcall_requires_a_non_replicated_request() {
+    for is_replicated in [None, Some(true)] {
+        let mut test = query_outcall_test();
+        let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+        let result = test
+            .non_replicated_query(
+                canister_id,
+                "composite_query",
+                ic00_composite_query("http_request", query_outcall_args(is_replicated)),
+            )
+            .unwrap();
+
+        let WasmResult::Reply(message) = result else {
+            panic!("expected a reply carrying the reject message");
+        };
+        let message = String::from_utf8(message).unwrap();
+        assert!(
+            message.contains("must be non-replicated"),
+            "is_replicated {is_replicated:?} produced an unexpected message: {message}"
+        );
+    }
+}
+
+#[test]
+fn composite_query_http_outcall_rejects_invalid_arguments() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", b"not candid".to_vec()),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(message) = result else {
+        panic!("expected a reply carrying the reject message");
+    };
+    let message = String::from_utf8(message).unwrap();
+    assert!(
+        message.contains("Error decoding candid"),
+        "unexpected message: {message}"
+    );
+}
+
+#[test]
+fn composite_query_http_outcall_respects_the_per_query_limit() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_http_requests_enabled()
+        .with_max_query_outcalls_per_query(1)
+        .build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            wasm()
+                .call_simple(
+                    CanisterId::ic_00(),
+                    "http_request",
+                    call_args()
+                        .other_side(query_outcall_args(Some(false)))
+                        .on_reject(
+                            wasm().call_simple(
+                                CanisterId::ic_00(),
+                                "http_request",
+                                call_args()
+                                    .other_side(query_outcall_args(Some(false)))
+                                    .on_reject(wasm().reject_message().append_and_reply()),
+                            ),
+                        ),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    let WasmResult::Reply(message) = result else {
+        panic!("expected a reply carrying the reject message");
+    };
+    let message = String::from_utf8(message).unwrap();
+    assert!(
+        message.contains("maximum number (1) of HTTP outcalls per query call"),
+        "unexpected message: {message}"
+    );
+}
+
+/// Validation happens, but performing the outcall requires suspending the query,
+/// which is not implemented yet.
+#[test]
+fn composite_query_http_outcall_is_not_implemented_yet() {
+    let mut test = query_outcall_test();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            ic00_composite_query("http_request", query_outcall_args(Some(false))),
+        )
+        .unwrap();
+
+    assert_eq!(
+        result,
+        WasmResult::Reply(b"HTTP outcalls from queries are not implemented yet.".to_vec())
+    );
+}

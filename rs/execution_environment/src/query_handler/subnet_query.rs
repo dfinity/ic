@@ -10,23 +10,62 @@ use crate::canister_logs::fetch_canister_logs_response;
 use crate::execution::common::{canister_info, list_canisters};
 use candid::Encode;
 use ic_base_types::PrincipalId;
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterMetricsArgs, FetchCanisterLogsRequest, Payload,
-    QueryMethod,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetricsArgs, FetchCanisterLogsRequest,
+    Method as Ic00Method, Payload, QueryMethod,
 };
 use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_types::{CanisterId, NumInstructions};
 use std::str::FromStr;
 
-/// Parses the given method name as a management canister query method.
-pub(super) fn parse_query_method(method_name: &str) -> Result<QueryMethod, UserError> {
-    QueryMethod::from_str(method_name).map_err(|_| {
-        UserError::new(
-            ErrorCode::CanisterMethodNotFound,
-            format!("Query method {method_name} not found."),
-        )
-    })
+/// A management canister method that a composite query may call.
+pub(super) enum CompositeQueryMethod {
+    /// Also reachable by a query addressed directly to the management
+    /// canister.
+    User(QueryMethod),
+    /// A non-replicated HTTP outcall, reachable only from a composite query:
+    /// it is performed on behalf of a calling canister.
+    HttpRequest,
+}
+
+/// Parses a method name that an end user addressed directly to the management
+/// canister.
+///
+/// Returns a [`QueryMethod`], which has no HTTP-outcall variant: were
+/// `http_request` reachable here, anyone could make this node fetch an
+/// arbitrary URL on behalf of no canister at all. Do not add one to dedupe with
+/// [`parse_composite_query_method`] — the exhaustive match in
+/// [`execute_subnet_query`] is a tripwire that forces the decision under
+/// review.
+pub(super) fn parse_user_query_method(method_name: &str) -> Result<QueryMethod, UserError> {
+    QueryMethod::from_str(method_name).map_err(|_| method_not_found(method_name))
+}
+
+/// Parses a method name that a composite query called on the management
+/// canister.
+///
+/// While `query_http_requests` is disabled, `http_request` is not recognised at
+/// all, so the rejection is indistinguishable from any other unknown method.
+pub(super) fn parse_composite_query_method(
+    method_name: &str,
+    query_http_requests: FlagStatus,
+) -> Result<CompositeQueryMethod, UserError> {
+    if query_http_requests == FlagStatus::Enabled
+        && Ic00Method::from_str(method_name) == Ok(Ic00Method::HttpRequest)
+    {
+        return Ok(CompositeQueryMethod::HttpRequest);
+    }
+
+    parse_user_query_method(method_name).map(CompositeQueryMethod::User)
+}
+
+fn method_not_found(method_name: &str) -> UserError {
+    UserError::new(
+        ErrorCode::CanisterMethodNotFound,
+        format!("Query method {method_name} not found."),
+    )
 }
 
 /// Executes the given management canister query method against the given state

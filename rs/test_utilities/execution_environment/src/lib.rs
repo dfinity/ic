@@ -2445,6 +2445,9 @@ pub struct ExecutionTestBuilder {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     subnet_features: String,
+    /// Overrides the `http_requests` subnet feature. `SubnetFeatures::from_str`
+    /// can only turn features on, so disabling one needs its own knob.
+    http_requests_subnet_feature: Option<bool>,
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     time: Time,
     current_round: ExecutionRound,
@@ -2486,6 +2489,7 @@ impl Default for ExecutionTestBuilder {
             registry_settings: test_registry_settings(),
             manual_execution: false,
             subnet_features: String::default(),
+            http_requests_subnet_feature: None,
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: UNIX_EPOCH,
             current_round: ExecutionRound::new(1),
@@ -2735,6 +2739,29 @@ impl ExecutionTestBuilder {
 
     pub fn with_flexible_http_requests_disabled(mut self) -> Self {
         self.execution_config.flexible_http_requests = FlagStatus::Disabled;
+        self
+    }
+
+    /// Enables non-replicated HTTP outcalls from composite queries.
+    ///
+    /// Note that outcalls are also gated on the `http_requests` subnet feature,
+    /// so a test that wants them will usually need `with_subnet_features` too.
+    pub fn with_query_http_requests_enabled(mut self) -> Self {
+        self.execution_config.query_http_requests = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_max_query_outcalls_per_query(
+        mut self,
+        max_query_outcalls_per_query: usize,
+    ) -> Self {
+        self.execution_config.max_query_outcalls_per_query = max_query_outcalls_per_query;
+        self
+    }
+
+    /// Turns off the `http_requests` subnet feature, which is on by default.
+    pub fn without_http_requests_subnet_feature(mut self) -> Self {
+        self.http_requests_subnet_feature = Some(false);
         self
     }
 
@@ -3033,6 +3060,9 @@ impl ExecutionTestBuilder {
         } else {
             own_subnet_info.subnet_features =
                 SubnetFeatures::from_str(&self.subnet_features).unwrap();
+        }
+        if let Some(http_requests) = self.http_requests_subnet_feature {
+            own_subnet_info.subnet_features.http_requests = http_requests;
         }
         own_subnet_info.resource_limits = self.resource_limits;
 

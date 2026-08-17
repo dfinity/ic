@@ -1,5 +1,7 @@
 use super::query_call_graph::evaluate_query_call_graph;
-use super::subnet_query::{execute_subnet_query, parse_query_method};
+use super::subnet_query::{
+    CompositeQueryMethod, execute_subnet_query, parse_composite_query_method,
+};
 use crate::{
     CanisterManager, NonReplicatedQueryKind, RoundInstructions,
     execution::common::{self, validate_method},
@@ -27,6 +29,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{ReplicaLogger, error, info};
+use ic_management_canister_types_private::{CanisterHttpRequestArgs, Payload as Ic00Payload};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -35,6 +38,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, NumInstructions, NumMessages, NumSlices, Time,
     batch::QueryStats,
+    canister_http::QueryOutcallRequest,
     ingress::WasmResult,
     messages::{
         CallContextId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext, Request,
@@ -124,6 +128,10 @@ pub(super) struct QueryContext {
     transient_errors: usize,
     /// The number of calls to the management canister in this query context.
     ic00_calls: usize,
+    query_http_requests: FlagStatus,
+    max_query_outcalls_per_query: usize,
+    /// The number of HTTP outcalls requested in this query context.
+    query_outcalls: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
     /// An optional atomic to observe the number of instructions used in the query.
     /// This should only be populated for http outcalls transformations.
@@ -149,6 +157,8 @@ impl QueryContext {
         max_query_call_walltime: Duration,
         instruction_overhead_per_query_call: NumInstructions,
         composite_queries: FlagStatus,
+        query_http_requests: FlagStatus,
+        max_query_outcalls_per_query: usize,
         canister_id: CanisterId,
         metrics: Arc<QueryHandlerMetrics>,
         local_query_execution_stats: Option<Arc<QueryStatsCollector>>,
@@ -191,6 +201,9 @@ impl QueryContext {
             evaluated_canister_stats: BTreeMap::from([(canister_id, QueryStats::default())]),
             transient_errors: 0,
             ic00_calls: 0,
+            query_http_requests,
+            max_query_outcalls_per_query,
+            query_outcalls: 0,
             cycles_account_manager,
             instruction_observation,
         }
@@ -935,10 +948,14 @@ impl QueryContext {
         // executed in non-replicated mode, as well as the calls to methods not
         // exported by the management canister at all, with the same error as for
         // such a query sent by an end user to the management canister.
-        let method = match parse_query_method(&request.method_name) {
-            Ok(method) => method,
-            Err(err) => return reject(err),
-        };
+        let method =
+            match parse_composite_query_method(&request.method_name, self.query_http_requests) {
+                Ok(CompositeQueryMethod::User(method)) => method,
+                Ok(CompositeQueryMethod::HttpRequest) => {
+                    return self.start_http_outcall(request, to_query_result);
+                }
+                Err(err) => return reject(err),
+            };
 
         // Charge the base overhead of a query call. This happens after rejecting
         // calls to methods that are not management canister query methods, in the
@@ -967,6 +984,73 @@ impl QueryContext {
             Ok(reply) => ExecutionResult::Response(to_query_result(Payload::Data(reply))),
             Err(err) => reject(err),
         }
+    }
+
+    /// Validates a non-replicated HTTP outcall and enforces the limits, then
+    /// rejects: performing it requires suspending the query.
+    fn start_http_outcall(
+        &mut self,
+        request: &Request,
+        to_query_result: impl Fn(Payload) -> QueryResponse,
+    ) -> ExecutionResult {
+        let reject_with_error = |err: UserError| {
+            ExecutionResult::Response(to_query_result(Payload::Reject(RejectContext::from(err))))
+        };
+        let reject = |reject_code: RejectCode, message: &str| {
+            ExecutionResult::Response(to_query_result(Payload::Reject(RejectContext::new(
+                reject_code,
+                message.to_string(),
+            ))))
+        };
+
+        // Reported the same way as the config flag: which of the two is off is
+        // not the caller's business.
+        if !self.state.get_ref().subnet_features().http_requests {
+            return reject_with_error(UserError::new(
+                ErrorCode::CanisterContractViolation,
+                "This API is not enabled on this subnet".to_string(),
+            ));
+        }
+
+        // As for any other management canister method.
+        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
+
+        if self.query_outcalls >= self.max_query_outcalls_per_query {
+            return reject_with_error(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The maximum number ({}) of HTTP outcalls per query call has been reached.",
+                    self.max_query_outcalls_per_query
+                ),
+            ));
+        }
+
+        let args = match CanisterHttpRequestArgs::decode(&request.method_payload) {
+            Ok(args) => args,
+            Err(err) => return reject_with_error(err),
+        };
+
+        let (_outcall, _transform) = match QueryOutcallRequest::try_from_args(
+            request.sender,
+            args,
+            self.remaining_walltime(),
+        ) {
+            Ok(outcall) => outcall,
+            Err(err) => return reject_with_error(err.into()),
+        };
+
+        self.query_outcalls += 1;
+
+        reject(
+            RejectCode::SysTransient,
+            "HTTP outcalls from queries are not implemented yet.",
+        )
+    }
+
+    /// What is left of this query context's walltime budget.
+    fn remaining_walltime(&self) -> Duration {
+        self.query_context_time_limit
+            .saturating_sub(self.query_context_time_start.elapsed())
     }
 
     /// Extracts the query result from the call context action.

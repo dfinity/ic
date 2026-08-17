@@ -198,7 +198,7 @@ impl InternalHttpQueryHandler {
 
         // Serve the query locally if it is addressed to the management canister.
         if query.receiver == CanisterId::ic_00() {
-            let method = subnet_query::parse_query_method(&query.method_name)?;
+            let method = subnet_query::parse_user_query_method(&query.method_name)?;
             let since = Instant::now(); // Start logging execution time.
             let result = subnet_query::execute_subnet_query(
                 &self.canister_manager,
@@ -300,6 +300,8 @@ impl InternalHttpQueryHandler {
             max_query_call_walltime,
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
+            self.config.query_http_requests,
+            self.config.max_query_outcalls_per_query,
             query.receiver,
             Arc::clone(&self.metrics),
             query_stats_collector,
