@@ -656,7 +656,7 @@ pub mod test {
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::CountBytes;
     use ic_types::ReplicaVersion;
     use ic_types::crypto::crypto_hash;
@@ -3785,7 +3785,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: test_replica_version(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -3885,7 +3885,7 @@ pub mod test {
                             content_hash: crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: ReplicaVersion::default(),
+                            replica_version: test_replica_version(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
