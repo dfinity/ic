@@ -29,7 +29,7 @@ use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
-use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup, SupportedToken};
+use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup};
 use ic_ethereum_types::Address;
 use std::time::Duration;
 
@@ -198,25 +198,17 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     const USDT_BELOW_MINIMUM: u128 = 1_000_000;
 
     let setup = LiveBalanceScanSetup::new_live();
+    // `supported_erc20_tokens()` registers ckUSDC then ckUSDT, in that order.
+    let [usdc, usdt] = setup.supported_erc20_tokens() else {
+        panic!("expected exactly 2 supported tokens")
+    };
     let deposits = [
-        (
-            setup.depositor(1),
-            SupportedToken::CkUsdt,
-            USDT_ABOVE_MINIMUM,
-        ),
-        (
-            setup.depositor(2),
-            SupportedToken::CkUsdc,
-            USDC_ABOVE_MINIMUM,
-        ),
-        (
-            setup.depositor(3),
-            SupportedToken::CkUsdt,
-            USDT_BELOW_MINIMUM,
-        ),
+        (setup.depositor(1), usdt, USDT_ABOVE_MINIMUM),
+        (setup.depositor(2), usdc, USDC_ABOVE_MINIMUM),
+        (setup.depositor(3), usdt, USDT_BELOW_MINIMUM),
     ];
 
-    let holdings: Vec<Holding> = deposits
+    let holdings: Vec<Holding<'_>> = deposits
         .iter()
         .map(|&(depositor, token, amount)| Holding {
             deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT, token),
@@ -228,21 +220,21 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
 
     let deadline = Duration::from_secs(180);
     assert_matches!(
-        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdt, deadline).status,
+        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, usdt, deadline).status,
         DepositStatus::AwaitingSweep(detected)
-            if detected.erc20_contract_address == SupportedToken::CkUsdt.contract().to_string()
+            if detected.erc20_contract_address == usdt.contract.address
                 && detected.scanned_balance == USDT_ABOVE_MINIMUM
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdc, deadline).status,
+        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, usdc, deadline).status,
         DepositStatus::AwaitingSweep(detected)
-            if detected.erc20_contract_address == SupportedToken::CkUsdc.contract().to_string()
+            if detected.erc20_contract_address == usdc.contract.address
                 && detected.scanned_balance == USDC_ABOVE_MINIMUM
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdt, deadline).status,
+        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, usdt, deadline).status,
         DepositStatus::Scanning { scan_count, last_scanned_block, .. }
             if scan_count >= 1 && last_scanned_block.is_some()
     );
