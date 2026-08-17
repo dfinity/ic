@@ -1023,6 +1023,15 @@ impl LocalBackend {
                 .arg("raw")
                 .arg("-b")
                 .arg(&base)
+                // Pin the qcow2 version instead of inheriting `qemu-img`'s
+                // default, because `detect-zeroes=unmap` on the `-drive` below
+                // depends on it: only v3 (`compat=1.1`) can record a *zero
+                // cluster*, which is what makes a zeroed range read back as
+                // zeros rather than falling through to the backing file. On v2
+                // qcow2 would have to write the zeros out instead, silently
+                // giving up the space saving.
+                .arg("-o")
+                .arg("compat=1.1")
                 .arg(&primary_disk);
             // Grow the overlay's virtual size to `min_gib`, but only when it
             // exceeds the base image's size (the base is raw, so its byte length
@@ -1219,9 +1228,9 @@ impl LocalBackend {
         // every node — grows its overlays by ~87 GiB. Paired with the
         // `discard=unmap` on the same drive, zero writes instead become unmaps,
         // bringing that down to ~11 GiB. That is safe over a backing
-        // file: the overlay is qcow2 v3 (`compat=1.1`), so qcow2 records a *zero
-        // cluster* rather than deallocating, and reads keep returning zeros
-        // instead of falling through to the base image.
+        // file because the overlay is created with `compat=1.1` above: qcow2 v3
+        // records a *zero cluster* rather than deallocating, so reads keep
+        // returning zeros instead of falling through to the base image.
         let rp = root_port!();
         arg!(
             "-drive",
