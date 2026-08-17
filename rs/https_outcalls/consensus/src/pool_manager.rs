@@ -3913,6 +3913,11 @@ pub mod test {
         for replication in [
             Replication::FullyReplicated,
             Replication::NonReplicated(node_test_id(0)),
+            Replication::Flexible {
+                committee: BTreeSet::from([node_test_id(0), node_test_id(1)]),
+                min_responses: 1,
+                max_responses: 2,
+            },
         ] {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 with_test_replica_logger(|log| {
