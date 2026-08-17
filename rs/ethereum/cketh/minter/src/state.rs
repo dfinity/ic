@@ -186,21 +186,32 @@ impl State {
             ));
         }
 
-        let mut seen_contract_addresses = BTreeSet::new();
-        for address in self
+        // Every contract the minter interacts with must have a distinct, non-zero address. Carry a
+        // human label for each so both the zero and the duplicate error name which contract(s) are
+        // at fault (the `seen` map keeps the earlier label to name the other side of a collision).
+        let labelled_contracts = self
             .log_scrapings
             .iter()
-            .filter_map(|(_id, scraping)| scraping.contract_address())
-            .chain(self.sweeper_contract_address.as_ref())
-        {
+            .filter_map(|(id, scraping)| {
+                scraping
+                    .contract_address()
+                    .map(|addr| (id.to_string(), addr))
+            })
+            .chain(
+                self.sweeper_contract_address
+                    .as_ref()
+                    .map(|addr| ("sweeper".to_string(), addr)),
+            );
+        let mut seen_contract_addresses: BTreeMap<&Address, String> = BTreeMap::new();
+        for (label, address) in labelled_contracts {
             if address == &Address::ZERO {
-                return Err(InvalidStateError::InvalidContractAddress(
-                    "contract address must not be zero".to_string(),
-                ));
-            }
-            if !seen_contract_addresses.insert(address) {
                 return Err(InvalidStateError::InvalidContractAddress(format!(
-                    "contract address {address} is used by more than one contract"
+                    "the {label} contract address must not be zero"
+                )));
+            }
+            if let Some(previous) = seen_contract_addresses.insert(address, label.clone()) {
+                return Err(InvalidStateError::InvalidContractAddress(format!(
+                    "the {previous} and {label} contract addresses must be distinct (both are {address})"
                 )));
             }
         }
