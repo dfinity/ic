@@ -285,9 +285,8 @@ pub(crate) fn max_consensus_fee(
             max_responses,
             ..
         } => {
-            let responses = max_responses as u128;
             consensus_fee(
-                responses.saturating_mul(
+                (max_responses as u128).saturating_mul(
                     FLEXIBLE_RESPONSE_SIZE_OVERHEAD.saturating_add(transformed_bytes),
                 ),
                 subnet_size,
