@@ -138,9 +138,20 @@ fn test_appending_to_uninitialized_store_updates_next_idx() {
 fn test_minimal_allowed_capacity() {
     let mut s = LogMemoryStore::new();
 
-    s.resize_for_testing(1); // Set a small limit.
+    s.resize_for_testing(EXPECTED_DATA_CAPACITY_MIN); // Set the smallest allowed limit.
 
     assert_eq!(s.byte_capacity(), EXPECTED_DATA_CAPACITY_MIN);
+}
+
+// Non-zero limits below the minimum are rejected when canister settings are
+// validated, so reaching the store with one is a bug.
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "non-zero log memory limit 1 is below the minimum 4096")]
+fn test_resize_below_minimal_allowed_capacity_panics() {
+    let mut s = LogMemoryStore::new();
+
+    s.resize_for_testing(1);
 }
 
 #[test]
@@ -593,9 +604,9 @@ fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
 #[test]
 fn test_small_capacity_indexing() {
     let mut s = LogMemoryStore::new();
-    // Set a very small capacity, smaller than 146 bytes (INDEX_ENTRY_COUNT_MAX).
-    // 146 entries. If capacity is 100. 100 / 146 = 0.
-    s.resize_for_testing(100);
+    // Set the smallest allowed capacity, so that each of the 146 index entries
+    // (INDEX_ENTRY_COUNT_MAX) covers a segment of just 4096 / 146 = 28 bytes.
+    s.resize_for_testing(EXPECTED_DATA_CAPACITY_MIN);
 
     let mut delta = CanisterLog::new_delta_with_next_index(0, 100);
     // Add multiple records.
@@ -648,12 +659,11 @@ fn test_multiple_records_in_same_segment() {
 }
 
 #[test]
-fn test_very_small_capacity_single_byte() {
+fn test_minimal_allowed_capacity_single_record() {
     let mut s = LogMemoryStore::new();
-    // Set capacity to 1 byte - this will be clamped to DATA_CAPACITY_MIN (4096 bytes).
-    s.resize_for_testing(1);
+    // Set capacity to DATA_CAPACITY_MIN (4096 bytes).
+    s.resize_for_testing(EXPECTED_DATA_CAPACITY_MIN);
 
-    // Verify byte capacity was clamped to minimum.
     assert_eq!(s.byte_capacity(), 4096);
 
     let mut delta = CanisterLog::new_delta_with_next_index(0, 4096);
@@ -976,11 +986,6 @@ fn assert_memory_usage_for_limit(limit: usize) {
 #[test]
 fn memory_usage_for_limit_zero_limit() {
     assert_memory_usage_for_limit(0);
-}
-
-#[test]
-fn memory_usage_for_limit_below_minimum() {
-    assert_memory_usage_for_limit(1); // below DATA_CAPACITY_MIN
 }
 
 #[test]
