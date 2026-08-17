@@ -724,8 +724,8 @@ http_file(
 
 http_file(
     name = "cketh_sepolia_events.gz",
-    sha256 = "ad417332a67911cace2ed1f5179b7b1e5f4eb5327a5e872f68a85283dfa838af",
-    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v1.gz",
+    sha256 = "a4e034db414ea13e03e2533bbdf0e5291d9ccc6e81748191ec5b747389e74921",
+    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v2.gz",
 )
 
 # EVM RPC canister
