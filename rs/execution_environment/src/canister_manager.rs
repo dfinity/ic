@@ -3058,18 +3058,19 @@ impl CanisterManager {
         &self,
         args: &UploadCanisterSnapshotDataArgs,
     ) -> (u64, NumInstructions) {
+        let overhead = self.config.canister_snapshot_baseline_instructions;
         match args.kind {
             CanisterSnapshotDataOffset::WasmModule { .. } => (
                 args.chunk.len() as u64,
-                NumInstructions::new(args.chunk.len() as u64),
+                overhead + NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::WasmMemory { .. } => (
                 args.chunk.len() as u64,
-                NumInstructions::new(args.chunk.len() as u64),
+                overhead + NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::StableMemory { .. } => (
                 args.chunk.len() as u64,
-                NumInstructions::new(args.chunk.len() as u64),
+                overhead + NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::WasmChunk => (
                 wasm_chunk_store::chunk_size().get(),

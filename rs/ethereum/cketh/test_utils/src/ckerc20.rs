@@ -381,8 +381,10 @@ impl CkErc20Setup {
         self,
         from: Principal,
         subaccount: Option<[u8; 32]>,
+        erc20_contract_address: String,
     ) -> DepositErc20Flow {
         let arg = DepositErc20Arg {
+            erc20_contract_address,
             mode: DepositMode::Unsponsored { subaccount },
         };
         self.call_minter_deposit_erc20_with(from, arg)

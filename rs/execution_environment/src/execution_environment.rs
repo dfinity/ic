@@ -2254,7 +2254,7 @@ impl ExecutionEnvironment {
 
         let http_outcalls_are_free = self.http_outcalls_are_free(cost_schedule);
 
-        // The refundable cycles are everything the payment covers beyond the
+        // The refundable payment is everything the payment covers beyond the
         // base fee; when the outcall is free nothing is charged, so nothing is
         // refundable. We set the refund status even for legacy pricing in order
         // to enable observability during the dark launch. However, nothing is
@@ -2262,7 +2262,7 @@ impl ExecutionEnvironment {
         // caller is instead refunded the unspent `request.payment` (the full
         // payment on free/system subnets, where the legacy fee is zero) when the
         // response is delivered.
-        let refundable_cycles = if http_outcalls_are_free {
+        let refundable_payment = if http_outcalls_are_free {
             Cycles::new(0)
         } else {
             canister_http_request_context.request.payment - base_fee.real()
@@ -2270,9 +2270,20 @@ impl ExecutionEnvironment {
         let node_count = canister_http_request_context
             .replication
             .node_count(canister_http_request_context.subnet_size);
+        // Whatever the payment covers beyond the worst-case cost of the outcall can
+        // never be spent, so withholding it would only lock up the caller's cycles
+        // until the request is settled. Only the smaller of the two is split into
+        // per-replica allowances.
+        let max_usage_fee = self.cycles_account_manager.max_http_request_usage_fee(
+            &canister_http_request_context.replication,
+            canister_http_request_context.max_response_bytes,
+            canister_http_request_context.subnet_size,
+        );
+        let per_replica_allowance = refundable_payment.min(max_usage_fee) / node_count;
+        let refundable_cycles = per_replica_allowance * node_count;
         canister_http_request_context.refund_status = RefundStatus {
             refundable_cycles,
-            per_replica_allowance: refundable_cycles / node_count,
+            per_replica_allowance,
             refunded_cycles: Cycles::new(0),
             refunding_nodes: BTreeSet::new(),
         };
@@ -2285,11 +2296,12 @@ impl ExecutionEnvironment {
                 canister_http_request_context.request.payment -= legacy_fee.real();
             }
             PricingVersion::PayAsYouGo => {
-                // Take out the entire payment upfront; the refundable portion is
-                // returned later via the refund mechanism. When the outcall is
-                // free there is nothing to charge.
+                // Deduct the base fee plus the per-replica allowances.
+                // The remaining payment is refunded when the response is delivered.
+                // Part of the per-replica allowances may be refunded after the response is delivered.
                 if !http_outcalls_are_free {
-                    canister_http_request_context.request.payment.take();
+                    canister_http_request_context.request.payment -=
+                        base_fee.real() + refundable_cycles;
                 }
             }
         }

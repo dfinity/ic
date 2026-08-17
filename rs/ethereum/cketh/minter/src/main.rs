@@ -22,7 +22,7 @@ use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
     EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
 };
-use ic_cketh_minter::guard::retrieve_withdraw_guard;
+use ic_cketh_minter::guard::{deposit_erc20_guard, retrieve_withdraw_guard};
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
@@ -179,6 +179,26 @@ async fn minter_address() -> String {
 async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
+    // Held for the whole call, including across the ECDSA public key fetch below, so that the
+    // status check and the registration that follows it cannot be interleaved with another
+    // `deposit_erc20` from the same principal.
+    let _guard = deposit_erc20_guard(caller).unwrap_or_else(|e| {
+        ic_cdk::trap(format!(
+            "Failed retrieving guard for principal {caller}: {e:?}"
+        ))
+    });
+    let token = Address::from_str(&arg.erc20_contract_address)
+        .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: invalid ERC-20 contract address: {e}")));
+    if !read_state(|s| s.is_supported_ckerc20(&token)) {
+        let supported_tokens: BTreeSet<_> = read_state(|s| {
+            s.supported_ck_erc20_tokens()
+                .map(|token| token.into())
+                .collect()
+        });
+        return Err(DepositErc20Error::TokenNotSupported {
+            supported_tokens: Vec::from_iter(supported_tokens),
+        });
+    }
     let subaccount = match arg.mode {
         DepositMode::Unsponsored { subaccount } => subaccount,
     };
@@ -188,7 +208,8 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     };
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
-    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account)) {
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+    {
         return Ok(status);
     }
 
@@ -196,10 +217,19 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     // the state so that the (synchronous) registration below can derive the address.
     state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    mutate_state(|s| s.register_deposit_address(now, account))?;
+    // Re-check the status after the await: a concurrent balance scan may have detected a deposit and
+    // moved this pair into the sweep queue while we waited for the ECDSA key (only possible right
+    // after an upgrade, before the key is cached). Returning its status here keeps `register_deposit_
+    // address` from trying to re-arm an already-swept pair. From here on the call is synchronous, so
+    // no further scan can interleave before the registration below.
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+    {
+        return Ok(status);
+    }
+    mutate_state(|s| s.register_deposit_address(now, account, token))?;
     Ok(
-        read_state(|s| s.automatic_deposits.deposit_status(now, &account))
-            .expect("BUG: a just-registered address must report a Scanning status"),
+        read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+            .expect("BUG: a just-registered pair must report a Scanning status"),
     )
 }
 
@@ -624,8 +654,8 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
 }
 
 #[update]
-async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
-    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+async fn get_canister_status() -> ic_cdk_management_canister::CanisterStatusResult {
+    ic_cdk_management_canister::canister_status(&ic_cdk_management_canister::CanisterStatusArgs {
         canister_id: ic_cdk::api::canister_self(),
     })
     .await
@@ -717,8 +747,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
 
     fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
         use ic_cketh_minter::endpoints::events::{
-            DepositAddressRegistration as CandidDepositAddressRegistration,
-            Erc20Balance as CandidErc20Balance, EventPayload as EP,
+            DepositAddressRegistration as CandidDepositAddressRegistration, EventPayload as EP,
         };
         CandidEvent {
             timestamp,
@@ -732,6 +761,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         .map(|r| CandidDepositAddressRegistration {
                             owner: r.owner,
                             subaccount: r.subaccount,
+                            erc20_contract_address: r.erc20_contract_address.to_string(),
                             address: r.address.to_string(),
                             expires_at_nanos: r.expires_at_nanos.as_nanos(),
                             last_scanned_block: r.last_scanned_block.map(Into::into),
@@ -743,16 +773,10 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     owner: deposit.owner,
                     subaccount: deposit.subaccount,
                     address: deposit.address.to_string(),
+                    erc20_contract_address: deposit.erc20_contract_address.to_string(),
                     last_scanned_block: deposit.last_scanned_block.into(),
                     scan_count: deposit.scan_count.into(),
-                    deposits: deposit
-                        .deposits
-                        .into_iter()
-                        .map(|d| CandidErc20Balance {
-                            token: d.token.to_string(),
-                            scanned_balance: d.scanned_balance.into(),
-                        })
-                        .collect(),
+                    scanned_balance: deposit.scanned_balance.into(),
                 },
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),

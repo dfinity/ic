@@ -14,8 +14,7 @@ use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{
-    consensus_cost_coefficient, flexible_initial_spent, min_flexible_consensus_cost,
-    non_flexible_initial_spent,
+    consensus_fee, flexible_initial_spent, min_flexible_consensus_cost, non_flexible_initial_spent,
 };
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
@@ -5293,9 +5292,7 @@ fn with_payg_allowance(
 /// a subnet of `num_nodes` nodes, i.e. the part of the collective initial spend
 /// that the signing replicas' unspent allowances have to cover.
 fn non_flexible_consensus_cost(num_nodes: usize, content_size: u32) -> Cycles {
-    Cycles::from(
-        consensus_cost_coefficient(NumberOfNodes::from(num_nodes as u32)) * content_size as u128,
-    )
+    consensus_fee(content_size as u128, NumberOfNodes::from(num_nodes as u32))
 }
 
 /// Adds a share (and its response) for every node in `nodes` to the pool, all

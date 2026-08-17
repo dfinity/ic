@@ -98,17 +98,28 @@ impl LiveBalanceScanSetup {
         PrincipalId::new_user_test_id(seed).into()
     }
 
-    /// Registers a deposit address for `caller`'s `subaccount` and returns the Ethereum address the
-    /// minter derived for it.
-    pub fn register_deposit_address(&self, caller: Principal, subaccount: [u8; 32]) -> Address {
-        Address::from_str(&self.deposit_erc20(caller, subaccount).address)
+    /// Registers a `(caller/subaccount, token)` deposit and returns the Ethereum address the minter
+    /// derived for it (shared across the caller's tokens).
+    pub fn register_deposit_address(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        token: SupportedToken,
+    ) -> Address {
+        Address::from_str(&self.deposit_erc20(caller, subaccount, token).address)
             .expect("BUG: minter returned an invalid deposit address")
     }
 
-    /// Calls `deposit_erc20` as `caller`, which registers (idempotently) that user's deposit
-    /// address for balance scanning and reports its scan progress.
-    pub fn deposit_erc20(&self, caller: Principal, subaccount: [u8; 32]) -> DepositErc20Response {
+    /// Calls `deposit_erc20` as `caller`, which registers (idempotently) that user's
+    /// `(address, token)` pair for balance scanning and reports its scan progress.
+    pub fn deposit_erc20(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        token: SupportedToken,
+    ) -> DepositErc20Response {
         let arg = DepositErc20Arg {
+            erc20_contract_address: token.contract().to_string(),
             mode: DepositMode::Unsponsored {
                 subaccount: Some(subaccount),
             },
@@ -146,8 +157,8 @@ impl LiveBalanceScanSetup {
                 &u256_be(holding.amount),
             );
         }
-        // Every registered address is scanned against both tokens, so a token without code would
-        // revert the whole scan even for addresses that do not hold it.
+        // Every token appearing in a registered pair is read in the shared batch, so a token
+        // without code would revert the whole scan even for pairs that do not hold it.
         for token in SupportedToken::ALL {
             self.anvil.set_code(&token.contract(), &runtime);
         }
@@ -171,11 +182,12 @@ impl LiveBalanceScanSetup {
         &self,
         caller: Principal,
         subaccount: [u8; 32],
+        token: SupportedToken,
         deadline: Duration,
     ) -> DepositErc20Response {
         let start = Instant::now();
         loop {
-            let progress = self.deposit_erc20(caller, subaccount);
+            let progress = self.deposit_erc20(caller, subaccount, token);
             let scanned = match &progress.status {
                 DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
                 DepositStatus::AwaitingSweep(_) => true,

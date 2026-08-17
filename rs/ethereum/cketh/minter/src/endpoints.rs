@@ -215,6 +215,9 @@ pub struct WithdrawalArg {
 /// Argument for the `deposit_erc20` endpoint.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DepositErc20Arg {
+    /// The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC). Traps if it
+    /// cannot be parsed as an Ethereum address. Must be a ckERC20 token supported by the minter.
+    pub erc20_contract_address: String,
     pub mode: DepositMode,
 }
 
@@ -256,17 +259,16 @@ pub enum DepositStatus {
         /// How many times the address' balance has been scanned so far.
         scan_count: u64,
     },
-    /// Funds were detected at or above the minimum and queued for sweeping, one
-    /// entry per funded token.
-    AwaitingSweep(Vec<DetectedDeposit>),
+    /// Funds were detected at or above the minimum and queued for sweeping.
+    AwaitingSweep(DetectedDeposit),
 }
 
 /// A funded token detected at a deposit address and queued for sweeping.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DetectedDeposit {
     /// The ERC-20 token contract whose balance was found.
-    pub token: String,
-    /// The balance scanned for `token`; may change before the sweep.
+    pub erc20_contract_address: String,
+    /// The balance scanned for `erc20_contract_address`; may change before the sweep.
     pub scanned_balance: Nat,
     /// The Ethereum block at which the balance was detected.
     pub detected_at_block: Nat,
@@ -274,8 +276,13 @@ pub struct DetectedDeposit {
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositErc20Error {
-    /// The maximum number of concurrently armed deposit addresses has been reached.
-    TooManyActiveAddresses,
+    /// The `erc20_contract_address` is not a ckERC20 token supported by the minter.
+    TokenNotSupported { supported_tokens: Vec<CkErc20Token> },
+    /// The account already has the maximum number of ERC-20 tokens armed.
+    TooManyTokensForAccount,
+    /// The maximum number of concurrently armed deposits (`(account, token)` pairs) has been
+    /// reached.
+    TooManyActiveDeposits,
     /// The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable(String),
 }
@@ -568,23 +575,18 @@ pub mod events {
             owner: Principal,
             subaccount: Option<[u8; 32]>,
             address: String,
+            erc20_contract_address: String,
             last_scanned_block: Nat,
             scan_count: u64,
-            deposits: Vec<Erc20Balance>,
+            scanned_balance: Nat,
         },
-    }
-
-    /// One funded token in an [`EventPayload::AutomaticDepositReceived`].
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-    pub struct Erc20Balance {
-        pub token: String,
-        pub scanned_balance: Nat,
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct DepositAddressRegistration {
         pub owner: Principal,
         pub subaccount: Option<[u8; 32]>,
+        pub erc20_contract_address: String,
         pub address: String,
         pub expires_at_nanos: u64,
         pub last_scanned_block: Option<Nat>,

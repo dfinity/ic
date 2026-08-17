@@ -1659,7 +1659,8 @@ fn execute_canisters_on_thread(
                 exec_env,
                 canister_arc,
                 instruction_limits.clone(),
-                config.max_instructions_per_query_message,
+                resource_limits
+                    .maximum_query_instructions_or(config.max_instructions_per_query_message),
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
