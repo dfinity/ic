@@ -1006,6 +1006,7 @@ mod tests {
         backwards_compatibility::BackwardsCompatible,
         consensus::{BlockPayload, Payload, dkg::SplittingArgs},
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
+        subnet_id_into_protobuf,
         time::UNIX_EPOCH,
     };
     use rstest::rstest;
@@ -1671,6 +1672,13 @@ mod tests {
                 assert_eq!(config.receivers().get(), &expected_committee);
                 assert_eq!(config.dealers().get(), &expected_committee);
             }
+
+            assert_eq!(
+                summary.subnet_splitting_status(),
+                SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                    new_subnet_id: looked_up_subnet_id,
+                })
+            );
         });
     }
 
@@ -1702,6 +1710,132 @@ mod tests {
             assert!(
                 error.contains("Empty cup contents"),
                 "Unexpected error: {error}"
+            );
+        });
+    }
+
+    /// Creates a summary at a registry version at which a split of the subnet is scheduled, and
+    /// checks that the scheduled split is picked up.
+    #[test]
+    fn test_create_summary_payload_with_scheduled_subnet_split() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let source_subnet_id = subnet_test_id(222);
+            let destination_subnet_id = subnet_test_id(223);
+            let nodes: Vec<_> = (7..14).map(node_test_id).collect();
+            let dkg_interval_len = 3;
+            // The registry version referenced by the last summary block.
+            let last_summary_registry_version = RegistryVersion::from(1);
+            // The registry version at which the subnet split is scheduled. It is proposed by the
+            // summary block being created, i.e. it is the registry version of its validation
+            // context.
+            let split_registry_version = RegistryVersion::from(2);
+
+            let Dependencies {
+                crypto,
+                registry,
+                registry_data_provider,
+                mut pool,
+                state_manager,
+                ..
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                source_subnet_id,
+                vec![(
+                    last_summary_registry_version.get(),
+                    SubnetRecordBuilder::from(&nodes)
+                        .with_dkg_interval_length(dkg_interval_len)
+                        .build(),
+                )],
+            )
+            .build();
+
+            let cup_contents = registry
+                .get_cup_contents(source_subnet_id, last_summary_registry_version)
+                .expect("Failed to retrieve the CUP contents from the registry")
+                .value
+                .expect("Missing CUP contents");
+            let genesis_summary = get_dkg_summary_from_cup_contents(
+                cup_contents.clone(),
+                source_subnet_id,
+                &*registry,
+                last_summary_registry_version,
+            )
+            .expect("Failed to get DKG summary from CUP contents");
+
+            // Schedule the split by adding a subnet splitting CUP contents record for the source
+            // subnet at `split_registry_version`.
+            registry_data_provider
+                .add(
+                    &make_catch_up_package_contents_key(source_subnet_id),
+                    split_registry_version,
+                    Some(CatchUpPackageContents {
+                        cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgsProto {
+                            destination_subnet_id: Some(subnet_id_into_protobuf(
+                                destination_subnet_id,
+                            )),
+                        })),
+                        ..cup_contents
+                    }),
+                )
+                .expect("Failed to add the subnet splitting CUP contents");
+            registry.update_to_latest_version();
+
+            // Advance to the last block of the DKG interval, so that the next block is a summary.
+            pool.advance_round_normal_operation_n(dkg_interval_len);
+            let parent = pool.get_cache().finalized_block();
+
+            let summary = create_summary_payload(
+                source_subnet_id,
+                registry.as_ref(),
+                crypto.as_ref(),
+                &PoolReader::new(&pool),
+                &genesis_summary,
+                &parent,
+                last_summary_registry_version,
+                state_manager.as_ref(),
+                &ValidationContext {
+                    registry_version: split_registry_version,
+                    certified_height: Height::from(dkg_interval_len),
+                    time: UNIX_EPOCH,
+                },
+                no_op_logger(),
+                None,
+            )
+            .expect("Failed to create the summary payload");
+
+            assert_eq!(
+                get_subnet_splitting_status(
+                    source_subnet_id,
+                    registry.as_ref(),
+                    last_summary_registry_version,
+                    split_registry_version,
+                )
+                .expect("Failed to get the subnet splitting status"),
+                SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id,
+                    destination_subnet_id,
+                })
+            );
+
+            assert_eq!(
+                summary.subnet_splitting_status(),
+                SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id,
+                    destination_subnet_id,
+                })
+            );
+
+            // The summary block starting the split adopts `split_registry_version`, so from the
+            // next summary on the split is not pending anymore.
+            assert_eq!(
+                get_subnet_splitting_status(
+                    source_subnet_id,
+                    registry.as_ref(),
+                    split_registry_version,
+                    split_registry_version,
+                )
+                .expect("Failed to get the subnet splitting status"),
+                SubnetSplittingStatus::NotScheduled
             );
         });
     }
