@@ -108,7 +108,7 @@ pub struct InternalHttpQueryHandler {
     canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
     config: Config,
-    metrics: QueryHandlerMetrics,
+    metrics: Arc<QueryHandlerMetrics>,
     max_instructions_per_query: NumInstructions,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_query_execution_stats: Arc<QueryStatsCollector>,
@@ -136,7 +136,7 @@ impl InternalHttpQueryHandler {
             canister_manager,
             own_subnet_type,
             config,
-            metrics: QueryHandlerMetrics::new(metrics_registry),
+            metrics: Arc::new(QueryHandlerMetrics::new(metrics_registry)),
             max_instructions_per_query,
             cycles_account_manager,
             local_query_execution_stats,
@@ -219,7 +219,7 @@ impl InternalHttpQueryHandler {
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
             && enable_query_stats_tracking
         {
-            Some(self.local_query_execution_stats.as_ref())
+            Some(Arc::clone(&self.local_query_execution_stats))
         } else {
             None
         };
@@ -237,7 +237,7 @@ impl InternalHttpQueryHandler {
             let state = state.get_ref().as_ref();
             if let Some(result) =
                 self.query_cache
-                    .get_valid_result(&key, state, query_stats_collector)
+                    .get_valid_result(&key, state, query_stats_collector.as_deref())
             {
                 return result;
             }
@@ -281,9 +281,9 @@ impl InternalHttpQueryHandler {
             None => resource_limits.maximum_query_instructions_or(self.max_instructions_per_query),
         };
         let mut context = query_context::QueryContext::new(
-            &self.log,
-            self.hypervisor.as_ref(),
-            self.canister_manager.as_ref(),
+            self.log.clone(),
+            Arc::clone(&self.hypervisor),
+            Arc::clone(&self.canister_manager),
             self.own_subnet_type,
             // For composite queries, the set of evaluated canisters is not known in advance,
             // so the whole state is needed to capture later the state of the call graph.
@@ -301,7 +301,7 @@ impl InternalHttpQueryHandler {
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,
-            &self.metrics,
+            Arc::clone(&self.metrics),
             query_stats_collector,
             Arc::clone(&self.cycles_account_manager),
             instruction_observation,
