@@ -2,10 +2,48 @@ use crate::address::ecdsa_public_key_to_address;
 use ic_ethereum_types::Address;
 use ic_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
 use icrc_ledger_types::icrc1::account::Account;
+use minicbor::{Decode, Encode};
 use serde_bytes::ByteBuf;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 #[cfg(test)]
 mod tests;
+
+/// An Ethereum address the minter controls and derived for a single IC account, to which that
+/// account's deposits are sent.
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
+#[cbor(transparent)]
+pub struct DepositAddress(#[n(0)] Address);
+
+impl DepositAddress {
+    /// Tag an [`Address`] as a deposit address. [`deposit_address`] is the only caller that
+    /// derives one; everything else reconstructs an address the minter derived earlier (event
+    /// replay, tests), so this asserts provenance rather than establishing it.
+    pub const fn new(address: Address) -> Self {
+        Self(address)
+    }
+
+    /// The underlying Ethereum address, for the boundaries that need the raw value (ABI encoding,
+    /// the Candid layer). Deliberately explicit: every use is a place the distinction is dropped.
+    pub const fn as_address(&self) -> &Address {
+        &self.0
+    }
+}
+
+impl Display for DepositAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl FromStr for DepositAddress {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Address::from_str(s).map(Self)
+    }
+}
 
 const CKERC20_DEPOSIT_SCHEMA_TAG: u8 = 1;
 const CKETH_DEPOSIT_SCHEMA_TAG: u8 = 2;
@@ -35,12 +73,12 @@ pub fn deposit_address(
     chain_code: &[u8; 32],
     schema: DepositAddressSchema,
     account: &Account,
-) -> Address {
-    derive_address(
+) -> DepositAddress {
+    DepositAddress::new(derive_address(
         master_public_key,
         chain_code,
         deposit_derivation_path(schema, account),
-    )
+    ))
 }
 
 /// Derive the minter's dedicated sweeper address from its master

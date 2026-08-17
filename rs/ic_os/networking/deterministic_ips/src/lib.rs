@@ -84,8 +84,7 @@ pub fn calculate_deterministic_mac(
             [0x6a, index, hash[0], hash[1], hash[2], hash[3]].into()
         }
         VmSlot::Multi(slot) => {
-            // NOTE: We extend to 7a and use the space of the index to store the
-            // slot.
+            // NOTE: We extend to 7a and use some of the space of the hash to store the slot.
             // 0x7a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
             [0x7a, index, slot.into(), hash[1], hash[2], hash[3]].into()
         }
