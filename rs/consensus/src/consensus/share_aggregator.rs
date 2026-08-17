@@ -5,12 +5,12 @@
 use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
-    crypto::ConsensusCrypto, get_current_transcript_from_summary_block, membership::Membership,
-    pool_reader::PoolReader, registry_version_at_height,
+    aggregate_with_threshold, crypto::ConsensusCrypto, get_current_transcript_from_summary_block,
+    membership::Membership, pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, debug, info, warn};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{
     Height,
     consensus::{
@@ -18,7 +18,7 @@ use ic_types::{
         FinalizationContent, HasCommittee, HasHeight, RandomTapeContent,
         catchup::CatchUpPackageType,
     },
-    crypto::threshold_sig::ni_dkg::NiDkgTag,
+    crypto::{Signed, threshold_sig::ni_dkg::NiDkgTag},
     replica_config::ReplicaConfig,
 };
 use std::{cmp::min, sync::Arc};
@@ -64,7 +64,6 @@ impl ShareAggregator {
         messages.append(&mut self.aggregate_notarization_shares(pool));
         messages.append(&mut self.aggregate_finalization_shares(pool));
         messages.append(&mut self.aggregate_catch_up_package_shares(pool));
-
         messages
     }
 
@@ -152,21 +151,14 @@ impl ShareAggregator {
                 break;
             }
             match self.aggregate_catch_up_package_shares_for_summary_block(pool, start_block) {
-                Ok(Some(cup)) => {
-                    return vec![ConsensusMessage::CatchUpPackage(cup)];
+                Ok(messages) if !messages.is_empty() => {
+                    return to_messages(messages);
                 }
-                Ok(None) => {
-                    debug!(
-                        self.log,
-                        "Not enough shares to be able to create a full CUP at height{}",
-                        start_block_height
-                    );
-                }
+                Ok(_) => {}
                 Err(err) => {
                     warn!(
                         self.log,
-                        "Encountered an error while aggregating CUP shares at height {}: {err}",
-                        start_block_height
+                        "Encountered an error while aggregating CUP shares at height {start_block_height}: {err}",
                     );
                 }
             }
@@ -195,7 +187,7 @@ impl ShareAggregator {
         &self,
         pool: &PoolReader<'_>,
         summary_block: Block,
-    ) -> Result<Option<CatchUpPackage>, String> {
+    ) -> Result<Vec<CatchUpPackage>, String> {
         let cup_type = catchup_package_maker::get_catch_up_package_type(
             self.registry.as_ref(),
             self.replica_config.node_id,
@@ -242,36 +234,32 @@ impl ShareAggregator {
 
         let shares = pool
             .get_catch_up_package_shares(block.height())
-            .collect::<Vec<_>>();
+            .map(|share| Signed {
+                content: CatchUpContent::from_share_content(share.content, block.clone()),
+                signature: share.signature,
+            });
 
-        // The validation logic of CUP shares ensures that all of them have the same content for a
-        // given height, and it matches the content of the summary block.
-        if shares.len() < threshold {
-            return Ok(None);
-        }
-        let share_content = shares.first().unwrap().content.clone();
+        // Note that the committee of a post-split CUP is the one of a subnet which doesn't exist
+        // yet, so the threshold cannot be looked up in the `Membership`.
+        let cups = aggregate_with_threshold(
+            &self.log,
+            self.crypto.as_aggregate(),
+            Box::new(|_| Some(dkg_id.clone())),
+            Box::new(|_| Some(threshold)),
+            shares,
+        );
 
-        let cup_content = CatchUpContent::from_share_content(share_content, block);
-        let signatures = shares.iter().map(|share| &share.signature).collect();
-
-        let cup = self
-            .crypto
-            .aggregate(signatures, dkg_id)
-            .map_err(|err| format!("Failed to aggregate shares: {err}"))
-            .map(|signature| CatchUpPackage {
-                content: cup_content,
-                signature,
-            })?;
-
-        if let CatchUpPackageType::PostSplit { new_subnet_id } = cup_type {
-            info!(
-                self.log,
-                "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",
-                cup.height()
-            );
+        for cup in &cups {
+            if let CatchUpPackageType::PostSplit { new_subnet_id } = cup_type {
+                info!(
+                    self.log,
+                    "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",
+                    cup.height()
+                );
+            }
         }
 
-        Ok(Some(cup))
+        Ok(cups)
     }
 }
 

@@ -160,6 +160,41 @@ pub fn aggregate<
     selector: Box<dyn Fn(&Message) -> Option<KeySelector> + '_>,
     artifact_shares: Shares,
 ) -> Vec<Signed<Message, CommitteeSignature>> {
+    aggregate_with_threshold(
+        log,
+        crypto,
+        selector,
+        Box::new(|content: &Message| {
+            membership
+                .get_committee_threshold(content.height(), Message::committee())
+                .inspect_err(|err| error!(log, "MembershipError: {:?}", err))
+                .ok()
+        }),
+        artifact_shares,
+    )
+}
+
+/// Same as [`aggregate`], but with the threshold of each content provided by the caller instead of
+/// being looked up in the [`Membership`].
+///
+/// This is required whenever the committee signing the shares cannot be derived from the consensus
+/// pool, e.g. for the post-split catch-up packages, whose committee is the one of a subnet which
+/// doesn't exist yet.
+#[allow(clippy::type_complexity)]
+pub fn aggregate_with_threshold<
+    Message: Eq + Ord + Clone + std::fmt::Debug,
+    CryptoMessage,
+    Signature: Ord,
+    KeySelector,
+    CommitteeSignature,
+    Shares: Iterator<Item = Signed<Message, Signature>>,
+>(
+    log: &ReplicaLogger,
+    crypto: &dyn Aggregate<CryptoMessage, Signature, KeySelector, CommitteeSignature>,
+    selector: Box<dyn Fn(&Message) -> Option<KeySelector> + '_>,
+    threshold: Box<dyn Fn(&Message) -> Option<Threshold> + '_>,
+    artifact_shares: Shares,
+) -> Vec<Signed<Message, CommitteeSignature>> {
     group_shares(artifact_shares)
         .into_iter()
         .filter_map(|(content_ref, shares)| {
@@ -170,21 +205,21 @@ pub fn aggregate<
                 );
                 None
             })?;
-            let threshold = match membership
-                .get_committee_threshold(content_ref.height(), Message::committee())
-            {
-                Ok(threshold) => threshold,
-                Err(err) => {
-                    error!(log, "MembershipError: {:?}", err);
-                    return None;
-                }
-            };
+            let threshold = threshold(&content_ref)?;
             if shares.len() < threshold {
                 return None;
             }
             let shares_ref = shares.iter().collect();
             crypto
                 .aggregate(shares_ref, selector)
+                .inspect_err(|err| {
+                    warn!(
+                        log,
+                        "aggregate: failed to aggregate the shares of content {:?}: {:?}",
+                        content_ref,
+                        err
+                    )
+                })
                 .ok()
                 .map(|signature| {
                     let content = content_ref.clone();
