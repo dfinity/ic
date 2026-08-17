@@ -1784,15 +1784,9 @@ impl Validator {
                 "Failed to determine the cup type: {err}"
             ))
         })? {
-            CatchUpPackageType::PostSplit { new_subnet_id } => {
-                // Post-split CUPs should be produced on the fly skipping one interval past the
-                // last summary
-                if dkg_summary.get_next_start_height() != share_height {
-                    return Err(
-                        InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare.into(),
-                    );
-                }
-
+            CatchUpPackageType::PostSplit { new_subnet_id }
+                if dkg_summary.get_next_start_height() == share_height =>
+            {
                 let post_split_block = catchup_package_maker::create_post_split_summary_block(
                     &dkg_summary_block,
                     new_subnet_id,
@@ -1808,7 +1802,16 @@ impl Validator {
 
                 (post_split_block, post_split_random_beacon, state_height)
             }
-            CatchUpPackageType::Normal => {
+            // We don't produce CUPs for the height at which a subnet splitting is happening.
+            CatchUpPackageType::PostSplit { .. } if dkg_summary.height == share_height => {
+                return Err(
+                    InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare.into(),
+                );
+            }
+            // It could be that, in our view, the latest summary indicates a subnet-split but
+            // we receive an old CUP share or a future CUP share (i.e. that does not correspond to
+            // the expected post-split height). In that case, validate it like normally.
+            CatchUpPackageType::PostSplit { .. } | CatchUpPackageType::Normal => {
                 let block = pool_reader
                     .get_finalized_block(share_height)
                     .ok_or(ValidationFailure::FinalizedBlockNotFound(share_height))?;
