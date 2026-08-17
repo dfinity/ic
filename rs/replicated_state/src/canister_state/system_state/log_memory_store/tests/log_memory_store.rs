@@ -609,24 +609,26 @@ fn test_small_capacity_indexing() {
     s.resize_for_testing(EXPECTED_DATA_CAPACITY_MIN);
 
     let mut delta = CanisterLog::new_delta_with_next_index(0, 100);
-    // Add multiple records.
+    // Add multiple records, each larger than a single 28-byte segment.
     // Header overhead is 8+8+4 = 20 bytes.
-    // Content "a" is 1 byte.
-    // Total 21 bytes per record.
-    delta.add_record(0, b"a".to_vec());
-    delta.add_record(1, b"b".to_vec());
+    // Content is 10 bytes.
+    // Total 30 bytes per record.
+    let content_a = b"aaaaaaaaaa".to_vec();
+    let content_b = b"bbbbbbbbbb".to_vec();
+    delta.add_record(0, content_a.clone());
+    delta.add_record(1, content_b.clone());
 
     s.append_delta_log(&mut delta);
 
     assert!(!s.is_empty());
-    // 21 * 2 = 42 bytes used.
-    assert_eq!(s.bytes_used(), 42);
+    // 30 * 2 = 60 bytes used.
+    assert_eq!(s.bytes_used(), 60);
 
     // Try to read it back.
     let records = s.records(None);
     assert_eq!(records.len(), 2, "Should return 2 records");
-    assert_eq!(records[0].content, b"a");
-    assert_eq!(records[1].content, b"b");
+    assert_eq!(records[0].content, content_a);
+    assert_eq!(records[1].content, content_b);
 }
 
 #[test]
