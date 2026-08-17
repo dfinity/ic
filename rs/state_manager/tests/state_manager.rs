@@ -8495,15 +8495,10 @@ fn deleted_canister_is_removed_from_tip() {
         state_manager_test(|_metrics, state_manager| {
             let canister_id = canister_test_id(100);
 
-            // Install a canister and give it some initial state.
+            // Install a canister and checkpoint the state, so that the canister has a
+            // directory in the tip.
             let (_height, mut state) = state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_id);
-            let canister_state = state.canister_state_make_mut(&canister_id).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            execution_state
-                .wasm_memory
-                .page_map
-                .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
             state_manager.commit_and_certify(state, CertificationScope::Full, None);
             state_manager.flush_tip_channel();
 
