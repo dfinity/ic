@@ -282,8 +282,9 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     let module_hash = wasm_module.module_hash();
     // Stage 2: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
     // Replace the execution state of the canister with a new execution state that
-    // persists the stable memory and, for canisters with enhanced orthogonal
-    // persistence, also the main memory.
+    // persists the stable memory and, if the `wasm_memory_persistence: opt keep`
+    // upgrade option is used (which requires enhanced orthogonal persistence),
+    // also the main memory.
     let memory_handling = CanisterMemoryHandling {
         stable_memory_handling: MemoryHandling::Keep,
         main_memory_handling: main_memory_handling(context.mode),

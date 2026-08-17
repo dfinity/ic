@@ -149,10 +149,12 @@ pub enum MemoryHandling {
 /// * On install and re-install:
 ///   - Replace both the stable memory and the main memory.
 /// * On upgrade:
-///   - For canisters with enhanced orthogonal persistence (Motoko):
-///     Retain both the main memory and the stable memory.
-///   - For all other canisters:
-///     Retain only the stable memory and erase the main memory.
+///   - Always retain the stable memory.
+///   - Retain the main memory if and only if the `wasm_memory_persistence: opt keep`
+///     upgrade option is used, and erase it otherwise. That option is meant for
+///     canisters with enhanced orthogonal persistence (Motoko) and is only valid
+///     for those; such a canister may still opt into erasing its main memory by
+///     passing `wasm_memory_persistence: opt replace`.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct CanisterMemoryHandling {
     pub stable_memory_handling: MemoryHandling,
