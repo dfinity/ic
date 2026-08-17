@@ -7943,6 +7943,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-consensus-upgrade"
+version = "0.9.0"
+dependencies = [
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-interfaces",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "ic-test-utilities-types",
+ "ic-types",
+ "num-traits",
+]
+
+[[package]]
 name = "ic-consensus-utils"
 version = "0.9.0"
 dependencies = [

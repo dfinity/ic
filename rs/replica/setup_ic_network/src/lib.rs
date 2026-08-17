@@ -11,9 +11,9 @@ use ic_artifact_pool::{
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::consensus::{
-    upgrade_permit_auth_pool_manager::{UpgradePermitAuthBouncer, UpgradePermitAuthPoolManager},
     ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
 };
+use ic_consensus_upgrade::pool_manager::{UpgradePermitAuthBouncer, UpgradePermitAuthPoolManager};
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::DkgBouncer;

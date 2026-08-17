@@ -1831,7 +1831,7 @@ impl StateMachineBuilder {
             sm.query_stats_payload_builder.clone(),
             sm.chain_key_payload_builder.clone(),
             std::sync::Arc::new(
-                ic_consensus::consensus::upgrade_section::UpgradePayloadBuilderStub::new(),
+                ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderStub::new(),
             ),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),

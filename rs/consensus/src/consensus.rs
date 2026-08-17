@@ -19,9 +19,6 @@ mod random_beacon_maker;
 mod random_tape_maker;
 mod share_aggregator;
 mod status;
-pub mod upgrade_permit_auth_pool_manager;
-mod upgrade_protocol;
-pub mod upgrade_section;
 pub mod validator;
 
 #[cfg(all(test, feature = "proptest"))]
@@ -36,6 +33,7 @@ use crate::consensus::{
 };
 use ic_artifact_pool::upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl;
 use ic_consensus_dkg::DkgKeyManager;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilder;
 use ic_consensus_utils::{
     RoundRobin, bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto,
     get_notarization_delay_settings, membership::Membership, pool_reader::PoolReader,
@@ -203,7 +201,7 @@ impl ConsensusImpl {
             canister_http_payload_builder,
             query_stats_payload_builder,
             chain_key_payload_builder,
-            Arc::new(upgrade_section::UpgradePayloadBuilder::new(
+            Arc::new(UpgradePayloadBuilder::new(
                 replica_config.node_id,
                 membership.clone(),
                 state_manager.clone(),

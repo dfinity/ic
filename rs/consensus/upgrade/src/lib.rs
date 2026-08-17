@@ -1,11 +1,14 @@
-//! Upgrade-permit kernel shared by the payload section (builder/validator)
-//! and the share signer (the pool manager): membership views and share
-//! validation.
+//! The upgrade permit protocol for the Phase-2 rolling GuestOS reboots.
 //!
-//! Membership distinguishes the committee (registry at the CUP/summary
-//! version for the block height, changing only at DKG interval boundaries)
-//! from the current members staying even at the new CUP (still present at the
-//! block's registry version).
+//! Reboot permits are requested in blocks, authorized by threshold share
+//! collections gossiped between replicas, and returned after the reboot.
+//!
+//! This crate root holds the kernel shared by the payload section
+//! (builder/validator) and the share signer (the pool manager): membership
+//! views and share validation. Membership distinguishes the committee
+//! (registry at the CUP/summary version for the block height, changing only
+//! at DKG interval boundaries) from the current members staying even at the
+//! new CUP (still present at the block's registry version).
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
@@ -14,8 +17,10 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_replicated_state::metadata_state::UpgradeState;
 use ic_types::consensus::UpgradePermitAuthorizationShare;
 use ic_types::{Height, NodeId, RegistryVersion};
-use num_traits::SaturatingSub;
 use std::collections::BTreeSet;
+
+pub mod payload_builder;
+pub mod pool_manager;
 
 pub(crate) struct SubnetMembership {
     /// The actual current members: registry membership at the CUP/summary
@@ -86,8 +91,8 @@ pub(crate) fn subnet_membership(
     }
 }
 
-/// Check one share: the content must match `(requestor_node, request_height)`, the
-/// signer must be a staying member, and the signature must verify against
+/// Check one share: the content must match `(requestor_node, request_height)`,
+/// the signer must be a staying member, and the signature must verify against
 /// the signer's node key at `registry_version`. Returns the signer.
 pub(crate) fn validate_share(
     share: &UpgradePermitAuthorizationShare,

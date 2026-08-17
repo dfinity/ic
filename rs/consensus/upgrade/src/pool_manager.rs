@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
-use crate::consensus::upgrade_protocol::{subnet_membership, validate_share, SubnetMembership};
+use crate::{subnet_membership, validate_share, SubnetMembership};
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer};
 use ic_interfaces::upgrade_permit_auth::{

@@ -9,10 +9,9 @@
 //! Holds the block-facing protocol logic: state reconstruction (certified
 //! anchor folded with the certification-gap payloads), action building, and
 //! action validation. The kernel shared with the share signer (membership
-//! views, share validation) lives in
-//! [`crate::consensus::upgrade_protocol`].
+//! views, share validation) lives in the crate root.
 
-use crate::consensus::upgrade_protocol::{SubnetMembership, subnet_membership, validate_share};
+use crate::{subnet_membership, validate_share};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext};
@@ -20,7 +19,7 @@ use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationError};
 use ic_interfaces::upgrade::InvalidUpgradePayloadReason;
 use ic_interfaces::upgrade_permit_auth::UpgradePermitAuthPool;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, info};
+use ic_logger::ReplicaLogger;
 use ic_replicated_state::ReplicatedState;
 use ic_replicated_state::metadata_state::UpgradeState;
 use ic_types::batch::{bytes_to_upgrade_payload, upgrade_payload_to_bytes};
