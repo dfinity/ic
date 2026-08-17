@@ -8258,6 +8258,14 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
+/// Drops a canister from the state the same way `online_split()` does, i.e. without
+/// recording an `UnflushedCheckpointOp::DeleteCanister`: canisters dropped during a
+/// subnet split are removed from tip by `FilterTipCanisters` instead.
+fn drop_canister(state: &mut ReplicatedState, canister_id: &CanisterId) {
+    state.take_canister_state(canister_id).unwrap();
+    state.metadata.subnet_schedule.remove(canister_id);
+}
+
 #[test]
 fn can_split_with_inflight_restore_snapshot() {
     // We will be splitting subnet A into A' and B.
@@ -8340,11 +8348,11 @@ fn can_split_with_inflight_restore_snapshot() {
             if subnet_id == SUBNET_A {
                 other_subnet_id = SUBNET_B;
                 // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
-                expected.remove_canister(&CANISTER_2);
+                drop_canister(&mut expected, &CANISTER_2);
             } else if subnet_id == SUBNET_B {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
-                expected.remove_canister(&CANISTER_1);
+                drop_canister(&mut expected, &CANISTER_1);
             } else {
                 unreachable!("Unexpected subnet ID: {:?}", subnet_id);
             }
@@ -8480,15 +8488,6 @@ fn can_rename_canister() {
     can_rename_canister_impl(CertificationScope::Full);
 }
 
-/// Simplified version of canister deletion that only does the parts relevant to the state manager.
-fn delete_canister(state: &mut ReplicatedState, canister_id: CanisterId) {
-    state.remove_canister(&canister_id).unwrap();
-    state
-        .metadata
-        .unflushed_checkpoint_ops
-        .delete_canister(canister_id);
-}
-
 #[test]
 fn deleted_canister_is_removed_from_tip() {
     fn deleted_canister_is_removed_from_tip_impl(certification_scope: CertificationScope) {
@@ -8510,7 +8509,7 @@ fn deleted_canister_is_removed_from_tip() {
             .unwrap();
             assert_eq!(tip.canister_ids().unwrap(), vec![canister_id]);
 
-            delete_canister(&mut state, canister_id);
+            state.remove_canister(&canister_id).unwrap();
             assert!(!state.system_metadata().unflushed_checkpoint_ops.is_empty());
 
             // Trigger a flush either at the checkpoint or by committing exactly

@@ -2319,7 +2319,10 @@ impl UnflushedCheckpointOps {
         ));
     }
 
-    pub fn delete_canister(&mut self, canister_id: CanisterId) {
+    /// Records the deletion of a canister. Private to the crate because the only way
+    /// of permanently removing a canister is `ReplicatedState::remove_canister()`,
+    /// which already records the operation.
+    pub(crate) fn delete_canister(&mut self, canister_id: CanisterId) {
         self.operations
             .push(UnflushedCheckpointOp::DeleteCanister(canister_id));
     }
