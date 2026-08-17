@@ -281,7 +281,6 @@ impl QueryContext {
                         canister,
                         call_origin,
                         requests,
-                        self.max_query_call_graph_depth,
                         &measurement_scope,
                     ),
                 };
@@ -550,7 +549,8 @@ impl QueryContext {
     }
 
     // Observes query metrics.
-    pub(super) fn observe_metrics(&mut self, metrics: &QueryHandlerMetrics) {
+    pub(super) fn observe_metrics(&self) {
+        let metrics = &self.metrics;
         // Observe System API call counters in the corresponding metrics.
         let query_system_api_calls = &metrics.query_system_api_calls;
         query_system_api_calls
@@ -1202,6 +1202,17 @@ impl QueryContext {
     /// made in this query context.
     pub fn ic00_calls(&self) -> usize {
         self.ic00_calls
+    }
+
+    /// Returns the maximum number of nested query calls.
+    pub(super) fn max_query_call_graph_depth(&self) -> usize {
+        self.max_query_call_graph_depth
+    }
+
+    /// Returns the state snapshot that every query in this context executes
+    /// against.
+    pub(super) fn state(&self) -> &ReplicatedState {
+        self.state.get_ref().as_ref()
     }
 
     fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {

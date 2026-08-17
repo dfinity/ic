@@ -308,13 +308,23 @@ impl InternalHttpQueryHandler {
         );
 
         let result = context.run(query, &self.metrics, &measurement_scope);
-        context.accumulate_transient_errors_from_result(result.as_ref());
-        context.observe_metrics(&self.metrics);
 
-        // Add the query execution result to the query cache (if the query caching is enabled).
-        // Query caching is disabled if the key is set to `None`.
+        self.finalize(&mut context, result, cache_entry_key)
+    }
+
+    /// Records a finished execution's errors and metrics, and offers its result
+    /// to the cache.
+    fn finalize(
+        &self,
+        context: &mut query_context::QueryContext,
+        result: Result<WasmResult, UserError>,
+        cache_entry_key: Option<query_cache::EntryKey>,
+    ) -> Result<WasmResult, UserError> {
+        context.accumulate_transient_errors_from_result(result.as_ref());
+        context.observe_metrics();
+
         if let Some(key) = cache_entry_key {
-            let state = state.get_ref().as_ref();
+            let state = context.state();
             let counters = context.system_api_call_counters();
             let stats = context.evaluated_canister_stats();
             let errors = context.transient_errors();

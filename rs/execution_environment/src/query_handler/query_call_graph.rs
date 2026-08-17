@@ -47,16 +47,27 @@ pub(super) fn evaluate_query_call_graph(
     canister: CanisterState,
     call_origin: CallOrigin,
     requests: VecDeque<Arc<Request>>,
-    max_query_call_graph_depth: usize,
     measurement_scope: &MeasurementScope,
 ) -> QueryResponse {
-    // The nodes of the query call graph that are being visited.
-    // Invariant: `call_stack[i+1]` corresponds to a query call made by `call_stack[i]`.
-    let mut call_stack: Vec<PendingCall> = vec![PendingCall(canister, call_origin, requests)];
+    run_call_graph(
+        query_context,
+        vec![PendingCall(canister, call_origin, requests)],
+        None,
+        measurement_scope,
+    )
+}
 
-    // The result of the most recently visited node (i.e. the last node popped
-    // from the call stack).
-    let mut callee_result: Option<QueryResponse> = None;
+/// Runs the DFS traversal from the given state.
+///
+/// `call_stack[i+1]` must correspond to a query call made by `call_stack[i]`,
+/// and `callee_result` to a query call made by the node popped first.
+fn run_call_graph(
+    query_context: &mut QueryContext,
+    mut call_stack: Vec<PendingCall>,
+    mut callee_result: Option<QueryResponse>,
+    measurement_scope: &MeasurementScope,
+) -> QueryResponse {
+    let max_query_call_graph_depth = query_context.max_query_call_graph_depth();
 
     while let Some(PendingCall(canister, call_origin, mut requests)) = call_stack.pop() {
         // Loop invariant: `callee_result` is a result of a query call made by
