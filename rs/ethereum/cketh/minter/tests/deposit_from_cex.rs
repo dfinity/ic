@@ -21,9 +21,12 @@
 //! [`ic_cketh_test_utils::anvil`]; `anvil` and `solc` are vendored via Bazel
 //! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
 
+use assert_matches::assert_matches;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
+use ic_cketh_minter::deposit_address::DepositAddress;
+use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
 use ic_cketh_test_utils::live_scan::{CkErc20LiveScanSetup, Holding, SupportedToken};
@@ -51,27 +54,27 @@ fn should_read_erc20_balances_across_tokens_and_holders() {
     let calls = vec![
         BalanceOfCall {
             token: token_a,
-            holder: h1,
+            holder: DepositAddress::new(h1),
         },
         BalanceOfCall {
             token: token_a,
-            holder: h2,
+            holder: DepositAddress::new(h2),
         },
         BalanceOfCall {
             token: token_a,
-            holder: h3,
+            holder: DepositAddress::new(h3),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h1,
+            holder: DepositAddress::new(h1),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h2,
+            holder: DepositAddress::new(h2),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h3,
+            holder: DepositAddress::new(h3),
         },
     ];
 
@@ -94,7 +97,7 @@ fn should_read_erc20_balances_across_tokens_and_holders() {
 
     // The batcher must agree with anvil's own view of every balance.
     for call in &calls {
-        let expected = anvil.erc20_balance(&call.token, &call.holder);
+        let expected = anvil.erc20_balance(&call.token, call.holder.as_address());
         let single = anvil
             .eth_call_create(&dev, &encode_balance_batch(std::slice::from_ref(call)))
             .expect("single-call batch reverted");
@@ -120,7 +123,7 @@ fn should_read_many_balances_in_a_single_call() {
         .iter()
         .map(|holder| BalanceOfCall {
             token,
-            holder: *holder,
+            holder: DepositAddress::new(*holder),
         })
         .collect();
 
@@ -140,8 +143,8 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
     let anvil = Anvil::start();
     let dev = address_from_hex(DEV_ACCOUNT);
     let token = deploy_mock_erc20(&anvil, &dev);
-    let holder = Address::new([0x11; 20]);
-    anvil.fund(&token, &dev, &holder, 500);
+    let holder = DepositAddress::new(Address::new([0x11; 20]));
+    anvil.fund(&token, &dev, holder.as_address(), 500);
 
     // A "token" with no code: STATICCALL succeeds with empty return data, which
     // is not the 32 bytes the batcher requires, so it reverts the whole call
@@ -216,30 +219,32 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     let holdings: Vec<Holding> = deposits
         .iter()
         .map(|&(depositor, token, amount)| Holding {
-            deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT),
+            deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT, token),
             token,
             amount,
         })
         .collect();
     setup.credit_deposits(&holdings);
 
-    // deposit_erc20 reports each address as scanned; a failed batch would never advance any of them.
-    for &(depositor, _, _) in &deposits {
-        let progress = setup.await_scan(depositor, DEPOSIT_SUBACCOUNT, Duration::from_secs(180));
-        assert!(
-            progress.scan_count >= 1,
-            "each address should report a scan"
-        );
-        assert!(
-            progress.last_scanned_block.is_some(),
-            "a scanned address should report the block it was scanned at"
-        );
-    }
-
-    assert_eq!(
-        setup.balance_scan_candidates(),
-        2,
-        "only the 20 USDT and 15 USDC deposits clear the per-token minimum; the 1 USDT does not"
+    let deadline = Duration::from_secs(180);
+    assert_matches!(
+        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdt, deadline).status,
+        DepositStatus::AwaitingSweep(detected)
+            if detected.erc20_contract_address == SupportedToken::CkUsdt.contract().to_string()
+                && detected.scanned_balance == USDT_ABOVE_MINIMUM
+                && detected.detected_at_block > 0_u8
+    );
+    assert_matches!(
+        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdc, deadline).status,
+        DepositStatus::AwaitingSweep(detected)
+            if detected.erc20_contract_address == SupportedToken::CkUsdc.contract().to_string()
+                && detected.scanned_balance == USDC_ABOVE_MINIMUM
+                && detected.detected_at_block > 0_u8
+    );
+    assert_matches!(
+        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, SupportedToken::CkUsdt, deadline).status,
+        DepositStatus::Scanning { scan_count, last_scanned_block, .. }
+            if scan_count >= 1 && last_scanned_block.is_some()
     );
 }
 

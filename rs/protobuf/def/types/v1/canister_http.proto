@@ -78,6 +78,13 @@ message CanisterHttpResponseDivergence {
   repeated CanisterHttpShare shares = 1;
 }
 
+message CanisterHttpOutOfCycles {
+  uint64 callback_id = 1;
+  repeated CanisterHttpShare shares = 2;
+  state.queues.v1.Cycles min_cost = 3;
+  state.queues.v1.Cycles unspent_allowance = 4;
+}
+
 message FlexibleCanisterHttpResponseWithProof {
   CanisterHttpResponse response = 1;
   CanisterHttpShare proof = 2;
@@ -127,6 +134,7 @@ message CanisterHttpResponseMessage {
     CanisterHttpResponseDivergence divergence_response = 3;
     FlexibleCanisterHttpResponses flexible_responses = 4;
     FlexibleCanisterHttpError flexible_error = 5;
+    CanisterHttpOutOfCycles out_of_cycles = 6;
   }
 }
 

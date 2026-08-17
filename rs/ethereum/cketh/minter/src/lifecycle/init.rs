@@ -88,6 +88,7 @@ impl TryFrom<InitArg> for State {
             ethereum_network,
             ecdsa_key_name,
             pending_withdrawal_principals: Default::default(),
+            pending_deposit_principals: Default::default(),
             eth_transactions: EthTransactions::new(initial_nonce),
             cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,

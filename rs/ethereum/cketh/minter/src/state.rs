@@ -11,14 +11,14 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
-use crate::state::automatic_deposits::{AutomaticDeposits, DepositRequest};
+use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
-use ic_cdk::management_canister::EcdsaPublicKeyResult;
+use ic_cdk_management_canister::EcdsaPublicKeyResult;
 use ic_ethereum_types::Address;
 use ic_secp256k1::PublicKey;
 use icrc_ledger_types::icrc1::account::Account;
@@ -86,6 +86,9 @@ pub struct State {
 
     /// Per-principal lock for pending withdrawals
     pub pending_withdrawal_principals: BTreeSet<Principal>,
+
+    /// Per-principal lock for in-flight `deposit_erc20` calls
+    pub pending_deposit_principals: BTreeSet<Principal>,
 
     /// Locks preventing concurrent execution timer tasks
     pub active_tasks: HashSet<TaskType>,
@@ -249,6 +252,11 @@ impl State {
                 erc20_ethereum_network: self.ethereum_network,
                 ckerc20_token_symbol: symbol.clone(),
             })
+    }
+
+    /// Whether `erc20_contract_address` is a ckERC20 token supported by the minter.
+    pub fn is_supported_ckerc20(&self, erc20_contract_address: &Address) -> bool {
+        self.ckerc20_tokens.contains_alt(erc20_contract_address)
     }
 
     /// Quarantine the deposit event to prevent double minting.
@@ -630,7 +638,8 @@ impl State {
         &mut self,
         now: Timestamp,
         account: Account,
-    ) -> Result<Entry<DepositRequest>, DepositErc20Error> {
+        token: Address,
+    ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
         let (master_public_key, chain_code) =
             self.public_key_and_chain_code()
                 .ok_or(DepositErc20Error::TemporarilyUnavailable(
@@ -643,7 +652,7 @@ impl State {
             &account,
         );
         self.automatic_deposits
-            .watch_address_for_account(now, account, address)
+            .watch_deposit(now, account, token, address)
     }
 }
 
@@ -666,7 +675,7 @@ where
 }
 
 pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32]) {
-    use ic_cdk::management_canister::{
+    use ic_cdk_management_canister::{
         EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, ecdsa_public_key,
     };
 

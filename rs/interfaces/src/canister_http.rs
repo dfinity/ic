@@ -108,8 +108,9 @@ pub enum InvalidCanisterHttpPayloadReason {
         callback_id: CallbackId,
         signer: NodeId,
     },
-    /// The callback_id in a flexible response group does not match a response or proof within it.
-    FlexibleCallbackIdMismatch {
+    /// The callback_id a share or response is signed for does not match the one of
+    /// the payload section it appears in.
+    ShareCallbackIdMismatch {
         callback_id: CallbackId,
         mismatched_id: CallbackId,
     },
@@ -120,13 +121,14 @@ pub enum InvalidCanisterHttpPayloadReason {
         min_responses: u32,
         max_responses: u32,
     },
-    /// A flexible response group has duplicate signers.
-    FlexibleDuplicateSigner {
+    /// A payload section carrying individual shares has more than one from the same
+    /// signer.
+    DuplicateShareSigner {
         callback_id: CallbackId,
         signer: NodeId,
     },
-    /// A signer in a flexible response group is not part of the flexible committee.
-    FlexibleSignerNotInCommittee {
+    /// A share is signed by a node that is not part of the request's committee.
+    ShareSignerNotInCommittee {
         callback_id: CallbackId,
         signer: NodeId,
     },
@@ -163,7 +165,7 @@ pub enum InvalidCanisterHttpPayloadReason {
     FlexibleResponsesNotTooLarge(CallbackId),
     /// A figure an OutOfCycles error reports to the caller does not match the value
     /// recomputed from the request context and the signed receipts.
-    FlexibleOutOfCyclesFigureMismatch {
+    OutOfCyclesFigureMismatch {
         callback_id: CallbackId,
         field: &'static str,
         /// The figure received in the payload.
@@ -173,7 +175,7 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// An OutOfCycles error is invalid: what is left of the committee's
     /// per-replica allowances can still cover the cost of delivering a response.
-    FlexibleNotOutOfCycles {
+    NotOutOfCycles {
         callback_id: CallbackId,
         /// The committee's collective allowance that is still unspent, assuming
         /// that every committee member that has not reported a spend yet has

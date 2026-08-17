@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-13
+
 ### Added
 
 - Added the `PATCH` variant to the `HttpMethod` enum used by canister HTTPS outcalls (`http_request`). The variant is plumbed through the type but not yet enabled on replicated subnets.
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Doc: `CanisterSettings::wasm_memory_threshold` is capped at 2<sup>48</sup> (i.e., 256TB), not 2<sup>64</sup>-1.
+- Doc: the `CanisterLogFilter` variants filter on the half-open range `[start, end)`; `end` is exclusive, not inclusive.
 
 ## [0.8.0] - 2026-05-13
 

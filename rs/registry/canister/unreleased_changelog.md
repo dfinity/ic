@@ -9,7 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+Add a `replica_version_id` to `ReplicaVersionRecord`s, and backfill with a data migration.
+
 ## Changed
+
+* Guest launch measurements are now required (when electing a new GuestOS version).
 
 ## Deprecated
 

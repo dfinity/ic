@@ -444,11 +444,12 @@ fn upgrade_fails_on_long_pre_upgrade_hits_instructions_limit() {
 
 ////////////////////////////////////////////////////////////////////////
 // upgrade_stage_2_and_3a_create_execution_state_and_call_start()
-// 1. if let Err(err) = helper.replace_execution_state_and_allocations(..)
-// 2. if !execution_state.exports_method(Start)
-// 3. match execute_dts(..)
-//    3a. Finished
-//    3b. Paused
+// 1. if let Err(err) = validate_wasm_memory_persistence(..)
+// 2. if let Err(err) = helper.replace_execution_state_and_allocations(..)
+// 3. if !execution_state.exports_method(Start)
+// 4. match execute_dts(..)
+//    4a. Finished
+//    4b. Paused
 
 #[test]
 fn upgrade_fails_on_invalid_new_canister() {
