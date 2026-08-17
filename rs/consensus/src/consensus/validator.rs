@@ -3314,6 +3314,9 @@ pub mod test {
         next_block
     }
 
+    /// The subnet IDs of the source and destination subnets in the subnet split tests below.
+    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
     /// The registry version at which the subnet split is scheduled in the tests below.
     const SUBNET_SPLIT_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
 
@@ -3332,7 +3335,7 @@ pub mod test {
             .value
             .expect("The CUP contents should be in the registry");
         cup_contents.cup_type = Some(CupType::SubnetSplitting(SubnetSplittingArgsProto {
-            destination_subnet_id: Some(subnet_id_into_protobuf(subnet_test_id(1))),
+            destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
         }));
 
         registry_data_provider
@@ -3367,7 +3370,7 @@ pub mod test {
                 ..
             } = ValidatorAndDependenciesBuilder::single_subnet(
                 pool_config,
-                subnet_test_id(0),
+                SOURCE_SUBNET_ID,
                 (1..=block_registry_version.get())
                     .map(|version| {
                         (
@@ -3441,7 +3444,7 @@ pub mod test {
                 ..
             } = ValidatorAndDependenciesBuilder::single_subnet(
                 pool_config,
-                subnet_test_id(0),
+                SOURCE_SUBNET_ID,
                 (1..=block_registry_version.get())
                     .map(|version| {
                         (
@@ -3464,6 +3467,10 @@ pub mod test {
             // summary block below is the first one that could adopt the scheduled version.
             pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
 
+            if block_registry_version >= SUBNET_SPLIT_REGISTRY_VERSION {
+                schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
+            }
+
             // The proposal picks up the latest registry version, and its payload is built for that
             // very version, so the only thing under test is the version itself.
             let summary_proposal = make_next_block(&pool);
@@ -3476,13 +3483,35 @@ pub mod test {
                 context.registry_version, block_registry_version,
                 "expected the summary block to reference the registry version under test",
             );
+            // Sanity-check that the summary block's payload reflects the subnet splitting status
+            // as it should be at the registry version under test.
+            assert_eq!(
+                summary_proposal
+                    .content
+                    .as_ref()
+                    .payload
+                    .as_ref()
+                    .as_summary()
+                    .dkg
+                    .subnet_splitting_status(),
+                if block_registry_version < SUBNET_SPLIT_REGISTRY_VERSION {
+                    SubnetSplittingStatus::NotScheduled
+                } else {
+                    SubnetSplittingStatus::Scheduled(SplittingArgs {
+                        source_subnet_id: replica_config.subnet_id,
+                        destination_subnet_id: DESTINATION_SUBNET_ID,
+                    })
+                },
+            );
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(context.certified_height);
             time_source.set_time(context.time).unwrap();
 
-            schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
+            if block_registry_version < SUBNET_SPLIT_REGISTRY_VERSION {
+                schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
+            }
 
             let result = validator.check_block_validity(&PoolReader::new(&pool), &summary_proposal);
             if block_registry_version <= SUBNET_SPLIT_REGISTRY_VERSION {
@@ -5032,10 +5061,7 @@ pub mod test {
         });
     }
 
-    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
-    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
     const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
-    const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
 
     enum MalformShare {
         StateHash,
@@ -5097,14 +5123,14 @@ pub mod test {
                                 .build(),
                         ),
                         (
-                            SPLITTING_REGISTRY_VERSION.get(),
+                            SUBNET_SPLIT_REGISTRY_VERSION.get(),
                             SOURCE_SUBNET_ID,
                             SubnetRecordBuilder::from(&[NODE_1, NODE_2])
                                 .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
                                 .build(),
                         ),
                         (
-                            SPLITTING_REGISTRY_VERSION.get(),
+                            SUBNET_SPLIT_REGISTRY_VERSION.get(),
                             DESTINATION_SUBNET_ID,
                             SubnetRecordBuilder::from(&[NODE_3, NODE_4])
                                 .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
@@ -5121,7 +5147,7 @@ pub mod test {
                 // registry would do. The setup above only inserts the transcripts at the initial
                 // version.
                 insert_initial_dkg_transcript(
-                    SPLITTING_REGISTRY_VERSION.get(),
+                    SUBNET_SPLIT_REGISTRY_VERSION.get(),
                     SOURCE_SUBNET_ID,
                     &SubnetRecordBuilder::from(&[NODE_1, NODE_2])
                         .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
@@ -5162,7 +5188,7 @@ pub mod test {
                 let mut proposal = pool.make_next_block();
                 let block = proposal.content.as_mut();
                 block.context.certified_height = block.height;
-                block.context.registry_version = SPLITTING_REGISTRY_VERSION;
+                block.context.registry_version = SUBNET_SPLIT_REGISTRY_VERSION;
                 let mut payload = block.payload.as_ref().as_summary().clone();
                 payload.dkg.subnet_splitting_status =
                     BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
