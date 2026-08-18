@@ -2161,6 +2161,15 @@ crate.annotation(
     crate = "libz-sys",
     crate_features = ["static"],
 )
+
+# Redirect every `@crate_index` consumer of `ic-error-types` (notably the copy
+# pulled in transitively by `ic-cdk`, which re-exports `ic_error_types::RejectCode`)
+# to the in-repo crate, mirroring the Cargo `[patch.crates-io]` in the root
+# `Cargo.toml`.
+crate.annotation(
+    crate = "ic-error-types",
+    override_target_lib = "//packages/ic-error-types",
+)
 crate.annotation(
     crate = "curve25519-dalek",
     rustc_flags = [
