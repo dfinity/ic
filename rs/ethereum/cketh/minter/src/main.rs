@@ -1178,8 +1178,9 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_sweeper_funding_burned_not_yet_spent",
                     s.sweeper_funding.burned_not_yet_spent().as_f64(),
                     "ckETH burned for sweeping but not yet spent, i.e. how far burn runs ahead of \
-                     spend. Gross: while a funding is in flight this includes its burn, which the \
-                     next funding may not offset against.",
+                     spend: the burn of a funding still in flight, plus the fees earlier fundings \
+                     provisioned but never paid. Nothing draws it down -- the surplus stays as \
+                     ckETH backing -- so between fundings it only ratchets up.",
                 )?;
                 // NaN rather than 0: "no gas" and "never looked" must not read alike.
                 w.encode_gauge(
@@ -1196,12 +1197,16 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_sweeper_in_flight_funding_age_seconds",
                     s.sweeper_funding
                         .in_flight_funding()
-                        .map(|f| {
-                            (ic_cdk::api::time().saturating_sub(f.created_at_nanos) / 1_000_000_000)
-                                as f64
+                        .map(|f| match f.created_at_nanos {
+                            Some(created_at_nanos) => {
+                                (ic_cdk::api::time().saturating_sub(created_at_nanos)
+                                    / 1_000_000_000) as f64
+                            }
+                            None => f64::NAN,
                         })
                         .unwrap_or(0.0),
-                    "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
+                    "Age of the sweeper funding awaiting finalization; 0 if none is outstanding, \
+                     NaN if one is but its acceptance time is unknown.",
                 )?;
                 // Alert on this when sweeping stalls: a growing age means funding is failing.
                 w.encode_gauge(

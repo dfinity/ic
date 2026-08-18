@@ -206,7 +206,7 @@
                     </tr>
                     <tr id="sweeper-in-flight-funding">
                         <th>Funding in flight</th>
-                        <td>{% if sweeper_funding.in_flight.is_some() %}burn index {{ sweeper_funding.in_flight.as_ref().unwrap().ledger_burn_index }}, {{ sweeper_funding.in_flight.as_ref().unwrap().amount }} Wei, accepted at {{ sweeper_funding.in_flight.as_ref().unwrap().created_at|timestamp_to_datetime }}{% else %}none{% endif %}</td>
+                        <td>{% match sweeper_funding.in_flight %}{%- when Some with (in_flight) -%}burn index {{ in_flight.ledger_burn_index }}, {{ in_flight.amount }} Wei, accepted at {% call format_opt_timestamp(in_flight.created_at) %}{% endcall %}{%- when None -%}none{% endmatch %}</td>
                     </tr>
                     <tr id="sweeper-burned-not-yet-spent">
                         <th>Burned but not yet spent</th>
