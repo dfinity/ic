@@ -25,7 +25,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };
-use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
+use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     NodeId, SubnetId,
@@ -317,7 +317,7 @@ impl CatchUpPackageMaker {
             })
             .ok()?;
 
-        info!(
+        debug!(
             self.log,
             "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {height}"
         );
