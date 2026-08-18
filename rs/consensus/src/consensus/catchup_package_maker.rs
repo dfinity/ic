@@ -264,20 +264,20 @@ impl CatchUpPackageMaker {
 
         let cup_block = self
             .get_cup_block(start_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Could't get a block for a CUP: {err}"))
+            .inspect_err(|err| warn!(self.log, "Couldn't get a block for a CUP: {err}"))
             .ok()?;
 
         let height = cup_block.height();
 
         let random_beacon = self
             .get_cup_random_beacon(pool, &cup_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Could't get a random beacon for a CUP: {err}"))
+            .inspect_err(|err| warn!(self.log, "Couldn't get a random beacon for a CUP: {err}"))
             .ok()?;
 
         let high_threshold_transcript =
             get_current_transcript_from_summary_block(&cup_block, &NiDkgTag::HighThreshold)
                 .or_else(|| {
-                    warn!(self.log, "Could't find transcript at height {height}");
+                    warn!(self.log, "Couldn't find transcript at height {height}");
                     None
                 })?;
 
