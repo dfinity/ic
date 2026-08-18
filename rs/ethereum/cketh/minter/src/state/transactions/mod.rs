@@ -389,8 +389,9 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    sent transactions for that nonce and burn index in case of resubmissions.
 /// 5. For a given nonce (and burn index), at most one sent transaction is finalized.
 ///    The others sent transactions for that nonce were never mined and can be discarded.
-/// 6. If a given transaction fails the minter will reimburse the user who requested the
-///    withdrawal with the corresponding amount minus fees.
+/// 6. For a given nonce, at most one sent transaction is finalized; a failed one is reported as
+///    such. Paying the requester back is not the pipeline's concern — see
+///    [`WithdrawalTransactions`].
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(in crate::state) struct TransactionPipeline {
     pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
@@ -419,6 +420,16 @@ pub enum ResubmitTransactionError {
         allowed_max_transaction_fee: Wei,
         max_transaction_fee: Wei,
     },
+}
+
+/// How far a transaction has got through the pipeline. Carries the transaction itself, since
+/// every caller that asks the stage also wants the transaction at it.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum TransactionStage<'a> {
+    Created(&'a Eip1559TransactionRequest),
+    /// The most recently sent transaction, i.e. the one with the highest fee.
+    Sent(&'a SignedTransactionRequest),
+    Finalized(&'a FinalizedEip1559Transaction),
 }
 
 impl TransactionPipeline {
@@ -671,7 +682,7 @@ impl TransactionPipeline {
 
     /// Move the transaction matching `receipt` into the finalized map and clean up its
     /// superseded resubmissions, returning the finalized transaction.
-    pub fn finalize_transaction(
+    pub fn record_finalized_transaction(
         &mut self,
         ledger_burn_index: LedgerBurnIndex,
         receipt: &TransactionReceipt,
@@ -791,6 +802,24 @@ impl TransactionPipeline {
         burn_index: &LedgerBurnIndex,
     ) -> Option<&FinalizedEip1559Transaction> {
         self.finalized_tx.get_alt(burn_index)
+    }
+
+    pub fn processed_withdrawal_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
+        self.processed_withdrawal_requests.values()
+    }
+
+    /// How far the transaction for `burn_index` has got, or `None` if the pipeline holds none.
+    pub fn transaction_stage(&self, burn_index: &LedgerBurnIndex) -> Option<TransactionStage<'_>> {
+        if let Some(tx) = self.created_tx.get_alt(burn_index) {
+            return Some(TransactionStage::Created(tx.as_ref()));
+        }
+        // The last one sent is the one with the highest fee, so it is the one that may be mined.
+        if let Some(tx) = self.sent_tx.get_alt(burn_index).and_then(|txs| txs.last()) {
+            return Some(TransactionStage::Sent(tx));
+        }
+        self.finalized_tx
+            .get_alt(burn_index)
+            .map(TransactionStage::Finalized)
     }
 
     pub fn get_processed_withdrawal_request(
@@ -931,7 +960,7 @@ impl WithdrawalTransactions {
     ) {
         let finalized_tx = self
             .pipeline
-            .finalize_transaction(ledger_burn_index, &receipt);
+            .record_finalized_transaction(ledger_burn_index, &receipt);
         if self.is_reimbursable(&ledger_burn_index) {
             assert!(
                 self.maybe_reimburse.remove(&ledger_burn_index),
@@ -1251,20 +1280,15 @@ impl WithdrawalTransactions {
         Option<&Eip1559TransactionRequest>,
     )> {
         // Pending requests matching the given search parameter
-        let pending = self
-            .pipeline
-            .pending_withdrawal_requests
-            .iter()
-            .filter_map(|r| {
-                r.match_parameter(parameter)
-                    .then_some((r, WithdrawalStatus::Pending, None))
-            });
+        let pending = self.pipeline.withdrawal_requests_iter().filter_map(|r| {
+            r.match_parameter(parameter)
+                .then_some((r, WithdrawalStatus::Pending, None))
+        });
 
         // Processed withdrawal requests matching the given search parameter.
         let processed = self
             .pipeline
-            .processed_withdrawal_requests
-            .values()
+            .processed_withdrawal_requests_iter()
             .filter(|r| r.match_parameter(parameter))
             .map(|request| {
                 match self.processed_transaction_status(&request.cketh_ledger_burn_index()) {
@@ -1289,8 +1313,7 @@ impl WithdrawalTransactions {
     pub fn transaction_status(&self, burn_index: &LedgerBurnIndex) -> RetrieveEthStatus {
         if self
             .pipeline
-            .pending_withdrawal_requests
-            .iter()
+            .withdrawal_requests_iter()
             .any(|r| &r.cketh_ledger_burn_index() == burn_index)
         {
             return RetrieveEthStatus::Pending;
@@ -1302,56 +1325,48 @@ impl WithdrawalTransactions {
         &self,
         burn_index: &LedgerBurnIndex,
     ) -> (RetrieveEthStatus, Option<&Eip1559TransactionRequest>) {
-        if let Some(tx) = self.pipeline.created_tx.get_alt(burn_index) {
-            return (RetrieveEthStatus::TxCreated, Some(tx.as_ref()));
-        }
+        let tx = match self.pipeline.transaction_stage(burn_index) {
+            Some(TransactionStage::Created(tx)) => return (RetrieveEthStatus::TxCreated, Some(tx)),
+            Some(TransactionStage::Sent(tx)) => {
+                return (
+                    RetrieveEthStatus::TxSent(EthTransaction::from(tx.as_ref())),
+                    Some(tx.as_ref().as_ref()),
+                );
+            }
+            Some(TransactionStage::Finalized(tx)) => tx,
+            None => return (RetrieveEthStatus::NotFound, None),
+        };
 
-        if let Some(tx) = self
-            .pipeline
-            .sent_tx
-            .get_alt(burn_index)
-            .and_then(|txs| txs.last())
+        if let Some(Ok(reimbursed)) =
+            self.find_reimbursed_transaction_by_cketh_ledger_burn_index(burn_index)
         {
             return (
-                RetrieveEthStatus::TxSent(EthTransaction::from(tx.as_ref())),
-                Some(tx.as_ref().as_ref()),
-            );
-        }
-
-        if let Some(tx) = self.pipeline.finalized_tx.get_alt(burn_index) {
-            if let Some(Ok(reimbursed)) =
-                self.find_reimbursed_transaction_by_cketh_ledger_burn_index(burn_index)
-            {
-                return (
-                    RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
-                        reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
-                        transaction_hash: tx.transaction_hash().to_string(),
-                        reimbursed_amount: reimbursed.reimbursed_amount.into(),
-                    }),
-                    Some(tx.as_ref()),
-                );
-            }
-            if tx.transaction_status() == &TransactionStatus::Failure {
-                return (
-                    RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                        EthTransaction {
-                            transaction_hash: tx.transaction_hash().to_string(),
-                        },
-                    )),
-                    Some(tx.as_ref()),
-                );
-            }
-
-            return (
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success {
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
+                    reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
                     transaction_hash: tx.transaction_hash().to_string(),
-                    effective_transaction_fee: Some(tx.effective_transaction_fee().into()),
+                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
                 }),
                 Some(tx.as_ref()),
             );
         }
+        if tx.transaction_status() == &TransactionStatus::Failure {
+            return (
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
+                    EthTransaction {
+                        transaction_hash: tx.transaction_hash().to_string(),
+                    },
+                )),
+                Some(tx.as_ref()),
+            );
+        }
 
-        (RetrieveEthStatus::NotFound, None)
+        (
+            RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success {
+                transaction_hash: tx.transaction_hash().to_string(),
+                effective_transaction_fee: Some(tx.effective_transaction_fee().into()),
+            }),
+            Some(tx.as_ref()),
+        )
     }
 }
 
