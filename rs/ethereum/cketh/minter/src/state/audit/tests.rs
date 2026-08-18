@@ -97,7 +97,7 @@ impl GetEventsFile {
         use crate::eth_logs::EventSource;
         use crate::state::TransactionStatus;
         use crate::state::audit::EventType as ET;
-        use crate::state::transactions::{EthWithdrawalRequest, SweeperFundingRequest};
+        use crate::state::transactions::EthWithdrawalRequest;
 
         fn map_event_source(
             CandidEventSource {
@@ -322,7 +322,7 @@ impl GetEventsFile {
                     from,
                     from_subaccount,
                     created_at,
-                } => ET::AcceptedSweeperFundingRequest(SweeperFundingRequest {
+                } => ET::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
                     withdrawal_amount: withdrawal_amount.try_into().unwrap(),
                     destination: destination.parse().unwrap(),
                     ledger_burn_index: map_nat(ledger_burn_index),

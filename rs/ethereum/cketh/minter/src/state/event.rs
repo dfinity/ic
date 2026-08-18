@@ -5,7 +5,7 @@ use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, SweeperFundingRequest,
+    ReimbursementRequest,
 };
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
@@ -184,7 +184,7 @@ pub enum EventType {
     AutomaticDepositReceived(#[n(0)] AutomaticDeposit),
     /// The minter burned ckETH from its fee subaccount to top up the sweeper address with gas.
     #[n(27)]
-    AcceptedSweeperFundingRequest(#[n(0)] SweeperFundingRequest),
+    AcceptedSweeperFundingRequest(#[n(0)] EthWithdrawalRequest),
 }
 
 /// Full snapshot of the ckERC20 deposit address registry. Carries the limits in

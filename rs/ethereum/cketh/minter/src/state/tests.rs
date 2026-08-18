@@ -14,7 +14,7 @@ use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, ReimbursementIndex, SweeperFundingRequest,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
 };
 use crate::state::{Erc20Balances, State};
 use crate::test_fixtures::{
@@ -745,9 +745,9 @@ prop_compose! {
         ledger_burn_index in any::<u64>(),
         from in arb_principal(),
         from_subaccount in arb_ledger_subaccount(),
-        created_at in any::<u64>(),
-    ) -> SweeperFundingRequest {
-        SweeperFundingRequest {
+        created_at in proptest::option::of(any::<u64>()),
+    ) -> EthWithdrawalRequest {
+        EthWithdrawalRequest {
             withdrawal_amount,
             destination,
             ledger_burn_index: ledger_burn_index.into(),
@@ -1565,7 +1565,7 @@ mod eth_balance {
         let eth_balance_before_funding = state_before_funding.eth_balance.clone();
 
         let funding_amount = Wei::new(10_000_000_000_000_000);
-        let funding_request = SweeperFundingRequest {
+        let funding_request = WithdrawalRequest::SweeperFunding(EthWithdrawalRequest {
             withdrawal_amount: funding_amount,
             destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
                 .parse()
@@ -1575,8 +1575,8 @@ mod eth_balance {
                 .parse()
                 .unwrap(),
             from_subaccount: None,
-            created_at: 1699527697000000000,
-        };
+            created_at: Some(1699527697000000000),
+        });
         let outcomes = apply_eth_transfer_both_ways(&state_before_funding, funding_request);
         let receipt_succeeded = &outcomes.receipt_succeeded;
         let after_success = outcomes.after_success.eth_balance.clone();

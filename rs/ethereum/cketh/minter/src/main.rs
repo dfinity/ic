@@ -32,7 +32,7 @@ use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, SweeperFundingRequest,
+    ReimbursementRequest,
 };
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
@@ -838,7 +838,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
                     created_at,
                 },
-                EventType::AcceptedSweeperFundingRequest(SweeperFundingRequest {
+                EventType::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
                     withdrawal_amount,
                     destination,
                     ledger_burn_index,

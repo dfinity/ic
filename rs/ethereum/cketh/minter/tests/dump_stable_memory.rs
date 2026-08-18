@@ -18,7 +18,7 @@ use ic_cketh_minter::state::audit::EventType as ET;
 use ic_cketh_minter::state::event::Event;
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, SweeperFundingRequest,
+    ReimbursementRequest,
 };
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
@@ -270,7 +270,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 from,
                 from_subaccount,
                 created_at,
-            } => ET::AcceptedSweeperFundingRequest(SweeperFundingRequest {
+            } => ET::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
                 withdrawal_amount: withdrawal_amount.try_into().unwrap(),
                 destination: destination.parse().unwrap(),
                 ledger_burn_index: map_nat(ledger_burn_index),

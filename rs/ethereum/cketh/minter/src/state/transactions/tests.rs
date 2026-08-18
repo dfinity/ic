@@ -2136,7 +2136,7 @@ mod eth_transactions {
             create_and_record_signed_transaction,
         };
         use crate::state::transactions::{
-            CreateTransactionError, NotReimbursable, ReimbursementIndex, SweeperFundingRequest,
+            CreateTransactionError, EthWithdrawalRequest, NotReimbursable, ReimbursementIndex,
             create_transaction,
         };
         use crate::tx::GasFeeEstimate;
@@ -2146,20 +2146,24 @@ mod eth_transactions {
         use maplit::{btreemap, btreeset};
         use std::str::FromStr;
 
-        fn sweeper_funding_request() -> SweeperFundingRequest {
-            SweeperFundingRequest {
+        fn sweeper_funding_payload() -> EthWithdrawalRequest {
+            EthWithdrawalRequest {
                 withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
                 destination: Address::new([0x53; 20]),
                 ledger_burn_index: LedgerBurnIndex::new(15),
                 from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
                 from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
-                created_at: DEFAULT_CREATED_AT,
+                created_at: Some(DEFAULT_CREATED_AT),
             }
+        }
+
+        fn sweeper_funding_request() -> WithdrawalRequest {
+            WithdrawalRequest::SweeperFunding(sweeper_funding_payload())
         }
 
         #[test]
         fn should_not_be_reimbursable() {
-            let request = Into::<WithdrawalRequest>::into(sweeper_funding_request());
+            let request = sweeper_funding_request();
 
             assert!(!request.is_reimbursable());
             assert_eq!(
@@ -2226,7 +2230,7 @@ mod eth_transactions {
 
         #[test]
         fn should_deduct_the_transaction_fee_from_the_funded_amount() {
-            let funding = sweeper_funding_request();
+            let funding = sweeper_funding_payload();
             let gas_fee = gas_fee_estimate();
             let expected_fee = gas_fee
                 .clone()
@@ -2234,7 +2238,7 @@ mod eth_transactions {
                 .max_transaction_fee();
 
             let tx = create_transaction(
-                &Into::<WithdrawalRequest>::into(funding.clone()),
+                &WithdrawalRequest::SweeperFunding(funding.clone()),
                 TransactionNonce::ZERO,
                 gas_fee,
                 CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -2256,15 +2260,15 @@ mod eth_transactions {
 
         #[test]
         fn should_fail_to_create_a_transaction_when_the_fee_exceeds_the_funded_amount() {
-            let funding = SweeperFundingRequest {
+            let funding = EthWithdrawalRequest {
                 withdrawal_amount: Wei::new(1),
-                ..sweeper_funding_request()
+                ..sweeper_funding_payload()
             };
             let expected_index = funding.ledger_burn_index;
 
             assert_matches!(
                 create_transaction(
-                    &Into::<WithdrawalRequest>::into(funding),
+                    &WithdrawalRequest::SweeperFunding(funding),
                     TransactionNonce::ZERO,
                     gas_fee_estimate(),
                     CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -2282,13 +2286,11 @@ mod eth_transactions {
         #[test]
         fn should_cap_resubmission_at_the_funded_amount() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let funding = sweeper_funding_request();
-            transactions.record_withdrawal_request(funding.clone());
-            let created_tx = create_and_record_transaction(
-                &mut transactions,
-                funding.clone(),
-                gas_fee_estimate(),
-            );
+            let funding = sweeper_funding_payload();
+            let request = WithdrawalRequest::SweeperFunding(funding.clone());
+            transactions.record_withdrawal_request(request.clone());
+            let created_tx =
+                create_and_record_transaction(&mut transactions, request, gas_fee_estimate());
             create_and_record_signed_transaction(&mut transactions, created_tx);
 
             let spiked_fee = GasFeeEstimate {
@@ -2311,7 +2313,7 @@ mod eth_transactions {
 
         #[test]
         fn should_use_the_plain_transfer_gas_limit() {
-            let request: WithdrawalRequest = sweeper_funding_request().into();
+            let request = sweeper_funding_request();
 
             assert_eq!(
                 crate::withdraw::estimate_gas_limit(&request),
@@ -2419,9 +2421,10 @@ mod oldest_incomplete_withdrawal_timestamp {
 
     fn set_created_at(withdrawal_request: &mut WithdrawalRequest, created_at: u64) {
         match withdrawal_request {
-            WithdrawalRequest::CkEth(request) => request.created_at = Some(created_at),
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.created_at = Some(created_at)
+            }
             WithdrawalRequest::CkErc20(request) => request.created_at = created_at,
-            WithdrawalRequest::SweeperFunding(request) => request.created_at = created_at,
         }
     }
 }

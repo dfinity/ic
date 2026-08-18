@@ -38,7 +38,10 @@ pub enum WithdrawalSearchParameter {
 pub enum WithdrawalRequest {
     CkEth(EthWithdrawalRequest),
     CkErc20(Erc20WithdrawalRequest),
-    SweeperFunding(SweeperFundingRequest),
+    /// Carries the same payload as [`WithdrawalRequest::CkEth`] — a burn of the minter's own
+    /// ckETH, transferred to the sweeper address — but is never reimbursed, so it needs a
+    /// variant of its own rather than a flag on the payload.
+    SweeperFunding(EthWithdrawalRequest),
 }
 
 impl WithdrawalRequest {
@@ -52,43 +55,48 @@ impl WithdrawalRequest {
 
     pub fn created_at(&self) -> Option<u64> {
         match self {
-            WithdrawalRequest::CkEth(request) => request.created_at,
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.created_at
+            }
             WithdrawalRequest::CkErc20(request) => Some(request.created_at),
-            WithdrawalRequest::SweeperFunding(request) => Some(request.created_at),
         }
     }
 
     /// Address to which the funds are to be sent to.
     pub fn payee(&self) -> Address {
         match self {
-            WithdrawalRequest::CkEth(request) => request.destination,
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.destination
+            }
             WithdrawalRequest::CkErc20(request) => request.destination,
-            WithdrawalRequest::SweeperFunding(request) => request.destination,
         }
     }
 
     /// Address to which the transaction is to be sent to.
     pub fn destination(&self) -> Address {
         match self {
-            WithdrawalRequest::CkEth(request) => request.destination,
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.destination
+            }
             WithdrawalRequest::CkErc20(request) => request.erc20_contract_address,
-            WithdrawalRequest::SweeperFunding(request) => request.destination,
         }
     }
 
     pub fn from(&self) -> Principal {
         match self {
-            WithdrawalRequest::CkEth(request) => request.from,
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.from
+            }
             WithdrawalRequest::CkErc20(request) => request.from,
-            WithdrawalRequest::SweeperFunding(request) => request.from,
         }
     }
 
     pub fn from_subaccount(&self) -> Option<&LedgerSubaccount> {
         match self {
-            WithdrawalRequest::CkEth(request) => request.from_subaccount.as_ref(),
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.from_subaccount.as_ref()
+            }
             WithdrawalRequest::CkErc20(request) => request.from_subaccount.as_ref(),
-            WithdrawalRequest::SweeperFunding(request) => request.from_subaccount.as_ref(),
         }
     }
 
@@ -138,12 +146,6 @@ impl From<Erc20WithdrawalRequest> for WithdrawalRequest {
     }
 }
 
-impl From<SweeperFundingRequest> for WithdrawalRequest {
-    fn from(value: SweeperFundingRequest) -> Self {
-        WithdrawalRequest::SweeperFunding(value)
-    }
-}
-
 /// Ethereum withdrawal request issued by the user.
 #[derive(Clone, Eq, PartialEq, Decode, Encode)]
 pub struct EthWithdrawalRequest {
@@ -165,29 +167,6 @@ pub struct EthWithdrawalRequest {
     /// The IC time at which the withdrawal request arrived.
     #[n(5)]
     pub created_at: Option<u64>,
-}
-
-/// Sweeper gas funding request issued by the minter itself. Never reimbursed.
-#[derive(Clone, Eq, PartialEq, Decode, Encode)]
-pub struct SweeperFundingRequest {
-    /// The ckETH burned for this funding, and the ceiling on what it may spend in total.
-    #[n(0)]
-    pub withdrawal_amount: Wei,
-    /// The minter's dedicated sweeper address (tECDSA derivation path `[3]`).
-    #[n(1)]
-    pub destination: Address,
-    /// The transaction ID of the ckETH burn on the ckETH ledger.
-    #[cbor(n(2), with = "crate::cbor::id")]
-    pub ledger_burn_index: LedgerBurnIndex,
-    /// The owner of the account from which the minter burned ckETH: the minter itself.
-    #[cbor(n(3), with = "icrc_cbor::principal")]
-    pub from: Principal,
-    /// The subaccount from which the minter burned ckETH.
-    #[n(4)]
-    pub from_subaccount: Option<LedgerSubaccount>,
-    /// The IC time at which the funding was decided.
-    #[n(5)]
-    pub created_at: u64,
 }
 
 /// ERC-20 withdrawal request issued by the user.
@@ -353,30 +332,6 @@ impl fmt::Debug for EthWithdrawalRequest {
             created_at,
         } = self;
         f.debug_struct("EthWithdrawalRequest")
-            .field("withdrawal_amount", withdrawal_amount)
-            .field("destination", destination)
-            .field("ledger_burn_index", ledger_burn_index)
-            .field("from", &format_args!("{from}"))
-            .field(
-                "from_subaccount",
-                &format_args!("{}", DisplayOption(from_subaccount)),
-            )
-            .field("created_at", created_at)
-            .finish()
-    }
-}
-
-impl fmt::Debug for SweeperFundingRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        let SweeperFundingRequest {
-            withdrawal_amount,
-            destination,
-            ledger_burn_index,
-            from,
-            from_subaccount,
-            created_at,
-        } = self;
-        f.debug_struct("SweeperFundingRequest")
             .field("withdrawal_amount", withdrawal_amount)
             .field("destination", destination)
             .field("ledger_burn_index", ledger_burn_index)
@@ -583,7 +538,7 @@ impl EthTransactions {
             "BUG: withdrawal request and transaction destination mismatch"
         );
         match &withdrawal_request {
-            WithdrawalRequest::CkEth(req) => {
+            WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => {
                 assert!(
                     req.withdrawal_amount > transaction.amount,
                     "BUG: transaction amount should be the withdrawal amount deducted from transaction fees"
@@ -594,12 +549,6 @@ impl EthTransactions {
                     Wei::ZERO,
                     transaction.amount,
                     "BUG: ERC-20 transaction amount should be zero"
-                );
-            }
-            WithdrawalRequest::SweeperFunding(req) => {
-                assert!(
-                    req.withdrawal_amount > transaction.amount,
-                    "BUG: transaction amount should be the funded amount deducted from transaction fees"
                 );
             }
         }
@@ -613,17 +562,14 @@ impl EthTransactions {
         let transaction_request = TransactionRequest {
             transaction,
             resubmission: match &withdrawal_request {
-                WithdrawalRequest::CkEth(cketh) => ResubmissionStrategy::ReduceEthAmount {
-                    withdrawal_amount: cketh.withdrawal_amount,
-                },
+                WithdrawalRequest::CkEth(cketh) | WithdrawalRequest::SweeperFunding(cketh) => {
+                    ResubmissionStrategy::ReduceEthAmount {
+                        withdrawal_amount: cketh.withdrawal_amount,
+                    }
+                }
                 WithdrawalRequest::CkErc20(ckerc20) => ResubmissionStrategy::GuaranteeEthAmount {
                     allowed_max_transaction_fee: ckerc20.max_transaction_fee,
                 },
-                WithdrawalRequest::SweeperFunding(funding) => {
-                    ResubmissionStrategy::ReduceEthAmount {
-                        withdrawal_amount: funding.withdrawal_amount,
-                    }
-                }
             },
         };
         assert_eq!(
@@ -855,13 +801,13 @@ impl EthTransactions {
                     // Funding is a plain value transfer to an address derived from the minter's
                     // own key, so there is no code for it to revert in: reaching this means an
                     // assumption broke. Logged rather than trapped, since the accounting holds
-                    // either way — the burn simply stays unspent.
+                    // either way — the burn stays burned and the ETH stays backing ckETH.
                     log!(
                         INFO,
                         "[record_finalized_transaction]: UNEXPECTED: sweeper funding {} of {} to \
                          {} FAILED (tx {}), which should be impossible for a transfer to an \
-                         address the minter controls; the burn is NOT reimbursed and stays \
-                         available as prepaid gas",
+                         address the minter controls; the burn is NOT reimbursed: the ETH \
+                         never left the main address and now over-backs ckETH",
                         ledger_burn_index,
                         request.withdrawal_amount,
                         request.destination,
@@ -1257,7 +1203,7 @@ pub fn create_transaction(
             ledger_burn_index,
             ..
         })
-        | WithdrawalRequest::SweeperFunding(SweeperFundingRequest {
+        | WithdrawalRequest::SweeperFunding(EthWithdrawalRequest {
             withdrawal_amount,
             destination,
             ledger_burn_index,

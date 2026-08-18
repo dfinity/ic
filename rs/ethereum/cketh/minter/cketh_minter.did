@@ -575,7 +575,7 @@ type Event = record {
             ledger_burn_index : nat;
             from : principal;
             from_subaccount : opt blob;
-            created_at: nat64;
+            created_at: opt nat64;
         };
         CreatedTransaction : record {
             withdrawal_id : nat;

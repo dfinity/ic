@@ -366,15 +366,11 @@ impl State {
             .get_processed_withdrawal_request(withdrawal_id)
             .expect("BUG: missing withdrawal request");
         let charged_tx_fee = match withdrawal_request {
-            WithdrawalRequest::CkEth(req) => req
+            WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => req
                 .withdrawal_amount
                 .checked_sub(tx.transaction().amount)
                 .expect("BUG: withdrawal amount MUST always be at least the transaction amount"),
             WithdrawalRequest::CkErc20(req) => req.max_transaction_fee,
-            WithdrawalRequest::SweeperFunding(req) => req
-                .withdrawal_amount
-                .checked_sub(tx.transaction().amount)
-                .expect("BUG: funded amount MUST always be at least the transaction amount"),
         };
         let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect(
             "BUG: charged transaction fee MUST always be at least the effective transaction fee",
