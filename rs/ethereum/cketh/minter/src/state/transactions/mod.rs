@@ -801,17 +801,20 @@ impl EthTransactions {
                     // Funding is a plain value transfer to an address derived from the minter's
                     // own key, so there is no code for it to revert in: reaching this means an
                     // assumption broke. Logged rather than trapped, since the accounting holds
-                    // either way — the burn stays burned and the ETH stays backing ckETH.
+                    // either way — the burn stays burned, and of the ETH it covered only the gas
+                    // of the failed transaction actually left the main address.
                     log!(
                         INFO,
                         "[record_finalized_transaction]: UNEXPECTED: sweeper funding {} of {} to \
                          {} FAILED (tx {}), which should be impossible for a transfer to an \
-                         address the minter controls; the burn is NOT reimbursed: the ETH \
-                         never left the main address and now over-backs ckETH",
+                         address the minter controls; the burn is NOT reimbursed: no ETH reached \
+                         the sweeper, the failed transaction still paid {} of gas, and the rest \
+                         of the burn now over-backs ckETH",
                         ledger_burn_index,
                         request.withdrawal_amount,
                         request.destination,
                         receipt.transaction_hash,
+                        receipt.effective_transaction_fee(),
                     );
                 }
             }

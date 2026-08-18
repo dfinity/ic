@@ -355,9 +355,10 @@ with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as 
   funding provisioned but did not spend is left as backing rather than discounted
   from the next burn, which keeps funding accounted for exactly like a user
   withdrawal. In the same spirit, a funding whose transaction fails is not
-  reimbursed — the whole burn stays as backing. That is a plain-transfer send to an
-  address derived from the minter's own key, so there is no code there to revert in;
-  accepting the loss buys an accounting with no reimbursement path to audit.
+  reimbursed: no ETH reaches the sweeper, the failed transaction still pays for its
+  gas, and the burn minus that gas stays as backing. That is a plain-transfer send to
+  an address derived from the minter's own key, so there is no code there to revert
+  in; accepting the loss buys an accounting with no reimbursement path to audit.
 * Fundings and per-sweep effective fees are audit events; the sweeper balance and
   the fee/cost ratio are exposed on the dashboard (`R8`, `R9`) to recalibrate
   `deposit_fee` via proposal.
