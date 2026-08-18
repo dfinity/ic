@@ -205,6 +205,40 @@ RUNTIME_RUN_ARGS=(
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
 
+# When the checkout is a linked git worktree, its `.git` is a *file* holding an
+# absolute path to an admin directory under the main checkout's `.git`, i.e. a
+# path outside the checkout. Mounting only the checkout leaves that pointer
+# dangling, so every `git` call inside the container fails -- including the
+# `$(git rev-parse --show-toplevel)` that several ci scripts rely on. Mount the
+# main checkout's `.git` at the very same absolute path so the pointer resolves.
+if [ -f "${REPO_ROOT}/.git" ]; then
+    GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
+    GIT_COMMON_DIR="$(cd "$GIT_COMMON_DIR" && pwd)" # may be relative
+    case "$GIT_COMMON_DIR" in
+        "$REPO_ROOT" | "$REPO_ROOT"/*)
+            : # inside the checkout already, covered by the mount above
+            ;;
+        *)
+            eprintln "Checkout is a git worktree, also mounting '$GIT_COMMON_DIR'"
+            RUNTIME_RUN_ARGS+=(
+                --mount type=bind,source="${GIT_COMMON_DIR}",target="${GIT_COMMON_DIR}"
+
+                # Each worktree admin directory holds a back-pointer to its
+                # worktree's *host* path, and those paths do not exist in the
+                # container (this checkout lives at $WORKDIR, the others are not
+                # mounted at all), so git considers every worktree prunable here.
+                # That is harmless for reading, but `git gc` -- which git runs
+                # automatically after commit/fetch/... -- prunes worktrees as
+                # part of its job and would delete the host's admin directories.
+                # Turn auto gc off; an explicit `git gc` remains the user's call.
+                -e GIT_CONFIG_COUNT=1
+                -e GIT_CONFIG_KEY_0=gc.auto
+                -e GIT_CONFIG_VALUE_0=0
+            )
+            ;;
+    esac
+fi
+
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
 if [ "$RUNTIME" = docker ]; then
     # Under docker the IC-OS build runs (rootless) podman *inside* this

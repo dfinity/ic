@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -xeuo pipefail
 
-cd "${CI_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+# Note the assignment: `cd "$(git rev-parse ...)"` would `cd ""` and *succeed*
+# (bash returns 0 for a null directory operand) if git failed, silently turning
+# this script into a no-op that lints nothing and exits 0. An assignment, in
+# contrast, takes the command substitution's exit status, so `set -e` fires.
+REPO_ROOT="${CI_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+cd "$REPO_ROOT"
 
 cargo fmt -- --check
 
