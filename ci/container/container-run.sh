@@ -219,6 +219,24 @@ if [ -f "${REPO_ROOT}/.git" ]; then
             : # inside the checkout already, covered by the mount above
             ;;
         *)
+            # Mounting at the same absolute path only helps if the pointer *is*
+            # absolute. With `worktree.useRelativePaths` (git >= 2.48) `.git`
+            # holds a path relative to the checkout, which inside the container
+            # resolves against $WORKDIR no matter where the admin directory is
+            # mounted, and so keeps dangling. Say so instead of handing over a
+            # container in which git does not work.
+            GITDIR_POINTER="$(sed -n 's/^gitdir: //p' "${REPO_ROOT}/.git")"
+            case "$GITDIR_POINTER" in
+                /*) ;;
+                *)
+                    eprintln "'${REPO_ROOT}/.git' points at '$GITDIR_POINTER', a path relative to the checkout."
+                    eprintln "The checkout is mounted at '$WORKDIR' in the container, so that path cannot be made to resolve there."
+                    eprintln "Re-point it absolutely, e.g. from the main checkout:"
+                    eprintln "> git -c worktree.useRelativePaths=false worktree repair '$REPO_ROOT'"
+                    exit 1
+                    ;;
+            esac
+
             eprintln "Checkout is a git worktree, also mounting '$GIT_COMMON_DIR'"
             RUNTIME_RUN_ARGS+=(
                 --mount type=bind,source="${GIT_COMMON_DIR}",target="${GIT_COMMON_DIR}"
