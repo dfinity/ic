@@ -199,7 +199,7 @@ pub struct StateManagerMetrics {
     fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
     skip_optimization_missing_cert_count: IntCounter,
-    skipped_state_observations: IntCounter,
+    state_observation_blocked_duration: Histogram,
 }
 
 #[derive(Clone)]
@@ -528,9 +528,10 @@ impl StateManagerMetrics {
             "How often we could have skipped state cloning but did not because no certification was available.",
         );
 
-        let skipped_state_observations = metrics_registry.int_counter(
-            "state_manager_skipped_state_observations",
-            "Number of `ReplicatedStateMetrics::observe` invocations skipped because the background metrics thread was still busy.",
+        let metrics_observation_blocked_duration = metrics_registry.histogram(
+            "state_manager_observe_metrics_blocked_duration_seconds",
+            "Duration spent blocked on the critical path handing off a `ReplicatedStateMetrics::observe` invocation to the background metrics thread, in seconds. Zero when enqueued immediately.",
+            decimal_buckets_with_zero(-3, 0),
         );
 
         Self {
@@ -565,7 +566,7 @@ impl StateManagerMetrics {
             fast_forward_height,
             no_state_clone_count,
             skip_optimization_missing_cert_count,
-            skipped_state_observations,
+            state_observation_blocked_duration: metrics_observation_blocked_duration,
         }
     }
 
@@ -1403,7 +1404,11 @@ impl StateManagerImpl {
             invariants: replicated_state_invariants.map(Arc::new),
             worker_thread: WorkerThread::new(
                 "StateMetrics",
-                metrics.skipped_state_observations.clone(),
+                // One slot of slack, so that we need not block if the worker thread has not
+                // been scheduled since the previous round. May hold on to a `ReplicatedState`
+                // (which the State Manager likely also holds, as the latest state).
+                1,
+                metrics.state_observation_blocked_duration.clone(),
             ),
         };
 
@@ -4536,9 +4541,9 @@ impl ReplicatedStateMetricsThread {
     /// Enqueues background metric observations and invariant checks for the given
     /// state.
     ///
-    /// No-op if the worker thread is backlogged with earlier enqueued tasks. Since
-    /// neither metrics nor invariant checks are critical to correct functioning of
-    /// the replica, this is preferable to blocking on the critical path.
+    /// Blocks if the worker thread has not yet picked up the previously enqueued
+    /// observation, recording the time spent blocked in
+    /// `state_manager_observe_metrics_blocked_duration_seconds`.
     fn enqueue_observe_and_check(
         &self,
         state: Arc<ReplicatedState>,

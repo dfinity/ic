@@ -469,6 +469,61 @@ impl SubnetCallContextManager {
         removed
     }
 
+    /// Returns the number of in-progress subnet calls of each type, as
+    /// `(call type, count)` pairs.
+    pub fn context_counts(&self) -> impl Iterator<Item = (&'static str, usize)> {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever a new context type is added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        let Self {
+            next_callback_id: _,
+            setup_initial_dkg_contexts,
+            sign_with_threshold_contexts,
+            canister_http_request_contexts,
+            delivered_canister_http_request_contexts,
+            reshare_chain_key_contexts,
+            bitcoin_get_successors_contexts,
+            bitcoin_send_transaction_internal_contexts,
+            canister_management_calls,
+            raw_rand_contexts,
+            // Not a call context; exported separately, by key ID.
+            pre_signature_stashes: _,
+        } = self;
+
+        [
+            ("setup_initial_dkg", setup_initial_dkg_contexts.len()),
+            ("sign_with_threshold", sign_with_threshold_contexts.len()),
+            (
+                "canister_http_request",
+                canister_http_request_contexts.len(),
+            ),
+            (
+                "delivered_canister_http_request",
+                delivered_canister_http_request_contexts.len(),
+            ),
+            ("reshare_chain_key", reshare_chain_key_contexts.len()),
+            (
+                "bitcoin_get_successors",
+                bitcoin_get_successors_contexts.len(),
+            ),
+            (
+                "bitcoin_send_transaction_internal",
+                bitcoin_send_transaction_internal_contexts.len(),
+            ),
+            ("raw_rand", raw_rand_contexts.len()),
+            (
+                "install_code",
+                canister_management_calls.install_code_calls_len(),
+            ),
+            (
+                "stop_canister",
+                canister_management_calls.stop_canister_calls_len(),
+            ),
+        ]
+        .into_iter()
+    }
+
     /// Returns the number of `sign_with_threshold_contexts` per key id.
     pub fn sign_with_threshold_contexts_count(&self, key_id: &MasterPublicKeyId) -> usize {
         self.sign_with_threshold_contexts
