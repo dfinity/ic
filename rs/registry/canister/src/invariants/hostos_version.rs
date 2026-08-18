@@ -79,7 +79,7 @@ mod tests {
     fn panic_with_inner_version_mismatch() {
         let registry = invariant_compliant_registry(0);
 
-        let key = make_hostos_version_key("FOO".to_string());
+        let key = make_hostos_version_key("FOO");
         let value = HostosVersionRecord {
             hostos_version_id: "BAR".to_string(),
             ..Default::default()
