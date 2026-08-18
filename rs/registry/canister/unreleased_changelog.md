@@ -15,8 +15,6 @@ on the process that this file is part of, see
 
 ## Removed
 
-The `blessed_replica_versions` record has been removed.
-
 ## Fixed
 
 ## Security

@@ -2364,7 +2364,7 @@ impl SystemState {
     ) -> Cycles {
         self.cycles_balance
             + self.queues.attached_cycles()
-            + refunds.map(RefundPool::compute_total).unwrap_or_default()
+            + refunds.map(RefundPool::total).unwrap_or_default()
             + extra_cycles.unwrap_or_default()
     }
 

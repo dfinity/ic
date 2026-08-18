@@ -113,12 +113,14 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let cycles_debit = value
             .cycles_debit
-            .map(|c| c.into())
+            .map(Cycles::try_from)
+            .transpose()?
             .unwrap_or_else(Cycles::zero);
 
         let reserved_balance = value
             .reserved_balance
-            .map(|c| c.into())
+            .map(Cycles::try_from)
+            .transpose()?
             .unwrap_or_else(Cycles::zero);
 
         let mut consumed_cycles_by_use_cases = BTreeMap::new();
@@ -170,10 +172,14 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_balance,
             cycles_debit,
             reserved_balance,
-            reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
+            reserved_balance_limit: value
+                .reserved_balance_limit
+                .map(Cycles::try_from)
+                .transpose()?,
             minimum_incoming_canister_call_cycles: value
                 .minimum_incoming_canister_call_cycles
-                .map(|v| v.into())
+                .map(Cycles::try_from)
+                .transpose()?
                 .unwrap_or_default(),
             status: try_from_option_field(
                 value.canister_status,

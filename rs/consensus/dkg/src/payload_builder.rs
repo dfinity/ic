@@ -882,10 +882,7 @@ mod tests {
         },
         *,
     };
-    use ic_consensus_mocks::{
-        Dependencies, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
@@ -1086,7 +1083,7 @@ mod tests {
                 let subnet_id = subnet_test_id(0);
                 let vet_key_config = test_vet_key_config();
                 let key_id = vet_key_config.key_configs[0].key_id.clone();
-                let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+                let mut deps = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_id,
                     vec![(
@@ -1096,7 +1093,9 @@ mod tests {
                             .with_chain_key_config(test_vet_key_config())
                             .build(),
                     )],
-                );
+                )
+                .without_state_manager_expectations()
+                .build();
                 let registry_version = deps.registry.get_latest_version();
                 let setup_target = NiDkgTargetId::new([5_u8; 32]);
                 let reshare_target = NiDkgTargetId::new([6_u8; 32]);
@@ -1278,7 +1277,7 @@ mod tests {
                 mut pool,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -1288,7 +1287,8 @@ mod tests {
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
-            );
+            )
+            .build();
             let cup_contents = registry
                 .get_cup_contents(subnet_id, registry.get_latest_version())
                 .expect("Failed to retreive the DKG transcripts from registry");
@@ -1369,7 +1369,7 @@ mod tests {
             let initial_registry_version = 145;
             let dkg_interval_len = 66;
             let subnet_id = subnet_test_id(222);
-            let Dependencies { registry, .. } = dependencies_with_subnet_params(
+            let Dependencies { registry, .. } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -1379,7 +1379,8 @@ mod tests {
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             let cup_contents = registry
                 .get_cup_contents(subnet_id, registry.get_latest_version())
@@ -1470,7 +1471,7 @@ mod tests {
             let initial_registry_version = 112;
             let Dependencies {
                 registry, mut pool, ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -1480,7 +1481,8 @@ mod tests {
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
-            );
+            )
+            .build();
             let cup_contents = registry
                 .get_cup_contents(subnet_id, registry.get_latest_version())
                 .expect("Failed to retreive the DKG transcripts from registry");
@@ -1612,7 +1614,7 @@ mod tests {
                 registry,
                 replica_config,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -1621,7 +1623,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             // Get the latest summary block, which is the genesis block
             let cup = PoolReader::new(&pool).get_highest_catch_up_package();

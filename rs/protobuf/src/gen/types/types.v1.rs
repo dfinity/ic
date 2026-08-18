@@ -647,6 +647,17 @@ pub struct CanisterHttpResponseDivergence {
     #[prost(message, repeated, tag = "1")]
     pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpOutOfCycles {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(message, optional, tag = "3")]
+    pub min_cost: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "4")]
+    pub unspent_allowance: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FlexibleCanisterHttpResponseWithProof {
     #[prost(message, optional, tag = "1")]
@@ -722,7 +733,7 @@ pub mod flexible_canister_http_error {
 pub struct CanisterHttpResponseMessage {
     #[prost(
         oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3, 4, 5"
+        tags = "1, 2, 3, 4, 5, 6, 7"
     )]
     pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
 }
@@ -740,6 +751,10 @@ pub mod canister_http_response_message {
         FlexibleResponses(super::FlexibleCanisterHttpResponses),
         #[prost(message, tag = "5")]
         FlexibleError(super::FlexibleCanisterHttpError),
+        #[prost(message, tag = "6")]
+        OutOfCycles(super::CanisterHttpOutOfCycles),
+        #[prost(message, tag = "7")]
+        AsyncReceipt(super::CanisterHttpShare),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

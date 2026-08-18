@@ -19,7 +19,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
-use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
+use ic_replicated_state::{ExecutionState, Memory, NetworkTopology, ReplicatedState, SystemState};
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
@@ -135,6 +135,56 @@ impl CanisterLogMetrics for HypervisorMetrics {
     }
 }
 
+/// Indicates whether the memory is kept or replaced with new (initial) memory.
+/// Applicable to both the stable memory and the main memory of a canister.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum MemoryHandling {
+    /// Retain the memory.
+    Keep,
+    /// Reset the memory.
+    Replace,
+}
+
+/// Specifies the handling of the canister's memories.
+/// * On install and re-install:
+///   - Replace both the stable memory and the main memory.
+/// * On upgrade:
+///   - Always retain the stable memory.
+///   - Retain the main memory if and only if the `wasm_memory_persistence: opt keep`
+///     upgrade option is used, and erase it otherwise. That option is meant for
+///     canisters with enhanced orthogonal persistence (Motoko) and is only valid
+///     for those; such a canister may still opt into erasing its main memory by
+///     passing `wasm_memory_persistence: opt replace`.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct CanisterMemoryHandling {
+    pub stable_memory_handling: MemoryHandling,
+    pub main_memory_handling: MemoryHandling,
+}
+
+/// Specifies where the memories of a newly created execution state come from.
+///
+/// `Hypervisor::create_execution_state` always builds the initial memories of
+/// the new Wasm module (the module's declared minimum memory with its data
+/// segments applied); this type tells it what to do with them afterwards.
+#[derive(Debug)]
+// The `Explicit` variant is much larger than the others, but a `MemorySource`
+// is constructed once per operation and consumed right away.
+#[allow(clippy::large_enum_variant)]
+pub enum MemorySource<'a> {
+    /// Install and re-install: use the newly installed module's initial memories.
+    Fresh,
+    /// Upgrade: carry over the memories of `old` as directed by `handling`.
+    Preserve {
+        old: &'a ExecutionState,
+        handling: CanisterMemoryHandling,
+    },
+    /// Snapshot restore: install the memories provided by the caller.
+    Explicit {
+        wasm_memory: Memory,
+        stable_memory: Memory,
+    },
+}
+
 #[doc(hidden)]
 pub struct Hypervisor {
     wasm_executor: Arc<dyn WasmExecutor>,
@@ -160,6 +210,7 @@ impl Hypervisor {
         last_install_timestamp: Time,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
+        new_memories: MemorySource<'_>,
     ) -> (NumInstructions, HypervisorResult<ExecutionState>) {
         // If a wasm instruction has no arguments then it can be represented as
         // a single byte. So taking the length of the wasm source is a
@@ -198,6 +249,32 @@ impl Hypervisor {
                 // creating execution states, so every install/upgrade/snapshot
                 // restore is forced to provide it.
                 execution_state.last_install_timestamp = Some(last_install_timestamp);
+                // Same for the memories: the embedder always creates the
+                // initial memories of the new module, which the caller may want
+                // to replace with the preserved (or snapshotted) ones.
+                match new_memories {
+                    MemorySource::Fresh => {}
+                    MemorySource::Preserve { old, handling } => {
+                        // Cloning a `Memory` is cheap: cloning its page delta,
+                        // a persistent map, only clones the root node of its
+                        // tree, whose subtrees are `Arc`s, and its checkpoint
+                        // files, page allocator and sandbox handle are `Arc`s
+                        // as well.
+                        if handling.stable_memory_handling == MemoryHandling::Keep {
+                            execution_state.stable_memory = old.stable_memory.clone();
+                        }
+                        if handling.main_memory_handling == MemoryHandling::Keep {
+                            execution_state.wasm_memory = old.wasm_memory.clone();
+                        }
+                    }
+                    MemorySource::Explicit {
+                        wasm_memory,
+                        stable_memory,
+                    } => {
+                        execution_state.wasm_memory = wasm_memory;
+                        execution_state.stable_memory = stable_memory;
+                    }
+                }
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
                 round_limits.instructions -= as_round_instructions(total_cost);

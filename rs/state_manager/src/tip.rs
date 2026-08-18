@@ -106,6 +106,10 @@ pub(crate) enum TipRequest {
     },
     /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
     ///
+    /// Canisters deleted during execution are removed from tip via
+    /// `UnflushedCheckpointOp::DeleteCanister`, so this only needs to catch canisters
+    /// dropped without a corresponding operation, i.e. during subnet splitting.
+    ///
     /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
         height: Height,
@@ -819,7 +823,7 @@ fn switch_to_checkpoint(
 }
 
 /// Update the tip directory files with the most recent checkpoint operations.
-/// `operations` is an ordered list of all created/restored snapshots and renamed canisters since the last flush.
+/// `operations` is an ordered list of all created/restored snapshots and renamed or deleted canisters since the last flush.
 fn flush_unflushed_checkpoint_ops(
     log: &ReplicaLogger,
     tip_handler: &mut TipHandler,
@@ -837,6 +841,9 @@ fn flush_unflushed_checkpoint_ops(
             }
             UnflushedCheckpointOp::RenameCanister(src, dst) => {
                 tip_handler.move_canister_directory(height, src, dst)?;
+            }
+            UnflushedCheckpointOp::DeleteCanister(canister_id) => {
+                tip_handler.delete_canister_directory(height, canister_id)?;
             }
         }
     }

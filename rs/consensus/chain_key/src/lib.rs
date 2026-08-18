@@ -657,9 +657,7 @@ fn reject_if_invalid(
 mod tests {
     use assert_matches::assert_matches;
     use core::{convert::From, iter::Iterator, time::Duration};
-    use ic_consensus_mocks::{
-        Dependencies, dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationFailure};
     use ic_interfaces::idkg::IDkgChangeAction;
@@ -804,11 +802,13 @@ mod tests {
                 registry,
                 registry_data_provider,
                 ..
-            } = dependencies_with_subnet_records_with_raw_state_manager(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(1, subnet_record_builder.build())],
-            );
+            )
+            .without_state_manager_expectations()
+            .build();
 
             // Enable the configured keys
             if let Some(config) = config

@@ -1,12 +1,13 @@
 use ic_https_outcalls_pricing::fees::{
-    flexible_initial_spent, min_flexible_consensus_cost, non_flexible_initial_spent,
+    flexible_initial_spent, min_flexible_consensus_cost, min_non_flexible_consensus_cost,
+    non_flexible_initial_spent,
 };
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_logger::{ReplicaLogger, warn};
 use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
-        FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
+        CanisterHttpOutOfCycles, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     canister_http::{
@@ -201,62 +202,181 @@ pub(crate) struct OutOfCyclesProof {
     pub unspent_allowance: Cycles,
 }
 
+/// What is left of the committee's collective allowance, given the shares it has
+/// produced so far.
+///
+/// `None` if the consensus cost of this outcall is not enforced against its per-replica
+/// allowance (see [`per_replica_consensus_allowance`]).
+fn unspent_committee_allowance<'a>(
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
+    committee_size: usize,
+    context: &CanisterHttpRequestContext,
+) -> Option<Cycles> {
+    let ConsensusCostAllowance::PayAsYouGo(allowance) = per_replica_consensus_allowance(context)
+    else {
+        return None;
+    };
+    let spent: Cycles = seen_shares.map(|share| share.content.spent()).sum();
+    Some(allowance * committee_size - spent)
+}
+
+/// An out of cycles error is produced once what is left of the allowance falls short
+/// of the least a delivery can cost.
+fn out_of_cycles_verdict(
+    min_cost: Option<Cycles>,
+    unspent_allowance: Option<Cycles>,
+    callback_id: CallbackId,
+) -> Result<OutOfCyclesProof, InvalidCanisterHttpPayloadReason> {
+    match (min_cost, unspent_allowance) {
+        (Some(min_cost), Some(unspent_allowance)) if unspent_allowance < min_cost => {
+            Ok(OutOfCyclesProof {
+                min_cost,
+                unspent_allowance,
+            })
+        }
+        _ => {
+            debug_assert!(
+                unspent_allowance
+                    .map(|allowance| allowance >= min_cost.unwrap_or_default())
+                    .unwrap_or(true),
+                "expect unspent allowance {:?} >= min cost {:?}",
+                unspent_allowance,
+                min_cost
+            );
+            Err(InvalidCanisterHttpPayloadReason::NotOutOfCycles {
+                callback_id,
+                unspent_allowance,
+                min_cost,
+            })
+        }
+    }
+}
+
 /// Checks that a flexible outcall has run out of cycles, i.e. that its
 /// committee's remaining allowances can no longer cover the consensus cost of
 /// delivering any response.
-///
-/// `seen_shares` are the shares the committee has produced so far, at most one
-/// per member. What is left of the committee's collective allowance is at most
-/// the sum of the unspent allowances of those shares' signers, plus a full
-/// allowance for every committee member that has not been seen yet.
-pub(crate) fn check_out_of_cycles<'a>(
+pub(crate) fn check_flexible_out_of_cycles<'a>(
     seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare> + Clone,
     committee_size: usize,
     min_responses: u32,
     callback_id: CallbackId,
     context: &CanisterHttpRequestContext,
 ) -> Result<OutOfCyclesProof, InvalidCanisterHttpPayloadReason> {
-    let min_cost = min_flexible_consensus_cost(
-        seen_shares.clone(),
-        context.subnet_size,
-        committee_size,
-        min_responses,
-    );
-    let ConsensusCostAllowance::PayAsYouGo(allowance) = per_replica_consensus_allowance(context)
-    else {
-        // There is no per-replica allowance, so there is nothing to run out
-        // of (see `per_replica_consensus_allowance`).
-        return Err(InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
-            callback_id,
-            unspent_allowance: None,
-            min_cost,
-        });
-    };
+    out_of_cycles_verdict(
+        min_flexible_consensus_cost(
+            seen_shares.clone(),
+            context.subnet_size,
+            committee_size,
+            min_responses,
+        ),
+        unspent_committee_allowance(seen_shares, committee_size, context),
+        callback_id,
+    )
+}
 
-    let spent = seen_shares.map(|share| share.content.spent()).sum();
-    let unspent_allowance = allowance * committee_size - spent;
+/// Checks that a fully- or non-replicated outcall has run out of cycles, i.e. that
+/// its committee's remaining allowances can no longer cover the consensus cost of
+/// delivering any response.
+pub(crate) fn check_non_flexible_out_of_cycles<'a>(
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare> + Clone,
+    committee_size: usize,
+    threshold: usize,
+    callback_id: CallbackId,
+    context: &CanisterHttpRequestContext,
+) -> Result<OutOfCyclesProof, InvalidCanisterHttpPayloadReason> {
+    out_of_cycles_verdict(
+        min_non_flexible_consensus_cost(
+            seen_shares.clone(),
+            context.subnet_size,
+            committee_size,
+            threshold,
+        ),
+        unspent_committee_allowance(seen_shares, committee_size, context),
+        callback_id,
+    )
+}
 
-    // Only a bound the remaining allowances fall short of means out of cycles: no
-    // bound at all means nothing is left to deliver, and so nothing to cover.
-    match min_cost {
-        Some(min_cost) if unspent_allowance < min_cost => Ok(OutOfCyclesProof {
-            min_cost,
-            unspent_allowance,
-        }),
-        _ => {
-            debug_assert!(
-                unspent_allowance >= min_cost.unwrap_or_default(),
-                "expect unspent allowance {} >= min cost {:?}",
-                unspent_allowance,
-                min_cost
-            );
-            Err(InvalidCanisterHttpPayloadReason::FlexibleNotOutOfCycles {
-                callback_id,
-                unspent_allowance: Some(unspent_allowance),
-                min_cost,
-            })
+/// Collects at most one share per committee member.
+fn one_share_per_committee_member<'a>(
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&'a CanisterHttpResponseShare>>,
+    committee: &BTreeSet<NodeId>,
+) -> Vec<&'a CanisterHttpResponseShare> {
+    let mut seen_signers = BTreeSet::new();
+    grouped_shares
+        .values()
+        .flatten()
+        .filter(|share| {
+            let signer = share.signature.signer;
+            committee.contains(&signer) && seen_signers.insert(signer)
+        })
+        .copied()
+        .collect()
+}
+
+/// Reports a fully- or non-replicated outcall whose committee can no longer pay for
+/// delivering a response, or `None` while it still can.
+pub(crate) fn find_non_flexible_out_of_cycles(
+    callback_id: CallbackId,
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
+    committee: &BTreeSet<NodeId>,
+    threshold: usize,
+    context: &CanisterHttpRequestContext,
+) -> Option<CanisterHttpOutOfCycles> {
+    let shares = one_share_per_committee_member(grouped_shares, committee);
+    let proof = check_non_flexible_out_of_cycles(
+        shares.iter().copied(),
+        committee.len(),
+        threshold,
+        callback_id,
+        context,
+    )
+    .ok()?;
+    Some(CanisterHttpOutOfCycles {
+        callback_id,
+        shares: shares.into_iter().cloned().collect(),
+        min_cost: proof.min_cost,
+        unspent_allowance: proof.unspent_allowance,
+    })
+}
+
+/// The replicas of an already responded to outcall whose spend has been accounted
+/// for, and that must therefore not be refunded a second time.
+pub(crate) struct RefundedNodes<'a> {
+    by_context: &'a BTreeSet<NodeId>,
+    by_past_payload: Option<&'a HashSet<NodeId>>,
+}
+
+impl<'a> RefundedNodes<'a> {
+    pub(crate) fn new(
+        callback_id: CallbackId,
+        context: &'a CanisterHttpRequestContext,
+        past_payload_refunds: &'a BTreeMap<CallbackId, HashSet<NodeId>>,
+    ) -> Self {
+        Self {
+            by_context: &context.refund_status.refunding_nodes,
+            by_past_payload: past_payload_refunds.get(&callback_id),
         }
     }
+
+    pub(crate) fn contains(&self, node_id: &NodeId) -> bool {
+        self.by_context.contains(node_id)
+            || self
+                .by_past_payload
+                .is_some_and(|nodes| nodes.contains(node_id))
+    }
+}
+
+/// The receipts of the replicas that have contributed to an already responded to
+/// outcall but have not been refunded yet, at most one per replica.
+pub(crate) fn find_async_receipts<'a>(
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&'a CanisterHttpResponseShare>>,
+    committee: &BTreeSet<NodeId>,
+    already_refunded: &RefundedNodes,
+) -> Vec<&'a CanisterHttpResponseShare> {
+    one_share_per_committee_member(grouped_shares, committee)
+        .into_iter()
+        .filter(|share| !already_refunded.contains(&share.signature.signer))
+        .collect()
 }
 
 /// Reconstructs, for every signer of an aggregated proof, the
@@ -320,12 +440,10 @@ pub(crate) fn validate_flexible_response_with_proof(
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if response_with_proof.response.id != callback_id {
-        return Err(
-            InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                callback_id,
-                mismatched_id: response_with_proof.response.id,
-            },
-        );
+        return Err(InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch {
+            callback_id,
+            mismatched_id: response_with_proof.response.id,
+        });
     }
 
     validate_response_share(
@@ -363,7 +481,8 @@ pub(crate) fn validate_flexible_response_with_proof(
     Ok(())
 }
 
-/// Validates a single [`CanisterHttpResponseShare`]'s metadata.
+/// Validates a single [`CanisterHttpResponseShare`]'s metadata against the
+/// `committee` the request was assigned to.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership, the
 /// per-replica spend limit, and the response size limit.
@@ -374,17 +493,15 @@ pub(crate) fn validate_flexible_response_with_proof(
 pub(crate) fn validate_response_share(
     share: &CanisterHttpResponseShare,
     callback_id: CallbackId,
-    flex_committee: &BTreeSet<NodeId>,
+    committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if share.content.id() != callback_id {
-        return Err(
-            InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                callback_id,
-                mismatched_id: share.content.id(),
-            },
-        );
+        return Err(InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch {
+            callback_id,
+            mismatched_id: share.content.id(),
+        });
     }
 
     check_spent_within_limit(&share.content.payment_receipt, context)?;
@@ -392,14 +509,14 @@ pub(crate) fn validate_response_share(
 
     let signer = share.signature.signer;
     if !seen_signers.insert(signer) {
-        return Err(InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner {
+        return Err(InvalidCanisterHttpPayloadReason::DuplicateShareSigner {
             callback_id,
             signer,
         });
     }
-    if !flex_committee.contains(&signer) {
+    if !committee.contains(&signer) {
         return Err(
-            InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee {
+            InvalidCanisterHttpPayloadReason::ShareSignerNotInCommittee {
                 callback_id,
                 signer,
             },
@@ -511,6 +628,8 @@ pub(crate) fn group_shares_by_callback_id<
 /// allowances unspent to cover the consensus cost of putting it into a block
 /// (see [`check_initial_spent_within_limit`]); otherwise it is held back until
 /// further shares have arrived, each of which contributes another allowance.
+/// If no further shares can be received that would add enough allowance, we
+/// will generate an out-of-cycles error instead (see [`check_flexible_out_of_cycles`]).
 pub(crate) fn find_fully_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
@@ -536,9 +655,8 @@ pub(crate) fn find_fully_replicated_response(
 /// If found, returns the assembled [`CanisterHttpResponseWithConsensus`].
 ///
 /// As for fully-replicated responses, the response is held back while its
-/// collective spend exceeds the designated replica's allowance. Since no other
-/// replica contributes an allowance to a non-replicated outcall, such a request
-/// can only ever time out.
+/// collective spend exceeds the designated replica's allowance. In that case,
+/// we will generate an out-of-cycles error instead (see [`check_flexible_out_of_cycles`]).
 pub(crate) fn find_non_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
@@ -617,7 +735,7 @@ struct FlexibleCandidate<'a> {
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
 ///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
 /// - **OutOfCycles**: delivering a response can never be paid for again (see
-///   [`check_out_of_cycles`]).
+///   [`check_flexible_out_of_cycles`]).
 /// - **Pending**: not enough data to decide yet.
 ///
 /// Both of the results that deliver response bodies — `OkResponses` and
@@ -761,7 +879,7 @@ pub(crate) fn find_flexible_result(
     }
 
     // 4. Can delivering a response ever be paid for?
-    if let Ok(proof) = check_out_of_cycles(
+    if let Ok(proof) = check_flexible_out_of_cycles(
         all_shares.iter().copied(),
         committee.len(),
         min_responses as u32,

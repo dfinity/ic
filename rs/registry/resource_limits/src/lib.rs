@@ -72,6 +72,16 @@ impl ResourceLimits {
             .filter(|maximum_state_delta| maximum_state_delta.get() != 0)
             .unwrap_or(default)
     }
+
+    /// Returns the maximum number of instructions a query may consume, applied both to a single
+    /// query method execution and to a composite query call graph.
+    ///
+    /// This is `maximum_query_instructions` if not `0`, otherwise the provided `default`.
+    pub fn maximum_query_instructions_or(&self, default: NumInstructions) -> NumInstructions {
+        self.maximum_query_instructions
+            .filter(|maximum_query_instructions| maximum_query_instructions.get() != 0)
+            .unwrap_or(default)
+    }
 }
 
 impl From<ResourceLimits> for pb::ResourceLimits {
