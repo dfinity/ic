@@ -17,8 +17,4 @@ on the process that this file is part of, see
 
 ## Fixed
 
-* `get_available_sns_subnet` now rotates through all configured SNS subnets
-  (round-robin, based on the number of SNSs already deployed) instead of
-  always deploying new SNSes to the first subnet in `sns_subnet_ids`.
-
 ## Security
