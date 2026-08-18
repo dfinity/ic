@@ -19,7 +19,9 @@
     "mgmt_mac": "00:00:00:00:00:01",
     "deployment_environment": "mainnet",
     "nns_urls": [
-      "https://icp-api.io,https//icp0.io,https://ic0.app"
+      "https://icp-api.io/",
+      "https://icp0.io/",
+      "https://ic0.app/"
     ],
     "node_operator_private_key": null,
     "enable_trusted_execution_environment": false,
