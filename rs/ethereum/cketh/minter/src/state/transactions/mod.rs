@@ -1006,12 +1006,13 @@ impl EthTransactions {
                 );
             }
             if tx.transaction_status() == &TransactionStatus::Failure {
-                // A sweeper funding request is never reimbursed, so this status is imprecise for
-                // one. Tolerated rather than given a status of its own, which would mean adding a
-                // variant to `retrieve_eth_status`' return type and breaking existing clients:
-                // funding cannot fail in the first place, being a plain value transfer to an
-                // address derived from the minter's own key. Revisit if funding ever goes through
-                // a contract, where a revert becomes possible.
+                // Unreachable for a funding: the destination is derived from the minter's own
+                // key, so a bare transfer there has no code to revert in. Were it reached, the
+                // status would be wrong, since nothing reimburses a funding — tolerable only
+                // because it cannot happen, and not worth a status of its own, which would mean
+                // adding a variant to `retrieve_eth_status`' return type and breaking existing
+                // clients. Revisit if funding ever goes through a contract, where a revert becomes
+                // possible.
                 return (
                     RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
                         EthTransaction {

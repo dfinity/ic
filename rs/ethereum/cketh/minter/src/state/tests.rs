@@ -1429,6 +1429,53 @@ mod eth_balance {
         assert_eq!(balance_after_erc20_deposit, balance_before);
     }
 
+    /// Both outcomes of one withdrawal flow, applied to independent copies of the same starting
+    /// state so a test can compare them directly.
+    struct BothOutcomes {
+        after_success: State,
+        after_failure: State,
+        receipt_succeeded: TransactionReceipt,
+        receipt_failed: TransactionReceipt,
+    }
+
+    /// Runs the shared 21'000-gas flow against `state_before` twice, once finalizing successfully and
+    /// once with a failure receipt, leaving each caller to assert only what its request type makes
+    /// different. The gas fixture comes from a real Sepolia transaction and over-provisions the fee,
+    /// so part of it is always recorded as unspent.
+    fn apply_eth_transfer_both_ways<T: Into<WithdrawalRequest>>(
+        state_before: &State,
+        request: T,
+    ) -> BothOutcomes {
+        //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
+        let flow = WithdrawalFlow {
+            tx_fee: GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
+                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+            },
+            gas_limit: GasAmount::from(21_000_u32),
+            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
+            tx_status: TransactionStatus::Success,
+            ..WithdrawalFlow::for_request(request)
+        };
+
+        let mut after_success = state_before.clone();
+        let receipt_succeeded = flow.clone().apply(&mut after_success);
+
+        let mut after_failure = state_before.clone();
+        let receipt_failed = WithdrawalFlow {
+            tx_status: TransactionStatus::Failure,
+            ..flow
+        }
+        .apply(&mut after_failure);
+
+        BothOutcomes {
+            after_success,
+            after_failure,
+            receipt_succeeded,
+            receipt_failed,
+        }
+    }
+
     #[test]
     fn should_update_after_successful_and_failed_withdrawal() {
         let mut state_before_withdrawal = initial_state();
@@ -1437,10 +1484,8 @@ mod eth_balance {
             &EventType::AcceptedDeposit(received_eth_event()),
         );
 
-        let mut state_after_successful_withdrawal = state_before_withdrawal.clone();
         let eth_balance_before_withdrawal = state_before_withdrawal.eth_balance.clone();
         let erc20_balance_before_withdrawal = state_before_withdrawal.erc20_balances.clone();
-        //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
         let withdrawal_request = EthWithdrawalRequest {
             withdrawal_amount: Wei::new(10_000_000_000_000_000),
             destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
@@ -1453,23 +1498,10 @@ mod eth_balance {
             from_subaccount: None,
             created_at: Some(1699527697000000000),
         };
-        let withdrawal_flow = WithdrawalFlow {
-            tx_fee: GasFeeEstimate {
-                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
-                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
-            },
-            gas_limit: GasAmount::from(21_000_u32),
-            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
-            tx_status: TransactionStatus::Success,
-            ..WithdrawalFlow::for_request(withdrawal_request)
-        };
-        withdrawal_flow
-            .clone()
-            .apply(&mut state_after_successful_withdrawal);
-        let eth_balance_after_successful_withdrawal =
-            state_after_successful_withdrawal.eth_balance.clone();
+        let outcomes = apply_eth_transfer_both_ways(&state_before_withdrawal, withdrawal_request);
+        let eth_balance_after_successful_withdrawal = outcomes.after_success.eth_balance.clone();
         let erc20_balance_after_successful_withdrawal =
-            state_after_successful_withdrawal.erc20_balances.clone();
+            outcomes.after_success.erc20_balances.clone();
 
         assert_eq!(
             eth_balance_after_successful_withdrawal,
@@ -1493,15 +1525,9 @@ mod eth_balance {
             erc20_balance_after_successful_withdrawal
         );
 
-        let mut state_after_failed_withdrawal = state_before_withdrawal.clone();
-        let receipt_failed = WithdrawalFlow {
-            tx_status: TransactionStatus::Failure,
-            ..withdrawal_flow
-        }
-        .apply(&mut state_after_failed_withdrawal);
-        let eth_balance_after_failed_withdrawal = state_after_failed_withdrawal.eth_balance.clone();
-        let erc20_balance_after_failed_withdrawal =
-            state_after_failed_withdrawal.erc20_balances.clone();
+        let receipt_failed = &outcomes.receipt_failed;
+        let eth_balance_after_failed_withdrawal = outcomes.after_failure.eth_balance.clone();
+        let erc20_balance_after_failed_withdrawal = outcomes.after_failure.erc20_balances.clone();
 
         assert_eq!(
             eth_balance_after_failed_withdrawal.eth_balance,
@@ -1551,22 +1577,9 @@ mod eth_balance {
             from_subaccount: None,
             created_at: 1699527697000000000,
         };
-        let funding_flow = WithdrawalFlow {
-            tx_fee: GasFeeEstimate {
-                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
-                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
-            },
-            gas_limit: GasAmount::from(21_000_u32),
-            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
-            tx_status: TransactionStatus::Success,
-            ..WithdrawalFlow::for_request(funding_request)
-        };
-
-        let mut state_after_successful_funding = state_before_funding.clone();
-        let receipt_succeeded = funding_flow
-            .clone()
-            .apply(&mut state_after_successful_funding);
-        let after_success = state_after_successful_funding.eth_balance.clone();
+        let outcomes = apply_eth_transfer_both_ways(&state_before_funding, funding_request);
+        let receipt_succeeded = &outcomes.receipt_succeeded;
+        let after_success = outcomes.after_success.eth_balance.clone();
 
         // Asserted as the identity the accounting has to satisfy rather than as a fixed number: the
         // funding ceiling covers both the ETH delivered and the fee, so whatever part of the fee
@@ -1600,13 +1613,8 @@ mod eth_balance {
             "this fixture over-provisions the fee, so some of it must be recorded as unspent"
         );
 
-        let mut state_after_failed_funding = state_before_funding.clone();
-        let receipt_failed = WithdrawalFlow {
-            tx_status: TransactionStatus::Failure,
-            ..funding_flow
-        }
-        .apply(&mut state_after_failed_funding);
-        let after_failure = state_after_failed_funding.eth_balance.clone();
+        let receipt_failed = &outcomes.receipt_failed;
+        let after_failure = outcomes.after_failure.eth_balance.clone();
 
         assert_eq!(
             after_failure.eth_balance,

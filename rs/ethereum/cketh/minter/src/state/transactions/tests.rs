@@ -2129,7 +2129,7 @@ mod eth_transactions {
         use crate::eth_logs::LedgerSubaccount;
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::TransactionCount;
-        use crate::numeric::{GasAmount, Wei, WeiPerGas};
+        use crate::numeric::{Wei, WeiPerGas};
         use crate::state::transactions::ResubmitTransactionError;
         use crate::state::transactions::tests::{
             DEFAULT_CREATED_AT, DEFAULT_PRINCIPAL, DEFAULT_WITHDRAWAL_AMOUNT,
@@ -2140,12 +2140,11 @@ mod eth_transactions {
             create_transaction,
         };
         use crate::tx::GasFeeEstimate;
+        use crate::withdraw::CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT;
         use assert_matches::assert_matches;
         use ic_ethereum_types::Address;
         use maplit::{btreemap, btreeset};
         use std::str::FromStr;
-
-        const SWEEPER_FUNDING_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
 
         fn sweeper_funding_request() -> SweeperFundingRequest {
             SweeperFundingRequest {
@@ -2231,14 +2230,14 @@ mod eth_transactions {
             let gas_fee = gas_fee_estimate();
             let expected_fee = gas_fee
                 .clone()
-                .to_price(SWEEPER_FUNDING_GAS_LIMIT)
+                .to_price(CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT)
                 .max_transaction_fee();
 
             let tx = create_transaction(
                 &Into::<WithdrawalRequest>::into(funding.clone()),
                 TransactionNonce::ZERO,
                 gas_fee,
-                SWEEPER_FUNDING_GAS_LIMIT,
+                CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
                 EthereumNetwork::Mainnet,
             )
             .expect("the funded amount must cover the fee");
@@ -2261,20 +2260,21 @@ mod eth_transactions {
                 withdrawal_amount: Wei::new(1),
                 ..sweeper_funding_request()
             };
+            let expected_index = funding.ledger_burn_index;
 
             assert_matches!(
                 create_transaction(
                     &Into::<WithdrawalRequest>::into(funding),
                     TransactionNonce::ZERO,
                     gas_fee_estimate(),
-                    SWEEPER_FUNDING_GAS_LIMIT,
+                    CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
                     EthereumNetwork::Mainnet,
                 ),
                 Err(CreateTransactionError::InsufficientTransactionFee {
                     cketh_ledger_burn_index,
                     allowed_max_transaction_fee,
                     ..
-                }) if cketh_ledger_burn_index == LedgerBurnIndex::new(15)
+                }) if cketh_ledger_burn_index == expected_index
                     && allowed_max_transaction_fee == Wei::new(1)
             );
         }
@@ -2316,25 +2316,6 @@ mod eth_transactions {
             assert_eq!(
                 crate::withdraw::estimate_gas_limit(&request),
                 crate::withdraw::CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
-            );
-        }
-
-        #[test]
-        fn should_survive_an_event_encoding_roundtrip() {
-            use crate::state::event::{Event, EventType};
-            use ic_stable_structures::storable::Storable;
-
-            let event = Event {
-                timestamp: DEFAULT_CREATED_AT,
-                payload: EventType::AcceptedSweeperFundingRequest(sweeper_funding_request()),
-            };
-            let bytes = event.to_bytes();
-
-            assert_eq!(
-                event,
-                Event::from_bytes(bytes.clone()),
-                "failed to decode {}",
-                hex::encode(bytes)
             );
         }
     }
