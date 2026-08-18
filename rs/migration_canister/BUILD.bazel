@@ -65,9 +65,13 @@ rust_test(
     ],
     deps = [
         # Keep sorted.
+        "//rs/config",
         "//rs/limits",
         "//rs/nns/constants",
+        "//rs/replicated_state",
         "//rs/rust_canisters/dfn_http_metrics",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",

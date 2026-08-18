@@ -4,7 +4,8 @@
 //! process several requests concurrently.
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, EventType, RecoveryState, RequestState, ValidationError,
+    CYCLES_COST_PER_MIGRATION, EventType, ManagedMemoryAllocation, RecoveryState, RequestState,
+    ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
@@ -13,9 +14,9 @@ use crate::{
     controller_recovery::controller_recovery,
     external_interfaces::{
         management::{
-            CanisterStatusType, assert_no_snapshots, canister_status, delete_canister,
-            get_canister_info, get_registry_version, rename_canister, set_controllers,
-            set_exclusive_controller,
+            CanisterStatusResponse, CanisterStatusType, assert_no_snapshots, canister_status,
+            delete_canister, get_canister_info, get_registry_version, rename_canister,
+            set_controllers, set_exclusive_controller,
         },
         registry::migrate_canister,
     },
@@ -75,37 +76,96 @@ pub async fn process_all_by_predicate<F>(
 pub async fn process_accepted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
-    let RequestState::Accepted { request } = request else {
+    let RequestState::Accepted { mut request } = request else {
         println!("Error: list_by Accepted returned bad variant");
         return ProcessingResult::NoProgress;
     };
 
-    // Set controller of migrated canister
-    let res = set_exclusive_controller(request.migrated_canister)
-        .await
-        .map_success(|_| RequestState::ControllersChanged {
-            request: request.clone(),
-        })
-        .map_failure(|reason| RequestState::Failed {
-            request: request.clone(),
-            recovery_state: RecoveryState::new(),
-            reason,
-        });
-    if !res.is_success() {
-        return res;
+    // Set controller and memory allocation of migrated canister:
+    // every management canister call that the migration canister performs on the migrated
+    // canister (e.g., restoring its original controllers) records a canister history entry
+    // and thus increases the canister's memory usage. To make sure that such a call cannot
+    // fail because the subnet of the migrated canister cannot accommodate that increase,
+    // we bump the memory allocation of the migrated canister in the very same call that
+    // makes the migration canister the exclusive controller of the migrated canister.
+    // The original memory allocation is restored together with the original controllers.
+    //
+    // Whether the migration canister became the exclusive controller of the migrated canister
+    // is tracked so that the original controllers (and memory allocation) of that canister are
+    // only restored if the migration canister actually changed them.
+    match set_exclusive_controller(
+        request.migrated_canister,
+        request
+            .migrated_canister_memory_allocation
+            .map(|memory_allocation| memory_allocation.reserved),
+    )
+    .await
+    {
+        ProcessingResult::Success(()) => {
+            request.migrated_canister_exclusive_controller = Some(true);
+        }
+        // The outcome of the call is unknown: nothing is tracked (the request keeps its previous
+        // state) and the call is retried (making the migration canister the exclusive controller
+        // of a canister is idempotent).
+        ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
+        // The call definitely had no effect and thus there is nothing to restore.
+        ProcessingResult::FatalFailure(reason) => {
+            request.migrated_canister_exclusive_controller = Some(false);
+            return ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                recovery_state: RecoveryState::new(),
+                reason,
+            });
+        }
     }
 
-    // Set controller of replaced canister
-    set_exclusive_controller(request.replaced_canister)
-        .await
-        .map_success(|_| RequestState::ControllersChanged {
-            request: request.clone(),
-        })
-        .map_failure(|reason| RequestState::Failed {
-            request,
-            recovery_state: RecoveryState::new(),
-            reason,
-        })
+    // Set controller and memory allocation of replaced canister:
+    // see the comment on the migrated canister above (the calls that the migration canister
+    // performs on the replaced canister include renaming it).
+    match set_exclusive_controller(
+        request.replaced_canister,
+        request
+            .replaced_canister_memory_allocation
+            .map(|memory_allocation| memory_allocation.reserved),
+    )
+    .await
+    {
+        ProcessingResult::Success(()) => {
+            request.replaced_canister_exclusive_controller = Some(true);
+            ProcessingResult::Success(RequestState::ControllersChanged { request })
+        }
+        // See the comment on the migrated canister above: retrying this call also makes the
+        // (idempotent) call for the migrated canister again and thus it is irrelevant that
+        // the tracking for the migrated canister is dropped along with the request state.
+        ProcessingResult::NoProgress => ProcessingResult::NoProgress,
+        ProcessingResult::FatalFailure(reason) => {
+            request.replaced_canister_exclusive_controller = Some(false);
+            ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                recovery_state: RecoveryState::new(),
+                reason,
+            })
+        }
+    }
+}
+
+/// Checks that the memory usage of the given canister excluding its canister history
+/// did not change since the request was validated: the memory allocation that the migration
+/// canister set for the canister only reserves memory for the canister history entries that
+/// the migration canister records for the canister (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`)
+/// and thus recording those entries could fail if the rest of the canister's memory usage grew
+/// after validation.
+///
+/// This check is vacuous for a request validated by a version of the migration canister
+/// that did not manage the memory allocation of the canister yet.
+fn memory_usage_unchanged(
+    memory_allocation: Option<ManagedMemoryAllocation>,
+    canister_status: &CanisterStatusResponse,
+) -> bool {
+    memory_allocation.is_none_or(|memory_allocation| {
+        canister_status.memory_usage_excluding_canister_history()
+            == memory_allocation.usage_excluding_canister_history
+    })
 }
 
 pub async fn process_controllers_changed(
@@ -189,6 +249,31 @@ pub async fn process_controllers_changed(
                 "Migrated canister does not have sufficient cycles: {} < {}.",
                 migrated_canister_status.cycles, CYCLES_COST_PER_MIGRATION
             ),
+        });
+    }
+
+    // The migration canister is the exclusive controller of the migrated and replaced canisters
+    // at this point and both of them are stopped. Hence, only the migration canister can change
+    // their memory usage from now on (by recording canister history entries for them) and thus
+    // it suffices to check here that their memory usage did not change since validation.
+    if !memory_usage_unchanged(
+        request.migrated_canister_memory_allocation,
+        &migrated_canister_status,
+    ) {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            recovery_state: RecoveryState::new(),
+            reason: "Migrated canister memory usage changed.".to_string(),
+        });
+    }
+    if !memory_usage_unchanged(
+        request.replaced_canister_memory_allocation,
+        &replaced_canister_status,
+    ) {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            recovery_state: RecoveryState::new(),
+            reason: "Replaced canister memory usage changed.".to_string(),
         });
     }
 
@@ -344,7 +429,7 @@ pub async fn process_migrated_canister_deleted(
     {
         return ProcessingResult::NoProgress;
     }
-    // restore controllers
+    // restore controllers and the original memory allocation
     let controllers = request
         .migrated_canister_original_controllers
         .iter()
@@ -354,9 +439,14 @@ pub async fn process_migrated_canister_deleted(
     // The migration canister is the exclusive controller of `request.migrated_canister`
     // and thus the following call cannot fail because of the caller
     // not being a controller.
+    // Note that `request.migrated_canister` is the renamed replaced canister at this point
+    // and thus we restore the original memory allocation of the replaced canister.
     match set_controllers(
         request.migrated_canister,
         controllers,
+        request
+            .replaced_canister_memory_allocation
+            .map(|memory_allocation| memory_allocation.original),
         request.replaced_canister_subnet,
     )
     .await
@@ -412,12 +502,26 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         recovery_state.restore_migrated_canister_controllers,
         request.migrated_canister,
         request.migrated_canister_original_controllers.clone(),
+        // The memory allocation of the migrated canister is bumped in the very same call that
+        // makes the migration canister the exclusive controller of the migrated canister and
+        // thus it must be restored whenever the controllers are restored.
+        request
+            .migrated_canister_memory_allocation
+            .map(|memory_allocation| memory_allocation.original),
+        request.migrated_canister_exclusive_controller,
     )
     .await;
     recovery_state.restore_replaced_canister_controllers = controller_recovery(
         recovery_state.restore_replaced_canister_controllers,
         request.replaced_canister,
         request.replaced_canister_original_controllers.clone(),
+        // The memory allocation of the replaced canister is bumped in the very same call that
+        // makes the migration canister the exclusive controller of the replaced canister and
+        // thus it must be restored whenever the controllers are restored.
+        request
+            .replaced_canister_memory_allocation
+            .map(|memory_allocation| memory_allocation.original),
+        request.replaced_canister_exclusive_controller,
     )
     .await;
 

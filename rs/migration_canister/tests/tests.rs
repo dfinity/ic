@@ -1,7 +1,8 @@
 use candid::{CandidType, Decode, Encode, Principal, Reserved};
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
+use ic_config::execution_environment::{Config, LOG_MEMORY_STORE_FEATURE_ENABLED};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
@@ -12,7 +13,7 @@ use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use pocket_ic::{
-    CreateCanisterParams, CreateCanisterPlacement, PocketIcBuilder, Time,
+    CreateCanisterParams, CreateCanisterPlacement, ErrorCode, PocketIcBuilder, Time,
     common::rest::{
         CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
         SubnetSpec,
@@ -1839,6 +1840,360 @@ async fn after_validation_insufficient_cycles() {
         panic!("Unexpected status: {:?}", status.unwrap())
     };
     assert!(reason.contains("Migrated canister does not have sufficient cycles"));
+}
+
+/// The migration fails if the memory usage of the migrated or replaced canister changed after
+/// validation: the memory allocation that the migration canister sets for those canisters when
+/// making itself their exclusive controller only reserves memory for the canister history
+/// entries that the migration canister records for them.
+#[tokio::test]
+async fn after_validation_memory_usage_changed() {
+    for interfere_with_migrated_canister in [true, false] {
+        let Setup {
+            pic,
+            migrated_canisters,
+            replaced_canisters,
+            migrated_canister_controllers,
+            ..
+        } = setup(Settings::default()).await;
+        // The first controller of the migrated canister is also a controller
+        // of the replaced canister.
+        let sender = migrated_canister_controllers[0];
+        let migrated_canister = migrated_canisters[0];
+        let replaced_canister = replaced_canisters[0];
+        let args = MigrateCanisterArgs {
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
+        };
+        migrate_canister(&pic, sender, &args).await.unwrap();
+        // Validation succeeded. Now we break migration by interfering: installing a minimal
+        // Wasm module increases the memory usage of the canister (by way less than the memory
+        // reserved for the canister history entries recorded by the migration canister so that
+        // the migration canister still becomes the exclusive controller of that canister).
+        let canister = if interfere_with_migrated_canister {
+            migrated_canister
+        } else {
+            replaced_canister
+        };
+        pic.install_canister(
+            canister,
+            b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
+            vec![],
+            Some(sender),
+        )
+        .await;
+        for _ in 0..4 {
+            advance(&pic).await;
+        }
+        let status = get_status(&pic, sender, &args).await;
+        let MigrationStatus::Failed { ref reason, .. } = status.clone().unwrap() else {
+            panic!("Unexpected status: {:?}", status.unwrap())
+        };
+        let expected_reason = if interfere_with_migrated_canister {
+            "Migrated canister memory usage changed."
+        } else {
+            "Replaced canister memory usage changed."
+        };
+        assert_eq!(reason, expected_reason);
+
+        pic.drop().await;
+    }
+}
+
+/// The amount of memory that the migration canister reserves for the canister history
+/// entries it records for the migrated and replaced canisters
+/// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY` in the migration canister).
+const MEMORY_RESERVED_FOR_CANISTER_HISTORY: u64 = 16 * 1024;
+
+/// Number of canisters used to fill up the memory of a subnet.
+const NUM_FILLER_CANISTERS: usize = 8;
+
+/// Returns the memory usage and the memory allocation of the given canister.
+async fn memory_usage_and_allocation(
+    pic: &PocketIc,
+    canister_id: Principal,
+    sender: Principal,
+) -> (u64, u64) {
+    let status = pic
+        .canister_status(canister_id, Some(sender))
+        .await
+        .unwrap();
+    (
+        status.memory_size.0.try_into().unwrap(),
+        status.settings.memory_allocation.0.try_into().unwrap(),
+    )
+}
+
+async fn set_memory_allocation(
+    pic: &PocketIc,
+    canister_id: Principal,
+    sender: Principal,
+    memory_allocation: u64,
+) -> Result<(), pocket_ic::RejectResponse> {
+    pic.update_canister_settings(
+        canister_id,
+        Some(sender),
+        CanisterSettings {
+            memory_allocation: Some(memory_allocation.into()),
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+/// Fills up the memory of the given subnet by creating `NUM_FILLER_CANISTERS` canisters
+/// and growing their memory allocations until the subnet cannot accommodate
+/// a canister history entry any more.
+///
+/// The available subnet memory is split evenly among the subnet's execution threads and thus
+/// a single message can only ever allocate `1 / scheduler_cores` of the subnet's remaining
+/// memory capacity: this is why the memory allocations must be grown in many steps. We grow
+/// them by as much as possible, halving the step size whenever a step does not fit any more.
+/// Once a step of a single byte does not fit, the subnet's remaining memory capacity is less
+/// than `scheduler_cores` bytes.
+async fn fill_subnet_memory(pic: &PocketIc, subnet_id: Principal, sender: Principal) {
+    let create_canister = || async {
+        pic.create_canister_with_params(
+            Some(sender),
+            CreateCanisterParams {
+                // Plenty of cycles to cover the storage reservation
+                // for the canister's memory allocation.
+                cycles: Some(u128::MAX / 2),
+                settings: Some(CanisterSettings {
+                    controllers: Some(vec![sender]),
+                    reserved_cycles_limit: Some((u128::MAX / 2).into()),
+                    ..Default::default()
+                }),
+                placement: Some(CreateCanisterPlacement::SubnetId(subnet_id)),
+            },
+        )
+        .await
+        .unwrap()
+    };
+
+    // The canister used to check that the subnet memory is indeed exhausted at the end.
+    // It must be created (and must not have a memory allocation) before filling up
+    // the subnet memory.
+    let probe_canister = create_canister().await;
+    let mut filler_canisters: Vec<(Principal, u64)> = vec![];
+    for _ in 0..NUM_FILLER_CANISTERS {
+        filler_canisters.push((create_canister().await, 0));
+    }
+
+    let scheduler_cores = SchedulerConfig::application_subnet().scheduler_cores as u64;
+    let mut step = Config::default().subnet_memory_capacity.get() / scheduler_cores;
+    let mut i = 0;
+    while step > 0 {
+        let (canister, allocation) = &mut filler_canisters[i % NUM_FILLER_CANISTERS];
+        if set_memory_allocation(pic, *canister, sender, *allocation + step)
+            .await
+            .is_ok()
+        {
+            *allocation += step;
+            i += 1;
+        } else {
+            step /= 2;
+        }
+    }
+
+    // Changing the controllers of the probe canister records a canister history entry
+    // which the subnet cannot accommodate any more.
+    let err = pic
+        .set_controllers(probe_canister, Some(sender), vec![sender])
+        .await
+        .unwrap_err();
+    // The error must be about the subnet's memory capacity (and not, e.g., about the capacity
+    // for Wasm custom sections which produces a different message with the same suffix).
+    assert!(
+        err.error_code == ErrorCode::SubnetOversubscribed
+            && err
+                .reject_message
+                .contains("of memory but only 0 B are available in the subnet"),
+        "subnet memory has not been exhausted: {err:?}"
+    );
+}
+
+/// The migration canister bumps the memory allocation of the migrated and replaced canisters
+/// when it makes itself their exclusive controller and restores the original memory allocation
+/// when it restores the original controllers.
+#[tokio::test]
+async fn memory_allocation_bumped_and_restored() {
+    // The migrated and replaced canister use distinct initial memory allocations so that
+    // restoring the memory allocation of the wrong canister would be caught.
+    for (migrated_memory_allocation, replaced_memory_allocation) in
+        [(None, None), (Some(1 << 30), Some(2 << 30))]
+    {
+        let Setup {
+            pic,
+            migrated_canisters,
+            replaced_canisters,
+            migrated_canister_controllers,
+            ..
+        } = setup(Settings::default()).await;
+        let sender = migrated_canister_controllers[0];
+        let migrated_canister = migrated_canisters[0];
+        let replaced_canister = replaced_canisters[0];
+        let mc: Principal = MIGRATION_CANISTER_ID.into();
+        let mut memory_before = vec![];
+        for (canister, initial_memory_allocation) in [
+            (migrated_canister, migrated_memory_allocation),
+            (replaced_canister, replaced_memory_allocation),
+        ] {
+            if let Some(initial_memory_allocation) = initial_memory_allocation {
+                set_memory_allocation(&pic, canister, sender, initial_memory_allocation)
+                    .await
+                    .unwrap();
+            }
+            let memory_allocation_before = initial_memory_allocation.unwrap_or(0);
+            let (memory_usage, memory_allocation) =
+                memory_usage_and_allocation(&pic, canister, mc).await;
+            assert_eq!(memory_allocation, memory_allocation_before);
+            memory_before.push((canister, memory_usage, memory_allocation_before));
+        }
+
+        let args = MigrateCanisterArgs {
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
+        };
+        bring_to_state(&pic, sender, &args, MigrationState::ControllersChanged).await;
+
+        // The memory allocation of both canisters is bumped to cover the canister history entries
+        // recorded by the migration canister unless it is already high enough.
+        for (canister, memory_usage_before, memory_allocation_before) in memory_before {
+            let (_, memory_allocation) = memory_usage_and_allocation(&pic, canister, mc).await;
+            let expected_memory_allocation = std::cmp::max(
+                memory_allocation_before,
+                memory_usage_before + MEMORY_RESERVED_FOR_CANISTER_HISTORY,
+            );
+            assert_eq!(memory_allocation, expected_memory_allocation);
+        }
+
+        // Once the migration completes, the original memory allocation is restored.
+        for _ in 0..10 {
+            advance(&pic).await;
+        }
+        pic.advance_time(Duration::from_secs(360)).await;
+        for _ in 0..10 {
+            advance(&pic).await;
+        }
+        let status = get_status(&pic, sender, &args).await;
+        let MigrationStatus::Succeeded { .. } = status.as_ref().unwrap() else {
+            panic!("status: {:?}", status.unwrap());
+        };
+        // The replaced canister is addressed with the migrated canister's ID after the migration
+        // and thus its original memory allocation must be restored.
+        let (_, memory_allocation) =
+            memory_usage_and_allocation(&pic, migrated_canister, sender).await;
+        assert_eq!(memory_allocation, replaced_memory_allocation.unwrap_or(0));
+
+        pic.drop().await;
+    }
+}
+
+/// The migration completes even if the subnet of the replaced canister runs out of memory
+/// after the migration canister took exclusive control of the replaced canister: recording
+/// canister history entries for the replaced canister (e.g., when renaming it) is covered
+/// by the memory allocation that the migration canister set for the replaced canister.
+#[tokio::test]
+async fn migration_succeeds_when_subnet_memory_exhausted() {
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        replaced_canister_subnet,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
+    let args = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
+    };
+    // Drive the migration to the state right before the replaced canister is renamed.
+    bring_to_state(&pic, sender, &args, MigrationState::StoppedAndReady).await;
+
+    // Now we fill up the memory of the subnet of the replaced canister.
+    fill_subnet_memory(&pic, replaced_canister_subnet, sender).await;
+
+    for _ in 0..10 {
+        advance(&pic).await;
+    }
+    pic.advance_time(Duration::from_secs(360)).await;
+    for _ in 0..10 {
+        advance(&pic).await;
+    }
+    let status = get_status(&pic, sender, &args).await;
+    let MigrationStatus::Succeeded { .. } = status.as_ref().unwrap() else {
+        panic!("status: {:?}", status.unwrap());
+    };
+    // The controllers and the original memory allocation of the replaced canister
+    // (addressed with the migrated canister's ID after the migration) are restored.
+    let mut migrated_canister_controllers_after = pic.get_controllers(migrated_canister).await;
+    migrated_canister_controllers_after.sort();
+    let mut expected_controllers = migrated_canister_controllers;
+    expected_controllers.retain(|x| x != &MIGRATION_CANISTER_ID.get().0);
+    expected_controllers.sort();
+    assert_eq!(migrated_canister_controllers_after, expected_controllers);
+    let (_, memory_allocation) = memory_usage_and_allocation(&pic, migrated_canister, sender).await;
+    assert_eq!(memory_allocation, 0);
+}
+
+/// A failed migration is recovered even if the subnet of the migrated canister runs out of
+/// memory after the migration canister took exclusive control of the migrated canister:
+/// restoring the original controllers records a canister history entry which is covered by
+/// the memory freed when restoring the original memory allocation in the very same call.
+/// The original memory allocation is restored for both the migrated and replaced canisters.
+#[tokio::test]
+async fn migration_failure_recovers_when_subnet_memory_exhausted() {
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        mut migrated_canister_controllers,
+        migrated_canister_subnet,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
+    let args = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
+    };
+    bring_to_state(&pic, sender, &args, MigrationState::ControllersChanged).await;
+
+    // Now we fill up the memory of the subnet of the migrated canister.
+    fill_subnet_memory(&pic, migrated_canister_subnet, sender).await;
+
+    // The migration canister is the exclusive controller of the migrated canister at this point
+    // and thus we break the migration by starting the migrated canister on its behalf.
+    pic.start_canister(migrated_canister, Some(MIGRATION_CANISTER_ID.into()))
+        .await
+        .unwrap();
+
+    for _ in 0..10 {
+        advance(&pic).await;
+    }
+    // The request is recorded as failed, i.e., the recovery of the original controllers
+    // (and memory allocation) of the migrated and replaced canisters completed.
+    let status = get_status(&pic, sender, &args).await;
+    let MigrationStatus::Failed { ref reason, .. } = status.clone().unwrap() else {
+        panic!("Unexpected status: {:?}", status.unwrap())
+    };
+    assert_eq!(reason, "Migrated canister is not stopped.");
+    let mut migrated_canister_controllers_after = pic.get_controllers(migrated_canister).await;
+    migrated_canister_controllers_after.sort();
+    migrated_canister_controllers.sort();
+    assert_eq!(
+        migrated_canister_controllers_after,
+        migrated_canister_controllers
+    );
+    for canister in [migrated_canister, replaced_canister] {
+        let (_, memory_allocation) = memory_usage_and_allocation(&pic, canister, sender).await;
+        assert_eq!(memory_allocation, 0);
+    }
 }
 
 #[tokio::test]

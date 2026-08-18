@@ -12,7 +12,8 @@ use candid::{Principal, Reserved};
 use ic_cdk::api::canister_self;
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, Request, ValidationError,
+    CYCLES_COST_PER_MIGRATION, MEMORY_RESERVED_FOR_CANISTER_HISTORY, ManagedMemoryAllocation,
+    Request, ValidationError,
     canister_state::CanisterGuard,
     canister_state::requests::list_by,
     external_interfaces::{
@@ -164,6 +165,25 @@ pub async fn validate_request(
         ));
     }
 
+    // The memory allocation must cover the memory usage of the canister
+    // plus the canister history entries recorded by the migration canister.
+    let managed_memory_allocation = |canister_status: &CanisterStatusResponse| {
+        let original = canister_status.memory_allocation();
+        let reserved = std::cmp::max(
+            original,
+            canister_status
+                .memory_usage()
+                .saturating_add(MEMORY_RESERVED_FOR_CANISTER_HISTORY),
+        );
+        Some(ManagedMemoryAllocation {
+            original,
+            reserved,
+            usage_excluding_canister_history: canister_status
+                .memory_usage_excluding_canister_history(),
+        })
+    };
+    let migrated_canister_memory_allocation = managed_memory_allocation(&migrated_canister_status);
+    let replaced_canister_memory_allocation = managed_memory_allocation(&replaced_canister_status);
     let mut migrated_canister_original_controllers = migrated_canister_status.settings.controllers;
     migrated_canister_original_controllers.retain(|e| *e != canister_self());
     let mut replaced_canister_original_controllers = replaced_canister_status.settings.controllers;
@@ -172,9 +192,15 @@ pub async fn validate_request(
         migrated_canister,
         migrated_canister_subnet,
         migrated_canister_original_controllers,
+        migrated_canister_memory_allocation,
+        // The migration canister has not made itself the exclusive controller
+        // of the migrated and replaced canisters yet.
+        migrated_canister_exclusive_controller: Some(false),
         replaced_canister,
         replaced_canister_subnet,
         replaced_canister_original_controllers,
+        replaced_canister_memory_allocation,
+        replaced_canister_exclusive_controller: Some(false),
         caller,
     };
 
