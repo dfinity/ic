@@ -2546,7 +2546,7 @@ pub mod test {
             // Put a random tape share in the unvalidated pool
             let pool_reader = PoolReader::new(&pool);
             let beacon_1 = pool_reader.get_random_beacon(Height::from(1)).unwrap();
-            let mut beacon_2 = RandomBeacon::from_parent(&beacon_1);
+            let beacon_2 = RandomBeacon::from_parent(&beacon_1);
             let share_3 = RandomBeaconShare::fake(&beacon_2, replica_config.node_id);
             pool.insert_unvalidated(share_3.clone());
             let mut share_with_old_version = share_3.clone();
