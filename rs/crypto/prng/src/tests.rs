@@ -10,6 +10,7 @@ use ic_types::{
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use std::collections::BTreeSet;
+use std::str::FromStr;
 use strum::{EnumCount, IntoEnumIterator};
 
 #[test]
