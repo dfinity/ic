@@ -34,8 +34,17 @@ jobs:
         env:
           PR_NUMBER: ${{ inputs.pr-number }}
           COMMIT_SHA: ${{ inputs.commit-sha }}
+          CONFIRM: ${{ inputs.confirm }}
         with:
           script: |
+            // For boolean workflow_dispatch inputs, 'required: true' does not
+            // enforce that the box is ticked, so check it here.
+            if (process.env.CONFIRM !== 'true') {
+              core.setFailed('confirm must be checked: it acknowledges that you reviewed ' +
+                             'the PR at the specified commit');
+              return;
+            }
+
             // Match on the raw string: Number() would also accept forms like
             // '0x10', '1e3' or ' 12 ', which would target a different PR.
             if (!/^[1-9][0-9]*$/.test(process.env.PR_NUMBER || '')) {
