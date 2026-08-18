@@ -806,6 +806,16 @@ fn get_valid_system_apis_common(
             )],
         ),
         (
+            "subnet_self_node_count",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![DataType::I32],
+                },
+            )],
+        ),
+        (
             "cost_call",
             vec![(
                 API_VERSION_IC0,

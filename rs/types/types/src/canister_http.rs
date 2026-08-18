@@ -95,6 +95,17 @@ pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
 /// Maximum size of a canister http reject message.
 pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 
+/// The [`count_bytes`](CanisterHttpReject::count_bytes) of the largest
+/// [`CanisterHttpReject`] there is: a reject code plus a message of the maximum
+/// length.
+///
+/// Unlike a successful response, a reject is *not* bounded by the request's
+/// `max_response_bytes` (see
+/// [`CanisterHttpRequestContext::max_http_outcall_content_size`]), so this is the
+/// response size any outcall may end up delivering, whatever size it asked for.
+pub const MAX_CANISTER_HTTP_REJECT_BYTES: u64 =
+    CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES) as u64;
+
 /// Bytes reserved on top of a request's `max_response_bytes` for the Candid
 /// encoding of the response, since `max_response_bytes` is enforced on the
 /// response before it is encoded.
@@ -1018,7 +1029,7 @@ impl From<&CanisterHttpReject> for RejectContext {
 
 impl CanisterHttpReject {
     /// Same calculation as `Self::count_bytes` but from decomposed parts.
-    pub fn count_bytes_from_parts(message_len: usize) -> usize {
+    pub const fn count_bytes_from_parts(message_len: usize) -> usize {
         size_of::<RejectCode>() + message_len
     }
 }
@@ -1232,14 +1243,22 @@ impl CanisterHttpRequestContext {
     /// [`CanisterHttpResponseContent`] it could legitimately have produced.
     pub fn max_http_outcall_content_size(&self, is_reject: bool) -> u64 {
         if is_reject {
-            CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES)
-                as u64
+            MAX_CANISTER_HTTP_REJECT_BYTES
         } else {
-            self.max_response_bytes
-                .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
-                + CANDID_OVERHEAD_RESERVE_BYTES
+            max_http_outcall_response_size(self.max_response_bytes)
         }
     }
+}
+
+/// The largest [`CanisterHttpResponseContent::Success`] an outcall with the given
+/// `max_response_bytes` may deliver.
+///
+/// A response is delivered Candid-encoded, so it may exceed `max_response_bytes` by
+/// [`CANDID_OVERHEAD_RESERVE_BYTES`].
+pub fn max_http_outcall_response_size(max_response_bytes: Option<NumBytes>) -> u64 {
+    max_response_bytes
+        .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
+        .saturating_add(CANDID_OVERHEAD_RESERVE_BYTES)
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
@@ -1473,6 +1492,19 @@ mod tests {
         ];
         let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
         assert_eq!(encodings.len(), amounts.len());
+    }
+
+    #[test]
+    fn max_canister_http_reject_bytes_is_the_size_of_the_largest_reject() {
+        // The pricing of an outcall floors every response size at this constant (see
+        // `ic_https_outcalls_pricing::fees::max_consensus_fee`), so it has to be the
+        // `content_size` of an actual maximally large reject rather than an
+        // approximation of it.
+        let largest = CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "x".repeat(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES),
+        });
+        assert_eq!(largest.count_bytes() as u64, MAX_CANISTER_HTTP_REJECT_BYTES);
     }
 
     #[test]

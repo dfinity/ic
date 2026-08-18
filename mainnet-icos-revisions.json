@@ -7,6 +7,15 @@
         "update_img_hash_dev": "752a1309bc4be13a89acc5ae40f0cd9432d84b5020cba83952bbea85b8d3b027",
         "setupos_disk_img_hash": "cd003d2725de0248801b7572ae08adc8184f7311c93ed301c04507724e06dc9e",
         "setupos_disk_img_hash_dev": "5e82713d768fac0b8bafdde2dbaca91c66e0e1bac45f495d8168af0b9d529a1d",
+        "binaries": {
+          "canister_sandbox": "01898d9fa3c40d0aebd84930289bad1db5ec90a442aedcb4fd3dbab9eb7f426a",
+          "compiler_sandbox": "d8ba643ed70843d2d0e8cecde52a54ccf07ca22c417caf3b6ba6c0f35ff429da",
+          "ic-replay": "a668289276dcee2d693f9215dbf35176028d63f06b78443f481d209872aca17c",
+          "replicated-state-test": "58f3254c71beb7fe001f7046c660f398507a233bbdeb2e09f87a71a7eb441f27",
+          "sandbox_launcher": "5fe1e6d01515981f8f1bafa992d20131e57820cca44ce83f6d2f68d0f27921b4",
+          "state-layout-test": "224ba5a9ab6d2d6da570fae906cc39a1e9a98a114516c7d08ab9ed636ab437cd",
+          "types-test": "23e9a456614380a7edf15d1d6afdf87a3ec1a019dcc57e232542cf08805e5c44"
+        },
         "launch_measurements": {
           "guest_launch_measurements": [
             {
@@ -142,6 +151,15 @@
         "update_img_hash_dev": "3924d5e9c86822b367cbfdbaab48c667f2a32bee3ab65e5772d54c32e6a829ed",
         "setupos_disk_img_hash": "5c488a88730dd52c2cf3186d10517b8e86cfbc445f47e850a07479632d466390",
         "setupos_disk_img_hash_dev": "18330bb4c6fcf94977fb7e8576e0d781864777406a8b33b47153f15fbef4e454",
+        "binaries": {
+          "canister_sandbox": "2a2e8891dc8837b02b1bf00972b71e5e8393fc5334ac611638071bc151b37cfc",
+          "compiler_sandbox": "050bdee43705e3d66fc64fa95918d122625cb3a8539c4a00e30461788fe97afb",
+          "ic-replay": "6fc9e9b24e74690964357ac1681d4dcfac1c7907af6fbdd4d24a45e986d56ee5",
+          "replicated-state-test": "106b3fc2af013b33e251ead603152c22cef7ac12584c207bc223bcd4e0c081fc",
+          "sandbox_launcher": "e888b39bb3917002bd9843252469af5d3094aa4409d5b0c758ecf8d2b7a72c5e",
+          "state-layout-test": "f7603af64891a3f9d72efa8b12de51f9bf121e0bda974b45ffcbcf793bfa39ea",
+          "types-test": "c30d337312392ea63ac0be5403547ebe884b24aab716343891e6ed2442b83973"
+        },
         "launch_measurements": {
           "guest_launch_measurements": [
             {
@@ -284,6 +302,15 @@
       "update_img_hash_dev": "3924d5e9c86822b367cbfdbaab48c667f2a32bee3ab65e5772d54c32e6a829ed",
       "setupos_disk_img_hash": "5c488a88730dd52c2cf3186d10517b8e86cfbc445f47e850a07479632d466390",
       "setupos_disk_img_hash_dev": "18330bb4c6fcf94977fb7e8576e0d781864777406a8b33b47153f15fbef4e454",
+      "binaries": {
+        "canister_sandbox": "2a2e8891dc8837b02b1bf00972b71e5e8393fc5334ac611638071bc151b37cfc",
+        "compiler_sandbox": "050bdee43705e3d66fc64fa95918d122625cb3a8539c4a00e30461788fe97afb",
+        "ic-replay": "6fc9e9b24e74690964357ac1681d4dcfac1c7907af6fbdd4d24a45e986d56ee5",
+        "replicated-state-test": "106b3fc2af013b33e251ead603152c22cef7ac12584c207bc223bcd4e0c081fc",
+        "sandbox_launcher": "e888b39bb3917002bd9843252469af5d3094aa4409d5b0c758ecf8d2b7a72c5e",
+        "state-layout-test": "f7603af64891a3f9d72efa8b12de51f9bf121e0bda974b45ffcbcf793bfa39ea",
+        "types-test": "c30d337312392ea63ac0be5403547ebe884b24aab716343891e6ed2442b83973"
+      },
       "launch_measurements": {
         "guest_launch_measurements": [
           {
@@ -427,6 +454,15 @@
       "update_img_hash_dev": "d887710aaf9ecee67d0a50fe74b3476141515de128f6ffd1156f07ba7b053582",
       "setupos_disk_img_hash": "5c488a88730dd52c2cf3186d10517b8e86cfbc445f47e850a07479632d466390",
       "setupos_disk_img_hash_dev": "18330bb4c6fcf94977fb7e8576e0d781864777406a8b33b47153f15fbef4e454",
+      "binaries": {
+        "canister_sandbox": "2a2e8891dc8837b02b1bf00972b71e5e8393fc5334ac611638071bc151b37cfc",
+        "compiler_sandbox": "050bdee43705e3d66fc64fa95918d122625cb3a8539c4a00e30461788fe97afb",
+        "ic-replay": "6fc9e9b24e74690964357ac1681d4dcfac1c7907af6fbdd4d24a45e986d56ee5",
+        "replicated-state-test": "106b3fc2af013b33e251ead603152c22cef7ac12584c207bc223bcd4e0c081fc",
+        "sandbox_launcher": "e888b39bb3917002bd9843252469af5d3094aa4409d5b0c758ecf8d2b7a72c5e",
+        "state-layout-test": "f7603af64891a3f9d72efa8b12de51f9bf121e0bda974b45ffcbcf793bfa39ea",
+        "types-test": "c30d337312392ea63ac0be5403547ebe884b24aab716343891e6ed2442b83973"
+      },
       "launch_measurements": {
         "guest_launch_measurements": [
           {

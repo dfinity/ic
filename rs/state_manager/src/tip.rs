@@ -106,6 +106,10 @@ pub(crate) enum TipRequest {
     },
     /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
     ///
+    /// Canisters deleted during execution are removed from tip via
+    /// `UnflushedCheckpointOp::DeleteCanister`, so this only needs to catch canisters
+    /// dropped without a corresponding operation, i.e. during subnet splitting.
+    ///
     /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
         height: Height,
@@ -819,7 +823,7 @@ fn switch_to_checkpoint(
 }
 
 /// Update the tip directory files with the most recent checkpoint operations.
-/// `operations` is an ordered list of all created/restored snapshots and renamed canisters since the last flush.
+/// `operations` is an ordered list of all created/restored snapshots and renamed or deleted canisters since the last flush.
 fn flush_unflushed_checkpoint_ops(
     log: &ReplicaLogger,
     tip_handler: &mut TipHandler,
@@ -837,6 +841,9 @@ fn flush_unflushed_checkpoint_ops(
             }
             UnflushedCheckpointOp::RenameCanister(src, dst) => {
                 tip_handler.move_canister_directory(height, src, dst)?;
+            }
+            UnflushedCheckpointOp::DeleteCanister(canister_id) => {
+                tip_handler.delete_canister_directory(height, canister_id)?;
             }
         }
     }
@@ -1424,13 +1431,6 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
             status_visibility: canister_state.system_state.status_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
-            canister_log: canister_state.system_state.canister_log.clone(),
-            next_canister_log_record_idx: canister_state.system_state.canister_log.next_idx(),
-            // The one-time migration from `CanisterLog` to `LogMemoryStore`
-            // completed on all subnets, so this is always `true`. The field is
-            // still serialized (rather than dropped) so checkpoints remain
-            // readable by replicas that predate the log memory store.
-            log_memory_store_migrated: true,
             log_memory_store_persistent_next_idx: canister_state
                 .system_state
                 .log_memory_store

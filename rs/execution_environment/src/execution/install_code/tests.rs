@@ -23,7 +23,7 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions};
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
@@ -139,19 +139,38 @@ fn consumed_cycles_for_instructions(
         .unwrap_or_default()
 }
 
-/// Analogously to `dts_resume_fails_due_to_cycles_decrease` for calls,
-/// replicated queries, callbacks, and tasks, resuming a paused `install_code`
-/// whose canister lost cycles while it was paused fails instead of replaying the
-/// recorded steps on a balance that can no longer cover them. The failed
-/// execution is charged for exactly the instructions it had already executed,
-/// including those of the paused Wasm execution.
-#[test]
-fn dts_install_code_resume_fails_due_to_cycles_decrease() {
-    const INSTRUCTION_LIMIT: u64 = 50_000_000;
-    const SLICE_INSTRUCTION_LIMIT: u64 = 132_000;
+/// The instruction limits of the DTS `install_code` tests that change the cycles
+/// balance of the canister while its execution is paused.
+const DTS_INSTALL_CODE_INSTRUCTION_LIMIT: u64 = 50_000_000;
+const DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT: u64 = 132_000;
+
+/// A canister with a paused `install_code` execution, along with a snapshot of
+/// the accounting counters of that canister taken before the execution started.
+///
+/// Shared by the tests that decrease and increase the cycles balance of the
+/// canister while its `install_code` execution is paused.
+struct PausedInstallCode {
+    test: ExecutionTest,
+    canister_id: CanisterId,
+    /// The ingress message of the `install_code` subnet message.
+    ingress_id: MessageId,
+    /// The cycles balance before the execution cycles were prepaid.
+    original_balance: Cycles,
+    /// The cycles consumed for instructions.
+    original_consumed_cycles: NominalCycles,
+    /// The instructions executed by all the slices of the canister.
+    original_executed_instructions: NumInstructions,
+    /// The accumulated cost of the instructions executed by the canister.
+    original_execution_cost: CompoundCycles<Instructions>,
+}
+
+/// Starts an `install_code` execution that pauses after its first slice: that
+/// slice compiles the Wasm module and executes its `(start)` function, which
+/// together exceed the slice instruction limit.
+fn install_code_paused_after_first_slice() -> PausedInstallCode {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
-        .with_install_code_slice_instruction_limit(SLICE_INSTRUCTION_LIMIT)
+        .with_install_code_instruction_limit(DTS_INSTALL_CODE_INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
@@ -169,6 +188,7 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
     let original_balance = test.canister_state(canister_id).system_state.balance();
     let original_consumed_cycles = consumed_cycles_for_instructions(&test, canister_id);
     let original_executed_instructions = test.canister_executed_instructions(canister_id);
+    let original_execution_cost = test.canister_execution_cost(canister_id);
 
     let ingress_id = test.dts_install_code(payload);
 
@@ -187,12 +207,41 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
             - test
                 .cycles_account_manager()
                 .execution_cost(
-                    NumInstructions::from(INSTRUCTION_LIMIT),
+                    NumInstructions::from(DTS_INSTALL_CODE_INSTRUCTION_LIMIT),
                     test.get_own_subnet_cycles_config(),
                     WASM_EXECUTION_MODE,
                 )
                 .real(),
     );
+
+    PausedInstallCode {
+        test,
+        canister_id,
+        ingress_id,
+        original_balance,
+        original_consumed_cycles,
+        original_executed_instructions,
+        original_execution_cost,
+    }
+}
+
+/// Analogously to `dts_resume_fails_due_to_cycles_decrease` for calls,
+/// replicated queries, callbacks, and tasks, resuming a paused `install_code`
+/// whose canister lost cycles while it was paused fails instead of replaying the
+/// recorded steps on a balance that can no longer cover them. The failed
+/// execution is charged for exactly the instructions it had already executed,
+/// including those of the paused Wasm execution.
+#[test]
+fn dts_install_code_resume_fails_due_to_cycles_decrease() {
+    let PausedInstallCode {
+        mut test,
+        canister_id,
+        ingress_id,
+        original_balance,
+        original_consumed_cycles,
+        original_executed_instructions,
+        ..
+    } = install_code_paused_after_first_slice();
 
     // Decrease the cycles balance of the clean canister.
     test.canister_state_mut(canister_id)
@@ -224,7 +273,10 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
     // more than the slice instruction limit.
     let executed_instructions =
         test.canister_executed_instructions(canister_id) - original_executed_instructions;
-    assert_gt!(executed_instructions.get(), SLICE_INSTRUCTION_LIMIT);
+    assert_gt!(
+        executed_instructions.get(),
+        DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT
+    );
 
     // The canister is charged exactly the cost of those instructions, including
     // the instructions of the paused Wasm execution: the rest of the prepaid
@@ -242,6 +294,62 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_balance - expected_cost.real() - Cycles::new(1)
+    );
+}
+
+/// Counterpart of `dts_install_code_resume_fails_due_to_cycles_decrease`: while
+/// resuming a paused `install_code` whose canister lost cycles fails, an
+/// increase of the cycles balance while the execution is paused is tolerated and
+/// the additional cycles are not lost when the execution completes.
+#[test]
+fn dts_install_code_resume_succeeds_after_cycles_increase() {
+    const CYCLES_ADDED_WHILE_PAUSED: Cycles = Cycles::new(1_234_567_890);
+
+    let PausedInstallCode {
+        mut test,
+        canister_id,
+        ingress_id,
+        original_balance,
+        original_executed_instructions,
+        original_execution_cost,
+        ..
+    } = install_code_paused_after_first_slice();
+
+    // Increase the cycles balance of the clean canister.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .add_cycles(CYCLES_ADDED_WHILE_PAUSED);
+
+    // The remaining slices resume the paused execution, which completes.
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
+        test.execute_slice(canister_id);
+    }
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+
+    // The code has been installed.
+    assert!(test.canister_state(canister_id).execution_state.is_some());
+
+    // The execution spanned multiple slices.
+    let executed_instructions =
+        test.canister_executed_instructions(canister_id) - original_executed_instructions;
+    assert_gt!(
+        executed_instructions.get(),
+        DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT
+    );
+
+    // The canister is charged exactly the cost of the executed instructions: the
+    // cycles added while the execution was paused are not lost.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_balance
+            - (test.canister_execution_cost(canister_id) - original_execution_cost).real()
+            + CYCLES_ADDED_WHILE_PAUSED
     );
 }
 

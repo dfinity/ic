@@ -9,7 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-Enforce that every `hostos_version_id` matches its `HostosVersionRecord`'s registry key.
+* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
+  `guest_launch_measurements`.
+
+* Enforce that every `hostos_version_id` matches its `HostosVersionRecord`'s registry key.
 
 ## Changed
 
