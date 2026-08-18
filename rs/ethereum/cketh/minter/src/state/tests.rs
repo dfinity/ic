@@ -1726,8 +1726,6 @@ mod eth_balance {
 
     #[test]
     fn should_account_for_a_successful_sweeper_funding() {
-        use crate::state::transactions::SweeperFundingRequest;
-
         let mut state = initial_state();
         apply_state_transition(
             &mut state,
@@ -1735,7 +1733,7 @@ mod eth_balance {
         );
         let eth_balance_before = state.eth_balance.eth_balance();
 
-        let funding = SweeperFundingRequest {
+        let funding = EthWithdrawalRequest {
             withdrawal_amount: Wei::new(10_000_000_000_000_000),
             destination: "0x5353535353535353535353535353535353535353"
                 .parse()
@@ -1747,11 +1745,11 @@ mod eth_balance {
             from_subaccount: crate::eth_logs::LedgerSubaccount::from_bytes(
                 crate::CKETH_FEE_SUBACCOUNT,
             ),
-            created_at: 1699527697000000000,
+            created_at: Some(1699527697000000000),
         };
         let receipt = WithdrawalFlow {
             tx_status: TransactionStatus::Success,
-            ..WithdrawalFlow::for_request(funding.clone())
+            ..WithdrawalFlow::for_request(WithdrawalRequest::SweeperFunding(funding.clone()))
         }
         .apply(&mut state);
 
@@ -1777,7 +1775,7 @@ mod eth_balance {
         assert_eq!(
             state.sweeper_funding.burned_not_yet_spent(),
             unspent_fee_allowance,
-            "the unused fee allowance remains prepaid and offsets the next funding"
+            "the unused fee allowance stays as backing, neither re-minted nor offset"
         );
         assert_eq!(
             state.eth_balance.eth_balance(),
@@ -1792,9 +1790,7 @@ mod eth_balance {
     }
 
     #[test]
-    fn should_keep_a_failed_sweeper_funding_as_prepaid_gas() {
-        use crate::state::transactions::SweeperFundingRequest;
-
+    fn should_keep_a_failed_sweeper_funding_as_backing() {
         let mut state = initial_state();
         apply_state_transition(
             &mut state,
@@ -1802,7 +1798,7 @@ mod eth_balance {
         );
         let eth_balance_before = state.eth_balance.eth_balance();
 
-        let funding = SweeperFundingRequest {
+        let funding = EthWithdrawalRequest {
             withdrawal_amount: Wei::new(10_000_000_000_000_000),
             destination: "0x5353535353535353535353535353535353535353"
                 .parse()
@@ -1814,11 +1810,11 @@ mod eth_balance {
             from_subaccount: crate::eth_logs::LedgerSubaccount::from_bytes(
                 crate::CKETH_FEE_SUBACCOUNT,
             ),
-            created_at: 1699527697000000000,
+            created_at: Some(1699527697000000000),
         };
         WithdrawalFlow {
             tx_status: TransactionStatus::Failure,
-            ..WithdrawalFlow::for_request(funding.clone())
+            ..WithdrawalFlow::for_request(WithdrawalRequest::SweeperFunding(funding.clone()))
         }
         .apply(&mut state);
 
@@ -1834,7 +1830,7 @@ mod eth_balance {
         assert_eq!(
             state.sweeper_funding.burned_not_yet_spent(),
             funding.withdrawal_amount.checked_sub(spent).unwrap(),
-            "the rest stays prepaid and offsets the next funding"
+            "the rest stays as backing, available to no later funding"
         );
         assert_eq!(
             state.eth_balance.eth_balance(),

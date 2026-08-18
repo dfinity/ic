@@ -33,6 +33,20 @@ mod accounting {
     }
 
     #[test]
+    fn should_keep_the_unspent_fee_as_surplus_after_a_successful_funding() {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+        // The burn covers the fee the transaction may pay; the block charges half of it.
+        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE / 2));
+
+        assert_eq!(
+            accounting.burned_not_yet_spent(),
+            Wei::new(FEE - FEE / 2),
+            "the fee provisioned but never paid stays as backing"
+        );
+    }
+
+    #[test]
     fn should_keep_the_burn_as_surplus_after_a_failed_funding() {
         let mut accounting = SweeperFundingAccounting::default();
         accounting.record_burn(Wei::new(BURN));
@@ -42,39 +56,11 @@ mod accounting {
         assert_eq!(
             accounting.burned_not_yet_spent(),
             Wei::new(BURN - FEE),
-            "everything except the wasted gas remains prepaid"
+            "everything except the gas actually paid stays as backing"
         );
         assert!(
             accounting.cumulative_burned() > accounting.cumulative_spent(),
             "burned must exceed spent, i.e. ckETH is over-backed rather than under-backed"
-        );
-    }
-
-    #[test]
-    fn should_offset_a_later_funding_against_the_surplus() {
-        let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::ZERO, Wei::new(FEE));
-        let surplus = accounting.burned_not_yet_spent();
-
-        assert_eq!(accounting.burn_required_for(Wei::new(FEE)), Wei::ZERO);
-        assert_eq!(accounting.burn_required_for(surplus), Wei::ZERO);
-        assert_eq!(
-            accounting.burn_required_for(Wei::new(BURN)),
-            Wei::new(BURN)
-                .checked_sub(surplus)
-                .expect("test setup: surplus is below the burn")
-        );
-    }
-
-    #[test]
-    fn should_require_the_full_amount_when_there_is_no_surplus() {
-        let accounting = SweeperFundingAccounting::default();
-
-        assert_eq!(
-            accounting.burn_required_for(Wei::new(BURN)),
-            Wei::new(BURN),
-            "with nothing prepaid, a funding must burn its whole amount up front"
         );
     }
 

@@ -7,9 +7,12 @@
 //! cumulative ckETH burned for sweeping >= cumulative ETH debited from the main address for sweeping
 //! ```
 //!
-//! A failed funding leaves the ETH in place while the ckETH stays burned, so the burn runs ahead of
-//! the spend; that surplus is prepaid gas the next funding offsets against. It sits at the *main*
-//! address, not the sweeper's, which is why it is tracked here rather than read back on chain.
+//! The burn runs ahead of the spend, since a funding provisions the maximum fee its transaction may
+//! pay and usually pays less — and a failed one moves no ETH at all. That surplus is never re-minted
+//! and never discounted from a later burn: it simply stays as backing, exactly like the unspent gas
+//! of a user withdrawal. Each funding therefore burns for its own transfer alone, and this module
+//! only has to observe the surplus, which it does for the invariant above and for the dashboard. It
+//! sits at the *main* address, not the sweeper's, so it cannot be read back on chain.
 //!
 //! A fold over events the minter already persists, so replay reconstructs it exactly.
 
@@ -76,9 +79,11 @@ impl SweeperFundingAccounting {
         self.cumulative_burned
     }
 
-    /// ckETH burned for sweeping that has not been spent yet: the credit a later funding offsets
-    /// against. Panics rather than saturating if spend ever exceeds burn, since that means ckETH is
-    /// under-backed and is not a recoverable state.
+    /// ckETH burned for sweeping that has not been spent yet: the burn of a funding still in
+    /// flight, plus the fees earlier fundings provisioned but did not pay. A gauge rather than a
+    /// running total — it jumps by the whole amount when a funding burns and falls back when that
+    /// transaction finalizes. Panics rather than saturating if spend ever exceeds burn, since that
+    /// means ckETH is under-backed and is not a recoverable state.
     pub fn burned_not_yet_spent(&self) -> Wei {
         self.cumulative_burned
             .checked_sub(self.cumulative_spent())
@@ -86,18 +91,6 @@ impl SweeperFundingAccounting {
                 "BUG: more ETH spent on sweeping than ckETH burned for it, \
                  meaning ckETH is under-backed",
             )
-    }
-
-    /// How much ckETH a funding of `amount` still has to burn, given the credit from earlier burns
-    /// that were never spent. Zero when the credit already covers it.
-    ///
-    /// Consuming that credit requires a request that records the burn separately from the ETH it
-    /// moves: reducing a single amount would shrink the transfer by as much as the burn and leave
-    /// the credit untouched. The funding task and that second field arrive together.
-    pub fn burn_required_for(&self, amount: Wei) -> Wei {
-        amount
-            .checked_sub(self.burned_not_yet_spent())
-            .unwrap_or(Wei::ZERO)
     }
 }
 
