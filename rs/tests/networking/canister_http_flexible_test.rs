@@ -153,10 +153,7 @@ fn app_runtime_on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> Runtim
 /// The principal of the proxy canister on the application subnet running on
 /// `schedule`.
 fn proxy_principal_on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> PrincipalId {
-    match schedule {
-        CanisterCyclesCostSchedule::Free => get_proxy_canister_id(env),
-        CanisterCyclesCostSchedule::Normal => get_paying_proxy_canister_id(env),
-    }
+    get_proxy_canister_id_for(env, schedule)
 }
 
 /// Returns the proxy canister on the application subnet running on `schedule`.
@@ -206,7 +203,7 @@ fn system_proxy_canister<'a>(env: &TestEnv, runtime: &'a Runtime) -> Canister<'a
 /// The principal of the proxy canister (the sender of the outcalls), used as the
 /// valid transform principal.
 fn proxy_principal(env: &TestEnv) -> Principal {
-    get_proxy_canister_id(env).0
+    proxy_principal_on(env, CanisterCyclesCostSchedule::Free).0
 }
 
 fn webserver_base(env: &TestEnv) -> String {
