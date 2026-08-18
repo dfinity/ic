@@ -511,36 +511,6 @@ pub fn min_non_flexible_consensus_cost<'a>(
         .min()
 }
 
-/// A lower bound on the consensus cost of delivering a fully- or non-replicated
-/// response, given the `seen_shares` produced so far (at most one per replica).
-pub fn min_non_flexible_consensus_cost<'a>(
-    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
-    subnet_size: NumberOfNodes,
-    committee_size: usize,
-    threshold: usize,
-) -> Option<Cycles> {
-    // Shares agreeing on the same metadata are votes for the same response.
-    let mut votes: BTreeMap<&CanisterHttpResponseMetadata, usize> = BTreeMap::new();
-    let mut seen = 0;
-    for share in seen_shares {
-        *votes.entry(&share.content.metadata).or_default() += 1;
-        seen += 1;
-    }
-    let unseen = committee_size.saturating_sub(seen);
-
-    votes
-        .into_iter()
-        .map(|(metadata, votes)| (votes, metadata.content_size))
-        // A response nobody has voted for yet would have to come from the replicas that
-        // have not been seen, and may have an empty body.
-        .chain(std::iter::once((0, 0)))
-        .filter(|(votes, _)| votes + unseen >= threshold)
-        .map(|(_, content_size)| {
-            Cycles::from(consensus_cost_coefficient(subnet_size) * content_size as u128)
-        })
-        .min()
-}
-
 #[cfg(test)]
 mod tests {
     //! The expected values in these tests are computed by hand rather than by
