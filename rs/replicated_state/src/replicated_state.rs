@@ -1748,7 +1748,7 @@ impl ReplicatedState {
             + stream_cycles
             + dropped_message_cycles
             + self.subnet_queues.attached_cycles()
-            + self.refunds.compute_total()
+            + self.refunds.total()
     }
 
     /// Validates that the subnet's total cycle balance including cycles attached to

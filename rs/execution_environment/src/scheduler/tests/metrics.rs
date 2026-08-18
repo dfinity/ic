@@ -810,15 +810,34 @@ fn replicated_state_metrics_subnet_queue_messages() {
 #[test]
 fn replicated_state_metrics_pending_refunds() {
     const NAME: &str = "replicated_state_pending_refunds";
+    const CYCLES_NAME: &str = "replicated_state_pending_refunds_cycles";
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), NAME));
+    let registry = observe(&state);
+    assert_eq!(Some(0), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(0.), fetch_gauge(&registry, CYCLES_NAME));
 
     state.add_refund(canister_test_id(1), Cycles::new(13));
-    assert_eq!(Some(1), fetch_int_gauge(&observe(&state), NAME));
+    let registry = observe(&state);
+    assert_eq!(Some(1), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(13.), fetch_gauge(&registry, CYCLES_NAME));
+
+    // A second refund, to a different canister.
+    state.add_refund(canister_test_id(2), Cycles::new(29));
+    let registry = observe(&state);
+    assert_eq!(Some(2), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(42.), fetch_gauge(&registry, CYCLES_NAME));
+
+    // Taking the larger refund only leaves the smaller one behind.
+    state.take_refunds(|refund| refund.recipient() == canister_test_id(2));
+    let registry = observe(&state);
+    assert_eq!(Some(1), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(13.), fetch_gauge(&registry, CYCLES_NAME));
 
     state.take_refunds(|_| true);
-    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), NAME));
+    let registry = observe(&state);
+    assert_eq!(Some(0), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(0.), fetch_gauge(&registry, CYCLES_NAME));
 }
 
 #[test]
