@@ -18,6 +18,11 @@ on:
         required: false
         default: ${{ github.event.pull_request.head.ref }}
         type: string
+      head-repo:
+        description: The repository the head branch of the PR lives in ("owner/repo")
+        required: false
+        default: ${{ github.event.pull_request.head.repo.full_name }}
+        type: string
       pr-number:
         description: 'The PR number'
         required: false
@@ -63,6 +68,9 @@ jobs:
     runs-on: *dind-small-setup
     container: *container-setup
     timeout-minutes: 30
+    env: &pr-branch-env
+      HEAD_REF: ${{ inputs.head-ref }}
+      HEAD_REPO: ${{ inputs.head-repo }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
@@ -120,7 +128,17 @@ jobs:
                 git config --global user.email "infra+github-automation@dfinity.org"
                 git config --global user.name "IDX GitHub Automation"
                 git commit -m "Automatically fixing code for linting and formatting issues"
-                git push origin HEAD:'${{ inputs.head-ref }}'
+                # Only push when the PR's head branch lives in this repository. On the
+                # ci-kickoff-manual path the PR can come from a fork, in which case
+                # "origin" is still this repository and the push would create a branch
+                # named after the fork's branch here instead of updating the PR.
+                if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+                    git push origin HEAD:"$HEAD_REF"
+                else
+                    echo "Head branch '$HEAD_REF' lives in '$HEAD_REPO', not in" \
+                         "'$GITHUB_REPOSITORY': not pushing. Apply the diff below instead:"
+                    git --no-pager diff --cached
+                fi
 
                 # Because the buildifier made changes, fail the PR
                 EXIT_STATUS=1
@@ -163,6 +181,7 @@ jobs:
     name: Lock Generate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env: *pr-branch-env
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
@@ -209,7 +228,17 @@ jobs:
               git config --global user.email "infra+github-automation@dfinity.org"
               git config --global user.name "IDX GitHub Automation"
               git commit -m "Automatically updated Cargo*.lock"
-              git push origin HEAD:'${{ inputs.head-ref }}'
+              # Only push when the PR's head branch lives in this repository. On the
+              # ci-kickoff-manual path the PR can come from a fork, in which case
+              # "origin" is still this repository and the push would create a branch
+              # named after the fork's branch here instead of updating the PR.
+              if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+                  git push origin HEAD:"$HEAD_REF"
+              else
+                  echo "Head branch '$HEAD_REF' lives in '$HEAD_REPO', not in" \
+                       "'$GITHUB_REPOSITORY': not pushing. Apply the diff below instead:"
+                  git --no-pager diff --cached
+              fi
 
               # Because the lockfiles need updating, fail the PR
               EXIT_STATUS=1
@@ -222,6 +251,7 @@ jobs:
     runs-on: *dind-small-setup
     container: *container-setup
     timeout-minutes: 10
+    env: *pr-branch-env
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
@@ -259,7 +289,17 @@ jobs:
               git config --global user.email "infra+github-automation@dfinity.org"
               git config --global user.name "IDX GitHub Automation"
               git commit -m "Automatically updated config type fixtures"
-              git push origin HEAD:'${{ inputs.head-ref }}'
+              # Only push when the PR's head branch lives in this repository. On the
+              # ci-kickoff-manual path the PR can come from a fork, in which case
+              # "origin" is still this repository and the push would create a branch
+              # named after the fork's branch here instead of updating the PR.
+              if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+                  git push origin HEAD:"$HEAD_REF"
+              else
+                  echo "Head branch '$HEAD_REF' lives in '$HEAD_REPO', not in" \
+                       "'$GITHUB_REPOSITORY': not pushing. Apply the diff below instead:"
+                  git --no-pager diff --cached
+              fi
 
               # Because the fixtures need updating, fail the PR
               EXIT_STATUS=1

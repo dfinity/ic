@@ -26,6 +26,7 @@ jobs:
     outputs:
       base-ref: ${{ steps.fetch.outputs.base_ref }}
       head-ref: ${{ steps.fetch.outputs.head_ref }}
+      head-repo: ${{ steps.fetch.outputs.head_repo }}
     steps:
       - name: Verify Commit Is PR Head and Fetch PR Refs
         id: fetch
@@ -67,9 +68,15 @@ jobs:
               return;
             }
 
-            core.info(`PR #${prNumber} base ref: ${pr.base.ref}, head ref: ${pr.head.ref}`);
+            // Empty if the fork was deleted after the PR was opened. Jobs that
+            // push to the head branch compare this against github.repository and
+            // skip the push unless the branch lives in this repository.
+            const headRepo = pr.head.repo ? pr.head.repo.full_name : '';
+            core.info(`PR #${prNumber} base ref: ${pr.base.ref}, ` +
+                      `head ref: ${pr.head.ref}, head repo: ${headRepo}`);
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('head_repo', headRepo);
 
   ci-main:
     name: CI Main
@@ -94,6 +101,7 @@ jobs:
       commit-sha: ${{ inputs.commit-sha }}
       base-ref: ${{ needs.verify-inputs-and-get-pr-refs.outputs.base-ref }}
       head-ref: ${{ needs.verify-inputs-and-get-pr-refs.outputs.head-ref }}
+      head-repo: ${{ needs.verify-inputs-and-get-pr-refs.outputs.head-repo }}
       pr-number: ${{ inputs.pr-number }}
     permissions:
       contents: read
