@@ -283,7 +283,6 @@ mod tests {
         },
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         messages::CallbackId,
-        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
     use std::{
