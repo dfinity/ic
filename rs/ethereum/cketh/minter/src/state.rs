@@ -452,7 +452,10 @@ impl State {
         if matches!(withdrawal_request, WithdrawalRequest::SweeperFunding(_)) {
             let transferred = match receipt.status {
                 TransactionStatus::Success => tx.transaction().amount,
-                TransactionStatus::Failure => Wei::ZERO,
+                TransactionStatus::Failure => {
+                    self.sweeper_funding.record_failed_funding();
+                    Wei::ZERO
+                }
             };
             self.sweeper_funding
                 .record_finalized_funding(transferred, tx_fee);

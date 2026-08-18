@@ -26,6 +26,9 @@ pub struct SweeperFundingAccounting {
     /// Grows at the same point by the fee the transaction paid, which it does either way. Together
     /// with the amount transferred it is the spend, which never overtakes the burn.
     cumulative_transaction_fees: Wei,
+    /// How many funding transactions finalized with a failure receipt. Expected to stay zero: a
+    /// bare transfer to an address derived from the minter's own key has no code to revert in.
+    failed_fundings: u64,
 }
 
 impl Default for SweeperFundingAccounting {
@@ -34,6 +37,7 @@ impl Default for SweeperFundingAccounting {
             cumulative_burned: Wei::ZERO,
             cumulative_transferred: Wei::ZERO,
             cumulative_transaction_fees: Wei::ZERO,
+            failed_fundings: 0,
         }
     }
 }
@@ -60,6 +64,17 @@ impl SweeperFundingAccounting {
             .expect("BUG: overflow in cumulative sweeper funding fees");
         // Checked eagerly so a violation surfaces at the transition that caused it.
         let _ = self.burned_not_yet_spent();
+    }
+
+    /// Records a funding transaction that finalized with a failure receipt. Counted rather than
+    /// trapped: the accounting stays sound either way, since the burn simply goes unspent, but the
+    /// count is the only signal that something believed impossible has happened.
+    pub fn record_failed_funding(&mut self) {
+        self.failed_fundings = self.failed_fundings.saturating_add(1);
+    }
+
+    pub fn failed_fundings(&self) -> u64 {
+        self.failed_fundings
     }
 
     /// Total ETH debited from the main address on account of sweeping.
