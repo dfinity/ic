@@ -1846,41 +1846,39 @@ fn test_min_retrieval_amount_default() {
 #[test]
 fn test_min_retrieval_amount_custom() {
     let min_amount = 12_345;
+    let increment = (min_amount / 2).max(1);
     let ckbtc = CkBtcSetup::new_with(Network::Testnet, min_amount);
 
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
-    // Testnet floor fee applies even before set_fee_percentiles: 3 * 6_172 + 12_345 = 30_861
-    assert_eq!(retrieve_btc_min_amount, 30_861);
+    assert_eq!(retrieve_btc_min_amount, 3 * increment + min_amount);
 
-    // The numbers below use increment = (min_amount / 2).max(1) = 6_172 (since min_amount = 12_345).
-    // numerator = 22_100 + fee_ceil(221, rate) + 305 + check_fee; result = (numerator / 6_172) * 6_172 + min_amount.
     ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(0); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
-    assert_eq!(retrieve_btc_min_amount, 30_861); // 3 * 6_172 + 12_345
+    assert_eq!(retrieve_btc_min_amount, 3 * increment + min_amount);
 
     ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(116_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
-    assert_eq!(retrieve_btc_min_amount, 61_721); // 8 * 6_172 + 12_345
+    assert_eq!(retrieve_btc_min_amount, 8 * increment + min_amount);
 
     ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(342_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
-    assert_eq!(retrieve_btc_min_amount, 111_097); // 16 * 6_172 + 12_345
+    assert_eq!(retrieve_btc_min_amount, 16 * increment + min_amount);
 
     ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(343_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
-    assert_eq!(retrieve_btc_min_amount, 111_097); // same bucket as 342_000 with the new increment
+    assert_eq!(retrieve_btc_min_amount, 16 * increment + min_amount);
 
     // When fee becomes 0 again, it goes back to the fee floor (not raw min_amount)
-    // because the new increment 6_172 no longer aligns with the old 50_000 boundary.
+    // because the new increment no longer aligns with the old 50_000 boundary.
     ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(0); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
-    assert_eq!(retrieve_btc_min_amount, 30_861); // 3 * 6_172 + 12_345
+    assert_eq!(retrieve_btc_min_amount, 3 * increment + min_amount);
 
     // Test changing min_retrieve_fee when upgrade
     let min_amount = 123_456;
