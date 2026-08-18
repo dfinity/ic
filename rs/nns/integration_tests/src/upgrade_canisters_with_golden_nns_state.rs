@@ -455,8 +455,7 @@ mod sanity_check {
             .unwrap();
         println!(
             "new node provider rewards date range: {:?} - {:?}",
-            after_start_date,
-            after_end_date,
+            after_start_date, after_end_date,
         );
 
         MetricsBeforeAndAfter { before, after }.check_all();
@@ -479,10 +478,9 @@ mod sanity_check {
             most_recent_node_provider_rewards_timestamp_seconds
                 .checked_add(NODE_PROVIDER_REWARD_PERIOD_SECONDS)
                 .unwrap();
-        let expected_new_node_provider_rewards_timestamp = Time::from_secs_since_unix_epoch(
-            expected_new_node_provider_rewards_timestamp_seconds
-        )
-        .unwrap();
+        let expected_new_node_provider_rewards_timestamp =
+            Time::from_secs_since_unix_epoch(expected_new_node_provider_rewards_timestamp_seconds)
+                .unwrap();
 
         // Arrive at slightly before the next node provider rewards.
         advance_time_gradually(
@@ -521,9 +519,7 @@ mod sanity_check {
 
         let time_since_due = state_machine
             .get_time()
-            .saturating_duration_since(
-                expected_new_node_provider_rewards_timestamp
-            )
+            .saturating_duration_since(expected_new_node_provider_rewards_timestamp)
             .as_secs();
         panic!(
             "No new node provider rewards appeared. (A reasonable amount of time \
@@ -534,15 +530,13 @@ mod sanity_check {
 
     // Advances time by slightly more than 1 day, because voting rewards happen
     // once per day.
-    fn advance_for_voting_rewards(
-        state_machine: &StateMachine,
-    ) {
+    fn advance_for_voting_rewards(state_machine: &StateMachine) {
         advance_time_gradually(
             state_machine,
             ONE_DAY_SECONDS
                 // Put us slightly past the line. This probably isn't
                 // necessary, but also isn't harmful.
-                .saturating_add(10)
+                .saturating_add(10),
         );
 
         // This is to make sure that voting rewards have a chance to run.
@@ -577,8 +571,7 @@ mod sanity_check {
 
     // E.g. passing 2025-12-31 returns 2026-01-01.
     fn next_date(date: &DateUtc) -> DateUtc {
-        let naive_date = NaiveDate::from_ymd_opt(date.year as i32, date.month, date.day)
-            .unwrap();
+        let naive_date = NaiveDate::from_ymd_opt(date.year as i32, date.month, date.day).unwrap();
 
         let result = naive_date.succ_opt().unwrap();
 
