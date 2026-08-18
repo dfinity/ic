@@ -1,107 +1,29 @@
 use crate::numeric::{LedgerBurnIndex, Wei};
 use crate::state::sweeper_funding::SweeperFundingAccounting;
-use crate::sweeper::burn_for;
 
-const MINIMUM_BURN: u128 = 30_000_000_000_000_000; // ckETH's mainnet minimum withdrawal amount
 const AMOUNT: u128 = 100_000_000_000_000_000; // 0.1 ETH
-const CREATED_AT: u64 = 1_700_000_000_000_000_000;
-
-fn accept(
-    accounting: &mut SweeperFundingAccounting,
-    index: u64,
-    amount: Wei,
-    burn: Wei,
-) -> LedgerBurnIndex {
-    let index = LedgerBurnIndex::new(index);
-    accounting.record_burn(burn);
-    accounting.mark_funding_in_flight(index, amount, CREATED_AT);
-    index
-}
+/// Fixed acceptance time; these tests are about the accounting, not about ageing.
+const CREATED_AT: Option<u64> = Some(1_700_000_000_000_000_000);
 
 #[test]
-fn should_burn_the_whole_amount_when_nothing_is_prepaid() {
-    let accounting = SweeperFundingAccounting::default();
-
-    assert_eq!(
-        burn_for(&accounting, Wei::new(AMOUNT), Wei::new(MINIMUM_BURN)),
-        Wei::new(AMOUNT)
-    );
-}
-
-#[test]
-fn should_offset_the_burn_by_earlier_unspent_burns() {
-    let unspent_fee_allowance = 42_000_u128;
+fn should_preserve_the_invariant_across_consecutive_fundings() {
     let mut accounting = SweeperFundingAccounting::default();
-    let index = accept(&mut accounting, 1, Wei::new(AMOUNT), Wei::new(AMOUNT));
-    accounting.record_finalized_funding(
-        index,
-        Wei::new(AMOUNT - unspent_fee_allowance - 1_000),
-        Wei::new(1_000),
-    );
+
+    for index in 1..=3_u64 {
+        let index = LedgerBurnIndex::new(index);
+        accounting.record_burn(Wei::new(AMOUNT));
+        accounting.mark_funding_in_flight(index, Wei::new(AMOUNT), CREATED_AT);
+        accounting.record_finalized_funding(index, Wei::new(AMOUNT - 43_000), Wei::new(1_000));
+
+        assert!(accounting.cumulative_burned() >= accounting.cumulative_spent());
+        assert!(accounting.burned_not_yet_spent() <= accounting.cumulative_burned());
+    }
+
     assert_eq!(
         accounting.burned_not_yet_spent(),
-        Wei::new(unspent_fee_allowance)
+        Wei::new(3 * 42_000),
+        "each funding leaves the fee it provisioned but did not pay"
     );
-
-    assert_eq!(
-        burn_for(&accounting, Wei::new(AMOUNT), Wei::new(MINIMUM_BURN)),
-        Wei::new(AMOUNT - unspent_fee_allowance),
-        "the credit reduces the burn while the ETH still moves in full"
-    );
-}
-
-#[test]
-fn should_floor_the_burn_at_the_minimum_even_when_fully_covered() {
-    let mut accounting = SweeperFundingAccounting::default();
-    let index = accept(
-        &mut accounting,
-        1,
-        Wei::new(10 * AMOUNT),
-        Wei::new(10 * AMOUNT),
-    );
-    accounting.record_finalized_funding(index, Wei::ZERO, Wei::new(1_000));
-    assert!(accounting.burned_not_yet_spent() > Wei::new(AMOUNT));
-
-    assert_eq!(
-        burn_for(&accounting, Wei::new(AMOUNT), Wei::new(MINIMUM_BURN)),
-        Wei::new(MINIMUM_BURN),
-        "a fully covered funding still burns the ledger minimum so it has an index"
-    );
-}
-
-#[test]
-fn should_floor_a_small_residual_burn_at_the_minimum() {
-    let mut accounting = SweeperFundingAccounting::default();
-    let index = accept(&mut accounting, 1, Wei::new(AMOUNT), Wei::new(AMOUNT));
-    accounting.record_finalized_funding(index, Wei::new(1_000), Wei::new(1_000));
-
-    let burn = burn_for(&accounting, Wei::new(AMOUNT), Wei::new(MINIMUM_BURN));
-
-    assert_eq!(burn, Wei::new(MINIMUM_BURN));
-    assert!(
-        burn >= accounting.burn_required_for(Wei::new(AMOUNT)),
-        "flooring must only ever burn more than strictly required, never less"
-    );
-}
-
-#[test]
-fn should_preserve_the_invariant_across_an_offset_funding() {
-    let mut accounting = SweeperFundingAccounting::default();
-    let index = accept(&mut accounting, 1, Wei::new(AMOUNT), Wei::new(AMOUNT));
-    accounting.record_finalized_funding(index, Wei::new(AMOUNT - 43_000), Wei::new(1_000));
-
-    let amount = Wei::new(AMOUNT);
-    let burn = burn_for(&accounting, amount, Wei::new(MINIMUM_BURN));
-
-    let index = accept(&mut accounting, 2, amount, burn);
-    accounting.record_finalized_funding(
-        index,
-        amount.checked_sub(Wei::new(1_500)).unwrap(),
-        Wei::new(1_000),
-    );
-
-    assert!(accounting.cumulative_burned() >= accounting.cumulative_spent());
-    assert!(accounting.burned_not_yet_spent() <= accounting.cumulative_burned());
 }
 
 /// Regression tests for two fundings decided before the first one's transfer finalizes. They drive
@@ -114,7 +36,7 @@ mod concurrent_fundings {
     use crate::sweeper::{FundingDecision, plan_funding};
     use crate::test_fixtures::initial_state;
 
-    const CREATED_AT: u64 = 1_700_000_000_000_000_000;
+    const CREATED_AT: Option<u64> = Some(1_700_000_000_000_000_000);
     const LOW_WATER_MARK: u128 = 20_000_000_000_000_000; // 0.02 ETH
     const TARGET: u128 = 100_000_000_000_000_000; // 0.1 ETH
     const MINIMUM_BURN: u128 = 30_000_000_000_000_000; // 0.03 ETH
@@ -153,7 +75,7 @@ mod concurrent_fundings {
         state.eth_balance = crate::state::EthBalance::with_eth_balance(Wei::new(TARGET));
 
         match plan_funding(&state, Wei::ZERO) {
-            FundingDecision::Fund(plan) => assert_eq!(plan.amount, Wei::new(TARGET)),
+            FundingDecision::Fund(amount) => assert_eq!(amount, Wei::new(TARGET)),
             other => panic!("a fully covered funding must be due, got {other:?}"),
         }
     }
@@ -163,20 +85,17 @@ mod concurrent_fundings {
         let mut state = state();
 
         let first = match plan_funding(&state, Wei::ZERO) {
-            FundingDecision::Fund(plan) => plan,
+            FundingDecision::Fund(amount) => amount,
             other => panic!("the first funding must be due, got {other:?}"),
         };
-        assert_eq!(first.amount, Wei::new(TARGET));
-        assert_eq!(first.burn, Wei::new(TARGET));
-        state.sweeper_funding.record_burn(first.burn);
-        state.sweeper_funding.mark_funding_in_flight(
-            LedgerBurnIndex::new(1),
-            first.amount,
-            CREATED_AT,
-        );
+        assert_eq!(first, Wei::new(TARGET));
+        state.sweeper_funding.record_burn(first);
+        state
+            .sweeper_funding
+            .mark_funding_in_flight(LedgerBurnIndex::new(1), first, CREATED_AT);
 
-        // F2: the transfer has not landed, so the balance is still zero and a naive planner would
-        // fund again — offsetting against F1's earmarked burn.
+        // F2: the transfer has not landed, so the balance is still zero and a planner without the
+        // earmark would put a second funding on the same nonce lane.
         assert_eq!(
             plan_funding(&state, Wei::ZERO),
             FundingDecision::AlreadyInFlight(
@@ -194,19 +113,17 @@ mod concurrent_fundings {
     fn should_resume_funding_once_the_first_has_settled() {
         let mut state = state();
         let first = match plan_funding(&state, Wei::ZERO) {
-            FundingDecision::Fund(plan) => plan,
+            FundingDecision::Fund(amount) => amount,
             other => panic!("unexpected {other:?}"),
         };
-        state.sweeper_funding.record_burn(first.burn);
-        state.sweeper_funding.mark_funding_in_flight(
-            LedgerBurnIndex::new(1),
-            first.amount,
-            CREATED_AT,
-        );
+        state.sweeper_funding.record_burn(first);
+        state
+            .sweeper_funding
+            .mark_funding_in_flight(LedgerBurnIndex::new(1), first, CREATED_AT);
         let fee = Wei::new(1_000_000_000_000_000);
         state.sweeper_funding.record_finalized_funding(
             LedgerBurnIndex::new(1),
-            first.amount.checked_sub(fee).unwrap(),
+            first.checked_sub(fee).unwrap(),
             fee,
         );
 
@@ -231,20 +148,20 @@ mod concurrent_fundings {
         let fee = Wei::new(1_000_000_000_000_000);
 
         for index in 1..=5_u64 {
-            let plan = match plan_funding(&state, Wei::ZERO) {
-                FundingDecision::Fund(plan) => plan,
+            let amount = match plan_funding(&state, Wei::ZERO) {
+                FundingDecision::Fund(amount) => amount,
                 other => panic!("funding {index} should be due, got {other:?}"),
             };
-            state.sweeper_funding.record_burn(plan.burn);
+            state.sweeper_funding.record_burn(amount);
             state.sweeper_funding.mark_funding_in_flight(
                 LedgerBurnIndex::new(index),
-                plan.amount,
+                amount,
                 CREATED_AT,
             );
             // Reaching here without a trap is the assertion: spend never exceeds burn.
             state.sweeper_funding.record_finalized_funding(
                 LedgerBurnIndex::new(index),
-                plan.amount.checked_sub(fee).unwrap(),
+                amount.checked_sub(fee).unwrap(),
                 fee,
             );
             assert!(
@@ -254,17 +171,36 @@ mod concurrent_fundings {
         }
     }
 
-    /// The guard is what upholds the invariant, so bypassing it must be loud rather than silently
-    /// producing an under-backed state.
+    /// Bypassing the guard is a prudence violation, not a solvency one: each funding burns for its
+    /// own transfer, so the invariant survives two of them in flight.
     #[test]
-    #[should_panic(expected = "a second sweeper funding was accepted while one is still in flight")]
-    fn should_panic_when_a_second_funding_is_accepted_anyway() {
+    fn should_survive_a_second_funding_accepted_anyway() {
         let mut accounting = crate::state::sweeper_funding::SweeperFundingAccounting::default();
+        let fee = Wei::new(1_000_000_000_000_000);
         accounting.record_burn(Wei::new(TARGET));
         accounting.mark_funding_in_flight(LedgerBurnIndex::new(1), Wei::new(TARGET), CREATED_AT);
 
-        // The first funding has not settled, so earmarking a second must be loud rather than
-        // silently overwriting and letting the two transfers outspend the burns.
+        accounting.record_burn(Wei::new(TARGET));
         accounting.mark_funding_in_flight(LedgerBurnIndex::new(2), Wei::new(TARGET), CREATED_AT);
+
+        assert_eq!(
+            accounting
+                .in_flight_funding()
+                .map(|funding| funding.ledger_burn_index),
+            Some(LedgerBurnIndex::new(2)),
+            "the newer funding takes over the earmark"
+        );
+        // Both transfers settle; both were covered by their own burn, so the invariant holds.
+        accounting.record_finalized_funding(
+            LedgerBurnIndex::new(2),
+            Wei::new(TARGET).checked_sub(fee).unwrap(),
+            fee,
+        );
+        accounting.record_finalized_funding(
+            LedgerBurnIndex::new(1),
+            Wei::new(TARGET).checked_sub(fee).unwrap(),
+            fee,
+        );
+        assert!(accounting.cumulative_burned() >= accounting.cumulative_spent());
     }
 }

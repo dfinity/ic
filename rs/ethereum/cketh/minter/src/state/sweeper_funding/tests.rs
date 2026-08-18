@@ -3,7 +3,7 @@ use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConf
 
 const BURN: u128 = 100_000_000_000_000_000; // 0.1 ETH
 /// Fixed acceptance time; these tests are about the arithmetic, not about ageing.
-const CREATED_AT: u64 = 1_700_000_000_000_000_000;
+const CREATED_AT: Option<u64> = Some(1_700_000_000_000_000_000);
 const FEE: u128 = 1_000_000_000_000_000; // 0.001 ETH
 
 mod accounting {
@@ -49,8 +49,8 @@ mod accounting {
     #[test]
     fn should_keep_the_unspent_fee_as_surplus_after_a_successful_funding() {
         let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE / 2));
+        let index = accept(&mut accounting, 1, Wei::new(BURN), Wei::new(BURN));
+        accounting.record_finalized_funding(index, Wei::new(BURN - FEE), Wei::new(FEE / 2));
 
         assert_eq!(
             accounting.burned_not_yet_spent(),

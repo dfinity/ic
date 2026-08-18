@@ -882,7 +882,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from,
                     from_subaccount,
                     created_at,
-                    cketh_burned,
                 }) => EP::AcceptedSweeperFundingRequest {
                     withdrawal_amount: withdrawal_amount.into(),
                     destination: destination.to_string(),
@@ -890,7 +889,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from,
                     from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
                     created_at,
-                    cketh_burned: cketh_burned.into(),
                 },
                 EventType::CreatedTransaction {
                     withdrawal_id,

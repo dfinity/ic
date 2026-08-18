@@ -14,8 +14,8 @@ use crate::logs::{DEBUG, INFO};
 use crate::memo::BurnMemo;
 use crate::numeric::Wei;
 use crate::state::audit::{EventType, process_event};
-use crate::state::sweeper_funding::{InFlightFunding, SweeperFundingAccounting};
-use crate::state::transactions::SweeperFundingRequest;
+use crate::state::sweeper_funding::InFlightFunding;
+use crate::state::transactions::EthWithdrawalRequest;
 use crate::state::{State, TaskType, mutate_state, read_state};
 use crate::{CKETH_FEE_SUBACCOUNT, deposit_address::sweeper_address};
 use ic_canister_log::log;
@@ -57,8 +57,8 @@ pub async fn fund_sweeper_address() {
             }
         };
 
-    let plan = match read_state(|s| plan_funding(s, sweeper_balance)) {
-        FundingDecision::Fund(plan) => plan,
+    let amount = match read_state(|s| plan_funding(s, sweeper_balance)) {
+        FundingDecision::Fund(amount) => amount,
         FundingDecision::NotDue => {
             log!(
                 DEBUG,
@@ -81,7 +81,7 @@ pub async fn fund_sweeper_address() {
             log!(
                 INFO,
                 "[fund_sweeper]: SKIPPING: funding {} of {} is still in flight; \
-                 starting another would spend more than has been burned",
+                 one funding at a time",
                 in_flight.ledger_burn_index,
                 in_flight.amount,
             );
@@ -91,18 +91,15 @@ pub async fn fund_sweeper_address() {
 
     log!(
         INFO,
-        "[fund_sweeper]: {sweeper} holds {sweeper_balance}; funding it with {} \
-         (burning {} ckETH, {} covered by earlier unspent burns)",
-        plan.amount,
-        plan.burn,
-        plan.amount.checked_sub(plan.burn).unwrap_or(Wei::ZERO),
+        "[fund_sweeper]: {sweeper} holds {sweeper_balance}; funding it with {amount}, \
+         burning as much ckETH"
     );
 
     let client = read_state(LedgerClient::cketh_ledger_from_state);
     let ledger_burn_index = match client
         .burn_from_own_subaccount(
             CKETH_FEE_SUBACCOUNT,
-            plan.burn,
+            amount,
             BurnMemo::Convert {
                 to_address: sweeper,
             },
@@ -113,21 +110,20 @@ pub async fn fund_sweeper_address() {
         Err(e) => {
             log!(
                 INFO,
-                "[fund_sweeper]: SKIPPING: failed to burn {} ckETH from the fee account: {e:?}",
-                plan.burn
+                "[fund_sweeper]: SKIPPING: failed to burn {amount} ckETH from the fee \
+                 account: {e:?}"
             );
             return;
         }
     };
 
-    let request = SweeperFundingRequest {
-        withdrawal_amount: plan.amount,
+    let request = EthWithdrawalRequest {
+        withdrawal_amount: amount,
         destination: sweeper,
         ledger_burn_index,
         from: ic_cdk::api::canister_self(),
         from_subaccount: crate::eth_logs::LedgerSubaccount::from_bytes(CKETH_FEE_SUBACCOUNT),
-        created_at: ic_cdk::api::time(),
-        cketh_burned: plan.burn,
+        created_at: Some(ic_cdk::api::time()),
     };
     mutate_state(|s| {
         process_event(s, EventType::AcceptedSweeperFundingRequest(request));
@@ -143,18 +139,11 @@ pub fn sweeper_address_from_state(state: &State) -> Option<Address> {
     Some(sweeper_address(&master_public_key, &chain_code))
 }
 
-/// How much ETH to move, and how much ckETH that costs. `burn` is at most `amount`, the remainder
-/// being covered by earlier burns that were never spent.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub struct FundingPlan {
-    pub amount: Wei,
-    pub burn: Wei,
-}
-
 /// Why a funding is or is not due at `sweeper_balance`.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum FundingDecision {
-    Fund(FundingPlan),
+    /// Move this much ETH to the sweeper address, burning as much ckETH for it.
+    Fund(Wei),
     /// A previous funding is still between its burn and its finalized transfer.
     AlreadyInFlight(InFlightFunding),
     /// The minter's deposit-backed ETH does not cover the funding.
@@ -165,12 +154,13 @@ pub enum FundingDecision {
     NotDue,
 }
 
-/// Decides whether a funding is due at `sweeper_balance`, and what it costs.
+/// Decides whether a funding is due at `sweeper_balance`.
 ///
-/// The in-flight refusal is load-bearing: an earmarked burn is indistinguishable from spare credit,
-/// so a second funding would offset against the first one's burn and the two transfers together
-/// would outspend it. A stuck funding therefore blocks later ones, which is the safe direction but
-/// needs its own metric to be visible.
+/// Refuses while an earlier funding sits between its burn and its finalized transfer. That is
+/// prudence rather than a correctness requirement: each funding burns for its own transfer, so two
+/// in flight are still each covered by their own burn. One at a time keeps a single funding on the
+/// withdrawal nonce lane and the accounting easy to follow. A stuck funding therefore blocks later
+/// ones, which is the safe direction but needs its own metric to be visible.
 pub fn plan_funding(state: &State, sweeper_balance: Wei) -> FundingDecision {
     if let Some(in_flight) = state.sweeper_funding.in_flight_funding() {
         return FundingDecision::AlreadyInFlight(in_flight);
@@ -189,25 +179,12 @@ pub fn plan_funding(state: &State, sweeper_balance: Wei) -> FundingDecision {
                     required: amount,
                 };
             }
-            FundingDecision::Fund(FundingPlan {
-                amount,
-                burn: burn_for(&state.sweeper_funding, amount, minimum_burn(state)),
-            })
+            // The burn is the amount: a funding carves its fee out of what it burns, exactly
+            // like a user withdrawal. It always clears the ledger's minimum, since `amount_due` is
+            // at least the configured headroom and `validate` keeps that at or above the minimum
+            // withdrawal amount — and a real burn is what gives a funding the ledger index its
+            // withdrawal pipeline is keyed by.
+            FundingDecision::Fund(amount)
         }
     }
-}
-
-/// The burn a funding of `amount` costs, given the credit from earlier burns that were never spent.
-///
-/// Floored at `minimum_burn`: every funding needs a real burn, since its ledger index keys the
-/// withdrawal pipeline, and the floor also draws the credit down rather than stranding funding when
-/// the credit exceeds the amount due.
-fn burn_for(accounting: &SweeperFundingAccounting, amount: Wei, minimum_burn: Wei) -> Wei {
-    std::cmp::max(accounting.burn_required_for(amount), minimum_burn)
-}
-
-/// The smallest burn a funding will make: the minter's minimum withdrawal amount, reused rather
-/// than adding a second knob, since `validate_config` already guarantees it covers the ledger fee.
-fn minimum_burn(state: &State) -> Wei {
-    state.cketh_minimum_withdrawal_amount
 }
