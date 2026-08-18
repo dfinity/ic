@@ -131,7 +131,7 @@ mod init {
             Wei::new(10_000_000_000_000_000)
         );
         assert_eq!(
-            state.eth_transactions.next_transaction_nonce(),
+            state.withdrawal_transactions.next_transaction_nonce(),
             TransactionNonce::ZERO
         );
         assert_eq!(

@@ -423,7 +423,10 @@ async fn withdraw_eth(
 #[update]
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     let ledger_burn_index = LedgerBurnIndex::new(block_index);
-    read_state(|s| s.eth_transactions.transaction_status(&ledger_burn_index))
+    read_state(|s| {
+        s.withdrawal_transactions
+            .transaction_status(&ledger_burn_index)
+    })
 }
 
 #[query]
@@ -431,7 +434,7 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
     use transactions::WithdrawalRequest::*;
     let parameter = transactions::WithdrawalSearchParameter::try_from(parameter).unwrap();
     read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .withdrawal_status(&parameter)
             .into_iter()
             .map(|(request, status, tx)| WithdrawalDetail {
@@ -1132,7 +1135,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
                 let now_nanos = ic_cdk::api::time();
                 let age_nanos = now_nanos.saturating_sub(
-                    s.eth_transactions
+                    s.withdrawal_transactions
                         .oldest_incomplete_withdrawal_timestamp()
                         .unwrap_or(now_nanos),
                 );

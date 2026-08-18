@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests;
+pub(in crate::state) mod tests;
 
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
 use crate::eth_logs::LedgerSubaccount;
@@ -392,22 +392,18 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 /// 6. If a given transaction fails the minter will reimburse the user who requested the
 ///    withdrawal with the corresponding amount minus fees.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct EthTransactions {
-    pub(in crate::state) pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
+pub struct WithdrawalTransactions {
+    pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
     // Processed withdrawal requests (transaction created, sent, or finalized).
-    pub(in crate::state) processed_withdrawal_requests:
-        BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
-    pub(in crate::state) created_tx:
-        MultiKeyMap<TransactionNonce, LedgerBurnIndex, TransactionRequest>,
-    pub(in crate::state) sent_tx:
-        MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedTransactionRequest>>,
-    pub(in crate::state) finalized_tx:
-        MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
-    pub(in crate::state) next_nonce: TransactionNonce,
+    processed_withdrawal_requests: BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
+    created_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, TransactionRequest>,
+    sent_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedTransactionRequest>>,
+    finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
+    next_nonce: TransactionNonce,
 
-    pub(in crate::state) maybe_reimburse: BTreeSet<LedgerBurnIndex>,
-    pub(in crate::state) reimbursement_requests: BTreeMap<ReimbursementIndex, ReimbursementRequest>,
-    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
+    maybe_reimburse: BTreeSet<LedgerBurnIndex>,
+    reimbursement_requests: BTreeMap<ReimbursementIndex, ReimbursementRequest>,
+    reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -429,7 +425,7 @@ pub enum ResubmitTransactionError {
     },
 }
 
-impl EthTransactions {
+impl WithdrawalTransactions {
     pub fn new(next_nonce: TransactionNonce) -> Self {
         Self {
             pending_withdrawal_requests: VecDeque::new(),
