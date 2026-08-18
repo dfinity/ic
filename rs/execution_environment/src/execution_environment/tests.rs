@@ -3532,7 +3532,8 @@ fn execute_canister_http_request_non_replicated_refund_status() {
         is_replicated: Some(false),
         pricing_version: None,
     };
-    let payment = Cycles::new(1_000_000_000);
+    // A payment the outcall could conceivably spend in full
+    let payment = Cycles::new(100_000_000);
     test.inject_call_to_ic00(Method::HttpRequest, args.encode(), payment);
     test.execute_all();
 
@@ -3555,6 +3556,18 @@ fn execute_canister_http_request_non_replicated_refund_status() {
         &http_request_context.replication,
     );
     let expected_refundable = payment - base_fee.real();
+    // Sanity check that these args actually exercise the un-capped split: if the
+    // worst case ever drops below the payment, this test would silently start
+    // asserting the cap instead (which
+    // `execute_canister_http_request_caps_allowance_at_worst_case_cost` covers).
+    assert!(
+        expected_refundable
+            <= test.max_http_request_usage_fee(
+                &http_request_context.replication,
+                http_request_context.max_response_bytes,
+                http_request_context.subnet_size,
+            )
+    );
     assert_eq!(
         http_request_context.refund_status.refundable_cycles,
         expected_refundable
