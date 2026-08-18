@@ -344,7 +344,7 @@ mod upgrade {
                 ethereum_contract_address: Some("invalid".to_string()),
                 ..Default::default()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         let mut state = initial_state();
@@ -355,7 +355,61 @@ mod upgrade {
                 ),
                 ..Default::default()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                ethereum_sweeper_contract_address: Some("invalid".to_string()),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                ethereum_sweeper_contract_address: Some(
+                    "0x0000000000000000000000000000000000000000".to_string(),
+                ),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                erc20_helper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ethereum_sweeper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        state
+            .upgrade(UpgradeArg {
+                ethereum_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            })
+            .expect("valid upgrade args");
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                erc20_helper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_)),
+            "a contract address already set by an earlier upgrade must stay distinct"
         );
     }
 
@@ -370,6 +424,9 @@ mod upgrade {
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
             ),
             ethereum_block_height: Some(CandidBlockTag::Safe),
+            ethereum_sweeper_contract_address: Some(
+                "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38".to_string(),
+            ),
             ..Default::default()
         };
 
@@ -390,6 +447,10 @@ mod upgrade {
             Some(&Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
         assert_eq!(state.ethereum_block_height, CandidBlockTag::Safe);
+        assert_eq!(
+            state.sweeper_contract_address,
+            Some(Address::from_str("0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38").unwrap())
+        );
     }
 }
 
@@ -576,6 +637,7 @@ prop_compose! {
         ecdsa_key_name in "[a-z_]*",
         last_scraped_block_number in arb_nat(),
         evm_rpc_id in proptest::option::of(arb_principal()),
+        sweeper_contract_address in proptest::option::of(arb_address()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -587,6 +649,7 @@ prop_compose! {
             next_transaction_nonce,
             last_scraped_block_number,
             evm_rpc_id,
+            ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
         }
     }
 }
@@ -603,6 +666,7 @@ prop_compose! {
         evm_rpc_id in proptest::option::of(arb_principal()),
         deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
         last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
+        sweeper_contract_address in proptest::option::of(arb_address()),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
@@ -614,7 +678,8 @@ prop_compose! {
             last_erc20_scraped_block_number,
             evm_rpc_id,
             deposit_with_subaccount_helper_contract_address: deposit_with_subaccount_helper_contract_address.map(|addr| addr.to_string()),
-            last_deposit_with_subaccount_scraped_block_number
+            last_deposit_with_subaccount_scraped_block_number,
+            ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
         }
     }
 }
@@ -1083,6 +1148,11 @@ fn state_equivalence() {
         evm_rpc_id: EVM_RPC_ID_PRODUCTION,
         ckerc20_tokens,
         automatic_deposits,
+        sweeper_contract_address: Some(
+            "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38"
+                .parse()
+                .unwrap(),
+        ),
     };
 
     assert_eq!(
@@ -1171,6 +1241,15 @@ fn state_equivalence() {
         Ok(()),
         state.is_equivalent_to(&State {
             invalid_events: Default::default(),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            sweeper_contract_address: None,
             ..state.clone()
         }),
         "changing essential fields should break equivalence",

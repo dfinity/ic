@@ -59,23 +59,6 @@ archive_override(
 # Misc tools
 
 bazel_dep(name = "pigz", version = "2.8.bcr.1")  # (parallel) gzip
-
-# The BCR `pigz` module fetches its source tarball from https://zlib.net, which
-# is currently down. Override it to fetch it from a mirror. Drop this override
-# once zlib.net is reachable again / the BCR entry uses a live URL.
-archive_override(
-    module_name = "pigz",
-    integrity = "sha256-64crTw4fDr5Zyfe9jFBsQgSJO6aoSS3jHfQW8NUXD9A=",
-    patch_strip = 0,
-    patches = [
-        "//bazel:pigz/patches/pigz.c.patch",
-        "//bazel:pigz/patches/add_build_file.patch",
-        "//bazel:pigz/patches/module_dot_bazel.patch",
-    ],
-    strip_prefix = "pigz-2.8",
-    urls = ["https://distfiles.macports.org/pigz/pigz-2.8.tar.gz"],
-)
-
 bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
 
 # QEMU, for the local system test backend. We only use the prebuilt (hermetic)

@@ -279,6 +279,7 @@ pub struct DashboardTemplate {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub minter_address: String,
+    pub sweeper_contract_address: Option<Address>,
     pub log_scrapings: LogScrapings,
     pub next_transaction_nonce: TransactionNonce,
     pub minimum_withdrawal_amount: Wei,
@@ -482,6 +483,7 @@ impl DashboardTemplate {
                 .minter_address()
                 .map(|addr| addr.to_string())
                 .unwrap_or_default(),
+            sweeper_contract_address: state.sweeper_contract_address,
             log_scrapings: state.log_scrapings.clone(),
             cketh_ledger_id: state.cketh_ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),

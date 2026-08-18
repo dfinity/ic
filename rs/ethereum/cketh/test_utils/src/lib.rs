@@ -807,6 +807,7 @@ fn install_minter(
         minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
         last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         evm_rpc_id: Some(evm_rpc_id),
+        ethereum_sweeper_contract_address: None,
     };
     let minter_arg = MinterArg::InitArg(args);
     env.install_canister(

@@ -11,7 +11,7 @@ use crate::execution_environment::{
     RoundLimits,
 };
 use crate::execution_environment_metrics::ExecutionEnvironmentMetrics;
-use crate::hypervisor::Hypervisor;
+use crate::hypervisor::{Hypervisor, MemorySource};
 use crate::types::{IngressResponse, Response};
 use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
 
@@ -2295,6 +2295,35 @@ impl CanisterManager {
             return Err(CanisterManagerError::LongExecutionAlreadyInProgress { canister_id });
         }
 
+        // Build the memories to restore up front, so that they can be handed to
+        // `create_execution_state` below instead of being installed after the
+        // fact. This is cheap: it only clones the storage of the snapshot's page
+        // maps and, for another canister's snapshot, allocates a fresh page
+        // allocator.
+        let (snapshot_wasm_memory, snapshot_stable_memory) = if canister_id == snapshot_canister_id
+        {
+            (
+                Memory::from(&execution_snapshot.wasm_memory),
+                Memory::from(&execution_snapshot.stable_memory),
+            )
+        } else {
+            let not_loadable = || CanisterManagerError::CanisterSnapshotNotLoadable {
+                canister_id,
+                snapshot_id,
+            };
+            let wasm_memory = Memory::try_from((
+                &execution_snapshot.wasm_memory,
+                Arc::clone(&self.fd_factory),
+            ))
+            .map_err(|_| not_loadable())?;
+            let stable_memory = Memory::try_from((
+                &execution_snapshot.stable_memory,
+                Arc::clone(&self.fd_factory),
+            ))
+            .map_err(|_| not_loadable())?;
+            (wasm_memory, stable_memory)
+        };
+
         // All basic checks have passed, prepay cycles for instructions.
         //
         // The Wasm execution mode is only used to pick the per-instruction rate
@@ -2339,6 +2368,10 @@ impl CanisterManager {
                     time,
                     round_limits,
                     compilation_cost_handling,
+                    MemorySource::Explicit {
+                        wasm_memory: snapshot_wasm_memory,
+                        stable_memory: snapshot_stable_memory,
+                    },
                 );
             debug_assert!(
                 instructions_for_execution <= prepaid_execution_instructions,
@@ -2423,38 +2456,6 @@ impl CanisterManager {
 
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
 
-            if canister_id == snapshot_canister_id {
-                new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
-                new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
-            } else {
-                let new_stable_memory = match Memory::try_from((
-                    &execution_snapshot.stable_memory,
-                    Arc::clone(&self.fd_factory),
-                )) {
-                    Ok(memory) => memory,
-                    Err(_) => {
-                        return Err(CanisterManagerError::CanisterSnapshotNotLoadable {
-                            canister_id,
-                            snapshot_id,
-                        });
-                    }
-                };
-                new_execution_state.stable_memory = new_stable_memory;
-
-                let new_wasm_memory = match Memory::try_from((
-                    &execution_snapshot.wasm_memory,
-                    Arc::clone(&self.fd_factory),
-                )) {
-                    Ok(memory) => memory,
-                    Err(_) => {
-                        return Err(CanisterManagerError::CanisterSnapshotNotLoadable {
-                            canister_id,
-                            snapshot_id,
-                        });
-                    }
-                };
-                new_execution_state.wasm_memory = new_wasm_memory;
-            }
             Some(new_execution_state)
         };
 
