@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       commit-sha:
-        description: 'The commit SHA to run the workflow on'
+        description: 'The commit SHA to run the workflow on (must be the head commit of the PR)'
         required: true
         default: ''
       pr-number:
@@ -27,7 +27,7 @@ jobs:
       base-ref: ${{ steps.fetch.outputs.base_ref }}
       head-ref: ${{ steps.fetch.outputs.head_ref }}
     steps:
-      - name: Verify Commit Belongs to PR and Fetch PR Refs
+      - name: Verify Commit Is PR Head and Fetch PR Refs
         id: fetch
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         env:
@@ -58,32 +58,13 @@ jobs:
               return;
             }
 
-            // GitHub returns at most 250 commits here; for larger PRs only the
-            // head commit can be verified this way.
-            const commits = await github.paginate(github.rest.pulls.listCommits, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100
-            });
-            const shas = new Set(commits.map(c => c.sha.toLowerCase()));
-
-            if (!shas.has(sha)) {
-              if (pr.commits > commits.length) {
-                core.setFailed(
-                  `PR #${prNumber} has ${pr.commits} commits, more than the ${commits.length} ` +
-                  `the API returns, so ${sha} could not be verified. Re-run with the PR head ` +
-                  `commit ${pr.head.sha}.`);
-              } else {
-                core.setFailed(`Commit ${sha} is not part of PR #${prNumber} ` +
-                               `(head is ${pr.head.sha})`);
-              }
-              return;
-            }
-
+            // Require the head commit: the confirm checkbox states the PR was
+            // reviewed at this commit, and an older commit of the PR would run
+            // CI on code that is no longer what the PR proposes to merge.
             if (sha !== pr.head.sha.toLowerCase()) {
-              core.warning(`Commit ${sha} is not the current head of PR #${prNumber} ` +
-                           `(${pr.head.sha}) — running CI on an older commit of the PR`);
+              core.setFailed(`Commit ${sha} is not the head of PR #${prNumber} ` +
+                             `(head is ${pr.head.sha}). Re-run with the head commit.`);
+              return;
             }
 
             core.info(`PR #${prNumber} base ref: ${pr.base.ref}, head ref: ${pr.head.ref}`);
