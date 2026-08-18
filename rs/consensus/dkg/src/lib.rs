@@ -541,8 +541,13 @@ mod tests {
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
                 let replica_1 = node_test_id(1);
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config.clone(),
+                );
                 let dkg = DkgImpl::new(
                     ReplicaConfig {
                         node_id: replica_1,
@@ -613,8 +618,13 @@ mod tests {
                 // Create another dealer and add his dealings into the unvalidated pool of
                 // replica 1.
                 let replica_2 = node_test_id(2);
-                let dkg_key_manager_2 =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager_2 = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config.clone(),
+                );
                 let dkg_2 = DkgImpl::new(
                     ReplicaConfig {
                         node_id: replica_2,
@@ -703,8 +713,13 @@ mod tests {
                 let mut dkg_pool =
                     DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), Height::from(0));
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config.clone(),
+                );
                 let dkg = DkgImpl::new(
                     ReplicaConfig {
                         node_id: node_test_id(3),
@@ -721,8 +736,13 @@ mod tests {
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config.clone(),
+                );
                 let dkg = DkgImpl::new(
                     ReplicaConfig {
                         node_id: node_test_id(1),
@@ -814,8 +834,13 @@ mod tests {
                 );
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config.clone(),
+                );
                 let dkg = DkgImpl::new(
                     ReplicaConfig {
                         node_id: node_test_id(1),
@@ -1104,6 +1129,8 @@ mod tests {
                         crypto.clone(),
                         logger.clone(),
                         &PoolReader::new(&consensus_pool_1),
+                        registry_1.clone(),
+                        replica_config_1.clone(),
                     );
                     let dkg_1 = DkgImpl::new(
                         ReplicaConfig {
@@ -1123,6 +1150,8 @@ mod tests {
                         crypto.clone(),
                         logger.clone(),
                         &PoolReader::new(&consensus_pool_2),
+                        registry_2.clone(),
+                        replica_config_2.clone(),
                     );
                     let dkg_2 = DkgImpl::new(
                         ReplicaConfig {
@@ -1601,6 +1630,8 @@ mod tests {
                         crypto_1.clone(),
                         logger.clone(),
                         &PoolReader::new(&pool_1),
+                        dependencies_1.registry.clone(),
+                        dependencies_1.replica_config.clone(),
                     );
                     let dkg_1 = DkgImpl::new(
                         ReplicaConfig {
@@ -1627,7 +1658,13 @@ mod tests {
                         state_manager_2,
                         crypto_2.clone(),
                         pool_2.get_cache(),
-                        new_dkg_key_manager(crypto_2, logger.clone(), &PoolReader::new(&pool_2)),
+                        new_dkg_key_manager(
+                            crypto_2,
+                            logger.clone(),
+                            &PoolReader::new(&pool_2),
+                            dependencies_2.registry.clone(),
+                            dependencies_2.replica_config.clone(),
+                        ),
                         MetricsRegistry::new(),
                         logger.clone(),
                     );
@@ -2128,6 +2165,8 @@ mod tests {
                     deps.crypto.clone(),
                     logger.clone(),
                     &PoolReader::new(&deps.pool),
+                    deps.registry.clone(),
+                    deps.replica_config.clone(),
                 );
                 let receiver_dkg = DkgImpl::new(
                     ReplicaConfig {
@@ -2858,12 +2897,16 @@ mod tests {
         crypto: Arc<dyn ConsensusCrypto>,
         logger: ReplicaLogger,
         pool_reader: &PoolReader<'_>,
+        registry: Arc<dyn RegistryClient>,
+        replica_config: ReplicaConfig,
     ) -> Arc<Mutex<DkgKeyManager>> {
         Arc::new(Mutex::new(DkgKeyManager::new(
             MetricsRegistry::new(),
             crypto,
             logger,
             pool_reader,
+            registry,
+            replica_config,
         )))
     }
 
