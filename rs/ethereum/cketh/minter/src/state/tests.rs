@@ -1348,6 +1348,49 @@ fn state_equivalence() {
     );
 }
 
+mod sweeper_funding {
+    use super::*;
+    use crate::eth_logs::LedgerSubaccount;
+    use crate::numeric::{LedgerBurnIndex, Wei};
+    use crate::state::audit::apply_state_transition;
+    use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest};
+    use crate::test_fixtures::initial_state;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn should_record_an_accepted_funding_as_a_funding_request() {
+        let mut state = initial_state();
+        let funding = EthWithdrawalRequest {
+            withdrawal_amount: Wei::new(10_000_000_000_000_000),
+            destination: "0x5353535353535353535353535353535353535353"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
+            created_at: Some(1699527697000000000),
+        };
+
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedSweeperFundingRequest(funding),
+        );
+
+        let request = state
+            .eth_transactions
+            .withdrawal_requests_iter()
+            .next()
+            .expect("BUG: the funding request was not recorded");
+        assert_matches!(request, WithdrawalRequest::SweeperFunding(_));
+        assert!(
+            !request.is_reimbursable(),
+            "recorded as an ordinary withdrawal, a failed funding would be reimbursed"
+        );
+    }
+}
+
 mod eth_balance {
     use super::*;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
