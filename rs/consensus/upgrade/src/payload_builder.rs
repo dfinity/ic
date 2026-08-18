@@ -1,15 +1,7 @@
-//! Upgrade section builder for the Phase-2 rolling reboot.
-//!
-//! Produces the `upgrade` bytes in each data block's `BatchPayload`.
-//! Three actions:
-//! - `Request`: block maker requests reboot permission for itself
-//! - `Authorize`: block maker includes collected auth shares (≥ N−P) to authorize a node
-//! - `Return`: block maker releases its slot after rebooting
-//!
-//! Holds the block-facing protocol logic: state reconstruction (certified
-//! anchor folded with the certification-gap payloads), action building, and
-//! action validation. The kernel shared with the share signer (membership
-//! views, share validation) lives in the crate root.
+//! Builds and validates the `upgrade` bytes of each data block's
+//! `BatchPayload` for the Phase-2 rolling reboot. The kernel shared with
+//! the share signer (membership views, share validation) is in the crate
+//! root.
 
 use crate::{subnet_membership, validate_share};
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -63,10 +55,8 @@ impl UpgradePayloadBuilder {
         }
     }
 
-    /// The upgrade state at `height`: the committed anchor from the latest
-    /// certified replicated state, folded with the certification-gap
-    /// payloads and pruned of expired requests and departed members
-    /// (`members`: nodes still in the committee).
+    /// The upgrade state at `height`: the committed anchor folded with the
+    /// certification-gap payloads.
     fn upgrade_state_at(
         &self,
         past_payloads: &[PastPayload],
@@ -114,20 +104,23 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             actions.push(UpgradePermitAction::Return { node: self.node_id });
         }
 
-        if needs_reboot
-            && !upgrade_state.authorized.contains(&self.node_id)
-            && upgrade_state.slots_in_use() < limits.max_parallel_reboots
-        {
+        let request_fits = upgrade_state.active_slots_after(
+            &[UpgradePermitAction::Request {
+                node: self.node_id,
+                request_height: height,
+            }],
+            height,
+            &membership.staying_members,
+            &membership.current_members,
+        ) <= limits.max_parallel_reboots;
+        if needs_reboot && !upgrade_state.authorized.contains(&self.node_id) && request_fits {
             actions.push(UpgradePermitAction::Request {
                 node: self.node_id,
                 request_height: height,
             });
         }
 
-        // Authorize outstanding requests with enough collected shares, up to
-        // P. The pool holds one share per (signer, content), so the group
-        // size is the number of distinct signers; the validator re-checks
-        // every share.
+        // Authorize every request with enough shares
         let mut collected: BTreeMap<(NodeId, Height), Vec<UpgradePermitAuthorizationShare>> =
             BTreeMap::new();
         {
@@ -139,13 +132,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                     .push(share.clone());
             }
         }
-        let mut budget = limits
-            .max_parallel_reboots
-            .saturating_sub(upgrade_state.authorized.len());
         for (&req_node, &req_height) in &upgrade_state.requested {
-            if budget == 0 {
-                break;
-            }
             if upgrade_state.authorized.contains(&req_node) {
                 continue;
             }
@@ -155,7 +142,6 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                         node: req_node,
                         shares: shares.clone(),
                     }));
-                    budget -= 1;
                 }
             }
         }
@@ -182,7 +168,6 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         let limits = membership.limits();
         let upgrade_state =
             self.upgrade_state_at(past_payloads, &membership.current_members, height);
-        let mut slots_used = upgrade_state.slots_in_use();
 
         for action in &actions {
             match action {
@@ -195,15 +180,22 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                             },
                         ));
                     }
-                    if slots_used >= limits.max_parallel_reboots {
+                    // Capacity binds at request time; authorizations are
+                    // slot-neutral.
+                    let slots_in_use = upgrade_state.active_slots_after(
+                        &actions,
+                        height,
+                        &membership.staying_members,
+                        &membership.current_members,
+                    );
+                    if slots_in_use > limits.max_parallel_reboots {
                         return Err(invalid_upgrade(
                             InvalidUpgradePayloadReason::SlotsExhausted {
-                                slots_in_use: slots_used,
+                                slots_in_use,
                                 capacity: limits.max_parallel_reboots,
                             },
                         ));
                     }
-                    slots_used += 1;
                 }
                 UpgradePermitAction::Return { node } => {
                     if *node != proposal_context.proposer {

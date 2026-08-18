@@ -67,6 +67,7 @@ rust_test(
         "//rs/consensus/mocks",
         "//rs/consensus/utils",
         "//rs/interfaces",
+        "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",

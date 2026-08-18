@@ -69,9 +69,7 @@ impl UpgradePermitAuthPoolManager {
         }
     }
 
-    /// Membership at the given finalized block's own height and registry
-    /// version, the pair under which the block's upgrade actions were
-    /// validated.
+    /// Membership at the finalized block's own height and registry version.
     fn block_membership(&self, block: &Block) -> SubnetMembership {
         subnet_membership(
             &self.membership,
@@ -115,8 +113,8 @@ impl UpgradePermitAuthPoolManager {
             // Membership at the request block's own height and registry
             // version, the pair under which the request was validated.
             let membership = self.block_membership(block);
-            // Sign only if we are staying in the subnet for the foreseeable
-            // future.
+            // Sign only if staying: a leaving node's share is thrown
+            // away on validation.
             if !membership.staying(&self.node_id) {
                 continue;
             }
@@ -128,9 +126,6 @@ impl UpgradePermitAuthPoolManager {
                 else {
                     continue;
                 };
-                if !membership.staying(&node) {
-                    continue;
-                }
                 let key = (node, request_height);
                 if signed.contains(&key) {
                     continue;

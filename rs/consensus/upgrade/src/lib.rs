@@ -37,12 +37,14 @@ impl SubnetMembership {
         self.staying_members.contains(node)
     }
 
-    /// Capacity quantities derived from the current subnet size.
+    /// Reboot capacity and share threshold. Leaving members reduce the
+    /// capacity (never below one); the threshold uses the unadjusted P.
     pub fn limits(&self) -> PermitLimits {
         let subnet_size = self.current_members.len();
+        let leaving = self.current_members.len() - self.staying_members.len();
         let max_parallel_reboots = UpgradeState::max_parallel_reboots(subnet_size);
         PermitLimits {
-            max_parallel_reboots,
+            max_parallel_reboots: max_parallel_reboots.saturating_sub(leaving).max(1),
             authorization_threshold: subnet_size.saturating_sub(max_parallel_reboots),
         }
     }
@@ -88,9 +90,8 @@ pub fn subnet_membership(
     }
 }
 
-/// Check one share: the content must match `(requestor_node, request_height)`,
-/// the signer must be a staying member, and the signature must verify against
-/// the signer's node key at `registry_version`. Returns the signer.
+/// Check a share's content, staying signer, and signature. Returns the
+/// signer.
 pub fn validate_share(
     share: &UpgradePermitAuthorizationShare,
     requestor_node: NodeId,

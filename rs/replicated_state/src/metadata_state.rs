@@ -71,12 +71,8 @@ pub struct UpgradeState {
 }
 
 impl UpgradeState {
-    /// Apply a block's upgrade actions to this state, as of the block
-    /// `height`. Also prunes requests that expired (requested more than
-    /// `REQUEST_TIMEOUT_BLOCKS` below `height`) and permits of nodes that
-    /// left the membership.
-    ///
-    /// `members` is the current subnet membership.
+    /// Apply a block's upgrade actions at `height`, pruning expired
+    /// requests and permits of departed members.
     pub fn apply(
         &mut self,
         actions: &[UpgradePermitAction],
@@ -112,10 +108,32 @@ impl UpgradeState {
         self.authorized.retain(|node| members.contains(node));
     }
 
-    /// Number of reboot slots in use: outstanding requests + authorized nodes
-    /// that haven't returned yet.
-    pub fn slots_in_use(&self) -> usize {
-        self.requested.len() + self.authorized.len()
+    /// Reboot slots held by staying members; leaving members are
+    /// accounted through the capacity reduction instead.
+    pub fn active_slots_in_use(&self, staying: &BTreeSet<NodeId>) -> usize {
+        self.requested
+            .keys()
+            .filter(|node| staying.contains(*node))
+            .count()
+            + self
+                .authorized
+                .iter()
+                .filter(|node| staying.contains(node))
+                .count()
+    }
+
+    /// Active slots after applying the given block actions at `height`.
+    // TODO: move this to payload_builder
+    pub fn active_slots_after(
+        &self,
+        actions: &[UpgradePermitAction],
+        height: Height,
+        staying: &BTreeSet<NodeId>,
+        current_members: &BTreeSet<NodeId>,
+    ) -> usize {
+        let mut next = self.clone();
+        next.apply(actions, height, current_members);
+        next.active_slots_in_use(staying)
     }
 
     /// Max parallel reboots (P): min(3, ceil((N−1)/6)), clamped to f.

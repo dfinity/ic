@@ -19,6 +19,7 @@ use ic_interfaces::p2p::consensus::{MutablePool, PoolMutationsProducer, Unvalida
 use ic_interfaces::upgrade::InvalidUpgradePayloadReason;
 use ic_interfaces::upgrade_permit_auth::UpgradePermitAuthPool;
 use ic_interfaces::validation::ValidationError;
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -157,6 +158,27 @@ impl TestFixture {
 
     fn committed(&self) -> &UpgradeState {
         &self.committed
+    }
+
+    /// Assert the committed state respects the subnet's reboot capacity:
+    /// staying members holding a request or permit never exceed it.
+    fn assert_capacity(&self) {
+        let membership = subnet_membership(
+            &self.membership,
+            self.next_height(),
+            self.registry.get_latest_version(),
+            &no_op_logger(),
+        );
+        let limits = membership.limits();
+        let holders = self
+            .committed
+            .active_slots_in_use(&membership.staying_members);
+        assert!(
+            holders <= limits.max_parallel_reboots,
+            "capacity violated: {} staying permit holders, capacity is {}",
+            holders,
+            limits.max_parallel_reboots
+        );
     }
 
     fn validated_shares(&self, node: usize) -> usize {
@@ -353,8 +375,8 @@ impl TestFixture {
     }
 }
 
-/// Make the pool's next block, carry the given upgrade bytes in its batch
-/// payload, and finalize it. Returns `(height, upgrade payload bytes)`.
+/// Finalize the pool's next block carrying the given upgrade bytes;
+/// returns `(height, upgrade payload bytes)`.
 fn finalize_upgrade_block(pool: &mut TestConsensusPool, upgrade: Vec<u8>) -> (Height, Vec<u8>) {
     let proposal = pool.make_next_block();
     let signer = proposal.signature.signer;
@@ -771,5 +793,160 @@ fn test_gossiped_share_from_non_staying_signer_is_dropped() {
             .map(|share| share.signature.signer)
             .collect();
         assert_eq!(signers, vec![fx.node(1)]);
+    });
+}
+
+/// A leaving node (still in the committee, removed from the registry) counts
+/// towards the reboot capacity whether or not it is rebooting — it could go
+/// down at any minute — but it doesn't consume budget for its own permit and
+/// can be authorized like anyone else. What it cannot do is vote: it counts
+/// as inactive for permits, so a share it signed invalidates the whole
+/// `Authorize` action.
+#[test]
+fn test_leaving_node_may_be_authorized_but_cannot_vote() {
+    with_test_pool_config(|pool_config| {
+        let mut fx = TestFixture::new(4, pool_config);
+        // The committee still has 4 nodes; the registry removes node 3.
+        fx.apply_membership_delta(2, (0..3).map(node_test_id).collect());
+
+        // The leaving node may propose itself for an upgrade: its builder
+        // emits the request and every validator accepts it — even at the
+        // version where node 3 is no longer staying.
+        let actions = fx.build(3, fx.needs_reboot.clone());
+        assert_request(&actions, fx.node(3));
+        fx.validates_all(3, &actions, RegistryVersion::new(2))
+            .expect("a leaving node may request a permit");
+        fx.finalize(actions);
+
+        // The staying members sign for it; the leaving node itself signs
+        // nothing (its vote doesn't count).
+        fx.run_managers();
+        for node in 0..3 {
+            assert_eq!(fx.validated_shares(node), 1, "node {}", node);
+        }
+        assert_eq!(fx.validated_shares(3), 0, "the leaving node signs nothing");
+
+        // With the shares collected, the leaving node is authorized — from
+        // staying signers only.
+        fx.gossip_shares();
+        let actions = fx.build(1, fx.rebooted.clone());
+        assert_authorize(&actions, fx.node(3), 3);
+        fx.validates_all(1, &actions, RegistryVersion::new(2))
+            .expect("the leaving node may be authorized");
+        fx.finalize(actions);
+        assert!(fx.committed().authorized.contains(&fx.node(3)));
+
+        // The leaving node's authorization doesn't consume budget: a
+        // staying node can take the floor slot in parallel.
+        let actions = fx.build(0, fx.needs_reboot.clone());
+        assert_request(&actions, fx.node(0));
+        fx.validates_all(0, &actions, RegistryVersion::new(2))
+            .expect("the floor slot is still free");
+        let h0 = fx.next_height();
+        fx.finalize(actions);
+        fx.run_managers();
+        fx.gossip_shares();
+
+        // A share signed by the leaving node doesn't count: including one
+        // invalidates the whole Authorize action, even with enough other
+        // signers.
+        let authorize = vec![UpgradePermitAction::Authorize(UpgradePermitShares {
+            node: fx.node(0),
+            shares: vec![share(0, 0, h0), share(1, 0, h0), share(3, 0, h0)],
+        })];
+        assert_invalid_upgrade!(
+            fx.validates_all(1, &authorize, RegistryVersion::new(2)),
+            InvalidUpgradePayloadReason::AuthorizeInvalidShare { .. }
+        );
+
+        // Without the leaving node's share, node 0 is authorized.
+        let actions = fx.build(1, fx.rebooted.clone());
+        assert_authorize(&actions, fx.node(0), 3);
+        fx.validates_all(1, &actions, RegistryVersion::new(2))
+            .expect("the staying node may be authorized");
+        fx.finalize(actions);
+        assert!(fx.committed().authorized.contains(&fx.node(0)));
+        assert!(fx.committed().authorized.contains(&fx.node(3)));
+        // The leaving request is gone; both nodes hold permits at once
+        // under a raw budget of one.
+        assert!(fx.committed().requested.is_empty());
+    });
+}
+
+/// With a raw budget of two (N=10), two nodes can normally upgrade in
+/// parallel. One already-upgraded node being decommissioned reserves one
+/// unit of the budget — even though it holds no permit and is not
+/// rebooting — so only one of the two upgrades can proceed.
+#[test]
+fn test_leaving_node_reservation_limits_parallel_upgrades() {
+    // Baseline: without a leaving node, two upgrades fit.
+    with_test_pool_config(|pool_config| {
+        let mut fx = TestFixture::new(10, pool_config);
+
+        for node in 0..2 {
+            let actions = fx.build(node, fx.needs_reboot.clone());
+            assert_request(&actions, fx.node(node));
+            fx.validates_all(node, &actions, RegistryVersion::new(1))
+                .expect("the raw budget is two");
+            fx.finalize(actions);
+        }
+        fx.assert_capacity();
+    });
+
+    // Node 9 has finished upgrading (its versions match) and is being
+    // removed from the subnet: its reservation reduces the capacity to one.
+    with_test_pool_config(|pool_config| {
+        let mut fx = TestFixture::new(10, pool_config);
+        fx.apply_membership_delta(2, (0..9).map(node_test_id).collect());
+
+        // The first upgrade takes the only remaining slot.
+        let actions = fx.build(0, fx.needs_reboot.clone());
+        assert_request(&actions, fx.node(0));
+        fx.validates_all(0, &actions, RegistryVersion::new(2))
+            .expect("one slot remains after the reservation");
+        fx.finalize(actions);
+
+        // Node 1's request doesn't fit — the leaving node's reservation
+        // consumes the other slot even though it is not rebooting — so its
+        // block contributes nothing; the capacity is asserted on the
+        // committed state below.
+        let actions = fx.build(1, fx.needs_reboot.clone());
+        fx.finalize(actions);
+
+        // The one upgrade completes (threshold is N−P = 8 shares; the
+        // leaving node's manager signs nothing).
+        fx.run_managers();
+        fx.gossip_shares();
+        let actions = fx.build(2, fx.rebooted.clone());
+        assert_authorize(&actions, fx.node(0), 8);
+        fx.validates_all(2, &actions, RegistryVersion::new(2))
+            .expect("the single upgrade completes");
+        fx.finalize(actions);
+        assert!(fx.committed().authorized.contains(&fx.node(0)));
+
+        // The leaving node doesn't consume budget: even though node 0
+        // (staying) holds the only slot, node 9 may still request and be
+        // authorized.
+        let actions = fx.build(9, fx.needs_reboot.clone());
+        assert_request(&actions, fx.node(9));
+        fx.validates_all(9, &actions, RegistryVersion::new(2))
+            .expect("the leaving node doesn't consume budget");
+        fx.finalize(actions);
+        fx.run_managers();
+        fx.gossip_shares();
+        let actions = fx.build(2, fx.rebooted.clone());
+        assert_authorize(&actions, fx.node(9), 8);
+        fx.validates_all(2, &actions, RegistryVersion::new(2))
+            .expect("the leaving node may be authorized");
+        fx.finalize(actions);
+
+        // End state: exactly one staying member (node 0) holds a permit —
+        // node 1's request never made it in — plus the leaving node, which
+        // doesn't count towards the capacity.
+        fx.assert_capacity();
+        assert!(fx.committed().authorized.contains(&fx.node(0)));
+        assert!(fx.committed().authorized.contains(&fx.node(9)));
+        assert!(!fx.committed().authorized.contains(&fx.node(1)));
+        assert!(fx.committed().requested.is_empty());
     });
 }
