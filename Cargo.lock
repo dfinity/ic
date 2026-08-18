@@ -1909,6 +1909,7 @@ name = "canister_http"
 version = "0.9.0"
 dependencies = [
  "canister-test",
+ "ic-protobuf",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -1916,50 +1917,6 @@ dependencies = [
  "ic-types-cycles",
  "slog",
  "tokio",
-]
-
-[[package]]
-name = "canister_http_correctness"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "assert_matches",
- "candid",
- "canister-test",
- "canister_http",
- "dfn_candid",
- "ic-agent",
- "ic-base-types",
- "ic-config",
- "ic-cycles-account-manager",
- "ic-management-canister-types-private",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-test-utilities",
- "ic-test-utilities-types",
- "ic-types",
- "ic-types-cycles",
- "proxy_canister",
- "rand 0.8.6",
- "serde",
- "serde_json",
- "slog",
- "tokio",
-]
-
-[[package]]
-name = "canister_http_flexible"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "canister-test",
- "canister_http",
- "dfn_candid",
- "ic-management-canister-types-private",
- "ic-system-test-driver",
- "proxy_canister",
- "slog",
 ]
 
 [[package]]
@@ -18014,8 +17971,6 @@ dependencies = [
  "candid",
  "canister-test",
  "canister_http",
- "canister_http_correctness",
- "canister_http_flexible",
  "cloner-canister-types",
  "dfn_candid",
  "futures",
