@@ -119,7 +119,8 @@ fn should_not_fund_a_sweeper_above_the_low_water_mark() {
     );
 }
 
-/// A funding transaction that fails on chain is never reimbursed; the burn becomes prepaid gas.
+/// A funding transaction that fails on chain is never reimbursed. The ETH never leaves the main
+/// address and the ckETH stays burned, so the burn ends up as extra backing.
 ///
 /// Has to be arranged, because it is otherwise unreachable: the sweeper is a code-less EOA precisely
 /// so a bare transfer cannot fail. Placing code there leaves the 21'000 base gas with nothing to run
@@ -191,7 +192,7 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
         .expect("the dashboard must report the unspent burn");
     assert_ne!(
         surplus, "0 Wei",
-        "the unreimbursed burn must be tracked as prepaid gas, got {surplus}"
+        "the unreimbursed burn must still show as burned but unspent, got {surplus}"
     );
 }
 
