@@ -266,7 +266,9 @@ impl KeyDerParser {
             let high_tag_number_form = tag_number == 0x1f;
             index += 1;
             if high_tag_number_form {
-                while index < der.len() && der[index] & 0x80 != 0 {
+                while let Some(octet) = der.get(index)
+                    && octet & 0x80 != 0
+                {
                     index += 1;
                 }
                 index += 1;
