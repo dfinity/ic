@@ -21,14 +21,16 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_replicated_state::{
+    CallOrigin, CanisterState, NetworkTopology, canister_state::WASM_PAGE_SIZE_IN_BYTES,
+};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    MemoryAllocation, NumBytes, NumInstructions, Time,
+    MAX_WASM64_MEMORY_IN_BYTES, MemoryAllocation, NumBytes, NumInstructions, Time,
     messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
@@ -52,6 +54,12 @@ pub enum Wasm64 {
     Enabled,
     Disabled,
 }
+
+/// The number of Wasm pages of the heap declared by the Wasm64 benchmark modules.
+///
+/// This is the largest heap a Wasm64 canister module may declare: a module
+/// declaring more is rejected when its execution state is created.
+pub const WASM64_HEAP_NUM_PAGES: u64 = MAX_WASM64_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64;
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -285,16 +293,9 @@ where
     let own_subnet_type = SubnetType::Application;
     let subnet_configs = SubnetConfig::new(own_subnet_type);
 
-    let embedders_config = EmbeddersConfig {
-        // Set up larger heap, of 8GB for the Wasm64 feature.
-        max_wasm64_memory_size: NumBytes::from(8 * 1024 * 1024 * 1024),
-        ..EmbeddersConfig::default()
-    };
-
-    let config = Config {
-        embedders_config,
-        ..Default::default()
-    };
+    // The default embedders config already allows the largest Wasm64 heap
+    // (`WASM64_HEAP_NUM_PAGES` pages) declared by the Wasm64 benchmark modules.
+    let config = Config::default();
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
     let metrics_registry = MetricsRegistry::new();
