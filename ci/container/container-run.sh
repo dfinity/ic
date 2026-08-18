@@ -205,12 +205,17 @@ RUNTIME_RUN_ARGS=(
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
 
-# When the checkout is a linked git worktree, its `.git` is a *file* holding an
-# absolute path to an admin directory under the main checkout's `.git`, i.e. a
-# path outside the checkout. Mounting only the checkout leaves that pointer
+# Where `.git` is a *file* rather than a directory it holds a path to the real
+# git directory -- typically a linked git worktree, whose `.git` names an admin
+# directory under the main checkout's `.git`, but a `--separate-git-dir` clone
+# or a submodule looks the same. Mounting only the checkout leaves that pointer
 # dangling, so every `git` call inside the container fails -- including the
 # `$(git rev-parse --show-toplevel)` that several ci scripts rely on. Mount the
-# main checkout's `.git` at the very same absolute path so the pointer resolves.
+# git directory at the very same absolute path so the pointer resolves.
+#
+# Note that for a worktree this hands the container read-write access to the
+# main checkout's entire git directory, where for a plain clone only the
+# checkout itself is exposed.
 if [ -f "${REPO_ROOT}/.git" ]; then
     GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
     GIT_COMMON_DIR="$(cd "$GIT_COMMON_DIR" && pwd)" # may be relative
@@ -237,7 +242,7 @@ if [ -f "${REPO_ROOT}/.git" ]; then
                     ;;
             esac
 
-            eprintln "Checkout is a git worktree, also mounting '$GIT_COMMON_DIR'"
+            eprintln "Git directory lies outside the checkout, also mounting '$GIT_COMMON_DIR'"
             RUNTIME_RUN_ARGS+=(
                 --mount type=bind,source="${GIT_COMMON_DIR}",target="${GIT_COMMON_DIR}"
 
