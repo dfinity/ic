@@ -311,6 +311,7 @@ impl RoundLimits {
 pub(crate) struct ConsumedCyclesForInstructions<'a> {
     consumed_cycles: CompoundCycles<Instructions>,
     instructions_used: NumInstructions,
+    install_code_debit: NumInstructions,
     cycles_account_manager: &'a CyclesAccountManager,
     log: &'a ReplicaLogger,
 }
@@ -324,6 +325,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         Self {
             consumed_cycles: CompoundCycles::new(Cycles::zero(), cost_schedule),
             instructions_used: NumInstructions::new(0),
+            install_code_debit: NumInstructions::new(0),
             cycles_account_manager,
             log,
         }
@@ -338,6 +340,20 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         self.instructions_used += instructions;
     }
 
+    /// Accumulates instructions that count towards the `install_code` rate
+    /// limit of the canister, i.e., instructions used by management operations
+    /// that install code on the canister (and thus compile a Wasm module).
+    ///
+    /// The debit is only applied if the management operation fails: on success
+    /// the operation itself is responsible for updating the canister's
+    /// `install_code_debit`.
+    ///
+    /// The caller is responsible for only accumulating instructions if
+    /// rate limiting of instructions is enabled.
+    pub(crate) fn add_install_code_debit(&mut self, instructions: NumInstructions) {
+        self.install_code_debit += instructions;
+    }
+
     pub(crate) fn apply(
         self,
         canister: &mut CanisterState,
@@ -345,6 +361,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         failed_charge: &IntCounter,
     ) {
+        canister.scheduler_state.install_code_debit += self.install_code_debit;
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
         let res = self.cycles_account_manager.consume_cycles_for_final_instructions(
