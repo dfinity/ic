@@ -25,10 +25,11 @@ use assert_matches::assert_matches;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
+use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
-use ic_cketh_test_utils::live_scan::{CkErc20LiveScanSetup, Holding, SupportedToken};
+use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup};
 use ic_ethereum_types::Address;
 use std::time::Duration;
 
@@ -53,27 +54,27 @@ fn should_read_erc20_balances_across_tokens_and_holders() {
     let calls = vec![
         BalanceOfCall {
             token: token_a,
-            holder: h1,
+            holder: DepositAddress::new(h1),
         },
         BalanceOfCall {
             token: token_a,
-            holder: h2,
+            holder: DepositAddress::new(h2),
         },
         BalanceOfCall {
             token: token_a,
-            holder: h3,
+            holder: DepositAddress::new(h3),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h1,
+            holder: DepositAddress::new(h1),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h2,
+            holder: DepositAddress::new(h2),
         },
         BalanceOfCall {
             token: token_b,
-            holder: h3,
+            holder: DepositAddress::new(h3),
         },
     ];
 
@@ -96,7 +97,7 @@ fn should_read_erc20_balances_across_tokens_and_holders() {
 
     // The batcher must agree with anvil's own view of every balance.
     for call in &calls {
-        let expected = anvil.erc20_balance(&call.token, &call.holder);
+        let expected = anvil.erc20_balance(&call.token, call.holder.as_address());
         let single = anvil
             .eth_call_create(&dev, &encode_balance_batch(std::slice::from_ref(call)))
             .expect("single-call batch reverted");
@@ -122,7 +123,7 @@ fn should_read_many_balances_in_a_single_call() {
         .iter()
         .map(|holder| BalanceOfCall {
             token,
-            holder: *holder,
+            holder: DepositAddress::new(*holder),
         })
         .collect();
 
@@ -142,8 +143,8 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
     let anvil = Anvil::start();
     let dev = address_from_hex(DEV_ACCOUNT);
     let token = deploy_mock_erc20(&anvil, &dev);
-    let holder = Address::new([0x11; 20]);
-    anvil.fund(&token, &dev, &holder, 500);
+    let holder = DepositAddress::new(Address::new([0x11; 20]));
+    anvil.fund(&token, &dev, holder.as_address(), 500);
 
     // A "token" with no code: STATICCALL succeeds with empty return data, which
     // is not the 32 bytes the batcher requires, so it reverts the whole call
@@ -196,29 +197,21 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     const USDC_ABOVE_MINIMUM: u128 = 15_000_000;
     const USDT_BELOW_MINIMUM: u128 = 1_000_000;
 
-    let setup = CkErc20LiveScanSetup::new_live();
+    let setup = LiveBalanceScanSetup::new_live();
+    // `supported_erc20_tokens()` registers ckUSDC then ckUSDT, in that order.
+    let [usdc, usdt] = setup.supported_erc20_tokens() else {
+        panic!("expected exactly 2 supported tokens")
+    };
     let deposits = [
-        (
-            setup.depositor(1),
-            SupportedToken::CkUsdt,
-            USDT_ABOVE_MINIMUM,
-        ),
-        (
-            setup.depositor(2),
-            SupportedToken::CkUsdc,
-            USDC_ABOVE_MINIMUM,
-        ),
-        (
-            setup.depositor(3),
-            SupportedToken::CkUsdt,
-            USDT_BELOW_MINIMUM,
-        ),
+        (setup.depositor(1), usdt, USDT_ABOVE_MINIMUM),
+        (setup.depositor(2), usdc, USDC_ABOVE_MINIMUM),
+        (setup.depositor(3), usdt, USDT_BELOW_MINIMUM),
     ];
 
-    let holdings: Vec<Holding> = deposits
+    let holdings: Vec<Holding<'_>> = deposits
         .iter()
         .map(|&(depositor, token, amount)| Holding {
-            deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT),
+            deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT, token),
             token,
             amount,
         })
@@ -227,23 +220,21 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
 
     let deadline = Duration::from_secs(180);
     assert_matches!(
-        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, deadline).status,
+        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, usdt, deadline).status,
         DepositStatus::AwaitingSweep(detected)
-            if detected.len() == 1
-                && detected[0].token == SupportedToken::CkUsdt.contract().to_string()
-                && detected[0].scanned_balance == USDT_ABOVE_MINIMUM
-                && detected[0].detected_at_block > 0_u8
+            if detected.erc20_contract_address == usdt.contract.address
+                && detected.scanned_balance == USDT_ABOVE_MINIMUM
+                && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, deadline).status,
+        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, usdc, deadline).status,
         DepositStatus::AwaitingSweep(detected)
-            if detected.len() == 1
-                && detected[0].token == SupportedToken::CkUsdc.contract().to_string()
-                && detected[0].scanned_balance == USDC_ABOVE_MINIMUM
-                && detected[0].detected_at_block > 0_u8
+            if detected.erc20_contract_address == usdc.contract.address
+                && detected.scanned_balance == USDC_ABOVE_MINIMUM
+                && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, deadline).status,
+        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, usdt, deadline).status,
         DepositStatus::Scanning { scan_count, last_scanned_block, .. }
             if scan_count >= 1 && last_scanned_block.is_some()
     );

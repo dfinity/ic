@@ -1166,6 +1166,11 @@ pub struct CanisterHttpPaymentReceipt {
     /// `per_replica_allowance - spent`. On free subnets it may exceed the (zero)
     /// allowance, since it is only used for cost accounting, but it may never
     /// exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+    ///
+    /// Encoded as a pair of `u64`s: this struct is part of the CBOR signed bytes
+    /// of [`CanisterHttpResponseReceipt`], and CBOR cannot represent a bare
+    /// `u128` above `u64::MAX`.
+    #[serde(with = "ic_types_cycles::serde_as_u64_pair")]
     pub spent: Cycles,
 }
 
@@ -1394,7 +1399,11 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 
 #[cfg(test)]
 mod tests {
-    use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH};
+    use crate::{
+        crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
+        messages::NO_DEADLINE,
+        time::UNIX_EPOCH,
+    };
 
     use super::*;
 
@@ -1408,6 +1417,63 @@ mod tests {
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
     use strum::IntoEnumIterator;
+
+    /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
+    /// any `spent` amount in the whole `Cycles` (`u128`) range.
+    ///
+    /// CBOR cannot represent a bare integer above `u64::MAX`, so a receipt holding
+    /// a transparently serialized `Cycles` used to panic while being signed or
+    /// verified.
+    #[test]
+    fn signed_bytes_of_exhaustive_receipts_round_trip() {
+        use crate::exhaustive::ExhaustiveSet;
+        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
+        let mut rng = reproducible_rng();
+        let receipts = CanisterHttpResponseReceipt::exhaustive_set(&mut rng);
+        assert!(receipts.iter().any(|r| r.spent() > Cycles::from(u64::MAX)));
+
+        for receipt in receipts {
+            let mut bytes = Vec::new();
+            receipt.write_signed_bytes_without_domain_separator(&mut bytes);
+            assert!(!bytes.is_empty());
+
+            let decoded: CanisterHttpResponseReceipt = serde_cbor::from_slice(&bytes)
+                .unwrap_or_else(|err| panic!("failed to decode {receipt:?}: {err}"));
+            assert_eq!(receipt, decoded);
+        }
+    }
+
+    /// The signed bytes must distinguish receipts that differ only in `spent`,
+    /// including beyond `u64::MAX`.
+    #[test]
+    fn signed_bytes_are_injective_in_spent() {
+        let signed_bytes = |spent: Cycles| {
+            let mut bytes = Vec::new();
+            CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: CallbackId::new(1),
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
+                    content_size: 0,
+                    is_reject: false,
+                    replica_version: ReplicaVersion::default(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt { spent },
+            }
+            .write_signed_bytes_without_domain_separator(&mut bytes);
+            bytes
+        };
+
+        let amounts = [
+            Cycles::zero(),
+            Cycles::new(1),
+            Cycles::from(u64::MAX),
+            Cycles::from(u64::MAX) + Cycles::new(1),
+            Cycles::new(u128::MAX),
+        ];
+        let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
+        assert_eq!(encodings.len(), amounts.len());
+    }
 
     #[test]
     fn test_request_arg_variable_size() {

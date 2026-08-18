@@ -14,7 +14,7 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CountBytes, SubnetId};
+use ic_types::{CanisterId, CountBytes, SubnetId};
 use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
@@ -42,6 +42,9 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Misrouted messages currently in streams, by remote subnet.
     pub stream_misrouted_messages: IntGaugeVec,
+    /// Canister output queues skipped because their destination subnet was
+    /// cooling down.
+    pub cooling_down_skipped_queues: IntCounter,
     /// Critical error for payloads above the maximum supported size.
     pub critical_error_payload_too_large: IntCounter,
     /// Critical error for responses dropped due to destination not found.
@@ -63,6 +66,7 @@ const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_STREAM_MISROUTED_MESSAGES: &str = "mr_stream_misrouted_messages";
+const METRIC_COOLING_DOWN_SKIPPED_QUEUES: &str = "mr_cooling_down_skipped_queues";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -126,6 +130,12 @@ impl StreamBuilderMetrics {
             "Count of misrouted messages in streams, by remote subnet. Only populated for subnets currently involved in a canister migration.",
             &[LABEL_REMOTE],
         );
+        let cooling_down_skipped_queues = metrics_registry.int_counter(
+            METRIC_COOLING_DOWN_SKIPPED_QUEUES,
+            "Canister output queues skipped because their destination subnet was cooling down. \
+            Counted once per queue per round, so the same queue is counted repeatedly for as \
+            long as the destination subnet keeps cooling down.",
+        );
         let critical_error_payload_too_large =
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
         let critical_error_response_destination_not_found =
@@ -167,6 +177,7 @@ impl StreamBuilderMetrics {
             routed_messages,
             routed_payload_sizes,
             stream_misrouted_messages,
+            cooling_down_skipped_queues,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
             critical_error_induct_response_failed,
@@ -442,6 +453,10 @@ impl StreamBuilderImpl {
         let refund_limit = self.max_stream_messages / 2;
         self.route_refunds(&mut state, refund_limit, &network_topology, &mut streams);
 
+        // No canister can have the subnet's own principal as its canister ID, so this
+        // identifies the messages taken from the subnet's own output queues.
+        let own_subnet_as_canister_id = CanisterId::from(self.subnet_id);
+
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
         let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
@@ -458,11 +473,24 @@ impl StreamBuilderImpl {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
 
+            let is_from_subnet_queues = msg.sender() == own_subnet_as_canister_id;
+
             match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
-                    let dst_stream_entry = streams.entry(dst_subnet_id);
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
+
+                    // A cooling down destination subnet must not be sent any messages
+                    // from canister output queues. Retain the message (along with
+                    // everything behind it in the same queue) until the destination stops
+                    // cooling down, rather than rejecting or dropping it.
+                    if !is_from_subnet_queues && network_topology.is_cooling_down(&dst_subnet_id) {
+                        self.metrics.cooling_down_skipped_queues.inc();
+                        output_iter.exclude_queue();
+                        continue;
+                    }
+
+                    let dst_stream_entry = streams.entry(dst_subnet_id);
                     if !is_loopback_stream
                         && is_at_limit(
                             &dst_stream_entry,

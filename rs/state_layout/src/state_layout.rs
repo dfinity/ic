@@ -532,6 +532,19 @@ impl TipHandler {
         Ok(())
     }
 
+    /// Deletes the directory of the given canister from tip.
+    ///
+    /// This is a no-op if the canister has no directory in tip, e.g. because it was
+    /// created and deleted without any of its `PageMap`s having been flushed.
+    pub fn delete_canister_directory(
+        &mut self,
+        height: Height,
+        canister_id: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        tip.delete_canister_dir(&canister_id)
+    }
+
     /// Moves the entire canister directory from one canister id to another.
     pub fn move_canister_directory(
         &mut self,
@@ -1800,13 +1813,16 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         &self,
         canister_id: &CanisterId,
     ) -> Result<CanisterLayout<Permissions>, LayoutError> {
-        CanisterLayout::new(
-            self.0
-                .root
-                .join(CANISTER_STATES_DIR)
-                .join(hex::encode(canister_id.get_ref().as_slice())),
-            self,
-        )
+        CanisterLayout::new(self.canister_path(canister_id), self)
+    }
+
+    /// The path of the given canister's directory. As opposed to `canister()`, this
+    /// does not create the directory.
+    fn canister_path(&self, canister_id: &CanisterId) -> PathBuf {
+        self.0
+            .root
+            .join(CANISTER_STATES_DIR)
+            .join(hex::encode(canister_id.get_ref().as_slice()))
     }
 
     /// Lists all snapshots in the checkpoint.
@@ -2030,6 +2046,23 @@ where
             message: "Failed to sync checkpoint directory for the creation of the state sync checkpoint marker".to_string(),
             io_err: err,
         })
+    }
+
+    /// Removes the entire directory of the given canister.
+    ///
+    /// This is a no-op if the canister has no directory, e.g. because it was created
+    /// and deleted without any of its `PageMap`s having been flushed.
+    pub fn delete_canister_dir(&self, canister_id: &CanisterId) -> Result<(), LayoutError> {
+        let canister_path = self.canister_path(canister_id);
+        match std::fs::remove_dir_all(&canister_path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(LayoutError::IoError {
+                path: canister_path,
+                message: "Cannot remove canister.".to_string(),
+                io_err: err,
+            }),
+        }
     }
 }
 

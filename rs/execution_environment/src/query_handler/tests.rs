@@ -4,11 +4,12 @@ use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterIdRange, CanisterIdRecord, CanisterMetricsArgs, CanisterMetricsResult,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, ListCanistersResponse, LogVisibilityV2,
-    Payload,
+    CanisterIdRange, CanisterIdRecord, CanisterInfoRequest, CanisterInfoResponse,
+    CanisterMetricsArgs, CanisterMetricsResult, CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2, CanisterStatusType, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, ListCanistersResponse, LogVisibilityV2, Payload,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_state::CanisterStateBuilder;
@@ -425,6 +426,112 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
             generate_call_to(&canisters, num_calls as usize).build(),
         );
         match &test {
+            Ok(_) => panic!("Query with {num_calls} calls should have failed!"),
+            Err(err) => assert_eq!(
+                err.code(),
+                ErrorCode::QueryCallGraphTotalInstructionLimitExceeded
+            ),
+        }
+    }
+}
+
+#[test]
+fn query_instructions_limit_from_resource_limits_can_raise_above_default() {
+    // The static replica default is tiny; the registry raises the per-query limit well above it.
+    // A query that would exceed the tiny default must succeed under the (larger) registry limit,
+    // proving the registry value overrides the default upward (not just via a minimum).
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit_per_query_message(4)
+        .with_resource_limits(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::from(5_000_000_000)),
+            ..Default::default()
+        })
+        .build();
+
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let result = test.query(
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(1),
+                ingress_expiry: 0,
+                nonce: None,
+                sender_info: None,
+            },
+            receiver: canister,
+            method_name: "query".to_string(),
+            method_payload: wasm().stable_grow(10).reply_data(b"ok".as_ref()).build(),
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+        /*certificate_delegation_metadata=*/ None,
+    );
+    assert_eq!(result, Ok(WasmResult::Reply(b"ok".to_vec())));
+}
+
+#[test]
+fn composite_query_callgraph_max_instructions_from_resource_limits_is_enforced() {
+    const NUM_CANISTERS: u64 = 6;
+    const NUM_SUCCESSFUL_QUERIES: u64 = 5; // Number of calls expected to succeed
+
+    // The single `maximum_query_instructions` registry field also bounds the composite-query call
+    // graph total (rather than the static hypervisor config); the query handler must honor it.
+    let mut test = ExecutionTestBuilder::new()
+        .with_resource_limits(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::from(
+                NUM_SUCCESSFUL_QUERIES * INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
+            )),
+            ..Default::default()
+        })
+        .build();
+
+    let mut canisters = vec![];
+    for _ in 0..NUM_CANISTERS {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    // Generate call tree of depth 1: canister 0 calls into each of canisters 1..num_calls
+    // sequentially, staying under the depth limit but hitting the total-instruction limit.
+    fn generate_call_to(
+        canisters: &[ic_types::CanisterId],
+        canister_idx: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        assert_lt!(canister_idx, canisters.len());
+
+        let reply = if canister_idx <= 1 {
+            wasm().stable_size().reply_int()
+        } else {
+            generate_call_to(canisters, canister_idx - 1)
+        };
+
+        wasm().stable_grow(10).composite_query(
+            canisters[canister_idx],
+            call_args()
+                .other_side(wasm().reply_data(b"ignore".as_ref()))
+                .on_reply(reply),
+        )
+    }
+
+    // Below the configured limit: should succeed.
+    for num_calls in 1..NUM_SUCCESSFUL_QUERIES {
+        let result = test.non_replicated_query(
+            canisters[0],
+            "composite_query",
+            generate_call_to(&canisters, num_calls as usize).build(),
+        );
+        assert!(
+            result.is_ok(),
+            "Query with {num_calls} calls failed, when it should have succeeded: {result:?}"
+        );
+    }
+    // At/above the configured limit: should fail with the total-instruction-limit error.
+    for num_calls in NUM_SUCCESSFUL_QUERIES..NUM_CANISTERS {
+        let result = test.non_replicated_query(
+            canisters[0],
+            "composite_query",
+            generate_call_to(&canisters, num_calls as usize).build(),
+        );
+        match &result {
             Ok(_) => panic!("Query with {num_calls} calls should have failed!"),
             Err(err) => assert_eq!(
                 err.code(),
@@ -1293,6 +1400,46 @@ fn query_call_exceeds_instructions_limit() {
     );
 }
 
+#[test]
+fn query_instructions_limit_from_resource_limits_is_enforced() {
+    let instructions_limit = 4;
+    // The per-query instruction limit is configured via the subnet record's `ResourceLimits`
+    // (rather than the static scheduler config); the query handler must honor it.
+    let mut test = ExecutionTestBuilder::new()
+        .with_resource_limits(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::from(instructions_limit)),
+            ..Default::default()
+        })
+        .build();
+
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let output = test
+        .query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                    sender_info: None,
+                },
+                receiver: canister,
+                method_name: "query".to_string(),
+                method_payload: wasm().stable_grow(10).build(),
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+            /*certificate_delegation_metadata=*/ None,
+        )
+        .unwrap_err();
+    output.assert_contains(
+            ErrorCode::CanisterInstructionLimitExceeded,
+            &format!(
+                "Error from Canister {canister}: Canister exceeded the limit of {instructions_limit} instructions for single message execution."
+            )
+    );
+}
+
 // Subnet with a Normal cost schedule has no subnet admins concept; any caller
 // must be rejected with CanisterRejectedMessage.
 #[test]
@@ -1412,6 +1559,42 @@ fn composite_query_call_to_management_canister_canister_status() {
             .balance()
             .get()
     );
+}
+
+#[test]
+fn composite_query_call_to_management_canister_canister_info() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    // Canister B is controlled by the test user, not by canister A.
+    let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let payload = CanisterInfoRequest::new(canister_b, Some(10)).encode();
+    let reply = test
+        .non_replicated_query(
+            canister_a,
+            "composite_query",
+            ic00_composite_query("canister_info", payload.clone()),
+        )
+        .unwrap();
+
+    // `canister_info` is not subject to any access control, so canister A can
+    // retrieve the info of canister B and gets the same response as a query
+    // sent by the user directly to the management canister.
+    let expected = test
+        .non_replicated_query(CanisterId::ic_00(), "canister_info", payload)
+        .unwrap();
+    let info = Decode!(&reply.bytes(), CanisterInfoResponse).unwrap();
+    assert_eq!(
+        info,
+        Decode!(&expected.bytes(), CanisterInfoResponse).unwrap()
+    );
+    assert_eq!(info.controllers(), vec![test.user_id().get()]);
+    assert_eq!(
+        info.changes().len() as u64,
+        info.total_num_changes(),
+        "the whole canister history is expected to fit into the response"
+    );
+    assert_gt!(info.total_num_changes(), 0);
 }
 
 #[test]

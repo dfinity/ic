@@ -6,14 +6,15 @@ use ic_protobuf::{
     types::v1::{CanisterHttpResponseMessage, canister_http_response_message::MessageType},
 };
 use ic_types::{
-    NumBytes,
+    NodeId, NumBytes, PrincipalId,
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponses, iterator_to_bytes, slice_to_messages,
     },
+    canister_http::CanisterHttpResponseShare,
     messages::CallbackId,
 };
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, ProxyDecodeError> {
     let messages: Vec<CanisterHttpResponseMessage> =
@@ -36,6 +37,9 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
             Some(MessageType::OutOfCycles(out_of_cycles)) => payload
                 .out_of_cycles
                 .push(CanisterHttpOutOfCycles::try_from(out_of_cycles)?),
+            Some(MessageType::AsyncReceipt(share)) => payload
+                .async_receipts
+                .push(CanisterHttpResponseShare::try_from(share)?),
             None => return Err(ProxyDecodeError::MissingField("message_type")),
         }
     }
@@ -51,6 +55,7 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
         responses,
         flexible_responses,
         flexible_errors,
+        async_receipts,
     } = payload;
 
     let message_iterator =
@@ -101,33 +106,75 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
                             pb::CanisterHttpOutOfCycles::from(out_of_cycles),
                         )),
                     }),
+            )
+            .chain(
+                async_receipts
+                    .into_iter()
+                    .map(|share| CanisterHttpResponseMessage {
+                        message_type: Some(MessageType::AsyncReceipt(pb::CanisterHttpShare::from(
+                            share,
+                        ))),
+                    }),
             );
 
     iterator_to_bytes(message_iterator, max_size)
 }
 
-pub(crate) fn parse_past_payload_ids(
+/// Relevant data of payloads between the certified height and the block being built.
+#[derive(Default)]
+pub struct PastPayloads {
+    /// The callback ids that have already been responded to.
+    pub delivered_ids: HashSet<CallbackId>,
+    /// Per callback id, the replicas whose spend has already been reported
+    /// asynchronously, i.e. that must not be refunded again.
+    pub refunded_nodes: BTreeMap<CallbackId, HashSet<NodeId>>,
+}
+
+/// Collects from the `past_payloads` everything a new payload must not repeat:
+/// the responses already delivered and the asynchronous receipts already
+/// reported.
+pub(crate) fn parse_past_payloads(
     past_payloads: &[PastPayload],
     log: &ReplicaLogger,
-) -> HashSet<CallbackId> {
-    past_payloads
-        .iter()
-        .flat_map(|payload| {
-            slice_to_messages::<CanisterHttpResponseMessage>(payload.payload).unwrap_or_else(
-                |err| {
-                    error!(
-                        log,
-                        "Failed to parse CanisterHttp past payload for height {}. Error: {}",
-                        payload.height,
-                        err
-                    );
-                    vec![]
-                },
-            )
-        })
-        .filter_map(get_id_from_message)
-        .map(CallbackId::new)
-        .collect()
+) -> PastPayloads {
+    let mut parsed = PastPayloads::default();
+    for payload in past_payloads {
+        let messages = slice_to_messages::<CanisterHttpResponseMessage>(payload.payload)
+            .unwrap_or_else(|err| {
+                error!(
+                    log,
+                    "Failed to parse CanisterHttp past payload for height {}. Error: {}",
+                    payload.height,
+                    err
+                );
+                vec![]
+            });
+        for message in messages {
+            if let Some(MessageType::AsyncReceipt(share)) = &message.message_type {
+                if let Some((callback_id, signer)) = callback_and_signer_of_share(share) {
+                    parsed
+                        .refunded_nodes
+                        .entry(callback_id)
+                        .or_default()
+                        .insert(signer);
+                }
+                continue;
+            }
+            if let Some(id) = get_id_from_message(message) {
+                parsed.delivered_ids.insert(CallbackId::new(id));
+            }
+        }
+    }
+    parsed
+}
+
+/// Extracts the callback and signer IDs of a [`pb::CanisterHttpShare`], or
+/// `None` if either is missing or malformed. Such a share would have failed
+/// payload validation, so it cannot appear in a past payload.
+fn callback_and_signer_of_share(share: &pb::CanisterHttpShare) -> Option<(CallbackId, NodeId)> {
+    let callback_id = CallbackId::new(share.metadata.as_ref()?.id);
+    let signer = PrincipalId::try_from(share.signature.as_ref()?.signer.as_slice()).ok()?;
+    Some((callback_id, NodeId::from(signer)))
 }
 
 /// Extracts the CallbackId (as u64) from a [`CanisterHttpResponseMessage`]
@@ -144,6 +191,8 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
         Some(MessageType::FlexibleError(flex_error)) => Some(flex_error.callback_id),
         Some(MessageType::OutOfCycles(out_of_cycles)) => Some(out_of_cycles.callback_id),
         Some(MessageType::Timeout(id)) => Some(id),
+        // Handled by `parse_past_payloads`, which does not deliver a response for it.
+        Some(MessageType::AsyncReceipt(_)) => None,
         None => None,
     }
 }
