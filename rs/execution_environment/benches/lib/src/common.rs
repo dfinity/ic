@@ -55,11 +55,12 @@ pub enum Wasm64 {
     Disabled,
 }
 
-/// The number of Wasm pages of the heap declared by the Wasm64 benchmark modules.
+/// The largest heap a Wasm64 canister module may declare, in Wasm pages: a
+/// module declaring more is rejected when its execution state is created.
 ///
-/// This is the largest heap a Wasm64 canister module may declare: a module
-/// declaring more is rejected when its execution state is created.
-pub const WASM64_HEAP_NUM_PAGES: u64 = MAX_WASM64_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64;
+/// This is the heap declared by the Wasm64 benchmark modules.
+pub const MAX_WASM64_HEAP_NUM_PAGES: u64 =
+    MAX_WASM64_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64;
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -294,7 +295,7 @@ where
     let subnet_configs = SubnetConfig::new(own_subnet_type);
 
     // The default embedders config already allows the largest Wasm64 heap
-    // (`WASM64_HEAP_NUM_PAGES` pages) declared by the Wasm64 benchmark modules.
+    // (`MAX_WASM64_HEAP_NUM_PAGES` pages) declared by the Wasm64 benchmark modules.
     let config = Config::default();
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
