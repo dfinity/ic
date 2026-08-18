@@ -59,8 +59,8 @@ use ic_types::messages::{
 };
 use ic_types::{
     CanisterId, CanisterTimer, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
-    MIN_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes, NumInstructions, PrincipalId, SnapshotId, Time,
+    MAX_STABLE_MEMORY_IN_BYTES, MIN_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes, NumInstructions,
+    PrincipalId, SnapshotId, Time,
 };
 use ic_types_cycles::{
     CanisterCreation, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
@@ -2446,23 +2446,9 @@ impl CanisterManager {
                         });
             }
 
-            // The snapshot's Wasm and stable memory must fit within the limits
-            // for the loaded module's execution mode.
-            let wasm_memory_limit = match new_execution_state.wasm_execution_mode {
-                WasmExecutionMode::Wasm32 => MAX_WASM_MEMORY_IN_BYTES,
-                WasmExecutionMode::Wasm64 => MAX_WASM64_MEMORY_IN_BYTES,
-            };
-            let snapshot_wasm_memory_bytes =
-                execution_snapshot.wasm_memory.size.get() as u64 * WASM_PAGE_SIZE_IN_BYTES as u64;
-            if snapshot_wasm_memory_bytes > wasm_memory_limit {
-                return Err(CanisterManagerError::CanisterSnapshotInconsistent {
-                    message: format!(
-                        "Snapshot Wasm memory ({snapshot_wasm_memory_bytes} bytes) exceeds the \
-                         limit allowed for the snapshot module's execution mode \
-                         ({wasm_memory_limit} bytes)."
-                    ),
-                });
-            }
+            // The snapshot's Wasm memory is validated against the loaded module
+            // by `create_execution_state` above; the snapshot's stable memory
+            // must fit within the limit allowed.
             let snapshot_stable_memory_bytes =
                 execution_snapshot.stable_memory.size.get() as u64 * WASM_PAGE_SIZE_IN_BYTES as u64;
             if snapshot_stable_memory_bytes > MAX_STABLE_MEMORY_IN_BYTES {
