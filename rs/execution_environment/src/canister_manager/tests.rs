@@ -56,6 +56,7 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
     canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
+        UnflushedCheckpointOp,
         subnet_call_context_manager::InstallCodeCallId,
         testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
@@ -2042,6 +2043,27 @@ fn canister_status_of_deleted_canister() {
     assert!(
         err.description()
             .contains(&format!("Canister {canister_id} not found"))
+    );
+}
+
+#[test]
+fn delete_canister_records_unflushed_checkpoint_op() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+
+    // Creating and stopping a canister does not require any checkpoint ops.
+    assert!(test.state().metadata.unflushed_checkpoint_ops.is_empty());
+
+    test.delete_canister(canister_id).unwrap();
+
+    // Deleting the canister requires deleting its directory from the tip.
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![UnflushedCheckpointOp::DeleteCanister(canister_id)]
     );
 }
 

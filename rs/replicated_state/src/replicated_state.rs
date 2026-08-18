@@ -592,10 +592,18 @@ impl ReplicatedState {
     }
 
     /// Permanently removes the canister and its scheduling priority from the subnet
-    /// schedule.
+    /// schedule; and records the removal as an unflushed checkpoint operation, so that
+    /// the canister's directory is also deleted from the tip.
+    ///
+    /// Use `take_canister_state()` instead if the canister is only temporarily removed
+    /// from the state (e.g. to work around borrow checker limitations).
     pub fn remove_canister(&mut self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
         self.metadata.subnet_schedule.remove(canister_id);
-        self.canister_states.remove(canister_id)
+        let canister_state = self.canister_states.remove(canister_id)?;
+        self.metadata
+            .unflushed_checkpoint_ops
+            .delete_canister(*canister_id);
+        Some(canister_state)
     }
 
     /// Returns a reference to the canister states.
