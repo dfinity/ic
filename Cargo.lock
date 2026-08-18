@@ -7815,6 +7815,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "slog",
+ "static_assertions",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
