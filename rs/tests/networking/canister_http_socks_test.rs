@@ -159,7 +159,7 @@ fn setup_and_run_subnet_test(
     // wildcard service does: colons written as dashes. The webserver's
     // certificate covers that name (see `start_httpbin_on_uvm`), and on the
     // local backend the group's dnsmasq synthesises it (see
-    // `LocalBackend::start_ra_daemon`), so no external DNS is involved there.
+    // `LocalBackend::start_dnsmasq`), so no external DNS is involved there.
     let nip_io_hostname = webserver_ipv6.replace(':', "-") + ".ipv6.nip.io";
     let webserver_url = format!("https://{}/ip", nip_io_hostname);
 

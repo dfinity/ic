@@ -551,11 +551,11 @@ impl LocalBackend {
     ///
     /// IC GuestOS nodes statically configure their global IPv6: the test driver
     /// hands each node a fixed address plus the `<prefix>::1` gateway (which
-    /// lives on the bridge), so they need neither RA nor SLAAC. We still run a
-    /// minimal `dnsmasq` as an RA daemon on the bridge for non-IC-node VMs (e.g.
-    /// universal VMs), which bring up only a link-local address and derive their
-    /// global one via SLAAC from the RA; the RA's non-zero router lifetime also
-    /// installs the bridge (the host) as their default router.
+    /// lives on the bridge), so they need neither RA nor SLAAC. The group's
+    /// `dnsmasq` still advertises the prefix on the bridge for non-IC-node VMs
+    /// (e.g. universal VMs), which bring up only a link-local address and derive
+    /// their global one via SLAAC from the RA; the RA's non-zero router lifetime
+    /// also installs the bridge (the host) as their default router.
     ///
     /// Either way the host is each guest's default router, which lets a guest
     /// reply to the driver's off-`/64` management address
@@ -628,8 +628,8 @@ impl LocalBackend {
         );
         Self::run_shell(&create_script, "create group bridge")?;
 
-        // Start the RA daemon. Non-IC-node VMs (e.g. universal VMs) SLAAC their
-        // global address from it; IC GuestOS nodes use a static config instead.
+        // Start `dnsmasq`. Non-IC-node VMs (e.g. universal VMs) SLAAC their
+        // global address from its RA; IC GuestOS nodes use a static config instead.
         // The same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for
         // VMs that requested a second NIC, and DNS on the name-server addresses
         // assigned above.
@@ -902,7 +902,7 @@ impl LocalBackend {
             "Deleting local group {group_name} (bridge {bridge})"
         );
 
-        // Stop the RA daemon before removing the bridge it listens on.
+        // Stop `dnsmasq` before removing the bridge it listens on.
         self.stop_dnsmasq(&bridge);
 
         // Best effort: stop every VM QEMU process started for this group. Each
