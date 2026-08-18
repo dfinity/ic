@@ -35,7 +35,7 @@ fn should_display_sweeper_funding() {
     state.sweeper_funding.mark_funding_in_flight(
         LedgerBurnIndex::new(1),
         Wei::from(950_000_u64),
-        0,
+        Some(0),
     );
     state.sweeper_funding.record_finalized_funding(
         LedgerBurnIndex::new(1),
@@ -63,7 +63,7 @@ fn should_display_an_in_flight_sweeper_funding() {
     state.sweeper_funding.mark_funding_in_flight(
         LedgerBurnIndex::new(42),
         Wei::from(900_000_u64),
-        1_620_328_630_000_000_000,
+        Some(1_620_328_630_000_000_000),
     );
 
     let dashboard = DashboardTemplate::from_state(&state, DashboardPaginationParameters::default());

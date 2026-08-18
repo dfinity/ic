@@ -321,7 +321,7 @@ pub struct DashboardSweeperFunding {
 pub struct DashboardInFlightFunding {
     pub ledger_burn_index: LedgerBurnIndex,
     pub amount: Wei,
-    pub created_at: u64,
+    pub created_at: Option<u64>,
 }
 
 impl DashboardTemplate {
