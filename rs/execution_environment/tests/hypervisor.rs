@@ -4425,12 +4425,19 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "write", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    // The canister reads one Wasm page and writes another. Page faults are
+    // handled at Wasm page granularity, so each of them is reported as all of
+    // its constituent OS pages (16 on 4 KiB hosts, 4 on 16 KiB hosts).
+    let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as f64;
     assert_eq!(
         fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
         metric_vec(&[
             (
                 &[("api_type", "update"), ("memory_type", "wasm")],
-                HistogramStats { count: 1, sum: 1.0 }
+                HistogramStats {
+                    count: 1,
+                    sum: os_pages_per_wasm_page
+                }
             ),
             (
                 &[("api_type", "update"), ("memory_type", "stable")],
@@ -4448,9 +4455,7 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
         match mem_type.as_ref().map(|a| String::as_ref(*a)) {
             Some("wasm") => {
                 assert_eq!(stats.count, 1);
-                // We can't match exactly here because on MacOS the page size is different (16 KiB) so the
-                // number of reported pages is different.
-                assert_ge!(stats.sum, 2.0)
+                assert_eq!(stats.sum, 2.0 * os_pages_per_wasm_page)
             }
             Some("stable") => {
                 assert_eq!(stats.count, 1);
@@ -4496,7 +4501,11 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
                 &[("api_type", "update"), ("memory_type", "wasm")],
                 HistogramStats {
                     count: 1,
-                    sum: 262145.0 // (1GiB + 4096) / 4096
+                    // The loop writes to every OS page between 0 and 1 GiB, so
+                    // it dirties all 16385 Wasm pages of the heap. Page faults
+                    // are handled at Wasm page granularity, so every one of
+                    // them is reported as all of its constituent OS pages.
+                    sum: 16385.0 * (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as f64
                 }
             ),
             (
@@ -5158,12 +5167,17 @@ fn ic0_trap_preserves_some_cycles() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+    // `ic0.trap` reads the trap message from the single Wasm page holding the
+    // data segment. Page faults are handled at Wasm page granularity, so the
+    // read is charged for all of the OS pages that Wasm page consists of.
+    let os_pages_per_wasm_page = WASM_PAGE_SIZE_IN_BYTES as u64 / PAGE_SIZE as u64;
     let expected_executed_instructions = NumInstructions::from(
         instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
             + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
             + bytes_and_logging_cost(12) as u64 /* trap data */
-            + 1, // Function is 1 instruction.
+            + 1 // Function is 1 instruction.
+            + os_pages_per_wasm_page * test.dirty_heap_page_overhead(),
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert_eq!(
@@ -10265,25 +10279,18 @@ fn page_metrics_are_recorded(
     assert_eq!(err.code(), expected_code);
 
     const OS_PAGES_PER_WASM_PAGE: f64 = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as f64;
-    let (
-        api_type,
-        wasm_dirty_os_pages,
-        wasm_dirty_wasm_pages,
-        wasm_accessed_os_pages,
-        wasm_accessed_wasm_pages,
-    ) = if call_type == "query" {
-        // At the moment, queries do not report Wasm dirty pages and over-estimate
-        // Wasm accessed pages. This will be fixed in a future PR.
-        (
-            "replicated query",
-            0.0,
-            0.0,
-            384.0,
-            384.0 / OS_PAGES_PER_WASM_PAGE,
-        )
+    // The canister touches the heap at offsets 0 and 4 MiB, i.e. two Wasm pages.
+    const TOUCHED_WASM_PAGES: f64 = 2.0;
+    let (api_type, wasm_dirty_wasm_pages) = if call_type == "query" {
+        // At the moment, queries do not report Wasm dirty pages. This will be
+        // fixed in a future PR.
+        ("replicated query", 0.0)
     } else {
-        ("update", 2.0, 2.0, 2.0, 2.0)
+        ("update", TOUCHED_WASM_PAGES)
     };
+    let wasm_dirty_os_pages = wasm_dirty_wasm_pages * OS_PAGES_PER_WASM_PAGE;
+    let wasm_accessed_wasm_pages = TOUCHED_WASM_PAGES;
+    let wasm_accessed_os_pages = TOUCHED_WASM_PAGES * OS_PAGES_PER_WASM_PAGE;
     assert_eq!(
         fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
         metric_vec(&[
