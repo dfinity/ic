@@ -32,6 +32,8 @@ pub struct InitArg {
     pub last_scraped_block_number: Nat,
     #[cbor(n(9), with = "icrc_cbor::principal::option")]
     pub evm_rpc_id: Option<Principal>,
+    #[n(10)]
+    pub ethereum_sweeper_contract_address: Option<String>,
 }
 
 impl TryFrom<InitArg> for State {
@@ -47,6 +49,7 @@ impl TryFrom<InitArg> for State {
             next_transaction_nonce,
             last_scraped_block_number,
             evm_rpc_id,
+            ethereum_sweeper_contract_address,
         }: InitArg,
     ) -> Result<Self, Self::Error> {
         use std::str::FromStr;
@@ -60,7 +63,15 @@ impl TryFrom<InitArg> for State {
             .map(|a| Address::from_str(&a))
             .transpose()
             .map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
+                InvalidStateError::InvalidContractAddress(format!("ethereum_contract_address: {e}"))
+            })?;
+        let sweeper_contract_address = ethereum_sweeper_contract_address
+            .map(|a| Address::from_str(&a))
+            .transpose()
+            .map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!(
+                    "ethereum_sweeper_contract_address: {e}"
+                ))
             })?;
         let last_scraped_block_number = BlockNumber::try_from(last_scraped_block_number)
             .map_err(|e| InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {e}")))?;
@@ -79,10 +90,7 @@ impl TryFrom<InitArg> for State {
         let mut log_scrapings = LogScrapings::new(last_scraped_block_number);
         if let Some(contract_address) = eth_helper_contract_address {
             log_scrapings
-                .set_contract_address(LogScrapingId::EthDepositWithoutSubaccount, contract_address)
-                .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
-                })?;
+                .set_contract_address(LogScrapingId::EthDepositWithoutSubaccount, contract_address);
         }
         let state = Self {
             ethereum_network,
@@ -111,6 +119,7 @@ impl TryFrom<InitArg> for State {
             erc20_balances: Default::default(),
             log_scrapings,
             automatic_deposits: AutomaticDeposits::default(),
+            sweeper_contract_address,
         };
         state.validate_config()?;
         Ok(state)

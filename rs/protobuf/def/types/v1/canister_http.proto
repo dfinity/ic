@@ -135,6 +135,7 @@ message CanisterHttpResponseMessage {
     FlexibleCanisterHttpResponses flexible_responses = 4;
     FlexibleCanisterHttpError flexible_error = 5;
     CanisterHttpOutOfCycles out_of_cycles = 6;
+    CanisterHttpShare async_receipt = 7;
   }
 }
 
