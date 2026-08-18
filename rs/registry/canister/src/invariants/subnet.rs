@@ -153,13 +153,13 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        check_node_type4_iff_cloud_engine(subnet_id, &subnet_record, &node_records)?;
+        check_node_type4_iff_cloud_engine(&subnet_record, &node_records, subnet_id)?;
 
         // SEV-enabled subnets invariants
         if let Some(features) = subnet_record.features.as_ref()
             && features.sev_enabled == Some(true)
         {
-            check_sev_subnet_invariants(subnet_id, &subnet_record, snapshot)?;
+            check_sev_subnet_invariants(&subnet_record, snapshot, subnet_id)?;
         }
 
         check_subnet_admins_invariant(&subnet_record, subnet_id)?;
@@ -282,9 +282,9 @@ pub(crate) fn get_subnet_records_map(
 /// SEV-enabled subnets must consist of SEV-supporting nodes only, and must run a
 /// GuestOS version that has launch measurements.
 fn check_sev_subnet_invariants(
-    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
     subnet_record: &SubnetRecord,
     snapshot: &RegistrySnapshot,
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
 ) -> Result<(), InvariantCheckError> {
     let subnet_members: HashSet<NodeId> = subnet_record
         .membership
@@ -326,25 +326,16 @@ fn check_sev_subnet_invariants(
         });
     }
 
-    // A CloudEngine is allowed to leave replica_version_id blank, and then runs
-    // the versions of the StandardEngineReplicaVersionRecord instead. Those are
-    // checked by the standard engine replica version invariants.
+    // An SEV-enabled subnet must run only a GuestOS version that has launch measurements; otherwise
+    // its nodes cannot be attested, which defeats the purpose of enabling SEV.
+    //
+    // A CloudEngine is allowed to leave replica_version_id blank, and then runs the versions of the
+    // StandardEngineReplicaVersionRecord instead. Those are checked by the standard engine replica
+    // version invariants.
     let subnet_replica_version_id = &subnet_record.replica_version_id;
-    if !subnet_replica_version_id.is_empty() {
-        check_sev_subnet_launch_measurements(subnet_id, subnet_replica_version_id, snapshot)?;
-    }
-
-    Ok(())
-}
-
-/// An SEV-enabled subnet must run only a GuestOS version that has launch measurements; otherwise
-/// its nodes cannot be attested, which defeats the purpose of enabling SEV.
-fn check_sev_subnet_launch_measurements(
-    subnet_id: SubnetId,
-    subnet_replica_version_id: &str,
-    snapshot: &RegistrySnapshot,
-) -> Result<(), InvariantCheckError> {
-    if !has_launch_measurements(subnet_replica_version_id, snapshot) {
+    if !subnet_replica_version_id.is_empty()
+        && !has_launch_measurements(subnet_replica_version_id, snapshot)
+    {
         return Err(InvariantCheckError {
             msg: format!(
                 "Subnet {subnet_id} is SEV-enabled, but the GuestOS version that it \
@@ -358,9 +349,9 @@ fn check_sev_subnet_launch_measurements(
 }
 
 fn check_node_type4_iff_cloud_engine(
-    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
     subnet_record: &SubnetRecord,
     node_records: &[NodeRecord],
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
 ) -> Result<(), InvariantCheckError> {
     let is_cloud_engine = subnet_record.subnet_type == i32::from(SubnetType::CloudEngine);
     let is_cloud_engine_node = |node: &NodeRecord| match node.node_reward_type() {
