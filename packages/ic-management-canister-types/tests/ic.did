@@ -685,7 +685,7 @@ service ic : {
     http_request : (http_request_args) -> (http_request_result);
 
     // Public canister data
-    canister_info : (canister_info_args) -> (canister_info_result);
+    canister_info : (canister_info_args) -> (canister_info_result) query;
     canister_metadata : (canister_metadata_args) -> (canister_metadata_result);
 
     // Threshold ECDSA signature

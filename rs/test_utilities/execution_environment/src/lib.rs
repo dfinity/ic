@@ -2937,6 +2937,15 @@ impl ExecutionTestBuilder {
         self
     }
 
+    /// Sets the number of nodes on the own subnet. This is reflected both in the
+    /// registry settings and in the nodes of the own subnet's network topology.
+    pub fn with_subnet_size(mut self, subnet_size: usize) -> Self {
+        self.registry_settings.subnet_size = subnet_size;
+        self.registry_settings.node_ids =
+            (0..subnet_size).map(|i| node_test_id(i as u64)).collect();
+        self
+    }
+
     pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
         self.resource_limits = resource_limits;
         self

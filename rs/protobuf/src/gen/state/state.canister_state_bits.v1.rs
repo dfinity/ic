@@ -774,16 +774,6 @@ pub struct CanisterStateBits {
     /// The capacity of the canister log in bytes.
     #[prost(uint64, tag = "56")]
     pub log_memory_limit: u64,
-    /// Log records of the canister.
-    #[prost(message, repeated, tag = "43")]
-    pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
-    /// The index of the next log record to be created.
-    #[prost(uint64, tag = "44")]
-    pub next_canister_log_record_idx: u64,
-    /// Whether the one-time migration from CanisterLog to LogMemoryStore has
-    /// already been performed for this canister.
-    #[prost(bool, tag = "66")]
-    pub log_memory_store_migrated: bool,
     /// The persistent high-water mark for log record indexing in LogMemoryStore.
     #[prost(uint64, tag = "67")]
     pub log_memory_store_persistent_next_idx: u64,

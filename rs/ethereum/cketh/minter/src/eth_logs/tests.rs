@@ -277,13 +277,10 @@ mod scraping {
             let last_scraped_block_number = BlockNumber::from(6_970_446_u32);
             let state = {
                 let mut state = initial_state();
-                state
-                    .log_scrapings
-                    .set_contract_address(
-                        LogScrapingId::EthOrErc20DepositWithSubaccount,
-                        CONTRACT_ADDRESS,
-                    )
-                    .unwrap();
+                state.log_scrapings.set_contract_address(
+                    LogScrapingId::EthOrErc20DepositWithSubaccount,
+                    CONTRACT_ADDRESS,
+                );
                 state.log_scrapings.set_last_scraped_block_number(
                     LogScrapingId::EthOrErc20DepositWithSubaccount,
                     last_scraped_block_number,

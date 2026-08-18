@@ -4672,6 +4672,32 @@ impl SystemApi for SystemApiImpl {
 
         result
     }
+
+    fn ic0_subnet_self_node_count(&self) -> HypervisorResult<u32> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0.subnet_self_node_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => Ok(self
+                .sandbox_safe_system_state
+                .subnet_cycles_config
+                .subnet_size as u32),
+        };
+
+        trace_syscall!(self, SubnetSelfNodeCount, result);
+        result
+    }
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.

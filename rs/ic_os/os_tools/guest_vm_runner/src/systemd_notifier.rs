@@ -13,7 +13,7 @@ pub struct DefaultSystemdNotifier;
 #[cfg(target_os = "linux")]
 impl SystemdNotifier for DefaultSystemdNotifier {
     fn notify_ready(&self) -> Result<()> {
-        systemd::daemon::notify(false, [(systemd::daemon::STATE_READY, "1")].iter())?;
+        libsystemd::daemon::notify(false, &[libsystemd::daemon::NotifyState::Ready])?;
         Ok(())
     }
 }
