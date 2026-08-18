@@ -2456,7 +2456,6 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-protobuf",
- "ic-recovery",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-features",
@@ -2470,7 +2469,6 @@ dependencies = [
  "reqwest",
  "serde_cbor",
  "slog",
- "tempfile",
  "tokio",
  "url",
 ]
@@ -17580,7 +17578,6 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-management-canister-types 0.8.0",
- "ic-recovery",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
