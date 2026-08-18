@@ -29,7 +29,7 @@ use ic_replicated_state::{
     canister_state::canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::{
-        ApiBoundaryNodeEntry,
+        ApiBoundaryNodeEntry, UnflushedCheckpointOp,
         testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     page_map::{PageIndex, Shard, StorageLayout},
@@ -8524,7 +8524,14 @@ fn canister_dropped_by_split_is_removed_from_tip() {
                 vec![&RETAINED]
             );
             // The canister dropped by the split was recorded as deleted.
-            assert!(!state.system_metadata().unflushed_checkpoint_ops.is_empty());
+            assert_eq!(
+                state
+                    .system_metadata()
+                    .unflushed_checkpoint_ops
+                    .clone()
+                    .take(),
+                vec![UnflushedCheckpointOp::DeleteCanister(DROPPED)]
+            );
 
             // Trigger a flush either at the checkpoint or by committing exactly
             // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
