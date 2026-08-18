@@ -227,13 +227,16 @@ if [ -f "${REPO_ROOT}/.git" ]; then
                 # worktree's *host* path, and those paths do not exist in the
                 # container (this checkout lives at $WORKDIR, the others are not
                 # mounted at all), so git considers every worktree prunable here.
-                # That is harmless for reading, but `git gc` -- which git runs
-                # automatically after commit/fetch/... -- prunes worktrees as
-                # part of its job and would delete the host's admin directories.
-                # Turn auto gc off; an explicit `git gc` remains the user's call.
+                # That is harmless for reading, but `git gc` prunes worktrees as
+                # part of its job -- and git runs gc automatically after
+                # commit/fetch/... -- so it would delete the host's admin
+                # directories. Disable worktree pruning itself rather than gc as
+                # a whole: object maintenance keeps working, and an explicit
+                # `git gc` is safe too. (`git worktree prune` ignores this
+                # setting, so still don't run that one in here.)
                 -e GIT_CONFIG_COUNT=1
-                -e GIT_CONFIG_KEY_0=gc.auto
-                -e GIT_CONFIG_VALUE_0=0
+                -e GIT_CONFIG_KEY_0=gc.worktreePruneExpire
+                -e GIT_CONFIG_VALUE_0=never
             )
             ;;
     esac
