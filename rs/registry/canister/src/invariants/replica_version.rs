@@ -33,10 +33,9 @@ use prost::Message;
 /// * Each URL is well-formed.
 /// * Release package hash is a well-formed hex-encoded SHA256 value.
 ///
-/// Exception: a CloudEngine can have a blank replica_version_id in its
-/// SubnetRecord if there is a StandardEngineReplicaVersionRecord. As of July
-/// 22, 2026, this feature is disabled via a flag (but the plan is to enable it
-/// in the not too distant future).
+/// Exception: a CloudEngine is allowed to have a blank replica_version_id in
+/// its SubnetRecord, provided a StandardEngineReplicaVersionRecord exists. In
+/// that case, that record determines the Cloud Engine's replica version.
 pub(crate) fn check_replica_version_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -67,7 +66,7 @@ pub(crate) fn check_replica_version_invariants(
     );
 
     for version in elected_set {
-        let r = get_replica_version_record(snapshot, version);
+        let r = get_replica_version_record(snapshot, &version);
 
         // Check whether release package URLs (update image) and corresponding hash are well-formed.
         // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
@@ -81,16 +80,18 @@ pub(crate) fn check_replica_version_invariants(
         if let Some(Err(defects)) = r.guest_launch_measurements.map(|v| v.validate()) {
             panic!("guest_launch_measurements are not valid. Defects: {defects:?}");
         }
+
+        // Enforce that the stored version always matches the key
+        if let Some(replica_version_id) = r.replica_version_id {
+            assert_eq!(replica_version_id, version);
+        }
     }
 
     Ok(())
 }
 
-fn get_replica_version_record(
-    snapshot: &RegistrySnapshot,
-    version: String,
-) -> ReplicaVersionRecord {
-    get_value_from_snapshot(snapshot, make_replica_version_key(version.clone()))
+fn get_replica_version_record(snapshot: &RegistrySnapshot, version: &str) -> ReplicaVersionRecord {
+    get_value_from_snapshot(snapshot, make_replica_version_key(version))
         .unwrap_or_else(|| panic!("Could not find replica version: {version}"))
 }
 
@@ -147,6 +148,18 @@ fn get_all_api_boundary_node_versions(snapshot: &RegistrySnapshot) -> BTreeSet<S
         .collect()
 }
 
+pub(crate) fn has_launch_measurements(
+    replica_version_id: &str,
+    snapshot: &RegistrySnapshot,
+) -> bool {
+    get_value_from_snapshot::<ReplicaVersionRecord>(
+        snapshot,
+        make_replica_version_key(replica_version_id),
+    )
+    .and_then(|replica_version_record| replica_version_record.guest_launch_measurements)
+    .is_some()
+}
+
 /// Returns the replica versions referenced by the
 /// StandardEngineReplicaVersionRecord (i.e. new_replica_version_id and
 /// old_replica_version_id).
@@ -166,7 +179,8 @@ fn get_all_standard_engine_replica_versions(snapshot: &RegistrySnapshot) -> BTre
 mod tests {
     use crate::{
         common::test_helpers::{
-            invariant_compliant_registry, prepare_registry_with_cloud_engine_subnet,
+            GUEST_LAUNCH_MEASUREMENTS, invariant_compliant_registry,
+            prepare_registry_with_cloud_engine_subnet,
         },
         flags::{
             temporarily_disable_blank_replica_version_id_for_cloud_engines,
@@ -198,7 +212,13 @@ mod tests {
             .map(|v| {
                 insert(
                     make_replica_version_key(v).as_bytes(),
-                    ReplicaVersionRecord::default().encode_to_vec(),
+                    ReplicaVersionRecord {
+                        // Versions referenced by the StandardEngineReplicaVersionRecord
+                        // must have launch measurements.
+                        guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
                 )
             })
             .collect()
@@ -519,6 +539,7 @@ mod tests {
 
         let replica_version_id = "unassigned_version".to_string();
         let replica_version = ReplicaVersionRecord {
+            replica_version_id: Some(replica_version_id.clone()),
             release_package_sha256_hex: "".to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: None,
@@ -584,6 +605,7 @@ mod tests {
 
         let key = make_replica_version_key(ReplicaVersion::default());
         let value = ReplicaVersionRecord {
+            replica_version_id: Some(ReplicaVersion::default().to_string()),
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -633,6 +655,7 @@ mod tests {
 
         let key = make_replica_version_key(ReplicaVersion::default());
         let value = ReplicaVersionRecord {
+            replica_version_id: Some(ReplicaVersion::default().to_string()),
             release_package_sha256_hex: MOCK_HASH.into(),
             release_package_urls: vec![MOCK_URL.into()],
             guest_launch_measurements: Some(GuestLaunchMeasurements {

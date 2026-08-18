@@ -236,6 +236,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 item.cost_schedule,
             )),
             subnet_admins: item.subnet_admins.iter().map(|sa| (*sa).into()).collect(),
+            cooling_down: item.cooling_down,
         }
     }
 }
@@ -281,6 +282,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             chain_keys_held,
             cost_schedule,
             subnet_admins,
+            cooling_down: item.cooling_down,
         })
     }
 }
@@ -615,6 +617,9 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 .subnet_split_from
                 .map(subnet_id_try_from_protobuf)
                 .transpose()?,
+            // Note: `load_checkpoint()` will set this based on the presence of
+            // `subnet_merged.pbuf`.
+            subnet_merged: false,
             canister_allocation_ranges,
             last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
@@ -774,6 +779,10 @@ impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
             IngressHistoryState::compute_memory_usage(&item.statuses),
             item.memory_usage
         );
+        debug_assert_eq!(
+            IngressHistoryState::compute_state_counts(&item.statuses),
+            item.state_counts
+        );
 
         pb_ingress::IngressHistoryState {
             statuses,
@@ -808,12 +817,14 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
         }
 
         let memory_usage = IngressHistoryState::compute_memory_usage(&statuses);
+        let state_counts = IngressHistoryState::compute_state_counts(&statuses);
 
         Ok(IngressHistoryState {
             statuses: Arc::new(statuses),
             pruning_times: Arc::new(pruning_times),
             next_terminal_time: Time::from_nanos_since_unix_epoch(item.next_terminal_time),
             memory_usage,
+            state_counts,
         })
     }
 }

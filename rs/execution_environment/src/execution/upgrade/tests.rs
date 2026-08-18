@@ -18,7 +18,7 @@ use ic_types_cycles::Cycles;
 // Constants and templates
 
 /// Slice size used across tests is 10K instructions
-const MAX_INSTRUCTIONS_PER_SLICE: u64 = 10_000;
+const MAX_INSTRUCTIONS_PER_SLICE: u64 = 240_000;
 /// Declare local variables for a loop in WAT
 const LOOP_LOCALS_WAT: &str = r#"
                 (local $limit i64)
@@ -26,7 +26,7 @@ const LOOP_LOCALS_WAT: &str = r#"
 /// Declare loop which takes a bit less than 10K instructions (8K)
 const LOOP_10K_WAT: &str = r#"
                 (local.set $limit
-                    (i64.add (call $performance_counter (i32.const 0)) (i64.const 8000))
+                    (i64.add (call $performance_counter (i32.const 0)) (i64.const 200000))
                 )
                 (loop $loop
                     (if (i64.lt_s
@@ -444,11 +444,12 @@ fn upgrade_fails_on_long_pre_upgrade_hits_instructions_limit() {
 
 ////////////////////////////////////////////////////////////////////////
 // upgrade_stage_2_and_3a_create_execution_state_and_call_start()
-// 1. if let Err(err) = helper.replace_execution_state_and_allocations(..)
-// 2. if !execution_state.exports_method(Start)
-// 3. match execute_dts(..)
-//    3a. Finished
-//    3b. Paused
+// 1. if let Err(err) = validate_wasm_memory_persistence(..)
+// 2. if let Err(err) = helper.replace_execution_state_and_allocations(..)
+// 3. if !execution_state.exports_method(Start)
+// 4. match execute_dts(..)
+//    4a. Finished
+//    4b. Paused
 
 #[test]
 fn upgrade_fails_on_invalid_new_canister() {

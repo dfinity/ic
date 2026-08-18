@@ -1,4 +1,5 @@
 mod dark_launch;
+pub mod fees;
 mod legacy;
 mod metrics;
 mod payg;
@@ -8,7 +9,7 @@ use std::time::Duration;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    NumBytes, NumInstructions, NumberOfNodes,
+    NumBytes, NumInstructions,
     canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext, PricingVersion},
 };
 pub use ic_types_cycles::CanisterCyclesCostSchedule;
@@ -22,19 +23,13 @@ pub trait BudgetTracker: Send {
     /// Returns the maximum network resources the Adapter is allowed to consume.
     fn get_adapter_limits(&self) -> AdapterLimits;
     /// Deducts the cost of the network resources consumed by the request.
-    ///
-    /// # Invariants
-    ///  - This method returns `Ok(())` if `network_usage <= get_adapter_limits()`.
-    ///  - This method returns `Err(PricingError)` if `network_usage > get_adapter_limits()`.
-    ///
-    /// Note that "<=" is used here to mean field-wise less than or equal to.
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
     /// Returns the maximum instructions allowed for the transformation function.
     fn get_transform_limit(&self) -> NumInstructions;
     /// Deducts the cost of the instructions consumed by the transformation.
     ///
     /// # Invariants
-    ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
+    ///  - This method returns `Ok(())` if `usage <= get_transform_limit()`.
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
     /// Deducts the cost of the final (post-transform) response that this replica
     /// produced and that will be gossiped to peers. This cost does not apply to fully-replicated
@@ -56,7 +51,10 @@ pub trait BudgetTracker: Send {
 /// response, as measured by the client. The server already enforces a 30s
 /// timeout (see `DEFAULT_HTTP_REQUEST_TIMEOUT_SECS`), so this is a safety margin
 /// above it.
-pub(crate) const MAX_RESPONSE_TIME: Duration = Duration::from_secs(60);
+///
+/// This is the ceiling on [`AdapterLimits::max_response_time`]; a tracker may
+/// hand out less than this, but never more.
+pub const MAX_RESPONSE_TIME: Duration = Duration::from_secs(60);
 
 pub struct AdapterLimits {
     /// The maximum size of the HTTP response, including the headers and the body.
@@ -92,24 +90,16 @@ impl PricingFactory {
         }
     }
 
-    pub fn new_tracker(
-        &self,
-        context: &CanisterHttpRequestContext,
-        subnet_size: NumberOfNodes,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Box<dyn BudgetTracker> {
+    pub fn new_tracker(&self, context: &CanisterHttpRequestContext) -> Box<dyn BudgetTracker> {
         match context.pricing_version {
             PricingVersion::Legacy => Box::new(DarkLaunchTracker::new(
-                Box::new(LegacyTracker::new(context.max_response_bytes)),
-                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule)),
-                context.request.sender,
-                context.replication.kind(),
+                Box::new(LegacyTracker::new(context)),
+                Box::new(PayAsYouGoTracker::new(context)),
+                context,
                 self.metrics.clone(),
                 self.log.clone(),
             )),
-            PricingVersion::PayAsYouGo => {
-                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule))
-            }
+            PricingVersion::PayAsYouGo => Box::new(PayAsYouGoTracker::new(context)),
         }
     }
 }

@@ -23,11 +23,11 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
-use more_asserts::assert_le;
+use more_asserts::{assert_gt, assert_le};
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::sync::Arc;
@@ -56,13 +56,21 @@ const DTS_INSTALL_WAT: &str = r#"
         )
         (func $start
             (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 12) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 23) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
         )
         (func (export "canister_init")
             (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
         )
         (start $start)
         (memory 0 20)
@@ -70,10 +78,10 @@ const DTS_INSTALL_WAT: &str = r#"
 
 #[test]
 fn dts_resume_works_in_install_code() {
-    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
@@ -88,11 +96,7 @@ fn dts_resume_works_in_install_code() {
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
     let ingress_id = test.dts_install_code(payload);
-    for _ in 0..4 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
             original_system_state.balance()
@@ -121,12 +125,240 @@ fn dts_resume_works_in_install_code() {
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
+/// Returns the cycles consumed for instructions by the given canister so far.
+fn consumed_cycles_for_instructions(
+    test: &ExecutionTest,
+    canister_id: CanisterId,
+) -> NominalCycles {
+    test.canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::Instructions)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// The instruction limits of the DTS `install_code` tests that change the cycles
+/// balance of the canister while its execution is paused.
+const DTS_INSTALL_CODE_INSTRUCTION_LIMIT: u64 = 50_000_000;
+const DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT: u64 = 132_000;
+
+/// A canister with a paused `install_code` execution, along with a snapshot of
+/// the accounting counters of that canister taken before the execution started.
+///
+/// Shared by the tests that decrease and increase the cycles balance of the
+/// canister while its `install_code` execution is paused.
+struct PausedInstallCode {
+    test: ExecutionTest,
+    canister_id: CanisterId,
+    /// The ingress message of the `install_code` subnet message.
+    ingress_id: MessageId,
+    /// The cycles balance before the execution cycles were prepaid.
+    original_balance: Cycles,
+    /// The cycles consumed for instructions.
+    original_consumed_cycles: NominalCycles,
+    /// The instructions executed by all the slices of the canister.
+    original_executed_instructions: NumInstructions,
+    /// The accumulated cost of the instructions executed by the canister.
+    original_execution_cost: CompoundCycles<Instructions>,
+}
+
+/// Starts an `install_code` execution that pauses after its first slice: that
+/// slice compiles the Wasm module and executes its `(start)` function, which
+/// together exceed the slice instruction limit.
+fn install_code_paused_after_first_slice() -> PausedInstallCode {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(DTS_INSTALL_CODE_INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT)
+        .with_create_execution_state_base_cost(0)
+        .with_manual_execution()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        sender_canister_version: None,
+    };
+
+    // Snapshot of the accounting counters before the execution cycles are prepaid,
+    // which happens when the message execution starts.
+    let original_balance = test.canister_state(canister_id).system_state.balance();
+    let original_consumed_cycles = consumed_cycles_for_instructions(&test, canister_id);
+    let original_executed_instructions = test.canister_executed_instructions(canister_id);
+    let original_execution_cost = test.canister_execution_cost(canister_id);
+
+    let ingress_id = test.dts_install_code(payload);
+
+    // The first slice has been executed and the execution is paused.
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    assert!(test.canister_state(canister_id).has_paused_install_code());
+
+    // The cycles for the whole instruction limit are prepaid while the execution
+    // is paused.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_balance
+            - test
+                .cycles_account_manager()
+                .execution_cost(
+                    NumInstructions::from(DTS_INSTALL_CODE_INSTRUCTION_LIMIT),
+                    test.get_own_subnet_cycles_config(),
+                    WASM_EXECUTION_MODE,
+                )
+                .real(),
+    );
+
+    PausedInstallCode {
+        test,
+        canister_id,
+        ingress_id,
+        original_balance,
+        original_consumed_cycles,
+        original_executed_instructions,
+        original_execution_cost,
+    }
+}
+
+/// Analogously to `dts_resume_fails_due_to_cycles_decrease` for calls,
+/// replicated queries, callbacks, and tasks, resuming a paused `install_code`
+/// whose canister lost cycles while it was paused fails instead of replaying the
+/// recorded steps on a balance that can no longer cover them. The failed
+/// execution is charged for exactly the instructions it had already executed,
+/// including those of the paused Wasm execution.
+#[test]
+fn dts_install_code_resume_fails_due_to_cycles_decrease() {
+    let PausedInstallCode {
+        mut test,
+        canister_id,
+        ingress_id,
+        original_balance,
+        original_consumed_cycles,
+        original_executed_instructions,
+        ..
+    } = install_code_paused_after_first_slice();
+
+    // Decrease the cycles balance of the clean canister.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(Cycles::new(1));
+
+    // The next slice detects the cycles balance mismatch and fails the execution.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterWasmEngineError,
+        &format!(
+            "Error from Canister {canister_id}: Canister encountered a Wasm engine error: \
+             Failed to apply system changes: Mismatch in cycles \
+             balance when resuming an install code"
+        ),
+    );
+
+    // The canister has no code installed.
+    assert!(test.canister_state(canister_id).execution_state.is_none());
+
+    // The instructions consumed by the slices of the failed execution: compiling
+    // the Wasm module and executing the first Wasm slice, which together consumed
+    // more than the slice instruction limit.
+    let executed_instructions =
+        test.canister_executed_instructions(canister_id) - original_executed_instructions;
+    assert_gt!(
+        executed_instructions.get(),
+        DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT
+    );
+
+    // The canister is charged exactly the cost of those instructions, including
+    // the instructions of the paused Wasm execution: the rest of the prepaid
+    // cycles is refunded.
+    let expected_cost = test.cycles_account_manager().execution_cost(
+        executed_instructions,
+        test.get_own_subnet_cycles_config(),
+        WASM_EXECUTION_MODE,
+    );
+    assert_eq!(
+        consumed_cycles_for_instructions(&test, canister_id) - original_consumed_cycles,
+        expected_cost.nominal()
+    );
+    // The balance also lost the single cycle removed above.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_balance - expected_cost.real() - Cycles::new(1)
+    );
+}
+
+/// Counterpart of `dts_install_code_resume_fails_due_to_cycles_decrease`: while
+/// resuming a paused `install_code` whose canister lost cycles fails, an
+/// increase of the cycles balance while the execution is paused is tolerated and
+/// the additional cycles are not lost when the execution completes.
+#[test]
+fn dts_install_code_resume_succeeds_after_cycles_increase() {
+    const CYCLES_ADDED_WHILE_PAUSED: Cycles = Cycles::new(1_234_567_890);
+
+    let PausedInstallCode {
+        mut test,
+        canister_id,
+        ingress_id,
+        original_balance,
+        original_executed_instructions,
+        original_execution_cost,
+        ..
+    } = install_code_paused_after_first_slice();
+
+    // Increase the cycles balance of the clean canister.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .add_cycles(CYCLES_ADDED_WHILE_PAUSED);
+
+    // The remaining slices resume the paused execution, which completes.
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
+        test.execute_slice(canister_id);
+    }
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+
+    // The code has been installed.
+    assert!(test.canister_state(canister_id).execution_state.is_some());
+
+    // The execution spanned multiple slices.
+    let executed_instructions =
+        test.canister_executed_instructions(canister_id) - original_executed_instructions;
+    assert_gt!(
+        executed_instructions.get(),
+        DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT
+    );
+
+    // The canister is charged exactly the cost of the executed instructions: the
+    // cycles added while the execution was paused are not lost.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_balance
+            - (test.canister_execution_cost(canister_id) - original_execution_cost).real()
+            + CYCLES_ADDED_WHILE_PAUSED
+    );
+}
+
 #[test]
 fn dts_abort_works_in_install_code() {
-    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
@@ -141,25 +373,27 @@ fn dts_abort_works_in_install_code() {
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
     let ingress_id = test.dts_install_code(payload);
-    for _ in 0..3 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
-        assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance()
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(
-                        NumInstructions::from(INSTRUCTION_LIMIT),
-                        test.get_own_subnet_cycles_config(),
-                        WASM_EXECUTION_MODE
-                    )
-                    .real(),
-        );
-        test.execute_slice(canister_id);
-    }
+    // Execute a single slice so the install code execution is paused, then abort
+    // it. The number of slices depends on the OS page size (via the memory
+    // tracker's per-OS-page charge), so we only rely on the execution spanning
+    // more than one slice, not on an exact count.
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_system_state.balance()
+            - test
+                .cycles_account_manager()
+                .execution_cost(
+                    NumInstructions::from(INSTRUCTION_LIMIT),
+                    test.get_own_subnet_cycles_config(),
+                    WASM_EXECUTION_MODE
+                )
+                .real(),
+    );
+    test.execute_slice(canister_id);
 
     test.abort_all_paused_executions();
     assert_eq!(
@@ -167,11 +401,11 @@ fn dts_abort_works_in_install_code() {
         Some(1)
     );
 
-    for _ in 0..5 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
             original_system_state.balance()
@@ -425,19 +659,17 @@ fn execute_install_code_message_dts_helper(
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     test.execute_subnet_message();
 
-    // Execute all slices.
-    for _ in 0..2 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
+    // Execute all slices. The number of slices depends on the OS page size (via
+    // the memory tracker's per-OS-page charge), so drain until the execution
+    // finishes instead of assuming a fixed count.
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
             original_system_state.balance()
                 - test
                     .cycles_account_manager()
                     .execution_cost(
-                        NumInstructions::from(1_000_000),
+                        NumInstructions::from(50_000_000),
                         test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE
                     )
@@ -456,9 +688,9 @@ fn execute_install_code_message_dts_helper(
 #[test]
 fn install_code_with_start_with_err() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_instruction_limit(50_000_000)
+        .with_install_code_instruction_limit(50_000_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
@@ -471,8 +703,12 @@ fn install_code_with_start_with_err() {
 
         (func $start
             (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 13) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 14) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 13) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
              unreachable
         )
         (start $start)
@@ -491,8 +727,8 @@ fn install_code_with_start_with_err() {
 #[test]
 fn install_code_with_start_with_success() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_instruction_limit(50_000_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
@@ -504,8 +740,12 @@ fn install_code_with_start_with_success() {
     (module
         (func $start
             (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 13) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 14) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 13) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 50000))
         )
         (start $start)
         (memory 0 20)
@@ -553,8 +793,12 @@ fn execute_install_code_init_dts_helper(
 ) -> MessageId {
     let message_id = start_install_code_dts(test, canister_id, wasm);
 
-    // Execute next slice.
-    test.execute_slice(canister_id);
+    // Drain the remaining slices. The number of slices depends on the OS page
+    // size (via the memory tracker's per-OS-page charge), so continue until the
+    // execution finishes instead of assuming a fixed count.
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
+        test.execute_slice(canister_id);
+    }
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
@@ -566,8 +810,8 @@ fn execute_install_code_init_dts_helper(
 #[test]
 fn install_code_with_init_method_with_error() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_instruction_limit(50_000_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
@@ -580,7 +824,10 @@ fn install_code_with_init_method_with_error() {
          (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
          (func (export "canister_init")
             (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
             (drop (call $stable_grow (i32.const 1)))
             unreachable
         )
@@ -599,8 +846,8 @@ fn install_code_with_init_method_with_error() {
 #[test]
 fn install_code_with_init_method_success() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_instruction_limit(5_000_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
@@ -613,7 +860,10 @@ fn install_code_with_init_method_success() {
          (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
          (func (export "canister_init")
             (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
             (drop (call $stable_grow (i32.const 1)))
         )
         (memory 0 20)
@@ -627,8 +877,8 @@ fn install_code_with_init_method_success() {
 #[test]
 fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_instruction_limit(50_000_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_manual_execution()
         .build();
     // canister history memory usage at the beginning of attempted install
@@ -729,8 +979,8 @@ fn install_code_running_out_of_instructions() {
 #[test]
 fn dts_uninstall_with_aborted_install_code() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_instruction_limit(50_000_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
@@ -743,17 +993,20 @@ fn dts_uninstall_with_aborted_install_code() {
          (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
          (func (export "canister_init")
             (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
         )
         (memory 0 20)
     )"#;
 
     let message_id = start_install_code_dts(&mut test, canister_id, wasm);
 
-    test.execute_slice(canister_id);
+    // The install code execution is paused after the first slice (asserted in
+    // `start_install_code_dts`). Abort it while paused; the number of slices
+    // depends on the OS page size (via the memory tracker's per-OS-page charge),
+    // so we do not execute a fixed number of slices here.
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueInstallCode,
@@ -773,13 +1026,13 @@ fn dts_uninstall_with_aborted_install_code() {
 
 #[test]
 fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
-    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
@@ -817,11 +1070,7 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
     );
     test.execute_subnet_message();
 
-    for _ in 0..4 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
         // Check that the SubnetCallContextManager contains the call after paused execution.
         assert_eq!(
             test.state()
@@ -851,13 +1100,13 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
 
 #[test]
 fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
-    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
@@ -895,29 +1144,31 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
     );
     test.execute_subnet_message();
 
-    for _ in 0..3 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
-        // Check that the SubnetCallContextManager contains the call after paused execution.
-        assert_eq!(
-            test.state()
-                .metadata
-                .subnet_call_context_manager
-                .install_code_calls_len(),
-            1
-        );
-        test.execute_slice(canister_id);
-    }
+    // Execute a single slice so the install code execution is paused, then abort
+    // it. The number of slices depends on the OS page size (via the memory
+    // tracker's per-OS-page charge), so we only rely on the execution spanning
+    // more than one slice, not on an exact count.
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    // Check that the SubnetCallContextManager contains the call after paused execution.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+    test.execute_slice(canister_id);
     test.abort_all_paused_executions();
 
     // Continues to keep track of install code context after aborting the execution.
-    for _ in 0..5 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
         // Check that the SubnetCallContextManager contains the call.
         assert_eq!(
             test.state()
@@ -954,7 +1205,7 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         // Ensure that all `install_code()` executions will get paused.
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
@@ -1133,7 +1384,7 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         // Ensure that all `install_code()` executions will get paused.
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
@@ -1337,7 +1588,7 @@ fn consistent_install_code_calls_after_split() {
         .with_own_subnet_id(subnet_a)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         // Ensure that all `install_code()` executions will get paused.
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(subnet_a, caller_canister)
@@ -2055,7 +2306,7 @@ fn install_chunked_succeeds_from_store_canister() {
 fn install_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(2_000_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(240_000)
         .with_manual_execution()
         .build();
 
@@ -2180,7 +2431,7 @@ fn install_with_dts_correctly_updates_system_state() {
 fn upgrade_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(2_000_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(240_000)
         .with_manual_execution()
         .build();
 
@@ -2457,7 +2708,7 @@ fn install_chunked_with_dts_works() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
+        .with_install_code_slice_instruction_limit(132_000)
         .build();
 
     let canister_id = test.create_canister(CYCLES);

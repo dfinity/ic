@@ -114,6 +114,7 @@ struct PausedResponseHelper {
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
+    executed_wasm_instructions: NumInstructions,
 }
 
 /// A helper that implements and keeps track of response execution steps.
@@ -126,6 +127,19 @@ struct ResponseHelper {
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
+    /// Instructions already executed by this callback, if previously paused.
+    ///
+    /// *Finished* Wasm executions are charged based on
+    /// `output.num_instructions_left`. Paused slices only update the round
+    /// limits. If resuming a paused execution fails, there is no
+    /// `output.num_instructions_left` to derive the charge from. Hence, we track
+    /// the executed instructions, to make it possible to charge for failed
+    /// resumptions.
+    ///
+    /// Reset once a Wasm execution has finished and updated the instruction
+    /// limits correspondingly, so that the next Wasm execution (the cleanup
+    /// callback) starts counting from zero.
+    executed_wasm_instructions: NumInstructions,
     applied_subnet_memory_reservation: NumBytes,
     deallocation_sender: DeallocationSender,
 }
@@ -193,6 +207,7 @@ impl ResponseHelper {
             refund_for_response_transmission,
             initial_cycles_balance,
             response_sender,
+            executed_wasm_instructions: NumInstructions::new(0),
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
@@ -295,7 +310,14 @@ impl ResponseHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// initial steps in subsequent rounds.
-    fn pause(self, round_limits: &mut RoundLimits) -> PausedResponseHelper {
+    /// The given `slice_executed_instructions` are the instructions executed by
+    /// the slice of the Wasm execution that is being paused; they are added to
+    /// the instructions executed by its earlier slices.
+    fn pause(
+        self,
+        round_limits: &mut RoundLimits,
+        slice_executed_instructions: NumInstructions,
+    ) -> PausedResponseHelper {
         self.revert_subnet_memory_reservation(round_limits);
         self.deallocation_sender.send(Box::new(self.canister));
         PausedResponseHelper {
@@ -305,6 +327,8 @@ impl ResponseHelper {
             refund_for_response_transmission: self.refund_for_response_transmission,
             initial_cycles_balance: self.initial_cycles_balance,
             response_sender: self.response_sender,
+            executed_wasm_instructions: self.executed_wasm_instructions
+                + slice_executed_instructions,
         }
     }
 
@@ -315,8 +339,8 @@ impl ResponseHelper {
     /// call context, and execution state because it is not possible to invoke
     /// the cleanup callback in such cases.
     ///
-    /// It returns an error if the cycles balance of the clean canister differs
-    /// from the cycles balances at the start of the DTS execution.
+    /// It returns an error if the cycles balance of the clean canister dropped
+    /// below the cycles balance at the start of the DTS execution.
     #[allow(clippy::result_large_err)]
     fn resume(
         paused: PausedResponseHelper,
@@ -346,6 +370,7 @@ impl ResponseHelper {
             refund_for_response_transmission: paused.refund_for_response_transmission,
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
+            executed_wasm_instructions: paused.executed_wasm_instructions,
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
@@ -362,9 +387,13 @@ impl ResponseHelper {
             .validate(&call_context, original, round, round_limits)
             .expect("Failed to resume DTS response: validation");
 
-        // The cycles balance of the clean canister must not change during the
-        // DTS execution.
-        if helper.initial_cycles_balance != paused.initial_cycles_balance {
+        // The cycles balance of the clean canister must not decrease during the
+        // DTS execution: the initial steps are replayed on the clean canister
+        // state and a lower balance might no longer be able to cover them.
+        // An increase is safe: all cycles changes of the DTS execution are
+        // applied relative to the balance of the clean canister state and hence
+        // the additional cycles are preserved.
+        if helper.initial_cycles_balance < paused.initial_cycles_balance {
             let msg = "Mismatch in cycles balance when resuming a response call".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err((helper, err));
@@ -442,7 +471,9 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
-            is_composite_query(&original.call_origin),
+            // Composite queries are always executed in the non-replicated mode,
+            // where their responses are handled by the query handler.
+            false,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -498,7 +529,9 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
-            is_composite_query(&original.call_origin),
+            // Composite queries are always executed in the non-replicated mode,
+            // where their responses are handled by the query handler.
+            false,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -697,16 +730,6 @@ struct OriginalContext {
     sender_info: Option<SenderInfo>,
 }
 
-fn is_composite_query(origin: &CallOrigin) -> bool {
-    match origin {
-        CallOrigin::CanisterQuery { .. } => true,
-        CallOrigin::CanisterUpdate { .. }
-        | CallOrigin::Ingress { .. }
-        | CallOrigin::Query { .. }
-        | CallOrigin::SystemTask => false,
-    }
-}
-
 /// Struct used to hold necessary information for the
 /// deterministic time slicing execution of a response.
 #[derive(Debug)]
@@ -746,6 +769,7 @@ impl PausedExecution for PausedResponseExecution {
         // The height of the `clean_canister` state increases with every call of
         // `resume()`. We re-create the helper based on `clean_canister` so that
         // the Wasm state changes are applied to the up-to-date state.
+        let executed_wasm_instructions = self.helper.executed_wasm_instructions;
         let (helper, result) = match ResponseHelper::resume(
             self.helper,
             &clean_canister,
@@ -768,10 +792,19 @@ impl PausedExecution for PausedResponseExecution {
                     err,
                 );
                 self.paused_wasm_execution.abort();
-                let result = wasm_execution_error(
-                    err,
-                    self.execution_parameters.instruction_limits.message(),
+                // The instructions already executed by the paused Wasm execution
+                // are still charged: they have been executed and hence consumed
+                // round instructions, but the paused Wasm execution never
+                // finishes and hence yields no `num_instructions_left` to derive
+                // them from.
+                let instructions_left = NumInstructions::new(
+                    self.execution_parameters
+                        .instruction_limits
+                        .message()
+                        .get()
+                        .saturating_sub(executed_wasm_instructions.get()),
                 );
+                let result = wasm_execution_error(err, instructions_left);
                 (helper, result)
             }
         };
@@ -861,6 +894,7 @@ impl PausedExecution for PausedCleanupExecution {
         //
         // Note that we don't apply changes from the response callback execution
         // because the cleanup callback runs only if the response callback fails.
+        let executed_wasm_instructions = self.helper.executed_wasm_instructions;
         let (helper, result) = match ResponseHelper::resume(
             self.helper,
             &clean_canister,
@@ -883,10 +917,19 @@ impl PausedExecution for PausedCleanupExecution {
                     err,
                 );
                 self.paused_wasm_execution.abort();
-                let result = wasm_execution_error(
-                    err,
-                    self.execution_parameters.instruction_limits.message(),
+                // The instructions already executed by the paused Wasm execution
+                // are still charged: they have been executed and hence consumed
+                // round instructions, but the paused Wasm execution never
+                // finishes and hence yields no `num_instructions_left` to derive
+                // them from.
+                let instructions_left = NumInstructions::new(
+                    self.execution_parameters
+                        .instruction_limits
+                        .message()
+                        .get()
+                        .saturating_sub(executed_wasm_instructions.get()),
                 );
+                let result = wasm_execution_error(err, instructions_left);
                 (helper, result)
             }
         };
@@ -1091,7 +1134,7 @@ fn reserve_cleanup_instructions(
 #[allow(clippy::too_many_arguments)]
 fn execute_response_cleanup(
     clean_canister: CanisterState,
-    helper: ResponseHelper,
+    mut helper: ResponseHelper,
     cleanup_closure: WasmClosure,
     callback_err: HypervisorError,
     instructions_left: NumInstructions,
@@ -1104,6 +1147,10 @@ fn execute_response_cleanup(
     execution_parameters
         .instruction_limits
         .update(instructions_left);
+    // The instructions executed by the response callback are reflected in the
+    // instruction limits updated above. Hence the next Wasm execution (the
+    // cleanup callback) starts counting from zero.
+    helper.executed_wasm_instructions = NumInstructions::new(0);
     let func_ref = match original.call_origin {
         CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
             FuncRef::UpdateClosure(cleanup_closure)
@@ -1176,7 +1223,7 @@ fn process_response_result(
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedResponseExecution {
                 paused_wasm_execution,
-                helper: helper.pause(round_limits),
+                helper: helper.pause(round_limits, slice.executed_instructions),
                 execution_parameters,
                 reserved_cleanup_instructions,
                 original,
@@ -1276,7 +1323,7 @@ fn process_cleanup_result(
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedCleanupExecution {
                 paused_wasm_execution,
-                helper: helper.pause(round_limits),
+                helper: helper.pause(round_limits, slice.executed_instructions),
                 execution_parameters,
                 callback_err,
                 original,

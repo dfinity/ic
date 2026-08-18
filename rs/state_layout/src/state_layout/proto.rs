@@ -75,14 +75,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             )
             .into(),
             log_memory_limit: item.log_memory_limit.get(),
-            canister_log_records: item
-                .canister_log
-                .records()
-                .iter()
-                .map(|record| record.into())
-                .collect(),
-            next_canister_log_record_idx: item.next_canister_log_record_idx,
-            log_memory_store_migrated: item.log_memory_store_migrated,
             log_memory_store_persistent_next_idx: item.log_memory_store_persistent_next_idx,
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
@@ -121,12 +113,14 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let cycles_debit = value
             .cycles_debit
-            .map(|c| c.into())
+            .map(Cycles::try_from)
+            .transpose()?
             .unwrap_or_else(Cycles::zero);
 
         let reserved_balance = value
             .reserved_balance
-            .map(|c| c.into())
+            .map(Cycles::try_from)
+            .transpose()?
             .unwrap_or_else(Cycles::zero);
 
         let mut consumed_cycles_by_use_cases = BTreeMap::new();
@@ -178,10 +172,14 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_balance,
             cycles_debit,
             reserved_balance,
-            reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
+            reserved_balance_limit: value
+                .reserved_balance_limit
+                .map(Cycles::try_from)
+                .transpose()?,
             minimum_incoming_canister_call_cycles: value
                 .minimum_incoming_canister_call_cycles
-                .map(|v| v.into())
+                .map(Cycles::try_from)
+                .transpose()?
                 .unwrap_or_default(),
             status: try_from_option_field(
                 value.canister_status,
@@ -237,16 +235,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )
             .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),
-            canister_log: CanisterLog::new_aggregate(
-                value.next_canister_log_record_idx,
-                value
-                    .canister_log_records
-                    .into_iter()
-                    .map(|record| record.into())
-                    .collect(),
-            ),
-            next_canister_log_record_idx: value.next_canister_log_record_idx,
-            log_memory_store_migrated: value.log_memory_store_migrated,
             log_memory_store_persistent_next_idx: value.log_memory_store_persistent_next_idx,
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
@@ -351,6 +339,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                 .on_low_wasm_memory_hook_status
                 .map(|x| pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&x).into()),
             source: pb_canister_state_bits::SnapshotSource::from(item.source).into(),
+            restored: item.restored,
         }
     }
 }
@@ -405,6 +394,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             global_timer,
             on_low_wasm_memory_hook_status,
             source,
+            restored: item.restored,
         })
     }
 }

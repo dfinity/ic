@@ -33,7 +33,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:65ab9023792784e8e13dbdd5b9a63c2dff0cd38237afd1cdbc299577505d4b88
+      image: ghcr.io/dfinity/ic-build@sha256:631b89b4b353889b5ab845fe0305cfed185091efe16bf6c79029cf083db4e42c
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -89,7 +89,7 @@ jobs:
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
-          protected_branches=("^master$" "^feat-ai-on-engines$" "^rc--" "^hotfix-" "^public-hotfix-")
+          protected_branches=("^master$" "^rc--" "^hotfix-")
           for pattern in "${protected_branches[@]}"; do
               if [[ "$BRANCH_NAME" =~ $pattern ]]; then
                   is_protected_branch="true"
@@ -128,7 +128,13 @@ jobs:
           else
               # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
-              diff_only="true"
+
+              # The `infer-bazel-targets` job below is very unstable when diff_only is enabled so we temporarily disable it until we have a proper fix.
+              # When diff_only is enabled ci/scripts/targets.py will run a bazel query involving `rdeps` of modified files which will force all bazel repositories to be downloaded.
+              # These include several multi-GB mainnet ICOS images which will either cause the runner to run out of disk space or the bazel query to run for a very long time or timeout.
+              # diff_only="true"
+              diff_only="false"
+
               skip_long_tests="true"
           fi
 
@@ -173,7 +179,9 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            targets_args=()
+            # Local system-tests will run on the Remote Execution Cluster @ Namespace
+            # via the .github/workflows/ci-rbe-evaluation.yml job so skip them in this job:
+            targets_args=(--exclude_tags=local_system_test)
             if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
@@ -227,7 +235,7 @@ jobs:
           bazel_args=( --config=flaky_retry ) # auto retry eg systests
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
-          elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
+          elif [[ $BRANCH_NAME =~ ^hotfix- ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate )
           else
               bazel_args+=( --keep_going )
@@ -237,7 +245,6 @@ jobs:
             # make sure the version is stamped in
             bazel_args+=( --config=stamped )
           fi
-
 
           echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
 
@@ -323,13 +330,10 @@ jobs:
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --enable_remote_asset_api --bazelrc=/tmp/bazel-cache.bazelrc
-          cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
       - name: Build and Test
         run: |
-          mkdir -p /tmp/zig-cache
-
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
@@ -575,6 +579,15 @@ jobs:
     name: Build Determinism
     runs-on: ubuntu-latest
     needs: [build-ic, bazel-test-all]
+    # Run even when `bazel-test-all` fails: its test failures happen *after*
+    # its build succeeded, its execution logs were uploaded (the bazel action
+    # uploads them on failure too) and — on release builds — the artifacts
+    # were already published to the CDN. Without this condition a single
+    # failing/flaky test silently skipped the determinism check while the
+    # artifacts still shipped. `build-ic` still has to succeed: it produces the
+    # no-cache side of the comparison (and is skipped on merge_group, where
+    # there is nothing to compare).
+    if: ${{ !cancelled() && needs.build-ic.result == 'success' }}
     steps:
       - name: Download execution logs (cache)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -656,10 +669,8 @@ jobs:
           steps.filter.outputs.cargo == 'true' ||
           contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||
           env.BRANCH_NAME == 'master' ||
-          env.BRANCH_NAME == 'feat-ai-on-engines' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-') ||
-          startsWith(env.BRANCH_NAME, 'public-hotfix-')
+          startsWith(env.BRANCH_NAME, 'hotfix-')
         shell: bash
         env:
           # on dind_small cargo sometimes runs out of files (when building and linting). This trades
@@ -711,6 +722,22 @@ jobs:
             command: "--image ic-build bash"
     steps:
       - *checkout
+      - name: Workaround for actions/runner-images#14473 (crun pinning)
+        run: |
+          # Workaround for actions/runner-images#14473:
+          # Podman 5.x on ubuntu-24.04/22.04 picks /usr/bin/crun (1.14.1) over
+          # /usr/local/bin/crun (1.28). Pin it explicitly.
+          #
+          # container-run.sh always invokes podman as `sudo podman`, which
+          # resets $HOME, so a per-user containers.conf drop-in under $HOME
+          # would never be seen by (rootful) podman. Instead, use
+          # container-run.sh's own ~/.container-run.conf hook: it is sourced
+          # in the invoking (non-root) shell *before* `sudo podman run` is
+          # exec'd, and PODMAN_RUN_USR_ARGS is appended as CLI args to that
+          # `podman run` call -- which, unlike $HOME, survive sudo.
+          if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
+            echo 'PODMAN_RUN_USR_ARGS=(--runtime /usr/local/bin/crun)' >>~/.container-run.conf
+          fi
       - name: Filter Relevant Files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
@@ -725,9 +752,7 @@ jobs:
         if: |
           steps.filter.outputs.container-run == 'true' ||
           env.BRANCH_NAME == 'master' ||
-          env.BRANCH_NAME == 'feat-ai-on-engines' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-') ||
-          startsWith(env.BRANCH_NAME, 'public-hotfix-')
+          startsWith(env.BRANCH_NAME, 'hotfix-')
         run: |
           ./ci/container/container-run.sh ${{ matrix.command }}

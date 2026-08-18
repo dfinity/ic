@@ -411,24 +411,46 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
             EventPayload::RegisteredDepositAddresses {
                 scan_window_nanos,
                 capacity,
-                addresses,
+                registrations,
             } => ET::RegisteredDepositAddresses(
                 ic_cketh_minter::state::event::DepositAddressRegistry {
                     scan_window_nanos,
                     capacity,
-                    registrations: addresses
+                    registrations: registrations
                         .into_iter()
                         .map(
                             |a| ic_cketh_minter::state::event::DepositAddressRegistration {
                                 owner: a.owner,
                                 subaccount: a.subaccount,
+                                erc20_contract_address: a.erc20_contract_address.parse().unwrap(),
                                 address: a.address.parse().unwrap(),
                                 expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
+                                last_scanned_block: a
+                                    .last_scanned_block
+                                    .map(|b| b.try_into().unwrap()),
+                                scan_count: a.scan_count.try_into().unwrap(),
                             },
                         )
                         .collect(),
                 },
             ),
+            EventPayload::AutomaticDepositReceived {
+                owner,
+                subaccount,
+                address,
+                erc20_contract_address,
+                last_scanned_block,
+                scan_count,
+                scanned_balance,
+            } => ET::AutomaticDepositReceived(ic_cketh_minter::state::event::AutomaticDeposit {
+                owner,
+                subaccount,
+                address: address.parse().unwrap(),
+                erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                last_scanned_block: last_scanned_block.try_into().unwrap(),
+                scan_count: scan_count.try_into().unwrap(),
+                scanned_balance: scanned_balance.try_into().unwrap(),
+            }),
         },
     }
 }

@@ -2,7 +2,7 @@ use crate::metrics::Metrics;
 use candid::Encode;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_pricing::{
-    AdapterLimits, BudgetTracker, NetworkUsage, PricingError, PricingFactory,
+    AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError, PricingFactory,
 };
 use ic_https_outcalls_service::{
     CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
@@ -19,8 +19,8 @@ use ic_types::{
     canister_http::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform,
-        validate_http_headers_and_body,
+        CanisterHttpResponseContent, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
     messages::{Query, QuerySource, Request},
@@ -137,12 +137,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 id: request_id,
                 context: request_context,
                 socks_proxy_addrs,
-                cost_schedule,
-                subnet_size,
             } = canister_http_request;
 
-            let mut budget =
-                pricing_factory.new_tracker(&request_context, subnet_size, cost_schedule);
+            let mut budget = pricing_factory.new_tracker(&request_context);
             let request_size = request_context.variable_parts_size();
 
             let CanisterHttpRequestContext {
@@ -159,8 +156,14 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 transform: request_transform,
                 pricing_version: request_pricing_version,
                 replication: request_replication,
+                max_response_bytes: request_max_response_bytes,
                 ..
             } = request_context;
+
+            // The response size cap the caller asked for, which is what we hold
+            // the final (post-transform) response to.
+            let max_response_size_bytes = request_max_response_bytes
+                .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get());
 
             if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
                 warn!(
@@ -213,7 +216,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                 // Only apply the transform if a function name is specified
                 let transform_timer = metrics.transform_execution_duration.start_timer();
-                let max_response_size_bytes = budget.get_adapter_limits().max_response_size.get();
                 let transformed_payload = match &request_transform {
                     Some(transform) => {
                         let (transform_result, instruction_count) = transform_adapter_response(
@@ -398,22 +400,34 @@ async fn execute_http_request(
 
     let (grpc_result, elapsed) =
         timeout_with_capped_metric(max_response_time, adapter_client.https_outcall(proto_req))
-            .await
-            .map_err(|_| CanisterHttpReject {
-                reject_code: RejectCode::SysTransient,
-                message: "Deadline Exceeded".to_string(),
-            })?;
-    let adapter_response = grpc_result.map_err(|grpc_status| CanisterHttpReject {
-        reject_code: grpc_status_code_to_reject(grpc_status.code()),
-        message: grpc_status.message().to_string(),
-    })?;
-    let HttpsOutcallResult {
-        metrics: adapter_metrics,
-        result,
-    } = adapter_response.into_inner();
+            .await;
 
-    let downloaded_bytes = NumBytes::from(adapter_metrics.map_or(0, |m| m.downloaded_bytes));
+    let adapter_result = match grpc_result {
+        Ok(Ok(adapter_response)) => Ok(adapter_response.into_inner()),
+        Ok(Err(grpc_status)) => Err(CanisterHttpReject {
+            reject_code: grpc_status_code_to_reject(grpc_status.code()),
+            message: grpc_status.message().to_string(),
+        }),
+        // A deadline below the protocol maximum is one the request's allowance
+        // imposed, so exceeding it means the request ran out of cycles to pay for
+        // more time rather than that the server was slow.
+        Err(_deadline) if max_response_time < MAX_RESPONSE_TIME => Err(CanisterHttpReject {
+            reject_code: RejectCode::CanisterReject,
+            message: "Insufficient cycles".to_string(),
+        }),
+        Err(_deadline) => Err(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "Deadline Exceeded".to_string(),
+        }),
+    };
 
+    // Every attempt occupied the adapter for `elapsed`, whether or not it got as
+    // far as a response, so all of them are charged for that time (and for what
+    // they did download) before any error is returned.
+    let downloaded_bytes = NumBytes::from(match &adapter_result {
+        Ok(HttpsOutcallResult { metrics, .. }) => metrics.map_or(0, |m| m.downloaded_bytes),
+        Err(_) => 0,
+    });
     budget
         .subtract_network_usage(NetworkUsage {
             response_size: downloaded_bytes,
@@ -423,6 +437,8 @@ async fn execute_http_request(
             reject_code: RejectCode::CanisterReject,
             message: "Insufficient cycles".to_string(),
         })?;
+
+    let HttpsOutcallResult { result, .. } = adapter_result?;
 
     let response = match result {
         Some(https_outcall_result::Result::Response(https_outcall_response)) => {
@@ -586,16 +602,13 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 async fn timeout_with_capped_metric<F>(
     limit: Duration,
     future: F,
-) -> Result<(F::Output, Duration), tokio::time::error::Elapsed>
+) -> (Result<F::Output, tokio::time::error::Elapsed>, Duration)
 where
     F: std::future::Future,
 {
     let start = Instant::now();
-    let result = timeout(limit, future).await?;
-
-    let elapsed = std::cmp::min(start.elapsed(), limit);
-
-    Ok((result, elapsed))
+    let result = timeout(limit, future).await;
+    (result, std::cmp::min(start.elapsed(), limit))
 }
 
 #[cfg(test)]
@@ -612,7 +625,8 @@ mod tests {
     use ic_types::{
         NumberOfNodes, RegistryVersion,
         canister_http::{
-            MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
+            CANDID_OVERHEAD_RESERVE_BYTES, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion,
+            RefundStatus, Replication, Transform,
         },
     };
     use ic_types::{
@@ -630,12 +644,20 @@ mod tests {
 
     #[derive(Clone)]
     pub struct SingleResponseAdapter {
-        response: Result<HttpsOutcallResult, (Code, String)>,
+        /// `None` never responds at all, so that only the client's deadline can
+        /// end the call.
+        response: Option<Result<HttpsOutcallResult, (Code, String)>>,
     }
 
     impl SingleResponseAdapter {
         fn new(response: Result<HttpsOutcallResult, (Code, String)>) -> Self {
-            Self { response }
+            Self {
+                response: Some(response),
+            }
+        }
+
+        fn hanging() -> Self {
+            Self { response: None }
         }
     }
 
@@ -646,8 +668,9 @@ mod tests {
             _request: Request<HttpsOutcallRequest>,
         ) -> Result<Response<HttpsOutcallResult>, Status> {
             match self.response.clone() {
-                Ok(resp) => Ok(Response::new(resp)),
-                Err((code, msg)) => Err(Status::new(code, msg)),
+                Some(Ok(resp)) => Ok(Response::new(resp)),
+                Some(Err((code, msg))) => Err(Status::new(code, msg)),
+                None => std::future::pending().await,
             }
         }
     }
@@ -655,8 +678,17 @@ mod tests {
     async fn setup_adapter_mock(
         adapter_response: Result<HttpsOutcallResult, (Code, String)>,
     ) -> Channel {
+        serve_mock_adapter(SingleResponseAdapter::new(adapter_response)).await
+    }
+
+    async fn setup_hanging_adapter_mock() -> Channel {
+        serve_mock_adapter(SingleResponseAdapter::hanging()).await
+    }
+
+    /// Serves `mock_adapter` over a fresh in-memory gRPC connection and returns the
+    /// client end of it.
+    async fn serve_mock_adapter(mock_adapter: SingleResponseAdapter) -> Channel {
         let (client, server) = tokio::io::duplex(1024);
-        let mock_adapter = SingleResponseAdapter::new(adapter_response);
         tokio::spawn(async move {
             Server::builder()
                 .add_service(HttpsOutcallsServiceServer::new(mock_adapter))
@@ -680,6 +712,108 @@ mod tests {
             }))
             .await
             .unwrap()
+    }
+
+    /// A [`BudgetTracker`] that grants a fixed deadline and records the network
+    /// usage it is charged, so that the accounting of an outcall attempt can be
+    /// observed without going through a real pricing version.
+    struct RecordingTracker {
+        max_response_time: Duration,
+        network_usage: Vec<(NumBytes, Duration)>,
+    }
+
+    impl RecordingTracker {
+        fn with_deadline(max_response_time: Duration) -> Self {
+            Self {
+                max_response_time,
+                network_usage: Vec::new(),
+            }
+        }
+    }
+
+    impl BudgetTracker for RecordingTracker {
+        fn get_adapter_limits(&self) -> AdapterLimits {
+            AdapterLimits {
+                max_response_size: NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                max_response_time: self.max_response_time,
+            }
+        }
+        fn subtract_network_usage(
+            &mut self,
+            network_usage: NetworkUsage,
+        ) -> Result<(), PricingError> {
+            self.network_usage
+                .push((network_usage.response_size, network_usage.response_time));
+            Ok(())
+        }
+        fn get_transform_limit(&self) -> NumInstructions {
+            NumInstructions::from(0)
+        }
+        fn subtract_transform_usage(&mut self, _: NumInstructions) -> Result<(), PricingError> {
+            Ok(())
+        }
+        fn subtract_gossip_usage(&mut self, _: NumBytes) -> Result<(), PricingError> {
+            Ok(())
+        }
+        fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
+            CanisterHttpPaymentReceipt::default()
+        }
+    }
+
+    async fn execute_mock_http_request(
+        grpc_channel: Channel,
+        budget: &mut dyn BudgetTracker,
+    ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
+        execute_http_request(
+            &mut HttpsOutcallsServiceClient::new(grpc_channel),
+            "http://notused.invalid".to_string(),
+            CanisterHttpMethod::GET,
+            Vec::new(),
+            None,
+            Vec::new(),
+            budget,
+        )
+        .await
+    }
+
+    /// An attempt that the adapter fails outright still occupied it for as long as
+    /// it took to fail, so that time is accounted for rather than going uncharged.
+    #[tokio::test]
+    async fn test_network_usage_is_charged_when_the_adapter_returns_an_error() {
+        let grpc_channel =
+            setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
+        let mut budget = RecordingTracker::with_deadline(MAX_RESPONSE_TIME);
+
+        let reject = execute_mock_http_request(grpc_channel, &mut budget)
+            .await
+            .expect_err("the adapter returns an error");
+        assert_eq!(reject.reject_code, RejectCode::SysTransient);
+        assert_eq!(reject.message, "adapter unavailable");
+
+        // No response was downloaded, but the attempt is charged for its time.
+        assert_eq!(budget.network_usage.len(), 1);
+        assert_eq!(budget.network_usage[0].0, NumBytes::from(0));
+    }
+
+    /// A deadline below [`MAX_RESPONSE_TIME`] is one the request's allowance
+    /// imposed, so exceeding it is a lack of cycles rather than a slow server —
+    /// and the time it took to find that out is charged in full.
+    #[tokio::test]
+    async fn test_budget_imposed_deadline_is_charged_and_reported_as_insufficient_cycles() {
+        let grpc_channel = setup_hanging_adapter_mock().await;
+        let deadline = Duration::from_millis(50);
+        assert!(deadline < MAX_RESPONSE_TIME);
+        let mut budget = RecordingTracker::with_deadline(deadline);
+
+        let reject = execute_mock_http_request(grpc_channel, &mut budget)
+            .await
+            .expect_err("the adapter never responds");
+        assert_eq!(reject.reject_code, RejectCode::CanisterReject);
+        assert_eq!(reject.message, "Insufficient cycles");
+
+        // The elapsed time is capped at the deadline, which is exactly what a
+        // timed-out attempt used.
+        assert_eq!(budget.network_usage, vec![(NumBytes::from(0), deadline)]);
     }
 
     fn build_mock_canister_http_request(
@@ -708,11 +842,9 @@ mod tests {
                 refund_status: RefundStatus::default(),
                 registry_version: RegistryVersion::from(1),
                 subnet_size: NumberOfNodes::from(13),
-                cost_schedule: None,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
             socks_proxy_addrs: vec![],
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
-            subnet_size: NumberOfNodes::from(13),
         }
     }
 
@@ -1415,6 +1547,14 @@ mod tests {
         if let CanisterHttpResponseContent::Success(content) = x.content {
             // Subtract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
             assert!(content.len() <= MAX_CANISTER_HTTP_PAYLOAD_SIZE - 50 * 1024);
+            assert!(
+                content.len() as u64
+                    <= MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES,
+                "encoding the largest allowed response overflows the \
+                 {CANDID_OVERHEAD_RESERVE_BYTES}-byte Candid reserve: {} bytes encoded, from \
+                 {MAX_CANISTER_HTTP_RESPONSE_BYTES} bytes of headers and body",
+                content.len(),
+            );
         } else {
             panic!("build_mock_canister_http_response_success should not return this case");
         }

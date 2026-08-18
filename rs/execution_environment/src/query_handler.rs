@@ -5,22 +5,21 @@ mod query_cache;
 mod query_call_graph;
 mod query_context;
 mod query_scheduler;
+mod subnet_query;
 #[cfg(test)]
 mod tests;
 
 use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
     CanisterManager,
-    canister_logs::fetch_canister_logs_response,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
-use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
     TransformExecutionInput, TransformExecutionService,
@@ -42,7 +41,6 @@ use ic_types::{
 use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
 use std::convert::Infallible;
-use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 use std::{
     future::Future,
@@ -55,10 +53,6 @@ use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::QueryScheduler;
-use crate::execution::common::list_canisters;
-use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterMetricsArgs, FetchCanisterLogsRequest, Payload, QueryMethod,
-};
 
 pub struct DataCertificateWithDelegationMetadata {
     pub data_certificate: Vec<u8>,
@@ -186,110 +180,24 @@ impl InternalHttpQueryHandler {
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
-        // Update the query receiver if the query is for the management canister.
+        // Serve the query locally if it is addressed to the management canister.
         if query.receiver == CanisterId::ic_00() {
-            match QueryMethod::from_str(&query.method_name) {
-                Ok(QueryMethod::FetchCanisterLogs) => {
-                    let since = Instant::now(); // Start logging execution time.
-                    let args = FetchCanisterLogsRequest::decode(&query.method_payload)?;
-                    let canister_id = args.get_canister_id();
-                    let canister =
-                        state
-                            .get_ref()
-                            .canister_state(&canister_id)
-                            .ok_or_else(|| {
-                                UserError::new(
-                                    ErrorCode::CanisterNotFound,
-                                    format!("Canister {canister_id} not found"),
-                                )
-                            })?;
-                    let (reply, _record_count, _content_size) =
-                        fetch_canister_logs_response(query.source(), canister, args)
-                            .map_err(UserError::from)?;
-                    let result = Ok(WasmResult::Reply(reply));
-                    self.metrics.observe_subnet_query_message(
-                        QueryMethod::FetchCanisterLogs,
-                        since.elapsed().as_secs_f64(),
-                        &result,
-                    );
-                    return result;
-                }
-                Ok(QueryMethod::CanisterStatus) => {
-                    let args = CanisterIdRecord::decode(&query.method_payload)?;
-                    let canister_id = args.get_canister_id();
-                    let ready_for_migration = state.get_ref().ready_for_migration(&canister_id);
-                    let canister =
-                        state
-                            .get_ref()
-                            .canister_state(&canister_id)
-                            .ok_or_else(|| {
-                                UserError::new(
-                                    ErrorCode::CanisterNotFound,
-                                    format!("Canister {canister_id} not found"),
-                                )
-                            })?;
-                    let since = Instant::now(); // Start logging execution time.
-                    let response = self.canister_manager.get_canister_status(
-                        query.source(),
-                        canister,
-                        state.get_ref().get_own_subnet_cycles_config(),
-                        ready_for_migration,
-                        state.get_ref().get_own_subnet_admins(),
-                    )?;
-                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
-                    self.metrics.observe_subnet_query_message(
-                        QueryMethod::CanisterStatus,
-                        since.elapsed().as_secs_f64(),
-                        &result,
-                    );
-                    return result;
-                }
-                Ok(QueryMethod::ListCanisters) => {
-                    let since = Instant::now();
-                    let caller = query.source();
-                    let result = list_canisters(state.get_ref(), &caller, &query.method_payload)
-                        .map(|(res, _instructions)| WasmResult::Reply(res));
-                    self.metrics.observe_subnet_query_message(
-                        QueryMethod::ListCanisters,
-                        since.elapsed().as_secs_f64(),
-                        &result,
-                    );
-                    return result;
-                }
-                Ok(QueryMethod::CanisterMetrics) => {
-                    let args = CanisterMetricsArgs::decode(&query.method_payload)?;
-                    let canister_id = args.get_canister_id();
-                    let canister =
-                        state
-                            .get_ref()
-                            .canister_state(&canister_id)
-                            .ok_or_else(|| {
-                                UserError::new(
-                                    ErrorCode::CanisterNotFound,
-                                    format!("Canister {canister_id} not found"),
-                                )
-                            })?;
-                    let since = Instant::now(); // Start logging execution time.
-                    let response = self.canister_manager.get_canister_metrics(
-                        query.source(),
-                        canister,
-                        state.get_ref().get_own_subnet_admins(),
-                    )?;
-                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
-                    self.metrics.observe_subnet_query_message(
-                        QueryMethod::CanisterMetrics,
-                        since.elapsed().as_secs_f64(),
-                        &result,
-                    );
-                    return result;
-                }
-                Err(_) => {
-                    return Err(UserError::new(
-                        ErrorCode::CanisterMethodNotFound,
-                        format!("Query method {} not found.", query.method_name),
-                    ));
-                }
-            };
+            let method = subnet_query::parse_query_method(&query.method_name)?;
+            let since = Instant::now(); // Start logging execution time.
+            let result = subnet_query::execute_subnet_query(
+                &self.canister_manager,
+                state.get_ref(),
+                query.source(),
+                method,
+                &query.method_payload,
+            )
+            .map(|(reply, _instructions)| reply);
+            self.metrics.observe_subnet_query_message(
+                method,
+                since.elapsed().as_secs_f64(),
+                &result,
+            );
+            return result.map(WasmResult::Reply);
         }
 
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
@@ -338,13 +246,24 @@ impl InternalHttpQueryHandler {
                 data_certificate_with_delegation_metadata.data_certificate
             },
         );
+        // The subnet's registry-configured `maximum_query_instructions` (`ResourceLimits`) overrides
+        // both the per-query and the composite-query-graph instruction limits; each falls back to
+        // its own replica default when unset.
+        let resource_limits = state.get_ref().resource_limits();
+        let max_query_call_graph_instructions = resource_limits
+            .maximum_query_instructions_or(self.config.max_query_call_graph_instructions);
         let max_instructions_per_query = match max_instructions {
-            Some(max_ins) => max_ins.min(self.max_instructions_per_query),
-            None => self.max_instructions_per_query,
+            // A caller-provided limit (currently only the HTTP outcalls transform budget) is
+            // authoritative for that call.
+            Some(max_instructions) => max_instructions,
+            // Otherwise the subnet's registry-configured limit overrides the replica default
+            // (up or down); when unset, the replica default is used.
+            None => resource_limits.maximum_query_instructions_or(self.max_instructions_per_query),
         };
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
+            self.canister_manager.as_ref(),
             self.own_subnet_type,
             // For composite queries, the set of evaluated canisters is not known in advance,
             // so the whole state is needed to capture later the state of the call graph.
@@ -357,12 +276,12 @@ impl InternalHttpQueryHandler {
             self.config.canister_guaranteed_callback_quota as u64,
             max_instructions_per_query,
             self.config.max_query_call_graph_depth,
-            self.config.max_query_call_graph_instructions,
+            max_query_call_graph_instructions,
             self.config.max_query_call_walltime,
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,
-            &self.metrics.query_critical_error,
+            &self.metrics,
             query_stats_collector,
             Arc::clone(&self.cycles_account_manager),
             instruction_observation,
@@ -379,8 +298,11 @@ impl InternalHttpQueryHandler {
             let counters = context.system_api_call_counters();
             let stats = context.evaluated_canister_stats();
             let errors = context.transient_errors();
+            // Results of queries calling the management canister are not cached:
+            // they depend on parts of the state that the cache does not track.
+            let ic00_calls = context.ic00_calls();
             self.query_cache
-                .push(key, &result, state, counters, stats, errors);
+                .push(key, &result, state, counters, stats, errors, ic00_calls);
         }
         result
     }

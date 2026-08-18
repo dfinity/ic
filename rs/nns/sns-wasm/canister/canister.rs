@@ -1,7 +1,6 @@
-#![allow(deprecated)]
 use async_trait::async_trait;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_cdk::api::call::{CallResult, RejectionCode};
+use ic_cdk::call::{Call, Error as IcCdkCallError, RejectCode};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_management_canister_types_private::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
@@ -35,9 +34,14 @@ use ic_sns_wasm::{
 };
 use ic_types::CanisterId;
 use ic_types_cycles::Cycles;
-use std::{cell::RefCell, collections::HashMap, convert::TryInto};
+use std::{cell::RefCell, collections::HashMap};
 
-use ic_cdk::{init, post_upgrade, pre_upgrade, println, query, update};
+use ic_cdk::{
+    api::{
+        canister_cycle_balance, canister_self, msg_caller, msg_cycles_accept, msg_cycles_available,
+    },
+    init, post_upgrade, pre_upgrade, println, query, update,
+};
 use ic_nervous_system_common::serve_metrics;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
@@ -58,7 +62,7 @@ struct CanisterApiImpl {}
 impl CanisterApi for CanisterApiImpl {
     /// See CanisterApi::local_canister_id
     fn local_canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::id()))
+        CanisterId::unchecked_from_principal(PrincipalId::from(canister_self()))
     }
 
     /// See CanisterApi::create_canister
@@ -73,22 +77,23 @@ impl CanisterApi for CanisterApiImpl {
             .with_controllers(vec![controller_id])
             .with_wasm_memory_limit(wasm_memory_limit);
 
-        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment(
-            target_subnet.get().0,
-            &Method::CreateCanister.to_string(),
-            (CreateCanisterArgs {
+        Call::unbounded_wait(target_subnet.get().0, &Method::CreateCanister.to_string())
+            .with_arg(&CreateCanisterArgs {
                 settings: Some(settings.build()),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
-            },),
-            cycles.get().try_into().unwrap(),
-        )
-        .await;
-
-        result
+            })
+            .with_cycles(cycles.get())
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<CanisterIdRecord>()
+                    .map_err(IcCdkCallError::from)
+            })
             .map_err(handle_call_error(format!(
                 "Creating canister in subnet {target_subnet} failed"
             )))
-            .map(|record| record.0.get_canister_id())
+            .map(|record| record.get_canister_id())
     }
 
     /// See CanisterApi::delete_canister
@@ -97,16 +102,14 @@ impl CanisterApi for CanisterApiImpl {
         self.stop_canister(canister).await?;
 
         // TODO(NNS1-1524) We need to collect the cycles from the canister before we delete it
-        let response: CallResult<()> = ic_cdk::call(
-            CanisterId::ic_00().get().0,
-            "delete_canister",
-            (CanisterIdRecord::from(canister),),
-        )
-        .await;
-
-        response.map_err(handle_call_error(format!(
-            "Failed to delete canister {canister}"
-        )))
+        Call::unbounded_wait(CanisterId::ic_00().get().0, "delete_canister")
+            .with_arg(CanisterIdRecord::from(canister))
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| response.candid_tuple::<()>().map_err(IcCdkCallError::from))
+            .map_err(handle_call_error(format!(
+                "Failed to delete canister {canister}"
+            )))
     }
 
     /// See CanisterApi::install_wasm
@@ -123,12 +126,14 @@ impl CanisterApi for CanisterApiImpl {
             arg: init_payload,
             sender_canister_version: Some(ic_cdk::api::canister_version()),
         };
-        let install_res: CallResult<()> =
-            ic_cdk::call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await;
-
-        install_res.map_err(handle_call_error(format!(
-            "Failed to install WASM on canister {target_canister}"
-        )))
+        Call::unbounded_wait(CanisterId::ic_00().get().0, "install_code")
+            .with_arg(&install_args)
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| response.candid_tuple::<()>().map_err(IcCdkCallError::from))
+            .map_err(handle_call_error(format!(
+                "Failed to install WASM on canister {target_canister}"
+            )))
     }
 
     /// See CanisterApi::set_controller
@@ -145,16 +150,18 @@ impl CanisterApi for CanisterApiImpl {
             sender_canister_version: Some(ic_cdk::api::canister_version()),
         };
 
-        let result: CallResult<()> =
-            ic_cdk::call(CanisterId::ic_00().get().0, "update_settings", (args,)).await;
-
-        result.map_err(handle_call_error(format!(
-            "Failed to update controllers for canister {canister}"
-        )))
+        Call::unbounded_wait(CanisterId::ic_00().get().0, "update_settings")
+            .with_arg(&args)
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| response.candid_tuple::<()>().map_err(IcCdkCallError::from))
+            .map_err(handle_call_error(format!(
+                "Failed to update controllers for canister {canister}"
+            )))
     }
 
-    fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = ic_cdk::api::canister_balance();
+    fn this_canister_has_enough_cycles(&self, required_cycles: u128) -> Result<u128, String> {
+        let available = canister_cycle_balance();
 
         if available < required_cycles {
             return Err(format!(
@@ -164,8 +171,8 @@ impl CanisterApi for CanisterApiImpl {
         Ok(available)
     }
 
-    fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = ic_cdk::api::call::msg_cycles_available();
+    fn message_has_enough_cycles(&self, required_cycles: u128) -> Result<u128, String> {
+        let available = msg_cycles_available();
 
         if available < required_cycles {
             return Err(format!(
@@ -175,33 +182,66 @@ impl CanisterApi for CanisterApiImpl {
         Ok(available)
     }
 
-    fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
-        let cycles = cycles.unwrap_or_else(ic_cdk::api::call::msg_cycles_available);
+    fn accept_message_cycles(&self, cycles: Option<u128>) -> Result<u128, String> {
+        let cycles = cycles.unwrap_or_else(msg_cycles_available);
         self.message_has_enough_cycles(cycles)?;
 
-        let accepted = ic_cdk::api::call::msg_cycles_accept(cycles);
+        let accepted = msg_cycles_accept(cycles);
         Ok(accepted)
     }
 
-    async fn send_cycles_to_canister(&self, target: CanisterId, cycles: u64) -> Result<(), String> {
-        let response: CallResult<()> = ic_cdk::api::call::call_with_payment(
-            CanisterId::ic_00().get().0,
-            "deposit_cycles",
-            (CanisterIdRecord::from(target),),
-            cycles,
-        )
-        .await;
-
-        response.map_err(handle_call_error(format!(
-            "Failed to send cycles to canister {target}"
-        )))
+    async fn send_cycles_to_canister(
+        &self,
+        target: CanisterId,
+        cycles: u128,
+    ) -> Result<(), String> {
+        Call::unbounded_wait(CanisterId::ic_00().get().0, "deposit_cycles")
+            .with_arg(CanisterIdRecord::from(target))
+            .with_cycles(cycles)
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| response.candid_tuple::<()>().map_err(IcCdkCallError::from))
+            .map_err(handle_call_error(format!(
+                "Failed to send cycles to canister {target}"
+            )))
     }
 }
 
-/// This handles the errors returned from ic_cdk::call (and related methods)
-fn handle_call_error(prefix: String) -> impl FnOnce((RejectionCode, String)) -> String {
-    move |(code, msg)| {
-        let err = format!("{}: error code {}: {}", prefix, code as i32, msg);
+/// Translates a failed call into the `(reject code, message)` pair that the error messages
+/// below report.
+///
+/// The match is deliberately exhaustive (rather than using a catch-all arm) so
+/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
+/// instead of silently classifying it as [`RejectCode::SysTransient`].
+fn into_reject_code_and_message(err: IcCdkCallError) -> (i32, String) {
+    match err {
+        IcCdkCallError::CallRejected(rejected) => (
+            rejected.raw_reject_code() as i32,
+            rejected.reject_message().to_string(),
+        ),
+        // A response that cannot be decoded means the callee misbehaved.
+        IcCdkCallError::CandidDecodeFailed(err) => {
+            (RejectCode::CanisterError as i32, err.to_string())
+        }
+        // Neither of these ever left this canister, so the call may well succeed
+        // if retried.
+        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+        IcCdkCallError::CallPerformFailed(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+    }
+}
+
+/// This handles the errors returned from Call::unbounded_wait (and related methods)
+fn handle_call_error<E>(prefix: String) -> impl FnOnce(E) -> String
+where
+    E: Into<IcCdkCallError>,
+{
+    move |err| {
+        let (code, msg) = into_reject_code_and_message(err.into());
+        let err = format!("{prefix}: error code {code}: {msg}");
         println!("{}{}", LOG_PREFIX, err);
         err
     }
@@ -209,18 +249,15 @@ fn handle_call_error(prefix: String) -> impl FnOnce((RejectionCode, String)) -> 
 
 impl CanisterApiImpl {
     async fn stop_canister(&self, canister: CanisterId) -> Result<(), String> {
-        () = ic_cdk::call(
-            CanisterId::ic_00().get().0,
-            "stop_canister",
-            (CanisterIdRecord::from(canister),),
-        )
-        .await
-        .map_err(|(code, msg)| {
-            format!(
-                "Unable to stop target canister: error code {}: {}",
-                code as i32, msg
-            )
-        })?;
+        Call::unbounded_wait(CanisterId::ic_00().get().0, "stop_canister")
+            .with_arg(CanisterIdRecord::from(canister))
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| response.candid_tuple::<()>().map_err(IcCdkCallError::from))
+            .map_err(|err| {
+                let (code, msg) = into_reject_code_and_message(err);
+                format!("Unable to stop target canister: error code {code}: {msg}")
+            })?;
 
         let mut count = 0;
         // Wait until canister is in the stopped state.
@@ -253,7 +290,7 @@ impl CanisterApiImpl {
 }
 
 fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk::caller())
+    PrincipalId::from(msg_caller())
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.

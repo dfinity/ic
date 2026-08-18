@@ -166,7 +166,7 @@ pub struct UpdateStandardEngineReplicaVersionPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::test_helpers::invariant_compliant_registry;
+    use crate::common::test_helpers::{GUEST_LAUNCH_MEASUREMENTS, invariant_compliant_registry};
     use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
     use ic_registry_keys::make_replica_version_key;
     use ic_registry_transport::insert;
@@ -182,9 +182,12 @@ mod tests {
                 result.maybe_apply_mutation_internal(vec![insert(
                     make_replica_version_key(version),
                     ReplicaVersionRecord {
+                        replica_version_id: Some(version.to_string()),
                         release_package_sha256_hex: "".into(),
                         release_package_urls: vec![],
-                        guest_launch_measurements: None,
+                        // Versions of the StandardEngineReplicaVersionRecord must
+                        // have launch measurements.
+                        guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
                     }
                     .encode_to_vec(),
                 )]);

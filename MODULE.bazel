@@ -17,17 +17,20 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "rules_cc", version = "0.2.22")
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
+
+# Hermetic clang/lld-based CC toolchain
+# (https://github.com/hermeticbuild/hermetic-llvm)
+bazel_dep(name = "llvm", version = "0.8.16")
+
+# Keep clang from warning that the toolchain's own --unwindlib=none is unused
+# on rustc links (surfaced by rustc's linker_messages lint); see the patch
+# header for details.
 single_version_override(
-    module_name = "hermetic_cc_toolchain",
+    module_name = "llvm",
     patch_strip = 1,
-    patches = [
-        "//bazel:hermetic_cc_toolchain_strip.patch",
-        "//bazel:hermetic_cc_toolchain_cache_dir.patch",
-        "//bazel:hermetic_cc_toolchain_lto.patch",
-    ],
+    patches = ["//bazel:hermetic_llvm_unwindlib.patch"],
 )
 
 # configure/make dependencies
@@ -41,7 +44,8 @@ register_toolchains(
 # Use a patch to work around determinism issues in make & pkgconfig toolchains
 # https://github.com/bazel-contrib/rules_foreign_cc/issues/1313
 # Also we use HEAD to have the latest version of the dependencies (Meson in
-# particular which otherwise cannot use the zig toolchain)
+# particular, which needs a recent rules_foreign_cc to work with hermetic
+# toolchains)
 archive_override(
     module_name = "rules_foreign_cc",
     patch_strip = 1,
@@ -131,7 +135,9 @@ bazel_dep(name = "rules_buf", version = "0.5.2")
 
 # Go dependencies
 
-bazel_dep(name = "rules_go", version = "0.61.1")
+# 0.62.0 matches what the resolved dependency graph selects (pulled in via
+# the llvm module); keep the declaration in line with the resolution.
+bazel_dep(name = "rules_go", version = "0.62.0")
 bazel_dep(name = "gazelle", version = "0.51.3")
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
@@ -712,14 +718,14 @@ http_file(
 # ckETH
 http_file(
     name = "cketh_mainnet_events.gz",
-    sha256 = "e5ffdd0be68b11eacdc623547643dc3c4dc02de4bcb4e1dfb5906fd775c4d8e0",
-    url = "https://download.dfinity.systems/testdata/cketh/mainnet_events_v1.gz",
+    sha256 = "19531a137015b4c685134d7a454e981dbc8723227a947a78a274894c1ea7c867",
+    url = "https://download.dfinity.systems/testdata/cketh/mainnet_events_v2.gz",
 )
 
 http_file(
     name = "cketh_sepolia_events.gz",
-    sha256 = "ad417332a67911cace2ed1f5179b7b1e5f4eb5327a5e872f68a85283dfa838af",
-    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v1.gz",
+    sha256 = "a4e034db414ea13e03e2533bbdf0e5291d9ccc6e81748191ec5b747389e74921",
+    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v2.gz",
 )
 
 # EVM RPC canister
@@ -1284,6 +1290,33 @@ mainnet_icos_images(
     path = "//:mainnet-icos-revisions.json",
 )
 
+mainnet_icos_binaries = use_repo_rule("//bazel:mainnet-icos-binaries.bzl", "mainnet_icos_binaries")
+
+# Mainnet release binaries, published for the same revisions as the mainnet ICOS
+# images above. Declaring them as Bazel dependencies (instead of having the tests
+# download them from the CDN while they run) is what allows the system-tests that
+# use them to also run on the network-isolated local backend. See the
+# mainnet_binaries_runtime_deps dicts in //rs/tests:common.bzl.
+mainnet_icos_binaries(
+    name = "mainnet_nns_binaries",
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_binaries(
+    name = "mainnet_app_binaries",
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
 mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
 
 mainnet_icos_versions(
@@ -1295,27 +1328,68 @@ os_info = use_repo_rule("//bazel:os_info.bzl", "os_info")
 
 os_info(name = "os_info")
 
-# Set up hermetic cc toolchains for binaries and canisters
-toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+# Set up hermetic cc toolchains (hermetic-llvm) for binaries and canisters.
+#
+# We register wrapper toolchain()s from //bazel instead of the generated
+# @llvm_toolchains//... toolchains so that every toolchain is additionally
+# gated on //bazel:use_hermetic_cc. This lets builds opt out in favor of the
+# system toolchain (e.g. --config=afl / --hermetic_cc=false), replicating
+# hermetic_cc_toolchain's extra_target_settings mechanism, which hermetic-llvm
+# does not provide.
+llvm_toolchain = use_extension("@llvm//extensions:toolchain.bzl", "toolchain")
 
-# The use_hermetic_cc setting is added to each toolchain to allow us to opt out
-# in favor of system toolchains, when needed.
-toolchains.extra_target_settings(settings = ["//bazel:use_hermetic_cc"])
-use_repo(toolchains, "zig_sdk")
+# Executors. macOS executors are declared only so that wasm32 (canister)
+# builds keep working on macs; native macOS targets stay on the system Xcode
+# toolchain until hermetic-llvm's macOS support matures (see the registration
+# below).
+llvm_toolchain.exec(
+    arch = "x86_64",
+    os = "linux",
+)
+llvm_toolchain.exec(
+    arch = "aarch64",
+    os = "linux",
+)
+llvm_toolchain.exec(
+    arch = "x86_64",
+    os = "macos",
+)
+llvm_toolchain.exec(
+    arch = "aarch64",
+    os = "macos",
+)
+
+# Targets: native Linux, plus wasm32 for canisters.
+llvm_toolchain.target(
+    arch = "x86_64",
+    os = "linux",
+)
+llvm_toolchain.target(
+    arch = "aarch64",
+    os = "linux",
+)
+llvm_toolchain.target(
+    arch = "wasm32",
+    os = "none",
+)
+use_repo(llvm_toolchain, "llvm_toolchains")
+
+# The llvm-project sources, for the libunwind headers used by
+# //bazel:libunwind_include.
+llvm_project = use_extension("@llvm//extensions:llvm.bzl", "llvm")
+use_repo(llvm_project, "llvm-project")
 
 register_toolchains(
-    # Linux toolchains
-    "@zig_sdk//toolchain:linux_amd64_gnu.2.31",
-    "@zig_sdk//toolchain:linux_arm64_gnu.2.31",
+    # Linux executors: native + cross + wasm.
+    "//bazel:hermetic_cc_linux_x86_64_to_linux_x86_64",
+    "//bazel:hermetic_cc_linux_x86_64_to_none_wasm32",
+    "//bazel:hermetic_cc_linux_aarch64_to_linux_aarch64",
 
-    # macOS toolchains
-    # Do not use hermetic toolchains for macOS until we have had a chance to
-    # wrap the various system libraries.
-    # "@zig_sdk//toolchain:darwin_amd64",
-    # "@zig_sdk//toolchain:darwin_arm64",
-
-    # wasm toolchains
-    "@zig_sdk//toolchain:none_wasm",
+    # macOS executors: wasm only. Native macOS targets deliberately stay on the system Xcode toolchain:
+    # hermetic-llvm's macOS support (trimmed Apple SDK sysroot, resource-dir handling)
+    # is not yet mature enough for the full darwin build (e.g. configure-based cargo build scripts fail to find SDK headers).
+    "//bazel:hermetic_cc_macos_x86_64_to_none_wasm32",
+    "//bazel:hermetic_cc_macos_aarch64_to_none_wasm32",
 
     # These toolchains are only registered locally.
     dev_dependency = True,
@@ -1323,18 +1397,20 @@ register_toolchains(
 
 new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
 
-# Use libsystemd from the host environment
-# Ideally this is pulled hermetically, but as this is only used by infogetty
-# within IC images, we have less compatibility to worry about, and packaging it
-# this way is easier.
+# Use libvirt from the host environment
+# Used for managing virtual machines programmatically.
 new_local_repository(
-    name = "libsystemd",
-    build_file = "@//third_party:BUILD.libsystemd.bazel",
+    name = "cryptsetup",
+    build_file = "@//third_party:BUILD.cryptsetup.bazel",
     path = "/usr",
 )
 
-# Use libvirt from the host environment
-# Used for managing virtual machines programmatically.
+new_local_repository(
+    name = "devmapper",
+    build_file = "@//third_party:BUILD.devmapper.bazel",
+    path = "/usr",
+)
+
 new_local_repository(
     name = "libvirt",
     build_file = "@//third_party:BUILD.libvirt.bazel",

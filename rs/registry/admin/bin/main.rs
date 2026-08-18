@@ -22,7 +22,9 @@ use ic_crypto_utils_threshold_sig_der::{
 };
 use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types_private::{
+    CanisterInstallMode, CanisterInstallModeV2, WasmMemoryPersistence,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -59,7 +61,10 @@ use ic_nns_governance_api::{
         },
         swap_parameters,
     },
-    install_code::CanisterInstallMode as GovernanceInstallMode,
+    install_code::{
+        CanisterInstallMode as GovernanceInstallMode,
+        CanisterUpgradeOptions as GovernanceCanisterUpgradeOptions,
+    },
     proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
@@ -86,6 +91,7 @@ use ic_protobuf::registry::{
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
+use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry, chain_keys::ChainKeysRegistry,
@@ -418,6 +424,9 @@ enum SubCommand {
 
     /// Submits a proposal to bless an alternative GuestOS version for disaster recovery.
     ProposeToBlessAlternativeGuestOsVersion(ProposeToBlessAlternativeGuestOsVersionCmd),
+
+    /// Submits a proposal to change what replica version(s) are run by Cloud Engines.
+    ProposeToUpdateStandardEngineReplicaVersion(ProposeToUpdateStandardEngineReplicaVersionCmd),
 
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
@@ -1443,6 +1452,22 @@ struct ProposeToChangeNnsCanisterCmd {
     /// The sha256 of the arg binary file.
     #[clap(long)]
     arg_sha256: Option<String>,
+
+    #[clap(long)]
+    /// Whether to skip the canister's pre_upgrade hook. Only valid when mode is upgrade.
+    // This is not Option<bool>, because `--skip-pre-upgrade true` looks stupid.
+    // At the same time, it is fine that we do not support both `None` and
+    // `Some(false)`, because those end up having the same behavior.
+    skip_pre_upgrade: bool,
+
+    #[clap(long)]
+    /// Whether to retain (keep) or drop (replace) the canister's main memory
+    /// before running the new code (between pre- and post-upgrade). Required
+    /// when upgrading a canister whose current/old WASM module has the
+    /// `icp:private enhanced-orthogonal-persistence` custom section (this
+    /// happens with modern Motoko canisters, which use Enhanced Orthogonal
+    /// Persistence). Only valid when mode is upgrade.
+    wasm_memory_persistence: Option<WasmMemoryPersistence>,
 }
 
 #[async_trait]
@@ -1488,7 +1513,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
         let arg = read_arg(&self.arg, &self.arg_sha256);
         ChangeCanisterRequest {
             stop_before_installing: !self.skip_stopping_before_installing,
-            mode: self.mode,
+            mode: CanisterInstallModeV2::from(self.mode),
             canister_id: self.canister_id,
             wasm_module,
             arg,
@@ -1517,16 +1542,56 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             CanisterInstallMode::Upgrade => Some(GovernanceInstallMode::Upgrade as i32),
         };
 
+        let canister_upgrade_options =
+            assemble_canister_upgrade_options(self.skip_pre_upgrade, self.wasm_memory_persistence);
+
         let install_code = InstallCodeRequest {
             skip_stopping_before_installing,
             install_mode,
             canister_id,
             wasm_module,
             arg,
+            canister_upgrade_options,
         };
 
         ProposalActionRequest::InstallCode(install_code)
     }
+}
+
+/// Constructs a CanisterUpgradeOptions from its flag values.
+///
+/// Returns None if skip_pre_upgrade is false and wasm_memory_persistence is
+/// None, i.e. there is nothing to say.
+fn assemble_canister_upgrade_options(
+    // These parameter types match the corresponding flags.
+    skip_pre_upgrade: bool,
+    wasm_memory_persistence: Option<WasmMemoryPersistence>,
+) -> Option<GovernanceCanisterUpgradeOptions> {
+    let has_option = skip_pre_upgrade || wasm_memory_persistence.is_some();
+    if !has_option {
+        // It is not ok to always return an "empty" CanisterUpgradeOptions,
+        // because that is only allowed when `--mode upgrade`.
+        return None;
+    }
+
+    let skip_pre_upgrade = if skip_pre_upgrade {
+        Some(true)
+    } else {
+        // Alternatively, we could use Some(false) here, but when false is
+        // passed to this function, that means that there was no
+        // `--skip-pre-upgrade` in the command. This better reflects that
+        // omission.
+        None
+    };
+
+    let wasm_memory_persistence = wasm_memory_persistence.map(|wasm_memory_persistence| {
+        WasmMemoryPersistenceProto::from(&wasm_memory_persistence) as i32
+    });
+
+    Some(GovernanceCanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    })
 }
 
 /// Sub-command to submit a proposal to upgrade an NNS canister.
@@ -2178,6 +2243,60 @@ impl ProposalAction for ProposeToBlessAlternativeGuestOsVersionCmd {
                 chip_ids: Some(chip_ids),
                 rootfs_hash: Some(self.rootfs_hash.clone()),
                 base_guest_launch_measurements: Some(measurements),
+            },
+        )
+    }
+}
+
+/// Sub-command to submit a proposal to change what replica version(s) are run
+/// by Cloud Engines.
+#[derive_common_proposal_fields]
+#[derive(Clone, Parser, ProposalMetadata)]
+struct ProposeToUpdateStandardEngineReplicaVersionCmd {
+    /// The replica version that Cloud Engines should eventually upgrade to.
+    #[clap(long, required = true)]
+    new_replica_version_id: String,
+
+    /// The replica version that Cloud Engines should upgrade from.
+    #[clap(long, required = true)]
+    old_replica_version_id: String,
+
+    /// The (approximate) fraction of Cloud Engines that should be on new
+    /// replica version (the rest stay on the old one). Must be in the closed
+    /// interval [0.0, 1.0].
+    #[clap(long, required = true)]
+    deployment_progress: f64,
+}
+
+impl ProposalTitle for ProposeToUpdateStandardEngineReplicaVersionCmd {
+    fn title(&self) -> String {
+        if let Some(title) = &self.proposal_title {
+            return title.clone();
+        }
+
+        format!(
+            "Update {:.1}% of Cloud Engines to {}",
+            self.deployment_progress * 100.0,
+            shortened_hash_string(&self.new_replica_version_id),
+        )
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToUpdateStandardEngineReplicaVersionCmd {
+    async fn action(&self, _: &Agent) -> ProposalActionRequest {
+        let Self {
+            new_replica_version_id,
+            old_replica_version_id,
+            deployment_progress,
+            ..
+        } = self.clone();
+
+        ProposalActionRequest::UpdateStandardEngineReplicaVersion(
+            ic_nns_governance_api::UpdateStandardEngineReplicaVersion {
+                new_replica_version_id: Some(new_replica_version_id),
+                old_replica_version_id: Some(old_replica_version_id),
+                deployment_progress: Some(deployment_progress),
             },
         )
     }
@@ -4607,6 +4726,7 @@ async fn main() {
             SubCommand::ProposeToAddOrRemoveDataCenters(_) => (),
             SubCommand::ProposeToAddOrRemoveNodeProvider(_) => (),
             SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
+            SubCommand::ProposeToBlessAlternativeGuestOsVersion(_) => (),
             SubCommand::ProposeToChangeNnsCanister(_) => (),
             SubCommand::ProposeToChangeSubnetMembership(_) => (),
             SubCommand::ProposeToChangeSubnetTypeAssignment(_) => (),
@@ -4649,6 +4769,7 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
             SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(_) => (),
+            SubCommand::ProposeToUpdateStandardEngineReplicaVersion(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToUpdateSubnetType(_) => (),
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
@@ -6037,6 +6158,16 @@ async fn main() {
             );
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
+        SubCommand::ProposeToUpdateStandardEngineReplicaVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
     }
 }
 
@@ -7325,9 +7456,12 @@ impl RootCanisterClient {
             &cmd.wasm_module_sha256,
         )
         .await;
-        let change_canister_request =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_wasm(wasm_module);
+        let change_canister_request = ChangeCanisterRequest::new(
+            true, // Stop before installing.
+            CanisterInstallModeV2::Upgrade(None),
+            GOVERNANCE_CANISTER_ID,
+        )
+        .with_wasm(wasm_module);
 
         let serialized = Encode!(&CanisterIdRecord::from(GOVERNANCE_CANISTER_ID)).unwrap();
         let response = self

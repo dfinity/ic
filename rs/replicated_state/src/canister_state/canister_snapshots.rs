@@ -2,7 +2,7 @@ use crate::{
     CanisterState, NumWasmPages, PageMap,
     canister_state::{
         WASM_PAGE_SIZE_IN_BYTES,
-        execution_state::{Memory, WasmExecutionMode},
+        execution_state::Memory,
         system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
     },
     page_map::{Buffer, PageAllocatorFileDescriptor, PersistenceError},
@@ -14,8 +14,8 @@ use ic_management_canister_types_private::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
-    MAX_WASM64_MEMORY_IN_BYTES, NumBytes, SnapshotId, Time,
+    CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
+    SnapshotId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -238,6 +238,9 @@ pub struct CanisterSnapshot {
     size: NumBytes,
     /// The certified data blob belonging to the canister.
     certified_data: Vec<u8>,
+    /// Whether this snapshot has been loaded onto a canister. Restored snapshots
+    /// are immutable and cannot be modified via `upload_canister_snapshot_data`.
+    restored: bool,
     /// Snapshot of chunked store.
     #[validate_eq(CompareWithValidateEq)]
     chunk_store: WasmChunkStore,
@@ -254,12 +257,14 @@ impl CanisterSnapshot {
         chunk_store: WasmChunkStore,
         execution_snapshot: ExecutionStateSnapshot,
         size: NumBytes,
+        restored: bool,
     ) -> CanisterSnapshot {
         Self {
             source,
             taken_at_timestamp,
             canister_version,
             certified_data,
+            restored,
             chunk_store,
             execution_snapshot,
             size,
@@ -316,6 +321,7 @@ impl CanisterSnapshot {
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version(),
             certified_data: canister.system_state.certified_data.clone(),
+            restored: false,
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
             size: canister.snapshot_size_bytes(),
@@ -360,6 +366,7 @@ impl CanisterSnapshot {
             canister_version,
             size: metadata.snapshot_size_bytes(),
             certified_data: metadata.certified_data.clone(),
+            restored: false,
             chunk_store,
             execution_snapshot,
         }
@@ -367,6 +374,14 @@ impl CanisterSnapshot {
 
     pub fn source(&self) -> SnapshotSource {
         self.source
+    }
+
+    pub fn restored(&self) -> bool {
+        self.restored
+    }
+
+    pub fn set_restored(&mut self) {
+        self.restored = true;
     }
 
     pub fn canister_version(&self) -> u64 {
@@ -500,7 +515,6 @@ pub struct ValidatedSnapshotMetadata {
 impl ValidatedSnapshotMetadata {
     pub fn validate(
         raw: UploadCanisterSnapshotMetadataArgs,
-        wasm_mode: WasmExecutionMode,
     ) -> Result<Self, MetadataValidationError> {
         if raw.wasm_module_size == 0 {
             return Err(MetadataValidationError::WasmModuleEmpty);
@@ -511,17 +525,8 @@ impl ValidatedSnapshotMetadata {
         if !(raw.wasm_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
             return Err(MetadataValidationError::WasmMemoryNotPageAligned);
         }
-        match wasm_mode {
-            WasmExecutionMode::Wasm32 => {
-                if raw.wasm_memory_size > MAX_WASM_MEMORY_IN_BYTES {
-                    return Err(MetadataValidationError::WasmMemoryTooLarge);
-                }
-            }
-            WasmExecutionMode::Wasm64 => {
-                if raw.wasm_memory_size > MAX_WASM64_MEMORY_IN_BYTES {
-                    return Err(MetadataValidationError::WasmMemoryTooLarge);
-                }
-            }
+        if raw.wasm_memory_size > MAX_WASM64_MEMORY_IN_BYTES {
+            return Err(MetadataValidationError::WasmMemoryTooLarge);
         }
         if !(raw.stable_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
             return Err(MetadataValidationError::StableMemoryNotPageAligned);
@@ -642,6 +647,7 @@ mod tests {
             WasmChunkStore::new_for_testing(),
             execution_snapshot,
             NumBytes::from(0),
+            false,
         );
 
         let snapshot_id = SnapshotId::from((canister_id, local_id));

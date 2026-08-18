@@ -1,11 +1,14 @@
 // TODO: Jira ticket NNS1-3556
-#![allow(deprecated)]
 #![allow(static_mut_refs)]
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, println, query, update};
+use ic_cdk::{
+    api::{canister_self, msg_caller},
+    call::{Call, Error as IcCdkCallError, RejectCode},
+    init, post_upgrade, pre_upgrade, println, query, update,
+};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
@@ -121,6 +124,37 @@ impl CanisterEnv {
     }
 }
 
+/// Translates a failed call into the `(error code, message)` pair that
+/// [`Environment::call_canister`] reports to its callers.
+///
+/// The match is deliberately exhaustive (rather than using a catch-all arm) so
+/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
+/// instead of silently classifying it as [`RejectCode::SysTransient`].
+fn into_reject_code_and_message(err: IcCdkCallError) -> (Option<i32>, String) {
+    let (code, message) = match err {
+        IcCdkCallError::CallRejected(rejected) => (
+            rejected.raw_reject_code() as i32,
+            rejected.reject_message().to_string(),
+        ),
+
+        // A response that cannot be decoded means the callee misbehaved.
+        IcCdkCallError::CandidDecodeFailed(err) => {
+            (RejectCode::CanisterError as i32, err.to_string())
+        }
+
+        // Neither of these ever left this canister, so the call may well succeed
+        // if retried.
+        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+        IcCdkCallError::CallPerformFailed(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+    };
+
+    (Some(code), message)
+}
+
 #[async_trait]
 impl Environment for CanisterEnv {
     fn now(&self) -> u64 {
@@ -152,11 +186,13 @@ impl Environment for CanisterEnv {
             /* message: */ String,
         ),
     > {
-        // Due to object safety constraints in Rust, call_canister sends and returns bytes, so we are using
-        // call_raw here instead of call, which requires known candid types.
-        ic_cdk::api::call::call_raw(canister_id.get().0, method_name, &arg, 0)
+        // Due to object safety constraints in Rust, call_canister sends and returns bytes, so we
+        // are passing raw arguments here instead of Candid ones, which require known types.
+        Call::unbounded_wait(canister_id.get().0, method_name)
+            .take_raw_args(arg)
             .await
-            .map_err(|(rejection_code, message)| (Some(rejection_code as i32), message))
+            .map(|response| response.into_bytes())
+            .map_err(|err| into_reject_code_and_message(err.into()))
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -178,7 +214,7 @@ impl Environment for CanisterEnv {
 
     /// Return the canister's ID.
     fn canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::id()))
+        CanisterId::unchecked_from_principal(PrincipalId::from(canister_self()))
     }
 
     /// Return the canister version.
@@ -205,7 +241,7 @@ fn now_seconds() -> u64 {
 }
 
 fn caller() -> PrincipalId {
-    PrincipalId::from(cdk_caller())
+    PrincipalId::from(msg_caller())
 }
 
 #[init]

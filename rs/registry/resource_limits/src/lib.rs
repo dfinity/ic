@@ -6,7 +6,7 @@
 use candid::CandidType;
 use clap::Args;
 use ic_protobuf::registry::subnet::v1 as pb;
-use ic_types::NumBytes;
+use ic_types::{NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
 
 /// Limits on resource consumption (e.g., memory usage).
@@ -24,9 +24,37 @@ pub struct ResourceLimits {
     /// The protocol uses a default value if the limit of `0` is specified.
     #[arg(long)]
     pub maximum_state_delta: Option<NumBytes>,
+    /// The maximum number of instructions a query may consume. This applies both to a single
+    /// (non-composite) query method execution and to the total across an entire composite query
+    /// call graph.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[arg(long)]
+    pub maximum_query_instructions: Option<NumInstructions>,
+    /// The maximum wall-clock time, in seconds, that a query (including a composite query call
+    /// graph) is allowed to run.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[arg(long)]
+    pub maximum_query_walltime_seconds: Option<u64>,
 }
 
 impl ResourceLimits {
+    /// Returns a copy of `self` where every unset (`None`) field inherits its value from `base`.
+    ///
+    /// This is used when updating a subnet: fields not specified in the update keep the value
+    /// currently used in production (taken from the existing subnet record).
+    pub fn inherit_from(&self, base: &Self) -> Self {
+        Self {
+            maximum_state_size: self.maximum_state_size.or(base.maximum_state_size),
+            maximum_state_delta: self.maximum_state_delta.or(base.maximum_state_delta),
+            maximum_query_instructions: self
+                .maximum_query_instructions
+                .or(base.maximum_query_instructions),
+            maximum_query_walltime_seconds: self
+                .maximum_query_walltime_seconds
+                .or(base.maximum_query_walltime_seconds),
+        }
+    }
+
     /// Returns the subnet memory capacity.
     ///
     /// This is `maximum_state_size` if not `0`, otherwise the provided `default`.
@@ -44,6 +72,16 @@ impl ResourceLimits {
             .filter(|maximum_state_delta| maximum_state_delta.get() != 0)
             .unwrap_or(default)
     }
+
+    /// Returns the maximum number of instructions a query may consume, applied both to a single
+    /// query method execution and to a composite query call graph.
+    ///
+    /// This is `maximum_query_instructions` if not `0`, otherwise the provided `default`.
+    pub fn maximum_query_instructions_or(&self, default: NumInstructions) -> NumInstructions {
+        self.maximum_query_instructions
+            .filter(|maximum_query_instructions| maximum_query_instructions.get() != 0)
+            .unwrap_or(default)
+    }
 }
 
 impl From<ResourceLimits> for pb::ResourceLimits {
@@ -51,6 +89,8 @@ impl From<ResourceLimits> for pb::ResourceLimits {
         Self {
             maximum_state_size: resource_limits.maximum_state_size.map(|x| x.get()),
             maximum_state_delta: resource_limits.maximum_state_delta.map(|x| x.get()),
+            maximum_query_instructions: resource_limits.maximum_query_instructions.map(|x| x.get()),
+            maximum_query_walltime_seconds: resource_limits.maximum_query_walltime_seconds,
         }
     }
 }
@@ -60,6 +100,10 @@ impl From<pb::ResourceLimits> for ResourceLimits {
         Self {
             maximum_state_size: resource_limits.maximum_state_size.map(NumBytes::from),
             maximum_state_delta: resource_limits.maximum_state_delta.map(NumBytes::from),
+            maximum_query_instructions: resource_limits
+                .maximum_query_instructions
+                .map(NumInstructions::from),
+            maximum_query_walltime_seconds: resource_limits.maximum_query_walltime_seconds,
         }
     }
 }

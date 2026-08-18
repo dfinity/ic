@@ -1,3 +1,4 @@
+use crate::canister_http_spent::CanisterHttpSpentMetrics;
 use crate::state_machine::{StateMachine, StateMachineImpl};
 use crate::{routing, scheduling};
 use ic_config::execution_environment::{
@@ -359,6 +360,9 @@ pub(crate) struct MessageRoutingMetrics {
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
 
+    /// Metrics for the accounting of HTTP outcall (cycles) spent reports and refunds.
+    pub(crate) canister_http_spent_metrics: CanisterHttpSpentMetrics,
+
     /// Metrics for the `next_checkpoint_height` passed to `process_batch`.
     next_checkpoint_height: IntGauge,
 }
@@ -502,6 +506,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
+
+            canister_http_spent_metrics: CanisterHttpSpentMetrics::new(metrics_registry),
 
             next_checkpoint_height: metrics_registry.int_gauge(
                 METRIC_NEXT_CHECKPOINT_HEIGHT,
@@ -1128,6 +1134,9 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
                     chain_keys_held,
                     cost_schedule,
                     subnet_admins,
+                    // There is no registry field backing this yet, so no subnet
+                    // ever cools down in production; only tests set it.
+                    cooling_down: false,
                 },
             );
         }

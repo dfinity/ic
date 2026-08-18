@@ -30,6 +30,12 @@ pub fn initial_state() -> State {
     State::try_from(valid_init_arg()).expect("BUG: invalid init arg")
 }
 
+/// Install `state` into the global thread-local `STATE`, so `read_state`/`mutate_state` see it in a
+/// unit test. Each test runs on its own thread, so the `thread_local!` `STATE` is per-test.
+pub fn init_state(state: State) {
+    crate::state::STATE.with_borrow_mut(|cell| *cell = Some(state));
+}
+
 pub fn valid_init_arg() -> InitArg {
     InitArg {
         ethereum_network: Default::default(),
@@ -42,6 +48,7 @@ pub fn valid_init_arg() -> InitArg {
         next_transaction_nonce: Default::default(),
         last_scraped_block_number: Default::default(),
         evm_rpc_id: Some(EVM_RPC_ID_STAGING),
+        ethereum_sweeper_contract_address: None,
     }
 }
 

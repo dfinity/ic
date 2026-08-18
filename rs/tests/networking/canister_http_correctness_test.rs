@@ -14,7 +14,6 @@ Success::
 1. Received http response with status 200.
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::Result;
 use assert_matches::assert_matches;
@@ -26,7 +25,6 @@ use ic_agent::{
     agent::{CallResponse, RejectCode, RejectResponse},
 };
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
-use ic_cdk::api::call::RejectionCode;
 use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_management_canister_types_private::{
@@ -52,8 +50,8 @@ use ic_types::{
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use proxy_canister::{
-    FlexibleRemoteHttpRequest, RemoteHttpRequest, RemoteHttpResponse, ResponseWithRefundedCycles,
-    UnvalidatedCanisterHttpRequestArgs,
+    FlexibleRemoteHttpRequest, RejectionCode, RemoteHttpRequest, RemoteHttpResponse,
+    ResponseWithRefundedCycles, UnvalidatedCanisterHttpRequestArgs,
 };
 use serde_json::Value;
 use std::collections::{BTreeSet, HashSet};

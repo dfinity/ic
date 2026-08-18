@@ -8,6 +8,7 @@ import "ic_nervous_system/pb/v1/nervous_system.proto";
 import "ic_nns_common/pb/v1/types.proto";
 import "ic_sns_swap/pb/v1/swap.proto";
 import "registry/replica_version/v1/replica_version.proto";
+import "types/v1/management_canister_types.proto";
 
 // The entity that owns the nodes that run the network.
 //
@@ -730,6 +731,8 @@ message Proposal {
     LoadCanisterSnapshot load_canister_snapshot = 33;
     // Create a canister in a (possibly non-NNS) subnet and install code into it.
     CreateCanisterAndInstallCode create_canister_and_install_code = 34;
+    // Change what replica version(s) are run by Cloud Engines.
+    UpdateStandardEngineReplicaVersion update_standard_engine_replica_version = 35;
   }
 }
 
@@ -1933,6 +1936,21 @@ message InstallCode {
   optional bytes wasm_module_hash = 6;
   // The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
   optional bytes arg_hash = 7;
+
+  message CanisterUpgradeOptions {
+    // Whether to skip the canister's pre_upgrade hook.
+    optional bool skip_pre_upgrade = 1;
+
+    // Whether to retain (keep) or drop (replace) the canister's Wasm main
+    // memory across the upgrade. If the old WASM had a custom section named
+    // "icp:private enhanced-orthogonal-persistence", then this must be set
+    // (otherwise, the Management canister will block the upgrade). If keep is
+    // used here, then the new WASM must also have the same custom section.
+    optional types.v1.WasmMemoryPersistence wasm_memory_persistence = 2;
+  }
+
+  // Options that only apply when install_mode is upgrade.
+  optional CanisterUpgradeOptions canister_upgrade_options = 8;
 }
 
 message StopOrStartCanister {
@@ -2008,6 +2026,14 @@ message BlessAlternativeGuestOsVersion {
   repeated bytes chip_ids = 1;
   string rootfs_hash = 2;
   registry.replica_version.v1.GuestLaunchMeasurements base_guest_launch_measurements = 3;
+}
+
+// Changes what replica version(s) are run by Cloud Engines. See Registry's
+// do_update_standard_engine_replica_version for what changes are allowed.
+message UpdateStandardEngineReplicaVersion {
+  string new_replica_version_id = 1;
+  string old_replica_version_id = 2;
+  double deployment_progress = 3;
 }
 
 message LoadCanisterSnapshot {

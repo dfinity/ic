@@ -9,6 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
+* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
+  `guest_launch_measurements`.
+
 ## Changed
 
 ## Deprecated

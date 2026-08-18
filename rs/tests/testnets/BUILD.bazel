@@ -88,6 +88,7 @@ system_test_nns(
     name = "small",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 Application + 1 unassigned + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -107,6 +108,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 64 + 2 * DEFAULT_VCPUS_PER_VM,  # 1 System node @ 64 vCPUs (subnet override) + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -127,6 +129,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 64 + 3 * DEFAULT_VCPUS_PER_VM,  # 1 Application node @ 64 vCPUs (subnet override) + 1 System + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -162,6 +165,7 @@ system_test_nns(
     name = "small_nns",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 Application + 1 API boundary node + 1 unassigned + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -187,6 +191,7 @@ system_test_nns(
     name = "small_with_query_stats",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 Application + 1 API boundary node + 1 unassigned + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -209,6 +214,7 @@ system_test_nns(
     name = "sns_testing",
     cpus = MIN_LOCAL_CPUS + 6 * DEFAULT_VCPUS_PER_VM,  # 1 System + 2 Application + 1 API boundary node + 1 unassigned + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -236,6 +242,17 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 23 * DEFAULT_VCPUS_PER_VM,  # 1 System + 20 unassigned nodes (NUM_UNASSIGNED_NODES default) + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
+    # Boot the GuestOS version that mainnet's NNS subnet runs. The _dev variant is
+    # necessary because this testnet brings up a fresh NNS whose public key has to
+    # be configured on the nodes.
+    guestos = "mainnet_nns_dev",
+    # No vector VM: the driver creates it without host features and with no way
+    # to pass any, so it cannot be placed on the DMZ hosts this testnet runs on.
+    # See the placement note in cloud_engine.rs.
+    logs = False,
+    # The Prometheus VM needs the same mandatory feature as every other VM here.
+    prometheus_vm_required_host_features = ["dmz"],
     tags = [
         "dynamic_testnet",
         "manual",
@@ -248,6 +265,7 @@ system_test_nns(
     },
     deps = [
         # Keep sorted.
+        "//rs/nervous_system/common/test_keys",
         "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
@@ -255,6 +273,9 @@ system_test_nns(
         "//rs/tests/nns/nns_dapp",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-utils",
+        "@crate_index//:slog",
     ],
 )
 
@@ -263,6 +284,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 11 * DEFAULT_VCPUS_PER_VM,  # 4 System + 4 Application + 1 unassigned + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -282,6 +304,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 10 * 64 + DEFAULT_VCPUS_PER_VM,  # 9 subnet nodes (4 System + 4 + 1 Application) + 1 API boundary node @ 64 vCPUs (IC-level override) + 1 ic-gateway VM @ 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -308,6 +331,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 64 + 3 * DEFAULT_VCPUS_PER_VM,  # 1 Application node @ 64 vCPUs (subnet override, default 1 perf host) + 1 System + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "dynamic_testnet",
@@ -330,6 +354,7 @@ system_test_nns(
     name = "baremetal_app_subnet",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs (the bare-metal node is external hardware, not a Farm VM).
     enable_metrics = True,
+    enable_uvm = True,
     env = MAINNET_ENV,
     env_inherit = [
         "BARE_METAL_HOST_SECRETS",
@@ -360,6 +385,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 36 * DEFAULT_VCPUS_PER_VM,  # 32 Application + 2 System + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -406,6 +432,7 @@ system_test_nns(
     name = "nns_recovery",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs (SUBNET_SIZE nested HostOS nodes, default 0, not included).
     enable_metrics = True,
+    enable_uvm = True,
     env = {
         "USE_MAINNET_STATE": "false",
     },
@@ -422,6 +449,7 @@ system_test_nns(
     name = "mainnet_nns_recovery",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 API boundary node + 1 unassigned + 1 aux UVM + 1 ic-gateway VM, all 6 vCPUs (SUBNET_SIZE nested HostOS nodes, default 0, not included).
     enable_metrics = True,
+    enable_uvm = True,
     env = MAINNET_ENV | {
         "USE_MAINNET_STATE": "true",
     },
@@ -445,6 +473,7 @@ system_test_nns(
     name = "mainnet_nns_state",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 API boundary node + 1 unassigned + 1 aux UVM + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
+    enable_uvm = True,
     env = MAINNET_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
     guestos = "mainnet_nns",

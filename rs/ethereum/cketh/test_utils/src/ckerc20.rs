@@ -6,20 +6,19 @@ use crate::flow::{
 use crate::mock::{
     JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
 };
-use crate::response::{block_response, empty_logs, fee_history};
+use crate::response::{balance_scan_response, block_response, empty_logs, fee_history};
 use crate::{
     CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, ERC20_HELPER_CONTRACT_ADDRESS,
     ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, LedgerBalance, MAX_TICKS,
     RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
-    format_ethereum_address_to_eip_55, new_state_machine,
+    format_ethereum_address_to_eip_55,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::Hex32;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_cketh_minter::SCRAPING_ETH_LOGS_INTERVAL;
+use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
@@ -28,14 +27,18 @@ use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, MinterInfo,
 };
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
+use ic_cketh_minter::{
+    BALANCE_SCAN_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL,
+};
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
-use ic_ledger_suite_orchestrator_test_utils::{LedgerSuiteOrchestrator, supported_erc20_tokens};
-use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
-use ic_types::messages::MessageId;
+use ic_ledger_suite_orchestrator_test_utils::pocket_ic::LedgerSuiteOrchestrator;
+use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
+use pocket_ic::common::rest::RawMessageId;
+use pocket_ic::{ErrorCode, PocketIc};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::identity;
@@ -51,7 +54,7 @@ pub const ONE_USDC: u64 = 1_000_000; //6 decimals
 pub const TWO_USDC: u64 = 2_000_000; //6 decimals
 
 pub struct CkErc20Setup {
-    pub env: Arc<StateMachine>,
+    pub env: Arc<PocketIc>,
     pub cketh: CkEthSetup,
     pub orchestrator: LedgerSuiteOrchestrator,
     pub supported_erc20_tokens: Vec<Erc20Token>,
@@ -59,7 +62,7 @@ pub struct CkErc20Setup {
 
 impl Default for CkErc20Setup {
     fn default() -> Self {
-        Self::new(Arc::new(new_state_machine()))
+        Self::new()
     }
 }
 
@@ -70,28 +73,36 @@ impl AsRef<CkEthSetup> for CkErc20Setup {
 }
 
 impl CkErc20Setup {
-    pub fn new(env: Arc<StateMachine>) -> Self {
-        let mut ckerc20 = Self::new_without_ckerc20_active(env);
+    pub fn new() -> Self {
+        Self::with_cketh(CkEthSetup::default())
+    }
+
+    /// Activates the ckERC20 feature on an existing ckETH fixture: the balance-scan harness in
+    /// [`crate::live_scan`] supplies one backed by a live anvil node rather than the mocked default.
+    pub(crate) fn with_cketh(cketh: CkEthSetup) -> Self {
+        let mut ckerc20 = Self::without_ckerc20_active(cketh);
         ckerc20.cketh = ckerc20
             .cketh
             .upgrade_minter_to_add_orchestrator_id(
-                ckerc20
-                    .orchestrator
-                    .ledger_suite_orchestrator_id
-                    .get_ref()
-                    .0,
+                ckerc20.orchestrator.ledger_suite_orchestrator_id,
             )
             .upgrade_minter_to_add_erc20_helper_contract(ERC20_HELPER_CONTRACT_ADDRESS.to_string());
         ckerc20
     }
 
-    pub fn new_without_ckerc20_active(env: Arc<StateMachine>) -> Self {
-        let cketh = CkEthSetup::new(env.clone());
+    pub fn new_without_ckerc20_active() -> Self {
+        Self::without_ckerc20_active(CkEthSetup::default())
+    }
+
+    /// The ckETH fixture builds the PocketIC instance; the orchestrator is then created on that
+    /// same instance so both share one replica.
+    fn without_ckerc20_active(cketh: CkEthSetup) -> Self {
+        let env = cketh.env.clone();
         let orchestrator = LedgerSuiteOrchestrator::new(
             env.clone(),
             LedgerSuiteOrchestratorInitArg {
                 more_controller_ids: vec![],
-                minter_id: Some(cketh.minter_id.get_ref().0),
+                minter_id: Some(cketh.minter_id),
                 cycles_management: None,
             },
         )
@@ -134,6 +145,37 @@ impl CkErc20Setup {
     pub fn add_support_for_subaccount(mut self) -> Self {
         self.cketh = self.cketh.add_support_for_subaccount();
         self
+    }
+
+    /// Advance the refresh timer and answer the resulting `eth_getBlockByNumber("latest")` with
+    /// `block`, so the minter's latest block height becomes `block`, then settle the reply. The
+    /// mock matches the full `["latest", false]` request, so concurrent `eth_getBlockByNumber`
+    /// calls (e.g. the finalized scraper) are left untouched.
+    pub fn refresh_latest_block(&self, block: u64) {
+        self.env.advance_time(REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL);
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .with_request_params(json!(["latest", false]))
+            .respond_for_all_with(block_response(block))
+            .build()
+            .expect_rpc_calls(self);
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+        }
+    }
+
+    /// Advance the balance-scan timer and answer the resulting deployless-batcher `eth_call` with
+    /// `balances` — one entry per scanned `(deposit address, supported token)` pair, in scan order
+    /// (i.e. `live-due addresses × supported tokens`). Settles the reply so the per-address scan
+    /// schedule is advanced before returning.
+    pub fn run_balance_scan(&self, balances: &[u128]) {
+        self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
+            .respond_for_all_with(balance_scan_response(balances))
+            .build()
+            .expect_rpc_calls(self);
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+        }
     }
 
     pub fn check_events(self) -> MinterEventAssert<Self> {
@@ -222,34 +264,25 @@ impl CkErc20Setup {
     }
 
     pub fn stop_ckerc20_ledger(&self, ledger_id: Principal) {
-        let stop_res = self.env.stop_canister_as(
-            self.orchestrator.ledger_suite_orchestrator_id.get(),
-            CanisterId::unchecked_from_principal(ledger_id.into()),
-        );
-        assert_matches!(
-            stop_res,
-            Ok(WasmResult::Reply(_)),
-            "Failed to stop ckERC20 ledger"
-        );
+        self.env
+            .stop_canister(
+                ledger_id,
+                Some(self.orchestrator.ledger_suite_orchestrator_id),
+            )
+            .expect("Failed to stop ckERC20 ledger");
     }
 
     pub fn start_ckerc20_ledger(&self, ledger_id: Principal) {
-        let start_res = self.env.start_canister_as(
-            self.orchestrator.ledger_suite_orchestrator_id.get(),
-            CanisterId::unchecked_from_principal(ledger_id.into()),
-        );
-        assert_matches!(
-            start_res,
-            Ok(WasmResult::Reply(_)),
-            "Failed to start ckERC20 ledger"
-        );
+        self.env
+            .start_canister(
+                ledger_id,
+                Some(self.orchestrator.ledger_suite_orchestrator_id),
+            )
+            .expect("Failed to start ckERC20 ledger");
     }
 
     pub fn balance_of_ledger(&self, ledger_id: Principal, account: impl Into<Account>) -> Nat {
-        self.cketh.balance_of_ledger(
-            CanisterId::unchecked_from_principal(ledger_id.into()),
-            account,
-        )
+        self.cketh.balance_of_ledger(ledger_id, account)
     }
 
     pub fn call_cketh_ledger_approve_minter(
@@ -274,12 +307,7 @@ impl CkErc20Setup {
     ) -> Self {
         self.cketh = self
             .cketh
-            .call_ledger_id_approve_minter(
-                CanisterId::unchecked_from_principal(ledger_id.into()),
-                from,
-                amount,
-                from_subaccount,
-            )
+            .call_ledger_id_approve_minter(ledger_id, from, amount, from_subaccount)
             .expect_ok(1);
         self
     }
@@ -304,11 +332,8 @@ impl CkErc20Setup {
         ledger_id: Principal,
         ledger_index: T,
     ) -> LedgerTransactionAssert<Self> {
-        let ledger_transaction = crate::flow::call_ledger_id_get_transaction(
-            &self.env,
-            CanisterId::unchecked_from_principal(ledger_id.into()),
-            ledger_index,
-        );
+        let ledger_transaction =
+            crate::flow::call_ledger_id_get_transaction(&self.env, ledger_id, ledger_index);
         LedgerTransactionAssert {
             setup: self,
             ledger_transaction,
@@ -337,12 +362,15 @@ impl CkErc20Setup {
         from: Principal,
         withdraw_erc20_arg: WithdrawErc20Arg,
     ) -> RefreshGasFeeEstimate {
-        let message_id = self.env.send_ingress(
-            PrincipalId::from(from),
-            self.cketh.minter_id,
-            "withdraw_erc20",
-            Encode!(&withdraw_erc20_arg).expect("failed to encode withdraw args"),
-        );
+        let message_id = self
+            .env
+            .submit_call(
+                self.cketh.minter_id,
+                from,
+                "withdraw_erc20",
+                Encode!(&withdraw_erc20_arg).expect("failed to encode withdraw args"),
+            )
+            .expect("failed to submit withdraw_erc20 call");
         RefreshGasFeeEstimate {
             setup: self,
             message_id,
@@ -353,8 +381,10 @@ impl CkErc20Setup {
         self,
         from: Principal,
         subaccount: Option<[u8; 32]>,
+        erc20_contract_address: String,
     ) -> DepositErc20Flow {
         let arg = DepositErc20Arg {
+            erc20_contract_address,
             mode: DepositMode::Unsponsored { subaccount },
         };
         self.call_minter_deposit_erc20_with(from, arg)
@@ -365,16 +395,23 @@ impl CkErc20Setup {
         from: Principal,
         deposit_erc20_arg: DepositErc20Arg,
     ) -> DepositErc20Flow {
-        let message_id = self.env.send_ingress(
-            PrincipalId::from(from),
-            self.cketh.minter_id,
-            "deposit_erc20",
-            Encode!(&deposit_erc20_arg).expect("failed to encode deposit_erc20 args"),
-        );
+        let message_id = self
+            .env
+            .submit_call(
+                self.cketh.minter_id,
+                from,
+                "deposit_erc20",
+                Encode!(&deposit_erc20_arg).expect("failed to encode deposit_erc20 args"),
+            )
+            .expect("failed to submit deposit_erc20 call");
         DepositErc20Flow {
             setup: self,
             message_id,
         }
+    }
+
+    pub fn advance_time(&self, duration: Duration) {
+        self.cketh.advance_time(duration);
     }
 
     pub fn caller(&self) -> Principal {
@@ -382,7 +419,7 @@ impl CkErc20Setup {
     }
 
     pub fn cketh_ledger_id(&self) -> Principal {
-        self.cketh.ledger_id.get_ref().0
+        self.cketh.ledger_id
     }
 
     pub fn find_ckerc20_token(&self, token_symbol: &str) -> CkErc20Token {
@@ -794,8 +831,9 @@ impl CkErc20DepositFlow {
         let max_eth_logs_block_range = self.as_ref().max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        self.setup.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .with_request_params(json!(["finalized", false]))
             .respond_for_all_with(block_response(latest_finalized_block))
             .build()
             .expect_rpc_calls(self);
@@ -906,7 +944,7 @@ impl CkErc20DepositFlow {
 
 pub struct RefreshGasFeeEstimate {
     pub setup: CkErc20Setup,
-    pub message_id: MessageId,
+    pub message_id: RawMessageId,
 }
 
 impl RefreshGasFeeEstimate {
@@ -946,16 +984,13 @@ impl RefreshGasFeeEstimate {
 
 pub struct Erc20WithdrawalFlow {
     pub setup: CkErc20Setup,
-    pub message_id: MessageId,
+    pub message_id: RawMessageId,
 }
 
 impl Erc20WithdrawalFlow {
     pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
-        let result = self
-            .setup
-            .env
-            .await_ingress(self.message_id.clone(), MAX_TICKS);
-        assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains(error_substring));
+        let result = self.setup.env.await_call(self.message_id.clone());
+        assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
         self.setup
     }
 
@@ -982,27 +1017,23 @@ impl Erc20WithdrawalFlow {
 
     #[allow(clippy::result_large_err)]
     fn minter_response(&self) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
-        Decode!(&assert_reply(
-        self.setup.env
-            .await_ingress(self.message_id.clone(), MAX_TICKS)
-            .expect("failed to resolve message with id: {message_id}"),
-    ), Result<RetrieveErc20Request, WithdrawErc20Error>)
+        Decode!(
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
+            Result<RetrieveErc20Request, WithdrawErc20Error>
+        )
         .unwrap()
     }
 }
 
 pub struct DepositErc20Flow {
     pub setup: CkErc20Setup,
-    pub message_id: MessageId,
+    pub message_id: RawMessageId,
 }
 
 impl DepositErc20Flow {
     pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
-        let result = self
-            .setup
-            .env
-            .await_ingress(self.message_id.clone(), MAX_TICKS);
-        assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains(error_substring));
+        let result = self.setup.env.await_call(self.message_id.clone());
+        assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
         self.setup
     }
 
@@ -1024,12 +1055,7 @@ impl DepositErc20Flow {
 
     fn minter_response(&self) -> Result<DepositErc20Response, DepositErc20Error> {
         Decode!(
-            &assert_reply(
-                self.setup
-                    .env
-                    .await_ingress(self.message_id.clone(), MAX_TICKS)
-                    .expect("failed to resolve message with id: {message_id}")
-            ),
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
             Result<DepositErc20Response, DepositErc20Error>
         )
         .unwrap()

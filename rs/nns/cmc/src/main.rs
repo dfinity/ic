@@ -1,11 +1,14 @@
-#![allow(deprecated)]
 use candid::{CandidType, Encode, Nat};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use environment::Environment;
 use exchange_rate_canister::{UpdateExchangeRateError, UpdateExchangeRateState};
 use ic_cdk::{
-    api::call::{CallResult, ManualReply},
+    api::{
+        canister_cycle_balance, canister_self, certified_data_set, msg_cycles_accept,
+        msg_cycles_available, msg_reject, msg_reply,
+    },
+    call::{Call, Error as IcCdkCallError},
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
@@ -75,7 +78,7 @@ const MAX_MEMO_LENGTH: usize = 32;
 
 /// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
 /// This is the minimum amount needed for creating a canister as of October 2023.
-const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
+const CREATE_CANISTER_MIN_CYCLES: u128 = 100_000_000_000;
 
 /// Prior to 2024-12-10, we used 50e15, but legitimate users started running
 /// into this. At that time, prices had recently gone up, so we resolved to
@@ -130,7 +133,7 @@ impl Environment for CanisterEnvironment {
     }
 
     fn set_certified_data(&self, data: &[u8]) {
-        ic_cdk::api::set_certified_data(data)
+        certified_data_set(data)
     }
 }
 
@@ -425,7 +428,7 @@ where
     yansi::Paint<S>: std::string::ToString,
 {
     #[cfg(target_arch = "wasm32")]
-    ic_cdk::api::print(yansi::Paint::yellow(s).to_string());
+    ic_cdk::api::debug_print(yansi::Paint::yellow(s).to_string());
 
     #[cfg(not(target_arch = "wasm32"))]
     println!("{}", yansi::Paint::yellow(s).to_string());
@@ -539,9 +542,11 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
 #[update(manual_reply = true)]
 fn update_subnet_type(args: UpdateSubnetTypeArgs) {
     match do_update_subnet_type(args) {
-        Ok(response) => ManualReply::<()>::one(response),
-        Err(err) => ManualReply::reject(err.to_string()),
-    };
+        Ok(response) => {
+            msg_reply(candid::encode_one(response).expect("Failed to encode the reply."))
+        }
+        Err(err) => msg_reject(err.to_string()),
+    }
 }
 
 /// Updates the set of available subnet types.
@@ -610,9 +615,11 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
 #[update(manual_reply = true)]
 fn change_subnet_type_assignment(args: ChangeSubnetTypeAssignmentArgs) {
     match do_change_subnet_type_assignment(args) {
-        Ok(response) => ManualReply::<()>::one(response),
-        Err(err) => ManualReply::reject(err.to_string()),
-    };
+        Ok(response) => {
+            msg_reply(candid::encode_one(response).expect("Failed to encode the reply."))
+        }
+        Err(err) => msg_reject(err.to_string()),
+    }
 }
 
 /// Changes the assignment of provided subnets to subnet types.
@@ -1480,32 +1487,32 @@ async fn create_canister(
         subnet_type,
     }: CreateCanister,
 ) -> Result<CanisterId, CreateCanisterError> {
-    let cycles = ic_cdk::api::call::msg_cycles_available();
+    let cycles = msg_cycles_available();
 
     if cycles < CREATE_CANISTER_MIN_CYCLES {
         return Err(CreateCanisterError::Refunded {
-            refund_amount: cycles.into(),
+            refund_amount: cycles,
             create_error: "Insufficient cycles attached.".to_string(),
         });
     }
     let subnet_selection =
         get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
             CreateCanisterError::Refunded {
-                refund_amount: cycles.into(),
+                refund_amount: cycles,
                 create_error: error_message,
             }
         })?;
 
     match do_create_canister(caller(), cycles.into(), subnet_selection, settings).await {
         Ok(canister_id) => {
-            ic_cdk::api::call::msg_cycles_accept(cycles);
+            msg_cycles_accept(cycles);
             Ok(canister_id)
         }
         Err(create_error) => {
-            ic_cdk::api::call::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
-            let refund_amount = ic_cdk::api::call::msg_cycles_available();
+            msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY);
+            let refund_amount = msg_cycles_available();
             Err(CreateCanisterError::Refunded {
-                refund_amount: refund_amount.into(),
+                refund_amount,
                 create_error,
             })
         }
@@ -1612,7 +1619,7 @@ async fn fetch_transaction(
     };
 
     let expected_to = AccountIdentifier::new(
-        PrincipalId::from(ic_cdk::api::id()),
+        PrincipalId::from(canister_self()),
         Some(expected_to_subaccount),
     );
     if to != expected_to {
@@ -1780,7 +1787,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
             spender: _,
         } => {
             let incoming_to_account_identifier = AccountIdentifier::new(
-                PrincipalId::from(ic_cdk::api::id()),
+                PrincipalId::from(canister_self()),
                 Some(incoming_to_subaccount),
             );
             if to != &incoming_to_account_identifier {
@@ -2034,14 +2041,12 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
         to: minting_account_id,
         created_at_time: None,
     };
-    let res: CallResult<BlockIndex> = call_protobuf(ledger_canister_id, "send_pb", send_args).await;
+    let res: Result<BlockIndex, (i32, String)> =
+        call_protobuf(ledger_canister_id, "send_pb", send_args).await;
 
     match res {
         Ok(block) => print(format!("{msg} done in block {block}.")),
-        Err((code, err)) => {
-            let code = code as i32;
-            print(format!("{msg} failed with code {code}: {err:?}"))
-        }
+        Err((code, err)) => print(format!("{msg} failed with code {code}: {err:?}")),
     }
 }
 
@@ -2082,14 +2087,11 @@ async fn refund_icp(
             to,
             created_at_time: None,
         };
-        let send_res: CallResult<BlockIndex> =
+        let send_res: Result<BlockIndex, (i32, String)> =
             call_protobuf(ledger_canister_id, "send_pb", send_args).await;
-        let block = send_res.map_err(|(code, err)| {
-            let code = code as i32;
-            NotifyError::Other {
-                error_code: NotifyErrorCode::RefundFailed as u64,
-                error_message: format!("Refund to {to} failed with code {code}: {err}"),
-            }
+        let block = send_res.map_err(|(code, err)| NotifyError::Other {
+            error_code: NotifyErrorCode::RefundFailed as u64,
+            error_message: format!("Refund to {to} failed with code {code}: {err}"),
         })?;
 
         print(format!("Refund to {to} done in block {block}."));
@@ -2114,21 +2116,18 @@ async fn deposit_cycles(
         ensure_balance(cycles, limiter_to_use)?;
     }
 
-    let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
+    let _response = Call::unbounded_wait(
         candid::Principal::management_canister(),
         METHOD_DEPOSIT_CYCLES,
-        (CanisterIdRecord {
-            canister_id: canister_id.get().0,
-        },),
-        u128::from(cycles),
     )
-    .await;
-
-    res.map_err(|(code, msg)| {
-        format!(
-            "Depositing cycles failed with code {}: {:?}",
-            code as i32, msg
-        )
+    .with_arg(&CanisterIdRecord {
+        canister_id: canister_id.get().0,
+    })
+    .with_cycles(u128::from(cycles))
+    .await
+    .map_err(|err| {
+        let (code, msg) = into_reject_code_and_message(err.into());
+        format!("Depositing cycles failed with code {code}: {msg:?}")
     })?;
 
     Ok(())
@@ -2152,20 +2151,20 @@ async fn do_mint_cycles(
         memo: deposit_memo,
     };
 
-    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment128(
-        cycles_ledger_canister_id.get().0,
-        "deposit",
-        (arg,),
-        u128::from(cycles),
-    )
-    .await;
-
-    result.map(|r| r.0).map_err(|(code, msg)| {
-        format!(
-            "Cycles ledger rejected deposit call with code {}: {:?}",
-            code as i32, msg
-        )
-    })
+    Call::unbounded_wait(cycles_ledger_canister_id.get().0, "deposit")
+        .with_arg(&arg)
+        .with_cycles(u128::from(cycles))
+        .await
+        .map_err(IcCdkCallError::from)
+        .and_then(|response| {
+            response
+                .candid::<CyclesLedgerDepositResult>()
+                .map_err(IcCdkCallError::from)
+        })
+        .map_err(|err| {
+            let (code, msg) = into_reject_code_and_message(err);
+            format!("Cycles ledger rejected deposit call with code {code}: {msg:?}")
+        })
 }
 
 async fn do_create_canister(
@@ -2258,28 +2257,31 @@ async fn do_create_canister(
         });
 
     for subnet_id in subnets {
-        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment128(
-            subnet_id.get().0,
-            METHOD_CREATE_CANISTER,
-            (CreateCanisterArgs {
+        let result = Call::unbounded_wait(subnet_id.get().0, METHOD_CREATE_CANISTER)
+            .with_arg(&CreateCanisterArgs {
                 settings: Some(canister_settings.clone()),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
-            },),
-            u128::from(cycles),
-        )
-        .await;
+            })
+            .with_cycles(u128::from(cycles))
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<CanisterIdRecord>()
+                    .map_err(IcCdkCallError::from)
+            });
 
         let canister_id = match result {
-            Ok((canister_id_record,)) => {
+            Ok(canister_id_record) => {
                 // Safe: canister_id returned by the management canister is always a valid canister principal.
                 CanisterId::unchecked_from_principal(PrincipalId::from(
                     canister_id_record.canister_id,
                 ))
             }
-            Err((code, msg)) => {
+            Err(err) => {
+                let (code, msg) = into_reject_code_and_message(err);
                 let err = format!(
-                    "Creating canister in subnet {} failed with code {}: {}",
-                    subnet_id, code as i32, msg
+                    "Creating canister in subnet {subnet_id} failed with code {code}: {msg}"
                 );
                 print(format!("[cycles] {err}"));
                 last_err = Some(err);
@@ -2306,7 +2308,7 @@ fn ensure_balance(
 ) -> Result<(), String> {
     let now = now_system_time();
 
-    let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
+    let current_balance = Cycles::from(canister_cycle_balance());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
@@ -2317,7 +2319,7 @@ fn ensure_balance(
 
     // unused because of check above
     let _minted_cycles = ic0_mint_cycles128(cycles_to_mint);
-    assert!(ic_cdk::api::canister_balance128() >= cycles.get());
+    assert!(canister_cycle_balance() >= cycles.get());
     Ok(())
 }
 
@@ -2339,21 +2341,14 @@ fn get_subnets_for(controller_id: &PrincipalId) -> Vec<SubnetId> {
 }
 
 async fn get_rng() -> Result<StdRng, String> {
-    let res: CallResult<(Vec<u8>,)> = ic_cdk::call(
-        candid::Principal::management_canister(),
-        METHOD_RAW_RAND,
-        (),
-    )
-    .await;
-
-    let bytes = res
-        .map_err(|(code, msg)| {
-            format!(
-                "Getting random bytes failed with code {}: {:?}",
-                code as i32, msg
-            )
-        })?
-        .0;
+    let bytes = Call::unbounded_wait(candid::Principal::management_canister(), METHOD_RAW_RAND)
+        .await
+        .map_err(IcCdkCallError::from)
+        .and_then(|response| response.candid::<Vec<u8>>().map_err(IcCdkCallError::from))
+        .map_err(|err| {
+            let (code, msg) = into_reject_code_and_message(err);
+            format!("Getting random bytes failed with code {code}: {msg:?}")
+        })?;
 
     Ok(StdRng::from_seed(bytes[0..32].try_into().unwrap()))
 }

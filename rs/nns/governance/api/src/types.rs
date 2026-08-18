@@ -693,6 +693,8 @@ pub mod proposal {
         LoadCanisterSnapshot(super::LoadCanisterSnapshot),
         /// Create a canister in a (possibly non-NNS) subnet and install code into it.
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Change what replica version(s) are run by Cloud Engines.
+        UpdateStandardEngineReplicaVersion(super::UpdateStandardEngineReplicaVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1454,6 +1456,7 @@ pub enum ProposalActionRequest {
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeRequest),
+    UpdateStandardEngineReplicaVersion(UpdateStandardEngineReplicaVersion),
 }
 
 #[derive(
@@ -2576,9 +2579,35 @@ pub struct InstallCode {
 
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub arg_hash: Option<Vec<u8>>,
+
+    /// Options that only apply when install_mode is Upgrade.
+    pub canister_upgrade_options: Option<install_code::CanisterUpgradeOptions>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        Default,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook.
+        pub skip_pre_upgrade: Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. When the previous WASM had a custom
+        /// section named "icp:private enhanced-orthogonal-persistence", then
+        /// upgrading gets blocked if this is not set. The integer value
+        /// corresponds to `ic_protobuf::types::v1::WasmMemoryPersistence`.
+        pub wasm_memory_persistence: Option<i32>,
+    }
+
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2637,6 +2666,8 @@ pub struct InstallCodeRequest {
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+    /// Options that only apply when install_mode is Upgrade.
+    pub canister_upgrade_options: ::core::option::Option<install_code::CanisterUpgradeOptions>,
 }
 
 #[derive(
@@ -2841,6 +2872,15 @@ pub struct BlessAlternativeGuestOsVersion {
     pub chip_ids: Option<Vec<Vec<u8>>>,
     pub rootfs_hash: Option<String>,
     pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct UpdateStandardEngineReplicaVersion {
+    pub new_replica_version_id: Option<String>,
+    pub old_replica_version_id: Option<String>,
+    pub deployment_progress: Option<f64>,
 }
 
 /// See also the definition of GuestLaunchMeasurements (plural!) in

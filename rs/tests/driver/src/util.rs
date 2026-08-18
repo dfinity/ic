@@ -26,7 +26,7 @@ use ic_agent::{
     identity::BasicIdentity,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::{ConfigOptional, ConfigSource};

@@ -20,7 +20,6 @@ pub use crate::canister_logs::fetch_canister_logs_response_for_bench;
 pub use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use canister_manager::types::WasmSource;
-pub use canister_manager::wasm_execution_mode;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
@@ -28,7 +27,9 @@ pub use execution_environment::{
     as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-pub use hypervisor::{Hypervisor, HypervisorMetrics};
+pub use hypervisor::{
+    CanisterMemoryHandling, Hypervisor, HypervisorMetrics, MemoryHandling, MemorySource,
+};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -343,7 +344,6 @@ fn setup_execution_helper(
             wasm_executor,
             config.embedders_config.create_execution_state_base_cost,
             config.embedders_config.cost_to_compile_wasm_instruction,
-            config.embedders_config.dirty_page_overhead,
             config.canister_guaranteed_callback_quota,
         ),
     });

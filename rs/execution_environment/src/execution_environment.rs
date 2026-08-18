@@ -6,7 +6,7 @@ use crate::canister_manager::types::{
 };
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
-use crate::execution::common::{list_canisters, validate_controller};
+use crate::execution::common::{canister_info, list_canisters, validate_controller};
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
 use crate::execution_environment_metrics::{
@@ -33,12 +33,12 @@ use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType,
-    ClearChunkStoreArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs,
-    IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType, ClearChunkStoreArgs,
+    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -66,7 +66,6 @@ use ic_replicated_state::{
 use ic_types::batch::ChainKeyData;
 use ic_types::canister_http::{
     CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus,
-    Replication,
 };
 use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
 use ic_types::crypto::{
@@ -312,6 +311,7 @@ impl RoundLimits {
 pub(crate) struct ConsumedCyclesForInstructions<'a> {
     consumed_cycles: CompoundCycles<Instructions>,
     instructions_used: NumInstructions,
+    install_code_debit: NumInstructions,
     cycles_account_manager: &'a CyclesAccountManager,
     log: &'a ReplicaLogger,
 }
@@ -325,6 +325,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         Self {
             consumed_cycles: CompoundCycles::new(Cycles::zero(), cost_schedule),
             instructions_used: NumInstructions::new(0),
+            install_code_debit: NumInstructions::new(0),
             cycles_account_manager,
             log,
         }
@@ -339,6 +340,20 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         self.instructions_used += instructions;
     }
 
+    /// Accumulates instructions that count towards the `install_code` rate
+    /// limit of the canister, i.e., instructions used by management operations
+    /// that install code on the canister (and thus compile a Wasm module).
+    ///
+    /// The debit is only applied if the management operation fails: on success
+    /// the operation itself is responsible for updating the canister's
+    /// `install_code_debit`.
+    ///
+    /// The caller is responsible for only accumulating instructions if
+    /// rate limiting of instructions is enabled.
+    pub(crate) fn add_install_code_debit(&mut self, instructions: NumInstructions) {
+        self.install_code_debit += instructions;
+    }
+
     pub(crate) fn apply(
         self,
         canister: &mut CanisterState,
@@ -346,9 +361,10 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         failed_charge: &IntCounter,
     ) {
+        canister.scheduler_state.install_code_debit += self.install_code_debit;
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
-        let res = self.cycles_account_manager.consume_cycles(
+        let res = self.cycles_account_manager.consume_cycles_for_final_instructions(
             &mut canister.system_state,
             memory_usage,
             message_memory_usage,
@@ -741,7 +757,7 @@ impl ExecutionEnvironment {
                                 "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, reply_callback_id {}, sender {}, process_id {}",
                                 response.payload_size_bytes().get(),
                                 max_response_size,
-                                registry_settings.subnet_size,
+                                context.subnet_size.get(),
                                 context.request.sender_reply_callback,
                                 context.request.sender,
                                 std::process::id(),
@@ -2137,6 +2153,13 @@ impl ExecutionEnvironment {
                         .unflushed_checkpoint_ops
                         .push(unflushed_checkpoint_op);
                 }
+                if let Some(snapshot_id) = response.snapshot_to_make_immutable
+                    && let Some(canister) =
+                        state.canister_state_make_mut(&snapshot_id.get_canister_id())
+                    && let Some(snapshot) = canister.canister_snapshots.get_mut(snapshot_id)
+                {
+                    Arc::make_mut(snapshot).set_restored();
+                }
                 crate::util::process_responses(
                     response.deleted_call_context_responses,
                     state,
@@ -2248,7 +2271,7 @@ impl ExecutionEnvironment {
 
         let http_outcalls_are_free = self.http_outcalls_are_free(cost_schedule);
 
-        // The refundable cycles are everything the payment covers beyond the
+        // The refundable payment is everything the payment covers beyond the
         // base fee; when the outcall is free nothing is charged, so nothing is
         // refundable. We set the refund status even for legacy pricing in order
         // to enable observability during the dark launch. However, nothing is
@@ -2256,19 +2279,28 @@ impl ExecutionEnvironment {
         // caller is instead refunded the unspent `request.payment` (the full
         // payment on free/system subnets, where the legacy fee is zero) when the
         // response is delivered.
-        let refundable_cycles = if http_outcalls_are_free {
+        let refundable_payment = if http_outcalls_are_free {
             Cycles::new(0)
         } else {
             canister_http_request_context.request.payment - base_fee.real()
         };
-        let node_count = match &canister_http_request_context.replication {
-            Replication::Flexible { committee, .. } => committee.len().max(1),
-            Replication::NonReplicated(_) => 1,
-            Replication::FullyReplicated => cycles_config.subnet_size.max(1),
-        };
+        let node_count = canister_http_request_context
+            .replication
+            .node_count(canister_http_request_context.subnet_size);
+        // Whatever the payment covers beyond the worst-case cost of the outcall can
+        // never be spent, so withholding it would only lock up the caller's cycles
+        // until the request is settled. Only the smaller of the two is split into
+        // per-replica allowances.
+        let max_usage_fee = self.cycles_account_manager.max_http_request_usage_fee(
+            &canister_http_request_context.replication,
+            canister_http_request_context.max_response_bytes,
+            canister_http_request_context.subnet_size,
+        );
+        let per_replica_allowance = refundable_payment.min(max_usage_fee) / node_count;
+        let refundable_cycles = per_replica_allowance * node_count;
         canister_http_request_context.refund_status = RefundStatus {
             refundable_cycles,
-            per_replica_allowance: refundable_cycles / node_count,
+            per_replica_allowance,
             refunded_cycles: Cycles::new(0),
             refunding_nodes: BTreeSet::new(),
         };
@@ -2281,11 +2313,12 @@ impl ExecutionEnvironment {
                 canister_http_request_context.request.payment -= legacy_fee.real();
             }
             PricingVersion::PayAsYouGo => {
-                // Take out the entire payment upfront; the refundable portion is
-                // returned later via the refund mechanism. When the outcall is
-                // free there is nothing to charge.
+                // Deduct the base fee plus the per-replica allowances.
+                // The remaining payment is refunded when the response is delivered.
+                // Part of the per-replica allowances may be refunded after the response is delivered.
                 if !http_outcalls_are_free {
-                    canister_http_request_context.request.payment.take();
+                    canister_http_request_context.request.payment -=
+                        base_fee.real() + refundable_cycles;
                 }
             }
         }
@@ -2696,6 +2729,11 @@ impl ExecutionEnvironment {
         time: Time,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         self.execute_mgmt_operation_on_canister(
             canister_id,
             |canister, _msg, round_limits, _consumed_cycles| {
@@ -2705,6 +2743,8 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_admins,
                     time,
+                    subnet_cycles_config,
+                    &resource_saturation,
                 )
             },
             state,
@@ -2809,23 +2849,7 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(canister_id, state)?;
-        let canister_history = canister.system_state.get_canister_history();
-        let total_num_changes = canister_history.get_total_num_changes();
-        let changes = canister_history
-            .get_changes(num_requested_changes.unwrap_or(0) as usize)
-            .map(|e| (*e.clone()).clone())
-            .collect();
-        let module_hash = canister
-            .execution_state
-            .as_ref()
-            .map(|es| es.wasm_binary.binary.module_hash().to_vec());
-        let controllers = canister
-            .controllers()
-            .iter()
-            .copied()
-            .collect::<Vec<PrincipalId>>();
-        let res = CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers);
-        Ok(res.encode())
+        Ok(canister_info(canister, num_requested_changes).encode())
     }
 
     fn get_canister_metadata(
@@ -3191,6 +3215,11 @@ impl ExecutionEnvironment {
         let to_total_num_changes = args.rename_to.total_num_changes;
         let requested_by = args.requested_by();
 
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
+
         // Take canister out.
         let mut canister = match state.take_canister_state(&old_id) {
             None => {
@@ -3215,6 +3244,7 @@ impl ExecutionEnvironment {
                 requested_by,
                 state,
                 round_limits,
+                &resource_saturation,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
@@ -3413,8 +3443,20 @@ impl ExecutionEnvironment {
         )
     }
 
-    /// Asks the canister if it is willing to accept the provided ingress
-    /// message.
+    /// Runs the ingress filter checks against the provided ingress message: that
+    /// the subnet is accepting ingress messages at all; that the paying canister
+    /// can cover the message's induction cost; and that the target canister
+    /// accepts the message -- for messages addressed to the subnet by validating
+    /// them against the management canister's ingress rules and the provisional
+    /// whitelist, for all other messages by asking the canister itself (i.e. by
+    /// executing its `canister_inspect_message` hook, if exported) and requiring
+    /// that it is running.
+    ///
+    /// This is executed by the replica that received the message from the user,
+    /// before the message enters the ingress pool: on `Ok(())` the message is
+    /// admitted into the pool and gossiped to the rest of the subnet; on `Err(_)`
+    /// it is immediately rejected with the returned error by this replica and
+    /// never enters the pool.
     pub fn should_accept_ingress_message(
         &self,
         state: Arc<ReplicatedState>,
@@ -3423,6 +3465,23 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
+        // While the subnet is cooling down it accepts no ingress messages at all, so
+        // that they don't make it into the ingress pool (and the user gets a
+        // meaningful error). This is only an optimization: messages already in the
+        // pool when the subnet starts cooling down are not affected. The same check
+        // applied during payload building and validation (see
+        // `IngressSelector::validate_ingress_payload()`) is what actually guarantees
+        // that no such message ever makes it into a block.
+        if state.metadata.is_cooling_down() {
+            return Err(UserError::new(
+                ErrorCode::SubnetCoolingDown,
+                format!(
+                    "Subnet {} is cooling down and does not accept ingress messages",
+                    state.metadata.own_subnet_id
+                ),
+            ));
+        }
+
         let canister = |canister_id: CanisterId| -> Result<&CanisterState, UserError> {
             match state.canister_state(&canister_id) {
                 Some(canister) => Ok(canister),

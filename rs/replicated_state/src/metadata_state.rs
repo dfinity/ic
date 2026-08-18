@@ -111,6 +111,14 @@ pub struct SystemMetadata {
     /// exported.
     pub subnet_split_from: Option<SubnetId>,
 
+    /// "Subnet was merged" marker: `true` if this subnet is the result of a subnet
+    /// merge.
+    ///
+    /// Like `split_from`, persisted in its own `subnet_merged.pbuf` file rather than
+    /// as a `SystemMetadata` proto field. A `false` flag encodes to an empty message,
+    /// so the file is absent in that case.
+    pub subnet_merged: bool,
+
     /// Asynchronously handled subnet messages.
     pub subnet_call_context_manager: SubnetCallContextManager,
 
@@ -327,6 +335,16 @@ impl NetworkTopology {
             .map(|subnet_topology| subnet_topology.nodes.len())
     }
 
+    /// Returns whether the given subnet is cooling down. Unknown subnets are
+    /// not considered to be cooling down.
+    ///
+    /// See [`SubnetTopology::cooling_down`] for the exact semantics.
+    pub fn is_cooling_down(&self, subnet_id: &SubnetId) -> bool {
+        self.subnets
+            .get(subnet_id)
+            .is_some_and(|subnet_topology| subnet_topology.cooling_down)
+    }
+
     /// Returns the cycles cost schedule of the given subnet.
     pub fn get_cost_schedule(&self, subnet_id: &SubnetId) -> Option<CanisterCyclesCostSchedule> {
         self.subnets
@@ -408,6 +426,17 @@ pub struct SubnetTopology {
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
+
+    /// Whether the subnet is "cooling down", i.e. quiescing. While a subnet is
+    /// cooling down:
+    ///
+    ///  * it inducts no ingress messages, so the ingress history becomes free of
+    ///    expiring message statuses;
+    ///  * (on all subnets) no messages are routed to a cooling down subnet --
+    ///    including into the cooling down subnet's own loopback stream -- but
+    ///    retained in their respective output queues, so that the respective
+    ///    streams can be emptied.
+    pub cooling_down: bool,
 }
 
 /// Only rented subnets, i.e., application subnets on a "free" cost schedule,
@@ -586,11 +615,11 @@ impl SubnetMetrics {
     /// Computes the total consumed cycles on the subnet.
     ///
     /// This is the current computation, which avoids double counting the cycles
-    /// consumed by deleted canisters. It is not yet reflected in the certified
-    /// state: the canonical state consumer still uses
-    /// [`Self::consumed_cycles_total_v27`] for all certification versions up to
-    /// and including `V27`. A future certification version should switch the
-    /// consumer over to this function.
+    /// consumed by deleted canisters. The canonical state consumer uses it
+    /// starting with certification version `V29`, adding on top the cycles
+    /// consumed by all non-deleted canisters; for earlier certification
+    /// versions the consumer uses the legacy [`Self::consumed_cycles_total_v28`]
+    /// instead.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -645,16 +674,16 @@ impl SubnetMetrics {
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical
-    /// state consumer for certification versions up to and including `V27`.
+    /// state consumer for certification versions up to and including `V28`.
     ///
     /// This version double counts the cycles consumed by deleted canisters: at
     /// deletion, a canister's per-use-case consumption is added both to
     /// `consumed_cycles_by_deleted_canisters` and to the
     /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
-    /// unchanged to preserve the certified state for existing certification
-    /// versions; [`Self::consumed_cycles_total`] fixes the double counting for
-    /// future certification versions.
-    pub fn consumed_cycles_total_v27(&self) -> NominalCycles {
+    /// unchanged to preserve the certified state for certification versions up
+    /// to and including `V28`; [`Self::consumed_cycles_total`] fixes the double
+    /// counting starting with certification version `V29`.
+    pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
@@ -738,6 +767,7 @@ impl SystemMetadata {
             own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
+            subnet_merged: false,
 
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -781,6 +811,14 @@ impl SystemMetadata {
     pub fn own_reference_subnet_size(&self) -> Option<usize> {
         self.network_topology
             .get_reference_subnet_size(&self.own_subnet_id)
+    }
+
+    /// Returns whether this subnet is cooling down. Defaults to `false` if
+    /// `network_topology` is not populated.
+    ///
+    /// See [`SubnetTopology::cooling_down`] for the exact semantics.
+    pub fn is_cooling_down(&self) -> bool {
+        self.network_topology.is_cooling_down(&self.own_subnet_id)
     }
 
     /// Returns the subnet's guaranteed response message memory capacity, capped
@@ -968,6 +1006,7 @@ impl SystemMetadata {
     ) -> Result<Self, String> {
         assert_eq!(None, self.split_from);
         assert_eq!(None, self.subnet_split_from);
+        assert!(!self.subnet_merged);
         assert_eq!(0, self.heap_delta_estimate.get());
         assert!(self.expected_compiled_wasms.is_empty());
 
@@ -1071,6 +1110,7 @@ impl SystemMetadata {
             own_subnet_info: _,
             ref mut split_from,
             subnet_split_from,
+            subnet_merged,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
             state_sync_version: _,
@@ -1088,6 +1128,7 @@ impl SystemMetadata {
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
         assert_eq!(None, subnet_split_from);
+        assert!(!subnet_merged);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -1175,6 +1216,7 @@ impl SystemMetadata {
             own_subnet_info,
             split_from,
             mut subnet_split_from,
+            subnet_merged,
             mut subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -1189,6 +1231,7 @@ impl SystemMetadata {
 
         assert_eq!(None, split_from);
         assert_eq!(None, subnet_split_from);
+        assert!(!subnet_merged);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -1278,6 +1321,8 @@ impl SystemMetadata {
             own_subnet_info,
             split_from,
             subnet_split_from,
+            // Just asserted to be `false`; a subnet split does not set it.
+            subnet_merged,
             subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -1772,6 +1817,8 @@ pub struct IngressHistoryState {
     next_terminal_time: Time,
     /// Transient: memory usage of the ingress history.
     memory_usage: usize,
+    /// Transient: number of entries in each `IngressState`.
+    state_counts: IngressHistoryStats,
 }
 
 impl Default for IngressHistoryState {
@@ -1781,6 +1828,64 @@ impl Default for IngressHistoryState {
             pruning_times: Arc::new(BTreeMap::new()),
             next_terminal_time: UNIX_EPOCH,
             memory_usage: 0,
+            state_counts: IngressHistoryStats::default(),
+        }
+    }
+}
+
+/// The number of ingress history entries in each `IngressState`.
+///
+/// `IngressStatus::Unknown` does not describe an entry at all: it is the stand-in
+/// for a message with no ingress history entry, so recording one is
+/// `debug_assert`ed against in `IngressHistoryState::insert()`. It is still given
+/// a count of its own rather than being ignored, as a release build backstop: this
+/// way the counts always add up to `IngressHistoryState::len()` and a non-zero
+/// `unknown` count reveals that something did record one.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub struct IngressHistoryStats {
+    pub received: usize,
+    pub processing: usize,
+    pub completed: usize,
+    pub failed: usize,
+    pub done: usize,
+    pub unknown: usize,
+}
+
+impl IngressHistoryStats {
+    /// Returns the counts as `(state name, count)` pairs.
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, usize)> {
+        [
+            ("received", self.received),
+            ("processing", self.processing),
+            ("completed", self.completed),
+            ("failed", self.failed),
+            ("done", self.done),
+            ("unknown", self.unknown),
+        ]
+        .into_iter()
+    }
+
+    /// Records the insertion of an entry with the given status.
+    fn on_insert(&mut self, status: &IngressStatus) {
+        *self.count_mut(status) += 1;
+    }
+
+    /// Records the removal of an entry with the given status.
+    fn on_remove(&mut self, status: &IngressStatus) {
+        *self.count_mut(status) -= 1;
+    }
+
+    /// Returns a mutable reference to the count matching the given status.
+    fn count_mut(&mut self, status: &IngressStatus) -> &mut usize {
+        match status {
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Received => &mut self.received,
+                IngressState::Processing => &mut self.processing,
+                IngressState::Completed(_) => &mut self.completed,
+                IngressState::Failed(_) => &mut self.failed,
+                IngressState::Done => &mut self.done,
+            },
+            IngressStatus::Unknown => &mut self.unknown,
         }
     }
 }
@@ -1804,6 +1909,16 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
+        // `IngressStatus::Unknown` stands for the absence of an entry, so it must
+        // never be recorded as the status of a message. Note that
+        // `IngressStatus::is_valid_state_transition()` (checked by the callers) can
+        // only catch this if there already is an entry, as it allows any transition
+        // away from `Unknown`, i.e. from "no entry".
+        debug_assert!(
+            !matches!(status, IngressStatus::Unknown),
+            "Attempted to record `IngressStatus::Unknown` for message {message_id}"
+        );
+
         // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
@@ -1823,9 +1938,11 @@ impl IngressHistoryState {
                 .insert(message_id.clone());
         }
         self.memory_usage += status.payload_bytes();
+        self.state_counts.on_insert(&status);
         let old_status = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
         if let Some(old) = &old_status {
             self.memory_usage -= old.payload_bytes();
+            self.state_counts.on_remove(old);
         }
 
         if self.memory_usage > ingress_memory_capacity.get() as usize {
@@ -1839,6 +1956,10 @@ impl IngressHistoryState {
         debug_assert_eq!(
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
+        );
+        debug_assert_eq!(
+            Self::compute_state_counts(&self.statuses),
+            self.state_counts
         );
 
         old_status.unwrap_or_else(|| IngressStatus::Unknown.into())
@@ -1889,6 +2010,7 @@ impl IngressHistoryState {
             for message_id in pruning_times {
                 if let Some(removed) = statuses.remove(message_id) {
                     self.memory_usage -= removed.payload_bytes();
+                    self.state_counts.on_remove(&removed);
                 }
             }
         }
@@ -1897,6 +2019,10 @@ impl IngressHistoryState {
         debug_assert_eq!(
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
+        );
+        debug_assert_eq!(
+            Self::compute_state_counts(&self.statuses),
+            self.state_counts
         );
     }
 
@@ -1954,12 +2080,14 @@ impl IngressHistoryState {
                             state: IngressState::Done,
                         });
                         self.memory_usage += done_status.payload_bytes();
+                        self.state_counts.on_insert(&done_status);
 
                         // We can safely unwrap here because we know there must be an
                         // ingress status with the given `id` in `statuses` in this
                         // branch.
                         let old_status = statuses.insert(id.clone(), done_status).unwrap();
                         self.memory_usage -= old_status.payload_bytes();
+                        self.state_counts.on_remove(&old_status);
                     }
                     _ => continue,
                 }
@@ -1972,6 +2100,10 @@ impl IngressHistoryState {
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
         );
+        debug_assert_eq!(
+            Self::compute_state_counts(&self.statuses),
+            self.state_counts
+        );
     }
 
     /// Returns the memory usage of the statuses in the ingress history. See the
@@ -1981,8 +2113,23 @@ impl IngressHistoryState {
         NumBytes::new(self.memory_usage as u64)
     }
 
+    /// Returns the number of statuses in the ingress history, by `IngressState`.
+    pub fn state_counts(&self) -> IngressHistoryStats {
+        self.state_counts
+    }
+
     fn compute_memory_usage(statuses: &BTreeMap<MessageId, Arc<IngressStatus>>) -> usize {
         statuses.values().map(|status| status.payload_bytes()).sum()
+    }
+
+    fn compute_state_counts(
+        statuses: &BTreeMap<MessageId, Arc<IngressStatus>>,
+    ) -> IngressHistoryStats {
+        let mut state_counts = IngressHistoryStats::default();
+        for status in statuses.values() {
+            state_counts.on_insert(status);
+        }
+        state_counts
     }
 
     /// Prunes the ingress history as part of subnet splitting, retaining:
@@ -2003,6 +2150,7 @@ impl IngressHistoryState {
             pruning_times: _,
             next_terminal_time: _,
             memory_usage,
+            state_counts,
         } = self;
 
         // Filters for messages in terminal states or addressed to local canisters.
@@ -2026,6 +2174,7 @@ impl IngressHistoryState {
             .collect();
         mut_statuses.retain(|message_id, _| message_ids_to_retain.contains(message_id));
         *memory_usage = Self::compute_memory_usage(mut_statuses);
+        *state_counts = Self::compute_state_counts(mut_statuses);
     }
 }
 
@@ -2222,6 +2371,8 @@ pub enum UnflushedCheckpointOp {
     LoadSnapshot(CanisterId, SnapshotId),
     /// A canister was renamed.
     RenameCanister(CanisterId, CanisterId),
+    /// A canister was deleted.
+    DeleteCanister(CanisterId),
 }
 
 /// A collection of unflushed checkpoint operations in the order that they were applied to the state.
@@ -2267,6 +2418,14 @@ impl UnflushedCheckpointOps {
             old_canister_id,
             new_canister_id,
         ));
+    }
+
+    /// Records the deletion of a canister. Private to the crate because the only way
+    /// of permanently removing a canister is `ReplicatedState::remove_canister()`,
+    /// which calls this on the caller's behalf.
+    pub(crate) fn delete_canister(&mut self, canister_id: CanisterId) {
+        self.operations
+            .push(UnflushedCheckpointOp::DeleteCanister(canister_id));
     }
 }
 
@@ -2388,6 +2547,7 @@ pub mod testing {
             pruning_times: Default::default(),
             next_terminal_time: UNIX_EPOCH,
             memory_usage: Default::default(),
+            state_counts: Default::default(),
         };
         //
         // DO NOT MODIFY WITHOUT READING DOC COMMENT!
@@ -2409,6 +2569,7 @@ pub mod testing {
             own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
+            subnet_merged: false,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,
