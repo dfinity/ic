@@ -58,8 +58,8 @@ proptest! {
 
         for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
             let deposit = deposit_address(&pk, &cc, schema, &account);
-            prop_assert_ne!(deposit, main_address);
-            prop_assert_ne!(deposit, sweeper);
+            prop_assert_ne!(deposit.as_address(), &main_address);
+            prop_assert_ne!(deposit.as_address(), &sweeper);
         }
     }
 

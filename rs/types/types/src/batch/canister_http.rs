@@ -35,16 +35,7 @@ pub struct CanisterHttpPayload {
     pub out_of_cycles: Vec<CanisterHttpOutOfCycles>,
     pub flexible_responses: Vec<FlexibleCanisterHttpResponses>,
     pub flexible_errors: Vec<FlexibleCanisterHttpError>,
-    /// Receipts signed for HTTP outcalls whose responses have already been
-    /// delivered, by replicas whose spend was not covered by those responses'
-    /// initial refunds. Each receipt refunds the callback its signed metadata
-    /// names, and at most one receipt per replica and callback may appear.
-    ///
-    /// Delivering them lets the caller be refunded what those replicas left of
-    /// their per-replica allowances, instead of having to wait for the delivered
-    /// context to time out (which would refund the full allowance, i.e. charge
-    /// nothing at all for the work these replicas did).
-    pub async_refunds: Vec<CanisterHttpResponseShare>,
+    pub async_receipts: Vec<CanisterHttpResponseShare>,
 }
 
 /// A fully- or non-replicated HTTP outcall whose committee can no longer cover the
@@ -282,7 +273,7 @@ impl CanisterHttpPayload {
             out_of_cycles,
             flexible_responses,
             flexible_errors,
-            async_refunds,
+            async_receipts,
         } = self;
         responses.len()
             + timeouts.len()
@@ -290,7 +281,7 @@ impl CanisterHttpPayload {
             + out_of_cycles.len()
             + flexible_responses.len()
             + flexible_errors.len()
-            + async_refunds.len()
+            + async_receipts.len()
     }
 
     /// Returns the number of non_timeout responses
@@ -302,7 +293,7 @@ impl CanisterHttpPayload {
             out_of_cycles,
             flexible_responses,
             flexible_errors,
-            async_refunds,
+            async_receipts,
         } = self;
         responses.len()
             + divergence_responses.len()
@@ -312,7 +303,7 @@ impl CanisterHttpPayload {
                 .iter()
                 .filter(|error| !matches!(error, FlexibleCanisterHttpError::Timeout { .. }))
                 .count()
-            + async_refunds.len()
+            + async_receipts.len()
     }
 
     /// Returns true, if this is an empty payload
@@ -937,7 +928,7 @@ mod tests {
                 out_of_cycles,
                 flexible_responses,
                 flexible_errors,
-                async_refunds,
+                async_receipts,
                 timeouts: _, // skipped because there is no dedicated protobuf conversion for this
             } = payload;
 
@@ -972,7 +963,7 @@ mod tests {
                 let roundtripped = CanisterHttpOutOfCycles::try_from(pb).unwrap();
                 assert_eq!(error, roundtripped);
             }
-            for share in async_refunds {
+            for share in async_receipts {
                 let pb = pb::CanisterHttpShare::from(share.clone());
                 let roundtripped = CanisterHttpResponseShare::try_from(pb).unwrap();
                 assert_eq!(share, roundtripped);

@@ -33,6 +33,12 @@ message SubnetTopology {
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
   registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
   repeated types.v1.PrincipalId subnet_admins = 8;
+  // Whether the subnet is "cooling down", i.e. quiescing: it inducts no ingress
+  // messages.
+  //
+  // See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+  // semantics.
+  bool cooling_down = 9;
 }
 
 message SubnetsEntry {

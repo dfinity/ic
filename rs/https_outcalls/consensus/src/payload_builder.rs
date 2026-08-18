@@ -5,8 +5,8 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            FlexibleFindResult, ResponseShareSigInput, find_async_refunds, find_flexible_result,
-            find_fully_replicated_response, find_non_flexible_out_of_cycles,
+            FlexibleFindResult, RefundedNodes, ResponseShareSigInput, find_async_receipts,
+            find_flexible_result, find_fully_replicated_response, find_non_flexible_out_of_cycles,
             find_non_replicated_response, group_shares_by_callback_id,
             grouped_shares_meet_divergence_criteria, response_share_sig_inputs,
             validate_flexible_response_with_proof, validate_response_share,
@@ -41,6 +41,7 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
@@ -82,7 +83,7 @@ pub struct CanisterHttpBatchStats {
     pub timeouts: usize,
     pub divergence_responses: usize,
     pub out_of_cycles: usize,
-    pub async_refunds: usize,
+    pub async_receipts: usize,
     pub single_signature_responses: usize,
     pub flexible_ok_responses: usize,
     pub flexible_ok_responses_candid_failures: usize,
@@ -180,7 +181,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut out_of_cycles = vec![];
         let mut flexible_responses = vec![];
         let mut flexible_errors = vec![];
-        let mut async_refunds = vec![];
+        let mut async_receipts = vec![];
 
         // Metrics counters
         let mut total_share_count = 0;
@@ -385,8 +386,17 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
             }
 
-            // Collect any synchronous refunds
-            'refunds: for (callback_id, request) in delivered_canister_http_request_contexts {
+            // Collect the asynchronous receipts of the requests that have already
+            // been responded to.
+            for (callback_id, request) in delivered_canister_http_request_contexts {
+                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                    // Break early to avoid iterating through all open contexts.
+                    break;
+                }
+                // Skip contexts that have already timed out.
+                if delivered_context_timed_out(request, validation_context) {
+                    continue;
+                }
                 let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
                     continue;
                 };
@@ -399,20 +409,15 @@ impl CanisterHttpPayloadBuilderImpl {
                 };
                 // Skip shares for nodes that have already issued a refund for this request,
                 // according to the certified state or any past payload above it.
-                let already_refunded = |node_id: &NodeId| {
-                    request.refund_status.refunding_nodes.contains(node_id)
-                        || refunded_nodes
-                            .get(callback_id)
-                            .is_some_and(|nodes| nodes.contains(node_id))
-                };
-                for share in find_async_refunds(grouped_shares, &committee, already_refunded) {
+                let already_refunded = RefundedNodes::new(*callback_id, request, &refunded_nodes);
+                for share in find_async_receipts(grouped_shares, &committee, &already_refunded) {
                     if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                        break 'refunds;
+                        break;
                     }
                     let share_size = share.count_bytes();
                     let size = NumBytes::new((accumulated_size + share_size) as u64);
                     if size < max_payload_size {
-                        async_refunds.push(share.clone());
+                        async_receipts.push(share.clone());
                         responses_included += 1;
                         accumulated_size += share_size;
                     }
@@ -427,7 +432,7 @@ impl CanisterHttpPayloadBuilderImpl {
             out_of_cycles,
             flexible_responses,
             flexible_errors,
-            async_refunds,
+            async_receipts,
         }
     }
 
@@ -1152,23 +1157,29 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        // Validate asynchronous refunds: receipts of replicas whose spend was not
-        // covered by the already delivered response of their outcall.
-        let mut refunds_by_callback: BTreeMap<CallbackId, Vec<&CanisterHttpResponseShare>> =
+        // Validate asynchronous receipts: the signed spends of replicas that the
+        // already delivered response of their outcall did not account for.
+        let mut receipts_by_callback: BTreeMap<CallbackId, Vec<&CanisterHttpResponseShare>> =
             BTreeMap::new();
-        for share in &payload.async_refunds {
-            refunds_by_callback
+        for share in &payload.async_receipts {
+            receipts_by_callback
                 .entry(share.content.id())
                 .or_default()
                 .push(share);
         }
-        for (callback_id, shares) in refunds_by_callback {
+        for (callback_id, shares) in receipts_by_callback {
             // Only an outcall that has already been responded to can be refunded asynchronously.
             let context = delivered_http_contexts.get(&callback_id).ok_or(
                 CanisterHttpPayloadValidationError::InvalidArtifact(
                     InvalidCanisterHttpPayloadReason::UnknownDeliveredCallbackId(callback_id),
                 ),
             )?;
+            // Reject if the context for this share has already timed out.
+            if delivered_context_timed_out(context, validation_context) {
+                return invalid_artifact(
+                    InvalidCanisterHttpPayloadReason::DeliveredCallbackTimedOut(callback_id),
+                );
+            }
             let committee = self.request_committee(context).map_err(|err| {
                 warn!(self.log, "Failed to get membership: {:?}", err);
                 CanisterHttpPayloadValidationError::ValidationFailed(
@@ -1177,17 +1188,14 @@ impl CanisterHttpPayloadBuilderImpl {
             })?;
 
             // A replica may only be refunded once.
+            let already_refunded = RefundedNodes::new(callback_id, context, &refunded_nodes);
             let mut seen_signers = HashSet::new();
             for &share in &shares {
                 validate_response_share(share, callback_id, &committee, &mut seen_signers, context)
                     .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
                 let signer = share.signature.signer;
-                if context.refund_status.refunding_nodes.contains(&signer)
-                    || refunded_nodes
-                        .get(&callback_id)
-                        .is_some_and(|nodes| nodes.contains(&signer))
-                {
+                if already_refunded.contains(&signer) {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::AlreadyRefunded {
                         callback_id,
                         signer,
@@ -1501,8 +1509,8 @@ impl
         }
 
         let mut async_spent: BTreeMap<CallbackId, BTreeMap<NodeId, Cycles>> = BTreeMap::new();
-        for share in messages.async_refunds {
-            stats.async_refunds += 1;
+        for share in messages.async_receipts {
+            stats.async_receipts += 1;
             async_spent
                 .entry(share.content.id())
                 .or_default()
@@ -1707,13 +1715,10 @@ fn out_of_cycles_reject_message(
 ) -> String {
     let total_spent: Cycles = shares.iter().map(|share| share.content.spent()).sum();
     format!(
-        "Out of cycles: {} of the assigned replicas reported a collective spend of {} cycles, \
-         leaving {} cycles of the attached payment (after base fee deduction). \
-         Delivering a response would cost at least {} cycles.",
+        "Out of cycles: {} of the assigned replicas reported a collective spend of {total_spent} cycles, \
+         leaving {unspent_allowance} cycles of the attached payment (after base fee deduction). \
+         Delivering a response would cost at least {min_cost} cycles.",
         shares.len(),
-        total_spent,
-        unspent_allowance,
-        min_cost,
     )
 }
 
@@ -1774,6 +1779,18 @@ fn divergence_response_into_reject(
             ),
         )),
     ))
+}
+
+/// Returns true if a delivered context has timed out, meaning no further
+/// asynchronous receipts are accepted.
+fn delivered_context_timed_out(
+    context: &CanisterHttpRequestContext,
+    validation_context: &ValidationContext,
+) -> bool {
+    validation_context
+        .time
+        .saturating_duration_since(context.time)
+        >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
 }
 
 fn validation_failed(

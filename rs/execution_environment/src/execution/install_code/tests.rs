@@ -23,11 +23,11 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
-use more_asserts::assert_le;
+use more_asserts::{assert_gt, assert_le};
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::sync::Arc;
@@ -123,6 +123,126 @@ fn dts_resume_works_in_install_code() {
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+}
+
+/// Returns the cycles consumed for instructions by the given canister so far.
+fn consumed_cycles_for_instructions(
+    test: &ExecutionTest,
+    canister_id: CanisterId,
+) -> NominalCycles {
+    test.canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::Instructions)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Analogously to `dts_resume_fails_due_to_cycles_decrease` for calls,
+/// replicated queries, callbacks, and tasks, resuming a paused `install_code`
+/// whose canister lost cycles while it was paused fails instead of replaying the
+/// recorded steps on a balance that can no longer cover them. The failed
+/// execution is charged for exactly the instructions it had already executed,
+/// including those of the paused Wasm execution.
+#[test]
+fn dts_install_code_resume_fails_due_to_cycles_decrease() {
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
+    const SLICE_INSTRUCTION_LIMIT: u64 = 132_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(SLICE_INSTRUCTION_LIMIT)
+        .with_create_execution_state_base_cost(0)
+        .with_manual_execution()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        sender_canister_version: None,
+    };
+
+    // Snapshot of the accounting counters before the execution cycles are prepaid,
+    // which happens when the message execution starts.
+    let original_balance = test.canister_state(canister_id).system_state.balance();
+    let original_consumed_cycles = consumed_cycles_for_instructions(&test, canister_id);
+    let original_executed_instructions = test.canister_executed_instructions(canister_id);
+
+    let ingress_id = test.dts_install_code(payload);
+
+    // The first slice has been executed and the execution is paused.
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    assert!(test.canister_state(canister_id).has_paused_install_code());
+
+    // The cycles for the whole instruction limit are prepaid while the execution
+    // is paused.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_balance
+            - test
+                .cycles_account_manager()
+                .execution_cost(
+                    NumInstructions::from(INSTRUCTION_LIMIT),
+                    test.get_own_subnet_cycles_config(),
+                    WASM_EXECUTION_MODE,
+                )
+                .real(),
+    );
+
+    // Decrease the cycles balance of the clean canister.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(Cycles::new(1));
+
+    // The next slice detects the cycles balance mismatch and fails the execution.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterWasmEngineError,
+        &format!(
+            "Error from Canister {canister_id}: Canister encountered a Wasm engine error: \
+             Failed to apply system changes: Mismatch in cycles \
+             balance when resuming an install code"
+        ),
+    );
+
+    // The canister has no code installed.
+    assert!(test.canister_state(canister_id).execution_state.is_none());
+
+    // The instructions consumed by the slices of the failed execution: compiling
+    // the Wasm module and executing the first Wasm slice, which together consumed
+    // more than the slice instruction limit.
+    let executed_instructions =
+        test.canister_executed_instructions(canister_id) - original_executed_instructions;
+    assert_gt!(executed_instructions.get(), SLICE_INSTRUCTION_LIMIT);
+
+    // The canister is charged exactly the cost of those instructions, including
+    // the instructions of the paused Wasm execution: the rest of the prepaid
+    // cycles is refunded.
+    let expected_cost = test.cycles_account_manager().execution_cost(
+        executed_instructions,
+        test.get_own_subnet_cycles_config(),
+        WASM_EXECUTION_MODE,
+    );
+    assert_eq!(
+        consumed_cycles_for_instructions(&test, canister_id) - original_consumed_cycles,
+        expected_cost.nominal()
+    );
+    // The balance also lost the single cycle removed above.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_balance - expected_cost.real() - Cycles::new(1)
+    );
 }
 
 #[test]
