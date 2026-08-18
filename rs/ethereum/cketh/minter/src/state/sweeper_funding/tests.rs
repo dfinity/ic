@@ -24,6 +24,26 @@ mod accounting {
     }
 
     #[test]
+    fn should_count_only_failed_fundings() {
+        let mut accounting = SweeperFundingAccounting::default();
+        let succeeded = accept(&mut accounting, 1, Wei::new(BURN), Wei::new(BURN));
+        accounting.record_finalized_funding(succeeded, Wei::new(BURN - FEE), Wei::new(FEE));
+
+        assert_eq!(
+            accounting.failed_fundings(),
+            0,
+            "a funding that delivered its ETH is not a failure"
+        );
+
+        // What the caller does on a failure receipt: no ETH transferred, and the count bumped.
+        let failed = accept(&mut accounting, 2, Wei::new(BURN), Wei::new(BURN));
+        accounting.record_failed_funding();
+        accounting.record_finalized_funding(failed, Wei::ZERO, Wei::new(FEE));
+
+        assert_eq!(accounting.failed_fundings(), 1);
+    }
+
+    #[test]
     fn should_start_empty() {
         let accounting = SweeperFundingAccounting::default();
 

@@ -1165,6 +1165,15 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     s.sweeper_funding.cumulative_spent().as_f64(),
                     "Cumulative ETH debited from the minter's main address for sweeping.",
                 )?;
+                // Alertable: a funding transaction cannot fail on Ethereum unless something the
+                // minter believed impossible has happened, so any non-zero value wants a look.
+                w.encode_counter(
+                    "cketh_minter_sweeper_funding_failed_total",
+                    s.sweeper_funding.failed_fundings() as f64,
+                    "Funding transactions that finalized with a failure receipt. Expected to stay \
+                     zero: funding is a bare transfer to an address derived from the minter's own \
+                     key, which has no code to revert in.",
+                )?;
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_burned_not_yet_spent",
                     s.sweeper_funding.burned_not_yet_spent().as_f64(),
