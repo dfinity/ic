@@ -23,7 +23,8 @@
   "postStartCommand": "/ic/ci/container/init.sh",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
-    "USER": "${localEnv:USER}"
+    "USER": "${localEnv:USER}",
+    "LANG": "C.UTF-8"
   },
   "mounts": [
     {
