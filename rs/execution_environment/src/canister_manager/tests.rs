@@ -86,8 +86,8 @@ use ic_test_utilities_types::{
     messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
-    SubnetId, UserId,
+    CanisterId, CanisterTimer, ComputeAllocation, MIN_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
+    NumBytes, NumInstructions, SubnetId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CanisterCall, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
@@ -5846,6 +5846,113 @@ fn create_canister_heap_delta_log_memory_limit_explicit() {
     .unwrap();
 
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+}
+
+// A non-zero log_memory_limit below the minimum is rejected on canister creation.
+#[test]
+fn create_canister_with_too_low_log_memory_limit_fails() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    for limit in [1, MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64 - 1] {
+        test.create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(limit)
+                .build(),
+        )
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterRejectedMessage,
+            &format!(
+                "The canister log memory limit {limit} is too low. \
+                It must be either zero or at least {MIN_AGGREGATE_LOG_MEMORY_LIMIT}."
+            ),
+        );
+        assert_eq!(test.state().num_canisters(), 0);
+    }
+}
+
+// A non-zero log_memory_limit below the minimum is rejected on update_settings,
+// leaving the previous limit in place.
+#[test]
+fn update_settings_with_too_low_log_memory_limit_fails() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(MIB)
+                .build(),
+        )
+        .unwrap();
+
+    for limit in [1, MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64 - 1] {
+        let args = UpdateSettingsArgs {
+            canister_id: canister_id.get(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(limit)
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        test.subnet_message(Method::UpdateSettings, args)
+            .unwrap_err()
+            .assert_contains(
+                ErrorCode::CanisterRejectedMessage,
+                &format!(
+                    "The canister log memory limit {limit} is too low. \
+                    It must be either zero or at least {MIN_AGGREGATE_LOG_MEMORY_LIMIT}."
+                ),
+            );
+        assert_eq!(
+            test.canister_state(canister_id).log_memory_limit(),
+            NumBytes::new(MIB)
+        );
+    }
+}
+
+// The minimum log_memory_limit is accepted and applied as is.
+#[test]
+fn update_settings_with_minimum_log_memory_limit_succeeds() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+    let min_limit = MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(MIB)
+                .build(),
+        )
+        .unwrap();
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(min_limit)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).log_memory_limit(),
+        NumBytes::new(min_limit)
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .byte_capacity() as u64,
+        min_limit
+    );
 }
 
 #[test]

@@ -22,6 +22,19 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+/// Returns the ring buffer data capacity to use for a non-zero log memory limit.
+///
+/// Non-zero limits below `DATA_CAPACITY_MIN` are rejected when canister settings
+/// are validated, so the clamping here is only a safety net for the release
+/// build; in debug builds such a limit trips the assertion instead.
+fn data_capacity_for_limit(limit: usize) -> usize {
+    debug_assert!(
+        limit >= DATA_CAPACITY_MIN,
+        "non-zero log memory limit {limit} is below the minimum {DATA_CAPACITY_MIN}"
+    );
+    limit.max(DATA_CAPACITY_MIN)
+}
+
 /// Canister log storage backed by a PageMap-based ring buffer.
 ///
 /// Using PageMap allows log data to be stored outside the heap and
@@ -256,7 +269,7 @@ impl LogMemoryStore {
             return NumBytes::new(0);
         }
         // Mirror resize_impl's capacity clamping exactly.
-        let target_capacity = (limit.get() as usize).max(DATA_CAPACITY_MIN);
+        let target_capacity = data_capacity_for_limit(limit.get() as usize);
         NumBytes::new(self.virtual_memory_for_data_capacity(target_capacity) as u64)
     }
 
@@ -290,7 +303,7 @@ impl LogMemoryStore {
             // Limit zero deallocates — work only if allocated.
             return self.maybe_page_map.is_some();
         }
-        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let target_limit = data_capacity_for_limit(limit);
         let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
         current_capacity != Some(target_limit)
     }
@@ -318,7 +331,7 @@ impl LogMemoryStore {
             self.deallocate();
             return;
         }
-        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let target_limit = data_capacity_for_limit(limit);
         let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
 
         // Determine the PageMap strategy and create a new ring buffer.
