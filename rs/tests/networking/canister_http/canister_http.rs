@@ -1,5 +1,6 @@
 use canister_test::Canister;
 use canister_test::Runtime;
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::farm::HostFeature;
@@ -27,6 +28,7 @@ const APP_SUBNET_SIZES: [usize; 3] = [13, 28, 40];
 pub const CONCURRENCY_LEVELS: [u64; 3] = [200, 500, 1000];
 const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
 const SYSTEM_PROXY_CANISTER_ID_PATH: &str = "system_proxy_canister_id";
+const PAYING_PROXY_CANISTER_ID_PATH: &str = "paying_proxy_canister_id";
 
 pub enum PemType {
     PemCert,
@@ -83,16 +85,18 @@ pub fn setup_with_free_cost_schedule(env: TestEnv) {
     );
 }
 
-/// Like [`setup_with_free_cost_schedule`], but the application subnet is on a
-/// normal cost schedule, so its HTTP outcalls are actually paid for under
-/// pay-as-you-go. That is where the allowance, refund and out-of-cycles paths
-/// are live, so a test suite worth running on a free subnet is generally worth
-/// running here too.
-pub fn setup_with_paying_cost_schedule(env: TestEnv) {
-    setup_with_cost_schedule(
+/// Like [`setup_with_free_cost_schedule`], but brings up a *second* application
+/// subnet on a normal cost schedule, with its own proxy canister.
+///
+/// The two differ only in whether HTTP outcalls are paid for, which lets one suite
+/// exercise every scenario both where pricing is moot and where the allowance,
+/// refund and out-of-cycles paths are live.
+pub fn setup_with_free_and_paying_subnets(env: TestEnv) {
+    setup_with_cost_schedule_impl(
         env,
-        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
         /*system_subnet_outcalls=*/ true,
+        /*paying_app_subnet=*/ true,
     );
 }
 
@@ -100,6 +104,20 @@ fn setup_with_cost_schedule(
     env: TestEnv,
     cost_schedule: CanisterCyclesCostSchedule,
     system_subnet_outcalls: bool,
+) {
+    setup_with_cost_schedule_impl(
+        env,
+        cost_schedule,
+        system_subnet_outcalls,
+        /*paying_app_subnet=*/ false,
+    );
+}
+
+fn setup_with_cost_schedule_impl(
+    env: TestEnv,
+    cost_schedule: CanisterCyclesCostSchedule,
+    system_subnet_outcalls: bool,
+    paying_app_subnet: bool,
 ) {
     std::thread::scope(|s| {
         // Set up IC with 1 system subnet with one node, and one application subnet with 4 nodes.
@@ -111,18 +129,22 @@ fn setup_with_cost_schedule(
                     ..SubnetFeatures::default()
                 });
             }
-            InternetComputer::new()
+            let app_subnet = |schedule| {
+                Subnet::new(SubnetType::Application)
+                    .with_features(SubnetFeatures {
+                        http_requests: true,
+                        ..SubnetFeatures::default()
+                    })
+                    .with_cost_schedule(schedule)
+                    .add_nodes(4)
+            };
+            let mut ic = InternetComputer::new()
                 .add_subnet(system_subnet)
-                .add_subnet(
-                    Subnet::new(SubnetType::Application)
-                        .with_features(SubnetFeatures {
-                            http_requests: true,
-                            ..SubnetFeatures::default()
-                        })
-                        .with_cost_schedule(cost_schedule)
-                        .add_nodes(4),
-                )
-                .setup_and_start(&env)
+                .add_subnet(app_subnet(cost_schedule));
+            if paying_app_subnet {
+                ic = ic.add_subnet(app_subnet(CanisterCyclesCostSchedule::Normal));
+            }
+            ic.setup_and_start(&env)
                 .expect("failed to setup IC under test");
 
             await_nodes_healthy(&env);
@@ -143,12 +165,32 @@ fn setup_with_cost_schedule(
                 }
             });
             s.spawn(|| {
-                // Get application subnet node to deploy canister to.
-                let mut nodes = get_node_snapshots(&env);
+                // Get application subnet node to deploy canister to. With a second,
+                // paying application subnet around, pick the one this setup's cost
+                // schedule names rather than whichever comes first.
+                let mut nodes = if paying_app_subnet {
+                    get_app_subnet_node_snapshots_with_schedule(&env, cost_schedule)
+                } else {
+                    get_node_snapshots(&env)
+                };
                 let node = nodes.next().expect("there is no application node");
                 let runtime = get_runtime_from_node(&node);
                 let _ = create_proxy_canister(&env, &runtime, &node);
             });
+            if paying_app_subnet {
+                s.spawn(|| {
+                    let node = get_paying_app_subnet_node_snapshots(&env)
+                        .next()
+                        .expect("there is no paying application node");
+                    let runtime = get_runtime_from_node(&node);
+                    let _ = create_proxy_canister_with_name(
+                        &env,
+                        &runtime,
+                        &node,
+                        PAYING_PROXY_CANISTER_ID_PATH,
+                    );
+                });
+            }
         });
         // Set up Universal VM with HTTP Bin testing service
         s.spawn(|| {
@@ -370,6 +412,35 @@ pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapsh
         .nodes()
 }
 
+/// The nodes of the application subnet running on the given cost schedule.
+///
+/// A setup with more than one application subnet
+/// ([`setup_with_free_and_paying_subnets`]) tells them apart this way rather than
+/// by position, which the topology does not promise to preserve.
+pub fn get_app_subnet_node_snapshots_with_schedule(
+    env: &TestEnv,
+    cost_schedule: CanisterCyclesCostSchedule,
+) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+    let wanted = i32::from(CanisterCyclesCostScheduleProto::from(cost_schedule));
+    env.topology_snapshot()
+        .subnets()
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::Application
+                && subnet.raw_subnet_record().canister_cycles_cost_schedule == wanted
+        })
+        .unwrap_or_else(|| {
+            panic!("there is no application subnet on a {cost_schedule:?} cost schedule")
+        })
+        .nodes()
+}
+
+/// The nodes of the application subnet that actually charges for HTTP outcalls.
+pub fn get_paying_app_subnet_node_snapshots(
+    env: &TestEnv,
+) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+    get_app_subnet_node_snapshots_with_schedule(env, CanisterCyclesCostSchedule::Normal)
+}
+
 pub fn get_cloud_engine_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
     env.topology_snapshot()
         .subnets()
@@ -491,4 +562,10 @@ pub fn get_proxy_canister_id(env: &TestEnv) -> PrincipalId {
 /// setup that enables HTTP outcalls there, e.g. [`setup_with_free_cost_schedule`]).
 pub fn get_system_proxy_canister_id(env: &TestEnv) -> PrincipalId {
     get_proxy_canister_id_with_name(env, SYSTEM_PROXY_CANISTER_ID_PATH)
+}
+
+/// The proxy canister on the application subnet that charges for HTTP outcalls
+/// (only with [`setup_with_free_and_paying_subnets`]).
+pub fn get_paying_proxy_canister_id(env: &TestEnv) -> PrincipalId {
+    get_proxy_canister_id_with_name(env, PAYING_PROXY_CANISTER_ID_PATH)
 }

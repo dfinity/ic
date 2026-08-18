@@ -21,24 +21,6 @@ CANISTER_HTTP_BASE_DEPS = [
     "@crate_index//:slog",
 ]
 
-# The flexible-outcall test binaries are thin: the scenarios they run live in
-# the shared library, so they only need it and `anyhow`.
-CANISTER_HTTP_FLEXIBLE_DEPS = [
-    # Keep sorted.
-    "//rs/tests/networking/canister_http:canister_http",
-    "//rs/tests/networking/canister_http_flexible:canister_http_flexible",
-    "@crate_index//:anyhow",
-]
-
-# The correctness test binaries are thin: the scenarios they run live in the
-# shared library, so they only need it, `anyhow` and the pricing-version constants.
-CANISTER_HTTP_CORRECTNESS_DEPS = [
-    # Keep sorted.
-    "//rs/tests/networking/canister_http_correctness",
-    "//rs/types/management_canister_types",
-    "@crate_index//:anyhow",
-]
-
 COMMON_DEPS = [
     # Keep sorted.
     "//rs/limits",
@@ -81,34 +63,20 @@ system_test_nns(
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
-# The flexible-outcall scenarios run twice: once on a subnet where HTTP outcalls
-# are free and once where they are paid for under pay-as-you-go. Both binaries
-# share their scenarios via //rs/tests/networking/canister_http_flexible; the
-# paying one adds the scenarios that only exist because it is charged.
 system_test_nns(
     name = "canister_http_flexible_test",
-    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    cpus = MIN_LOCAL_CPUS + 9 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 9 IC Node VMs (1 system + 2 * 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     enable_uvm = True,
     tags = [
-        "long_test",  # since it exercises many outcall scenarios.
+        "long_test",  # since it exercises many outcall scenarios, on two subnets.
     ],
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
-    deps = CANISTER_HTTP_FLEXIBLE_DEPS,
-)
-
-system_test_nns(
-    name = "canister_http_flexible_paying_test",
-    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
-    enable_uvm = True,
-    tags = [
-        "long_test",  # since it exercises many outcall scenarios.
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/cycles",
     ],
-    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
-        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
-    },
-    deps = CANISTER_HTTP_FLEXIBLE_DEPS,
 )
 
 system_test_nns(
@@ -202,20 +170,23 @@ system_test_nns(
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
-    deps = CANISTER_HTTP_CORRECTNESS_DEPS,
-)
-
-# The same correctness scenarios under the other pricing model. Both binaries share
-# them via //rs/tests/networking/canister_http_correctness; each adds the scenarios
-# that only exist under the model it picked.
-system_test_nns(
-    name = "canister_http_correctness_pay_as_you_go_test",
-    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
-    enable_uvm = True,
-    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
-        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
-    },
-    deps = CANISTER_HTTP_CORRECTNESS_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/cycles",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:ic-agent",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test_nns(

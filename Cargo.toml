@@ -500,8 +500,6 @@ members = [
     "rs/tests/nested/nns_recovery",
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
-    "rs/tests/networking/canister_http_correctness",
-    "rs/tests/networking/canister_http_flexible",
     "rs/tests/networking/canisters",
     "rs/tests/networking/firewall",
     "rs/tests/networking/subnet_update_workload",
