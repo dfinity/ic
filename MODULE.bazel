@@ -1370,16 +1370,6 @@ register_toolchains(
 
 new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
 
-# Use libsystemd from the host environment
-# Ideally this is pulled hermetically, but as this is only used by infogetty
-# within IC images, we have less compatibility to worry about, and packaging it
-# this way is easier.
-new_local_repository(
-    name = "libsystemd",
-    build_file = "@//third_party:BUILD.libsystemd.bazel",
-    path = "/usr",
-)
-
 # Use libvirt from the host environment
 # Used for managing virtual machines programmatically.
 new_local_repository(
