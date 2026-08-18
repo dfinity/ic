@@ -435,7 +435,10 @@ pub struct SubnetTopology {
     ///  * (on all subnets) no messages are routed to a cooling down subnet --
     ///    including into the cooling down subnet's own loopback stream -- but
     ///    retained in their respective output queues, so that the respective
-    ///    streams can be emptied.
+    ///    streams can be emptied;
+    ///  * it routes no messages from its canisters' output queues into any of
+    ///    its streams -- including its own loopback stream -- but retains them
+    ///    in those output queues, so that its streams can be emptied.
     pub cooling_down: bool,
 }
 

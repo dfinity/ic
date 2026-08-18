@@ -42,8 +42,8 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Misrouted messages currently in streams, by remote subnet.
     pub stream_misrouted_messages: IntGaugeVec,
-    /// Canister output queues skipped because their destination subnet was
-    /// cooling down.
+    /// Canister output queues skipped because this subnet or their destination
+    /// subnet was cooling down.
     pub cooling_down_skipped_queues: IntCounter,
     /// Critical error for payloads above the maximum supported size.
     pub critical_error_payload_too_large: IntCounter,
@@ -132,9 +132,9 @@ impl StreamBuilderMetrics {
         );
         let cooling_down_skipped_queues = metrics_registry.int_counter(
             METRIC_COOLING_DOWN_SKIPPED_QUEUES,
-            "Canister output queues skipped because their destination subnet was cooling down. \
-            Counted once per queue per round, so the same queue is counted repeatedly for as \
-            long as the destination subnet keeps cooling down.",
+            "Canister output queues skipped because this subnet or their destination subnet \
+            was cooling down. Counted once per queue per round, so the same queue is counted \
+            repeatedly for as long as either subnet keeps cooling down.",
         );
         let critical_error_payload_too_large =
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
@@ -456,6 +456,7 @@ impl StreamBuilderImpl {
         // No canister can have the subnet's own principal as its canister ID, so this
         // identifies the messages taken from the subnet's own output queues.
         let own_subnet_as_canister_id = CanisterId::from(self.subnet_id);
+        let own_subnet_is_cooling_down = network_topology.is_cooling_down(&self.subnet_id);
 
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
@@ -480,11 +481,15 @@ impl StreamBuilderImpl {
                 Some(dst_subnet_id) => {
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
 
-                    // A cooling down destination subnet must not be sent any messages
-                    // from canister output queues. Retain the message (along with
-                    // everything behind it in the same queue) until the destination stops
-                    // cooling down, rather than rejecting or dropping it.
-                    if !is_from_subnet_queues && network_topology.is_cooling_down(&dst_subnet_id) {
+                    // No messages from canister output queues are routed while either
+                    // this subnet (the source) or the destination subnet is cooling down;
+                    // not even into the loopback stream. Retain the message (along with
+                    // everything behind it in the same queue) until neither subnet is
+                    // cooling down anymore, rather than rejecting or dropping it.
+                    if !is_from_subnet_queues
+                        && (own_subnet_is_cooling_down
+                            || network_topology.is_cooling_down(&dst_subnet_id))
+                    {
                         self.metrics.cooling_down_skipped_queues.inc();
                         output_iter.exclude_queue();
                         continue;
