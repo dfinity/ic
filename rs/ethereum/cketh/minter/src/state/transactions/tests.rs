@@ -6,6 +6,7 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{
     BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
 };
+use crate::state::transactions::TransactionPipeline;
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, WithdrawalRequest, WithdrawalTransactions,
     create_transaction,
@@ -496,7 +497,10 @@ mod withdrawal_transactions {
                         access_list: Default::default(),
                     }
                 );
-                assert_eq!(transactions.next_nonce, TransactionNonce::from(i + 1));
+                assert_eq!(
+                    transactions.pipeline.next_nonce,
+                    TransactionNonce::from(i + 1)
+                );
             }
         }
 
@@ -535,7 +539,10 @@ mod withdrawal_transactions {
                         access_list: Default::default(),
                     }
                 );
-                assert_eq!(transactions.next_nonce, TransactionNonce::from(i + 1));
+                assert_eq!(
+                    transactions.pipeline.next_nonce,
+                    TransactionNonce::from(i + 1)
+                );
             }
         }
 
@@ -638,6 +645,7 @@ mod withdrawal_transactions {
                 assert_eq!(transactions.transactions_to_sign_iter().next(), None);
                 assert_eq!(
                     transactions
+                        .pipeline
                         .sent_tx
                         .get_alt(&cketh_ledger_burn_index)
                         .map(|txs| txs.iter().map(|tx| tx.as_ref()).collect()),
@@ -936,7 +944,11 @@ mod withdrawal_transactions {
                 .map(|res| res.unwrap())
                 .enumerate()
             {
-                let initial_transaction = transactions.sent_tx.get_alt(&withdrawal_id).unwrap()[0]
+                let initial_transaction = transactions
+                    .pipeline
+                    .sent_tx
+                    .get_alt(&withdrawal_id)
+                    .unwrap()[0]
                     .as_ref()
                     .transaction();
                 let expected_amount = initial_transaction
@@ -1002,7 +1014,11 @@ mod withdrawal_transactions {
                 .map(|res| res.unwrap())
                 .enumerate()
             {
-                let initial_transaction = transactions.sent_tx.get_alt(&withdrawal_id).unwrap()[0]
+                let initial_transaction = transactions
+                    .pipeline
+                    .sent_tx
+                    .get_alt(&withdrawal_id)
+                    .unwrap()[0]
                     .as_ref()
                     .transaction();
                 assert_eq!(
@@ -1789,6 +1805,7 @@ mod withdrawal_transactions {
             transactions.record_resubmit_transaction(created_tx.clone());
             assert!(
                 transactions
+                    .pipeline
                     .created_tx
                     .contains_alt(&cketh_ledger_burn_index)
             );
@@ -1797,7 +1814,7 @@ mod withdrawal_transactions {
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
 
             assert_eq!(
-                transactions.finalized_tx,
+                transactions.pipeline.finalized_tx,
                 MultiKeyMap::from_iter(vec![(
                     TransactionNonce::ZERO,
                     cketh_ledger_burn_index,
@@ -3068,6 +3085,7 @@ fn create_and_record_transaction<R: Into<WithdrawalRequest>>(
     .expect("failed to create transaction");
     transactions.record_created_transaction(withdrawal_request.cketh_ledger_burn_index(), tx);
     transactions
+        .pipeline
         .created_tx
         .get_alt(&burn_index)
         .unwrap()
@@ -3258,12 +3276,14 @@ impl WithdrawalTransactionsBuilder {
 
     pub(in crate::state) fn build(self) -> WithdrawalTransactions {
         WithdrawalTransactions {
-            pending_withdrawal_requests: self.pending_withdrawal_requests,
-            processed_withdrawal_requests: self.processed_withdrawal_requests,
-            created_tx: self.created_tx,
-            sent_tx: self.sent_tx,
-            finalized_tx: self.finalized_tx,
-            next_nonce: self.next_nonce,
+            pipeline: TransactionPipeline {
+                pending_withdrawal_requests: self.pending_withdrawal_requests,
+                processed_withdrawal_requests: self.processed_withdrawal_requests,
+                created_tx: self.created_tx,
+                sent_tx: self.sent_tx,
+                finalized_tx: self.finalized_tx,
+                next_nonce: self.next_nonce,
+            },
             maybe_reimburse: self.maybe_reimburse,
             reimbursement_requests: self.reimbursement_requests,
             reimbursed: self.reimbursed,
