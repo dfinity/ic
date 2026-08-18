@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use async_trait::async_trait;
 use candid::candid_method;
 use ic_base_types::{CanisterId, PrincipalId};

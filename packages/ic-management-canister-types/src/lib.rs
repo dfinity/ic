@@ -63,6 +63,23 @@ pub enum SnapshotVisibility {
     AllowedViewers(Vec<Principal>),
 }
 
+/// # Status Visibility.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
+)]
+pub enum StatusVisibility {
+    /// Controllers.
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    /// Public.
+    #[serde(rename = "public")]
+    Public,
+    /// Allowed viewers.
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(Vec<Principal>),
+}
+
 /// # Environment Variable.
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
@@ -148,6 +165,10 @@ pub struct CanisterSettings {
     ///
     /// Default value: [`SnapshotVisibility::Controllers`].
     pub snapshot_visibility: Option<SnapshotVisibility>,
+    /// Defines who is allowed to read the canister's status.
+    ///
+    /// Default value: [`StatusVisibility::Controllers`].
+    pub status_visibility: Option<StatusVisibility>,
     /// Indicates the upper limit on the WASM heap memory (bytes) consumption of the canister.
     ///
     /// Must be a number between 0 and 2<sup>48</sup>-1 (i.e 256TB), inclusively.
@@ -200,6 +221,8 @@ pub struct DefiniteCanisterSettings {
     pub log_memory_limit: Nat,
     /// Visibility of canister snapshots.
     pub snapshot_visibility: SnapshotVisibility,
+    /// Visibility of canister status.
+    pub status_visibility: StatusVisibility,
     /// Upper limit on the WASM heap memory (bytes) consumption of the canister.
     pub wasm_memory_limit: Nat,
     /// Threshold on the remaining wasm memory size of the canister in bytes.
@@ -1779,12 +1802,26 @@ pub enum SnapshotDataOffset {
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
 pub enum CanisterLogFilter {
-    /// Filter logs by index range (inclusive).
+    /// Filter logs by index range `[start, end)`.
     #[serde(rename = "by_idx")]
-    ByIdx { start: u64, end: u64 },
-    /// Filter logs by timestamp range (inclusive).
+    ByIdx {
+        /// Start of the range (inclusive).
+        start: u64,
+        /// End of the range (exclusive).
+        ///
+        /// If `end <= start`, the range is empty.
+        end: u64,
+    },
+    /// Filter logs by timestamp range `[start, end)`.
     #[serde(rename = "by_timestamp_nanos")]
-    ByTimestampNanos { start: u64, end: u64 },
+    ByTimestampNanos {
+        /// Start of the range (inclusive).
+        start: u64,
+        /// End of the range (exclusive).
+        ///
+        /// If `end <= start`, the range is empty.
+        end: u64,
+    },
 }
 
 /// # Fetch Canister Logs Args.

@@ -17,7 +17,6 @@ Success::
 1. Received http response with status 200 that is routed through the correct API boundary node.
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::Result;
 use anyhow::bail;

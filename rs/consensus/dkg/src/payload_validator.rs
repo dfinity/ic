@@ -255,7 +255,7 @@ mod tests {
     use super::*;
     use crate::{DkgImpl, DkgKeyManager};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
     use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests};
     use ic_interfaces::{
@@ -299,27 +299,20 @@ mod tests {
     fn test_validate_payload() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 4;
-            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
             let Dependencies {
                 crypto,
                 mut pool,
                 registry,
+                replica_config,
                 state_manager,
                 dkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    5,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
 
             let context = ValidationContext {
-                registry_version: RegistryVersion::from(5),
+                registry_version: RegistryVersion::from(1),
                 certified_height: Height::from(0),
                 time: ic_types::time::UNIX_EPOCH,
             };
@@ -336,7 +329,7 @@ mod tests {
                 .unwrap();
             assert!(
                 validate_payload(
-                    subnet_test_id(0),
+                    replica_config.subnet_id,
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
@@ -367,7 +360,7 @@ mod tests {
                 .unwrap();
             assert!(
                 validate_payload(
-                    subnet_test_id(0),
+                    replica_config.subnet_id,
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
@@ -526,7 +519,7 @@ mod tests {
                 registry,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config.clone(),
                 SUBNET_1,
                 vec![(
@@ -535,7 +528,8 @@ mod tests {
                         .with_dkg_dealings_per_block(1)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
@@ -629,7 +623,7 @@ mod tests {
                 registry,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config.clone(),
                 subnet_id,
                 vec![(
@@ -638,7 +632,8 @@ mod tests {
                         .with_dkg_dealings_per_block(max_dealings_per_payload)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
@@ -732,7 +727,7 @@ mod tests {
                 state_manager,
                 registry_data_provider,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -741,7 +736,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
             state_manager
                 .get_mut()
                 .expect_get_latest_certified_state()

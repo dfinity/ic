@@ -279,7 +279,7 @@ pub struct DkgSummary {
     /// The number of intervals a DKG for the given remote target was attempted.
     pub remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
     /// Status of the subnet splitting.
-    pub subnet_splitting_status: BackwardsCompatible<SubnetSplittingStatus, false>,
+    pub subnet_splitting_status: BackwardsCompatible<SubnetSplittingStatus, true>,
 }
 
 impl DkgSummary {
@@ -308,9 +308,7 @@ impl DkgSummary {
             next_interval_length,
             height,
             remote_dkg_attempts,
-            subnet_splitting_status: BackwardsCompatible::new_for_test_only(Some(
-                subnet_splitting_status,
-            )),
+            subnet_splitting_status: BackwardsCompatible::new(subnet_splitting_status),
         }
     }
 
@@ -345,16 +343,6 @@ impl DkgSummary {
     /// Returns a reference to the next transcripts.
     pub fn next_transcripts(&self) -> &BTreeMap<NiDkgTag, NiDkgTranscript> {
         &self.next_transcripts
-    }
-
-    /// Return the set of transcripts (current and next) for all tags.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_transcripts(self) -> Vec<NiDkgTranscript> {
-        self.current_transcripts
-            .into_iter()
-            .chain(self.next_transcripts)
-            .map(|(_, t)| t)
-            .collect()
     }
 
     /// Returns `true` if the provided height is included in the DKG interval

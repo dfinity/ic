@@ -737,7 +737,7 @@ pub(super) fn is_time_to_make_block(
 mod tests {
 
     use super::*;
-    use ic_consensus_mocks::{Dependencies, MockPayloadBuilder, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder, MockPayloadBuilder};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -775,10 +775,11 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                payload_builder,
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![
@@ -795,11 +796,11 @@ mod tests {
                             .build(),
                     ),
                 ],
-            );
+            )
+            .build();
 
             pool.advance_round_normal_operation_n(4);
 
-            let payload_builder = MockPayloadBuilder::new();
             let certified_height = Height::from(1);
             state_manager
                 .get_mut()
@@ -812,7 +813,7 @@ mod tests {
                 Arc::clone(&registry) as Arc<dyn RegistryClient>,
                 membership.clone(),
                 crypto.clone(),
-                Arc::new(payload_builder),
+                payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),
@@ -831,7 +832,6 @@ mod tests {
             // Check that block creation works properly.
             pool.advance_round_normal_operation_n(4);
 
-            let mut payload_builder = MockPayloadBuilder::new();
             let start = pool.validated().block_proposal().get_highest().unwrap();
             let next_height = start.height().increment();
             let start_hash = start.content.get_hash();
@@ -868,6 +868,7 @@ mod tests {
             );
 
             payload_builder
+                .get_mut()
                 .expect_get_payload()
                 .withf(move |_, payloads, context, _| {
                     matches_expected_payloads(payloads) && context == &expected_context
@@ -894,7 +895,7 @@ mod tests {
                 registry.clone(),
                 membership,
                 Arc::clone(&crypto) as Arc<_>,
-                Arc::new(payload_builder),
+                payload_builder,
                 dkg_pool,
                 idkg_pool,
                 state_manager,
@@ -933,9 +934,7 @@ mod tests {
 
     #[test]
     fn test_build_batch_payload() {
-        let subnet_id = subnet_test_id(0);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids: Vec<_> = (0..13).map(node_test_id).collect();
             let dkg_interval_length = 9;
             let Dependencies {
                 mut pool,
@@ -945,19 +944,13 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                payload_builder,
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_id,
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 13)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
 
             pool.advance_round_normal_operation_n(8);
 
@@ -993,12 +986,12 @@ mod tests {
             pool.insert_validated(summary);
 
             // Payload builder always returns a batch payload with some canister HTTP data
-            let mut payload_builder = MockPayloadBuilder::new();
             let expected_payload = BatchPayload {
                 canister_http: vec![1; 64],
                 ..Default::default()
             };
             payload_builder
+                .get_mut()
                 .expect_get_payload()
                 .return_const(expected_payload.clone());
             let certified_height = Height::from(1);
@@ -1028,7 +1021,7 @@ mod tests {
                 Arc::clone(&registry) as Arc<dyn RegistryClient>,
                 membership.clone(),
                 crypto.clone(),
-                Arc::new(payload_builder),
+                payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),
@@ -1099,10 +1092,11 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                payload_builder,
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config.clone(),
                 subnet_test_id(0),
                 vec![
@@ -1121,7 +1115,8 @@ mod tests {
                             .build(),
                     ),
                 ],
-            );
+            )
+            .build();
 
             state_manager
                 .get_mut()
@@ -1140,8 +1135,8 @@ mod tests {
                     Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
                 )));
 
-            let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
+                .get_mut()
                 .expect_get_payload()
                 .return_const(BatchPayload::default());
             let membership =
@@ -1154,7 +1149,7 @@ mod tests {
                 Arc::clone(&registry) as Arc<dyn RegistryClient>,
                 membership.clone(),
                 crypto.clone(),
-                Arc::new(payload_builder),
+                payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),
@@ -1246,14 +1241,20 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                payload_builder,
                 registry_data_provider,
                 dkg_pool,
                 idkg_pool,
                 ..
-            } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record.clone())]);
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_id,
+                vec![(1, record.clone())],
+            )
+            .build();
 
-            let mut payload_builder = MockPayloadBuilder::new();
             payload_builder
+                .get_mut()
                 .expect_get_payload()
                 .return_const(BatchPayload::default());
             let membership = Arc::new(Membership::new(
@@ -1268,7 +1269,7 @@ mod tests {
                 Arc::clone(&registry) as Arc<dyn RegistryClient>,
                 membership,
                 crypto,
-                Arc::new(payload_builder),
+                payload_builder,
                 dkg_pool,
                 idkg_pool,
                 state_manager,
@@ -1429,7 +1430,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool, registry, ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -1438,7 +1439,8 @@ mod tests {
                         .with_unit_delay(unit_delay)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             for rank in past_block_ranks {
                 pool.advance_round_with_block(&pool.make_next_block_with_rank(*rank));
@@ -1600,11 +1602,12 @@ mod tests {
                     time_source,
                     replica_config,
                     state_manager,
+                    payload_builder,
                     registry_data_provider,
                     dkg_pool,
                     idkg_pool,
                     ..
-                } = dependencies_with_subnet_params(
+                } = DependenciesBuilder::single_subnet(
                     pool_config,
                     SOURCE_SUBNET_ID,
                     (1..=MAX_REGISTRY_VERSION)
@@ -1617,10 +1620,11 @@ mod tests {
                             )
                         })
                         .collect(),
-                );
+                )
+                .build();
 
-                let mut payload_builder = MockPayloadBuilder::new();
                 payload_builder
+                    .get_mut()
                     .expect_get_payload()
                     .return_const(BatchPayload::default());
                 let membership = Arc::new(Membership::new(
@@ -1635,7 +1639,7 @@ mod tests {
                     Arc::clone(&registry) as Arc<dyn RegistryClient>,
                     membership,
                     crypto,
-                    Arc::new(payload_builder),
+                    payload_builder,
                     dkg_pool,
                     idkg_pool,
                     state_manager,

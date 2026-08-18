@@ -296,16 +296,14 @@ mod tests {
     use crate::consensus::catchup_package_maker::CatchUpPackageMaker;
 
     use super::*;
-    use ic_consensus_mocks::{
-        Dependencies, DependenciesBuilder, dependencies, dependencies_with_subnet_params,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, insert_initial_dkg_transcript};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         CryptoHashOfState, NodeId, RegistryVersion, SubnetId,
         backwards_compatibility::BackwardsCompatible,
@@ -341,7 +339,7 @@ mod tests {
                 registry,
                 replica_config,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
 
             let block = pool.make_next_block();
             let signer = block.signature.signer;
@@ -446,7 +444,6 @@ mod tests {
         oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
     ) -> CatchUpPackage {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids: Vec<_> = (0..3).map(node_test_id).collect();
             let interval_length = 3;
             let Dependencies {
                 mut pool,
@@ -455,16 +452,9 @@ mod tests {
                 registry,
                 replica_config,
                 ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    INITIAL_REGISTRY_VERSION,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 3)
+                .with_dkg_interval_length(interval_length)
+                .build();
             let message_routing = Arc::new(FakeMessageRouting::new());
             let aggregator = ShareAggregator::new(
                 membership,

@@ -498,6 +498,10 @@ pub(crate) enum CanisterManagerError {
         bytes: NumBytes,
         limit: NumBytes,
     },
+    CanisterLogMemoryLimitIsTooLow {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
     CanisterSnapshotAccessDenied {
         caller: PrincipalId,
         method_name: String,
@@ -774,6 +778,12 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
+                suggestion: "Set a higher canister log memory limit, \
+                or zero to disable canister logging."
+                    .to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1215,6 +1225,13 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "The canister log memory limit {bytes} is too high. It must be at most {limit}."
+                ),
+            ),
+            CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too low. \
+                    It must be either zero or at least {limit}."
                 ),
             ),
             FetchCanisterLogsAccessDenied { caller } => Self::new(

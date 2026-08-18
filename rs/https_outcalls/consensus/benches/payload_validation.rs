@@ -1,14 +1,14 @@
 //! Benchmark for the validation of canister HTTP outcall
 //! payloads.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
-use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
+use ic_https_outcalls_consensus::payload_builder::{CanisterHttpPayloadBuilderImpl, PastPayloads};
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::crypto::BasicSigner;
 use ic_interfaces_registry::RegistryClient;
@@ -148,7 +148,7 @@ fn bench_payload_verification(c: &mut Criterion) {
                     black_box(target.builder.validate_canister_http_payload_impl(
                         black_box(&target.payload),
                         black_box(&target.validation_context),
-                        black_box(HashSet::new()),
+                        black_box(PastPayloads::default()),
                     ))
                     .expect("validation failed");
                 })
@@ -178,11 +178,12 @@ fn build_target(
         })
         .build();
 
-    let deps = dependencies_with_subnet_params(
+    let deps = DependenciesBuilder::single_subnet(
         pool_config,
         subnet_id,
         vec![(REGISTRY_VERSION.get(), subnet_record)],
-    );
+    )
+    .build();
 
     let registry_client: Arc<dyn RegistryClient> = deps.registry.clone();
 
@@ -463,11 +464,13 @@ impl<'a> PayloadAssembler<'a> {
         }
 
         let payload = CanisterHttpPayload {
+            out_of_cycles: vec![],
             responses,
             timeouts: vec![],
             divergence_responses,
             flexible_responses,
             flexible_errors: vec![],
+            async_receipts: vec![],
         };
 
         assert!(

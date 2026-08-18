@@ -1,7 +1,6 @@
-#![allow(deprecated)]
 use ic_canister_log::{declare_log_buffer, log};
 use ic_canister_serve::serve_logs;
-use ic_cdk::management_canister::{HttpMethod, HttpRequestArgs, HttpRequestResult};
+use ic_cdk_management_canister::{HttpMethod, HttpRequestArgs, HttpRequestResult};
 use maplit::hashmap;
 use serde_json::json;
 use std::collections::HashMap;

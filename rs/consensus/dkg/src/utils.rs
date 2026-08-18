@@ -189,7 +189,7 @@ mod tests {
     use super::{get_dealers_from_chain, get_dkg_dealings};
     use crate::test_utils::create_dealing;
     use crate::utils::vetkd_key_ids_for_subnet;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_interfaces_registry::RegistryValue;
@@ -314,28 +314,24 @@ mod tests {
     #[test]
     fn test_get_dkg_dealings_included_and_excluded_by_transcript() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_id = subnet_test_id(1);
-            let nodes: Vec<_> = (0..4).map(node_test_id).collect();
             let dkg_interval_len = 10;
-            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_id,
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&nodes)
-                        .with_dkg_interval_length(dkg_interval_len)
-                        .build(),
-                )],
-            );
+            let Dependencies {
+                mut pool,
+                replica_config,
+                ..
+            } = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(dkg_interval_len)
+                .build();
 
             pool.advance_round_normal_operation_n(dkg_interval_len);
             let pool_reader = PoolReader::new(&pool);
             let tip = pool_reader.get_finalized_tip();
 
             // DKG id that has a transcript in this block -> its dealings should be excluded.
-            let dkg_id_with_transcript = dkg_id(subnet_id, NiDkgTag::HighThreshold);
+            let dkg_id_with_transcript = dkg_id(replica_config.subnet_id, NiDkgTag::HighThreshold);
             // DKG id with no transcript -> its dealings should be included.
-            let dkg_id_without_transcript = dkg_id(subnet_id, NiDkgTag::LowThreshold);
+            let dkg_id_without_transcript =
+                dkg_id(replica_config.subnet_id, NiDkgTag::LowThreshold);
 
             // Dealings per dealer (0..4) for each DKG id.
             let dealings_excluded: Vec<_> = (0..4)

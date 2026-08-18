@@ -422,6 +422,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                             |a| ic_cketh_minter::state::event::DepositAddressRegistration {
                                 owner: a.owner,
                                 subaccount: a.subaccount,
+                                erc20_contract_address: a.erc20_contract_address.parse().unwrap(),
                                 address: a.address.parse().unwrap(),
                                 expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
                                 last_scanned_block: a
@@ -433,6 +434,23 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                         .collect(),
                 },
             ),
+            EventPayload::AutomaticDepositReceived {
+                owner,
+                subaccount,
+                address,
+                erc20_contract_address,
+                last_scanned_block,
+                scan_count,
+                scanned_balance,
+            } => ET::AutomaticDepositReceived(ic_cketh_minter::state::event::AutomaticDeposit {
+                owner,
+                subaccount,
+                address: address.parse().unwrap(),
+                erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                last_scanned_block: last_scanned_block.try_into().unwrap(),
+                scan_count: scan_count.try_into().unwrap(),
+                scanned_balance: scanned_balance.try_into().unwrap(),
+            }),
         },
     }
 }

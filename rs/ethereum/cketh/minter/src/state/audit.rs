@@ -168,6 +168,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::RegisteredDepositAddresses(registry) => {
             state.automatic_deposits.rebuild_watchlist(registry)
         }
+        EventType::AutomaticDepositReceived(automatic_deposit) => state
+            .automatic_deposits
+            .record_automatic_deposit_received(automatic_deposit),
     }
 }
 

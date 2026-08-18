@@ -1454,6 +1454,7 @@ mod tests {
                 &make_replica_version_key(replica_version),
                 registry_version,
                 Some(ReplicaVersionRecord {
+                    replica_version_id: Some(replica_version.to_string()),
                     release_package_sha256_hex: "sha256".to_string(),
                     release_package_urls: vec![],
                     guest_launch_measurements: None,

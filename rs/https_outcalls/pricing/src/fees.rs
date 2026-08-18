@@ -1,48 +1,70 @@
 //! Pay-as-you-go pricing for HTTP outcalls.
 //!
 //! A request's cost is split into three parts, all defined here so that they
-//! share a single set of constants:
+//! share a single set of constants and formulas:
 //!   1. the base fee ([`base_fee`]), subtracted up-front when the request context
 //!      is created (and therefore reflected in `per_replica_allowance`);
-//!   2. the per-replica fee, accounted for as-you-go by the `PayAsYouGoTracker`
-//!      (see `payg.rs`), which uses the per-replica constants below;
+//!   2. the per-replica fees ([`network_usage_fee`], [`transform_usage_fee`],
+//!      [`gossip_usage_fee`]), accounted for as-you-go by the
+//!      `PayAsYouGoTracker` (see `payg.rs`);
 //!   3. the consensus fee ([`non_flexible_initial_spent`] /
 //!      [`flexible_initial_spent`]), computed from the aggregated response in the
 //!      block payload.
+//!
+//! [`total_fee`] adds those three parts up for a hypothetical outcall, which is the
+//! price reported to canisters; its second and third part — everything the
+//! per-replica allowances have to cover — is [`usage_fee`], whose worst case
+//! ([`max_usage_fee`]) in turn bounds how much of a request's payment is withheld as
+//! allowances.
 
+use std::time::Duration;
+
+use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
 use ic_types::{
-    NumBytes, NumberOfNodes,
-    canister_http::{CanisterHttpResponseProof, CanisterHttpResponseShare, Replication},
+    NumBytes, NumInstructions, NumberOfNodes,
+    canister_http::{
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseShare,
+        MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication, ReplicationKind,
+    },
 };
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig, HTTPOutcalls};
+use std::collections::BTreeMap;
+
+use crate::MAX_RESPONSE_TIME;
 
 // ============================ Base-fee constants ============================
 // Charged up-front for every request by [`base_fee`].
 
-const HTTP_REQUEST_BASE_FEE: u128 = 1_000_000;
-const HTTP_REQUEST_PER_BYTE_FEE: u128 = 50;
-const HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE: u128 = 140_000;
-const HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE: u128 = 800;
-const HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE: u128 = 90_000;
-const HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE: u128 = 2_000;
-const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: u128 = 100_000;
+const HTTP_REQUEST_BASE_FEE: Cycles = Cycles::new(1_000_000);
+const HTTP_REQUEST_PER_BYTE_FEE: Cycles = Cycles::new(50);
+const HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE: Cycles = Cycles::new(140_000);
+const HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE: Cycles = Cycles::new(800);
+const HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE: Cycles = Cycles::new(90_000);
+const HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE: Cycles = Cycles::new(2_000);
+const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: Cycles = Cycles::new(100_000);
 
 // ========================= Per-replica-fee constants =========================
-// Charged as-you-go by the `PayAsYouGoTracker` in `payg.rs`.
+// Charged as-you-go by the `PayAsYouGoTracker` in `payg.rs`, through the
+// per-replica fee functions below.
 
-pub(crate) const PER_DOWNLOADED_BYTE_FEE: u128 = 50;
-pub(crate) const PER_RESPONSE_MS_FEE: u128 = 300;
+pub(crate) const PER_DOWNLOADED_BYTE_FEE: Cycles = Cycles::new(50);
+pub(crate) const PER_RESPONSE_MS_FEE: Cycles = Cycles::new(300);
 /// HTTP outcalls are priced consistently against a reference subnet size of 13.
 pub(crate) const TRANSFORM_INSTRUCTION_DIVISOR: u128 = 13;
-pub(crate) const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
+pub(crate) const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: Cycles = Cycles::new(50);
 
 // ========================== Consensus-fee constants ==========================
 // Charged for including the aggregated response in a block, via
 // [`non_flexible_initial_spent`] / [`flexible_initial_spent`].
 
-const CONSENSUS_PER_NODE_BYTE_FEE: u128 = 10;
-const CONSENSUS_BYTE_FEE: u128 = 600;
+const CONSENSUS_PER_NODE_BYTE_FEE: Cycles = Cycles::new(10);
+const CONSENSUS_BYTE_FEE: Cycles = Cycles::new(600);
 const FLEXIBLE_RESPONSE_SIZE_OVERHEAD: u128 = 181;
+
+/// The number of nodes of the subnet described by `subnet_cycles_config`.
+fn subnet_size_of(subnet_cycles_config: CyclesAccountManagerSubnetConfig) -> NumberOfNodes {
+    NumberOfNodes::from(subnet_cycles_config.subnet_size as u32)
+}
 
 // ================================= Base fee =================================
 
@@ -54,49 +76,263 @@ pub fn base_fee(
     replication: &Replication,
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> CompoundCycles<HTTPOutcalls> {
-    let n = subnet_cycles_config.subnet_size as u128;
-    let request_bytes = request_size.get() as u128;
-    let per_replica = match replication {
-        Replication::FullyReplicated => {
-            HTTP_REQUEST_BASE_FEE
-                + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                + HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE * n
-                + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n
-        }
-        Replication::Flexible {
-            min_responses: min, ..
-        } => {
-            let min = *min as u128;
-            HTTP_REQUEST_BASE_FEE
-                + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
-                + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * min
-                + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min
-        }
-        Replication::NonReplicated(_) => {
-            // Non-replicated is equivalent to flexible replication with min_responses = 1.
-            HTTP_REQUEST_BASE_FEE
-                + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
-                + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n
-                + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE
-        }
-    };
-
     CompoundCycles::new(
-        Cycles::new(n * per_replica),
+        base_fee_amount(
+            request_size,
+            replication.kind(),
+            subnet_size_of(subnet_cycles_config),
+        ),
         subnet_cycles_config.cost_schedule,
     )
 }
 
+/// The [`base_fee`], on a subnet of `subnet_size` nodes.
+fn base_fee_amount(
+    request_size: NumBytes,
+    replication_kind: ReplicationKind,
+    subnet_size: NumberOfNodes,
+) -> Cycles {
+    let n = subnet_size.get() as u64;
+    let request_bytes = request_size.get();
+    match replication_kind {
+        ReplicationKind::FullyReplicated => {
+            (HTTP_REQUEST_BASE_FEE
+                + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
+                + HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE * n
+                + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n)
+                * n
+        }
+        // Non-replicated is equivalent to flexible replication with min_responses = 1.
+        ReplicationKind::NonReplicated => gossipping_base_fee(request_bytes, subnet_size, 1),
+        ReplicationKind::Flexible { min_responses, .. } => {
+            gossipping_base_fee(request_bytes, subnet_size, min_responses)
+        }
+    }
+}
+
+/// The base fee of a gossiping (flexible or non-replicated) outcall of
+/// `request_bytes` bytes that requires `min_responses` responses, on a subnet of
+/// `subnet_size` nodes.
+fn gossipping_base_fee(
+    request_bytes: u64,
+    subnet_size: NumberOfNodes,
+    min_responses: u32,
+) -> Cycles {
+    let n = subnet_size.get() as u64;
+    let min_responses = min_responses as u64;
+    (HTTP_REQUEST_BASE_FEE
+        + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
+        + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
+        + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * min_responses
+        + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min_responses)
+        * n
+}
+
+// ============================= Per-replica fees =============================
+// The individual fees the `PayAsYouGoTracker` (see `payg.rs`) charges a replica
+// as it performs the outcall.
+
+/// The fee for downloading a response of `response_size` in `response_time`.
+pub(crate) fn network_usage_fee(response_size: NumBytes, response_time: Duration) -> Cycles {
+    PER_DOWNLOADED_BYTE_FEE * response_size.get() + PER_RESPONSE_MS_FEE * response_time.as_millis()
+}
+
+/// The largest response [`network_usage_fee`] prices within `budget`, i.e. the
+/// inverse of its per-byte term.
+pub(crate) fn max_downloaded_bytes(budget: Cycles) -> NumBytes {
+    NumBytes::from(u64::try_from(budget.get() / PER_DOWNLOADED_BYTE_FEE.get()).unwrap_or(u64::MAX))
+}
+
+/// The longest response time [`network_usage_fee`] prices within `budget`, i.e.
+/// the inverse of its per-millisecond term.
+pub(crate) fn max_response_time(budget: Cycles) -> Duration {
+    Duration::from_millis(
+        u64::try_from(budget.get() / PER_RESPONSE_MS_FEE.get()).unwrap_or(u64::MAX),
+    )
+}
+
+/// The fee for running the transform function for `instructions`.
+pub(crate) fn transform_usage_fee(instructions: NumInstructions) -> Cycles {
+    Cycles::from((instructions.get() as u128) / TRANSFORM_INSTRUCTION_DIVISOR)
+}
+
+/// The most instructions [`transform_usage_fee`] prices within `budget`, i.e. the
+/// largest transform the budget affords.
+pub(crate) fn max_transform_instructions(budget: Cycles) -> NumInstructions {
+    // The fee rounds the instruction count down to a whole number of cycles, so
+    // the budget also affords the divisor's worth of instructions that costs
+    // nothing on top of it.
+    let instructions = (budget * TRANSFORM_INSTRUCTION_DIVISOR)
+        .get()
+        .saturating_add(TRANSFORM_INSTRUCTION_DIVISOR - 1);
+    NumInstructions::from(u64::try_from(instructions).unwrap_or(u64::MAX))
+}
+
+/// The fee for gossiping a transformed response of `transformed_response_size` to
+/// all `subnet_size` nodes of the subnet. Only gossiping (flexible and
+/// non-replicated) outcalls are charged this; for fully-replicated ones,
+/// disseminating the response is a consensus cost instead.
+pub(crate) fn gossip_usage_fee(
+    transformed_response_size: NumBytes,
+    subnet_size: NumberOfNodes,
+) -> Cycles {
+    FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
+        * transformed_response_size.get()
+        * (subnet_size.get() as u64)
+}
+
 // =============================== Consensus fee ===============================
 
-/// Per-response-byte consensus cost coefficient `N * (10 * N + 600)`, where `N`
-/// is the subnet size.
-pub fn consensus_cost_coefficient(subnet_size: NumberOfNodes) -> u128 {
-    let n = subnet_size.get() as u128;
-    n * (CONSENSUS_PER_NODE_BYTE_FEE * n + CONSENSUS_BYTE_FEE)
+/// The consensus fee for putting `response_bytes` many response bytes into a
+/// block on a subnet of size `subnet_size`, i.e. `N * (10 * N + 600) * response_bytes`.
+pub fn consensus_fee(response_bytes: u128, subnet_size: NumberOfNodes) -> Cycles {
+    let n = subnet_size.get() as u64;
+    (CONSENSUS_PER_NODE_BYTE_FEE * n + CONSENSUS_BYTE_FEE) * n * response_bytes
 }
+
+/// The additional consensus fee charged for `extra_responses` flexible responses
+/// beyond the `min_responses` required to reach consensus.
+fn flexible_extra_response_fee(extra_responses: u32, subnet_size: NumberOfNodes) -> Cycles {
+    let n = subnet_size.get() as u64;
+    (HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n
+        + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE)
+        * n
+        * (extra_responses as u64)
+}
+
+// ================================= Total fee =================================
+
+/// The total fee for an HTTP outcall of the given `replication_kind` where every
+/// participating replica consumed the given resources, i.e. the sum of all three
+/// parts of its price: the up-front [`base_fee`], the per-replica fees of every
+/// replica attempting it, and the consensus fee of putting the responses that are
+/// delivered into a block. Used by canisters to estimate the cost of an outcall.
+///
+/// Since how many replicas will respond is not known ahead of time, this is the most
+/// such an outcall can cost: every replica of the (flexible) committee is assumed to
+/// attempt it and `max_responses` of their responses to be delivered.
+pub fn total_fee(
+    request_size: NumBytes,
+    http_roundtrip_time: Duration,
+    raw_response_size: NumBytes,
+    transform_instructions: NumInstructions,
+    transformed_response_size: NumBytes,
+    replication_kind: ReplicationKind,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+) -> CompoundCycles<HTTPOutcalls> {
+    let subnet_size = subnet_size_of(subnet_cycles_config);
+    let amount = base_fee_amount(request_size, replication_kind, subnet_size)
+        + usage_fee(
+            replication_kind,
+            http_roundtrip_time,
+            raw_response_size,
+            transform_instructions,
+            transformed_response_size,
+            subnet_size,
+        );
+
+    CompoundCycles::new(amount, subnet_cycles_config.cost_schedule)
+}
+
+/// Everything an HTTP outcall of the given `replication_kind` with the given
+/// resource usage costs beyond its up-front [`base_fee`]: the per-replica fee of
+/// every replica attempting it, plus the consensus fee of delivering the responses.
+///
+/// This is the part of the price that the per-replica allowances have to cover.
+fn usage_fee(
+    replication_kind: ReplicationKind,
+    http_roundtrip_time: Duration,
+    raw_response_size: NumBytes,
+    transform_instructions: NumInstructions,
+    transformed_response_size: NumBytes,
+    subnet_size: NumberOfNodes,
+) -> Cycles {
+    let gossip_fee = match replication_kind {
+        ReplicationKind::FullyReplicated => Cycles::zero(),
+        ReplicationKind::NonReplicated | ReplicationKind::Flexible { .. } => {
+            gossip_usage_fee(transformed_response_size, subnet_size)
+        }
+    };
+    let consensus_fee = max_consensus_fee(replication_kind, transformed_response_size, subnet_size);
+
+    let per_replica_fee = network_usage_fee(raw_response_size, http_roundtrip_time)
+        + transform_usage_fee(transform_instructions)
+        + gossip_fee;
+    let replicas = replication_kind.node_count(subnet_size);
+
+    per_replica_fee * replicas + consensus_fee
+}
+
+/// The most the consensus fee of delivering the response(s) of an outcall of the
+/// given `replication_kind` can be, each response `transformed_response_size` bytes
+/// large.
+///
+/// How many of the responses consensus delivers is not known ahead of time, so a
+/// flexible outcall is priced for all `max_responses` of them, those beyond
+/// `min_responses` at an extra fee.
+pub(crate) fn max_consensus_fee(
+    replication_kind: ReplicationKind,
+    transformed_response_size: NumBytes,
+    subnet_size: NumberOfNodes,
+) -> Cycles {
+    let transformed_bytes = transformed_response_size.get() as u128;
+    match replication_kind {
+        ReplicationKind::FullyReplicated | ReplicationKind::NonReplicated => {
+            consensus_fee(transformed_bytes, subnet_size)
+        }
+        ReplicationKind::Flexible {
+            min_responses,
+            max_responses,
+            ..
+        } => {
+            consensus_fee(
+                (max_responses as u128).saturating_mul(
+                    FLEXIBLE_RESPONSE_SIZE_OVERHEAD.saturating_add(transformed_bytes),
+                ),
+                subnet_size,
+            ) + flexible_extra_response_fee(
+                max_responses.saturating_sub(min_responses),
+                subnet_size,
+            )
+        }
+    }
+}
+
+// ============================= Maximum usage fee =============================
+
+/// The most an HTTP outcall with the given `replication` and `max_response_bytes`
+/// can ever spend, i.e. its [`usage_fee`] in the worst case: a response of the
+/// largest permitted size, downloaded over the full `MAX_RESPONSE_TIME`,
+/// transformed with the full query instruction limit and delivered as a maximally
+/// large transformed response.
+///
+/// The result is rounded up to a multiple of the number of participating replicas,
+/// so that splitting it evenly among them always yields allowances that add up to at
+/// least the worst case.
+pub fn max_usage_fee(
+    replication: &Replication,
+    max_response_bytes: Option<NumBytes>,
+    subnet_size: NumberOfNodes,
+) -> Cycles {
+    let replication_kind = replication.kind();
+    let worst_case = usage_fee(
+        replication_kind,
+        MAX_RESPONSE_TIME,
+        max_response_bytes.unwrap_or(NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)),
+        MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
+        NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+        subnet_size,
+    );
+    let node_count = replication_kind.node_count(subnet_size) as u128;
+    Cycles::new(
+        worst_case
+            .get()
+            .div_ceil(node_count)
+            .saturating_mul(node_count),
+    )
+}
+
+// =============================== Initial spent ===============================
 
 /// Computes the collective initial spent cycles for a fully-replicated (or
 /// non-replicated) HTTP outcall response.
@@ -113,9 +349,7 @@ pub fn non_flexible_initial_spent(
         .values()
         .map(|sig| sig.payment_receipt.spent)
         .sum();
-    let consensus_cost =
-        Cycles::from(consensus_cost_coefficient(subnet_size) * proof.metadata.content_size as u128);
-    spent_sum + consensus_cost
+    spent_sum + consensus_fee(proof.metadata.content_size as u128, subnet_size)
 }
 
 /// Computes the collective initial spent cycles for a group of flexible HTTP
@@ -154,19 +388,110 @@ pub fn flexible_initial_spent<'a>(
     for share in extra_shares {
         spent_sum += share.content.payment_receipt.spent;
     }
-    let consensus_cost = Cycles::from(consensus_cost_coefficient(subnet_size) * size_term);
-    let extra_cost = extra_response_fee(subnet_size, count.saturating_sub(min_responses) as u128);
-    spent_sum + consensus_cost + extra_cost
+    let extra_responses = count.saturating_sub(min_responses);
+    spent_sum
+        + consensus_fee(size_term, subnet_size)
+        + flexible_extra_response_fee(extra_responses, subnet_size)
 }
 
-/// The fee charged for `extra_responses` many responses delivered beyond the
-/// `min_responses` the caller already paid for up front.
-fn extra_response_fee(subnet_size: NumberOfNodes, extra_responses: u128) -> Cycles {
-    let n = subnet_size.get() as u128;
-    Cycles::from(
-        n * (HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * extra_responses
-            + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * extra_responses),
-    )
+/// A lower bound on the consensus cost of delivering a flexible response, given
+/// the currently `seen_shares`.
+///
+/// The cheapest response delivers as few bodies as it may: every committee member
+/// that has not been seen yet may still produce an empty body, so only the bodies
+/// that must come out of `seen_shares` are counted at their actual size.
+pub fn min_flexible_consensus_cost<'a>(
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
+    subnet_size: NumberOfNodes,
+    committee_size: usize,
+    min_responses: u32,
+) -> Option<Cycles> {
+    let mut ok_sizes = Vec::new();
+    let mut reject_sizes = Vec::new();
+    for share in seen_shares {
+        if share.content.is_reject() {
+            reject_sizes.push(share.content.content_size());
+        } else {
+            ok_sizes.push(share.content.content_size());
+        }
+    }
+    // Smallest first: those are the bodies a cheapest result would pick.
+    ok_sizes.sort_unstable();
+    reject_sizes.sort_unstable();
+    let unseen = committee_size.saturating_sub(ok_sizes.len() + reject_sizes.len());
+
+    let min_ok = min_responses as usize;
+    let min_rejects = committee_size.saturating_sub(min_ok) + 1;
+    // A result is still reachable only while enough replicas can contribute to it.
+    let ok_cost = (ok_sizes.len() + unseen >= min_ok)
+        .then(|| min_delivery_cost(&ok_sizes, unseen, min_ok, subnet_size, min_responses));
+    let reject_cost = (reject_sizes.len() + unseen >= min_rejects).then(|| {
+        min_delivery_cost(
+            &reject_sizes,
+            unseen,
+            min_rejects,
+            subnet_size,
+            min_responses,
+        )
+    });
+
+    ok_cost.into_iter().chain(reject_cost).min()
+}
+
+/// The least it can cost to deliver the `required_responses` that a result cannot
+/// deliver fewer than: of those, at most `unseen` may still turn out to have an empty
+/// body and the rest have to have the smallest of the already known `seen_sizes`.
+fn min_delivery_cost(
+    seen_sizes: &[u32],
+    unseen: usize,
+    required_responses: usize,
+    subnet_size: NumberOfNodes,
+    min_responses: u32,
+) -> Cycles {
+    // Every replica not seen yet may still produce an empty body, so only the
+    // responses beyond those have to take a body from the seen sizes.
+    let from_seen = required_responses
+        .saturating_sub(unseen)
+        .min(seen_sizes.len());
+    let assumed_empty = required_responses - from_seen;
+    let size_term: u128 = seen_sizes[..from_seen]
+        .iter()
+        .map(|size| FLEXIBLE_RESPONSE_SIZE_OVERHEAD + *size as u128)
+        .sum::<u128>()
+        + FLEXIBLE_RESPONSE_SIZE_OVERHEAD * assumed_empty as u128;
+    // `required_responses` is bounded by the committee size, so it always fits a `u32`
+    let extra_responses = u32::try_from(required_responses.saturating_sub(min_responses as usize))
+        .unwrap_or(u32::MAX);
+    consensus_fee(size_term, subnet_size)
+        + flexible_extra_response_fee(extra_responses, subnet_size)
+}
+
+/// A lower bound on the consensus cost of delivering a fully- or non-replicated
+/// response, given the `seen_shares` produced so far (at most one per replica).
+pub fn min_non_flexible_consensus_cost<'a>(
+    seen_shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
+    subnet_size: NumberOfNodes,
+    committee_size: usize,
+    threshold: usize,
+) -> Option<Cycles> {
+    // Shares agreeing on the same metadata are votes for the same response.
+    let mut votes: BTreeMap<&CanisterHttpResponseMetadata, usize> = BTreeMap::new();
+    let mut seen = 0;
+    for share in seen_shares {
+        *votes.entry(&share.content.metadata).or_default() += 1;
+        seen += 1;
+    }
+    let unseen = committee_size.saturating_sub(seen);
+
+    votes
+        .into_iter()
+        .map(|(metadata, votes)| (votes, metadata.content_size))
+        // A response nobody has voted for yet would have to come from the replicas that
+        // have not been seen, and may have an empty body.
+        .chain(std::iter::once((0, 0)))
+        .filter(|(votes, _)| votes + unseen >= threshold)
+        .map(|(_, content_size)| consensus_fee(content_size as u128, subnet_size))
+        .min()
 }
 
 #[cfg(test)]
@@ -186,6 +511,7 @@ mod tests {
         messages::CallbackId,
         signature::BasicSignature,
     };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
     use std::collections::BTreeMap;
 
     fn node(i: u64) -> NodeId {
@@ -243,12 +569,11 @@ mod tests {
         }
     }
 
-    #[test]
-    fn consensus_cost_coefficient_matches_formula() {
-        // N * (10 * N + 600).
-        assert_eq!(consensus_cost_coefficient(NumberOfNodes::from(1)), 610);
-        assert_eq!(consensus_cost_coefficient(NumberOfNodes::from(13)), 9_490);
-        assert_eq!(consensus_cost_coefficient(NumberOfNodes::from(40)), 40_000);
+    /// Same as [`share`], but for a reject response.
+    fn reject_share(signer: u64, content_size: u32, spent: u128) -> CanisterHttpResponseShare {
+        let mut share = share(signer, content_size, spent);
+        share.content.metadata.is_reject = true;
+        share
     }
 
     #[test]
@@ -353,6 +678,181 @@ mod tests {
     }
 
     #[test]
+    fn min_flexible_consensus_cost_assumes_empty_bodies_for_unseen_replicas() {
+        // Nothing seen yet, so every body a result might deliver is assumed empty
+        // and costs only the 9_490 * 181 = 1_717_690 per-response overhead.
+        const PER_RESPONSE: u128 = 1_717_690;
+        let n = NumberOfNodes::from(13);
+        let seen = || std::iter::empty();
+        // A committee of 13 needing 7 responses delivers 7 bodies either way
+        // (7 successes, or the 13 - 7 + 1 = 7 rejects of a `TooManyRejects`), and
+        // neither is charged a fee for exceeding the 7 it needs.
+        assert_eq!(
+            min_flexible_consensus_cost(seen(), n, 13, 7),
+            Some(Cycles::new(7 * PER_RESPONSE))
+        );
+        // Needing just one response, a single successful body is the cheapest of
+        // the two; the 4 rejects proving the error would cost far more.
+        assert_eq!(
+            min_flexible_consensus_cost(seen(), n, 4, 1),
+            Some(Cycles::new(PER_RESPONSE))
+        );
+        // Needing all four, a single reject already makes the outcall fail, so one
+        // body suffices here too — and it is not an "extra" response, so no fee.
+        assert_eq!(
+            min_flexible_consensus_cost(seen(), n, 4, 4),
+            Some(Cycles::new(PER_RESPONSE))
+        );
+        // A (degenerate) `min_responses` of zero is delivered by an empty group,
+        // which genuinely costs nothing.
+        assert_eq!(
+            min_flexible_consensus_cost(seen(), n, 4, 0),
+            Some(Cycles::zero())
+        );
+    }
+
+    #[test]
+    fn min_flexible_consensus_cost_counts_the_smallest_bodies_it_must_deliver() {
+        // A committee of 4 needing 2 responses, of which 3 have been seen, so one
+        // replica is still unseen and may yet produce an empty body. The group
+        // therefore has to take just one body out of those seen — the smallest:
+        //   size_term = (181 + 1_000) + 181  = 1_362
+        //   cost      = 9_490 * 1_362        = 12_925_380
+        // The `TooManyRejects` branch needs 4 - 2 + 1 = 3 rejects, which the one
+        // unseen replica can no longer supply, so it is out of reach and ignored.
+        let n = NumberOfNodes::from(13);
+        // Deliberately not in ascending order, so that taking the smallest is not the
+        // same as taking the first.
+        let seen = [share(0, 3_000, 0), share(1, 1_000, 0), share(2, 2_000, 0)];
+        assert_eq!(
+            min_flexible_consensus_cost(seen.iter(), n, 4, 2),
+            Some(Cycles::new(12_925_380))
+        );
+    }
+
+    #[test]
+    fn min_flexible_consensus_cost_includes_the_fee_of_the_rejects_proving_an_error() {
+        // The mirror image: 3 of a committee of 4 have rejected and 2 responses are
+        // needed, so a group of successful responses is out of reach and only the
+        // `TooManyRejects` error remains. It delivers 4 - 2 + 1 = 3 rejects, two of
+        // which have to come from those seen — the two smallest — and pays the fee for
+        // the one response it delivers beyond `min_responses`:
+        //   size_term = (181 + 50) + (181 + 100) + 181 = 693
+        //   cost      = 9_490 * 693                    = 6_576_570
+        //   fee       = 13 * (2_000 * 13 + 100_000)    = 1_638_000
+        let n = NumberOfNodes::from(13);
+        // Distinct sizes, and not in ascending order, so that taking the two smallest
+        // is not the same as taking the first two.
+        let seen = [
+            reject_share(0, 5_000, 0),
+            reject_share(1, 50, 0),
+            reject_share(2, 100, 0),
+        ];
+        assert_eq!(
+            min_flexible_consensus_cost(seen.iter(), n, 4, 2),
+            Some(Cycles::new(6_576_570 + 1_638_000))
+        );
+    }
+
+    #[test]
+    fn min_flexible_consensus_cost_is_none_when_no_result_can_be_delivered() {
+        // A committee of 4 that has all responded successfully, but needs 10
+        // responses: neither the 10 successes nor a reject can still turn up, so
+        // there is no body left whose cost there would be to bound.
+        let n = NumberOfNodes::from(13);
+        let seen = [
+            share(0, 10, 0),
+            share(1, 10, 0),
+            share(2, 10, 0),
+            share(3, 10, 0),
+        ];
+        assert_eq!(min_flexible_consensus_cost(seen.iter(), n, 4, 10), None);
+    }
+
+    #[test]
+    fn min_flexible_consensus_cost_is_tight_once_the_whole_committee_is_seen() {
+        // With nothing left unseen the bound is no longer an estimate: it is exactly
+        // what the cheapest deliverable group costs, namely the two smallest of the
+        // four responses.
+        let n = NumberOfNodes::from(13);
+        let seen = [
+            share(0, 1_000, 7),
+            share(1, 2_000, 11),
+            share(2, 3_000, 13),
+            share(3, 4_000, 17),
+        ];
+        let bound = min_flexible_consensus_cost(seen.iter(), n, 4, 2).expect("a bound exists");
+        // The spends are not part of the bound, so they are subtracted from the
+        // group's collective spend before comparing.
+        let cheapest = flexible_initial_spent(seen[..2].iter(), std::iter::empty(), n, 2)
+            - Cycles::new(7 + 11);
+        assert_eq!(bound, cheapest);
+        // And it stays a bound for the groups that deliver more, or larger, bodies.
+        for delivered in 2..=4 {
+            let spends: u128 = seen[..delivered]
+                .iter()
+                .map(|s| s.content.spent().get())
+                .sum();
+            let spend = flexible_initial_spent(seen[..delivered].iter(), std::iter::empty(), n, 2)
+                - Cycles::new(spends);
+            assert!(
+                bound <= spend,
+                "bound exceeds the cost of {delivered} responses"
+            );
+        }
+    }
+
+    #[test]
+    fn min_non_flexible_consensus_cost_is_zero_while_another_response_can_still_win() {
+        // A committee of 13 tolerating 4 faults, so 9 have to agree.
+        let n = NumberOfNodes::from(13);
+        let (committee, threshold) = (13, 9);
+        let votes: Vec<_> = (0..13).map(|i| share(i, 1_000, 0)).collect();
+
+        // With 4 shares for a response of non-zero size (thus cost), the remaining 9 unseen
+        // shares may all be for a response of size 0, so the cheapest deliverable response is still free.
+        assert_eq!(
+            min_non_flexible_consensus_cost(votes[..4].iter(), n, committee, threshold),
+            Some(Cycles::zero())
+        );
+        // One more share for the non-zero size response, and a zero size response may no longer
+        // reach majority: the cheapest deliverable response is now the one with non-zero size.
+        assert_eq!(
+            min_non_flexible_consensus_cost(votes[..5].iter(), n, committee, threshold),
+            Some(Cycles::new(9_490_000))
+        );
+    }
+
+    #[test]
+    fn min_non_flexible_consensus_cost_pins_a_non_replicated_response_at_once() {
+        let n = NumberOfNodes::from(13);
+        // Nothing seen: the designated replica may still return an empty body.
+        assert_eq!(
+            min_non_flexible_consensus_cost(std::iter::empty(), n, 1, 1),
+            Some(Cycles::zero())
+        );
+        assert_eq!(
+            min_non_flexible_consensus_cost(std::iter::once(&share(0, 1_000, 0)), n, 1, 1),
+            Some(Cycles::new(9_490_000))
+        );
+    }
+
+    #[test]
+    fn min_non_flexible_consensus_cost_is_none_when_no_response_can_reach_the_threshold() {
+        let n = NumberOfNodes::from(13);
+        // Two camps of 5 out of 13, with 3 unseen: neither camp can reach 9, and the 3
+        // unseen cannot carry a third response there either.
+        let split: Vec<_> = (0..5)
+            .map(|i| share(i, 1_000, 0))
+            .chain((5..10).map(|i| share(i, 2_000, 0)))
+            .collect();
+        assert_eq!(
+            min_non_flexible_consensus_cost(split.iter(), n, 13, 9),
+            None
+        );
+    }
+
+    #[test]
     fn flexible_initial_spent_empty_is_zero() {
         let spent = flexible_initial_spent(
             std::iter::empty(),
@@ -361,5 +861,367 @@ mod tests {
             0,
         );
         assert_eq!(spent, Cycles::zero());
+    }
+
+    #[test]
+    fn max_downloaded_bytes_recovers_the_size_the_network_fee_priced() {
+        for size in [0, 1, 49, 50, 51, 1_000, 2_000_000, u64::MAX] {
+            let size = NumBytes::from(size);
+            assert_eq!(
+                max_downloaded_bytes(network_usage_fee(size, Duration::ZERO)),
+                size,
+                "a response of {size} does not survive the round trip"
+            );
+        }
+    }
+
+    #[test]
+    fn max_downloaded_bytes_is_the_largest_size_a_budget_affords() {
+        for budget in [0, 1, 49, 50, 51, 1_000, 100_000_000].map(Cycles::new) {
+            let size = max_downloaded_bytes(budget);
+            assert!(
+                network_usage_fee(size, Duration::ZERO) <= budget,
+                "a response of {size} costs more than the budget {budget}"
+            );
+            assert!(
+                network_usage_fee(NumBytes::from(size.get() + 1), Duration::ZERO) > budget,
+                "budget {budget}: {size} is not the largest affordable response"
+            );
+        }
+        // Except past what `NumBytes` can hold, where the size is bounded by the
+        // type rather than by the budget: a larger response would still be
+        // affordable, there just isn't one.
+        assert_eq!(
+            max_downloaded_bytes(Cycles::new(u128::MAX)),
+            NumBytes::from(u64::MAX)
+        );
+        // Exact whenever the budget is a whole number of bytes.
+        assert_eq!(
+            network_usage_fee(max_downloaded_bytes(Cycles::new(1_000)), Duration::ZERO),
+            Cycles::new(1_000)
+        );
+    }
+
+    #[test]
+    fn max_transform_instructions_is_the_largest_transform_a_budget_affords() {
+        for budget in [0, 1, 12, 13, 14, 1_000, 5_000_000_000].map(Cycles::new) {
+            let instructions = max_transform_instructions(budget);
+            assert_eq!(
+                transform_usage_fee(instructions),
+                budget,
+                "budget {budget} is not spent exactly by {instructions} instructions"
+            );
+            assert!(
+                transform_usage_fee(NumInstructions::from(instructions.get() + 1)) > budget,
+                "budget {budget}: {instructions} is not the largest affordable transform"
+            );
+        }
+        // Except once the instruction count saturates: past what `NumInstructions`
+        // can hold the budget is no longer spent exactly, only never exceeded.
+        let saturated = max_transform_instructions(Cycles::new(u128::MAX));
+        assert_eq!(saturated, NumInstructions::from(u64::MAX));
+        assert!(transform_usage_fee(saturated) < Cycles::new(u128::MAX));
+    }
+
+    #[test]
+    fn max_response_time_is_the_longest_response_a_budget_affords() {
+        for budget in [0, 1, 299, 300, 301, 18_000_000, 100_000_000].map(Cycles::new) {
+            let time = max_response_time(budget);
+            assert!(
+                network_usage_fee(NumBytes::from(0), time) <= budget,
+                "a response taking {time:?} costs more than the budget {budget}"
+            );
+            assert!(
+                network_usage_fee(NumBytes::from(0), time + Duration::from_millis(1)) > budget,
+                "budget {budget}: {time:?} is not the longest affordable response"
+            );
+        }
+        // 18_000_000 is the latency term every worst case is priced with, and it
+        // buys exactly the 60 s cap — so an allowance covering the worst case is
+        // never rationed below the full response time.
+        assert_eq!(
+            max_response_time(Cycles::new(18_000_000)),
+            MAX_RESPONSE_TIME
+        );
+        // Past what a `Duration` of whole milliseconds can hold, the time is bounded
+        // by that conversion rather than by the budget.
+        assert_eq!(
+            max_response_time(Cycles::new(u128::MAX)),
+            Duration::from_millis(u64::MAX)
+        );
+    }
+
+    /// The terms shared by every worst case at N = 13: the 60 s latency cap and the
+    /// full 5 B-instruction query limit.
+    const MAX_LATENCY_FEE: u128 = 300 * 60_000; // 18_000_000
+    const MAX_TRANSFORM_FEE: u128 = 5_000_000_000 / 13; // 384_615_384
+    /// `50 * 2_000_000 * 13`, the gossip fee for a maximally large transformed
+    /// response at N = 13.
+    const MAX_GOSSIP_FEE: u128 = 1_300_000_000;
+    /// `9_490 * 2_000_000`, the consensus fee for a maximally large response at
+    /// N = 13.
+    const MAX_NON_FLEXIBLE_CONSENSUS_FEE: u128 = 18_980_000_000;
+
+    /// The resource usage the `total_fee` tests below price, and the config they
+    /// price it on: a 100-byte request whose 1_000-byte response arrived in 2_000 ms,
+    /// was transformed with 26 instructions and ended up 500 bytes, at N = 13.
+    fn total_fee_of(replication_kind: ReplicationKind) -> CompoundCycles<HTTPOutcalls> {
+        total_fee(
+            NumBytes::from(100),
+            Duration::from_millis(2_000),
+            NumBytes::from(1_000),
+            NumInstructions::from(26),
+            NumBytes::from(500),
+            replication_kind,
+            CyclesAccountManagerSubnetConfig::new(13, CanisterCyclesCostSchedule::Normal, 13),
+        )
+    }
+
+    /// `50 * 1_000 + 300 * 2_000 + 26 / 13`, the network and transform fees of a
+    /// single replica for the usage priced by [`total_fee_of`].
+    const USAGE_FEE: u128 = 650_002;
+
+    #[test]
+    fn total_fee_fully_replicated_charges_no_gossip() {
+        // All 13 replicas produce the same response, whose dissemination is charged
+        // as a consensus fee rather than a per-replica gossip fee.
+        //   base fee    = 13 * (1_000_000 + 50*100 + 140_000*13 + 800*13*13)
+        //                                                          = 38_482_600
+        //   per replica = 13 * 650_002                              =  8_450_026
+        //   consensus   = 9_490 * 500                               =  4_745_000
+        let fee = total_fee_of(ReplicationKind::FullyReplicated);
+        assert_eq!(
+            fee.real(),
+            Cycles::new(38_482_600 + 13 * USAGE_FEE + 4_745_000)
+        );
+
+        // The parts add up to the single-expression formula of
+        // `ic0.cost_http_request_v2`, with the consensus fee's `10 * N + 600` as the
+        // per-transformed-byte coefficient. (The formula was originally specified
+        // with `10 * N + 650`, charging every replica another 50 per transformed
+        // byte; that is not what `PayAsYouGoTracker` charges a fully-replicated
+        // replica, so it is not reported either.)
+        let n = 13_u128;
+        assert_eq!(
+            fee.real(),
+            Cycles::new(
+                n * (1_000_000
+                    + 50 * 100
+                    + 140_000 * n
+                    + 800 * n * n
+                    + 50 * 1_000
+                    + 300 * 2_000
+                    + 26 / 13
+                    + (10 * n + 600) * 500)
+            )
+        );
+    }
+
+    #[test]
+    fn total_fee_non_replicated_charges_one_replica_that_gossips() {
+        // A single replica performs the outcall and gossips its response to all 13
+        // nodes; the base fee is the flexible one with `min_responses = 1`.
+        //   base fee    = 13 * (1_000_000 + 50*100 + 90_000*13 + 2_000*13 + 100_000)
+        //                                                          = 29_913_000
+        //   per replica = 1 * (650_002 + 50*500*13)                =    975_002
+        //   consensus   = 9_490 * 500                              =  4_745_000
+        let fee = total_fee_of(ReplicationKind::NonReplicated);
+        assert_eq!(
+            fee.real(),
+            Cycles::new(29_913_000 + (USAGE_FEE + 50 * 500 * 13) + 4_745_000)
+        );
+    }
+
+    #[test]
+    fn total_fee_flexible_charges_every_delegated_replica_and_response() {
+        // 3 delegated replicas, 2 of whose responses suffice, so all 3 perform the
+        // outcall and gossip their own response, and up to 3 responses are delivered
+        // — one of them beyond `min_responses`.
+        //   base fee    = 13 * (1_000_000 + 50*100 + 90_000*13 + 2_000*13*2 + 100_000*2)
+        //                                                          = 31_551_000
+        //   per replica = 3 * (650_002 + 50*500*13)                =  2_925_006
+        //   consensus   = 9_490 * 3 * (181 + 500)                  = 19_388_070
+        //   extra resp. = (3 - 2) * 13 * (2_000*13 + 100_000)      =  1_638_000
+        let fee = total_fee_of(ReplicationKind::Flexible {
+            total_requests: 3,
+            min_responses: 2,
+            max_responses: 3,
+        });
+        assert_eq!(
+            fee.real(),
+            Cycles::new(31_551_000 + 3 * (USAGE_FEE + 50 * 500 * 13) + 19_388_070 + 1_638_000)
+        );
+    }
+
+    /// [`total_fee`] of the largest outcall a canister can ask the price of, with the
+    /// given `replication_kind`: every byte and instruction count at `u64::MAX`, and
+    /// (where the kind has them) every response count at `u32::MAX`.
+    fn total_fee_of_maximal_params(
+        replication_kind: ReplicationKind,
+        subnet_size: usize,
+    ) -> Cycles {
+        total_fee(
+            NumBytes::from(u64::MAX),
+            Duration::from_millis(u64::MAX),
+            NumBytes::from(u64::MAX),
+            NumInstructions::from(u64::MAX),
+            NumBytes::from(u64::MAX),
+            replication_kind,
+            CyclesAccountManagerSubnetConfig::new(
+                subnet_size,
+                CanisterCyclesCostSchedule::Normal,
+                13,
+            ),
+        )
+        .real()
+    }
+
+    #[test]
+    fn total_fee_of_maximal_params_saturates_instead_of_overflowing() {
+        for replication_kind in [
+            ReplicationKind::FullyReplicated,
+            ReplicationKind::NonReplicated,
+            ReplicationKind::Flexible {
+                total_requests: u32::MAX,
+                min_responses: u32::MAX,
+                max_responses: u32::MAX,
+            },
+        ] {
+            // The cost doesn't overflow on realistic subnet sizes
+            for subnet_size in [0, 1, 13, 40, 1_000] {
+                let fee = total_fee_of_maximal_params(replication_kind, subnet_size);
+                assert!(
+                    fee < Cycles::new(u128::MAX),
+                    "{replication_kind:?} at subnet size {subnet_size}: price saturated at {fee}"
+                );
+            }
+            // The cost saturates at the maximum value
+            assert_eq!(
+                total_fee_of_maximal_params(replication_kind, u32::MAX as usize),
+                Cycles::new(u128::MAX),
+                "{replication_kind:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn total_fee_is_zero_on_a_free_subnet() {
+        let fee = total_fee(
+            NumBytes::from(100),
+            Duration::from_millis(2_000),
+            NumBytes::from(1_000),
+            NumInstructions::from(26),
+            NumBytes::from(500),
+            ReplicationKind::FullyReplicated,
+            CyclesAccountManagerSubnetConfig::new(13, CanisterCyclesCostSchedule::Free, 13),
+        );
+        assert_eq!(fee.real(), Cycles::zero());
+        // The nominal cost is still reported.
+        assert!(!fee.nominal().is_zero());
+    }
+
+    #[test]
+    fn max_usage_fee_fully_replicated() {
+        // A fully-replicated outcall at N = 13 without a response limit, so the
+        // download term uses the full 2 MB. All 13 replicas perform it, and their
+        // single agreed-on response is disseminated by consensus rather than
+        // gossiped.
+        //   per replica = 50 * 2_000_000                 =    100_000_000
+        //               + latency                        =     18_000_000
+        //               + transform                      =    384_615_384
+        //   consensus   = 9_490 * 2_000_000              = 18_980_000_000
+        let per_replica = 100_000_000 + MAX_LATENCY_FEE + MAX_TRANSFORM_FEE;
+        assert_eq!(
+            max_usage_fee(&Replication::FullyReplicated, None, NumberOfNodes::from(13)),
+            Cycles::new(13 * per_replica + MAX_NON_FLEXIBLE_CONSENSUS_FEE)
+        );
+    }
+
+    #[test]
+    fn max_usage_fee_non_replicated_charges_one_replica_that_gossips() {
+        // A non-replicated outcall with a 1 KB response limit at N = 13: a single
+        // replica performs it and gossips a maximally large transformed response to
+        // the whole subnet.
+        //   per replica = 50 * 1_000                     =         50_000
+        //               + latency                        =     18_000_000
+        //               + transform                      =    384_615_384
+        //               + gossip                         =  1_300_000_000
+        //   consensus   = 9_490 * 2_000_000              = 18_980_000_000
+        let per_replica = 50_000 + MAX_LATENCY_FEE + MAX_TRANSFORM_FEE + MAX_GOSSIP_FEE;
+        assert_eq!(
+            max_usage_fee(
+                &Replication::NonReplicated(node(0)),
+                Some(NumBytes::from(1_000)),
+                NumberOfNodes::from(13)
+            ),
+            Cycles::new(per_replica + MAX_NON_FLEXIBLE_CONSENSUS_FEE)
+        );
+    }
+
+    #[test]
+    fn max_usage_fee_flexible_covers_all_delegated_replicas_and_responses() {
+        // A flexible outcall with a committee of 3 (2 of which suffice) and a 1 KB
+        // response limit at N = 13: all 3 replicas perform it and gossip their own
+        // maximally large response, and all 3 responses are delivered, one of them
+        // beyond `min_responses`.
+        //   per replica    = 50_000 + latency + transform + gossip
+        //   consensus      = 9_490 * 3 * (181 + 2_000_000)   = 56_945_153_070
+        //   extra response = (3 - 2) * 13 * (2_000 * 13 + 100_000)     =      1_638_000
+        let per_replica = 50_000 + MAX_LATENCY_FEE + MAX_TRANSFORM_FEE + MAX_GOSSIP_FEE;
+        let consensus = 9_490 * 3 * (181 + 2_000_000) + 13 * (2_000 * 13 + 100_000);
+        let replication = Replication::Flexible {
+            committee: (0..3).map(node).collect(),
+            min_responses: 2,
+            max_responses: 3,
+        };
+        assert_eq!(
+            max_usage_fee(
+                &replication,
+                Some(NumBytes::from(1_000)),
+                NumberOfNodes::from(13)
+            ),
+            Cycles::new(3 * per_replica + consensus)
+        );
+    }
+
+    #[test]
+    fn max_usage_fee_is_rounded_up_to_whole_allowances() {
+        // Whatever the worst case, the reported maximum is a multiple of the number of
+        // participating replicas and at most `node_count - 1` cycles above the actual
+        // worst case, so that splitting it evenly always covers that worst case.
+        for replication in [
+            Replication::FullyReplicated,
+            Replication::NonReplicated(node(0)),
+            // A committee of 4, whose worst case is not a multiple of 4.
+            Replication::Flexible {
+                committee: (0..4).map(node).collect(),
+                min_responses: 2,
+                max_responses: 3,
+            },
+        ] {
+            let subnet_size = NumberOfNodes::from(13);
+            let replication_kind = replication.kind();
+            let node_count = replication_kind.node_count(subnet_size) as u128;
+            let worst_case = usage_fee(
+                replication_kind,
+                MAX_RESPONSE_TIME,
+                NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
+                NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                subnet_size,
+            );
+            let rounded = max_usage_fee(&replication, None, subnet_size);
+
+            assert_eq!(rounded.get() % node_count, 0, "{replication:?}");
+            assert!(
+                rounded >= worst_case && rounded.get() - worst_case.get() < node_count,
+                "{replication:?}: {rounded} not within a rounding step of {worst_case}"
+            );
+            // Splitting it evenly covers the worst case, which is the point.
+            assert!(
+                rounded / node_count * node_count >= worst_case,
+                "{replication:?}"
+            );
+        }
     }
 }

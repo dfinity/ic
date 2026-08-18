@@ -1,8 +1,9 @@
 use super::subnet_call_context_manager::{
+    BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext,
     DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT, EcdsaArguments, EcdsaMatchedPreSignature,
-    InstallCodeCall, PreSignatureStash, RawRandContext, SchnorrArguments,
-    SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
-    SubnetCallContextManager, ThresholdArguments,
+    InstallCodeCall, PreSignatureStash, RawRandContext, ReshareChainKeyContext, SchnorrArguments,
+    SchnorrMatchedPreSignature, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
+    SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
 use crate::metadata_state::testing::SystemMetadataTesting;
@@ -10,6 +11,7 @@ use crate::metrics::ReplicatedStateMetrics;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
 use crate::{CanisterPriority, InputQueueType, ReplicatedState};
 use assert_matches::assert_matches;
+use ic_btc_replica_types::{GetSuccessorsRequestInitial, Network, SendTransactionRequest};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
     generate_key_transcript, setup_unmasked_random_params,
@@ -26,7 +28,9 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities_metrics::fetch_gauge;
+use ic_test_utilities_metrics::{
+    MetricVec, fetch_gauge, fetch_int_gauge_vec, metric_vec, nonzero_values,
+};
 use ic_test_utilities_types::ids::{
     SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
     user_test_id,
@@ -42,6 +46,7 @@ use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSign
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
@@ -461,6 +466,7 @@ fn network_topology_roundtrip_encoding() {
         public_key: vec![4, 5, 6],
         nodes: [node_test_id(3)].into_iter().collect(),
         subnet_type: SubnetType::CloudEngine,
+        cooling_down: true,
         ..Default::default()
     };
 
@@ -857,6 +863,282 @@ fn system_metadata_online_split() {
     expected.subnet_metrics = Default::default();
     // Everything else should be unchanged.
     assert_eq!(expected, metadata_b);
+}
+
+const SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts";
+
+/// Observes the replicated state metrics of `state` into a fresh registry.
+fn observe(state: &ReplicatedState) -> MetricsRegistry {
+    let registry = MetricsRegistry::new();
+    ReplicatedStateMetrics::new(&registry).observe(
+        state.metadata.own_subnet_id,
+        state,
+        0.into(),
+        &no_op_logger(),
+    );
+    registry
+}
+
+/// Tests that each subnet call type is counted under its own label value: pushing
+/// one call of a given type bumps that label value to 1 (and no other), while
+/// removing it again drops it back to 0.
+#[test]
+fn subnet_call_contexts_metric() {
+    let fresh_state = || ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    let request = || {
+        RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(CanisterId::ic_00())
+            .build()
+    };
+    let call = || CanisterCall::Request(Arc::new(request()));
+    let canister_http_request_context = || CanisterHttpRequestContext {
+        request: request(),
+        url: "https://".to_string(),
+        max_response_bytes: None,
+        headers: Vec::new(),
+        body: None,
+        http_method: CanisterHttpMethod::GET,
+        transform: None,
+        time: UNIX_EPOCH,
+        replication: Replication::FullyReplicated,
+        pricing_version: PricingVersion::Legacy,
+        refund_status: RefundStatus::default(),
+        registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
+    };
+
+    // A state with no subnet calls exports a zero for every call type.
+    assert_eq!(
+        metric_vec(&[
+            (&[("type", "setup_initial_dkg")], 0),
+            (&[("type", "sign_with_threshold")], 0),
+            (&[("type", "canister_http_request")], 0),
+            (&[("type", "delivered_canister_http_request")], 0),
+            (&[("type", "reshare_chain_key")], 0),
+            (&[("type", "bitcoin_get_successors")], 0),
+            (&[("type", "bitcoin_send_transaction_internal")], 0),
+            (&[("type", "raw_rand")], 0),
+            (&[("type", "install_code")], 0),
+            (&[("type", "stop_canister")], 0),
+        ]),
+        fetch_int_gauge_vec(&observe(&fresh_state()), SUBNET_CALL_CONTEXTS)
+    );
+
+    // All the call types that are pushed and retrieved by callback ID.
+    for (call_type, context) in [
+        (
+            "setup_initial_dkg",
+            SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
+                request: request(),
+                nodes_in_target_subnet: BTreeSet::new(),
+                target_id: NiDkgTargetId::new([0_u8; 32]),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+            }),
+        ),
+        (
+            "sign_with_threshold",
+            SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
+                request: request(),
+                args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                    key_id: make_key_id(),
+                    message_hash: [0_u8; 32],
+                    pre_signature: None,
+                }),
+                derivation_path: Arc::new(vec![]),
+                batch_time: UNIX_EPOCH,
+                nonce: None,
+            }),
+        ),
+        (
+            "canister_http_request",
+            SubnetCallContext::CanisterHttpRequest(canister_http_request_context()),
+        ),
+        (
+            "reshare_chain_key",
+            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
+                request: request(),
+                key_id: MasterPublicKeyId::Ecdsa(make_key_id()),
+                nodes: BTreeSet::new(),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+                target_id: NiDkgTargetId::new([0_u8; 32]),
+            }),
+        ),
+        (
+            "bitcoin_get_successors",
+            SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
+                request: request(),
+                payload: GetSuccessorsRequestInitial {
+                    network: Network::BitcoinMainnet,
+                    anchor: vec![1, 2, 3],
+                    processed_block_hashes: vec![],
+                },
+                time: UNIX_EPOCH,
+            }),
+        ),
+        (
+            "bitcoin_send_transaction_internal",
+            SubnetCallContext::BitcoinSendTransactionInternal(
+                BitcoinSendTransactionInternalContext {
+                    request: request(),
+                    payload: SendTransactionRequest {
+                        network: Network::BitcoinMainnet,
+                        transaction: vec![1, 2, 3],
+                    },
+                    time: UNIX_EPOCH,
+                },
+            ),
+        ),
+    ] {
+        let mut state = fresh_state();
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
+
+        let callback_id = state
+            .metadata
+            .subnet_call_context_manager
+            .push_context(context);
+        assert_eq!(
+            metric_vec(&[(&[("type", call_type)], 1)]),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
+
+        assert!(
+            state
+                .metadata
+                .subnet_call_context_manager
+                .retrieve_context(callback_id, &no_op_logger())
+                .is_some()
+        );
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
+    }
+
+    // Delivered canister HTTP requests are only ever moved here from
+    // `canister_http_request_contexts`, and are dropped once they time out.
+    let mut state = fresh_state();
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    state
+        .metadata
+        .subnet_call_context_manager
+        .delivered_canister_http_request_contexts
+        .insert(CallbackId::new(1), canister_http_request_context());
+    assert_eq!(
+        metric_vec(&[(&[("type", "delivered_canister_http_request")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    assert_eq!(
+        1,
+        state
+            .metadata
+            .subnet_call_context_manager
+            .time_out_delivered_canister_http_request_contexts(
+                UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+            )
+            .len()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+
+    // `RawRand` requests are popped off the front of the queue and executed at the
+    // beginning of every round.
+    let mut state = fresh_state();
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_raw_rand_request(request(), ExecutionRound::from(1), UNIX_EPOCH);
+    assert_eq!(
+        metric_vec(&[(&[("type", "raw_rand")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    assert!(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .pop_front()
+            .is_some()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+
+    // Install code calls are removed by call ID.
+    let mut state = fresh_state();
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    let call_id = state
+        .metadata
+        .subnet_call_context_manager
+        .push_install_code_call(InstallCodeCall {
+            call: call(),
+            time: UNIX_EPOCH,
+            effective_canister_id: canister_test_id(2),
+        });
+    assert_eq!(
+        metric_vec(&[(&[("type", "install_code")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    assert!(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .remove_install_code_call(call_id)
+            .is_some()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+
+    // As are stop canister calls.
+    let mut state = fresh_state();
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    let call_id = state
+        .metadata
+        .subnet_call_context_manager
+        .push_stop_canister_call(StopCanisterCall {
+            call: call(),
+            time: UNIX_EPOCH,
+            effective_canister_id: canister_test_id(2),
+        });
+    assert_eq!(
+        metric_vec(&[(&[("type", "stop_canister")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    assert!(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .remove_stop_canister_call(call_id)
+            .is_some()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
 }
 
 #[test]
@@ -3315,6 +3597,29 @@ fn make_network_topology_with_subnet(
         subnets: btreemap! { subnet_id => subnet_topology },
         ..Default::default()
     }
+}
+
+#[test]
+fn network_topology_is_cooling_down() {
+    let cooling_down_subnet_id = subnet_test_id(1);
+    let other_subnet_id = subnet_test_id(2);
+    let unknown_subnet_id = subnet_test_id(3);
+
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            cooling_down_subnet_id => SubnetTopology {
+                cooling_down: true,
+                ..Default::default()
+            },
+            other_subnet_id => SubnetTopology::default(),
+        },
+        ..Default::default()
+    };
+
+    assert!(network_topology.is_cooling_down(&cooling_down_subnet_id));
+    assert!(!network_topology.is_cooling_down(&other_subnet_id));
+    // An unknown subnet is not considered to be cooling down.
+    assert!(!network_topology.is_cooling_down(&unknown_subnet_id));
 }
 
 #[test]

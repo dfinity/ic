@@ -718,14 +718,14 @@ http_file(
 # ckETH
 http_file(
     name = "cketh_mainnet_events.gz",
-    sha256 = "e5ffdd0be68b11eacdc623547643dc3c4dc02de4bcb4e1dfb5906fd775c4d8e0",
-    url = "https://download.dfinity.systems/testdata/cketh/mainnet_events_v1.gz",
+    sha256 = "19531a137015b4c685134d7a454e981dbc8723227a947a78a274894c1ea7c867",
+    url = "https://download.dfinity.systems/testdata/cketh/mainnet_events_v2.gz",
 )
 
 http_file(
     name = "cketh_sepolia_events.gz",
-    sha256 = "ad417332a67911cace2ed1f5179b7b1e5f4eb5327a5e872f68a85283dfa838af",
-    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v1.gz",
+    sha256 = "a4e034db414ea13e03e2533bbdf0e5291d9ccc6e81748191ec5b747389e74921",
+    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v2.gz",
 )
 
 # EVM RPC canister
@@ -1369,16 +1369,6 @@ register_toolchains(
 )
 
 new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
-
-# Use libsystemd from the host environment
-# Ideally this is pulled hermetically, but as this is only used by infogetty
-# within IC images, we have less compatibility to worry about, and packaging it
-# this way is easier.
-new_local_repository(
-    name = "libsystemd",
-    build_file = "@//third_party:BUILD.libsystemd.bazel",
-    path = "/usr",
-)
 
 # Use libvirt from the host environment
 # Used for managing virtual machines programmatically.

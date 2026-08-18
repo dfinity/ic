@@ -8,10 +8,10 @@ use crate::canister_manager::types::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    CanisterMemoryHandling, InstallCodeHelper, MemoryHandling, OriginalContext,
-    PausedInstallCodeHelper, finish_err,
+    InstallCodeHelper, OriginalContext, PausedInstallCodeHelper, finish_err,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::hypervisor::MemorySource;
 use ic_base_types::PrincipalId;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
@@ -120,15 +120,12 @@ pub(crate) fn execute_install(
         round.time,
         round_limits,
         original.compilation_cost_handling,
+        // Install and re-install replace both the stable memory and the main
+        // memory with the initial memories of the new module.
+        MemorySource::Fresh,
     );
     helper.charge_for_compilation(instructions_from_compilation);
-    if let Err(err) = helper.replace_execution_state_and_allocations(
-        result,
-        CanisterMemoryHandling {
-            stable_memory_handling: MemoryHandling::Replace,
-            main_memory_handling: MemoryHandling::Replace,
-        },
-    ) {
+    if let Err(err) = helper.replace_execution_state_and_allocations(result) {
         let instructions_left = helper.instructions_left();
         return finish_err(
             clean_canister,
@@ -204,7 +201,7 @@ pub(crate) fn execute_install(
                     ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     context_sender,
                     context_arg: context.arg,
                     original,
@@ -322,7 +319,7 @@ fn install_stage_2b_continue_install_after_start(
             let ingress_status =
                 ingress_status_with_processing_state(&original.message, original.time);
             let paused_execution = Box::new(PausedInitExecution {
-                paused_helper: helper.pause(),
+                paused_helper: helper.pause(slice.executed_instructions),
                 paused_wasm_execution,
                 original,
             });
@@ -440,7 +437,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedInitExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
@@ -550,7 +547,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                 );
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {

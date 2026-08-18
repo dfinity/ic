@@ -48,6 +48,7 @@ pub fn valid_init_arg() -> InitArg {
         next_transaction_nonce: Default::default(),
         last_scraped_block_number: Default::default(),
         evm_rpc_id: Some(EVM_RPC_ID_STAGING),
+        ethereum_sweeper_contract_address: None,
     }
 }
 

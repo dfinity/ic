@@ -360,50 +360,45 @@ impl DkgKeyManager {
     /// that CSP does not reload transcripts, which were successfully loaded
     /// before.
     fn load_transcripts_from_summary(&mut self, summary: &DkgSummary) {
-        let transcripts_to_load: Vec<_> = {
-            let current_interval_start = summary.height;
-            let next_interval_start = summary.get_next_start_height();
+        let current_interval_start = summary.height;
+        let next_interval_start = summary.get_next_start_height();
 
+        let transcripts_to_load = {
             // For current transcripts we take the current summary height as a deadline.
             let current_transcripts_with_load_deadlines = summary
                 .current_transcripts()
-                .iter()
-                .filter(|(_, t)| !self.pending_transcript_loads.contains_key(&t.dkg_id))
-                .map(|(_, t)| (current_interval_start, t.dkg_id.clone()));
+                .values()
+                .map(|t| (current_interval_start, t));
 
             // For next transcripts, we take the start of the next interval as a deadline.
             let next_transcripts_with_load_deadlines = summary
                 .next_transcripts()
-                .iter()
-                .filter(|(_, t)| !self.pending_transcript_loads.contains_key(&t.dkg_id))
-                .map(|(_, t)| (next_interval_start, t.dkg_id.clone()));
+                .values()
+                .map(|t| (next_interval_start, t));
 
-            current_transcripts_with_load_deadlines
-                .chain(next_transcripts_with_load_deadlines)
-                .collect()
+            current_transcripts_with_load_deadlines.chain(next_transcripts_with_load_deadlines)
         };
 
-        for (deadline, dkg_id) in transcripts_to_load.into_iter() {
+        for (deadline, transcript) in transcripts_to_load {
+            if self
+                .pending_transcript_loads
+                .contains_key(&transcript.dkg_id)
+            {
+                continue;
+            }
+
             let since = Instant::now();
 
             let crypto = self.crypto.clone();
             let logger = self.logger.clone();
-            let summary = summary.clone();
+            let transcript = transcript.clone();
             let (tx, rx) = sync_channel(0);
             self.pending_transcript_loads
-                .insert(dkg_id.clone(), (deadline, rx));
+                .insert(transcript.dkg_id.clone(), (deadline, rx));
 
             std::thread::spawn(move || {
-                let transcript = summary
-                    .current_transcripts()
-                    .iter()
-                    .chain(summary.next_transcripts().iter())
-                    .find(|(_, t)| t.dkg_id == dkg_id)
-                    .expect("No transcript was found")
-                    .1;
-
                 let result = loop {
-                    let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
+                    let result = NiDkgAlgorithm::load_transcript(&*crypto, &transcript);
                     let elapsed = since.elapsed().as_secs_f64();
 
                     match &result {
@@ -412,7 +407,7 @@ impl DkgKeyManager {
                             info!(
                                 logger,
                                 "Finished loading transcript {} after {}s",
-                                dkg_id_log_msg(&dkg_id),
+                                dkg_id_log_msg(&transcript.dkg_id),
                                 elapsed
                             );
                             break result;
@@ -423,7 +418,7 @@ impl DkgKeyManager {
                                 logger,
                                 "Finished loading public parts of transcript {} after {}s\
                                 (signing key unavailable since this node is not part of the committee)",
-                                dkg_id_log_msg(&dkg_id),
+                                dkg_id_log_msg(&transcript.dkg_id),
                                 elapsed
                             );
                             break result;
@@ -435,7 +430,7 @@ impl DkgKeyManager {
                                 logger,
                                 "Could only load public parts of transcript {} \
                                 (signing key unavailable: {:?})",
-                                dkg_id_log_msg(&dkg_id),
+                                dkg_id_log_msg(&transcript.dkg_id),
                                 val
                             );
                             break result;
@@ -447,7 +442,7 @@ impl DkgKeyManager {
                                 every_n_seconds => 5,
                                 logger,
                                 "Transcript {} couldn't be loaded: {:?} Retrying...",
-                                dkg_id_log_msg(&dkg_id),
+                                dkg_id_log_msg(&transcript.dkg_id),
                                 err
                             );
                         }
@@ -457,7 +452,7 @@ impl DkgKeyManager {
                             error!(
                                 logger,
                                 "Transcript {} couldn't be loaded: {:?}",
-                                dkg_id_log_msg(&dkg_id),
+                                dkg_id_log_msg(&transcript.dkg_id),
                                 err
                             );
                             break result;
@@ -489,28 +484,27 @@ impl DkgKeyManager {
         // Create list of transcripts that we need to retain, which is all DKG
         // transcripts in the latest CUP and in all subsequent finalized summary blocks.
         let mut transcripts_to_retain: HashSet<NiDkgTranscript> = HashSet::new();
-        let mut dkg_summary = Some(
+        let mut next_summary_block = Some(
             pool_reader
                 .as_cache()
                 .catch_up_package()
                 .content
                 .block
-                .into_inner()
-                .payload
-                .as_ref()
-                .as_summary()
-                .clone(),
+                .into_inner(),
         );
 
-        while let Some(summary) = dkg_summary {
-            let next_summary_height = summary.dkg.get_next_start_height();
-            for transcript in summary.dkg.into_transcripts() {
-                transcripts_to_retain.insert(transcript);
+        while let Some(summary_block) = next_summary_block {
+            let summary = &summary_block.payload.as_ref().as_summary().dkg;
+            let next_summary_height = summary.get_next_start_height();
+            for transcript in summary
+                .current_transcripts()
+                .values()
+                .chain(summary.next_transcripts().values())
+            {
+                transcripts_to_retain.insert(transcript.clone());
             }
 
-            dkg_summary = pool_reader
-                .get_finalized_block(next_summary_height)
-                .map(|b| b.payload.as_ref().as_summary().clone());
+            next_summary_block = pool_reader.get_finalized_block(next_summary_height);
         }
 
         let crypto = self.crypto.clone();
@@ -614,39 +608,23 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, DependenciesBuilder, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::backwards_compatibility::BackwardsCompatible;
-    use ic_types::consensus::{
-        BlockPayload, HashedBlock, Payload,
-        dkg::{SplittingArgs, SubnetSplittingStatus},
-    };
+    use ic_types::consensus::{BlockPayload, HashedBlock, Payload, dkg::SubnetSplittingStatus};
 
     #[test]
     fn test_transcripts_get_loaded_and_retained() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let nodes: Vec<_> = (0..1).map(node_test_id).collect();
                 let dkg_interval_len = 3;
-                let Dependencies {
-                    mut pool,
-                    registry,
-                    replica_config,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(222),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&nodes)
-                            .with_dkg_interval_length(dkg_interval_len)
-                            .build(),
-                    )],
-                );
+                let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
+                    .with_dkg_interval_length(dkg_interval_len)
+                    .build();
                 let csp = Arc::new(CryptoReturningOk::default());
                 let mut key_manager = DkgKeyManager::new(
                     MetricsRegistry::new(),
