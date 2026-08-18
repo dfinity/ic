@@ -11,7 +11,7 @@ use crate::driver::{
     constants::SSH_USERNAME,
     driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
     farm::{AttachImageSpec, Farm, FarmResult, FileId},
-    ic::{InternetComputer, Node},
+    ic::{InternetComputer, LocalApiBoundaryNodesPlaynet, Node},
     nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
@@ -290,16 +290,35 @@ pub fn setup_and_start_vms(
     for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
-    let api_bn_tls_cert: Option<IcBoundaryTlsCert> = if ic.api_bn_use_playnet {
-        let playnet = Playnet::read_attribute(env);
-        let cert = &playnet.playnet_cert.cert;
-        Some(IcBoundaryTlsCert {
-            cert_pem: format!("{}{}", cert.cert_pem, cert.chain_pem),
-            key_pem: cert.priv_key_pem.clone(),
-        })
-    } else {
-        None
-    };
+    // The API boundary nodes' TLS certificate, and — when it was issued by a CA
+    // the nodes do not already trust — that CA, which every node in the group
+    // then gets as an extra trust anchor. Farm's playnet certificate is publicly
+    // trusted, so only the local backend needs the second half. See
+    // `InternetComputer::setup_api_bn_local_playnet`.
+    let (api_bn_tls_cert, api_bn_trust_anchors_pem): (Option<IcBoundaryTlsCert>, Option<String>) =
+        match (
+            ic.api_bn_use_playnet,
+            SystemTestBackend::read_attribute(env),
+        ) {
+            (false, _) => (None, None),
+            (true, SystemTestBackend::Farm) => {
+                let playnet = Playnet::read_attribute(env);
+                let cert = &playnet.playnet_cert.cert;
+                let tls_cert = IcBoundaryTlsCert {
+                    cert_pem: format!("{}{}", cert.cert_pem, cert.chain_pem),
+                    key_pem: cert.priv_key_pem.clone(),
+                };
+                (Some(tls_cert), None)
+            }
+            (true, SystemTestBackend::Local) => {
+                let playnet = LocalApiBoundaryNodesPlaynet::read_attribute(env);
+                let tls_cert = IcBoundaryTlsCert {
+                    cert_pem: format!("{}{}", playnet.cert_pem, playnet.ca_pem),
+                    key_pem: playnet.key_pem.clone(),
+                };
+                (Some(tls_cert), Some(playnet.ca_pem))
+            }
+        };
     let api_bn_node_ids: Vec<NodeId> = initialized_ic
         .api_boundary_nodes
         .values()
@@ -324,6 +343,10 @@ pub fn setup_and_start_vms(
         } else {
             None
         };
+        // Given to every node, not just the API boundary nodes: it is the
+        // *clients* of an API boundary node — the cloud engine replicas fetching
+        // their NNS delegation — that need to trust its certificate.
+        let api_bn_trust_anchors_pem = api_bn_trust_anchors_pem.clone();
         nodes_info.insert(node.node_id, malicious_behavior.clone());
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
@@ -335,6 +358,7 @@ pub fn setup_and_start_vms(
                 domain,
                 recovery_hash,
                 ic_boundary_tls_cert,
+                api_bn_trust_anchors_pem,
                 &t_env,
             )?;
 
@@ -516,6 +540,7 @@ fn create_config_disk_image(
     domain_name: Option<String>,
     recovery_hash: Option<String>,
     ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
+    api_bn_trust_anchors_pem: Option<String>,
     test_env: &TestEnv,
 ) -> anyhow::Result<()> {
     let mut bootstrap_options = BootstrapOptions {
@@ -538,6 +563,7 @@ fn create_config_disk_image(
         domain_name,
         recovery_hash,
         ic_boundary_tls_cert,
+        api_bn_trust_anchors_pem,
         test_env,
         ic_name,
     )?;
@@ -582,6 +608,7 @@ fn create_guestos_config_for_node(
     domain_name: Option<String>,
     recovery_hash: Option<String>,
     ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
+    api_bn_trust_anchors_pem: Option<String>,
     test_env: &TestEnv,
     ic_name: &str,
 ) -> anyhow::Result<GuestOSConfig> {
@@ -676,6 +703,7 @@ fn create_guestos_config_for_node(
         hostname: Some(node.node_id.to_string()),
         generate_ic_boundary_tls_cert: node.node_config.domain.clone(),
         ic_boundary_tls_cert,
+        extra_api_boundary_node_trust_anchors_pem: api_bn_trust_anchors_pem,
         nns_pub_key_override,
     };
 
