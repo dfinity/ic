@@ -4410,9 +4410,7 @@ fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
 
 #[test]
 fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (func (export "canister_update write")
@@ -4471,9 +4469,7 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
     #[case] inject_trap: &str,
     #[case] expected_error_code: ErrorCode,
 ) {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"
         (module
@@ -4514,9 +4510,7 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn query_stable_memory_metrics_are_recorded() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     // The following canister will touch 2 pages worth of stable memory.
     let wat = r#"
         (module
@@ -4711,9 +4705,7 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
 
 #[test]
 fn install_code_calls_canister_init_and_start() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(true)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -5146,9 +5138,7 @@ fn cannot_execute_query_on_stopped_canister() {
 
 #[test]
 fn ic0_trap_preserves_some_cycles() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
@@ -8601,7 +8591,6 @@ fn yield_triggers_dts_slice_with_many_dirty_pages() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_manual_execution()
-        .with_deterministic_memory_tracker_enabled(false)
         .with_max_dirty_pages_optimization_embedder_config(pages_to_touch - 1)
         .build();
 
@@ -10242,9 +10231,7 @@ fn page_metrics_are_recorded(
     #[case] maybe_trap: &str,
     #[case] expected_code: ErrorCode,
 ) {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"
         (module
