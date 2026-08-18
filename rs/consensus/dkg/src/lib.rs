@@ -819,7 +819,7 @@ mod tests {
                     logger.clone(),
                     &PoolReader::new(&pool),
                     registry.clone(),
-                    replica_config,
+                    replica_config.clone(),
                 );
                 let dkg = DkgImpl::new(
                     node_test_id(1),

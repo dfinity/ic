@@ -2,26 +2,23 @@
 //! of shares into full objects. That is, it constructs Random Beacon objects
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
-use crate::consensus::{
-    catchup_package_maker::CatchUpPackageType,
-    random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE,
-};
+use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
-    registry_version_at_height,
+    aggregate_with_threshold, crypto::ConsensusCrypto, get_current_transcript_from_summary_block,
+    membership::Membership, pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, debug, info, warn};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{
     Height,
     consensus::{
         Block, CatchUpContent, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable,
         FinalizationContent, HasCommittee, HasHeight, RandomTapeContent,
-        dkg::{PostSplitArgs, SubnetSplittingStatus},
+        catchup::CatchUpPackageType,
     },
-    crypto::threshold_sig::ni_dkg::NiDkgTag,
+    crypto::{Signed, threshold_sig::ni_dkg::NiDkgTag},
     replica_config::ReplicaConfig,
 };
 use std::{cmp::min, sync::Arc};
@@ -155,21 +152,14 @@ impl ShareAggregator {
                 break;
             }
             match self.aggregate_catch_up_package_shares_for_summary_block(pool, start_block) {
-                Ok(Some(cup)) => {
-                    return vec![ConsensusMessage::CatchUpPackage(cup)];
+                Ok(messages) if !messages.is_empty() => {
+                    return to_messages(messages);
                 }
-                Ok(None) => {
-                    debug!(
-                        self.log,
-                        "Not enough shares to be able to create a full CUP at height{}",
-                        start_block_height
-                    );
-                }
+                Ok(_) => {}
                 Err(err) => {
                     warn!(
                         self.log,
-                        "Encountered an error while aggregating CUP shares at height {}: {err}",
-                        start_block_height
+                        "Encountered an error while aggregating CUP shares at height {start_block_height}: {err}",
                     );
                 }
             }
@@ -198,14 +188,15 @@ impl ShareAggregator {
         &self,
         pool: &PoolReader<'_>,
         summary_block: Block,
-    ) -> Result<Option<CatchUpPackage>, String> {
-        let (threshold, dkg_id, block) = match catchup_package_maker::get_catch_up_package_type(
+    ) -> Result<Vec<CatchUpPackage>, String> {
+        let cup_type = catchup_package_maker::get_catch_up_package_type(
             self.registry.as_ref(),
             self.replica_config.node_id,
             &summary_block,
         )
-        .map_err(|err| format!("Failed to determine the cup type: {err}"))?
-        {
+        .map_err(|err| format!("Failed to determine the cup type: {err}"))?;
+
+        let (threshold, dkg_id, block) = match cup_type {
             CatchUpPackageType::Normal => {
                 let threshold = self
                     .membership
@@ -227,15 +218,13 @@ impl ShareAggregator {
                     )
                     .map_err(|err| format!("Failed to create a post-split summary block: {err}"))?;
 
-                let transcript = post_split_summary_block
-                    .payload
-                    .as_ref()
-                    .as_summary()
-                    .dkg
-                    .current_transcript(&NiDkgTag::HighThreshold)
-                    .ok_or_else(|| {
-                        String::from("Couldn't find the transcript in the post-split summary block")
-                    })?;
+                let transcript = get_current_transcript_from_summary_block(
+                    &post_split_summary_block,
+                    &NiDkgTag::HighThreshold,
+                )
+                .ok_or_else(|| {
+                    String::from("Couldn't find the transcript in the post-split summary block")
+                })?;
 
                 let threshold = transcript.threshold.get().get() as usize;
                 let dkg_id = transcript.dkg_id.clone();
@@ -246,44 +235,32 @@ impl ShareAggregator {
 
         let shares = pool
             .get_catch_up_package_shares(block.height())
-            .collect::<Vec<_>>();
+            .map(|share| Signed {
+                content: CatchUpContent::from_share_content(share.content, block.clone()),
+                signature: share.signature,
+            });
 
-        // The validation logic of CUP shares ensures that all of them have the same content for a
-        // given height, and it matches the content of the summary block.
-        if shares.len() < threshold {
-            return Ok(None);
-        }
-        let share_content = shares.first().unwrap().content.clone();
+        // Note that the committee of a post-split CUP is the one of a subnet which doesn't exist
+        // yet, so the threshold cannot be looked up in the `Membership`.
+        let cups = aggregate_with_threshold(
+            &self.log,
+            self.crypto.as_aggregate(),
+            Box::new(|_| Some(dkg_id.clone())),
+            Box::new(|_| Some(threshold)),
+            shares,
+        );
 
-        let subnet_splitting_status = block
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .subnet_splitting_status();
-        let cup_content = CatchUpContent::from_share_content(share_content, block);
-        let signatures = shares.iter().map(|share| &share.signature).collect();
-
-        let cup = self
-            .crypto
-            .aggregate(signatures, dkg_id)
-            .map_err(|err| format!("Failed to aggregate shares: {err}"))
-            .map(|signature| CatchUpPackage {
-                content: cup_content,
-                signature,
-            })?;
-
-        if let SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) =
-            subnet_splitting_status
-        {
-            info!(
-                self.log,
-                "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",
-                cup.height()
-            );
+        for cup in &cups {
+            if let CatchUpPackageType::PostSplit { new_subnet_id } = cup_type {
+                info!(
+                    self.log,
+                    "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",
+                    cup.height()
+                );
+            }
         }
 
-        Ok(Some(cup))
+        Ok(cups)
     }
 }
 
@@ -539,11 +516,12 @@ mod tests {
                     mut pool,
                     membership,
                     registry,
+                    registry_data_provider,
                     crypto,
                     state_manager,
                     replica_config,
                     ..
-                } = DependenciesBuilder::new(
+                } = DependenciesBuilder::multiple_subnets(
                     pool_config,
                     vec![
                         (
@@ -569,22 +547,23 @@ mod tests {
                         ),
                     ],
                 )
-                .add_additional_registry_mutation(|registry_data_provider| {
-                    insert_initial_dkg_transcript(
-                        SPLITTING_REGISTRY_VERSION.get(),
-                        SOURCE_SUBNET_ID,
-                        &SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
-                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
-                            .build(),
-                        registry_data_provider,
-                    )
-                })
                 .with_replica_config(ReplicaConfig {
                     node_id: NODE_1,
                     subnet_id: SOURCE_SUBNET_ID,
                 })
-                .with_mocked_state_manager()
                 .build();
+                // Manually insert DKG transcripts at the splitting version to simulate what the
+                // registry would do. The setup above only inserts the transcripts at the initial
+                // version.
+                insert_initial_dkg_transcript(
+                    SPLITTING_REGISTRY_VERSION.get(),
+                    SOURCE_SUBNET_ID,
+                    &SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                        .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                        .build(),
+                    &registry_data_provider,
+                );
+                registry.reload();
 
                 state_manager
                     .get_mut()

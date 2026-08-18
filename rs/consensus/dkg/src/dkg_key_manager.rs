@@ -234,6 +234,8 @@ impl DkgKeyManager {
             let summary = if let Some(scheduled) =
                 subnet_splitting::is_split_scheduled(&summary_block)
             {
+                // If a subnet split is in progress, we should skip the `Scheduled` summary's
+                // transcripts (as the interval is skipped) and instead load the post-split one's.
                 match self.get_post_split_summary(&summary_block, scheduled) {
                     Ok(post_split_summary) => {
                         info!(
@@ -610,19 +612,35 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
+    use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::backwards_compatibility::BackwardsCompatible;
-    use ic_types::consensus::{BlockPayload, HashedBlock, Payload, dkg::SubnetSplittingStatus};
+    use ic_types::{
+        NodeId, RegistryVersion, SubnetId,
+        backwards_compatibility::BackwardsCompatible,
+        consensus::{
+            BlockPayload, HashedBlock, Payload,
+            dkg::{SplittingArgs, SubnetSplittingStatus},
+        },
+        crypto::crypto_hash,
+    };
+    use rstest::rstest;
 
     #[test]
     fn test_transcripts_get_loaded_and_retained() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let dkg_interval_len = 3;
-                let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
+                let Dependencies {
+                    mut pool,
+                    registry,
+                    replica_config,
+                    ..
+                } = DependenciesBuilder::new(pool_config, 1)
                     .with_dkg_interval_length(dkg_interval_len)
                     .build();
                 let csp = Arc::new(CryptoReturningOk::default());
@@ -724,41 +742,60 @@ mod tests {
         });
     }
 
-    /// Verifies that when a subnet split is in progress, the key manager loads
-    /// the transcripts from the post-split DKG summary in addition to the
-    /// current summary's transcripts.
-    #[test]
-    fn test_subnet_splitting_loads_post_split_transcripts() {
+    /// Returns the ids of all the current and next transcripts of the given summary.
+    fn transcript_ids(summary: &DkgSummary) -> HashSet<NiDkgId> {
+        summary
+            .current_transcripts()
+            .values()
+            .chain(summary.next_transcripts().values())
+            .map(|transcript| transcript.dkg_id.clone())
+            .collect()
+    }
+
+    /// The registry version at which the subnet split is scheduled, i.e. the version at which the
+    /// CUP contents that the two halves of the split start from are registered.
+    const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+
+    /// Verifies that when a subnet split is in progress, the key manager loads the transcripts from
+    /// the post-split DKG summary instead of the current summary's.
+    #[rstest]
+    // Run the test twice, once with the local node in the source subnet and once with it in the
+    // destination subnet.
+    #[case::source(true)]
+    #[case::destination(false)]
+    fn test_subnet_splitting_loads_post_split_transcripts_instead(#[case] is_source_subnet: bool) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let source_subnet_id = subnet_test_id(1);
                 let destination_subnet_id = subnet_test_id(2);
-                let source_nodes = vec![node_test_id(0)];
-                let destination_nodes = vec![node_test_id(1)];
-                let registry_version = 1u64;
+                let source_nodes = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let destination_nodes = (4..8).map(node_test_id).collect::<Vec<_>>();
                 let dkg_interval_len = 3;
 
-                // Set up two subnets: the source subnet is where node_test_id(0) lives, the
-                // destination subnet is where node_test_id(1) lives after the split.
-                // DependenciesBuilder calls insert_initial_dkg_transcript for both, so valid
-                // CUP contents exist in the registry for both subnets.
+                let (local_node_id, local_post_split_subnet_id) = if is_source_subnet {
+                    (source_nodes[0], source_subnet_id)
+                } else {
+                    (destination_nodes[0], destination_subnet_id)
+                };
+
                 let Dependencies {
                     mut pool,
                     registry,
+                    registry_data_provider,
                     replica_config,
                     ..
-                } = DependenciesBuilder::new(
+                } = DependenciesBuilder::multiple_subnets(
                     pool_config,
                     vec![
                         (
-                            registry_version,
+                            1,
                             source_subnet_id,
                             SubnetRecordBuilder::from(&source_nodes)
                                 .with_dkg_interval_length(dkg_interval_len)
                                 .build(),
                         ),
                         (
-                            registry_version,
+                            1,
                             destination_subnet_id,
                             SubnetRecordBuilder::from(&destination_nodes)
                                 .with_dkg_interval_length(dkg_interval_len)
@@ -766,8 +803,52 @@ mod tests {
                         ),
                     ],
                 )
-                .with_mocked_state_manager()
+                .with_replica_config(ReplicaConfig {
+                    node_id: local_node_id,
+                    // The local node always start in the source subnet.
+                    subnet_id: source_subnet_id,
+                })
                 .build();
+
+                // A subnet split registers the CUP contents each half of the split starts from at
+                // the registry version at which the split is scheduled. Their transcripts are
+                // freshly created for the split, i.e. they are *not* the initial ones registered at
+                // genesis, which is what makes loading them observable below.
+                let post_split_height = Height::from(2 * (dkg_interval_len + 1));
+                let add_post_split_cup_contents = |subnet_id: SubnetId, committee: &[NodeId]| {
+                    let transcript_record = |tag: NiDkgTag| {
+                        let mut transcript = dummy_transcript_for_tests_with_params(
+                            committee.to_vec(),
+                            tag.clone(),
+                            tag.threshold_for_subnet_of_size(committee.len()) as u32,
+                            SPLITTING_REGISTRY_VERSION.get(),
+                        );
+                        // These are just dummy modifications to uniquely identify transcripts,
+                        // they do not reflect how they would actually look like.
+                        transcript.dkg_id.start_block_height = post_split_height;
+                        transcript.dkg_id.dealer_subnet = subnet_id;
+                        InitialNiDkgTranscriptRecord::from(transcript)
+                    };
+
+                    registry_data_provider
+                        .add(
+                            &make_catch_up_package_contents_key(subnet_id),
+                            SPLITTING_REGISTRY_VERSION,
+                            Some(CatchUpPackageContents {
+                                initial_ni_dkg_transcript_low_threshold: Some(transcript_record(
+                                    NiDkgTag::LowThreshold,
+                                )),
+                                initial_ni_dkg_transcript_high_threshold: Some(transcript_record(
+                                    NiDkgTag::HighThreshold,
+                                )),
+                                ..Default::default()
+                            }),
+                        )
+                        .expect("Failed to add the post-split CUP contents");
+                };
+                add_post_split_cup_contents(source_subnet_id, &source_nodes);
+                add_post_split_cup_contents(destination_subnet_id, &destination_nodes);
+                registry.update_to_latest_version();
 
                 // Advance dkg_interval_len rounds so the finalized tip is at height
                 // dkg_interval_len, stopping just before the next DKG interval boundary.
@@ -777,7 +858,33 @@ mod tests {
                 let mut splitting_proposal = pool.make_next_block();
                 let mut splitting_block = splitting_proposal.content.as_ref().clone();
                 let splitting_height = splitting_block.height;
+                // Safety-check: the summary block scheduling the split adopts the registry version
+                // at which the split was registered, which is the version at which the key manager
+                // looks up the post-split CUP contents.
+                assert_eq!(
+                    splitting_block.context.registry_version,
+                    SPLITTING_REGISTRY_VERSION
+                );
                 let mut splitting_summary = splitting_block.payload.as_ref().as_summary().clone();
+                // The current transcripts of this first summary are still the initial ones taken
+                // from the registry, which are also the ones the key manager loads from the genesis
+                // CUP. Give them a `NiDkgId` of their own, so that we can tell whether the key
+                // manager loaded this summary or the post-split one. The next transcripts are
+                // locally created, so their ids are distinct already.
+                let current_transcripts = splitting_summary
+                    .dkg
+                    .current_transcripts()
+                    .iter()
+                    .map(|(tag, transcript)| {
+                        let mut transcript = transcript.clone();
+                        transcript.dkg_id.start_block_height = splitting_height;
+                        (tag.clone(), transcript)
+                    })
+                    .collect();
+                splitting_summary.dkg = splitting_summary
+                    .dkg
+                    .with_current_transcripts(current_transcripts);
+
                 splitting_summary.dkg.subnet_splitting_status =
                     BackwardsCompatible::new_for_test_only(Some(SubnetSplittingStatus::Scheduled(
                         SplittingArgs {
@@ -786,15 +893,16 @@ mod tests {
                         },
                     )));
                 splitting_block.payload = Payload::new(
-                    ic_types::crypto::crypto_hash,
+                    crypto_hash,
                     BlockPayload::Summary(splitting_summary.clone()),
                 );
-                splitting_proposal.content =
-                    HashedBlock::new(ic_types::crypto::crypto_hash, splitting_block.clone());
+                splitting_proposal.content = HashedBlock::new(crypto_hash, splitting_block.clone());
                 pool.advance_round_with_block(&splitting_proposal);
 
-                let post_split_dkg_summary = get_post_split_dkg_summary(
-                    destination_subnet_id,
+                // The local node keeps its registry membership across the split, so the subnet it
+                // ends up on is the one it already runs.
+                let post_split_summary = get_post_split_dkg_summary(
+                    local_post_split_subnet_id,
                     registry.as_ref(),
                     &splitting_block,
                 )
@@ -802,8 +910,32 @@ mod tests {
                 // Safety-check: the post-split summary should have been produced by the registry,
                 // meaning `next_transcripts` should be empty
                 assert!(
-                    post_split_dkg_summary.next_transcripts().is_empty(),
+                    post_split_summary.next_transcripts().is_empty(),
                     "The post-split summary should not contain next transcripts"
+                );
+
+                let cup_block = pool
+                    .get_cache()
+                    .catch_up_package()
+                    .content
+                    .block
+                    .into_inner();
+                let genesis_ids = transcript_ids(&cup_block.payload.as_ref().as_summary().dkg);
+                let splitting_ids = transcript_ids(&splitting_summary.dkg);
+                let post_split_ids = transcript_ids(&post_split_summary);
+                // Safety-check: the three sets of transcripts should be disjoint and non-empty,
+                // otherwise we can't tell which ones the key manager loaded.
+                assert!(
+                    !genesis_ids.is_empty()
+                        && !splitting_ids.is_empty()
+                        && !post_split_ids.is_empty(),
+                    "Each summary should reference transcripts of its own"
+                );
+                assert!(
+                    genesis_ids.is_disjoint(&splitting_ids)
+                        && genesis_ids.is_disjoint(&post_split_ids)
+                        && splitting_ids.is_disjoint(&post_split_ids),
+                    "The summaries should reference disjoint sets of transcripts"
                 );
 
                 let csp = Arc::new(CryptoReturningOk::default());
@@ -817,26 +949,28 @@ mod tests {
                 );
                 key_manager.sync();
 
-                // The key manager should not only load the transcripts from the splitting summary,
-                // but also the transcripts from the post split one, which is expected to be one
+                // The key manager should skip the transcripts from the splitting summary, but
+                // instead load the transcripts from the post split one, which is expected to be one
                 // interval later.
                 assert_eq!(
                     key_manager.last_dkg_summary_height,
                     Some(splitting_height + (dkg_interval_len + 1).into())
                 );
-                splitting_summary
-                    .dkg
-                    .into_transcripts()
-                    .iter()
-                    .chain(post_split_dkg_summary.into_transcripts().iter())
-                    .for_each(|transcript| {
-                        let id = &transcript.dkg_id;
-                        assert!(
-                            csp.loaded_transcripts.read().unwrap().contains(id),
-                            "Transcript {} should have been loaded",
-                            dkg_id_log_msg(id)
+                for (ids, expected_loaded) in [
+                    (genesis_ids, true),
+                    (splitting_ids, false),
+                    (post_split_ids, true),
+                ] {
+                    for id in ids {
+                        assert_eq!(
+                            csp.loaded_transcripts.read().unwrap().contains(&id),
+                            expected_loaded,
+                            "Transcript {} should {}have been loaded",
+                            dkg_id_log_msg(&id),
+                            if expected_loaded { "" } else { "not " }
                         );
-                    });
+                    }
+                }
             });
         });
     }

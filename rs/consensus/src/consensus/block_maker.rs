@@ -1648,6 +1648,13 @@ mod tests {
                     no_op_logger(),
                 );
 
+                if test_case.is_summary_block {
+                    pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+                    assert!(pool.make_next_block().content.as_ref().payload.is_summary());
+                } else {
+                    assert!(!pool.make_next_block().content.as_ref().payload.is_summary());
+                }
+
                 if let Some(splitting_registry_version) = test_case.splitting_registry_version {
                     registry_data_provider
                         .add(
@@ -1678,12 +1685,6 @@ mod tests {
 
                 registry.reload();
 
-                if test_case.is_summary_block {
-                    pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
-                    assert!(pool.make_next_block().content.as_ref().payload.is_summary());
-                } else {
-                    assert!(!pool.make_next_block().content.as_ref().payload.is_summary());
-                }
                 let mut parent = pool.get_cache().finalized_block();
                 parent.context.registry_version = test_case.parent_registry_version;
                 let mut last_summary = pool.get_cache().summary_block();

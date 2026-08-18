@@ -16,8 +16,9 @@
 use crate::consensus::status;
 use ic_consensus_dkg::payload_builder::get_post_split_dkg_summary;
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, get_oldest_state_registry_version,
-    membership::Membership, pool_reader::PoolReader,
+    crypto::ConsensusCrypto, get_current_transcript_from_summary_block,
+    get_oldest_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    subnet_splitting,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
@@ -25,28 +26,25 @@ use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };
 use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
-use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    NodeId, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block, BlockPayload, CatchUpContent, CatchUpPackage, CatchUpPackageShare,
-        CatchUpShareContent, HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon, Payload,
-        RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
-        dkg::{SplittingArgs, SubnetSplittingStatus},
+        Block, BlockPayload, CatchUpContent, CatchUpPackageShare, CatchUpShareContent, HasHeight,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeacon, RandomBeaconContent, Rank,
+        SummaryPayload, catchup::CatchUpPackageType,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
-        crypto_hash,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        crypto_hash, threshold_sig::ni_dkg::NiDkgTag,
     },
     replica_config::ReplicaConfig,
     signature::ThresholdSignature,
 };
 use std::sync::Arc;
 
-/// [`CatchUpPackage`] maker is responsible for creating beacon shares
+/// [`CatchUpPackage`] maker is responsible for creating CUP shares
 pub(crate) struct CatchUpPackageMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
@@ -55,17 +53,6 @@ pub(crate) struct CatchUpPackageMaker {
     message_routing: Arc<dyn MessageRouting>,
     registry: Arc<dyn RegistryClient>,
     log: ReplicaLogger,
-}
-
-/// Type of [`CatchUpPackage`].
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(crate) enum CatchUpPackageType {
-    Normal,
-    /// After deliverying a splitting block to the DSM, we immediately create a CUP at the start of
-    /// the next dkg interval and we create a new summary block and a dummy random beacon on the fly.
-    PostSplit {
-        new_subnet_id: SubnetId,
-    },
 }
 
 impl CatchUpPackageMaker {
@@ -264,7 +251,7 @@ impl CatchUpPackageMaker {
         let state = self
             .state_manager
             .get_state_at(summary_height)
-            .map_err(|err| {
+            .inspect_err(|err| {
                 error!(
                     self.log,
                     "Cannot make CUP at height {summary_height}: `get_state_hash_at` \
@@ -277,66 +264,67 @@ impl CatchUpPackageMaker {
 
         let cup_block = self
             .get_cup_block(start_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Can't get a block for a CUP: {err}"))
+            .inspect_err(|err| warn!(self.log, "Couldn't get a block for a CUP: {err}"))
             .ok()?;
+
+        let height = cup_block.height();
 
         let random_beacon = self
             .get_cup_random_beacon(pool, &cup_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Can't get a random beacon for a CUP: {err}"))
+            .inspect_err(|err| warn!(self.log, "Couldn't get a random beacon for a CUP: {err}"))
             .ok()?;
 
-        let high_dkg_id = self
-            .get_high_dkg_id(pool, &cup_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Can't get a high dkg id for a CUP: {err}"))
-            .ok()?;
+        let high_threshold_transcript =
+            get_current_transcript_from_summary_block(&cup_block, &NiDkgTag::HighThreshold)
+                .or_else(|| {
+                    warn!(self.log, "Couldn't find transcript at height {height}");
+                    None
+                })?;
 
-        if !self
-            .node_belongs_to_threshold_committee(&cup_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Can't check if node belongs to committee: {err}"))
-            .unwrap_or_default()
+        let my_node_id = self.replica_config.node_id;
+        if !high_threshold_transcript
+            .committee
+            .get()
+            .contains(&my_node_id)
         {
             return None;
         }
 
         // Skip if this node has already made a share
         if pool
-            .get_catch_up_package_shares(cup_block.height())
-            .any(|share| share.signature.signer == self.replica_config.node_id)
+            .get_catch_up_package_shares(height)
+            .any(|share| share.signature.signer == my_node_id)
         {
             return None;
         }
 
+        let high_dkg_id = high_threshold_transcript.dkg_id.clone();
         let content = CatchUpContent::new(
             HashedBlock::new(ic_types::crypto::crypto_hash, cup_block),
             HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
             state_hash,
             oldest_registry_version_in_use_by_replicated_state,
         );
-
         let share_content = CatchUpShareContent::from(&content);
-        let share_height = share_content.height();
-        match self
+        let signature = self
             .crypto
-            .sign(&content, self.replica_config.node_id, high_dkg_id)
-        {
-            Ok(signature) => {
-                info!(
-                    self.log,
-                    "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {share_height}"
-                );
-                Some(CatchUpPackageShare {
-                    content: share_content,
-                    signature,
-                })
-            }
-            Err(err) => {
+            .sign(&content, my_node_id, high_dkg_id)
+            .inspect_err(|err| {
                 error!(
                     self.log,
-                    "Couldn't create a signature at height {share_height}: {err}"
-                );
-                None
-            }
-        }
+                    "Couldn't create a signature at height {height}: {err}"
+                )
+            })
+            .ok()?;
+
+        info!(
+            self.log,
+            "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {height}"
+        );
+        Some(CatchUpPackageShare {
+            content: share_content,
+            signature,
+        })
     }
 
     fn get_cup_block(
@@ -370,65 +358,6 @@ impl CatchUpPackageMaker {
             CatchUpPackageType::PostSplit { .. } => create_post_split_random_beacon(cup_block),
         }
     }
-
-    fn get_high_dkg_id(
-        &self,
-        pool: &PoolReader<'_>,
-        cup_block: &Block,
-        cup_type: CatchUpPackageType,
-    ) -> Result<NiDkgId, String> {
-        // TODO: can we always take the transcript from the block?
-        match cup_type {
-            CatchUpPackageType::Normal => {
-                active_high_threshold_nidkg_id(pool.as_cache(), cup_block.height).ok_or_else(|| {
-                    format!("Couldn't find transcript at height {}", cup_block.height)
-                })
-            }
-            CatchUpPackageType::PostSplit { .. } => {
-                match get_current_transcript_from_summary_block(cup_block, &NiDkgTag::HighThreshold)
-                {
-                    Some(transcript) => Ok(transcript.dkg_id.clone()),
-                    None => Err(format!(
-                        "Couldn't find post-split transcript at height {}",
-                        cup_block.height
-                    )),
-                }
-            }
-        }
-    }
-
-    fn node_belongs_to_threshold_committee(
-        &self,
-        cup_block: &Block,
-        cup_type: CatchUpPackageType,
-    ) -> Result<bool, String> {
-        // TODO: can we always take the transcript from the block?
-        match cup_type {
-            CatchUpPackageType::Normal => self
-                .membership
-                .node_belongs_to_threshold_committee(
-                    self.replica_config.node_id,
-                    cup_block.height,
-                    CatchUpPackage::committee(),
-                )
-                .map_err(|err| {
-                    format!("Failed to check if node belongs to threshold committee {err:?}")
-                }),
-            CatchUpPackageType::PostSplit { .. } => {
-                match get_current_transcript_from_summary_block(cup_block, &NiDkgTag::HighThreshold)
-                {
-                    Some(transcript) => Ok(transcript
-                        .committee
-                        .get()
-                        .contains(&self.replica_config.node_id)),
-                    None => Err(format!(
-                        "Couldn't find post-split transcript at height {}",
-                        cup_block.height
-                    )),
-                }
-            }
-        }
-    }
 }
 
 pub(crate) fn get_catch_up_package_type(
@@ -436,44 +365,20 @@ pub(crate) fn get_catch_up_package_type(
     node_id: NodeId,
     summary_block: &Block,
 ) -> Result<CatchUpPackageType, String> {
-    match summary_block
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg
-        .subnet_splitting_status()
-    {
-        SubnetSplittingStatus::Scheduled(SplittingArgs {
-            destination_subnet_id,
-            source_subnet_id,
-        }) => {
-            let new_subnet_id = get_new_subnet_id(
-                registry,
-                summary_block,
-                node_id,
-                source_subnet_id,
-                destination_subnet_id,
-            )
-            .map_err(|err| format!("Failed to get the new subnet assignment: {err}"))?;
+    let Some(splitting_args) = subnet_splitting::is_split_scheduled(summary_block) else {
+        return Ok(CatchUpPackageType::Normal);
+    };
 
-            Ok(CatchUpPackageType::PostSplit { new_subnet_id })
-        }
-        SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit(..) => {
-            Ok(CatchUpPackageType::Normal)
-        }
-    }
-}
-
-fn get_current_transcript_from_summary_block<'a>(
-    summary_block: &'a Block,
-    tag: &NiDkgTag,
-) -> Option<&'a NiDkgTranscript> {
-    summary_block
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg
-        .current_transcript(tag)
+    subnet_splitting::get_post_split_subnet_assignment(
+        node_id,
+        summary_block,
+        registry,
+        splitting_args,
+    )
+    .map(|assignment| CatchUpPackageType::PostSplit {
+        new_subnet_id: assignment.new_subnet_id,
+    })
+    .map_err(|err| format!("Failed to get the new subnet assignment: {err}"))
 }
 
 pub(crate) fn create_post_split_summary_block(
@@ -489,18 +394,13 @@ pub(crate) fn create_post_split_summary_block(
     Ok(Block {
         version: splitting_summary_block.version.clone(),
         // Fake parent
-        parent: CryptoHashOf::from(CryptoHash(Vec::new())),
+        parent: CryptoHashOf::from(CryptoHash(vec![])),
         payload: Payload::new(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: post_split_dkg_summary,
-                // Copy over the IDKG summary from the splitting block
-                idkg: splitting_summary_block
-                    .payload
-                    .as_ref()
-                    .as_summary()
-                    .idkg
-                    .clone(),
+                // Splitting a chain-key enabled subnet is not supported yet
+                idkg: None,
             }),
         ),
         height: post_split_height,
@@ -529,46 +429,13 @@ pub(crate) fn create_post_split_random_beacon(cup_block: &Block) -> Result<Rando
         content: RandomBeaconContent {
             version: cup_block.version.clone(),
             height: cup_block.height(),
-            parent: CryptoHashOf::from(CryptoHash(Vec::new())),
+            parent: CryptoHashOf::from(CryptoHash(vec![])),
         },
         signature: ThresholdSignature {
             signer: transcript.dkg_id.clone(),
             signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
         },
     })
-}
-
-fn get_new_subnet_id(
-    registry: &dyn RegistryClient,
-    summary_block: &Block,
-    node_id: NodeId,
-    source_subnet_id: SubnetId,
-    destination_subnet_id: SubnetId,
-) -> Result<SubnetId, String> {
-    let registry_version = summary_block.context.registry_version;
-    let new_subnet_id = registry
-        .get_subnet_id_from_node_id(node_id, registry_version)
-        .map_err(|err| {
-            format!(
-                "Failed to get the new subnet id at \
-                registry version {registry_version}: {err}"
-            )
-        })?
-        .ok_or_else(|| {
-            format!(
-                "Node is not assigned to any subnet at \
-                registry version {registry_version}"
-            )
-        })?;
-
-    if ![source_subnet_id, destination_subnet_id].contains(&new_subnet_id) {
-        return Err(format!(
-            "According to the registry version {registry_version} \
-            the node belongs to neither source subnet nor the destination subnet"
-        ));
-    }
-
-    Ok(new_subnet_id)
 }
 
 #[cfg(test)]
@@ -599,13 +466,16 @@ mod tests {
         backwards_compatibility::BackwardsCompatible,
         consensus::{
             BlockPayload, BlockProposal, ConsensusMessageHashable, HasVersion, Payload,
-            SummaryPayload, idkg::PreSigId,
+            SummaryPayload,
+            dkg::{SplittingArgs, SubnetSplittingStatus},
+            idkg::PreSigId,
         },
         crypto::CryptoHash,
     };
-    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
+    use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2, SUBNET_3};
     use rstest::rstest;
+    use std::collections::BTreeSet;
     use std::sync::{Arc, RwLock};
 
     fn assert_cup_share_matches_block_and_state(
@@ -1092,52 +962,41 @@ mod tests {
         })
     }
 
+    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
+    const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+    const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+    const INTERVAL_LENGTH: Height = Height::new(9);
+
     // In this test the subnet initially has 4 nodes, and after the split `NODE_1, NODE_2` will stay
     // in the original subnet, and `NODE_3, NODE_4` will be moved to a new one.
     #[rstest]
-    #[case::source_subnet_node(
-        NODE_1,
-        "d5a517cd0906e1d36b43edf4103ef9b0dfb0e6892a87712ce5ed6602bfa5c97e"
-    )]
-    #[case::source_subnet_node(
-        NODE_2,
-        "d5a517cd0906e1d36b43edf4103ef9b0dfb0e6892a87712ce5ed6602bfa5c97e"
-    )]
-    #[case::destination_subnet_node(
-        NODE_3,
-        "e8614bf48bba176a546186f90e7cfc02ec573e4b87296e9d73a70547ca168416"
-    )]
-    #[case::destination_subnet_node(
-        NODE_4,
-        "e8614bf48bba176a546186f90e7cfc02ec573e4b87296e9d73a70547ca168416"
-    )]
+    #[case::source_subnet_node(NODE_1, SOURCE_SUBNET_ID, &[NODE_1, NODE_2])]
+    #[case::source_subnet_node(NODE_2, SOURCE_SUBNET_ID, &[NODE_1, NODE_2])]
+    #[case::destination_subnet_node(NODE_3, DESTINATION_SUBNET_ID, &[NODE_3, NODE_4])]
+    #[case::destination_subnet_node(NODE_4, DESTINATION_SUBNET_ID, &[NODE_3, NODE_4])]
     #[trace]
     fn create_post_split_cup_share_test(
         #[case] node_id: NodeId,
-        // We don't necessarily care what the hash is, but we want to ensure that different
-        // nodes produce different blocks (and hence different hashes), depending on which subnet
-        // they are going to land on
-        #[case] expected_block_hash_in_cup: &str,
+        // The subnet the node lands on after the split, which determines the block it puts into
+        // the CUP
+        #[case] expected_new_subnet_id: SubnetId,
+        // The membership of `expected_new_subnet_id` after the split
+        #[case] expected_committee: &[NodeId],
         #[values(Height::new(0), Height::new(1000))] context_certified_height: Height,
     ) {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
-                const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
-                const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
-                const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
-                const INTERVAL_LENGTH: Height = Height::new(9);
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
-
                 let Dependencies {
                     mut pool,
                     membership,
                     registry,
+                    registry_data_provider,
                     crypto,
                     state_manager,
                     replica_config,
                     ..
-                } = DependenciesBuilder::new(
+                } = DependenciesBuilder::multiple_subnets(
                     pool_config,
                     vec![
                         (
@@ -1163,23 +1022,25 @@ mod tests {
                         ),
                     ],
                 )
-                .add_additional_registry_mutation(|registry_data_provider| {
-                    insert_initial_dkg_transcript(
-                        SPLITTING_REGISTRY_VERSION.get(),
-                        SOURCE_SUBNET_ID,
-                        &SubnetRecordBuilder::from(&[NODE_1, NODE_2])
-                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
-                            .build(),
-                        registry_data_provider,
-                    )
-                })
                 .with_replica_config(ReplicaConfig {
                     node_id,
                     subnet_id: SOURCE_SUBNET_ID,
                 })
-                .with_mocked_state_manager()
                 .build();
+                // Manually insert DKG transcripts at the splitting version to simulate what the
+                // registry would do. The setup above only inserts the transcripts at the initial
+                // version.
+                insert_initial_dkg_transcript(
+                    SPLITTING_REGISTRY_VERSION.get(),
+                    SOURCE_SUBNET_ID,
+                    &SubnetRecordBuilder::from(&[NODE_1, NODE_2])
+                        .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                        .build(),
+                    &registry_data_provider,
+                );
+                registry.reload();
 
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
                 state_manager
                     .get_mut()
                     .expect_get_state_hash_at()
@@ -1195,7 +1056,7 @@ mod tests {
                     crypto,
                     state_manager,
                     message_routing,
-                    registry,
+                    registry.clone(),
                     log,
                 );
 
@@ -1227,10 +1088,43 @@ mod tests {
 
                 assert!(share.check_integrity());
                 assert_eq!(share.content.version, *proposal.content.version());
-                assert_eq!(
-                    hex::encode(&share.content.block.get().0),
-                    expected_block_hash_in_cup
-                );
+
+                // The share only carries the hash of the CUP block, so instead of pinning that
+                // hash we re-derive the two blocks the node could have chosen from, and check that
+                // it chose the one belonging to the subnet it lands on.
+                let post_split_block = |subnet_id| {
+                    create_post_split_summary_block(
+                        proposal.content.as_ref(),
+                        subnet_id,
+                        registry.as_ref(),
+                    )
+                    .expect("Should be able to create a post split block")
+                };
+                let other_subnet_id = if expected_new_subnet_id == SOURCE_SUBNET_ID {
+                    DESTINATION_SUBNET_ID
+                } else {
+                    SOURCE_SUBNET_ID
+                };
+                let expected_block = post_split_block(expected_new_subnet_id);
+                let other_block = post_split_block(other_subnet_id);
+
+                // The DKG transcripts of the post-split block are the ones of the subnet the node
+                // lands on, i.e. their committee is that subnet's membership ...
+                let expected_committee =
+                    expected_committee.iter().copied().collect::<BTreeSet<_>>();
+                for tag in [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold] {
+                    assert_eq!(
+                        get_current_transcript_from_summary_block(&expected_block, &tag)
+                            .expect("Post split block should contain a current transcript")
+                            .committee
+                            .get(),
+                        &expected_committee,
+                    );
+                }
+                // ... which is why nodes landing on different subnets create different blocks.
+                assert_ne!(crypto_hash(&expected_block), crypto_hash(&other_block));
+
+                assert_eq!(share.content.block, crypto_hash(&expected_block));
                 assert_eq!(
                     share.content.random_beacon.get_value().content.height,
                     proposal.content.height() + INTERVAL_LENGTH + Height::new(1),
@@ -1251,24 +1145,23 @@ mod tests {
         })
     }
 
-    #[test]
-    fn create_post_split_summary_block_copies_idkg_summary() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
-            const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
-            const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
-            const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
-            const INTERVAL_LENGTH: Height = Height::new(9);
-
-            let Dependencies {
-                mut pool, registry, ..
-            } = DependenciesBuilder::new(
-                pool_config,
-                vec![
+    // During a scheduled subnet split, a node which ends up neither in the source subnet nor in
+    // the destination subnet cannot determine the type of the CUP to create, and thus should not
+    // create any CUP share.
+    #[rstest]
+    #[case::node_unassigned_after_split(None)]
+    #[case::node_moved_to_unrelated_subnet(Some(SUBNET_3))]
+    #[trace]
+    fn no_post_split_cup_share_for_node_outside_both_subnets_test(
+        #[case] new_subnet_of_cup_maker: Option<SubnetId>,
+    ) {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let mut records = vec![
                     (
                         INITIAL_REGISTRY_VERSION.get(),
                         SOURCE_SUBNET_ID,
-                        SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4, NODE_5])
                             .with_dkg_interval_length(INTERVAL_LENGTH.get())
                             .build(),
                     ),
@@ -1286,70 +1179,83 @@ mod tests {
                             .with_dkg_interval_length(INTERVAL_LENGTH.get())
                             .build(),
                     ),
-                ],
-            )
-            .add_additional_registry_mutation(|registry_data_provider| {
-                insert_initial_dkg_transcript(
-                    SPLITTING_REGISTRY_VERSION.get(),
-                    SOURCE_SUBNET_ID,
-                    &SubnetRecordBuilder::from(&[NODE_1, NODE_2])
-                        .with_dkg_interval_length(INTERVAL_LENGTH.get())
-                        .build(),
-                    registry_data_provider,
-                )
-            })
-            .with_replica_config(ReplicaConfig {
-                node_id: NODE_1,
-                subnet_id: SOURCE_SUBNET_ID,
-            })
-            .with_mocked_state_manager()
-            .build();
+                ];
+                if let Some(subnet_id) = new_subnet_of_cup_maker {
+                    records.push((
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        subnet_id,
+                        SubnetRecordBuilder::from(&[NODE_5])
+                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                            .build(),
+                    ));
+                }
 
-            pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    crypto,
+                    state_manager,
+                    ..
+                } = DependenciesBuilder::multiple_subnets(pool_config, records)
+                    .with_replica_config(ReplicaConfig {
+                        node_id: NODE_5,
+                        subnet_id: SOURCE_SUBNET_ID,
+                    })
+                    .build();
 
-            let subnet_splitting_status =
-                ic_types::consensus::dkg::SubnetSplittingStatus::Scheduled(SplittingArgs {
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(fake_state_hash.clone()));
+
+                let message_routing = FakeMessageRouting::new();
+                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                let message_routing = Arc::new(message_routing);
+
+                let cup_maker = CatchUpPackageMaker::new(
+                    ReplicaConfig {
+                        node_id: NODE_5,
+                        subnet_id: SOURCE_SUBNET_ID,
+                    },
+                    membership,
+                    crypto,
+                    state_manager,
+                    message_routing,
+                    registry,
+                    log,
+                );
+
+                pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
+
+                let subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
                     source_subnet_id: SOURCE_SUBNET_ID,
                     destination_subnet_id: DESTINATION_SUBNET_ID,
                 });
+                let mut proposal = pool.make_next_block();
+                let block = proposal.content.as_mut();
+                block.context.certified_height = block.height;
+                block.context.registry_version = SPLITTING_REGISTRY_VERSION;
+                let mut payload = block.payload.as_ref().as_summary().clone();
+                payload.dkg.subnet_splitting_status =
+                    BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(payload),
+                );
+                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                pool.insert_validated(proposal.clone());
+                pool.notarize(&proposal);
+                pool.finalize(&proposal);
 
-            let mut proposal = pool.make_next_block();
-            let block = proposal.content.as_mut();
-            block.context.registry_version = SPLITTING_REGISTRY_VERSION;
-            let mut payload = block.payload.as_ref().as_summary().clone();
-            payload.dkg.subnet_splitting_status =
-                BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
-            let idkg = empty_idkg_payload(SOURCE_SUBNET_ID);
-            payload.idkg = Some(idkg.clone());
-            block.payload = Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(payload),
-            );
-            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
-            pool.insert_validated(proposal.clone());
-            pool.notarize(&proposal);
-            pool.finalize(&proposal);
-
-            let splitting_block = proposal.content.as_ref();
-            let post_split_block = create_post_split_summary_block(
-                splitting_block,
-                SOURCE_SUBNET_ID,
-                registry.as_ref(),
-            )
-            .expect("create_post_split_summary_block should succeed");
-
-            let post_split_idkg = post_split_block
-                .payload
-                .as_ref()
-                .as_summary()
-                .idkg
-                .as_ref()
-                .expect("Post-split summary block should have an IDKG summary");
-
-            assert_eq!(
-                *post_split_idkg, idkg,
-                "IDKG summary in post-split block should match the splitting block's IDKG summary"
-            );
+                assert_eq!(
+                    cup_maker
+                        .consider_block(&PoolReader::new(&pool), proposal.content.as_ref().clone()),
+                    None,
+                    "A node outside of both subnets should not create a CUP share"
+                );
+            })
         })
     }
 }

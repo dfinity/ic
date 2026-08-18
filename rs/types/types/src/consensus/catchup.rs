@@ -463,6 +463,17 @@ impl TryFrom<subnet_pb::SubnetSplittingArgs> for SubnetSplittingArgs {
     }
 }
 
+/// Types of [`CatchUpPackage`] created by the CUP maker
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum CatchUpPackageType {
+    Normal,
+    /// After delivering a splitting block to the DSM, we immediately create a CUP at the start of
+    /// the next dkg interval and we create a new summary block and a dummy random beacon on the fly.
+    PostSplit {
+        new_subnet_id: SubnetId,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -354,10 +354,6 @@ mod tests {
             let last_summary_block = PoolReader::new(&pool)
                 .dkg_summary_block(&parent_block)
                 .unwrap();
-
-            let last_summary_block = PoolReader::new(&pool)
-                .dkg_summary_block(&parent_block)
-                .unwrap();
             assert!(
                 validate_payload(
                     replica_config.subnet_id,
@@ -726,6 +722,7 @@ mod tests {
                 registry,
                 state_manager,
                 registry_data_provider,
+                replica_config,
                 ..
             } = DependenciesBuilder::single_subnet(
                 pool_config,
@@ -793,7 +790,7 @@ mod tests {
                 no_op_logger(),
                 &PoolReader::new(&pool),
                 registry.clone(),
-                ReplicaConfig { node_id, subnet_id },
+                replica_config,
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(

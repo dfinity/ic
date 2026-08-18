@@ -834,7 +834,7 @@ mod tests {
                 membership,
                 registry,
                 ..
-            } = DependenciesBuilder::new(
+            } = DependenciesBuilder::multiple_subnets(
                 pool_config,
                 vec![
                     (
@@ -864,7 +864,6 @@ mod tests {
                 node_id: NODE_1,
                 subnet_id: SOURCE_SUBNET_ID,
             })
-            .with_mocked_state_manager()
             .build();
 
             pool.advance_round_normal_operation_n(INTERVAL_LENGTH);
