@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-14: Proposal 143578
+
+http://dashboard.internetcomputer.org/proposal/143578
+
+## Fixed
+
+* `get_available_sns_subnet` now rotates through all configured SNS subnets
+  (round-robin, based on the number of SNSs already deployed) instead of
+  always deploying new SNSes to the first subnet in `sns_subnet_ids`.
+
+
 # 2026-07-24: Proposal 143073
 
 http://dashboard.internetcomputer.org/proposal/143073

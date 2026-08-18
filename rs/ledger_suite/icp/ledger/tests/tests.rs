@@ -35,6 +35,7 @@ use icrc_ledger_types::icrc1::{
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
 use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
@@ -1424,6 +1425,31 @@ fn test_transfer_from_smoke() {
 #[test]
 fn test_transfer_from_self() {
     ic_ledger_suite_state_machine_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_self_subaccount() {
+    ic_ledger_suite_state_machine_tests::test_transfer_from_self_subaccount(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+/// Unlike an ICRC ledger, this one requires an allowance to burn even when the spender is the
+/// account itself: `Operation::Burn` in `rs/ledger_suite/icp/src/lib.rs` checks one for any
+/// spender, though it exempts the self-spend when consuming one. Pinned rather than skipped, so
+/// that closing the gap is a visible change here.
+#[test]
+fn test_transfer_from_self_subaccount_burn() {
+    assert_eq!(
+        ic_ledger_suite_state_machine_tests::test_transfer_from_self_subaccount_burn(
+            ledger_wasm(),
+            encode_init_args,
+        ),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0_u8)
+        })
+    );
 }
 
 #[test]

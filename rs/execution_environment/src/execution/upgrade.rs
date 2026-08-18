@@ -292,12 +292,17 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     // Note that the memories to preserve are taken from the helper's canister,
     // i.e. as they are after `canister_pre_upgrade()` has run, and not from the
     // clean canister.
-    let new_memories = match helper.canister().execution_state.as_ref() {
-        Some(old) => MemorySource::Preserve {
-            old,
-            handling: memory_handling,
-        },
-        None => MemorySource::Fresh,
+    // Stage 1 rejects an upgrade of a canister without an execution state with
+    // `WasmModuleNotFound` and no step in between can remove it, so the old
+    // execution state is present here.
+    let old = helper
+        .canister()
+        .execution_state
+        .as_ref()
+        .expect("upgrading a canister without an execution state");
+    let new_memories = MemorySource::Preserve {
+        old,
+        handling: memory_handling,
     };
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         wasm_module,
