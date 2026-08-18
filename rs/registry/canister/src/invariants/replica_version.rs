@@ -11,13 +11,14 @@ use crate::{
 
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::{
+    replica_version::v1::ReplicaVersionRecord,
     standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
     subnet::v1::{SubnetRecord, SubnetType},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_standard_engine_replica_version_record_key, make_subnet_record_key,
-    make_unassigned_nodes_config_record_key,
+    make_replica_version_key, make_standard_engine_replica_version_record_key,
+    make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
 
@@ -190,9 +191,7 @@ mod tests {
     use canister_test::PrincipalId;
     use ic_protobuf::registry::replica_version::v1::{
         GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
-        ReplicaVersionRecord,
     };
-    use ic_registry_keys::make_replica_version_key;
     use ic_registry_transport::{delete, insert, pb::v1::RegistryMutation, upsert};
     use ic_types::ReplicaVersion;
     use prost::Message;
