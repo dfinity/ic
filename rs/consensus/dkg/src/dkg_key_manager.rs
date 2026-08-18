@@ -270,7 +270,13 @@ impl DkgKeyManager {
             // parallel with the previous removal and theoretically we could finish loading
             // the next transcript before the previous removal (which would consider the
             // next transcript key irrelevant and remove it).
-            self.delete_inactive_keys(pool_reader);
+            //
+            // Note that the removal we trigger here still runs in parallel with the loads
+            // below, so it is only harmless as long as the set of transcripts it retains is a
+            // superset of the ones we are about to load. This is why we hand `summary` to
+            // `delete_inactive_keys`: for a regular summary it is redundant, but the post-split
+            // summary is computed locally and thus invisible to the removal otherwise.
+            self.delete_inactive_keys(pool_reader, &summary);
             self.load_transcripts_from_summary(&summary);
             self.last_dkg_summary_height = Some(summary.height);
         }
@@ -473,8 +479,11 @@ impl DkgKeyManager {
     }
 
     /// Ask the CSP to drop DKG key material related to transcripts that are no
-    /// longer relevant
-    fn delete_inactive_keys(&mut self, pool_reader: &PoolReader<'_>) {
+    /// longer relevant.
+    ///
+    /// The transcripts of `summary_to_load`, i.e. the summary whose transcripts the caller is
+    /// about to load, are always retained. See the comment at the call site.
+    fn delete_inactive_keys(&mut self, pool_reader: &PoolReader<'_>, summary_to_load: &DkgSummary) {
         if let Some(handle) = self.pending_key_removal.take() {
             // To make sure we delete all keys sequentially, we check if another key removal
             // is ongoing and if yes, we block until this thread is done. This
@@ -514,6 +523,19 @@ impl DkgKeyManager {
                 .get_finalized_block(next_summary_height)
                 .map(|b| b.payload.as_ref().as_summary().clone());
         }
+
+        // The removal below runs concurrently with the loading of `summary_to_load`'s
+        // transcripts, so they must be part of the retain set. For a regular summary this is a
+        // no-op, as it is the latest finalized summary and hence already covered by the walk
+        // above. The post-split summary however is computed locally from the registry and never
+        // enters the pool, so this is the only place where it can be picked up.
+        transcripts_to_retain.extend(
+            summary_to_load
+                .current_transcripts()
+                .values()
+                .chain(summary_to_load.next_transcripts().values())
+                .cloned(),
+        );
 
         let crypto = self.crypto.clone();
         let logger = self.logger.clone();
@@ -965,7 +987,7 @@ mod tests {
                 for (ids, expected_loaded) in [
                     (genesis_ids, true),
                     (splitting_ids, false),
-                    (post_split_ids, true),
+                    (post_split_ids.clone(), true),
                 ] {
                     for id in ids {
                         assert_eq!(
@@ -976,6 +998,21 @@ mod tests {
                             if expected_loaded { "" } else { "not " }
                         );
                     }
+                }
+
+                // The key removal runs in parallel with the loading, so the post-split
+                // transcripts must be retained as well, otherwise the keys we just loaded could
+                // be deleted right away.
+                let retained_transcripts = csp.retained_transcripts.read().unwrap();
+                let last_retained = retained_transcripts
+                    .last()
+                    .expect("The key manager should have asked for a key removal");
+                for id in post_split_ids {
+                    assert!(
+                        last_retained.contains(&id),
+                        "Transcript {} should have been retained",
+                        dkg_id_log_msg(&id),
+                    );
                 }
             });
         });
