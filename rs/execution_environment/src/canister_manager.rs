@@ -59,7 +59,8 @@ use ic_types::messages::{
 };
 use ic_types::{
     CanisterId, CanisterTimer, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions, PrincipalId, SnapshotId, Time,
+    MAX_STABLE_MEMORY_IN_BYTES, MIN_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes, NumInstructions,
+    PrincipalId, SnapshotId, Time,
 };
 use ic_types_cycles::{
     CanisterCreation, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
@@ -577,6 +578,15 @@ impl CanisterManager {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
                     bytes: requested_limit,
                     limit: max_limit,
+                });
+            }
+            // A zero limit disables canister logging; any other limit must be
+            // at least the minimum ring buffer data capacity.
+            let min_limit = NumBytes::new(MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64);
+            if requested_limit.get() != 0 && requested_limit < min_limit {
+                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooLow {
+                    bytes: requested_limit,
+                    limit: min_limit,
                 });
             }
             // Resizing reads all stored log records from the old ring buffer and
@@ -1361,7 +1371,8 @@ impl CanisterManager {
         // - its state is permanently deleted, and
         // - its cycles are discarded.
 
-        // Remove the canister from `ReplicatedState`.
+        // Remove the canister from `ReplicatedState`. This also records the removal, so
+        // that the canister's directory is deleted from the tip.
         let canister_to_delete = state.remove_canister(&canister_id_to_delete).unwrap();
         let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
 
@@ -2404,6 +2415,16 @@ impl CanisterManager {
                 prepaid_execution_cycles - cycles_to_refund,
                 instructions_for_execution,
             );
+            // Loading a snapshot installs code on the canister (in particular,
+            // it compiles a Wasm module), so the instructions used count
+            // towards the `install_code` rate limit of the canister. Just like
+            // the consumed cycles, the debit is also recorded in
+            // `consumed_cycles` so that it survives the canister state
+            // rollback if a subsequent step fails.
+            if self.config.rate_limiting_of_instructions == FlagStatus::Enabled {
+                canister.scheduler_state.install_code_debit += instructions_for_execution;
+                consumed_cycles.add_install_code_debit(instructions_for_execution);
+            }
 
             let mut new_execution_state = match new_execution_state {
                 Ok(execution_state) => execution_state,

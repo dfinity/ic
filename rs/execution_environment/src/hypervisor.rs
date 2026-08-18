@@ -267,8 +267,11 @@ impl Hypervisor {
                 match new_memories {
                     MemorySource::Fresh => {}
                     MemorySource::Preserve { old, handling } => {
-                        // Cloning a `Memory` is cheap: its page delta is a
-                        // persistent map and its sandbox handle is an `Arc`.
+                        // Cloning a `Memory` is cheap: cloning its page delta,
+                        // a persistent map, only clones the root node of its
+                        // tree, whose subtrees are `Arc`s, and its checkpoint
+                        // files, page allocator and sandbox handle are `Arc`s
+                        // as well.
                         if handling.stable_memory_handling == MemoryHandling::Keep {
                             execution_state.stable_memory = old.stable_memory.clone();
                         }

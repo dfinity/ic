@@ -1211,6 +1211,7 @@ fn should_retrieve_minter_info() {
             )),
             erc20_helper_contract_address: None,
             deposit_with_subaccount_helper_contract_address: None,
+            sweeper_contract_address: None,
             supported_ckerc20_tokens: None,
             minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
@@ -1267,6 +1268,24 @@ fn should_retrieve_minter_info() {
                 .map(|balance| balance - debited_amount),
             ..info_after_deposit
         }
+    );
+}
+
+#[test]
+fn should_retrieve_sweeper_contract_address_after_upgrade() {
+    const SWEEPER_CONTRACT_ADDRESS: &str = "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38";
+
+    let cketh = CkEthSetup::default();
+    assert_eq!(cketh.get_minter_info().sweeper_contract_address, None);
+
+    let cketh = cketh.check_audit_logs_and_upgrade(UpgradeArg {
+        ethereum_sweeper_contract_address: Some(SWEEPER_CONTRACT_ADDRESS.to_string()),
+        ..Default::default()
+    });
+
+    assert_eq!(
+        cketh.get_minter_info().sweeper_contract_address,
+        Some(format_ethereum_address_to_eip_55(SWEEPER_CONTRACT_ADDRESS))
     );
 }
 
