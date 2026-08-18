@@ -21,13 +21,7 @@ SAVED_VERSIONS_CANISTERS_FILE = "mainnet-canister-revisions.json"
 # Release binaries (published on the CDN under `.../binaries/x86_64-linux/` as
 # `<name>.gz`) whose sha256 we record for every mainnet revision. They are exposed
 # to Bazel by //bazel:mainnet-icos-binaries.bzl and consumed by system-tests that
-# have to run a binary built at a mainnet version:
-#   * ic-replay, sandbox_launcher, canister_sandbox, compiler_sandbox
-#       -> //rs/tests/consensus/backup:backup_manager_{upgrade,downgrade}_test
-#   * types-test
-#       -> //rs/tests/consensus/orchestrator:cup_compatibility_test
-#   * replicated-state-test, state-layout-test
-#       -> //rs/tests/message_routing:queues_compatibility_test
+# have to run a binary built at a mainnet version.
 # Keep sorted; this determines the key order in the generated JSON.
 MAINNET_BINARIES = [
     "canister_sandbox",
@@ -38,12 +32,6 @@ MAINNET_BINARIES = [
     "state-layout-test",
     "types-test",
 ]
-
-# Fields every saved record must have. Listing them (rather than checking a single
-# field) means that when a new field is introduced, records that are already on the
-# current version are still rewritten once, so the new field gets backfilled instead
-# of only appearing on the next version bump.
-REQUIRED_RECORD_FIELDS = ("setupos_disk_img_hash", "binaries")
 
 
 class Command(Enum):
@@ -478,7 +466,7 @@ def get_binary_hashes(version: str) -> dict:
 
 def is_record_up_to_date(existing: dict, version: str) -> bool:
     """Whether `existing` is on `version` and already has every field we record."""
-    return existing.get("version", "") == version and all(f in existing for f in REQUIRED_RECORD_FIELDS)
+    return existing.get("version", "") == version and all(f in existing for f in ("setupos_disk_img_hash", "binaries"))
 
 
 def get_logger(level) -> logging.Logger:

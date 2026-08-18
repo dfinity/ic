@@ -18,11 +18,6 @@ MAINNET_ENV = {
 def mainnet_binaries_runtime_deps(repo, prefix, binaries):
     """Runtime dependencies on binaries published for a mainnet revision.
 
-    These come from @mainnet_{nns,app}_binaries (see
-    //bazel:mainnet-icos-binaries.bzl) instead of being downloaded from the CDN by
-    the test itself, which is what lets the `_local` (network-isolated) variants of
-    the consuming tests run.
-
     Only depend on the binaries a test actually uses: every runtime dependency ends
     up in the test's runfiles (and, for colocated tests, in the tarball copied to
     the driver's UVM), so an unused one costs both disk and time.
@@ -40,8 +35,6 @@ def mainnet_binaries_runtime_deps(repo, prefix, binaries):
         for name in binaries
     }
 
-# Used by //rs/tests/consensus/backup: `ic-backup` replays a subnet's artifacts
-# with the `ic-replay` (and sandbox binaries) of the version that produced them.
 MAINNET_NNS_REPLAY_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
     "mainnet_nns_binaries",
     "MAINNET_NNS",
@@ -53,7 +46,6 @@ MAINNET_NNS_REPLAY_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
     ],
 )
 
-# Used by //rs/tests/consensus/orchestrator:cup_compatibility_test.
 MAINNET_TYPES_TEST_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
     "mainnet_nns_binaries",
     "MAINNET_NNS",
