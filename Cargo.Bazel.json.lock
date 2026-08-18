@@ -1,5 +1,5 @@
 {
-  "checksum": "49f23508cb5f7f5588dfc22948a52cd7aa920ed8a09fa8b7d24083c0f596e53a",
+  "checksum": "ecab59e54cd3dfcb3d049bf925c4d1c1e1ab338ef237c40f066ef568f79e0321",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -8867,45 +8867,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "build-env 0.3.1": {
-      "name": "build-env",
-      "version": "0.3.1",
-      "package_url": "https://github.com/jmesmon/build-env",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/build-env/0.3.1/download",
-          "sha256": "1522ac6ee801a11bf9ef3f80403f4ede6eb41291fac3dde3de09989679305f25"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "build_env",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "build_env",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.3.1"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "build-info 0.0.45": {
       "name": "build-info",
       "version": "0.0.45",
@@ -16530,57 +16491,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "cstr-argument 0.1.2": {
-      "name": "cstr-argument",
-      "version": "0.1.2",
-      "package_url": "https://github.com/johnschug/cstr-argument",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cstr-argument/0.1.2/download",
-          "sha256": "b6bd9c8e659a473bce955ae5c35b116af38af11a7acb0b480e01f3ed348aeb40"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cstr_argument",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "cstr_argument",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.2"
-      },
-      "license": "Unlicense",
-      "license_ids": [
-        "Unlicense"
-      ],
-      "license_file": null
-    },
     "csv 1.2.2": {
       "name": "csv",
       "version": "1.2.2",
@@ -19866,8 +19776,12 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.19.0",
+              "id": "ic-cdk 0.20.2",
               "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk-bitcoin-canister 0.2.0",
+              "target": "ic_cdk_bitcoin_canister"
             },
             {
               "id": "ic-cdk-executor 2.0.0",
@@ -20069,6 +19983,10 @@
             {
               "id": "libnss 0.5.0",
               "target": "libnss"
+            },
+            {
+              "id": "libsystemd 0.7.2",
+              "target": "libsystemd"
             },
             {
               "id": "little-loadshedder 0.2.0",
@@ -20607,10 +20525,6 @@
             {
               "id": "sysinfo 0.37.2",
               "target": "sysinfo"
-            },
-            {
-              "id": "systemd 0.10.0",
-              "target": "systemd"
             },
             {
               "id": "tabled 0.20.0",
@@ -25593,132 +25507,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "foreign-types 0.5.0": {
-      "name": "foreign-types",
-      "version": "0.5.0",
-      "package_url": "https://github.com/sfackler/foreign-types",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/foreign-types/0.5.0/download",
-          "sha256": "d737d9aa519fb7b749cbc3b962edcf310a8dd1f4b67c91c4f83975dbdd17d965"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "foreign_types",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "foreign_types",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "foreign-types-shared 0.3.1",
-              "target": "foreign_types_shared"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "foreign-types-macros 0.2.3",
-              "target": "foreign_types_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.5.0"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "foreign-types-macros 0.2.3": {
-      "name": "foreign-types-macros",
-      "version": "0.2.3",
-      "package_url": "https://github.com/sfackler/foreign-types",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/foreign-types-macros/0.2.3/download",
-          "sha256": "1a5c6c585bc94aaf2c7b51dd4c2ba22680844aba4c687be581871a6f518c5742"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "foreign_types_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "foreign_types_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.2.3"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "foreign-types-shared 0.1.1": {
       "name": "foreign-types-shared",
       "version": "0.1.1",
@@ -25750,45 +25538,6 @@
         ],
         "edition": "2015",
         "version": "0.1.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "foreign-types-shared 0.3.1": {
-      "name": "foreign-types-shared",
-      "version": "0.3.1",
-      "package_url": "https://github.com/sfackler/foreign-types",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/foreign-types-shared/0.3.1/download",
-          "sha256": "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "foreign_types_shared",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "foreign_types_shared",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.3.1"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -33132,98 +32881,6 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.19.0": {
-      "name": "ic-cdk",
-      "version": "0.19.0",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.19.0/download",
-          "sha256": "818d6d5416a8f0212e1b132703b0da51e36c55f2b96677e96f2bbe7702e1bd85"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_cdk",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_cdk",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.35",
-              "target": "candid"
-            },
-            {
-              "id": "ic-cdk-executor 2.0.0",
-              "target": "ic_cdk_executor"
-            },
-            {
-              "id": "ic-error-types 0.2.0",
-              "target": "ic_error_types"
-            },
-            {
-              "id": "ic-management-canister-types 0.5.0",
-              "target": "ic_management_canister_types"
-            },
-            {
-              "id": "ic0 1.1.0",
-              "target": "ic0"
-            },
-            {
-              "id": "pin-project-lite 0.2.17",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "slotmap 1.0.7",
-              "target": "slotmap"
-            },
-            {
-              "id": "thiserror 2.0.18",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2024",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "ic-cdk-macros 0.19.0",
-              "target": "ic_cdk_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.19.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "ic-cdk 0.20.2": {
       "name": "ic-cdk",
       "version": "0.20.2",
@@ -33297,6 +32954,61 @@
           "selects": {}
         },
         "version": "0.20.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-bitcoin-canister 0.2.0": {
+      "name": "ic-cdk-bitcoin-canister",
+      "version": "0.2.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-bitcoin-canister/0.2.0/download",
+          "sha256": "0e8bf6dd432d5750428b8658bbe6fb0cbc26f6ad634e20d48994f48d7bf84da9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk_bitcoin_canister",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_bitcoin_canister",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.35",
+              "target": "candid"
+            },
+            {
+              "id": "ic-btc-interface 0.4.0",
+              "target": "ic_btc_interface"
+            },
+            {
+              "id": "ic-cdk 0.20.2",
+              "target": "ic_cdk"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -33386,69 +33098,6 @@
         "Apache-2.0"
       ],
       "license_file": null
-    },
-    "ic-cdk-macros 0.19.0": {
-      "name": "ic-cdk-macros",
-      "version": "0.19.0",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.19.0/download",
-          "sha256": "66dad91a214945cb3605bc9ef6901b87e2ac41e3624284c2cabba49d43aa4f43"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "ic_cdk_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_cdk_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.35",
-              "target": "candid"
-            },
-            {
-              "id": "darling 0.20.11",
-              "target": "darling"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2024",
-        "version": "0.19.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
     },
     "ic-cdk-macros 0.20.2": {
       "name": "ic-cdk-macros",
@@ -42237,20 +41886,20 @@
       ],
       "license_file": null
     },
-    "libsystemd-sys 0.9.3": {
-      "name": "libsystemd-sys",
-      "version": "0.9.3",
-      "package_url": "https://github.com/jmesmon/rust-systemd",
+    "libsystemd 0.7.2": {
+      "name": "libsystemd",
+      "version": "0.7.2",
+      "package_url": "https://github.com/lucab/libsystemd-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/libsystemd-sys/0.9.3/download",
-          "sha256": "ed080163caa59cc29b34bce2209b737149a4bac148cd9a8b04e4c12822798119"
+          "url": "https://static.crates.io/crates/libsystemd/0.7.2/download",
+          "sha256": "19c97a761fc86953c5b885422b22c891dbf5bcb9dcc99d0110d6ce4c052759f0"
         }
       },
       "targets": [
         {
           "Library": {
-            "crate_name": "libsystemd_sys",
+            "crate_name": "libsystemd",
             "crate_root": "src/lib.rs",
             "srcs": {
               "allow_empty": true,
@@ -42259,84 +41908,67 @@
               ]
             }
           }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
         }
       ],
-      "library_target_name": "libsystemd_sys",
+      "library_target_name": "libsystemd",
       "common_attrs": {
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "bus",
-            "default",
-            "journal"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
+            {
+              "id": "hmac 0.12.1",
+              "target": "hmac"
+            },
             {
               "id": "libc 0.2.186",
               "target": "libc"
             },
             {
-              "id": "libsystemd-sys 0.9.3",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "extra_link_deps": {
-          "common": [
-            "@@//third_party:systemd"
-          ],
-          "selects": {}
-        },
-        "version": "0.9.3"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "build-env 0.3.1",
-              "target": "build_env"
+              "id": "log 0.4.33",
+              "target": "log"
             },
             {
-              "id": "pkg-config 0.3.32",
-              "target": "pkg_config"
+              "id": "nix 0.29.0",
+              "target": "nix"
+            },
+            {
+              "id": "nom 8.0.0",
+              "target": "nom"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            },
+            {
+              "id": "uuid 1.12.1",
+              "target": "uuid"
             }
           ],
           "selects": {}
-        }
+        },
+        "edition": "2021",
+        "version": "0.7.2"
       },
-      "license": "LGPL-2.1-or-later WITH GCC-exception-2.0",
+      "license": "MIT/Apache-2.0",
       "license_ids": [
-        "LGPL-2.1"
+        "Apache-2.0",
+        "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE-APACHE-2.0"
     },
     "libusb1-sys 0.7.0": {
       "name": "libusb1-sys",
@@ -46857,26 +46489,26 @@
         "crate_features": {
           "common": [
             "default",
+            "dir",
             "fs",
             "ioctl",
+            "memoffset",
             "mount",
+            "process",
+            "socket",
             "uio"
           ],
           "selects": {
             "aarch64-apple-darwin": [
-              "process",
               "signal"
             ],
             "aarch64-unknown-linux-gnu": [
-              "process",
               "signal"
             ],
             "x86_64-apple-darwin": [
-              "process",
               "signal"
             ],
             "x86_64-unknown-linux-gnu": [
-              "process",
               "signal"
             ]
           }
@@ -46894,6 +46526,10 @@
             {
               "id": "libc 0.2.186",
               "target": "libc"
+            },
+            {
+              "id": "memoffset 0.9.0",
+              "target": "memoffset"
             },
             {
               "id": "nix 0.29.0",
@@ -72252,85 +71888,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "systemd 0.10.0": {
-      "name": "systemd",
-      "version": "0.10.0",
-      "package_url": "https://github.com/jmesmon/rust-systemd",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/systemd/0.10.0/download",
-          "sha256": "afec0101d9ae8ab26aedf0840109df689938ea7e538aa03df4369f1854f11562"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "systemd",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "systemd",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "bus",
-            "default",
-            "journal"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cstr-argument 0.1.2",
-              "target": "cstr_argument"
-            },
-            {
-              "id": "foreign-types 0.5.0",
-              "target": "foreign_types"
-            },
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            },
-            {
-              "id": "libsystemd-sys 0.9.3",
-              "target": "libsystemd_sys"
-            },
-            {
-              "id": "log 0.4.33",
-              "target": "log"
-            },
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            },
-            {
-              "id": "utf8-cstr 0.1.6",
-              "target": "utf8_cstr"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.10.0"
-      },
-      "license": "LGPL-2.1-or-later WITH GCC-exception-2.0",
-      "license_ids": [
-        "LGPL-2.1"
-      ],
-      "license_file": null
-    },
     "systemstat 0.2.3": {
       "name": "systemstat",
       "version": "0.2.3",
@@ -80266,45 +79823,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "utf8-cstr 0.1.6": {
-      "name": "utf8-cstr",
-      "version": "0.1.6",
-      "package_url": "https://github.com/jmesmon/utf8-cstr",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/utf8-cstr/0.1.6/download",
-          "sha256": "55bcbb425141152b10d5693095950b51c3745d019363fc2929ffd8f61449b628"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "utf8_cstr",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "utf8_cstr",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.1.6"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "utf8-width 0.1.6": {
       "name": "utf8-width",
@@ -91946,7 +91464,8 @@
     "ic-canister-runtime 0.2.3",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.1.0",
-    "ic-cdk 0.19.0",
+    "ic-cdk 0.20.2",
+    "ic-cdk-bitcoin-canister 0.2.0",
     "ic-cdk-executor 2.0.0",
     "ic-cdk-management-canister 0.1.1",
     "ic-cdk-timers 1.0.0",
@@ -91998,6 +91517,7 @@
     "libflate 2.3.1",
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
+    "libsystemd 0.7.2",
     "little-loadshedder 0.2.0",
     "lmdb-rkv 0.14.99",
     "lmdb-rkv-sys 0.11.99",
@@ -92138,7 +91658,6 @@
     "sys-mount 3.0.1",
     "syscalls 0.6.18",
     "sysinfo 0.37.2",
-    "systemd 0.10.0",
     "tabled 0.20.0",
     "tar 0.4.46",
     "tarpc 0.37.0",

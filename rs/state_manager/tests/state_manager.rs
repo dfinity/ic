@@ -8258,6 +8258,14 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
+/// Drops a canister from the state the same way `online_split()` does, i.e. without
+/// recording an `UnflushedCheckpointOp::DeleteCanister`: canisters dropped during a
+/// subnet split are removed from tip by `FilterTipCanisters` instead.
+fn drop_canister(state: &mut ReplicatedState, canister_id: &CanisterId) {
+    state.take_canister_state(canister_id).unwrap();
+    state.metadata.subnet_schedule.remove(canister_id);
+}
+
 #[test]
 fn can_split_with_inflight_restore_snapshot() {
     // We will be splitting subnet A into A' and B.
@@ -8340,11 +8348,11 @@ fn can_split_with_inflight_restore_snapshot() {
             if subnet_id == SUBNET_A {
                 other_subnet_id = SUBNET_B;
                 // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
-                expected.remove_canister(&CANISTER_2);
+                drop_canister(&mut expected, &CANISTER_2);
             } else if subnet_id == SUBNET_B {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
-                expected.remove_canister(&CANISTER_1);
+                drop_canister(&mut expected, &CANISTER_1);
             } else {
                 unreachable!("Unexpected subnet ID: {:?}", subnet_id);
             }
@@ -8478,6 +8486,59 @@ fn can_rename_canister() {
     }
     can_rename_canister_impl(CertificationScope::Metadata);
     can_rename_canister_impl(CertificationScope::Full);
+}
+
+#[test]
+fn deleted_canister_is_removed_from_tip() {
+    fn deleted_canister_is_removed_from_tip_impl(certification_scope: CertificationScope) {
+        state_manager_test(|_metrics, state_manager| {
+            let canister_id = canister_test_id(100);
+
+            // Install a canister and checkpoint the state, so that the canister has a
+            // directory in the tip.
+            let (_height, mut state) = state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_id);
+            state_manager.commit_and_certify(state, CertificationScope::Full, None);
+            state_manager.flush_tip_channel();
+
+            let (height, mut state) = state_manager.take_tip();
+            let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+                state_manager.state_layout().raw_path().join("tip"),
+                height,
+            )
+            .unwrap();
+            assert_eq!(tip.canister_ids().unwrap(), vec![canister_id]);
+
+            state.remove_canister(&canister_id).unwrap();
+            assert!(!state.system_metadata().unflushed_checkpoint_ops.is_empty());
+
+            // Trigger a flush either at the checkpoint or by committing exactly
+            // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
+            if certification_scope == CertificationScope::Full {
+                state_manager.commit_and_certify(state, certification_scope.clone(), None);
+            } else {
+                state_manager.commit_and_certify(
+                    state,
+                    certification_scope.clone(),
+                    Some(BatchSummary {
+                        next_checkpoint_height: Height(
+                            2 + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+                        ),
+                        current_interval_length: Height(500),
+                    }),
+                );
+            }
+            state_manager.flush_tip_channel();
+
+            // The canister directory is gone from the tip, even without a checkpoint.
+            assert!(tip.canister_ids().unwrap().is_empty());
+            // And the checkpoint op has been flushed.
+            let (_height, state) = state_manager.take_tip();
+            assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+        });
+    }
+    deleted_canister_is_removed_from_tip_impl(CertificationScope::Metadata);
+    deleted_canister_is_removed_from_tip_impl(CertificationScope::Full);
 }
 
 #[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]

@@ -3,14 +3,14 @@ use ic_cdk::api::{
     accept_message, canister_self, debug_print, instruction_counter, msg_arg_data, msg_reject,
 };
 use ic_cdk::call::{Call, Error as CallError, RejectCode};
-use ic_cdk::management_canister::{
+use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
+use ic_cdk::{inspect_message, query, trap, update};
+use ic_cdk_management_canister::{
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult, HttpMethod, HttpRequestArgs,
     HttpRequestResult, SignWithEcdsaArgs, SignWithEcdsaResult, TransformArgs, TransformContext,
     TransformFunc, ecdsa_public_key as ic_cdk_ecdsa_public_key,
     http_request as canister_http_outcall,
 };
-use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
-use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::{Deserialize, Serialize};

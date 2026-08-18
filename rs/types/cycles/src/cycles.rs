@@ -18,6 +18,13 @@ use thousands::Separable;
 ///
 /// NOTE: This is distinct from `NominalCycles` which should be used to update metrics
 /// related to cycles accounting.
+///
+/// NOTE: The derived `Serialize` impl is transparent, i.e. it emits the inner
+/// `u128`. CBOR (see `serde_cbor`) cannot represent integers above `u64::MAX`,
+/// so serializing a `Cycles` larger than that with `serde_cbor` *fails*. Types
+/// that hold a `Cycles` and are CBOR-encoded must therefore annotate the field
+/// with `#[serde(with = "ic_types_cycles::serde_as_u64_pair")]`, which encodes
+/// the full `u128` range as a pair of `u64`s.
 #[derive(
     Copy,
     Clone,
@@ -247,6 +254,27 @@ impl TryFrom<pbCyclesAccount> for Cycles {
     }
 }
 
+/// Serializes [`Cycles`] as a `(high, low)` pair of `u64`s instead of as a bare
+/// `u128`, for use with `#[serde(with = "...")]`.
+///
+/// The derived, transparent `Serialize` impl emits a `u128`, which CBOR cannot
+/// represent beyond `u64::MAX`: `serde_cbor` fails with "The number can't be
+/// stored in CBOR". Any type holding a `Cycles` that is CBOR-encoded must use
+/// this module.
+pub mod serde_as_u64_pair {
+    use super::Cycles;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(cycles: &Cycles, serializer: S) -> Result<S::Ok, S::Error> {
+        cycles.into_parts().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Cycles, D::Error> {
+        let (high, low) = <(u64, u64)>::deserialize(deserializer)?;
+        Ok(Cycles::from_parts(high, low))
+    }
+}
+
 /// Decodes `Cycles` from the little-endian representation used by the protobuf
 /// encodings above, mapping a length mismatch onto a `ProxyDecodeError`.
 fn try_from_le_bytes(bytes: Vec<u8>) -> Result<Cycles, ProxyDecodeError> {
@@ -259,6 +287,53 @@ fn try_from_le_bytes(bytes: Vec<u8>) -> Result<Cycles, ProxyDecodeError> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::collections::BTreeSet;
+
+    /// Holds a `Cycles` encoded via [`serde_as_u64_pair`].
+    #[derive(Debug, PartialEq, Deserialize, Serialize)]
+    struct AsU64Pair(#[serde(with = "serde_as_u64_pair")] Cycles);
+
+    /// A handful of amounts either side of the `u64::MAX` boundary.
+    const AMOUNTS: [Cycles; 5] = [
+        Cycles::zero(),
+        Cycles::new(1),
+        Cycles::new(u64::MAX as u128),
+        Cycles::new(u64::MAX as u128 + 1),
+        Cycles::new(u128::MAX),
+    ];
+
+    /// The derived `Serialize` impl is transparent, i.e. it emits the inner
+    /// `u128`, and CBOR cannot represent integers above `u64::MAX`.
+    #[test]
+    fn cbor_cannot_encode_large_cycles_transparently() {
+        assert!(serde_cbor::to_vec(&Cycles::new(u64::MAX as u128)).is_ok());
+        assert!(serde_cbor::to_vec(&Cycles::new(u64::MAX as u128 + 1)).is_err());
+        assert!(serde_cbor::to_vec(&Cycles::new(u128::MAX)).is_err());
+    }
+
+    /// [`serde_as_u64_pair`] must round-trip the whole `Cycles` range through
+    /// CBOR. That is what makes it usable in CBOR-encoded signed bytes.
+    #[test]
+    fn serde_as_u64_pair_round_trips_through_cbor() {
+        for amount in AMOUNTS {
+            let bytes = serde_cbor::to_vec(&AsU64Pair(amount))
+                .unwrap_or_else(|err| panic!("failed to encode {amount}: {err}"));
+            let decoded: AsU64Pair = serde_cbor::from_slice(&bytes)
+                .unwrap_or_else(|err| panic!("failed to decode {amount}: {err}"));
+            assert_eq!(AsU64Pair(amount), decoded);
+        }
+    }
+
+    /// Distinct amounts must have distinct encodings: types signing over a
+    /// `Cycles` rely on [`serde_as_u64_pair`] to produce unambiguous bytes.
+    #[test]
+    fn serde_as_u64_pair_encodings_are_distinct() {
+        let encodings: BTreeSet<_> = AMOUNTS
+            .iter()
+            .map(|amount| serde_cbor::to_vec(&AsU64Pair(*amount)).unwrap())
+            .collect();
+        assert_eq!(encodings.len(), AMOUNTS.len());
+    }
 
     #[test]
     fn test_addition() {

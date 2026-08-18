@@ -828,6 +828,48 @@ fn test_all_existing_wasm_files() {
 }
 
 #[test]
+fn test_delete_canister_dir() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+
+    // Deleting a canister without a directory is a no-op.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert!(checkpoint_layout.canister_ids().unwrap().is_empty());
+
+    // Create directories for two canisters, one of them with a wasm file.
+    let canister_layout = checkpoint_layout.canister(&canister_test_id(42)).unwrap();
+    File::create(canister_layout.wasm().path()).unwrap();
+    let _ = checkpoint_layout.canister(&canister_test_id(43)).unwrap();
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(42), canister_test_id(43)]
+    );
+
+    // Deleting a canister removes its directory with all its contents, but leaves
+    // the other canister alone.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert!(!canister_layout.raw_path().exists());
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(43)]
+    );
+
+    // Deleting the same canister again is a no-op.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(43)]
+    );
+}
+
+#[test]
 fn wasm_can_be_serialized_to_and_loaded_from_a_file() {
     let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
     let wasm_hash = wasm_in_memory.module_hash();

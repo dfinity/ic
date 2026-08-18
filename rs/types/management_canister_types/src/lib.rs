@@ -3758,6 +3758,7 @@ impl Payload<'_> for ListCanistersResponse {}
 pub enum QueryMethod {
     FetchCanisterLogs,
     CanisterStatus,
+    CanisterInfo,
     ListCanisters,
     CanisterMetrics,
 }

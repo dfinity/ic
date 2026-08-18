@@ -8,10 +8,10 @@ use crate::canister_manager::types::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    CanisterMemoryHandling, InstallCodeHelper, MemoryHandling, OriginalContext,
-    PausedInstallCodeHelper, finish_err,
+    InstallCodeHelper, OriginalContext, PausedInstallCodeHelper, finish_err,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::hypervisor::MemorySource;
 use ic_base_types::PrincipalId;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
@@ -120,15 +120,12 @@ pub(crate) fn execute_install(
         round.time,
         round_limits,
         original.compilation_cost_handling,
+        // Install and re-install replace both the stable memory and the main
+        // memory with the initial memories of the new module.
+        MemorySource::Fresh,
     );
     helper.charge_for_compilation(instructions_from_compilation);
-    if let Err(err) = helper.replace_execution_state_and_allocations(
-        result,
-        CanisterMemoryHandling {
-            stable_memory_handling: MemoryHandling::Replace,
-            main_memory_handling: MemoryHandling::Replace,
-        },
-    ) {
+    if let Err(err) = helper.replace_execution_state_and_allocations(result) {
         let instructions_left = helper.instructions_left();
         return finish_err(
             clean_canister,

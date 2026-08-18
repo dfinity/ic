@@ -1,5 +1,5 @@
 use ic_cdk::call::{CallFailed, RejectCode};
-use ic_cdk::management_canister::SignCallError;
+use ic_cdk_management_canister::SignCallError;
 use ic_management_canister_types_private::DerivationPath;
 use std::fmt;
 
@@ -110,7 +110,7 @@ pub async fn sign_with_ecdsa(
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
 ) -> Result<[u8; 64], CallError> {
-    use ic_cdk::management_canister::{EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgs, sign_with_ecdsa};
+    use ic_cdk_management_canister::{EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgs, sign_with_ecdsa};
 
     let result = sign_with_ecdsa(&SignWithEcdsaArgs {
         message_hash: message_hash.to_vec(),

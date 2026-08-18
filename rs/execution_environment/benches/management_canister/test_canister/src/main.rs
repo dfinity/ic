@@ -1,7 +1,8 @@
 use candid::{CandidType, Principal};
 use futures::future::join_all;
 use ic_cdk::call::Call;
-use ic_cdk::management_canister::{
+use ic_cdk::{api::canister_self, update};
+use ic_cdk_management_canister::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettings, CreateCanisterArgs, EcdsaKeyId,
     EcdsaPublicKeyArgs, HttpHeader as IcCdkHttpHeader, HttpMethod,
     HttpRequestArgs as IcCdkHttpRequestArgs, InstallCodeArgs as IcCdkInstallCodeArgs,
@@ -11,7 +12,6 @@ use ic_cdk::management_canister::{
     install_code as ic_cdk_install_code, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     stop_canister as ic_cdk_stop_canister, update_settings as ic_cdk_update_settings,
 };
-use ic_cdk::{api::canister_self, update};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
