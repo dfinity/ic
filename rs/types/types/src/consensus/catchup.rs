@@ -95,7 +95,8 @@ impl CatchUpContent {
         let random_beacon = self.random_beacon.as_ref();
         let payload_hash = block.payload.get_hash();
         let block_payload = block.payload.as_ref();
-        block.payload.is_summary() == block_payload.is_summary()
+        block.payload.is_summary()
+            && block_payload.is_summary()
             && &crypto_hash(random_beacon) == random_beacon_hash
             && &crypto_hash(block) == block_hash
             && &crypto_hash(block_payload) == payload_hash
