@@ -6137,9 +6137,9 @@ struct LongRunningExecution {
     ingress_id: Option<MessageId>,
 }
 
-/// Sets up a long-running update call (`method` is `"update"`) or replicated
-/// query (`method` is `"query"`).
-fn long_running_call(method: &str) -> LongRunningExecution {
+/// Sets up a long-running update call, or a long-running replicated query if
+/// `replicated_query` is set.
+fn long_running_call(replicated_query: bool) -> LongRunningExecution {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(1_000_000)
         .with_slice_instruction_limit(200_000)
@@ -6154,6 +6154,7 @@ fn long_running_call(method: &str) -> LongRunningExecution {
         .append_and_reply()
         .build();
 
+    let method = if replicated_query { "query" } else { "update" };
     let (ingress_id, _) = test.ingress_raw(a_id, method, a);
 
     LongRunningExecution {
@@ -6257,20 +6258,20 @@ fn long_running_heartbeat() -> LongRunningExecution {
 #[test]
 fn dts_resume_fails_due_to_cycles_decrease() {
     // 1. Update calls and replicated queries.
-    for method in ["update", "query"] {
+    for replicated_query in [false, true] {
         let LongRunningExecution {
             mut test,
             canister_id,
             ingress_id,
-        } = long_running_call(method);
+        } = long_running_call(replicated_query);
 
         paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
 
         let err = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap_err();
-        let message = if method == "update" {
-            "an update call"
-        } else {
+        let message = if replicated_query {
             "a replicated query"
+        } else {
+            "an update call"
         };
         err.assert_contains(
             ErrorCode::CanisterWasmEngineError,
@@ -6392,14 +6393,14 @@ fn paused_execution_resumes_after_cycles_increase(
 #[test]
 fn dts_resume_succeeds_after_cycles_increase() {
     // 1. Update calls and replicated queries.
-    for method in ["update", "query"] {
+    for replicated_query in [false, true] {
         let mut balances = vec![];
         for add_cycles in [false, true] {
             let LongRunningExecution {
                 mut test,
                 canister_id,
                 ingress_id,
-            } = long_running_call(method);
+            } = long_running_call(replicated_query);
 
             balances.push(paused_execution_resumes_after_cycles_increase(
                 &mut test,
