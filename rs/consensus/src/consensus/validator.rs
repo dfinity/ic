@@ -41,7 +41,10 @@ use ic_types::{
         HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare,
         RandomTape, RandomTapeShare, Rank,
         catchup::CatchUpPackageType,
-        dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
+        dkg::{
+            DkgPayloadValidationFailure, InvalidDkgPayloadReason, PostSplitArgs,
+            SubnetSplittingStatus,
+        },
     },
     crypto::{
         CryptoError, CryptoHashOf, Signed,
@@ -128,10 +131,14 @@ enum InvalidArtifactReason {
         expected: Height,
         received: Height,
     },
+    InvalidSubnetSplittingStatusInCatchUpPackage(SubnetSplittingStatus),
+    InvalidSubnetIdInSplittingCatchUpPackage {
+        expected: SubnetId,
+        received: SubnetId,
+    },
     RepeatedSigner,
     ReplicaVersionMismatch,
     NotABlockmaker,
-    InvalidSubnetIdInSplittingCatchUpPackage,
     RegistryVersionNotFrozenDuringSubnetSplitting {
         context_registry_version: RegistryVersion,
         subnet_split_scheduled_at: RegistryVersion,
@@ -337,37 +344,54 @@ impl SignatureVerify for CatchUpPackage {
     ) -> ValidationResult<ValidatorError> {
         let cup_registry_version = self.content.registry_version();
 
-        let registry_subnet_id = match membership
-            .registry_client
-            .get_subnet_id_from_node_id(cfg.node_id, cup_registry_version)
-        {
-            Ok(Some(subnet_id)) => subnet_id,
-            Ok(None) => {
-                return Err(ValidationError::ValidationFailed(
-                    ValidationFailure::SubnetSplittingError(format!(
-                        "Node {} is not assigned to any subnet at registry version {}",
-                        cfg.node_id, cup_registry_version
-                    )),
+        // During a subnet split, we will start receiving CUPs from both subnets. Only validate the
+        // ones for our subnet.
+        let subnet_id_to_validate_against = match self.subnet_splitting_status() {
+            SubnetSplittingStatus::NotScheduled => membership.subnet_id,
+            status @ SubnetSplittingStatus::Scheduled(_) => {
+                // There is no CUP on a `Scheduled` summary.
+                return Err(ValidationError::InvalidArtifact(
+                    InvalidArtifactReason::InvalidSubnetSplittingStatusInCatchUpPackage(status),
                 ));
             }
-            Err(e) => {
-                return Err(ValidationError::ValidationFailed(
-                    ValidationFailure::RegistryClientError(e),
-                ));
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) => {
+                let registry_subnet_id = match membership
+                    .registry_client
+                    .get_subnet_id_from_node_id(cfg.node_id, cup_registry_version)
+                {
+                    Ok(Some(subnet_id)) => subnet_id,
+                    Ok(None) => {
+                        // This should not happen: we are unassigned on a registry version of a
+                        // subnet split. Just in case, validate the CUP from the source subnet.
+                        // After doing so, the orchestrator will detect it and kill us.
+                        membership.subnet_id
+                    }
+                    Err(e) => {
+                        return Err(ValidationError::ValidationFailed(
+                            ValidationFailure::RegistryClientError(e),
+                        ));
+                    }
+                };
+
+                if registry_subnet_id != new_subnet_id {
+                    // This is a CUP from the other subnet
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage {
+                            expected: registry_subnet_id,
+                            received: new_subnet_id,
+                        },
+                    ));
+                }
+
+                new_subnet_id
             }
         };
-
-        if registry_subnet_id != membership.subnet_id {
-            return Err(ValidationError::InvalidArtifact(
-                InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage,
-            ));
-        }
 
         crypto
             .verify_combined_threshold_sig_by_public_key(
                 &self.signature.signature,
                 &self.content,
-                membership.subnet_id,
+                subnet_id_to_validate_against,
                 cup_registry_version,
             )
             .map_err(ValidatorError::from)
@@ -5269,19 +5293,75 @@ pub mod test {
         })
     }
 
-    /// Tests the subnet membership check performed when validating a full CUP: the
-    /// validator accepts a CUP only if, at the CUP's registry version, the registry
-    /// assigns its node to the subnet the validator is configured with.
+    /// Tests the checks performed when validating a full CUP during a subnet split: after the
+    /// split, both new subnets produce CUPs, and a node must only validate the one of the subnet
+    /// the registry assigns it to at the CUP's registry version.
     #[rstest]
-    #[case::node_in_subnet(NODE_1, Some(Ok(())))]
-    #[case::node_in_another_subnet(NODE_5, Some(Err("InvalidSubnetIdInSplittingCatchUpPackage")))]
-    // When the node is not assigned to any subnet, the validation fails transiently,
-    // so the CUP is left in the unvalidated pool.
-    #[case::node_unassigned(NODE_6, None)]
+    // CUPs unrelated to a subnet split are validated against the subnet we are running on.
+    #[case::split_not_scheduled(NODE_1, SubnetSplittingStatus::NotScheduled, Ok(()))]
+    // NODE_1 stays on the source subnet, so it validates the source subnet's CUP, but not the
+    // destination subnet's one.
+    #[case::source_node_and_source_cup(
+        NODE_1,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
+        Ok(())
+    )]
+    #[case::source_node_and_destination_cup(
+        NODE_1,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: DESTINATION_SUBNET_ID }),
+        Err(InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage {
+            expected: SOURCE_SUBNET_ID,
+            received: DESTINATION_SUBNET_ID,
+        })
+    )]
+    // NODE_5 moves to the destination subnet, so for it it's the other way around.
+    #[case::destination_node_and_destination_cup(
+        NODE_5,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: DESTINATION_SUBNET_ID }),
+        Ok(())
+    )]
+    #[case::destination_node_and_source_cup(
+        NODE_5,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
+        Err(InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage {
+            expected: DESTINATION_SUBNET_ID,
+            received: SOURCE_SUBNET_ID,
+        })
+    )]
+    // A node which the registry doesn't assign to any subnet keeps validating the CUP of the
+    // subnet it is currently running on, i.e. the source subnet.
+    #[case::unassigned_node_and_source_cup(
+        NODE_6,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
+        Ok(())
+    )]
+    #[case::unassigned_node_and_destination_cup(
+        NODE_6,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: DESTINATION_SUBNET_ID }),
+        Err(InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage {
+            expected: SOURCE_SUBNET_ID,
+            received: DESTINATION_SUBNET_ID,
+        })
+    )]
+    // A summary block which only schedules the split never has a CUP.
+    #[case::split_scheduled(
+        NODE_1,
+        SubnetSplittingStatus::Scheduled(SplittingArgs {
+            source_subnet_id: SOURCE_SUBNET_ID,
+            destination_subnet_id: DESTINATION_SUBNET_ID,
+        }),
+        Err(InvalidArtifactReason::InvalidSubnetSplittingStatusInCatchUpPackage(
+            SubnetSplittingStatus::Scheduled(SplittingArgs {
+                source_subnet_id: SOURCE_SUBNET_ID,
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+            })
+        ))
+    )]
     #[trace]
-    fn validate_catch_up_package_subnet_membership_test(
+    fn validate_catch_up_package_during_subnet_splitting_test(
         #[case] validator_node_id: NodeId,
-        #[case] expected_change_set_entry: Option<Result<(), &str>>,
+        #[case] cup_subnet_splitting_status: SubnetSplittingStatus,
+        #[case] expected_validation_result: Result<(), InvalidArtifactReason>,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
@@ -5321,39 +5401,46 @@ pub mod test {
                 .expect_latest_state_height()
                 .return_const(Height::new(1000));
 
-            // Create, notarize, and finalize a block at the CUP height, but don't
-            // create a CUP.
-            pool.advance_round_normal_operation_no_cup_n(DKG_INTERVAL_LENGTH + 1);
+            // Advance to just below the summary height, without creating any CUP.
+            pool.advance_round_normal_operation_no_cup_n(DKG_INTERVAL_LENGTH);
 
-            let finalization = pool.validated().finalization().get_highest().unwrap();
-            let catch_up_package = pool.make_catch_up_package(finalization.height());
+            // Insert the random beacon of the summary height, which the CUP refers to.
+            let beacon = pool.make_next_beacon();
+            pool.insert_beacon_chain(&beacon, beacon.content.height);
+
+            // Notarize and finalize the summary block, carrying the subnet splitting status under
+            // test, but don't create a CUP for it.
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            let mut payload = block.payload.as_ref().as_summary().clone();
+            payload.dkg.subnet_splitting_status =
+                BackwardsCompatible::new_for_test_only(Some(cup_subnet_splitting_status));
+            block.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(payload),
+            );
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+
+            let catch_up_package = pool.make_catch_up_package(proposal.height());
             pool.insert_unvalidated(catch_up_package.clone());
 
             let pool_reader = PoolReader::new(&pool);
             let change_set = validator.validate_catch_up_packages(&pool_reader);
 
-            match expected_change_set_entry {
-                Some(Ok(())) => {
-                    assert_eq!(
-                        change_set,
-                        vec![ChangeAction::MoveToValidated(
-                            ConsensusMessage::CatchUpPackage(catch_up_package)
-                        )]
-                    );
-                }
-                Some(Err(err)) => {
-                    assert_eq!(
-                        change_set,
-                        vec![ChangeAction::HandleInvalid(
-                            ConsensusMessage::CatchUpPackage(catch_up_package),
-                            String::from(err),
-                        )]
-                    );
-                }
-                None => {
-                    assert_eq!(change_set, vec![]);
-                }
-            }
+            let expected_change_action = match expected_validation_result {
+                Ok(()) => ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackage(
+                    catch_up_package,
+                )),
+                Err(err) => ChangeAction::HandleInvalid(
+                    ConsensusMessage::CatchUpPackage(catch_up_package),
+                    format!("{err:?}"),
+                ),
+            };
+
+            assert_eq!(change_set, vec![expected_change_action]);
         })
     }
 }
