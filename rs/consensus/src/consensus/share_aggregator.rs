@@ -4,9 +4,9 @@
 //! Finalizations from finalization shares.
 use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
-    aggregate_with_threshold, crypto::ConsensusCrypto, get_current_transcript_from_summary_block,
-    membership::Membership, pool_reader::PoolReader, registry_version_at_height,
+    active_low_threshold_nidkg_id, aggregate, aggregate_with_threshold, crypto::ConsensusCrypto,
+    get_current_transcript_from_summary_block, membership::Membership, pool_reader::PoolReader,
+    registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
@@ -15,8 +15,7 @@ use ic_types::{
     Height,
     consensus::{
         Block, CatchUpContent, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable,
-        FinalizationContent, HasCommittee, HasHeight, RandomTapeContent,
-        catchup::CatchUpPackageType,
+        FinalizationContent, HasHeight, RandomTapeContent, catchup::CatchUpPackageType,
     },
     crypto::{Signed, threshold_sig::ni_dkg::NiDkgTag},
     replica_config::ReplicaConfig,
@@ -195,42 +194,27 @@ impl ShareAggregator {
         )
         .map_err(|err| format!("Failed to determine the cup type: {err}"))?;
 
-        let (threshold, dkg_id, block) = match cup_type {
-            CatchUpPackageType::Normal => {
-                let threshold = self
-                    .membership
-                    .get_committee_threshold(summary_block.height(), CatchUpPackage::committee())
-                    .map_err(|err| format!("Failed to get the committee threshold: {err:?}"))?;
-
-                let dkg_id =
-                    active_high_threshold_nidkg_id(pool.as_cache(), summary_block.height())
-                        .ok_or_else(|| String::from("Couldn't get the high dkg id"))?;
-
-                (threshold, dkg_id, summary_block)
-            }
+        let block = match cup_type {
+            CatchUpPackageType::Normal => summary_block,
             CatchUpPackageType::PostSplit { new_subnet_id } => {
-                let post_split_summary_block =
-                    catchup_package_maker::create_post_split_summary_block(
-                        &summary_block,
-                        new_subnet_id,
-                        self.registry.as_ref(),
-                    )
-                    .map_err(|err| format!("Failed to create a post-split summary block: {err}"))?;
-
-                let transcript = get_current_transcript_from_summary_block(
-                    &post_split_summary_block,
-                    &NiDkgTag::HighThreshold,
+                catchup_package_maker::create_post_split_summary_block(
+                    &summary_block,
+                    new_subnet_id,
+                    self.registry.as_ref(),
                 )
-                .ok_or_else(|| {
-                    String::from("Couldn't find the transcript in the post-split summary block")
-                })?;
-
-                let threshold = transcript.threshold.get().get() as usize;
-                let dkg_id = transcript.dkg_id.clone();
-
-                (threshold, dkg_id, post_split_summary_block)
+                .map_err(|err| format!("Failed to create a post-split summary block: {err}"))?
             }
         };
+
+        // The high-threshold current transcript of the CUP block's own summary defines both who
+        // signs a CUP and how many such signatures are needed, so we take everything from there
+        let transcript =
+            get_current_transcript_from_summary_block(&block, &NiDkgTag::HighThreshold)
+                .ok_or_else(|| {
+                    String::from("Couldn't find the high threshold transcript in the summary block")
+                })?;
+        let threshold = transcript.threshold.get().get() as usize;
+        let dkg_id = transcript.dkg_id.clone();
 
         let shares = pool
             .get_catch_up_package_shares(block.height())
@@ -239,8 +223,6 @@ impl ShareAggregator {
                 signature: share.signature,
             });
 
-        // Note that the committee of a post-split CUP is the one of a subnet which doesn't exist
-        // yet, so the threshold cannot be looked up in the `Membership`.
         let cups = aggregate_with_threshold(
             &self.log,
             self.crypto.as_aggregate(),
