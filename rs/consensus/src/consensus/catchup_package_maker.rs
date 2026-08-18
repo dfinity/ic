@@ -251,7 +251,7 @@ impl CatchUpPackageMaker {
         let state = self
             .state_manager
             .get_state_at(summary_height)
-            .map_err(|err| {
+            .inspect_err(|err| {
                 error!(
                     self.log,
                     "Cannot make CUP at height {summary_height}: `get_state_hash_at` \
@@ -394,7 +394,7 @@ pub(crate) fn create_post_split_summary_block(
     Ok(Block {
         version: splitting_summary_block.version.clone(),
         // Fake parent
-        parent: CryptoHashOf::from(CryptoHash(Vec::new())),
+        parent: CryptoHashOf::from(CryptoHash(vec![])),
         payload: Payload::new(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
@@ -429,7 +429,7 @@ pub(crate) fn create_post_split_random_beacon(cup_block: &Block) -> Result<Rando
         content: RandomBeaconContent {
             version: cup_block.version.clone(),
             height: cup_block.height(),
-            parent: CryptoHashOf::from(CryptoHash(Vec::new())),
+            parent: CryptoHashOf::from(CryptoHash(vec![])),
         },
         signature: ThresholdSignature {
             signer: transcript.dkg_id.clone(),

@@ -124,10 +124,13 @@ enum InvalidArtifactReason {
     MismatchedOldestRegistryVersionInCatchUpPackageShare,
     MismatchedStateHashInCatchUpPackageShare,
     MismatchedRandomBeaconInCatchUpPackageShare,
+    InvalidHeightInSplittingCatchUpPackageShare {
+        expected: Height,
+        received: Height,
+    },
     RepeatedSigner,
     ReplicaVersionMismatch,
     NotABlockmaker,
-    InvalidHeightInSplittingCatchUpPackageShare,
     InvalidSubnetIdInSplittingCatchUpPackage,
     RegistryVersionNotFrozenDuringSubnetSplitting {
         context_registry_version: RegistryVersion,
@@ -1779,11 +1782,8 @@ impl Validator {
             self.replica_config.node_id,
             &dkg_summary_block,
         )
-        .map_err(|err| {
-            ValidationFailure::CatchUpPackageTypeError(format!(
-                "Failed to determine the cup type: {err}"
-            ))
-        })? {
+        .map_err(ValidationFailure::CatchUpPackageTypeError)?
+        {
             CatchUpPackageType::PostSplit { new_subnet_id }
                 if dkg_summary.get_next_start_height() == share_height =>
             {
@@ -1805,7 +1805,11 @@ impl Validator {
             // We don't produce CUPs for the height at which a subnet splitting is happening.
             CatchUpPackageType::PostSplit { .. } if dkg_summary.height == share_height => {
                 return Err(
-                    InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare.into(),
+                    InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare {
+                        expected: dkg_summary.get_next_start_height(),
+                        received: share_height,
+                    }
+                    .into(),
                 );
             }
             // It could be that, in our view, the latest summary indicates a subnet-split but
@@ -5077,32 +5081,40 @@ pub mod test {
     #[case(NODE_2, None, Ok(()))]
     // after the split, nodes NODE_3 and NODE_4 will be on a different subnet than the validator
     // (NODE_1)
-    #[case::wrong_subnet(NODE_3, None, Err("MismatchedBlockInCatchUpPackageShare"))]
-    #[case::wrong_subnet(NODE_4, None, Err("MismatchedBlockInCatchUpPackageShare"))]
+    #[case::wrong_subnet(
+        NODE_3,
+        None,
+        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
+    )]
+    #[case::wrong_subnet(
+        NODE_4,
+        None,
+        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
+    )]
     #[case::wrong_state_hash(
         NODE_1,
         Some(MalformShare::StateHash),
-        Err("MismatchedStateHashInCatchUpPackageShare")
+        Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare)
     )]
     #[case::wrong_random_beacon(
         NODE_1,
         Some(MalformShare::RandomBeacon),
-        Err("MismatchedRandomBeaconInCatchUpPackageShare")
+        Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare)
     )]
     #[case::wrong_registry_version(
         NODE_1,
         Some(MalformShare::RegistryVersion),
-        Err("MismatchedOldestRegistryVersionInCatchUpPackageShare")
+        Err(InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare)
     )]
     #[case::wrong_height(
         NODE_1,
         Some(MalformShare::Height),
-        Err("InvalidHeightInSplittingCatchUpPackageShare")
+        Err(InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare { expected: Height::from(20), received: Height::from(10) })
     )]
     fn validate_post_split_cup_share_test(
         #[case] cup_share_node_id: NodeId,
         #[case] malform_share: Option<MalformShare>,
-        #[case] expected_validation_result: Result<(), &str>,
+        #[case] expected_validation_result: Result<(), InvalidArtifactReason>,
     ) {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -5242,25 +5254,17 @@ pub mod test {
                 let pool_reader = PoolReader::new(&pool);
                 let change_set = validator.validate_catch_up_package_shares(&pool_reader);
 
-                match expected_validation_result {
+                let expected_change_action = match expected_validation_result {
                     Ok(()) => {
-                        assert_eq!(
-                            change_set,
-                            vec![ChangeAction::MoveToValidated(
-                                ConsensusMessage::CatchUpPackageShare(share)
-                            )]
-                        );
+                        ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(share))
                     }
-                    Err(err) => {
-                        assert_eq!(
-                            change_set,
-                            vec![ChangeAction::HandleInvalid(
-                                ConsensusMessage::CatchUpPackageShare(share),
-                                String::from(err),
-                            )]
-                        );
-                    }
-                }
+                    Err(err) => ChangeAction::HandleInvalid(
+                        ConsensusMessage::CatchUpPackageShare(share),
+                        format!("{err:?}"),
+                    ),
+                };
+
+                assert_eq!(change_set, vec![expected_change_action]);
             })
         })
     }
