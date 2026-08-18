@@ -106,9 +106,10 @@ pub(crate) enum TipRequest {
     },
     /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
     ///
-    /// Canisters deleted during execution are removed from tip via
-    /// `UnflushedCheckpointOp::DeleteCanister`, so this only needs to catch canisters
-    /// dropped without a corresponding operation, i.e. during subnet splitting.
+    /// Canisters deleted during execution and canisters dropped by an online subnet
+    /// split are removed from tip via `UnflushedCheckpointOp::DeleteCanister`, so this
+    /// is only a safety net for canisters that disappeared from the state without a
+    /// corresponding operation.
     ///
     /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
