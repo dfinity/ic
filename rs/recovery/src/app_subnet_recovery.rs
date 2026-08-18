@@ -522,8 +522,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             ))),
 
             StepType::ValidateReplayOutput => Ok(Box::new(
+                // `ic-replay` always delivers one extra batch at the end, to
+                // create the checkpoint that is uploaded below; the replayed
+                // height is therefore one above the subnet's.
                 self.recovery
-                    .get_validate_replay_step(self.params.subnet_id, 0),
+                    .get_validate_replay_step(self.params.subnet_id, 1),
             )),
 
             StepType::UploadState => {

@@ -118,6 +118,59 @@ fn charging_happens_on_average_once_every_charge_interval_rounds() {
     assert_eq!(num_charges, NUM_ROUNDS / CHARGE_INTERVAL_ROUNDS);
 }
 
+/// The round type is observable in the canisters' cycle state: on a round that is
+/// not a multiple of `CHARGE_INTERVAL_ROUNDS`, a `CheckpointRound` charges for
+/// resource allocation while an `OrdinaryRound` does not.
+///
+/// This is why `requires_full_state_hash` -- which selects the round type -- must
+/// be derived from the block alone and never from how far a caller chose to
+/// deliver batches (see `deliver_batches()` in `ic_consensus`). Replaying a round
+/// with the wrong round type produces a state that differs from the one the
+/// subnet computed for that same height.
+#[test]
+fn round_type_decides_whether_a_non_charging_round_charges() {
+    // A round on which charging is not otherwise due.
+    const ROUND: u64 = CHARGE_INTERVAL_ROUNDS + 1;
+    assert!(!ROUND.is_multiple_of(CHARGE_INTERVAL_ROUNDS));
+
+    let mut test = SchedulerTestBuilder::new().build();
+
+    // Charging handles time=0 as a special case, so it should be set to some
+    // non-zero time.
+    let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
+    test.set_time(initial_time);
+
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+    );
+
+    // Enough time has passed that a charge is due whenever charging is attempted.
+    test.advance_time(test.duration_between_allocation_charges());
+
+    // An ordinary round at `ROUND` does not charge...
+    let balance_before = test.canister_state(canister).system_state.balance();
+    test.advance_to_round(ExecutionRound::new(ROUND));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.canister_state(canister).system_state.balance(),
+        balance_before,
+        "an ordinary round charged for resource allocation"
+    );
+
+    // ...while a checkpoint round at the very same round does.
+    test.advance_to_round(ExecutionRound::new(ROUND));
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    assert!(
+        test.canister_state(canister).system_state.balance() < balance_before,
+        "a checkpoint round did not charge for resource allocation"
+    );
+}
+
 #[test]
 fn charging_for_message_memory_works() {
     let mut test = SchedulerTestBuilder::new()

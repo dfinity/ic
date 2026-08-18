@@ -449,7 +449,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
             StepType::ValidateReplayOutput => Ok(Box::new(self.recovery.get_validate_replay_step(
                 self.params.subnet_id,
-                u64::from(self.params.upgrade_version.is_some()),
+                // `ic-replay` always delivers one extra batch at the end, to create
+                // the checkpoint that is uploaded below, on top of the one delivered
+                // to update the registry local store during an upgrade.
+                1 + u64::from(self.params.upgrade_version.is_some()),
             ))),
 
             StepType::UpdateRegistryLocalStore => {

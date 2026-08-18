@@ -219,10 +219,15 @@ pub(crate) fn deliver_batches_with_result_processor(
         };
         let (consensus_responses, canister_http_spent) =
             generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
-        // This flag can only be true, if we've called deliver_batches with a height
-        // limit.  In this case we also want to have a checkpoint for that last height.
-        let persist_batch = Some(height) == max_batch_height_to_deliver;
-        let requires_full_state_hash = block.payload.is_summary() || persist_batch;
+        // Must be derived from the block alone, never from how far the caller chose
+        // to deliver: this flag also selects `ExecutionRoundType::CheckpointRound`
+        // (see `StateMachineImpl::execute_round`), which changes execution -- it
+        // forces resource allocation charging and aborts *all* paused executions.
+        // Deriving it from `max_batch_height_to_deliver` would make the last
+        // replayed round diverge from the round the subnet actually executed at
+        // that height. `ic-replay` creates the checkpoint it needs by delivering an
+        // extra batch instead, see `Player::deliver_extra_batch`.
+        let requires_full_state_hash = block.payload.is_summary();
         let batch_content = match block.payload.as_ref() {
             BlockPayload::Summary(_summary_payload) => BatchContent::Data {
                 batch_messages: BatchMessages::default(),
@@ -577,10 +582,13 @@ mod tests {
     //! Finalizer unit tests
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_remote_dkgs;
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
-    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
@@ -600,6 +608,54 @@ mod tests {
     use std::str::FromStr;
 
     const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
+
+    /// `requires_full_state_hash` selects `ExecutionRoundType::CheckpointRound`,
+    /// which changes execution. It must therefore depend only on the block, so
+    /// that a caller bounding the delivery (i.e. `ic-replay`) still executes each
+    /// round exactly the way the subnet executed it.
+    #[test]
+    fn requires_full_state_hash_ignores_max_batch_height_to_deliver() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval_length = 9;
+            let node_ids = [node_test_id(0)];
+            let record = SubnetRecordBuilder::from(&node_ids)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
+            let subnet_id = subnet_test_id(0);
+            let Dependencies {
+                registry, mut pool, ..
+            } = DependenciesBuilder::single_subnet(pool_config, subnet_id, vec![(1, record)])
+                .build();
+
+            // Summary blocks are at heights 0, 10, ...; finalize a few rounds and
+            // stop short of the next summary height.
+            let target_height = Height::from(5);
+            pool.advance_round_normal_operation_n(target_height.get());
+
+            let membership = Membership::new(pool.get_cache(), registry.clone(), subnet_id);
+            let message_routing = FakeMessageRouting::new();
+
+            let last_delivered = deliver_batches(
+                &message_routing,
+                &membership,
+                &PoolReader::new(&pool),
+                registry.as_ref(),
+                subnet_id,
+                &no_op_logger(),
+                Some(target_height),
+            )
+            .expect("failed to deliver batches");
+            assert_eq!(last_delivered, target_height);
+
+            let batches = message_routing.batches.read().unwrap();
+            let last_batch = batches.last().expect("no batch was delivered");
+            assert_eq!(last_batch.batch_number, target_height);
+            assert!(
+                !last_batch.requires_full_state_hash(),
+                "the batch at the delivery bound must not be a checkpoint round"
+            );
+        })
+    }
 
     const EXPECTED_FRESH_SUBNET_ID_STR: &str =
         "icdrs-3sfmz-hm6r3-cdzf5-cfroa-3cddh-aght7-azz25-eo34b-4strl-wae";
