@@ -4,8 +4,11 @@ use ic_types::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
 };
 use ic_types::signature::ThresholdSignature;
-use ic_types::{Height, crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet}, ReplicaVersion};
-use ic_types_test_utils::ids::{subnet_test_id};
+use ic_types::{
+    Height, ReplicaVersion,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+};
+use ic_types_test_utils::ids::subnet_test_id;
 use std::collections::BTreeSet;
 use strum::{EnumCount, IntoEnumIterator};
 
