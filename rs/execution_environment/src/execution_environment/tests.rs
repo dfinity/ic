@@ -1,4 +1,5 @@
 use crate::units::GIB as ONE_GIB;
+use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
@@ -39,8 +40,8 @@ use ic_types::{
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterTask, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
-        RequestOrResponse, Response,
+        CallbackId, CanisterTask, MAX_RESPONSE_COUNT_BYTES, MessageId, NO_DEADLINE, Payload,
+        RejectContext, RequestOrResponse, Response,
     },
     time::UNIX_EPOCH,
 };
@@ -6287,91 +6288,177 @@ fn paused_execution_fails_to_resume_after_cycles_decrease(
     );
 }
 
+/// A canister that is about to start a long-running execution: the first slice
+/// of that execution exceeds the slice instruction limit and hence pauses.
+///
+/// Shared by the tests that decrease and increase the cycles balance of the
+/// canister while its execution is paused.
+struct LongRunningExecution {
+    test: ExecutionTest,
+    /// The canister whose long-running execution pauses.
+    canister_id: CanisterId,
+    /// The ingress message whose status reflects the outcome of the long-running
+    /// execution; `None` for canister tasks, which have no ingress status.
+    ingress_id: Option<MessageId>,
+}
+
+/// Sets up a long-running update call, or a long-running replicated query if
+/// `replicated_query` is set.
+fn long_running_call(replicated_query: bool) -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(200_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .instruction_counter_is_at_least(200_000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let method = if replicated_query { "query" } else { "update" };
+    let (ingress_id, _) = test.ingress_raw(a_id, method, a);
+
+    LongRunningExecution {
+        test,
+        canister_id: a_id,
+        ingress_id: Some(ingress_id),
+    }
+}
+
+/// Sets up a long-running response callback, or a long-running cleanup callback
+/// if `cleanup` is set. In the latter case the response callback traps, so that
+/// the long-running callback is the cleanup one.
+fn long_running_callback(cleanup: bool) -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let long_execution = wasm()
+        .instruction_counter_is_at_least(1_000_000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+    let call_args = if cleanup {
+        call_args()
+            .other_side(b)
+            .on_reply(wasm().trap())
+            .on_cleanup(long_execution)
+    } else {
+        call_args().other_side(b).on_reply(long_execution)
+    };
+    let a = wasm().call_simple(b_id, "update", call_args).build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B, which replies.
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    LongRunningExecution {
+        test,
+        canister_id: a_id,
+        ingress_id: Some(ingress_id),
+    }
+}
+
+/// Sets up a long-running canister task: the heartbeat. It grows the stable
+/// memory before the execution is paused, so that its state changes can be
+/// checked to be either dropped or kept, depending on whether resuming the
+/// execution fails or succeeds.
+fn long_running_heartbeat() -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let (ingress_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm()
+            .set_heartbeat(
+                wasm()
+                    .stable_grow(1)
+                    .instruction_counter_is_at_least(1_000_000)
+                    .build(),
+            )
+            .reply()
+            .build(),
+    );
+    test.execute_message(canister_id);
+    check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .task_queue
+        .enqueue(ExecutionTask::Heartbeat);
+
+    LongRunningExecution {
+        test,
+        canister_id,
+        ingress_id: None,
+    }
+}
+
 /// Every kind of paused execution re-creates its helper from the current clean
 /// canister state when it is resumed, so it relies on the cycles balance of that
-/// state not changing while the execution is paused. This test covers all of
+/// state not decreasing while the execution is paused. This test covers all of
 /// them: update calls, replicated queries, response callbacks, cleanup
 /// callbacks, and canister tasks (heartbeat). The `install_code` case is covered
 /// by `dts_install_code_resume_fails_due_to_cycles_decrease`.
 #[test]
 fn dts_resume_fails_due_to_cycles_decrease() {
     // 1. Update calls and replicated queries.
-    for method in ["update", "query"] {
-        let mut test = ExecutionTestBuilder::new()
-            .with_instruction_limit(1_000_000)
-            .with_slice_instruction_limit(200_000)
-            .with_manual_execution()
-            .build();
+    for replicated_query in [false, true] {
+        let LongRunningExecution {
+            mut test,
+            canister_id,
+            ingress_id,
+        } = long_running_call(replicated_query);
 
-        let a_id = test.universal_canister().unwrap();
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
 
-        let a = wasm()
-            .instruction_counter_is_at_least(200_000)
-            .message_payload()
-            .append_and_reply()
-            .build();
-
-        let (ingress_id, _) = test.ingress_raw(a_id, method, a);
-
-        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, a_id);
-
-        let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-        let message = if method == "update" {
-            "an update call"
-        } else {
+        let err = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap_err();
+        let message = if replicated_query {
             "a replicated query"
+        } else {
+            "an update call"
         };
         err.assert_contains(
             ErrorCode::CanisterWasmEngineError,
             &format!(
-                "Error from Canister {a_id}: Canister encountered a Wasm engine error: \
+                "Error from Canister {canister_id}: Canister encountered a Wasm engine error: \
                  Failed to apply system changes: Mismatch in cycles \
                  balance when resuming {message}"
             ),
         );
     }
 
-    // 2. Response and cleanup callbacks. The response callback traps in the
-    //    cleanup case, so that the long-running callback is the cleanup one.
+    // 2. Response and cleanup callbacks.
     for cleanup in [false, true] {
-        let mut test = ExecutionTestBuilder::new()
-            .with_instruction_limit(100_000_000)
-            .with_slice_instruction_limit(1_000_000)
-            .with_manual_execution()
-            .build();
+        let LongRunningExecution {
+            mut test,
+            canister_id,
+            ingress_id,
+        } = long_running_callback(cleanup);
 
-        let a_id = test.universal_canister().unwrap();
-        let b_id = test.universal_canister().unwrap();
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
 
-        let b = wasm().message_payload().append_and_reply().build();
-
-        let long_execution = wasm()
-            .instruction_counter_is_at_least(1_000_000)
-            .message_payload()
-            .append_and_reply()
-            .build();
-        let call_args = if cleanup {
-            call_args()
-                .other_side(b)
-                .on_reply(wasm().trap())
-                .on_cleanup(long_execution)
-        } else {
-            call_args().other_side(b).on_reply(long_execution)
-        };
-        let a = wasm().call_simple(b_id, "update", call_args).build();
-
-        let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
-
-        // Canister A calls canister B, which replies.
-        test.execute_message(a_id);
-        test.induct_messages();
-        test.execute_message(b_id);
-        test.induct_messages();
-
-        // Start executing the response|cleanup callback.
-        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, a_id);
-
-        let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+        let err = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap_err();
         let code = if cleanup {
             // The error of the trapping response callback takes precedence.
             ErrorCode::CanisterCalledTrap
@@ -6390,38 +6477,13 @@ fn dts_resume_fails_due_to_cycles_decrease() {
 
     // 3. Canister tasks, e.g. the heartbeat.
     {
-        let mut test = ExecutionTestBuilder::new()
-            .with_instruction_limit(100_000_000)
-            .with_slice_instruction_limit(1_000_000)
-            .with_manual_execution()
-            .build();
-
-        let canister_id = test.universal_canister().unwrap();
-        let (ingress_id, _) = test.ingress_raw(
+        let LongRunningExecution {
+            mut test,
             canister_id,
-            "update",
-            wasm()
-                .set_heartbeat(
-                    // The stable memory is grown before the execution is paused
-                    // so that the resume can be checked to drop that change.
-                    wasm()
-                        .stable_grow(1)
-                        .instruction_counter_is_at_least(1_000_000)
-                        .build(),
-                )
-                .reply()
-                .build(),
-        );
-        test.execute_message(canister_id);
-        check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+            ..
+        } = long_running_heartbeat();
         let stable_memory_size = test.execution_state(canister_id).stable_memory.size;
 
-        test.canister_state_mut(canister_id)
-            .system_state
-            .task_queue
-            .enqueue(ExecutionTask::Heartbeat);
-
-        // Start executing the heartbeat.
         paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
 
         // A canister task has no ingress status and the failure is not recorded
@@ -6431,5 +6493,146 @@ fn dts_resume_fails_due_to_cycles_decrease() {
             test.execution_state(canister_id).stable_memory.size,
             stable_memory_size
         );
+    }
+}
+
+/// The cycles added to the cycles balance of a canister while its execution is
+/// paused.
+const CYCLES_ADDED_WHILE_PAUSED: Cycles = Cycles::new(1_234_567_890);
+
+/// Executes the first slice of the next execution of the given canister, which
+/// must pause, then adds `CYCLES_ADDED_WHILE_PAUSED` to the cycles balance of
+/// that canister if `add_cycles` is set, and finally executes all the remaining
+/// slices of that execution.
+///
+/// Asserts that resuming the paused execution did not fail: a failed resume
+/// aborts the paused Wasm execution without executing any further instructions,
+/// so the instructions executed by the remaining slices witness that the Wasm
+/// execution was resumed.
+///
+/// Returns the cycles balance of the canister after the execution has finished.
+fn paused_execution_resumes_after_cycles_increase(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    add_cycles: bool,
+) -> Cycles {
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    let executed_instructions_when_paused = test.canister_executed_instructions(canister_id);
+
+    if add_cycles {
+        test.canister_state_mut(canister_id)
+            .system_state
+            .add_cycles(CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
+        test.execute_slice(canister_id);
+    }
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+    assert_gt!(
+        test.canister_executed_instructions(canister_id),
+        executed_instructions_when_paused
+    );
+
+    test.canister_state(canister_id).system_state.balance()
+}
+
+/// Counterpart of `dts_resume_fails_due_to_cycles_decrease`: while resuming a
+/// paused execution fails if the cycles balance of the canister decreased in the
+/// meantime, an increase of that balance is tolerated and the additional cycles
+/// are not lost when the execution completes. This test covers the same kinds of
+/// paused executions; the `install_code` case is covered by
+/// `dts_install_code_resume_succeeds_after_cycles_increase`.
+///
+/// Every scenario is executed twice, once without adding any cycles and once
+/// with adding `CYCLES_ADDED_WHILE_PAUSED` while the execution is paused. The
+/// two runs are identical otherwise, so the final cycles balances must differ by
+/// exactly the added cycles.
+#[test]
+fn dts_resume_succeeds_after_cycles_increase() {
+    // 1. Update calls and replicated queries.
+    for replicated_query in [false, true] {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ingress_id,
+            } = long_running_call(replicated_query);
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            // The execution completed successfully.
+            let result = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap();
+            assert_matches!(result, WasmResult::Reply(_));
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    // 2. Response and cleanup callbacks.
+    for cleanup in [false, true] {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ingress_id,
+            } = long_running_callback(cleanup);
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            let status = check_ingress_status(test.ingress_status(&ingress_id.unwrap()));
+            if cleanup {
+                // The response callback traps, but the cleanup callback resumed
+                // and completed successfully.
+                let err = status.unwrap_err();
+                assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+            } else {
+                assert_matches!(status.unwrap(), WasmResult::Reply(_));
+            }
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    // 3. Canister tasks, e.g. the heartbeat.
+    {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ..
+            } = long_running_heartbeat();
+            let stable_memory_size = test.execution_state(canister_id).stable_memory.size;
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            // A canister task has no ingress status, but the state changes of
+            // the heartbeat must have been kept.
+            assert_gt!(
+                test.execution_state(canister_id).stable_memory.size,
+                stable_memory_size
+            );
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
     }
 }
