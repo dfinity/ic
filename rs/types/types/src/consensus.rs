@@ -1774,7 +1774,7 @@ impl ConsensusMessageHashable for EquivocationProof {
 /// upgrade permit authorization share.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct UpgradePermitAuthorizationContent {
-    pub node: NodeId,
+    pub requestor_node: NodeId,
     pub request_height: Height,
 }
 
@@ -1805,7 +1805,7 @@ impl PbArtifact for UpgradePermitAuthorizationShare {
 impl From<UpgradePermitAuthorizationContent> for pb::UpgradePermitAuthShareContent {
     fn from(content: UpgradePermitAuthorizationContent) -> Self {
         pb::UpgradePermitAuthShareContent {
-            node: Some(node_id_into_protobuf(content.node)),
+            node: Some(node_id_into_protobuf(content.requestor_node)),
             request_height: content.request_height.get(),
         }
     }
@@ -1816,7 +1816,7 @@ impl TryFrom<pb::UpgradePermitAuthShareContent> for UpgradePermitAuthorizationCo
 
     fn try_from(content: pb::UpgradePermitAuthShareContent) -> Result<Self, Self::Error> {
         Ok(UpgradePermitAuthorizationContent {
-            node: node_id_try_from_option(content.node)?,
+            requestor_node: node_id_try_from_option(content.node)?,
             request_height: Height::from(content.request_height),
         })
     }

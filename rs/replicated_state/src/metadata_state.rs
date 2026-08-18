@@ -83,7 +83,7 @@ impl UpgradeState {
         for action in actions {
             match action {
                 UpgradePermitAction::Request {
-                    node,
+                    requestor_node: node,
                     request_height,
                 } => {
                     self.requested.insert(*node, *request_height);
@@ -110,37 +110,21 @@ impl UpgradeState {
 
     /// Reboot slots held by staying members; leaving members are
     /// accounted through the capacity reduction instead.
-    pub fn active_slots_in_use(&self, staying: &BTreeSet<NodeId>) -> usize {
-        self.requested
-            .keys()
-            .filter(|node| staying.contains(*node))
-            .count()
-            + self
-                .authorized
-                .iter()
-                .filter(|node| staying.contains(node))
-                .count()
+    /// Total reboot slots held, by staying and leaving members alike.
+    pub fn slots_in_use(&self) -> usize {
+        self.requested.len() + self.authorized.len()
     }
 
-    /// Active slots after applying the given block actions at `height`.
-    // TODO: move this to payload_builder
-    pub fn active_slots_after(
+    /// Slots in use after applying the given block actions at `height`.
+    pub fn slots_in_use_after(
         &self,
         actions: &[UpgradePermitAction],
         height: Height,
-        staying: &BTreeSet<NodeId>,
         current_members: &BTreeSet<NodeId>,
     ) -> usize {
         let mut next = self.clone();
         next.apply(actions, height, current_members);
-        next.active_slots_in_use(staying)
-    }
-
-    /// Max parallel reboots (P): min(3, ceil((N−1)/6)), clamped to f.
-    pub fn max_parallel_reboots(num_members: usize) -> usize {
-        let f = ic_types::consensus::get_faults_tolerated(num_members);
-        let p = (num_members.max(1) - 1 + 5) / 6;
-        p.min(f).min(3)
+        next.slots_in_use()
     }
 }
 

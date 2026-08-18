@@ -120,18 +120,18 @@ impl UpgradePermitAuthPoolManager {
             }
             for action in actions {
                 let UpgradePermitAction::Request {
-                    node,
+                    requestor_node,
                     request_height,
                 } = action
                 else {
                     continue;
                 };
-                let key = (node, request_height);
+                let key = (requestor_node, request_height);
                 if signed.contains(&key) {
                     continue;
                 }
                 let content = UpgradePermitAuthorizationContent {
-                    node,
+                    requestor_node,
                     request_height,
                 };
                 let registry_version = block.context.registry_version;
@@ -141,7 +141,7 @@ impl UpgradePermitAuthPoolManager {
                         info!(
                             self.logger,
                             "permit_auth: signed share for node {:?} at height {:?}",
-                            node,
+                            requestor_node,
                             request_height
                         );
                         change_set.push(UpgradePermitAuthChangeAction::AddToValidated(
@@ -151,7 +151,7 @@ impl UpgradePermitAuthPoolManager {
                     Err(e) => {
                         warn!(
                             self.logger,
-                            "permit_auth: failed to sign share for node {:?}: {:?}", node, e
+                            "permit_auth: failed to sign share for node {:?}: {:?}", requestor_node, e
                         );
                     }
                 }
@@ -187,7 +187,7 @@ impl UpgradePermitAuthPoolManager {
             let membership = self.block_membership(block);
             match validate_share(
                 &share,
-                share.content.node,
+                share.content.requestor_node,
                 share.content.request_height,
                 &membership.staying_members,
                 block.context.registry_version,

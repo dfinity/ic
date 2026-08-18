@@ -28,7 +28,7 @@ pub enum UpgradePermitAction {
     /// `request_height` is the height of the block containing this request,
     /// used for timeout tracking.
     Request {
-        node: NodeId,
+        requestor_node: NodeId,
         request_height: Height,
     },
     /// Authorize a node to reboot — includes the collected signature shares.

@@ -41,7 +41,7 @@ pub fn bytes_to_upgrade_payload(data: &[u8]) -> Result<Vec<UpgradePermitAction>,
 impl From<UpgradePermitAction> for UpgradePayloadContentProto {
     fn from(action: UpgradePermitAction) -> Self {
         let proto_content = match action {
-            UpgradePermitAction::Request { node, request_height } => {
+            UpgradePermitAction::Request { requestor_node: node, request_height } => {
                 UpgradePayloadContentProtoContent::Request(
                     ic_protobuf::types::v1::UpgradePayloadRequestProto {
                         node: Some(crate::node_id_into_protobuf(node)),
@@ -84,7 +84,7 @@ impl TryFrom<UpgradePayloadContentProto> for UpgradePermitAction {
         ))?;
         Ok(match content {
             UpgradePayloadContentProtoContent::Request(request) => UpgradePermitAction::Request {
-                node: crate::node_id_try_from_option(request.node)?,
+                requestor_node: crate::node_id_try_from_option(request.node)?,
                 request_height: Height::new(request.request_height),
             },
             UpgradePayloadContentProtoContent::Authorize(authorize) => {
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn test_round_trip_request() {
         let actions = vec![UpgradePermitAction::Request {
-            node: node(3),
+            requestor_node: node(3),
             request_height: Height::new(42),
         }];
         let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
@@ -159,7 +159,7 @@ mod tests {
     fn test_round_trip_multiple_actions() {
         let actions = vec![
             UpgradePermitAction::Request {
-                node: node(1),
+                requestor_node: node(1),
                 request_height: Height::new(10),
             },
             UpgradePermitAction::Authorize(crate::consensus::upgrade::UpgradePermitShares {

@@ -14,7 +14,6 @@ use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::upgrade::InvalidUpgradePayloadReason;
 use ic_logger::{ReplicaLogger, warn};
-use ic_replicated_state::metadata_state::UpgradeState;
 use ic_types::consensus::UpgradePermitAuthorizationShare;
 use ic_types::{Height, NodeId, RegistryVersion};
 use std::collections::BTreeSet;
@@ -36,25 +35,33 @@ impl SubnetMembership {
     pub fn staying(&self, node: &NodeId) -> bool {
         self.staying_members.contains(node)
     }
-
-    /// Reboot capacity and share threshold. Leaving members reduce the
-    /// capacity (never below one); the threshold uses the unadjusted P.
-    pub fn limits(&self) -> PermitLimits {
-        let subnet_size = self.current_members.len();
-        let leaving = self.current_members.len() - self.staying_members.len();
-        let max_parallel_reboots = UpgradeState::max_parallel_reboots(subnet_size);
-        PermitLimits {
-            max_parallel_reboots: max_parallel_reboots.saturating_sub(leaving).max(1),
-            authorization_threshold: subnet_size.saturating_sub(max_parallel_reboots),
-        }
-    }
 }
 
 pub struct PermitLimits {
-    /// The maximum number of nodes that may reboot in parallel (P ≤ f).
-    pub max_parallel_reboots: usize,
+    /// Max concurrent reboots.
+    pub reboot_capacity: usize,
     /// The number of distinct shares required to authorize a reboot (N−P).
     pub authorization_threshold: usize,
+}
+
+/// The permit limits for a membership:
+///
+/// * `P` — the subnet's parallel-reboot bound, min(3, ceil((N−1)/6), f);
+/// * `reboot_capacity` — concurrent reboots actually allowed: P minus one
+///   per leaving member (it could go down at any minute, rebooting or
+///   not), with one slot always available;
+/// * `authorization_threshold` — distinct staying signers confirming a
+///   reboot: N − P.
+pub fn permit_limits(membership: &SubnetMembership) -> PermitLimits {
+    let n = membership.current_members.len();
+    let f = ic_types::consensus::get_faults_tolerated(n);
+    let p = (n - 1).div_ceil(6).min(f).min(3);
+    let leaving = membership.current_members.len() - membership.staying_members.len();
+    PermitLimits {
+        // TODO: should we always allow min 1 node?
+        reboot_capacity: p.saturating_sub(leaving).max(1),
+        authorization_threshold: n.saturating_sub(p),
+    }
 }
 
 /// Subnet membership at the block height and registry version.
@@ -101,7 +108,7 @@ pub fn validate_share(
     crypto: &dyn ConsensusCrypto,
 ) -> Result<NodeId, InvalidUpgradePayloadReason> {
     let signer = share.signature.signer;
-    if share.content.node != requestor_node || share.content.request_height != request_height {
+    if share.content.requestor_node != requestor_node || share.content.request_height != request_height {
         return Err(InvalidUpgradePayloadReason::AuthorizeInvalidShare { signer });
     }
     if !staying.contains(&signer) {

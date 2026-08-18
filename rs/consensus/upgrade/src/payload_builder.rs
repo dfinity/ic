@@ -3,7 +3,7 @@
 //! the share signer (membership views, share validation) is in the crate
 //! root.
 
-use crate::{subnet_membership, validate_share};
+use crate::{permit_limits, subnet_membership, validate_share};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext};
@@ -92,7 +92,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             context.registry_version,
             &self.logger,
         );
-        let limits = membership.limits();
+        let limits = permit_limits(&membership);
         let needs_reboot =
             self.platform_version.guestos_version != self.platform_version.binary_version;
         let upgrade_state =
@@ -104,18 +104,17 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             actions.push(UpgradePermitAction::Return { node: self.node_id });
         }
 
-        let request_fits = upgrade_state.active_slots_after(
+        let request_fits = upgrade_state.slots_in_use_after(
             &[UpgradePermitAction::Request {
-                node: self.node_id,
+                requestor_node: self.node_id,
                 request_height: height,
             }],
             height,
-            &membership.staying_members,
             &membership.current_members,
-        ) <= limits.max_parallel_reboots;
+        ) <= limits.reboot_capacity;
         if needs_reboot && !upgrade_state.authorized.contains(&self.node_id) && request_fits {
             actions.push(UpgradePermitAction::Request {
-                node: self.node_id,
+                requestor_node: self.node_id,
                 request_height: height,
             });
         }
@@ -126,8 +125,13 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         {
             let pool = self.pool.read().unwrap();
             for share in pool.get_validated_shares() {
+                // Perhaps a node signed a permit before it knew that it was
+                // going to leave, ignore its permit.
+                if !membership.staying(&share.signature.signer) {
+                    continue;
+                }
                 collected
-                    .entry((share.content.node, share.content.request_height))
+                    .entry((share.content.requestor_node, share.content.request_height))
                     .or_default()
                     .push(share.clone());
             }
@@ -165,13 +169,13 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
         let registry_version = proposal_context.validation_context.registry_version;
         let membership =
             subnet_membership(&self.membership, height, registry_version, &self.logger);
-        let limits = membership.limits();
+        let limits = permit_limits(&membership);
         let upgrade_state =
             self.upgrade_state_at(past_payloads, &membership.current_members, height);
 
         for action in &actions {
             match action {
-                UpgradePermitAction::Request { node, .. } => {
+                UpgradePermitAction::Request { requestor_node: node, .. } => {
                     if *node != proposal_context.proposer {
                         return Err(invalid_upgrade(
                             InvalidUpgradePayloadReason::RequestNodeMismatch {
@@ -182,17 +186,16 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                     }
                     // Capacity binds at request time; authorizations are
                     // slot-neutral.
-                    let slots_in_use = upgrade_state.active_slots_after(
+                    let slots_in_use = upgrade_state.slots_in_use_after(
                         &actions,
                         height,
-                        &membership.staying_members,
                         &membership.current_members,
                     );
-                    if slots_in_use > limits.max_parallel_reboots {
+                    if slots_in_use > limits.reboot_capacity {
                         return Err(invalid_upgrade(
                             InvalidUpgradePayloadReason::SlotsExhausted {
                                 slots_in_use,
-                                capacity: limits.max_parallel_reboots,
+                                capacity: limits.reboot_capacity,
                             },
                         ));
                     }
