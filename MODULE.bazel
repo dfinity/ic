@@ -62,15 +62,23 @@ bazel_dep(name = "pigz", version = "2.8.bcr.1")  # (parallel) gzip
 bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
 
 # QEMU, for the local system test backend. We only use the prebuilt (hermetic)
-# qemu binaries; calling qemu is handled by the system test driver.
+# qemu binaries; calling qemu is handled by the system test driver. The binaries
+# are referenced through the public `@rules_qemu//qemu:*` labels (see
+# rs/tests/system_tests.bzl), which need no `use_extension`/`use_repo` here.
 bazel_dep(name = "rules_qemu", version = "0.3.0")
 
-qemu = use_extension("@rules_qemu//qemu/extension:qemu.bzl", "qemu")
-use_repo(
-    qemu,
-    "qemu_img_prebuilt_linux_amd64",
-    "qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu",
-    "qemu_system_data_prebuilt_linux_amd64",
+# Those public labels don't exist in 0.3.0 yet: the prebuilts were only reachable
+# through toolchain resolution, so we had to `use_repo()` the extension's internal
+# repositories, which made every build warn about "incorrect imports of
+# repositories via use_repo()" (and `bazel mod tidy` "fixed" that by deleting the
+# imports the build needs). Drop this override once the PR below is released.
+# https://github.com/hermeticbuild/rules_qemu/pull/7
+archive_override(
+    module_name = "rules_qemu",
+    sha256 = "e3e0f3f5d071bdc74dad6b39859149fe13bada11e4fb4aac1d91e0f75823702a",
+    strip_prefix = "rules_qemu-92ae3a079e886c1d9c26a3670465758d5242d35f",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/hermeticbuild/rules_qemu/tar.gz/92ae3a079e886c1d9c26a3670465758d5242d35f"],
 )
 
 # Rust
