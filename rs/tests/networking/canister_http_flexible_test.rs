@@ -150,17 +150,43 @@ fn app_runtime_on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> Runtim
     get_runtime_from_node(&node)
 }
 
+/// The principal of the proxy canister on the application subnet running on
+/// `schedule`.
+fn proxy_principal_on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> PrincipalId {
+    match schedule {
+        CanisterCyclesCostSchedule::Free => get_proxy_canister_id(env),
+        CanisterCyclesCostSchedule::Normal => get_paying_proxy_canister_id(env),
+    }
+}
+
 /// Returns the proxy canister on the application subnet running on `schedule`.
 fn proxy_canister_on<'a>(
     env: &TestEnv,
     runtime: &'a Runtime,
     schedule: CanisterCyclesCostSchedule,
 ) -> Canister<'a> {
-    let principal_id = match schedule {
-        CanisterCyclesCostSchedule::Free => get_proxy_canister_id(env),
-        CanisterCyclesCostSchedule::Normal => get_paying_proxy_canister_id(env),
-    };
+    let principal_id = proxy_principal_on(env, schedule);
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+
+/// Points a transform that names the default proxy canister at the proxy the
+/// scenario is actually running against.
+///
+/// A transform has to be a method on the calling canister, and each application
+/// subnet has its own proxy. Scenarios name their own canister with
+/// [`proxy_principal`], so exactly those are retargeted; one that names a different
+/// principal on purpose — see `test_reject_invalid_transform_principal` — is left
+/// alone, which is what keeps it a negative test.
+fn retarget_transform(
+    args: &mut FlexibleCanisterHttpRequestArgs,
+    env: &TestEnv,
+    proxy: PrincipalId,
+) {
+    if let Some(transform) = args.transform.as_mut()
+        && transform.function.0.principal == proxy_principal(env)
+    {
+        transform.function.0.principal = proxy.0;
+    }
 }
 
 /// Returns a runtime for the (single) system-subnet node.
@@ -288,6 +314,7 @@ fn run_flexible_test_on<M, A>(
     let logger = env.logger();
     let runtime = app_runtime_on(env, schedule);
     let proxy = proxy_canister_on(env, &runtime, schedule);
+    let proxy_id = proxy_principal_on(env, schedule);
     let description = format!("{description} (on a {schedule:?} cost schedule)");
 
     block_on(async {
@@ -297,7 +324,8 @@ fn run_flexible_test_on<M, A>(
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                let args = make_args(env);
+                let mut args = make_args(env);
+                retarget_transform(&mut args, env, proxy_id);
                 let result = send_flexible(&proxy, args, cycles).await?;
                 assert_result(result)
             }
