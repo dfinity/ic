@@ -371,11 +371,7 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
-            // Unlike the management canister instruction costs above, this is kept
-            // non-zero on system subnets as well: the cost bounds the work done by a
-            // log memory resize, which is the same on every subnet type.
-            canister_log_resize_instructions_per_byte:
-                DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE,
+            canister_log_resize_instructions_per_byte: NumInstructions::from(0),
         }
     }
 

@@ -292,6 +292,59 @@ mod tests {
     }
 
     #[test]
+    fn test_canister_log_add_record_evicts_multiple_oldest_records() {
+        const SMALL_CONTENT_SIZE: usize = 100;
+        const SMALL_RECORDS_NUMBER: usize = 20;
+        /// The number of small records expected to survive the large record's arrival.
+        const EXPECTED_SURVIVORS: usize = 14;
+
+        const SMALL_USED_SPACE: usize = RECORD_SIZE + SMALL_CONTENT_SIZE;
+        /// The large record is sized so that exactly `EXPECTED_SURVIVORS` small records
+        /// fit next to it, filling the capacity to the byte.
+        const LARGE_USED_SPACE: usize =
+            TEST_MAX_ALLOWED_SIZE - EXPECTED_SURVIVORS * SMALL_USED_SPACE;
+
+        // Sanity checks on the setup: all the small records fit at first, the large
+        // record then evicts more than one of them but not all, and one more survivor
+        // would not fit next to it.
+        const _: () = assert!(SMALL_RECORDS_NUMBER * SMALL_USED_SPACE <= TEST_MAX_ALLOWED_SIZE);
+        const _: () = assert!(EXPECTED_SURVIVORS + 1 < SMALL_RECORDS_NUMBER);
+        const _: () = assert!(
+            (EXPECTED_SURVIVORS + 1) * SMALL_USED_SPACE + LARGE_USED_SPACE > TEST_MAX_ALLOWED_SIZE
+        );
+
+        let small_content = &[b'a'; SMALL_CONTENT_SIZE];
+        let large_content = vec![b'b'; LARGE_USED_SPACE - RECORD_SIZE];
+
+        // Arrange: fill the log with small records, none of them evicted yet.
+        let mut log = test_log();
+        for i in 0..SMALL_RECORDS_NUMBER as u64 {
+            log.add_record(100 + i, small_content.to_vec());
+        }
+        assert_eq!(log.records().len(), SMALL_RECORDS_NUMBER);
+        assert_eq!(log.bytes_used(), SMALL_RECORDS_NUMBER * SMALL_USED_SPACE);
+
+        // Act: add a single large record that does not fit in the remaining space.
+        log.add_record(500, large_content.clone());
+
+        // Assert the large record evicted several of the oldest small records at once,
+        // keeping the newest ones, and that its own content was not truncated.
+        let evicted = (SMALL_RECORDS_NUMBER - EXPECTED_SURVIVORS) as u64;
+        assert_eq!(log.records().len(), EXPECTED_SURVIVORS + 1);
+        assert_eq!(log.bytes_used(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.remaining_bytes(), 0);
+        let mut expected_records = (evicted..SMALL_RECORDS_NUMBER as u64)
+            .map(|i| (i, 100 + i, &small_content[..]))
+            .collect::<Vec<_>>();
+        expected_records.push((SMALL_RECORDS_NUMBER as u64, 500, &large_content[..]));
+        assert_eq!(
+            log.records(),
+            &VecDeque::from(canister_log_records(&expected_records))
+        );
+        assert_eq!(log.next_idx(), SMALL_RECORDS_NUMBER as u64 + 1);
+    }
+
+    #[test]
     fn test_canister_log_increases_next_idx_after_reaching_memory_limit() {
         let records_number = 42;
         let mut log = test_log();
