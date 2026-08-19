@@ -29,11 +29,8 @@ use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{FeatureFlags, LedgerArgument};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
-use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder, StartServerParams, start_server};
-use reqwest::Url;
-use std::process::Child;
+use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder};
 use std::str::FromStr;
-use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use crate::anvil::{Anvil, DEV_ACCOUNT, address_from_hex};
@@ -87,7 +84,6 @@ impl SweeperFundingSetup {
         let anvil = Anvil::start_mainnet_like();
 
         let mut env = PocketIcBuilder::new()
-            .with_server_url(long_lived_server_url())
             .with_nns_subnet() // make_live requires an NNS subnet.
             .with_fiduciary_subnet() // holds the secp256k1 `key_1` the minter signs with.
             .build();
@@ -361,36 +357,6 @@ fn nat_to_u128(nat: Nat) -> u128 {
     nat.0.to_u128().expect("balance does not fit into u128")
 }
 
-/// URL of a PocketIC server started by this process with a hard TTL above the Bazel timeout.
-///
-/// `PocketIc::new` starts every server with `--hard-ttl 600`, and the server then calls
-/// `exit(124)` 600s after launch regardless of activity or requests in flight. That budget covers
-/// *every* test in the binary combined, and these tests wait on the minter's 6-minute withdrawal
-/// timer, so they cross it and have the server shot out from under them mid-request — surfacing as
-/// `hyper::Error(IncompleteMessage)` with no hint of the cause. Starting the server here is the only
-/// way to raise it: the value is not exposed through `PocketIcBuilder`.
-fn long_lived_server_url() -> Url {
-    // Above the target's `timeout = "eternal"` (3600s), so Bazel's own timeout is what bounds a
-    // stuck run, and the hard TTL stays only a backstop against an orphaned server.
-    const HARD_TTL: Duration = Duration::from_secs(4200);
-
-    static SERVER: OnceLock<(Child, Url)> = OnceLock::new();
-    SERVER
-        .get_or_init(|| {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("building a runtime for the PocketIC server must succeed");
-            runtime.block_on(start_server(StartServerParams {
-                reuse: true,
-                hard_ttl: Some(HARD_TTL),
-                ..Default::default()
-            }))
-        })
-        .1
-        .clone()
-}
-
 /// Installs the ckETH ledger with every balance empty. The fee account is credited afterwards, by
 /// [`SweeperFundingSetup::new_live`], for the reason given there.
 fn install_ledger(env: &PocketIc, ledger_id: Principal, minter_id: Principal) {
@@ -449,6 +415,8 @@ fn install_minter(
         next_transaction_nonce: Nat::from(0_u8),
         last_scraped_block_number: Nat::from(0_u8),
         evm_rpc_id: Some(evm_rpc_id),
+        // Sweeping through the contract is out of scope here: funding is what these tests drive.
+        ethereum_sweeper_contract_address: None,
     };
     env.install_canister(
         minter_id,
