@@ -117,7 +117,6 @@ pub fn firewall_correctness_test(env: TestEnv) {
         // The rule allows necessary ports (SSH and the metrics ports) to be open to everyone, such
         // that the test driver can still connect to the nodes and perform the test
         add_necessary_ports_registry_rule(
-            &topology_snapshot,
             &topology_snapshot.root_subnet().nodes().next().unwrap(),
             &logger,
         )
@@ -168,11 +167,7 @@ pub fn firewall_correctness_test(env: TestEnv) {
     });
 }
 
-async fn add_necessary_ports_registry_rule(
-    topology_snapshot: &TopologySnapshot,
-    nns_node: &IcNodeSnapshot,
-    log: &Logger,
-) {
+async fn add_necessary_ports_registry_rule(nns_node: &IcNodeSnapshot, log: &Logger) {
     let ipv6_prefixes = get_config().firewall.unwrap().default_rules[0]
         .ipv6_prefixes
         .clone();
@@ -185,19 +180,13 @@ async fn add_necessary_ports_registry_rule(
         user: None,
         direction: Some(FirewallRuleDirection::Inbound as i32),
     };
-    // The global scope does not necessarily start out empty — the local backend
-    // seeds a rule that lets the test driver reach the nodes — and the proposal
-    // has to carry a hash of the rule set it applies to.
-    let previous_rules = topology_snapshot
-        .firewall_rules(&FirewallRulesScope::Global)
-        .expect("Could not read the global firewall rules");
     execute_add_firewall_rules_proposal(
         log,
         nns_node,
         FirewallRulesScope::Global,
         vec![rule],
         vec![0],
-        previous_rules,
+        vec![],
     )
     .await;
 }
