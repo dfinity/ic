@@ -55,7 +55,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
-    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
+    batch::{Batch, BatchContent, BatchMessages},
     consensus::{
         CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
         certification::{Certification, CertificationContent, CertificationShare},
@@ -797,8 +797,8 @@ impl Player {
         // executed it, so that the resulting certified state can be compared against
         // the subnet's certification shares (see `redeliver_certifications`).
         // Therefore we always deliver at least one extra batch after replaying the
-        // consensus pool; the (final) extra round is the one that creates the
-        // checkpoint.
+        // consensus pool; the final extra batch is a `BatchContent::Checkpointing`
+        // one, whose round creates the checkpoint without executing anything.
 
         let extra_ingresses = extra_msgs
             .iter()
@@ -808,21 +808,26 @@ impl Player {
         let mut extra_batch = Batch {
             batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
-            content: BatchContent::Data {
-                batch_messages: BatchMessages {
-                    signed_ingress_msgs: extra_ingresses,
-                    ..BatchMessages::default()
-                },
-                chain_key_data: Default::default(),
-                consensus_responses: Vec::new(),
-                canister_http_spent: Default::default(),
-                requires_full_state_hash: no_extra_msgs,
+            content: if no_extra_msgs {
+                BatchContent::Checkpointing
+            } else {
+                BatchContent::Data {
+                    batch_messages: BatchMessages {
+                        signed_ingress_msgs: extra_ingresses,
+                        ..BatchMessages::default()
+                    },
+                    chain_key_data: Default::default(),
+                    consensus_responses: Vec::new(),
+                    canister_http_spent: Default::default(),
+                    requires_full_state_hash: false,
+                }
             },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
             registry_version,
             time,
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            // No block was made for this batch, so no blockmaker is credited.
+            blockmaker_metrics: None,
             replica_version,
         };
 
@@ -856,12 +861,16 @@ impl Player {
                             });
 
                     extra_batch = extra_batch.clone();
-                    extra_batch.content = BatchContent::Data {
-                        batch_messages: BatchMessages::default(),
-                        chain_key_data: Default::default(),
-                        consensus_responses: Vec::new(),
-                        canister_http_spent: Default::default(),
-                        requires_full_state_hash: !have_incomplete_msgs,
+                    extra_batch.content = if have_incomplete_msgs {
+                        BatchContent::Data {
+                            batch_messages: BatchMessages::default(),
+                            chain_key_data: Default::default(),
+                            consensus_responses: Vec::new(),
+                            canister_http_spent: Default::default(),
+                            requires_full_state_hash: false,
+                        }
+                    } else {
+                        BatchContent::Checkpointing
                     };
                     extra_batch.batch_number = message_routing.expected_batch_height();
                     extra_batch.time += Duration::from_nanos(1);

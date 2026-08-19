@@ -39,7 +39,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         randomness: Randomness::from([0; 32]),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
-        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
         replica_version: ReplicaVersion::default(),
     }
 }
@@ -58,7 +58,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
         randomness: Randomness::from([0; 32]),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
-        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
         replica_version: ReplicaVersion::default(),
     }
 }

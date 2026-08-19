@@ -300,7 +300,7 @@ pub(crate) fn deliver_batches_with_result_processor(
 
             registry_version: block.context.registry_version,
             time: block.context.time,
-            blockmaker_metrics,
+            blockmaker_metrics: Some(blockmaker_metrics),
             replica_version,
         };
 

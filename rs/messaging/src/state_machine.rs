@@ -153,6 +153,16 @@ impl StateMachine for StateMachineImpl {
             } => {
                 return self.online_split(state, new_subnet_id, other_subnet_id);
             }
+
+            // `ic-replay` is telling us to create a checkpoint of the state it
+            // replayed. Only abort paused executions and wipe `SystemMetadata`
+            // caches; execute nothing, so that the checkpoint contains exactly the
+            // state the subnet computed for the last replayed height.
+            BatchContent::Checkpointing => {
+                self.scheduler
+                    .checkpoint_round_with_no_execution(&mut state);
+                return state;
+            }
         };
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
