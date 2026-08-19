@@ -1,5 +1,6 @@
 use crate::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, Playnet};
 use crate::driver::ic_images::try_get_setupos_img_version;
+use crate::driver::local_backend::LocalBackend;
 use crate::driver::nested::NestedVm;
 use crate::driver::resource::{BootImage, DiskImage};
 use crate::driver::test_env_api::{
@@ -23,7 +24,7 @@ use crate::driver::{
         get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
         get_setupos_img_sha256, get_setupos_img_url, try_get_guestos_img_version,
     },
-    test_setup::SystemTestBackend,
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use anyhow::{Context, Result, bail};
 use bare_metal_deployment::SshAuthMethod;
@@ -74,6 +75,13 @@ const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
 const DOGECOIND_ADDR_PATH: &str = "dogecoind_addr";
 const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
+
+/// The ports the Local backend whitelists for the test driver on every node,
+/// mirroring the ports the firewall template's `default_rules` open to Farm's
+/// management prefixes. `ic-prep` always adds 8080 on top of these.
+const LOCAL_WHITELISTED_PORTS: &[u32] = &[
+    22, 2497, 4100, 7070, 9090, 9091, 9100, 9324, 19100, 19523, 19531,
+];
 
 fn mk_compressed_img_path() -> std::string::String {
     format!("{CONF_IMG_FNAME}.zst")
@@ -220,16 +228,30 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
-    // On the Local backend the test driver reaches the nodes over the group's
-    // IPv6 ULA bridge (`fd00::/8`). Unlike Farm — whose management prefixes are
-    // covered by the firewall template's built-in `default_rules` — these ULA
-    // source addresses are not whitelisted by default. Once the orchestrator
-    // applies its nftables ruleset (whose presence several tests assert on), the
-    // driver would otherwise be locked out of the replica endpoints it needs
-    // (`:8080`, SSH, metrics, ...). Whitelist the ULA range on the same ports
-    // the Farm `default_rules` cover so the firewall can be fully active while
-    // keeping the nodes reachable from the driver. Port 8080 is always included
-    // by `ic-prep`.
+    // On the Local backend the test driver reaches the nodes from addresses
+    // that lie outside their `/64` (see `LocalBackend::group_driver_ipv6s`).
+    // Unlike Farm — whose management prefixes are covered by the firewall
+    // template's built-in `default_rules` — those source addresses are not
+    // whitelisted by default. Once the orchestrator applies its nftables ruleset
+    // (whose presence several tests assert on), the driver would otherwise be
+    // locked out of the replica endpoints it needs (`:8080`, SSH, metrics, ...).
+    // Whitelist the driver's own addresses on the same ports the Farm
+    // `default_rules` cover, so the firewall can be fully active while keeping
+    // the nodes reachable from the driver. Port 8080 is always added by
+    // `ic-prep`.
+    //
+    // Only the driver is whitelisted, not the group's whole ULA range `fd00::/8`
+    // that every VM — the nodes included — is addressed out of. Whitelisting
+    // that range would open these ports, 8080 among them, between all nodes, so
+    // node↔node traffic would no longer be governed by the registry's
+    // node-whitelisting rules alone as it is on Farm — which is exactly what
+    // `firewall_correctness_test` asserts. Nothing in the IC needs the wider
+    // range: non-cloud-engine nodes reach the NNS on `:8080` through those same
+    // whitelisting rules, and cloud engine nodes reach it through an API
+    // boundary node's `:443` (see `get_node_api_urls` in
+    // `rs/orchestrator/registry_replicator/src/internal_state.rs`). A test that
+    // has one of its *other* VMs talk to a node widens the whitelist explicitly
+    // with `InternetComputer::with_extra_firewall_whitelist`.
     //
     // Note: injecting this global registry rule makes the orchestrator use the
     // registry firewall rules *instead of* the config-file `default_rules` (see
@@ -242,10 +264,18 @@ pub fn init_ic(
         SystemTestBackend::read_attribute(test_env),
         SystemTestBackend::Local
     ) {
-        ic_config.set_whitelisted_prefixes(Some("fd00::/8".to_string()));
-        ic_config.set_whitelisted_ports(Some(
-            "22,2497,4100,7070,9090,9091,9100,9324,19100,19523,19531".to_string(),
-        ));
+        let group_name = GroupSetup::read_attribute(test_env).infra_group_name;
+        let prefixes: Vec<String> = LocalBackend::group_driver_ipv6_prefixes(&group_name)
+            .into_iter()
+            .chain(ic.extra_firewall_whitelist_prefixes.iter().cloned())
+            .collect();
+        let ports: Vec<String> = LOCAL_WHITELISTED_PORTS
+            .iter()
+            .chain(ic.extra_firewall_whitelist_ports.iter())
+            .map(|port| port.to_string())
+            .collect();
+        ic_config.set_whitelisted_prefixes(Some(prefixes.join(",")));
+        ic_config.set_whitelisted_ports(Some(ports.join(",")));
     }
 
     for dc_record in &ic.data_centers {
