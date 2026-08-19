@@ -665,8 +665,9 @@ mod tests {
                     allowances >= worst_case,
                     "{replication:?}, {max_response_bytes:?}"
                 );
-                // And they cover no more than that: the only slack is what rounding
-                // the worst case up to a whole number of allowances adds.
+                // And they cover no more than that: the only slack is what rounding the
+                // worst case up to a whole number of allowances adds, which [`usage_fee`]
+                // has already done, so here there is none.
                 assert!(
                     allowances - worst_case < Cycles::from(node_count as u64),
                     "{replication:?}, {max_response_bytes:?}"
