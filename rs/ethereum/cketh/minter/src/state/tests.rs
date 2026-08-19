@@ -2027,7 +2027,7 @@ mod eth_balance {
 
             let transaction = self
                 .withdrawal_request
-                .to_transaction(
+                .create_transaction(
                     self.nonce,
                     self.tx_fee,
                     self.gas_limit,

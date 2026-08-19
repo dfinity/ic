@@ -326,7 +326,7 @@ mod withdrawal_transactions {
             let [withdrawal_request] = create_ck_withdrawal_requests(&mut rng);
             let tx = withdrawal_request
                 .clone()
-                .to_transaction(
+                .create_transaction(
                     TransactionNonce::ZERO,
                     gas_fee_estimate(),
                     estimate_gas_limit(&withdrawal_request),
@@ -348,7 +348,7 @@ mod withdrawal_transactions {
             transactions.record_request(withdrawal_request.clone());
             let pipeline_request: WithdrawalRequest = withdrawal_request.clone().into();
             let correct_tx = pipeline_request
-                .to_transaction(
+                .create_transaction(
                     TransactionNonce::ZERO,
                     gas_fee_estimate(),
                     estimate_gas_limit(&withdrawal_request.clone().into()),
@@ -400,7 +400,7 @@ mod withdrawal_transactions {
             transactions.record_request(withdrawal_request.clone());
             let pipeline_request: WithdrawalRequest = withdrawal_request.clone().into();
             let correct_tx = pipeline_request
-                .to_transaction(
+                .create_transaction(
                     TransactionNonce::ZERO,
                     gas_fee_estimate(),
                     estimate_gas_limit(&withdrawal_request.clone().into()),
@@ -447,7 +447,7 @@ mod withdrawal_transactions {
                 let mut transactions = WithdrawalTransactions::new(current_nonce);
                 let mut rng = reproducible_rng();
                 let [withdrawal_request] = create_and_record_ck_withdrawal_requests(&mut transactions, &mut rng);
-                let tx_with_wrong_nonce = withdrawal_request.clone().to_transaction(
+                let tx_with_wrong_nonce = withdrawal_request.clone().create_transaction(
                     wrong_nonce,
                     gas_fee_estimate(),
                     CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -2247,7 +2247,7 @@ mod withdrawal_transactions {
                 .max_transaction_fee();
 
             let tx = WithdrawalRequest::SweeperFunding(funding.clone())
-                .to_transaction(
+                .create_transaction(
                     TransactionNonce::ZERO,
                     gas_fee,
                     CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -2276,7 +2276,7 @@ mod withdrawal_transactions {
             let expected_index = funding.ledger_burn_index;
 
             assert_matches!(
-                WithdrawalRequest::SweeperFunding(funding).to_transaction(
+                WithdrawalRequest::SweeperFunding(funding).create_transaction(
                     TransactionNonce::ZERO,
                     gas_fee_estimate(),
                     CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -2494,7 +2494,7 @@ mod create_transaction {
                 ..cketh_withdrawal_request_with_index(cketh_ledger_burn_index)
             };
             let pipeline_request: WithdrawalRequest = cketh_withdrawal_request.clone().into();
-            let result = pipeline_request.to_transaction(
+            let result = pipeline_request.create_transaction(
                 TransactionNonce::TWO,
                 gas_fee.clone(),
                 gas_limit,
@@ -2516,7 +2516,7 @@ mod create_transaction {
                 ..ckerc20_withdrawal_request_with_index(cketh_ledger_burn_index, LedgerBurnIndex::new(2))
             };
             let pipeline_request: WithdrawalRequest = ckerc20_withdrawal_request.clone().into();
-            let result = pipeline_request.to_transaction(
+            let result = pipeline_request.create_transaction(
                 TransactionNonce::TWO,
                 gas_fee,
                 gas_limit,
@@ -2552,7 +2552,7 @@ mod create_transaction {
             );
 
             let pipeline_request: WithdrawalRequest = withdrawal_request.clone().into();
-            let result = pipeline_request.to_transaction(
+            let result = pipeline_request.create_transaction(
                 TransactionNonce::TWO,
                 gas_fee,
                 gas_limit,
@@ -2606,7 +2606,7 @@ mod create_transaction {
             };
 
             let pipeline_request: WithdrawalRequest = withdrawal_request.clone().into();
-            let result = pipeline_request.to_transaction(
+            let result = pipeline_request.create_transaction(
                 TransactionNonce::from(0x57_u32),
                 gas_fee.clone(),
                 gas_limit,
@@ -2676,7 +2676,7 @@ mod withdrawal_flow {
             let withdrawal_requests = wrapped_txs.borrow().requests_batch(5);
             for request in withdrawal_requests {
                 let nonce = wrapped_txs.borrow().next_transaction_nonce();
-                if let Ok(created_tx) = request.to_transaction(
+                if let Ok(created_tx) = request.create_transaction(
                     nonce,
                     gas_fee_estimate.clone(),
                     estimate_gas_limit(&request),
@@ -3055,7 +3055,7 @@ fn create_and_record_transaction<R: Into<WithdrawalRequest>>(
 ) -> Eip1559TransactionRequest {
     let withdrawal_request = withdrawal_request.into();
     let tx = withdrawal_request
-        .to_transaction(
+        .create_transaction(
             transactions.next_transaction_nonce(),
             gas_fee_estimate,
             estimate_gas_limit(&withdrawal_request),

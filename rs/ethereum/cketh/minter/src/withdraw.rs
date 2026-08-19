@@ -257,7 +257,12 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
         let ethereum_network = read_state(State::ethereum_network);
         let nonce = read_state(|s| s.withdrawal_transactions.next_transaction_nonce());
         let gas_limit = estimate_gas_limit(&request);
-        match request.to_transaction(nonce, gas_fee_estimate.clone(), gas_limit, ethereum_network) {
+        match request.create_transaction(
+            nonce,
+            gas_fee_estimate.clone(),
+            gas_limit,
+            ethereum_network,
+        ) {
             Ok(transaction) => {
                 log!(
                     DEBUG,

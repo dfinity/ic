@@ -1489,7 +1489,7 @@ fn ckerc20_withdrawal_flow(
     };
     let pipeline_request: WithdrawalRequest = withdrawal_request.clone().into();
     let transaction = pipeline_request
-        .to_transaction(
+        .create_transaction(
             nonce,
             gas_fee,
             GasAmount::from(65_000_u32),

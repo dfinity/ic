@@ -373,6 +373,11 @@ pub trait PipelineRequest: Clone + Eq + fmt::Debug {
     /// The pipeline's alternate map key — a ckETH `LedgerBurnIndex` for withdrawals.
     type Id: Copy + Ord + fmt::Debug + fmt::Display;
 
+    /// Why [`Self::create_transaction`] could not build a transaction. A request that always funds
+    /// its own fee can set this to [`std::convert::Infallible`], making the failure unrepresentable
+    /// rather than merely unreachable.
+    type Error;
+
     /// The identity of this request, used as the pipeline's alternate map key.
     fn id(&self) -> Self::Id;
 
@@ -388,18 +393,22 @@ pub trait PipelineRequest: Clone + Eq + fmt::Debug {
     /// Assert that a freshly created transaction is consistent with the request (amount).
     fn assert_created_transaction(&self, transaction: &Eip1559TransactionRequest);
 
-    /// Build the EIP-1559 transaction that fulfils this request.
-    fn to_transaction(
+    /// Creates the EIP-1559 transaction that fulfils this request.
+    ///
+    /// # Errors
+    /// * [`Self::Error`] if the request cannot cover the transaction fee.
+    fn create_transaction(
         &self,
         nonce: TransactionNonce,
         gas_fee_estimate: GasFeeEstimate,
         gas_limit: GasAmount,
         ethereum_network: EthereumNetwork,
-    ) -> Result<Eip1559TransactionRequest, CreateTransactionError>;
+    ) -> Result<Eip1559TransactionRequest, Self::Error>;
 }
 
 impl PipelineRequest for WithdrawalRequest {
     type Id = LedgerBurnIndex;
+    type Error = CreateTransactionError;
 
     fn id(&self) -> LedgerBurnIndex {
         self.cketh_ledger_burn_index()
@@ -444,7 +453,9 @@ impl PipelineRequest for WithdrawalRequest {
         }
     }
 
-    fn to_transaction(
+    /// The transaction fees are paid by the beneficiary, meaning that the fees will be deducted
+    /// from the withdrawal amount.
+    fn create_transaction(
         &self,
         nonce: TransactionNonce,
         gas_fee_estimate: GasFeeEstimate,
@@ -1494,12 +1505,6 @@ impl WithdrawalTransactions {
     }
 }
 
-/// Creates an EIP-1559 transaction for the given pipeline request.
-/// The transaction fees are paid by the beneficiary,
-/// meaning that the fees will be deducted from the withdrawal amount.
-///
-/// # Errors
-/// * `CreateTransactionError::InsufficientTransactionFee` if the ETH withdrawal amount does not cover the transaction fee.
 // First 4 bytes of keccak256(transfer(address,uint256))
 const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex_literal::hex!("a9059cbb");
 
