@@ -10,10 +10,10 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
     CanisterStatusType, CreateCanisterArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, HttpMethod, IC_00, LogVisibilityV2,
-    MasterPublicKeyId, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, ReplicationCounts, SchnorrAlgorithm, SchnorrKeyId,
-    TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UploadChunkArgs, VetKdCurve,
-    VetKdKeyId,
+    MasterPublicKeyId, Method, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    ReplicationCounts, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext,
+    TransformFunc, UploadChunkArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
@@ -3423,6 +3423,110 @@ fn execute_canister_http_request_disabled() {
         .subnet_call_context_manager
         .canister_http_request_contexts;
     assert_eq!(canister_http_request_contexts.len(), 0);
+}
+
+/// The two ways HTTP outcalls come for free: a free cost schedule, and a system
+/// subnet, which charges nothing for outcalls despite its normal schedule.
+#[derive(Copy, Clone, Debug)]
+enum FreeOutcalls {
+    FreeCostSchedule,
+    SystemSubnet,
+}
+
+#[test]
+fn execute_canister_http_request_free_subnet_accepts_zero_cycles() {
+    // Where HTTP outcalls are free nothing is charged for them, so a caller must
+    // not have to attach any cycles — under pay-as-you-go just as under legacy
+    // pricing, and for flexible outcalls (always pay-as-you-go) just as for
+    // fully replicated ones.
+    //
+    // Both flavours of free are covered because they used to differ: outcalls are
+    // priced off the cost schedule pinned in the request context, and a system
+    // subnet reaches that through a mapping (normal schedule, free outcalls)
+    // rather than by carrying a free schedule to begin with.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let build_test = |free: FreeOutcalls| {
+        let builder = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister);
+        match free {
+            FreeOutcalls::FreeCostSchedule => {
+                builder.with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            }
+            FreeOutcalls::SystemSubnet => builder.with_subnet_type(SubnetType::System),
+        }
+        .build()
+    };
+    let http_request_args = |pricing_version| CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: Some(1_000_000),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: None,
+        pricing_version,
+    };
+
+    for free in [FreeOutcalls::FreeCostSchedule, FreeOutcalls::SystemSubnet] {
+        let calls: [(&str, Method, Vec<u8>); 3] = [
+            (
+                "legacy",
+                Method::HttpRequest,
+                http_request_args(Some(PRICING_VERSION_LEGACY)).encode(),
+            ),
+            (
+                "pay-as-you-go",
+                Method::HttpRequest,
+                http_request_args(Some(PRICING_VERSION_PAY_AS_YOU_GO)).encode(),
+            ),
+            (
+                "flexible",
+                Method::FlexibleHttpRequest,
+                flexible_http_request_args(caller_canister).encode(),
+            ),
+        ];
+        for (label, method, payload) in calls {
+            let mut test = build_test(free);
+            test.inject_call_to_ic00(method, payload, Cycles::zero());
+            test.execute_all();
+
+            let contexts = &test
+                .state()
+                .metadata
+                .subnet_call_context_manager
+                .canister_http_request_contexts;
+            assert_eq!(
+                contexts.len(),
+                1,
+                "a {label} outcall with no cycles attached was not accepted on {free:?}: {:?}",
+                test.xnet_messages()
+                    .first()
+                    .cloned()
+                    .map(get_reject_message),
+            );
+            // Nothing is charged, so nothing is withheld as an allowance and the
+            // whole (empty) payment is left to be refunded with the response.
+            let context = contexts.get(&CallbackId::from(0)).unwrap();
+            assert_eq!(
+                context.request.payment,
+                Cycles::zero(),
+                "a {label} outcall on {free:?} charged something out of an empty payment",
+            );
+            assert_eq!(
+                context.refund_status.per_replica_allowance,
+                Cycles::zero(),
+                "a {label} outcall on {free:?} withheld an allowance out of an empty payment",
+            );
+        }
+    }
 }
 
 #[test]
