@@ -99,9 +99,17 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             .0;
 
         let target_height = args.replay_until_height;
-        if let Some(h) = target_height {
-            let question = format!("The checkpoint created at height {h} ")
-                + "cannot be used for deterministic state computation if it is not a CUP height.\n"
+        // When replaying a consensus pool, an extra batch persists the state reached
+        // at the target height into a checkpoint, so no warning is needed there.
+        // Restoring from a backup delivers no extra batches: unless the target height
+        // is a CUP height, no checkpoint is created at it and the restore makes no
+        // persistent progress beyond the latest CUP at or below the target height.
+        if let Some(h) = target_height
+            && matches!(subcmd, Some(SubCommand::RestoreFromBackup(_)))
+        {
+            let question = format!("No checkpoint will be created at height {h} ")
+                + "unless it is a CUP height, so the restore will make no persistent\n"
+                + "progress beyond the latest CUP at or below this height.\n"
                 + "Continue?";
             if !args.skip_prompts && !consent_given(&question) {
                 return;
