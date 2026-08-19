@@ -420,32 +420,34 @@ impl Player {
             Default::default()
         };
 
-        let (latest_context_time, last_batch_height, msgs) = self.deliver_extra_batch(
+        let (latest_context_time, extra_batch_delivery) = self.deliver_extra_batch(
             self.message_routing.as_ref(),
             self.consensus_pool.as_ref(),
             extra,
         );
 
-        self.wait_for_state(last_batch_height);
-        // We only want to persist the checkpoint after the latest batch.
-        self.state_manager.remove_states_below(last_batch_height);
+        if let Some((last_batch_height, msgs)) = extra_batch_delivery {
+            self.wait_for_state(last_batch_height);
+            // We only want to persist the checkpoint after the latest batch.
+            self.state_manager.remove_states_below(last_batch_height);
 
-        // check if the extra messages have been delivered successfully
-        let get_latest_status = self.ingress_history_reader.get_latest_status();
-        for msg in msgs {
-            match get_latest_status(&msg.ingress.id()) {
-                IngressStatus::Known {
-                    state: IngressState::Completed(WasmResult::Reply(bytes)),
-                    ..
-                } => match msg.print {
-                    Some(printer) => printer(bytes),
-                    _ => println!(
-                        "Ingress id={} response={}",
-                        msg.ingress.id(),
-                        hex::encode(bytes)
-                    ),
-                },
-                status => panic!("Execution of {} has failed: {:?}", msg.ingress.id(), status),
+            // check if the extra messages have been delivered successfully
+            let get_latest_status = self.ingress_history_reader.get_latest_status();
+            for msg in msgs {
+                match get_latest_status(&msg.ingress.id()) {
+                    IngressStatus::Known {
+                        state: IngressState::Completed(WasmResult::Reply(bytes)),
+                        ..
+                    } => match msg.print {
+                        Some(printer) => printer(bytes),
+                        _ => println!(
+                            "Ingress id={} response={}",
+                            msg.ingress.id(),
+                            hex::encode(bytes)
+                        ),
+                    },
+                    status => panic!("Execution of {} has failed: {:?}", msg.ingress.id(), status),
+                }
             }
         }
 
@@ -734,7 +736,7 @@ impl Player {
         message_routing: &dyn MessageRouting,
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
-    ) -> (Time, Height, Vec<IngressWithPrinter>) {
+    ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
         let (registry_version, time, randomness, replica_version) = match pool {
             None => (
                 self.registry.get_latest_version(),
@@ -764,13 +766,21 @@ impl Player {
         };
 
         let extra_msgs = extra(self, time);
+        let no_extra_msgs = extra_msgs.is_empty();
+        // Without a consensus pool no batches were replayed, so the on-disk
+        // checkpoint is untouched and there is nothing to persist. Delivering a
+        // batch anyway would mutate the state based on the wall clock time from
+        // above, producing a non-deterministic state hash.
+        if no_extra_msgs && pool.is_none() {
+            return (time, None);
+        }
         // `deliver_batches()` deliberately does not force a checkpoint at the replay
         // target height: that height has to be executed exactly the way the subnet
         // executed it, so that the resulting certified state can be compared against
         // the subnet's certification shares (see `redeliver_certifications`).
-        // Therefore we always deliver at least one extra batch here, whose (final)
-        // round is the one that creates the checkpoint.
-        let no_extra_msgs = extra_msgs.is_empty();
+        // Therefore we always deliver at least one extra batch after replaying the
+        // consensus pool; the (final) extra round is the one that creates the
+        // checkpoint.
 
         let extra_ingresses = extra_msgs
             .iter()
@@ -847,7 +857,7 @@ impl Player {
                 }
             }
         }
-        (time, extra_batch.batch_number, extra_msgs)
+        (time, Some((extra_batch.batch_number, extra_msgs)))
     }
 
     fn certify_state_with_dummy_certification(&self) {
