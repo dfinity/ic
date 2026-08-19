@@ -408,8 +408,7 @@ pub struct Summary {
     /// allows the field to be removed without changing the hash of a summary: replica versions that
     /// still maintain the field and versions that have dropped it derive the same hash from the same
     /// wire bytes, because both read this marker. `repeated` fields cannot express the difference
-    /// between "absent" and "empty" on the wire, hence the separate marker. See the documentation of
-    /// `ic_types::backwards_compatibility::BackwardsCompatible` for the rollout this is part of.
+    /// between "absent" and "empty" on the wire, hence the separate marker.
     #[prost(bool, optional, tag = "16")]
     pub transcripts_for_remote_subnets_removed: ::core::option::Option<bool>,
     #[prost(oneof = "summary::SubnetSplittingStatus", tags = "13, 14, 15")]
