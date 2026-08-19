@@ -151,7 +151,6 @@ type UpgradeArg = record {
 
     // Change the sweeper smart contract address.
     ethereum_sweeper_contract_address : opt text;
-
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
