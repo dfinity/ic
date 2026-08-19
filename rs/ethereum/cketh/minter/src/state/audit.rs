@@ -6,7 +6,7 @@ pub use super::event::{Event, EventType};
 use crate::erc20::CkTokenSymbol;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
-use crate::state::transactions::{Reimbursed, ReimbursementIndex};
+use crate::state::transactions::{Reimbursed, ReimbursementIndex, WithdrawalRequest};
 use crate::storage::{record_event, with_event_iter};
 
 /// Updates the state to reflect the given state transition.
@@ -73,6 +73,13 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state
                 .eth_transactions
                 .record_withdrawal_request(request.clone());
+        }
+        EventType::AcceptedSweeperFundingRequest(request) => {
+            // Named explicitly: the payload converts to `CkEth` on its own, which would make the
+            // funding reimbursable.
+            state
+                .eth_transactions
+                .record_withdrawal_request(WithdrawalRequest::SweeperFunding(request.clone()));
         }
         EventType::CreatedTransaction {
             withdrawal_id,

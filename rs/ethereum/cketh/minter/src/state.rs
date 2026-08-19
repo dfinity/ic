@@ -407,7 +407,7 @@ impl State {
             .get_processed_withdrawal_request(withdrawal_id)
             .expect("BUG: missing withdrawal request");
         let charged_tx_fee = match withdrawal_request {
-            WithdrawalRequest::CkEth(req) => req
+            WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => req
                 .withdrawal_amount
                 .checked_sub(tx.transaction().amount)
                 .expect("BUG: withdrawal amount MUST always be at least the transaction amount"),

@@ -438,7 +438,9 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 withdrawal_id: *request.cketh_ledger_burn_index().as_ref(),
                 recipient_address: request.payee().to_string(),
                 token_symbol: match request {
-                    CkEth(_) => CkTokenSymbol::cketh_symbol_from_state(s).to_string(),
+                    CkEth(_) | SweeperFunding(_) => {
+                        CkTokenSymbol::cketh_symbol_from_state(s).to_string()
+                    }
                     CkErc20(r) => s
                         .ckerc20_tokens
                         .get_alt(&r.erc20_contract_address)
@@ -448,10 +450,14 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 withdrawal_amount: match request {
                     CkEth(r) => r.withdrawal_amount.into(),
                     CkErc20(r) => r.withdrawal_amount.into(),
+                    SweeperFunding(r) => r.withdrawal_amount.into(),
                 },
                 max_transaction_fee: match (request, tx) {
-                    (CkEth(_), None) => None,
+                    (CkEth(_) | SweeperFunding(_), None) => None,
                     (CkEth(r), Some(tx)) => {
+                        r.withdrawal_amount.checked_sub(tx.amount).map(|x| x.into())
+                    }
+                    (SweeperFunding(r), Some(tx)) => {
                         r.withdrawal_amount.checked_sub(tx.amount).map(|x| x.into())
                     }
                     (CkErc20(r), _) => Some(r.max_transaction_fee.into()),
@@ -850,6 +856,21 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_subaccount,
                     created_at,
                 }) => EP::AcceptedEthWithdrawalRequest {
+                    withdrawal_amount: withdrawal_amount.into(),
+                    destination: destination.to_string(),
+                    ledger_burn_index: ledger_burn_index.get().into(),
+                    from,
+                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
+                    created_at,
+                },
+                EventType::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
+                    withdrawal_amount,
+                    destination,
+                    ledger_burn_index,
+                    from,
+                    from_subaccount,
+                    created_at,
+                }) => EP::AcceptedSweeperFundingRequest {
                     withdrawal_amount: withdrawal_amount.into(),
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),

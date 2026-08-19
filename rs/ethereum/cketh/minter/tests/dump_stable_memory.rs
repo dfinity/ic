@@ -263,6 +263,21 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                 created_at,
             }),
+            EventPayload::AcceptedSweeperFundingRequest {
+                withdrawal_amount,
+                destination,
+                ledger_burn_index,
+                from,
+                from_subaccount,
+                created_at,
+            } => ET::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
+                withdrawal_amount: withdrawal_amount.try_into().unwrap(),
+                destination: destination.parse().unwrap(),
+                ledger_burn_index: map_nat(ledger_burn_index),
+                from,
+                from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
+                created_at,
+            }),
             EventPayload::CreatedTransaction {
                 withdrawal_id,
                 transaction,

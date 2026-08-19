@@ -13,7 +13,9 @@ use crate::state::audit::apply_state_transition;
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::event::{Event, EventType};
-use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
+};
 use crate::state::{Erc20Balances, State};
 use crate::test_fixtures::{
     arb::{arb_address, arb_checked_amount_of, arb_hash, arb_ledger_subaccount},
@@ -801,6 +803,26 @@ prop_compose! {
     }
 }
 
+prop_compose! {
+    fn arb_sweeper_funding_request()(
+        withdrawal_amount in arb_checked_amount_of(),
+        destination in arb_address(),
+        ledger_burn_index in any::<u64>(),
+        from in arb_principal(),
+        from_subaccount in arb_ledger_subaccount(),
+        created_at in proptest::option::of(any::<u64>()),
+    ) -> EthWithdrawalRequest {
+        EthWithdrawalRequest {
+            withdrawal_amount,
+            destination,
+            ledger_burn_index: ledger_burn_index.into(),
+            from,
+            from_subaccount,
+            created_at,
+        }
+    }
+}
+
 fn arb_event_type() -> impl Strategy<Value = EventType> {
     prop_oneof![
         arb_init_arg().prop_map(EventType::Init),
@@ -817,6 +839,7 @@ fn arb_event_type() -> impl Strategy<Value = EventType> {
                 mint_block_index: index.into(),
             }
         }),
+        arb_sweeper_funding_request().prop_map(EventType::AcceptedSweeperFundingRequest),
         arb_checked_amount_of().prop_map(|block_number| EventType::SyncedToBlock { block_number }),
         arb_checked_amount_of()
             .prop_map(|block_number| EventType::SyncedErc20ToBlock { block_number }),
@@ -1411,6 +1434,49 @@ fn state_equivalence() {
     );
 }
 
+mod sweeper_funding {
+    use super::*;
+    use crate::eth_logs::LedgerSubaccount;
+    use crate::numeric::{LedgerBurnIndex, Wei};
+    use crate::state::audit::apply_state_transition;
+    use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest};
+    use crate::test_fixtures::initial_state;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn should_record_an_accepted_funding_as_a_funding_request() {
+        let mut state = initial_state();
+        let funding = EthWithdrawalRequest {
+            withdrawal_amount: Wei::new(10_000_000_000_000_000),
+            destination: "0x5353535353535353535353535353535353535353"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
+            created_at: Some(1699527697000000000),
+        };
+
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedSweeperFundingRequest(funding),
+        );
+
+        let request = state
+            .eth_transactions
+            .withdrawal_requests_iter()
+            .next()
+            .expect("BUG: the funding request was not recorded");
+        assert_matches!(request, WithdrawalRequest::SweeperFunding(_));
+        assert!(
+            !request.is_reimbursable(),
+            "recorded as an ordinary withdrawal, a failed funding would be reimbursed"
+        );
+    }
+}
+
 mod eth_balance {
     use super::*;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -1492,6 +1558,53 @@ mod eth_balance {
         assert_eq!(balance_after_erc20_deposit, balance_before);
     }
 
+    /// Both outcomes of one withdrawal flow, applied to independent copies of the same starting
+    /// state so a test can compare them directly.
+    struct BothOutcomes {
+        after_success: State,
+        after_failure: State,
+        receipt_succeeded: TransactionReceipt,
+        receipt_failed: TransactionReceipt,
+    }
+
+    /// Runs the shared 21'000-gas flow against `state_before` twice, once finalizing successfully and
+    /// once with a failure receipt, leaving each caller to assert only what its request type makes
+    /// different. The gas fixture comes from a real Sepolia transaction and over-provisions the fee,
+    /// so part of it is always recorded as unspent.
+    fn apply_eth_transfer_both_ways<T: Into<WithdrawalRequest>>(
+        state_before: &State,
+        request: T,
+    ) -> BothOutcomes {
+        //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
+        let flow = WithdrawalFlow {
+            tx_fee: GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
+                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+            },
+            gas_limit: GasAmount::from(21_000_u32),
+            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
+            tx_status: TransactionStatus::Success,
+            ..WithdrawalFlow::for_request(request)
+        };
+
+        let mut after_success = state_before.clone();
+        let receipt_succeeded = flow.clone().apply(&mut after_success);
+
+        let mut after_failure = state_before.clone();
+        let receipt_failed = WithdrawalFlow {
+            tx_status: TransactionStatus::Failure,
+            ..flow
+        }
+        .apply(&mut after_failure);
+
+        BothOutcomes {
+            after_success,
+            after_failure,
+            receipt_succeeded,
+            receipt_failed,
+        }
+    }
+
     #[test]
     fn should_update_after_successful_and_failed_withdrawal() {
         let mut state_before_withdrawal = initial_state();
@@ -1500,10 +1613,8 @@ mod eth_balance {
             &EventType::AcceptedDeposit(received_eth_event()),
         );
 
-        let mut state_after_successful_withdrawal = state_before_withdrawal.clone();
         let eth_balance_before_withdrawal = state_before_withdrawal.eth_balance.clone();
         let erc20_balance_before_withdrawal = state_before_withdrawal.erc20_balances.clone();
-        //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
         let withdrawal_request = EthWithdrawalRequest {
             withdrawal_amount: Wei::new(10_000_000_000_000_000),
             destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
@@ -1516,23 +1627,10 @@ mod eth_balance {
             from_subaccount: None,
             created_at: Some(1699527697000000000),
         };
-        let withdrawal_flow = WithdrawalFlow {
-            tx_fee: GasFeeEstimate {
-                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
-                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
-            },
-            gas_limit: GasAmount::from(21_000_u32),
-            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
-            tx_status: TransactionStatus::Success,
-            ..WithdrawalFlow::for_request(withdrawal_request)
-        };
-        withdrawal_flow
-            .clone()
-            .apply(&mut state_after_successful_withdrawal);
-        let eth_balance_after_successful_withdrawal =
-            state_after_successful_withdrawal.eth_balance.clone();
+        let outcomes = apply_eth_transfer_both_ways(&state_before_withdrawal, withdrawal_request);
+        let eth_balance_after_successful_withdrawal = outcomes.after_success.eth_balance.clone();
         let erc20_balance_after_successful_withdrawal =
-            state_after_successful_withdrawal.erc20_balances.clone();
+            outcomes.after_success.erc20_balances.clone();
 
         assert_eq!(
             eth_balance_after_successful_withdrawal,
@@ -1556,15 +1654,9 @@ mod eth_balance {
             erc20_balance_after_successful_withdrawal
         );
 
-        let mut state_after_failed_withdrawal = state_before_withdrawal.clone();
-        let receipt_failed = WithdrawalFlow {
-            tx_status: TransactionStatus::Failure,
-            ..withdrawal_flow
-        }
-        .apply(&mut state_after_failed_withdrawal);
-        let eth_balance_after_failed_withdrawal = state_after_failed_withdrawal.eth_balance.clone();
-        let erc20_balance_after_failed_withdrawal =
-            state_after_failed_withdrawal.erc20_balances.clone();
+        let receipt_failed = &outcomes.receipt_failed;
+        let eth_balance_after_failed_withdrawal = outcomes.after_failure.eth_balance.clone();
+        let erc20_balance_after_failed_withdrawal = outcomes.after_failure.erc20_balances.clone();
 
         assert_eq!(
             eth_balance_after_failed_withdrawal.eth_balance,
@@ -1584,6 +1676,90 @@ mod eth_balance {
         assert_eq!(
             erc20_balance_before_withdrawal,
             erc20_balance_after_failed_withdrawal
+        );
+    }
+
+    /// Funding takes its own arm in the balance accounting, so the ckETH and ckERC20 cases above
+    /// cannot reach it. What is asserted is the same shape as a ckETH withdrawal — a success debits
+    /// the transferred ETH plus the fee actually paid, a failure debits only that fee — because
+    /// funding is an ordinary withdrawal to the accounting. What differs is that nothing is ever
+    /// reimbursed, which is why the failing case must still leave the fee counters moving.
+    #[test]
+    fn should_update_after_successful_and_failed_sweeper_funding() {
+        let mut state_before_funding = initial_state();
+        apply_state_transition(
+            &mut state_before_funding,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+        let eth_balance_before_funding = state_before_funding.eth_balance.clone();
+
+        let funding_amount = Wei::new(10_000_000_000_000_000);
+        let funding_request = WithdrawalRequest::SweeperFunding(EthWithdrawalRequest {
+            withdrawal_amount: funding_amount,
+            destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: None,
+            created_at: Some(1699527697000000000),
+        });
+        let outcomes = apply_eth_transfer_both_ways(&state_before_funding, funding_request);
+        let receipt_succeeded = &outcomes.receipt_succeeded;
+        let after_success = outcomes.after_success.eth_balance.clone();
+
+        // Asserted as the identity the accounting has to satisfy rather than as a fixed number: the
+        // funding ceiling covers both the ETH delivered and the fee, so whatever part of the fee
+        // went unspent is exactly what stays with the minter.
+        let unspent = after_success
+            .total_unspent_tx_fees
+            .checked_sub(eth_balance_before_funding.total_unspent_tx_fees)
+            .unwrap();
+        assert_eq!(
+            after_success.eth_balance,
+            eth_balance_before_funding
+                .eth_balance
+                .checked_sub(
+                    funding_amount
+                        .checked_sub(unspent)
+                        .expect("the unspent fee is part of the funding")
+                )
+                .unwrap(),
+            "a successful funding debits what it moved plus the fee it paid"
+        );
+        assert_eq!(
+            after_success.total_effective_tx_fees,
+            eth_balance_before_funding
+                .total_effective_tx_fees
+                .checked_add(receipt_succeeded.effective_transaction_fee())
+                .unwrap(),
+            "the fee actually paid must be counted"
+        );
+        assert!(
+            unspent > Wei::ZERO,
+            "this fixture over-provisions the fee, so some of it must be recorded as unspent"
+        );
+
+        let receipt_failed = &outcomes.receipt_failed;
+        let after_failure = outcomes.after_failure.eth_balance.clone();
+
+        assert_eq!(
+            after_failure.eth_balance,
+            eth_balance_before_funding
+                .eth_balance
+                .checked_sub(receipt_failed.effective_transaction_fee())
+                .unwrap(),
+            "a failed funding moved no ETH, so only the fee is debited"
+        );
+        assert_eq!(
+            after_failure.total_effective_tx_fees, after_success.total_effective_tx_fees,
+            "the same fee was paid either way"
+        );
+        assert_eq!(
+            after_failure.total_unspent_tx_fees, after_success.total_unspent_tx_fees,
+            "and the same amount of it went unspent"
         );
     }
 
@@ -1706,14 +1882,10 @@ mod eth_balance {
         }
 
         fn apply(self, state: &mut State) -> TransactionReceipt {
-            let accepted_withdrawal_request_event = match &self.withdrawal_request {
-                WithdrawalRequest::CkEth(eth_request) => {
-                    EventType::AcceptedEthWithdrawalRequest(eth_request.clone())
-                }
-                WithdrawalRequest::CkErc20(erc20_request) => {
-                    EventType::AcceptedErc20WithdrawalRequest(erc20_request.clone())
-                }
-            };
+            let accepted_withdrawal_request_event = self
+                .withdrawal_request
+                .clone()
+                .into_accepted_withdrawal_request_event();
             apply_state_transition(state, &accepted_withdrawal_request_event);
 
             let transaction = create_transaction(
