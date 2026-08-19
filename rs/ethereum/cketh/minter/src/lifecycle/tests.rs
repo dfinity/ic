@@ -6,7 +6,9 @@ mod init {
     use crate::test_fixtures::valid_init_arg;
     use assert_matches::assert_matches;
     use candid::{Nat, Principal};
+    use ic_ethereum_types::Address;
     use num_bigint::BigUint;
+    use std::str::FromStr;
 
     #[test]
     fn should_fail_when_init_args_invalid() {
@@ -31,7 +33,7 @@ mod init {
                 ethereum_contract_address: Some("invalid".to_string()),
                 ..valid_init_arg()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         assert_matches!(
@@ -41,7 +43,38 @@ mod init {
                 ),
                 ..valid_init_arg()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        assert_matches!(
+            State::try_from(InitArg {
+                ethereum_sweeper_contract_address: Some("invalid".to_string()),
+                ..valid_init_arg()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        assert_matches!(
+            State::try_from(InitArg {
+                ethereum_sweeper_contract_address: Some(
+                    "0x0000000000000000000000000000000000000000".to_string(),
+                ),
+                ..valid_init_arg()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        assert_matches!(
+            State::try_from(InitArg {
+                ethereum_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ethereum_sweeper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..valid_init_arg()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         assert_matches!(
@@ -75,7 +108,12 @@ mod init {
 
     #[test]
     fn should_succeed() {
-        let init_arg = valid_init_arg();
+        let init_arg = InitArg {
+            ethereum_sweeper_contract_address: Some(
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+            ),
+            ..valid_init_arg()
+        };
 
         let state = State::try_from(init_arg.clone()).expect("valid init args");
 
@@ -93,8 +131,12 @@ mod init {
             Wei::new(10_000_000_000_000_000)
         );
         assert_eq!(
-            state.eth_transactions.next_transaction_nonce(),
+            state.withdrawal_transactions.next_transaction_nonce(),
             TransactionNonce::ZERO
+        );
+        assert_eq!(
+            state.sweeper_contract_address,
+            Some(Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
     }
 }

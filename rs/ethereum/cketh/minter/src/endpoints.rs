@@ -71,6 +71,7 @@ pub struct MinterInfo {
     pub eth_helper_contract_address: Option<String>,
     pub erc20_helper_contract_address: Option<String>,
     pub deposit_with_subaccount_helper_contract_address: Option<String>,
+    pub sweeper_contract_address: Option<String>,
     pub supported_ckerc20_tokens: Option<Vec<CkErc20Token>>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_block_height: Option<CandidBlockTag>,
@@ -489,6 +490,14 @@ pub mod events {
             block_number: Nat,
         },
         AcceptedEthWithdrawalRequest {
+            withdrawal_amount: Nat,
+            destination: String,
+            ledger_burn_index: Nat,
+            from: Principal,
+            from_subaccount: Option<[u8; 32]>,
+            created_at: Option<u64>,
+        },
+        AcceptedSweeperFundingRequest {
             withdrawal_amount: Nat,
             destination: String,
             ledger_burn_index: Nat,

@@ -320,6 +320,7 @@ async fn get_minter_info() -> MinterInfo {
             eth_helper_contract_address,
             erc20_helper_contract_address,
             deposit_with_subaccount_helper_contract_address,
+            sweeper_contract_address: s.sweeper_contract_address.map(|a| a.to_string()),
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.clone()),
@@ -422,7 +423,10 @@ async fn withdraw_eth(
 #[update]
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     let ledger_burn_index = LedgerBurnIndex::new(block_index);
-    read_state(|s| s.eth_transactions.transaction_status(&ledger_burn_index))
+    read_state(|s| {
+        s.withdrawal_transactions
+            .transaction_status(&ledger_burn_index)
+    })
 }
 
 #[query]
@@ -430,14 +434,16 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
     use transactions::WithdrawalRequest::*;
     let parameter = transactions::WithdrawalSearchParameter::try_from(parameter).unwrap();
     read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .withdrawal_status(&parameter)
             .into_iter()
             .map(|(request, status, tx)| WithdrawalDetail {
                 withdrawal_id: *request.cketh_ledger_burn_index().as_ref(),
                 recipient_address: request.payee().to_string(),
                 token_symbol: match request {
-                    CkEth(_) => CkTokenSymbol::cketh_symbol_from_state(s).to_string(),
+                    CkEth(_) | SweeperFunding(_) => {
+                        CkTokenSymbol::cketh_symbol_from_state(s).to_string()
+                    }
                     CkErc20(r) => s
                         .ckerc20_tokens
                         .get_alt(&r.erc20_contract_address)
@@ -447,10 +453,14 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 withdrawal_amount: match request {
                     CkEth(r) => r.withdrawal_amount.into(),
                     CkErc20(r) => r.withdrawal_amount.into(),
+                    SweeperFunding(r) => r.withdrawal_amount.into(),
                 },
                 max_transaction_fee: match (request, tx) {
-                    (CkEth(_), None) => None,
+                    (CkEth(_) | SweeperFunding(_), None) => None,
                     (CkEth(r), Some(tx)) => {
+                        r.withdrawal_amount.checked_sub(tx.amount).map(|x| x.into())
+                    }
+                    (SweeperFunding(r), Some(tx)) => {
                         r.withdrawal_amount.checked_sub(tx.amount).map(|x| x.into())
                     }
                     (CkErc20(r), _) => Some(r.max_transaction_fee.into()),
@@ -856,6 +866,21 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
                     created_at,
                 },
+                EventType::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
+                    withdrawal_amount,
+                    destination,
+                    ledger_burn_index,
+                    from,
+                    from_subaccount,
+                    created_at,
+                }) => EP::AcceptedSweeperFundingRequest {
+                    withdrawal_amount: withdrawal_amount.into(),
+                    destination: destination.to_string(),
+                    ledger_burn_index: ledger_burn_index.get().into(),
+                    from,
+                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
+                    created_at,
+                },
                 EventType::CreatedTransaction {
                     withdrawal_id,
                     transaction,
@@ -1110,7 +1135,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
                 let now_nanos = ic_cdk::api::time();
                 let age_nanos = now_nanos.saturating_sub(
-                    s.eth_transactions
+                    s.withdrawal_transactions
                         .oldest_incomplete_withdrawal_timestamp()
                         .unwrap_or(now_nanos),
                 );

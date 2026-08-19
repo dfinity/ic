@@ -111,6 +111,9 @@ type InitArg = record {
     // with the Ethereum blockchain. If not specified, uses the production or
     // staging EVM RPC canister based on the ethereum_network field.
     evm_rpc_id : opt principal;
+
+    // Address of the sweeper smart contract.
+    ethereum_sweeper_contract_address : opt text;
 };
 
 type UpgradeArg = record {
@@ -145,6 +148,9 @@ type UpgradeArg = record {
 
     // Change the last scraped block number of the deposit with subaccount helper smart contract.
     last_deposit_with_subaccount_scraped_block_number : opt nat;
+
+    // Change the sweeper smart contract address.
+    ethereum_sweeper_contract_address : opt text;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -204,6 +210,9 @@ type MinterInfo = record {
     // Address of the ETH or ERC20 deposit with subaccount helper smart contract.
     deposit_with_subaccount_helper_contract_address: opt text;
 
+    // Address of the sweeper smart contract.
+    sweeper_contract_address: opt text;
+
     // Information of supported ERC20 tokens.
     supported_ckerc20_tokens: opt vec CkErc20Token;
 
@@ -243,7 +252,6 @@ type MinterInfo = record {
     // with the Ethereum blockchain.
     evm_rpc_id : opt principal;
 };
-
 
 type GasFeeEstimate = record {
     // Maximum amount of Wei per gas unit that the transaction is willing to pay in total.
@@ -574,6 +582,14 @@ type Event = record {
             block_number : nat;
         };
         AcceptedEthWithdrawalRequest : record {
+            withdrawal_amount : nat;
+            destination : text;
+            ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
+            created_at: opt nat64;
+        };
+        AcceptedSweeperFundingRequest : record {
             withdrawal_amount : nat;
             destination : text;
             ledger_burn_index : nat;

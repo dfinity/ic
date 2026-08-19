@@ -45,3 +45,10 @@ pub const EVM_RPC_ID_PRODUCTION: Principal =
     Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 204, 1, 1]);
 pub const EVM_RPC_ID_STAGING: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 161, 1, 1]);
 pub const CKETH_LEDGER_MEMO_SIZE: u16 = 80;
+
+pub const CKETH_FEE_SUBACCOUNT: [u8; 32] = {
+    let mut subaccount = [0_u8; 32];
+    subaccount[30] = 0x0f;
+    subaccount[31] = 0xee;
+    subaccount
+};

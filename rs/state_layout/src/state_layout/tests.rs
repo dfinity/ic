@@ -1,6 +1,5 @@
 use super::*;
 
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
@@ -63,8 +62,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         snapshot_visibility: Default::default(),
         status_visibility: Default::default(),
         log_memory_limit: NumBytes::from(0),
-        canister_log: CanisterLog::default_aggregate(),
-        next_canister_log_record_idx: 0,
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         environment_variables: BTreeMap::new(),
@@ -74,7 +71,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         local_subnet_messages_executed: 0,
         http_outcalls_executed: 0,
         heartbeats_and_global_timers_executed: 0,
-        log_memory_store_migrated: LOG_MEMORY_STORE_FEATURE_ENABLED,
         log_memory_store_persistent_next_idx: 0,
     }
 }
@@ -825,6 +821,48 @@ fn test_all_existing_wasm_files() {
         wasm_paths,
         BTreeSet::from([wasm_path_1, wasm_path_2, wasm_path_3, wasm_path_4])
     )
+}
+
+#[test]
+fn test_delete_canister_dir() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+
+    // Deleting a canister without a directory is a no-op.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert!(checkpoint_layout.canister_ids().unwrap().is_empty());
+
+    // Create directories for two canisters, one of them with a wasm file.
+    let canister_layout = checkpoint_layout.canister(&canister_test_id(42)).unwrap();
+    File::create(canister_layout.wasm().path()).unwrap();
+    let _ = checkpoint_layout.canister(&canister_test_id(43)).unwrap();
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(42), canister_test_id(43)]
+    );
+
+    // Deleting a canister removes its directory with all its contents, but leaves
+    // the other canister alone.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert!(!canister_layout.raw_path().exists());
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(43)]
+    );
+
+    // Deleting the same canister again is a no-op.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(43)]
+    );
 }
 
 #[test]

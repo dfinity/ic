@@ -260,6 +260,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::SubnetSelfSize => vec!["*"],
         SystemApiCallId::SubnetSelfCopy => vec!["*"],
+        SystemApiCallId::SubnetSelfNodeCount => vec!["*"],
         SystemApiCallId::EnvVarCount => vec!["*"],
         SystemApiCallId::EnvVarNameSize => vec!["*"],
         SystemApiCallId::EnvVarNameCopy => vec!["*"],
@@ -836,6 +837,16 @@ fn api_availability_test(
         SystemApiCallId::SubnetSelfCopy => {
             assert_api_availability(
                 |api| api.ic0_subnet_self_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::SubnetSelfNodeCount => {
+            assert_api_availability(
+                |api| api.ic0_subnet_self_node_count(),
                 api_type,
                 &system_state,
                 cycles_account_manager,

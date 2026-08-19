@@ -13,7 +13,9 @@ use crate::state::audit::apply_state_transition;
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::event::{Event, EventType};
-use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
+};
 use crate::state::{Erc20Balances, State};
 use crate::test_fixtures::{
     arb::{arb_address, arb_checked_amount_of, arb_hash, arb_ledger_subaccount},
@@ -344,7 +346,7 @@ mod upgrade {
                 ethereum_contract_address: Some("invalid".to_string()),
                 ..Default::default()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
         );
 
         let mut state = initial_state();
@@ -355,7 +357,61 @@ mod upgrade {
                 ),
                 ..Default::default()
             }),
-            Err(InvalidStateError::InvalidEthereumContractAddress(_))
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                ethereum_sweeper_contract_address: Some("invalid".to_string()),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                ethereum_sweeper_contract_address: Some(
+                    "0x0000000000000000000000000000000000000000".to_string(),
+                ),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                erc20_helper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ethereum_sweeper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_))
+        );
+
+        let mut state = initial_state();
+        state
+            .upgrade(UpgradeArg {
+                ethereum_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            })
+            .expect("valid upgrade args");
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                erc20_helper_contract_address: Some(
+                    "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
+                ),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidContractAddress(_)),
+            "a contract address already set by an earlier upgrade must stay distinct"
         );
     }
 
@@ -370,13 +426,16 @@ mod upgrade {
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
             ),
             ethereum_block_height: Some(CandidBlockTag::Safe),
+            ethereum_sweeper_contract_address: Some(
+                "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38".to_string(),
+            ),
             ..Default::default()
         };
 
         state.upgrade(upgrade_arg).expect("valid upgrade args");
 
         assert_eq!(
-            state.eth_transactions.next_transaction_nonce(),
+            state.withdrawal_transactions.next_transaction_nonce(),
             TransactionNonce::from(15_u64)
         );
         assert_eq!(
@@ -390,6 +449,10 @@ mod upgrade {
             Some(&Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
         assert_eq!(state.ethereum_block_height, CandidBlockTag::Safe);
+        assert_eq!(
+            state.sweeper_contract_address,
+            Some(Address::from_str("0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38").unwrap())
+        );
     }
 }
 
@@ -576,6 +639,7 @@ prop_compose! {
         ecdsa_key_name in "[a-z_]*",
         last_scraped_block_number in arb_nat(),
         evm_rpc_id in proptest::option::of(arb_principal()),
+        sweeper_contract_address in proptest::option::of(arb_address()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -587,6 +651,7 @@ prop_compose! {
             next_transaction_nonce,
             last_scraped_block_number,
             evm_rpc_id,
+            ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
         }
     }
 }
@@ -603,6 +668,7 @@ prop_compose! {
         evm_rpc_id in proptest::option::of(arb_principal()),
         deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
         last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
+        sweeper_contract_address in proptest::option::of(arb_address()),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
@@ -614,7 +680,8 @@ prop_compose! {
             last_erc20_scraped_block_number,
             evm_rpc_id,
             deposit_with_subaccount_helper_contract_address: deposit_with_subaccount_helper_contract_address.map(|addr| addr.to_string()),
-            last_deposit_with_subaccount_scraped_block_number
+            last_deposit_with_subaccount_scraped_block_number,
+            ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
         }
     }
 }
@@ -736,6 +803,26 @@ prop_compose! {
     }
 }
 
+prop_compose! {
+    fn arb_sweeper_funding_request()(
+        withdrawal_amount in arb_checked_amount_of(),
+        destination in arb_address(),
+        ledger_burn_index in any::<u64>(),
+        from in arb_principal(),
+        from_subaccount in arb_ledger_subaccount(),
+        created_at in proptest::option::of(any::<u64>()),
+    ) -> EthWithdrawalRequest {
+        EthWithdrawalRequest {
+            withdrawal_amount,
+            destination,
+            ledger_burn_index: ledger_burn_index.into(),
+            from,
+            from_subaccount,
+            created_at,
+        }
+    }
+}
+
 fn arb_event_type() -> impl Strategy<Value = EventType> {
     prop_oneof![
         arb_init_arg().prop_map(EventType::Init),
@@ -752,6 +839,7 @@ fn arb_event_type() -> impl Strategy<Value = EventType> {
                 mint_block_index: index.into(),
             }
         }),
+        arb_sweeper_funding_request().prop_map(EventType::AcceptedSweeperFundingRequest),
         arb_checked_amount_of().prop_map(|block_number| EventType::SyncedToBlock { block_number }),
         arb_checked_amount_of()
             .prop_map(|block_number| EventType::SyncedErc20ToBlock { block_number }),
@@ -800,9 +888,9 @@ fn state_equivalence() {
     use crate::EVM_RPC_ID_PRODUCTION;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::map::MultiKeyMap;
-    use crate::state::transactions::{
-        EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
-    };
+    use crate::state::transactions::WithdrawalRequest;
+    use crate::state::transactions::tests::WithdrawalTransactionsBuilder;
+    use crate::state::transactions::{EthWithdrawalRequest, Reimbursed, ReimbursementRequest};
     use crate::state::{InvalidEventReason, MintedEvent};
     use crate::timed_sized_map::Timestamp;
     use crate::tx::{
@@ -812,6 +900,7 @@ fn state_equivalence() {
     use ic_cdk_management_canister::EcdsaPublicKeyResult;
     use icrc_ledger_types::icrc1::account::Account;
     use maplit::{btreemap, btreeset};
+    use std::collections::VecDeque;
 
     fn source(txhash: &str, index: u64) -> EventSource {
         EventSource {
@@ -849,84 +938,55 @@ fn state_equivalence() {
         ledger_burn_index: LedgerBurnIndex::new(20),
         ..withdrawal_request1.clone()
     };
-    let eth_transactions = EthTransactions {
-        pending_withdrawal_requests: vec![
-            withdrawal_request1.clone().into(),
-            withdrawal_request2.clone().into(),
-        ]
-        .into_iter()
-        .collect(),
-        processed_withdrawal_requests: btreemap! {
-            LedgerBurnIndex::new(4) => EthWithdrawalRequest {
-                withdrawal_amount: Wei::new(1_000_000_000_000),
-                ledger_burn_index: LedgerBurnIndex::new(4),
-                destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52".parse().unwrap(),
-                from: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae"
+    let pending_withdrawal_requests: VecDeque<WithdrawalRequest> = vec![
+        withdrawal_request1.clone().into(),
+        withdrawal_request2.clone().into(),
+    ]
+    .into_iter()
+    .collect();
+    let processed_withdrawal_requests = btreemap! {
+        LedgerBurnIndex::new(4) => EthWithdrawalRequest {
+            withdrawal_amount: Wei::new(1_000_000_000_000),
+            ledger_burn_index: LedgerBurnIndex::new(4),
+            destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52".parse().unwrap(),
+            from: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae"
+                .parse()
+                .unwrap(),
+            from_subaccount: None,
+            created_at: Some(1699527697000000000),
+        }.into(),
+       withdrawal_request1.ledger_burn_index  => withdrawal_request1.clone().into(),
+    };
+    let created_tx = singleton_map(
+        2,
+        4,
+        TransactionRequest {
+            transaction: Eip1559TransactionRequest {
+                chain_id: 1,
+                nonce: TransactionNonce::new(2),
+                max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
+                max_fee_per_gas: WeiPerGas::new(100_000_000),
+                gas_limit: GasAmount::new(21_000),
+                destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
                     .parse()
                     .unwrap(),
-                from_subaccount: None,
-                created_at: Some(1699527697000000000),
-            }.into(),
-           withdrawal_request1.ledger_burn_index  => withdrawal_request1.clone().into(),
-        },
-        created_tx: singleton_map(
-            2,
-            4,
-            TransactionRequest {
-                transaction: Eip1559TransactionRequest {
-                    chain_id: 1,
-                    nonce: TransactionNonce::new(2),
-                    max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
-                    max_fee_per_gas: WeiPerGas::new(100_000_000),
-                    gas_limit: GasAmount::new(21_000),
-                    destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
-                        .parse()
-                        .unwrap(),
-                    amount: Wei::new(1_000_000_000_000),
-                    data: vec![],
-                    access_list: Default::default(),
-                },
-                resubmission: ResubmissionStrategy::ReduceEthAmount {
-                    withdrawal_amount: Wei::new(1_000_000_000_000),
-                },
+                amount: Wei::new(1_000_000_000_000),
+                data: vec![],
+                access_list: Default::default(),
             },
-        ),
-        sent_tx: singleton_map(
-            1,
-            3,
-            vec![SignedTransactionRequest {
-                transaction: SignedEip1559TransactionRequest::from((
-                    Eip1559TransactionRequest {
-                        chain_id: 1,
-                        nonce: TransactionNonce::new(1),
-                        max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
-                        max_fee_per_gas: WeiPerGas::new(100_000_000),
-                        gas_limit: GasAmount::new(21_000),
-                        destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
-                            .parse()
-                            .unwrap(),
-                        amount: Wei::new(1_000_000_000_000),
-                        data: vec![],
-                        access_list: Default::default(),
-                    },
-                    TransactionSignature {
-                        signature_y_parity: true,
-                        r: Default::default(),
-                        s: Default::default(),
-                    },
-                )),
-                resubmission: ResubmissionStrategy::ReduceEthAmount {
-                    withdrawal_amount: Wei::new(1_000_000_000_000),
-                },
-            }],
-        ),
-        finalized_tx: singleton_map(
-            0,
-            2,
-            SignedEip1559TransactionRequest::from((
+            resubmission: ResubmissionStrategy::ReduceEthAmount {
+                withdrawal_amount: Wei::new(1_000_000_000_000),
+            },
+        },
+    );
+    let sent_tx = singleton_map(
+        1,
+        3,
+        vec![SignedTransactionRequest {
+            transaction: SignedEip1559TransactionRequest::from((
                 Eip1559TransactionRequest {
                     chain_id: 1,
-                    nonce: TransactionNonce::new(0),
+                    nonce: TransactionNonce::new(1),
                     max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
                     max_fee_per_gas: WeiPerGas::new(100_000_000),
                     gas_limit: GasAmount::new(21_000),
@@ -942,44 +1002,81 @@ fn state_equivalence() {
                     r: Default::default(),
                     s: Default::default(),
                 },
-            ))
-            .try_finalize(TransactionReceipt {
-                block_hash: "0x9e1e2124a453e7b5afaabe42fb66fffb12d4b1053403d2f487d250007f3cb550"
+            )),
+            resubmission: ResubmissionStrategy::ReduceEthAmount {
+                withdrawal_amount: Wei::new(1_000_000_000_000),
+            },
+        }],
+    );
+    let finalized_tx = singleton_map(
+        0,
+        2,
+        SignedEip1559TransactionRequest::from((
+            Eip1559TransactionRequest {
+                chain_id: 1,
+                nonce: TransactionNonce::new(0),
+                max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
+                max_fee_per_gas: WeiPerGas::new(100_000_000),
+                gas_limit: GasAmount::new(21_000),
+                destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
                     .parse()
                     .unwrap(),
-                block_number: BlockNumber::new(400_000),
-                effective_gas_price: WeiPerGas::new(100_000_000),
-                gas_used: GasAmount::new(21_000),
-                status: TransactionStatus::Success,
-                transaction_hash:
-                    "0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
-                        .parse()
-                        .unwrap(),
-            })
-            .expect("valid receipt"),
-        ),
-        next_nonce: TransactionNonce::new(3),
-        maybe_reimburse: btreeset! { LedgerBurnIndex::new(4) },
-        reimbursement_requests: btreemap! {
-            ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(3) } => ReimbursementRequest {
-                transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
+                amount: Wei::new(1_000_000_000_000),
+                data: vec![],
+                access_list: Default::default(),
+            },
+            TransactionSignature {
+                signature_y_parity: true,
+                r: Default::default(),
+                s: Default::default(),
+            },
+        ))
+        .try_finalize(TransactionReceipt {
+            block_hash: "0x9e1e2124a453e7b5afaabe42fb66fffb12d4b1053403d2f487d250007f3cb550"
                 .parse()
-                .unwrap()),
-                ledger_burn_index: LedgerBurnIndex::new(3),
-                reimbursed_amount: CkTokenAmount::new(100_000_000_000),
-                to: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae".parse().unwrap(),
-                to_subaccount: None,
-            }
-        },
-        reimbursed: btreemap! {
-           ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(6) } => Ok(Reimbursed {
-                transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d".parse().unwrap()),
-                reimbursed_in_block: LedgerMintIndex::new(150),
-                reimbursed_amount: CkTokenAmount::new(10_000_000_000_000),
-                burn_in_block: LedgerBurnIndex::new(6),
-            }),
-        },
+                .unwrap(),
+            block_number: BlockNumber::new(400_000),
+            effective_gas_price: WeiPerGas::new(100_000_000),
+            gas_used: GasAmount::new(21_000),
+            status: TransactionStatus::Success,
+            transaction_hash: "0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
+                .parse()
+                .unwrap(),
+        })
+        .expect("valid receipt"),
+    );
+    let next_nonce = TransactionNonce::new(3);
+    let maybe_reimburse = btreeset! { LedgerBurnIndex::new(4) };
+    let reimbursement_requests = btreemap! {
+        ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(3) } => ReimbursementRequest {
+            transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
+            .parse()
+            .unwrap()),
+            ledger_burn_index: LedgerBurnIndex::new(3),
+            reimbursed_amount: CkTokenAmount::new(100_000_000_000),
+            to: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae".parse().unwrap(),
+            to_subaccount: None,
+        }
     };
+    let reimbursed = btreemap! {
+       ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(6) } => Ok(Reimbursed {
+            transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d".parse().unwrap()),
+            reimbursed_in_block: LedgerMintIndex::new(150),
+            reimbursed_amount: CkTokenAmount::new(10_000_000_000_000),
+            burn_in_block: LedgerBurnIndex::new(6),
+        }),
+    };
+    let builder = WithdrawalTransactionsBuilder::default()
+        .with_pending_withdrawal_requests(pending_withdrawal_requests)
+        .with_processed_withdrawal_requests(processed_withdrawal_requests)
+        .with_created_tx(created_tx)
+        .with_sent_tx(sent_tx)
+        .with_finalized_tx(finalized_tx)
+        .with_next_nonce(next_nonce)
+        .with_maybe_reimburse(maybe_reimburse)
+        .with_reimbursement_requests(reimbursement_requests)
+        .with_reimbursed(reimbursed);
+    let withdrawal_transactions = builder.clone().build();
     let mut ckerc20_tokens = DedupMultiKeyMap::default();
     ckerc20_tokens
         .try_insert(
@@ -1070,7 +1167,7 @@ fn state_equivalence() {
         invalid_events: btreemap! {
             source("0x05c6ec45699c9a6a4b1a4ea2058b0cee852ea2f19b18fb8313c04bf8156efde4", 11) => InvalidEventReason::InvalidDeposit("failed to decode principal from bytes 0x00333c125dc9f41abaf2b8b85d49fdc7ff75b2a4000000000000000000000000".to_string()),
         },
-        eth_transactions: eth_transactions.clone(),
+        withdrawal_transactions: withdrawal_transactions.clone(),
         pending_withdrawal_principals: Default::default(),
         pending_deposit_principals: Default::default(),
         active_tasks: Default::default(),
@@ -1083,6 +1180,11 @@ fn state_equivalence() {
         evm_rpc_id: EVM_RPC_ID_PRODUCTION,
         ckerc20_tokens,
         automatic_deposits,
+        sweeper_contract_address: Some(
+            "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38"
+                .parse()
+                .unwrap(),
+        ),
     };
 
     assert_eq!(
@@ -1176,18 +1278,29 @@ fn state_equivalence() {
         "changing essential fields should break equivalence",
     );
 
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            sweeper_contract_address: None,
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
     assert_eq!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                pending_withdrawal_requests: vec![
-                    withdrawal_request2.clone().into(),
-                    withdrawal_request1.clone().into()
-                ]
-                .into_iter()
-                .collect(),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder
+                .clone()
+                .with_pending_withdrawal_requests(
+                    vec![
+                        withdrawal_request2.clone().into(),
+                        withdrawal_request1.clone().into()
+                    ]
+                    .into_iter()
+                    .collect()
+                )
+                .build(),
             ..state.clone()
         },),
         "changing the order of withdrawal requests should result in an equivalent state",
@@ -1196,10 +1309,12 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                pending_withdrawal_requests: vec![withdrawal_request1.into()].into_iter().collect(),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder
+                .clone()
+                .with_pending_withdrawal_requests(
+                    vec![withdrawal_request1.into()].into_iter().collect()
+                )
+                .build(),
             ..state.clone()
         }),
         "changing the withdrawal requests should break equivalence"
@@ -1208,10 +1323,7 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                sent_tx: Default::default(),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder.clone().with_sent_tx(Default::default()).build(),
             ..state.clone()
         }),
         "changing the transactions should break equivalence"
@@ -1220,10 +1332,7 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                created_tx: Default::default(),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder.clone().with_created_tx(Default::default()).build(),
             ..state.clone()
         }),
         "changing the transactions should break equivalence"
@@ -1232,10 +1341,10 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                finalized_tx: Default::default(),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder
+                .clone()
+                .with_finalized_tx(Default::default())
+                .build(),
             ..state.clone()
         }),
         "changing the transactions should break equivalence"
@@ -1244,10 +1353,10 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                maybe_reimburse: Default::default(),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder
+                .clone()
+                .with_maybe_reimburse(Default::default())
+                .build(),
             ..state.clone()
         }),
         "changing the reimbursement data should break equivalence"
@@ -1256,10 +1365,10 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                reimbursement_requests: Default::default(),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder
+                .clone()
+                .with_reimbursement_requests(Default::default())
+                .build(),
             ..state.clone()
         }),
         "changing the reimbursement data should break equivalence"
@@ -1268,10 +1377,7 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                reimbursed: Default::default(),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder.clone().with_reimbursed(Default::default()).build(),
             ..state.clone()
         }),
         "changing the reimbursement data should break equivalence"
@@ -1280,10 +1386,10 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_transactions: EthTransactions {
-                next_nonce: TransactionNonce::new(1000),
-                ..eth_transactions.clone()
-            },
+            withdrawal_transactions: builder
+                .clone()
+                .with_next_nonce(TransactionNonce::new(1000))
+                .build(),
             ..state.clone()
         }),
         "changing the next nonce should break equivalence"
@@ -1330,6 +1436,49 @@ fn state_equivalence() {
         }),
         "changing essential fields should break equivalence",
     );
+}
+
+mod sweeper_funding {
+    use super::*;
+    use crate::eth_logs::LedgerSubaccount;
+    use crate::numeric::{LedgerBurnIndex, Wei};
+    use crate::state::audit::apply_state_transition;
+    use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest};
+    use crate::test_fixtures::initial_state;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn should_record_an_accepted_funding_as_a_funding_request() {
+        let mut state = initial_state();
+        let funding = EthWithdrawalRequest {
+            withdrawal_amount: Wei::new(10_000_000_000_000_000),
+            destination: "0x5353535353535353535353535353535353535353"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
+            created_at: Some(1699527697000000000),
+        };
+
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedSweeperFundingRequest(funding),
+        );
+
+        let request = state
+            .withdrawal_transactions
+            .withdrawal_requests_iter()
+            .next()
+            .expect("BUG: the funding request was not recorded");
+        assert_matches!(request, WithdrawalRequest::SweeperFunding(_));
+        assert!(
+            !request.is_reimbursable(),
+            "recorded as an ordinary withdrawal, a failed funding would be reimbursed"
+        );
+    }
 }
 
 mod eth_balance {
@@ -1413,6 +1562,53 @@ mod eth_balance {
         assert_eq!(balance_after_erc20_deposit, balance_before);
     }
 
+    /// Both outcomes of one withdrawal flow, applied to independent copies of the same starting
+    /// state so a test can compare them directly.
+    struct BothOutcomes {
+        after_success: State,
+        after_failure: State,
+        receipt_succeeded: TransactionReceipt,
+        receipt_failed: TransactionReceipt,
+    }
+
+    /// Runs the shared 21'000-gas flow against `state_before` twice, once finalizing successfully and
+    /// once with a failure receipt, leaving each caller to assert only what its request type makes
+    /// different. The gas fixture comes from a real Sepolia transaction and over-provisions the fee,
+    /// so part of it is always recorded as unspent.
+    fn apply_eth_transfer_both_ways<T: Into<WithdrawalRequest>>(
+        state_before: &State,
+        request: T,
+    ) -> BothOutcomes {
+        //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
+        let flow = WithdrawalFlow {
+            tx_fee: GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
+                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+            },
+            gas_limit: GasAmount::from(21_000_u32),
+            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
+            tx_status: TransactionStatus::Success,
+            ..WithdrawalFlow::for_request(request)
+        };
+
+        let mut after_success = state_before.clone();
+        let receipt_succeeded = flow.clone().apply(&mut after_success);
+
+        let mut after_failure = state_before.clone();
+        let receipt_failed = WithdrawalFlow {
+            tx_status: TransactionStatus::Failure,
+            ..flow
+        }
+        .apply(&mut after_failure);
+
+        BothOutcomes {
+            after_success,
+            after_failure,
+            receipt_succeeded,
+            receipt_failed,
+        }
+    }
+
     #[test]
     fn should_update_after_successful_and_failed_withdrawal() {
         let mut state_before_withdrawal = initial_state();
@@ -1421,10 +1617,8 @@ mod eth_balance {
             &EventType::AcceptedDeposit(received_eth_event()),
         );
 
-        let mut state_after_successful_withdrawal = state_before_withdrawal.clone();
         let eth_balance_before_withdrawal = state_before_withdrawal.eth_balance.clone();
         let erc20_balance_before_withdrawal = state_before_withdrawal.erc20_balances.clone();
-        //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
         let withdrawal_request = EthWithdrawalRequest {
             withdrawal_amount: Wei::new(10_000_000_000_000_000),
             destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
@@ -1437,23 +1631,10 @@ mod eth_balance {
             from_subaccount: None,
             created_at: Some(1699527697000000000),
         };
-        let withdrawal_flow = WithdrawalFlow {
-            tx_fee: GasFeeEstimate {
-                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
-                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
-            },
-            gas_limit: GasAmount::from(21_000_u32),
-            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
-            tx_status: TransactionStatus::Success,
-            ..WithdrawalFlow::for_request(withdrawal_request)
-        };
-        withdrawal_flow
-            .clone()
-            .apply(&mut state_after_successful_withdrawal);
-        let eth_balance_after_successful_withdrawal =
-            state_after_successful_withdrawal.eth_balance.clone();
+        let outcomes = apply_eth_transfer_both_ways(&state_before_withdrawal, withdrawal_request);
+        let eth_balance_after_successful_withdrawal = outcomes.after_success.eth_balance.clone();
         let erc20_balance_after_successful_withdrawal =
-            state_after_successful_withdrawal.erc20_balances.clone();
+            outcomes.after_success.erc20_balances.clone();
 
         assert_eq!(
             eth_balance_after_successful_withdrawal,
@@ -1477,15 +1658,9 @@ mod eth_balance {
             erc20_balance_after_successful_withdrawal
         );
 
-        let mut state_after_failed_withdrawal = state_before_withdrawal.clone();
-        let receipt_failed = WithdrawalFlow {
-            tx_status: TransactionStatus::Failure,
-            ..withdrawal_flow
-        }
-        .apply(&mut state_after_failed_withdrawal);
-        let eth_balance_after_failed_withdrawal = state_after_failed_withdrawal.eth_balance.clone();
-        let erc20_balance_after_failed_withdrawal =
-            state_after_failed_withdrawal.erc20_balances.clone();
+        let receipt_failed = &outcomes.receipt_failed;
+        let eth_balance_after_failed_withdrawal = outcomes.after_failure.eth_balance.clone();
+        let erc20_balance_after_failed_withdrawal = outcomes.after_failure.erc20_balances.clone();
 
         assert_eq!(
             eth_balance_after_failed_withdrawal.eth_balance,
@@ -1505,6 +1680,90 @@ mod eth_balance {
         assert_eq!(
             erc20_balance_before_withdrawal,
             erc20_balance_after_failed_withdrawal
+        );
+    }
+
+    /// Funding takes its own arm in the balance accounting, so the ckETH and ckERC20 cases above
+    /// cannot reach it. What is asserted is the same shape as a ckETH withdrawal — a success debits
+    /// the transferred ETH plus the fee actually paid, a failure debits only that fee — because
+    /// funding is an ordinary withdrawal to the accounting. What differs is that nothing is ever
+    /// reimbursed, which is why the failing case must still leave the fee counters moving.
+    #[test]
+    fn should_update_after_successful_and_failed_sweeper_funding() {
+        let mut state_before_funding = initial_state();
+        apply_state_transition(
+            &mut state_before_funding,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+        let eth_balance_before_funding = state_before_funding.eth_balance.clone();
+
+        let funding_amount = Wei::new(10_000_000_000_000_000);
+        let funding_request = WithdrawalRequest::SweeperFunding(EthWithdrawalRequest {
+            withdrawal_amount: funding_amount,
+            destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: None,
+            created_at: Some(1699527697000000000),
+        });
+        let outcomes = apply_eth_transfer_both_ways(&state_before_funding, funding_request);
+        let receipt_succeeded = &outcomes.receipt_succeeded;
+        let after_success = outcomes.after_success.eth_balance.clone();
+
+        // Asserted as the identity the accounting has to satisfy rather than as a fixed number: the
+        // funding ceiling covers both the ETH delivered and the fee, so whatever part of the fee
+        // went unspent is exactly what stays with the minter.
+        let unspent = after_success
+            .total_unspent_tx_fees
+            .checked_sub(eth_balance_before_funding.total_unspent_tx_fees)
+            .unwrap();
+        assert_eq!(
+            after_success.eth_balance,
+            eth_balance_before_funding
+                .eth_balance
+                .checked_sub(
+                    funding_amount
+                        .checked_sub(unspent)
+                        .expect("the unspent fee is part of the funding")
+                )
+                .unwrap(),
+            "a successful funding debits what it moved plus the fee it paid"
+        );
+        assert_eq!(
+            after_success.total_effective_tx_fees,
+            eth_balance_before_funding
+                .total_effective_tx_fees
+                .checked_add(receipt_succeeded.effective_transaction_fee())
+                .unwrap(),
+            "the fee actually paid must be counted"
+        );
+        assert!(
+            unspent > Wei::ZERO,
+            "this fixture over-provisions the fee, so some of it must be recorded as unspent"
+        );
+
+        let receipt_failed = &outcomes.receipt_failed;
+        let after_failure = outcomes.after_failure.eth_balance.clone();
+
+        assert_eq!(
+            after_failure.eth_balance,
+            eth_balance_before_funding
+                .eth_balance
+                .checked_sub(receipt_failed.effective_transaction_fee())
+                .unwrap(),
+            "a failed funding moved no ETH, so only the fee is debited"
+        );
+        assert_eq!(
+            after_failure.total_effective_tx_fees, after_success.total_effective_tx_fees,
+            "the same fee was paid either way"
+        );
+        assert_eq!(
+            after_failure.total_unspent_tx_fees, after_success.total_unspent_tx_fees,
+            "and the same amount of it went unspent"
         );
     }
 
@@ -1627,14 +1886,10 @@ mod eth_balance {
         }
 
         fn apply(self, state: &mut State) -> TransactionReceipt {
-            let accepted_withdrawal_request_event = match &self.withdrawal_request {
-                WithdrawalRequest::CkEth(eth_request) => {
-                    EventType::AcceptedEthWithdrawalRequest(eth_request.clone())
-                }
-                WithdrawalRequest::CkErc20(erc20_request) => {
-                    EventType::AcceptedErc20WithdrawalRequest(erc20_request.clone())
-                }
-            };
+            let accepted_withdrawal_request_event = self
+                .withdrawal_request
+                .clone()
+                .into_accepted_withdrawal_request_event();
             apply_state_transition(state, &accepted_withdrawal_request_event);
 
             let transaction = create_transaction(

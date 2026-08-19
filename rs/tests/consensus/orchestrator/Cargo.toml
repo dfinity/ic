@@ -16,7 +16,6 @@ ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }
 ic-protobuf = { path = "../../../protobuf" }
-ic-recovery = { path = "../../../recovery" }
 ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
@@ -30,7 +29,6 @@ registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 

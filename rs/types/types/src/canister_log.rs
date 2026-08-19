@@ -12,6 +12,13 @@ const MIB: usize = 1024 * KIB;
 /// The maximum size of an aggregate canister log buffer.
 pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 2 * MIB;
 
+/// The minimum non-zero size of an aggregate canister log buffer.
+///
+/// A limit of zero disables logging altogether; any other limit must be at
+/// least this value, which is the log memory store's minimum ring buffer data
+/// capacity of one OS page.
+pub const MIN_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KIB;
+
 /// The default size of an aggregate canister log buffer.
 pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KIB;
 
@@ -27,6 +34,7 @@ pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MIB;
 pub const MAX_FETCH_CANISTER_LOGS_RESULT_BYTES: usize = 2_000_000;
 
 // Compile-time assertions to ensure the constants are within valid ranges.
+const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
 const _: () = assert!(MAX_DELTA_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
 // A `fetch_canister_logs` response is the returned records (trimmed to
@@ -225,9 +233,7 @@ impl CanisterLog {
         self.records.get()
     }
 
-    // TODO(DSM-11): remove allow(dead_code) when log memory store is used in production.
     /// Returns mutable reference to the canister log records.
-    #[allow(dead_code)]
     pub fn records_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
         self.records.get_mut()
     }
