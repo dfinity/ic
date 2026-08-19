@@ -1275,12 +1275,19 @@ impl ExecutionEnvironment {
                     | SubnetType::VerifiedApplication
                     | SubnetType::CloudEngine => state.get_own_cost_schedule(),
                 };
-                let pricing_version = match (self.config.flexible_http_requests, cost_schedule) {
-                    (FlagStatus::Enabled, _) => Some(PricingVersion::PayAsYouGo),
-                    (FlagStatus::Disabled, CanisterCyclesCostSchedule::Free) => {
-                        Some(PricingVersion::Legacy)
+                // And, just like non-flexible outcalls, flexible outcalls are
+                // only offered on subnets where the `http_requests` subnet
+                // feature is enabled.
+                let pricing_version = if state.subnet_features().http_requests {
+                    match (self.config.flexible_http_requests, cost_schedule) {
+                        (FlagStatus::Enabled, _) => Some(PricingVersion::PayAsYouGo),
+                        (FlagStatus::Disabled, CanisterCyclesCostSchedule::Free) => {
+                            Some(PricingVersion::Legacy)
+                        }
+                        (FlagStatus::Disabled, CanisterCyclesCostSchedule::Normal) => None,
                     }
-                    (FlagStatus::Disabled, CanisterCyclesCostSchedule::Normal) => None,
+                } else {
+                    None
                 };
                 match pricing_version {
                     None => ExecuteSubnetMessageResult::Finished {

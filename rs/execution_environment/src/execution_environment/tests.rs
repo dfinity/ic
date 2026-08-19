@@ -4177,6 +4177,75 @@ fn execute_flexible_canister_http_request_disabled() {
     );
 }
 
+#[test]
+fn execute_flexible_canister_http_request_disabled_by_subnet_feature() {
+    /// The configurations in which flexible outcalls would be available if the
+    /// `http_requests` subnet feature were enabled.
+    #[derive(Copy, Clone, Debug)]
+    enum Available {
+        /// The `flexible_http_requests` feature flag is enabled.
+        FeatureFlag,
+        /// The subnet is on a free cost schedule, so pricing is moot.
+        FreeCostSchedule,
+        /// A system subnet charges nothing for outcalls despite a normal
+        /// cost schedule.
+        SystemSubnet,
+    }
+
+    // Just like non-flexible outcalls, flexible outcalls are unavailable on a
+    // subnet where the `http_requests` subnet feature is disabled — in every
+    // configuration that would otherwise offer them.
+    for available in [
+        Available::FeatureFlag,
+        Available::FreeCostSchedule,
+        Available::SystemSubnet,
+    ] {
+        let own_subnet = subnet_test_id(1);
+        let caller_canister = canister_test_id(10);
+        let builder = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister);
+        let mut test = match available {
+            Available::FeatureFlag => builder.with_flexible_http_requests_enabled(),
+            Available::FreeCostSchedule => {
+                builder.with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            }
+            Available::SystemSubnet => builder.with_subnet_type(SubnetType::System),
+        }
+        .build();
+        std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+            .subnet_features
+            .http_requests = false;
+
+        let args = flexible_http_request_args(caller_canister);
+        test.inject_call_to_ic00(
+            Method::FlexibleHttpRequest,
+            args.encode(),
+            Cycles::new(1_000_000_000),
+        );
+        test.execute_all();
+
+        // No context is added and the request is rejected specifically because
+        // the feature is not available on this subnet (as opposed to any other
+        // rejection reason).
+        let canister_http_request_contexts = &test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(
+            canister_http_request_contexts.len(),
+            0,
+            "unexpected context for {available:?}"
+        );
+        assert_eq!(
+            get_reject_message(test.xnet_messages()[0].clone()),
+            "This API is not enabled on this subnet",
+            "unexpected rejection message for {available:?}"
+        );
+    }
+}
+
 fn get_reject_message(response: RequestOrResponse) -> String {
     match response {
         RequestOrResponse::Request(_) => panic!("Expected Response"),
