@@ -498,11 +498,6 @@ impl SubnetMetrics {
             .consumed_cycles_by_use_case_as_counters
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
-
-        // Migrate the legacy scalar outcall fields into the use-case map. This
-        // runs on every observed use case, independently of whether the scalar
-        // fields themselves are observed.
-        self.migrate_outcalls_cycles_to_use_cases();
     }
 
     pub fn observe_consumed_cycles_by_deleted_canisters(&mut self, cycles: NominalCycles) {
@@ -536,10 +531,19 @@ impl SubnetMetrics {
     /// that predates use-case tracking while avoiding double counting the
     /// overlapping period.
     ///
-    /// This runs whenever a use case is observed (see
-    /// `observe_consumed_cycles_with_use_case`), i.e. independently of whether
-    /// the scalar fields themselves are observed, so the use-case entries also
-    /// catch up on subnets that stop performing outcalls.
+    /// This is called unconditionally once per round (from the scheduler's
+    /// `finish_round`), i.e. independently of any subnet activity. Hooking it to
+    /// an observation instead would leave the entries stale indefinitely on
+    /// subnets that observe no subnet-level use case at all: the subnet-level use
+    /// cases are only observed on HTTP outcalls, threshold signature outcalls,
+    /// canister deletion and cycles lost to dropped messages, so a subnet that
+    /// does none of these (e.g. one that has stopped performing outcalls) would
+    /// never catch up.
+    ///
+    /// Running once per round rather than per observation is equivalent, because
+    /// the call sites bump the scalar field and the matching use-case entry by
+    /// the same amount: `max(entry, scalar) + delta == max(entry + delta, scalar
+    /// + delta)`. It is also idempotent, so extra invocations are harmless.
     ///
     /// Only the `consumed_cycles_by_use_case` map is migrated; the monotonic
     /// `consumed_cycles_by_use_case_as_counters` map is intentionally left
@@ -549,7 +553,7 @@ impl SubnetMetrics {
     /// than zeroed, so that they remain the source of truth for readers such as
     /// `consumed_cycles_total` (which still reads them for now) and so that
     /// downgrading to an earlier replica version observes the correct totals.
-    fn migrate_outcalls_cycles_to_use_cases(&mut self) {
+    pub fn migrate_outcalls_cycles_to_use_cases(&mut self) {
         for (scalar, use_case) in [
             (
                 self.consumed_cycles_http_outcalls,
