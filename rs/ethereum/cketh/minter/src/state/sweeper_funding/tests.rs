@@ -1,7 +1,5 @@
 use crate::numeric::Wei;
-use crate::state::sweeper_funding::{
-    InvalidSweeperFundingConfig, SweeperFundingAccounting, SweeperFundingConfig,
-};
+use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 
 const BURN: u128 = 100_000_000_000_000_000; // 0.1 ETH
 const FEE: u128 = 1_000_000_000_000_000; // 0.001 ETH
@@ -89,77 +87,78 @@ mod accounting {
 
 mod config {
     use super::*;
+    use crate::state::sweeper_funding::SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS;
 
     /// ckETH's mainnet minimum withdrawal amount, i.e. the floor a funding's burn is held to.
     const MINIMUM_BURN: u128 = 30_000_000_000_000_000;
 
-    #[test]
-    fn should_accept_the_defaults() {
-        let config = SweeperFundingConfig::default();
-
-        assert_eq!(config.validate(Wei::new(MINIMUM_BURN)), Ok(()));
-        assert!(
-            config.target > config.low_water_mark,
-            "the default target must leave refill headroom"
-        );
+    fn config_for(minimum_withdrawal_amount: u128) -> SweeperFundingConfig {
+        SweeperFundingConfig::for_minimum_withdrawal_amount(Wei::new(minimum_withdrawal_amount))
+            .expect("test setup: the bounds must fit")
     }
 
     #[test]
-    fn should_reject_a_target_at_or_below_the_low_water_mark() {
-        for target in [Wei::new(BURN), Wei::new(BURN - 1), Wei::ZERO] {
-            let config = SweeperFundingConfig {
-                low_water_mark: Wei::new(BURN),
-                target,
-            };
+    fn should_derive_the_bounds_from_the_minimum_withdrawal_amount() {
+        let config = config_for(MINIMUM_BURN);
 
-            assert_eq!(
-                config.validate(Wei::new(MINIMUM_BURN)),
-                Err(InvalidSweeperFundingConfig::TargetNotAboveLowWaterMark {
-                    low_water_mark: Wei::new(BURN),
-                    target,
-                }),
-                "a target of {target} must be rejected: funding would loop"
+        assert_eq!(
+            config.target,
+            Wei::new(MINIMUM_BURN * SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS as u128)
+        );
+        assert_eq!(
+            config.low_water_mark,
+            config.target.checked_div_floor(2_u8).unwrap()
+        );
+    }
+
+    /// The relation the two bounds exist for: the smallest amount a funding moves is the gap between
+    /// them, and it has to clear the minimum the burn is held to. Derived, it holds for any input
+    /// rather than for the pairs a proposal happens to set.
+    #[test]
+    fn should_leave_headroom_above_the_minimum_withdrawal_amount() {
+        for minimum in [
+            1,
+            1_000,
+            10_000_000_000, // Sepolia's ledger transfer fee
+            MINIMUM_BURN,
+            1_000 * MINIMUM_BURN,
+        ] {
+            let config = config_for(minimum);
+            let headroom = config
+                .target
+                .checked_sub(config.low_water_mark)
+                .expect("the target must exceed the low-water mark");
+
+            assert!(
+                headroom >= Wei::new(minimum),
+                "a funding of a minter with minimum {minimum} moves at least {headroom}, \
+                 which must cover the minimum itself"
             );
         }
     }
 
     #[test]
-    fn should_reject_headroom_below_the_minimum_burn() {
-        let config = SweeperFundingConfig {
-            low_water_mark: Wei::new(20_000_000_000_000_000), // 0.02 ETH
-            target: Wei::new(30_000_000_000_000_000),         // 0.03 ETH -> only 0.01 of headroom
-        };
+    fn should_report_no_bounds_when_the_target_would_not_fit() {
+        let too_large = Wei::MAX
+            .checked_div_floor(SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS)
+            .unwrap()
+            .checked_add(Wei::ONE)
+            .unwrap();
 
         assert_eq!(
-            config.validate(Wei::new(MINIMUM_BURN)),
-            Err(InvalidSweeperFundingConfig::HeadroomBelowMinimumBurn {
-                headroom: Wei::new(10_000_000_000_000_000),
-                minimum_burn: Wei::new(MINIMUM_BURN),
-            }),
-            "0.03 ckETH burned to move 0.01 ETH is a 3x over-burn on every cycle"
+            SweeperFundingConfig::for_minimum_withdrawal_amount(too_large),
+            None,
+            "the caller must find out rather than the derivation trapping"
         );
     }
 
     #[test]
-    fn should_accept_headroom_exactly_at_the_minimum_burn() {
-        let config = SweeperFundingConfig {
-            low_water_mark: Wei::new(20_000_000_000_000_000),
-            target: Wei::new(20_000_000_000_000_000 + MINIMUM_BURN),
-        };
-
-        assert_eq!(config.validate(Wei::new(MINIMUM_BURN)), Ok(()));
-    }
-
-    #[test]
     fn should_not_fund_above_the_low_water_mark() {
-        let config = SweeperFundingConfig {
-            low_water_mark: Wei::new(BURN),
-            target: Wei::new(2 * BURN),
-        };
+        let config = config_for(MINIMUM_BURN);
 
-        assert_eq!(config.amount_due(Wei::new(2 * BURN)), None);
+        assert_eq!(config.amount_due(config.target), None);
         assert_eq!(
-            config.amount_due(Wei::new(BURN)),
+            config.amount_due(config.low_water_mark),
             None,
             "at the mark, not below"
         );
@@ -167,16 +166,14 @@ mod config {
 
     #[test]
     fn should_fund_up_to_the_target() {
-        let config = SweeperFundingConfig {
-            low_water_mark: Wei::new(BURN),
-            target: Wei::new(2 * BURN),
-        };
+        let config = config_for(MINIMUM_BURN);
+        let just_below = config.low_water_mark.checked_sub(Wei::ONE).unwrap();
 
         assert_eq!(
-            config.amount_due(Wei::new(BURN - 1)),
-            Some(Wei::new(BURN + 1)),
+            config.amount_due(just_below),
+            Some(config.target.checked_sub(just_below).unwrap()),
             "top up the shortfall to the target, not a fixed amount"
         );
-        assert_eq!(config.amount_due(Wei::ZERO), Some(Wei::new(2 * BURN)));
+        assert_eq!(config.amount_due(Wei::ZERO), Some(config.target));
     }
 }

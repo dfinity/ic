@@ -299,107 +299,50 @@ mod upgrade {
     use std::str::FromStr;
 
     #[test]
-    fn should_configure_the_sweeper_funding_bounds() {
+    fn should_track_the_minimum_withdrawal_amount_in_the_funding_bounds() {
         let mut state = initial_state();
-        let default_config = state.sweeper_funding_config.clone();
+        let before = state.sweeper_funding_config();
 
-        let mark = 30_000_000_000_000_000_u128; // 0.03 ETH
-        let target = 200_000_000_000_000_000_u128; // 0.2 ETH
+        let raised = 90_000_000_000_000_000_u128; // 0.09 ETH, triple mainnet's minimum
         state
             .upgrade(UpgradeArg {
-                sweeper_funding_low_water_mark: Some(Nat::from(mark)),
-                sweeper_funding_target: Some(Nat::from(target)),
+                minimum_withdrawal_amount: Some(Nat::from(raised)),
                 ..Default::default()
             })
-            .expect("a target well above the mark must be accepted");
+            .expect("raising the minimum withdrawal amount must be accepted");
 
-        assert_eq!(state.sweeper_funding_config.low_water_mark, Wei::new(mark));
-        assert_eq!(state.sweeper_funding_config.target, Wei::new(target));
-        assert_ne!(state.sweeper_funding_config, default_config);
-    }
-
-    #[test]
-    fn should_keep_the_other_bound_when_only_one_is_given() {
-        let mut state = initial_state();
-        let original_mark = state.sweeper_funding_config.low_water_mark;
-
-        state
-            .upgrade(UpgradeArg {
-                sweeper_funding_target: Some(Nat::from(u128::from(u64::MAX))),
-                ..Default::default()
-            })
-            .expect("raising only the target must be accepted");
-
-        assert_eq!(
-            state.sweeper_funding_config.low_water_mark, original_mark,
-            "an omitted bound must not be reset"
+        let after = state.sweeper_funding_config();
+        assert!(
+            after.target > before.target && after.low_water_mark > before.low_water_mark,
+            "the bounds are derived from the minimum, so raising it must move both: \
+             {before:?} -> {after:?}"
         );
-        assert_eq!(
-            state.sweeper_funding_config.target,
-            Wei::new(u128::from(u64::MAX))
+        assert!(
+            after
+                .target
+                .checked_sub(after.low_water_mark)
+                .expect("the target must exceed the low-water mark")
+                >= Wei::new(raised),
+            "and the smallest amount a funding moves must still cover the raised minimum"
         );
     }
 
     #[test]
-    fn should_reject_a_sweeper_funding_target_below_the_low_water_mark() {
-        for (mark, target) in [(10_u64, 10_u64), (10, 9), (10, 0)] {
-            let mut state = initial_state();
-            let unchanged = state.sweeper_funding_config.clone();
-
-            assert_matches!(
-                state.upgrade(UpgradeArg {
-                    sweeper_funding_low_water_mark: Some(Nat::from(mark)),
-                    sweeper_funding_target: Some(Nat::from(target)),
-                    ..Default::default()
-                }),
-                Err(InvalidStateError::InvalidSweeperFundingConfig(_)),
-                "mark {mark} with target {target} must be rejected"
-            );
-            assert_eq!(
-                state.sweeper_funding_config, unchanged,
-                "a rejected upgrade must not partially apply the config"
-            );
-        }
-    }
-
-    #[test]
-    fn should_reject_an_install_whose_minimum_exceeds_the_default_funding_headroom() {
+    fn should_install_with_a_minimum_the_fixed_bounds_would_have_refused() {
         use crate::lifecycle::init::InitArg;
         use crate::state::State;
         use crate::test_fixtures::valid_init_arg;
 
-        let too_large = InitArg {
-            // Above the 0.08 ETH of headroom the default bounds leave.
-            minimum_withdrawal_amount: Nat::from(90_000_000_000_000_000_u128),
+        // 0.09 ETH exceeded the 0.08 ETH of headroom the fixed default bounds used to leave, which
+        // failed the install outright. Derived bounds scale with the minimum instead.
+        let minimum = 90_000_000_000_000_000_u128;
+        let state = State::try_from(InitArg {
+            minimum_withdrawal_amount: Nat::from(minimum),
             ..valid_init_arg()
-        };
+        })
+        .expect("a minimum this large must no longer constrain the install");
 
-        assert_matches!(
-            State::try_from(too_large),
-            Err(InvalidStateError::InvalidSweeperFundingConfig(_)),
-            "the install must be refused rather than silently over-burning on every funding"
-        );
-    }
-
-    #[test]
-    fn should_reject_a_minimum_withdrawal_amount_that_exceeds_the_funding_headroom() {
-        let mut state = initial_state();
-        state
-            .upgrade(UpgradeArg {
-                sweeper_funding_low_water_mark: Some(Nat::from(20_000_000_000_000_000_u128)),
-                sweeper_funding_target: Some(Nat::from(60_000_000_000_000_000_u128)),
-                ..Default::default()
-            })
-            .expect("0.04 ETH of headroom is fine at the default minimum");
-
-        assert_matches!(
-            state.upgrade(UpgradeArg {
-                minimum_withdrawal_amount: Some(Nat::from(50_000_000_000_000_000_u128)),
-                ..Default::default()
-            }),
-            Err(InvalidStateError::InvalidSweeperFundingConfig(_)),
-            "a minimum burn above the headroom must be rejected even when the bounds are untouched"
-        );
+        assert!(state.sweeper_funding_config().low_water_mark > Wei::new(minimum));
     }
 
     #[test]
@@ -773,9 +716,6 @@ prop_compose! {
         deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
         last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
         sweeper_contract_address in proptest::option::of(arb_address()),
-        sweeper_funding_bounds in proptest::option::of((0_u128..u128::MAX / 4).prop_map(|mark| {
-            (Nat::from(mark), Nat::from(mark + 1_000_000_000_000_000_000_u128))
-        })),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
@@ -786,12 +726,6 @@ prop_compose! {
             erc20_helper_contract_address: erc20_helper_contract_address.map(|addr| addr.to_string()),
             last_erc20_scraped_block_number,
             evm_rpc_id,
-            sweeper_funding_low_water_mark: sweeper_funding_bounds
-                .as_ref()
-                .map(|(mark, _target)| mark.clone()),
-            sweeper_funding_target: sweeper_funding_bounds
-                .as_ref()
-                .map(|(_mark, target)| target.clone()),
             deposit_with_subaccount_helper_contract_address: deposit_with_subaccount_helper_contract_address.map(|addr| addr.to_string()),
             last_deposit_with_subaccount_scraped_block_number,
             ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
@@ -1238,7 +1172,6 @@ fn state_equivalence() {
     };
     let state = State {
         sweeper_funding: Default::default(),
-        sweeper_funding_config: Default::default(),
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),

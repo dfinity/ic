@@ -94,11 +94,14 @@ impl SweeperFundingAccounting {
     }
 }
 
-/// When to top the sweeper address up, and to what. Proposal-configurable; the defaults below are
-/// provisional, to be calibrated during the Sepolia rollout.
+/// When to top the sweeper address up, and to what.
 ///
-/// Not CBOR-serializable: replayed from the `Upgrade` events that set it, never persisted.
-#[derive(Clone, Eq, PartialEq, Debug)]
+/// Derived from the minter's minimum withdrawal amount rather than configured in its own right. The
+/// two bounds only ever had to keep one relation: the gap between them is the smallest amount a
+/// funding moves, and it has to clear the ledger minimum that gives the burn its index. Deriving
+/// them makes that hold by construction, so there is no pair for a proposal to get wrong and
+/// nothing to validate.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct SweeperFundingConfig {
     /// Fund the sweeper address once its ETH balance falls below this.
     pub low_water_mark: Wei,
@@ -106,56 +109,29 @@ pub struct SweeperFundingConfig {
     pub target: Wei,
 }
 
-/// 0.02 ETH: roughly 24 solo sweeps at 10 gwei, so refilling starts well before running dry.
-pub const DEFAULT_SWEEPER_FUNDING_LOW_WATER_MARK: Wei = Wei::new(20_000_000_000_000_000);
-/// 0.1 ETH, so a funding covers many sweeps and its own fee stays a small fraction of the amount
-/// moved.
-///
-/// Coupled to the check in [`SweeperFundingConfig::validate`]: the pair leaves 0.08 ETH of headroom,
-/// which is therefore the largest `minimum_withdrawal_amount` a fresh install can accept, since
-/// `InitArg` cannot express the bounds. Widen these defaults rather than relaxing the check.
-pub const DEFAULT_SWEEPER_FUNDING_TARGET: Wei = Wei::new(100_000_000_000_000_000);
-
-impl Default for SweeperFundingConfig {
-    fn default() -> Self {
-        Self {
-            low_water_mark: DEFAULT_SWEEPER_FUNDING_LOW_WATER_MARK,
-            target: DEFAULT_SWEEPER_FUNDING_TARGET,
-        }
-    }
-}
-
-/// Why a proposed [`SweeperFundingConfig`] is not usable.
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum InvalidSweeperFundingConfig {
-    /// Without headroom every funding would immediately be due again, funding in a tight loop.
-    TargetNotAboveLowWaterMark { low_water_mark: Wei, target: Wei },
-    /// The headroom is the smallest amount a funding ever moves, so below the minimum burn every
-    /// cycle would burn more ckETH than it moves ETH.
-    HeadroomBelowMinimumBurn { headroom: Wei, minimum_burn: Wei },
-}
+/// The target in minimum withdrawal amounts: 0.3 ETH against mainnet's 0.03, so a funding covers a
+/// great many sweeps and its own fee stays a small fraction of what it moves. Provisional, to be
+/// calibrated during the Sepolia rollout.
+pub const SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS: u8 = 10;
 
 impl SweeperFundingConfig {
-    /// Validates the pair against the smallest burn a funding will make. Takes `minimum_burn`
-    /// rather than checking the bounds alone because this is what an NNS proposal leans on.
-    pub fn validate(&self, minimum_burn: Wei) -> Result<(), InvalidSweeperFundingConfig> {
-        if self.target <= self.low_water_mark {
-            return Err(InvalidSweeperFundingConfig::TargetNotAboveLowWaterMark {
-                low_water_mark: self.low_water_mark,
-                target: self.target,
-            });
-        }
-        let headroom = self
-            .target
-            .checked_sub(self.low_water_mark)
-            .expect("BUG: target is above the low-water mark");
-        if headroom < minimum_burn {
-            return Err(InvalidSweeperFundingConfig::HeadroomBelowMinimumBurn {
-                headroom,
-                minimum_burn,
-            });
-        }
-        Ok(())
+    /// The bounds for a minter whose minimum withdrawal amount is `minimum_withdrawal_amount`, or
+    /// `None` if the target would overflow — which [`State::validate_config`] rejects, so callers
+    /// holding a validated state can unwrap.
+    ///
+    /// Refilling starts at half the target, so a funding always moves at least half of it — five
+    /// minimum withdrawal amounts — and therefore always burns more than the ledger minimum.
+    ///
+    /// [`State::validate_config`]: crate::state::State::validate_config
+    pub fn for_minimum_withdrawal_amount(minimum_withdrawal_amount: Wei) -> Option<Self> {
+        let target = minimum_withdrawal_amount
+            .checked_mul(SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS)?;
+        Some(Self {
+            low_water_mark: target
+                .checked_div_floor(2_u8)
+                .expect("BUG: dividing by a non-zero constant"),
+            target,
+        })
     }
 
     /// How much ETH to move to bring `sweeper_balance` up to the target, or `None` when the
@@ -164,7 +140,7 @@ impl SweeperFundingConfig {
         if sweeper_balance >= self.low_water_mark {
             return None;
         }
-        // Non-zero: the balance is below the low-water mark, which `validate` keeps below the target.
+        // Non-zero: the balance is below the low-water mark, which is half the target.
         self.target.checked_sub(sweeper_balance)
     }
 }

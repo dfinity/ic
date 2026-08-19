@@ -32,14 +32,6 @@ pub struct UpgradeArg {
     pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
     #[n(10)]
     pub ethereum_sweeper_contract_address: Option<String>,
-    /// Sweeper balance below which the minter tops it up with gas. Validated as a pair with
-    /// `sweeper_funding_target`: the target must exceed this by at least the minimum withdrawal
-    /// amount, that difference being the smallest amount a funding ever moves.
-    #[cbor(n(11), with = "icrc_cbor::nat::option")]
-    pub sweeper_funding_low_water_mark: Option<Nat>,
-    /// Sweeper balance the minter tops up to. See the constraint on the low-water mark.
-    #[cbor(n(12), with = "icrc_cbor::nat::option")]
-    pub sweeper_funding_target: Option<Nat>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {
