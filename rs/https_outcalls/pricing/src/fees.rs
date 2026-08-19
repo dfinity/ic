@@ -301,7 +301,7 @@ pub(crate) fn max_consensus_fee(
         ReplicationKind::FullyReplicated => {
             let n = (subnet_size.get() as usize).max(1);
             let threshold = (n - get_faults_tolerated(n)) as u128;
-            // The share of the fee a single replica holds, which the `threshold`
+            // The consensus fee that delivering the response will cost, which the `threshold`
             // contributing ones have to cover between them, times the `n` replicas the
             // allowance is split across.
             consensus_fee(response_bytes, subnet_size).div_ceil(threshold) * n
