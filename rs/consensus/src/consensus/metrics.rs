@@ -145,21 +145,19 @@ pub(crate) struct BatchStats {
 }
 
 impl BatchStats {
-    pub(crate) fn new(batch_height: Height) -> Self {
+    pub(crate) fn from_payload(batch_height: Height, payload: &BatchPayload) -> Self {
         Self {
             batch_height: batch_height.get(),
-            ..Self::default()
+            ingress_messages_delivered: payload.ingress.message_count(),
+            ingress_message_bytes_delivered: payload.ingress.total_messages_size_estimate().get()
+                as usize,
+            xnet_bytes_delivered: payload.xnet.size_bytes(),
+            ingress_ids: payload.ingress.message_ids().cloned().collect(),
+            canister_http: CanisterHttpBatchStats {
+                payload_bytes: payload.canister_http.len(),
+                ..Default::default()
+            },
         }
-    }
-
-    pub(crate) fn add_from_payload(&mut self, payload: &BatchPayload) {
-        self.ingress_messages_delivered += payload.ingress.message_count();
-        self.ingress_message_bytes_delivered +=
-            payload.ingress.total_messages_size_estimate().get() as usize;
-        self.xnet_bytes_delivered += payload.xnet.size_bytes();
-        self.ingress_ids
-            .extend(payload.ingress.message_ids().cloned());
-        self.canister_http.payload_bytes = payload.canister_http.len();
     }
 }
 
