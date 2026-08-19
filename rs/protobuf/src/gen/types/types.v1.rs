@@ -396,8 +396,6 @@ pub struct Summary {
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
     pub remote_dkg_attempts: ::prost::alloc::vec::Vec<RemoteDkgAttemptCount>,
-    #[prost(message, repeated, tag = "10")]
-    pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
     #[prost(message, repeated, tag = "11")]
     pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
