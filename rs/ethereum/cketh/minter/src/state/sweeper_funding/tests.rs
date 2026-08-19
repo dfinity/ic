@@ -34,7 +34,6 @@ mod accounting {
     fn should_keep_the_unspent_fee_as_surplus_after_a_successful_funding() {
         let mut accounting = SweeperFundingAccounting::default();
         accounting.record_burn(Wei::new(BURN));
-        // The burn covers the fee the transaction may pay; the block charges half of it.
         accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE / 2));
 
         assert_eq!(
@@ -89,8 +88,7 @@ mod config {
     use super::*;
     use crate::state::sweeper_funding::SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS;
 
-    /// ckETH's mainnet minimum withdrawal amount, i.e. the floor a funding's burn is held to.
-    const MINIMUM_BURN: u128 = 30_000_000_000_000_000;
+    const MINIMUM_BURN: u128 = 30_000_000_000_000_000; // ckETH's mainnet minimum withdrawal amount
 
     fn config_for(minimum_withdrawal_amount: u128) -> SweeperFundingConfig {
         SweeperFundingConfig::for_minimum_withdrawal_amount(Wei::new(minimum_withdrawal_amount))
@@ -111,9 +109,6 @@ mod config {
         );
     }
 
-    /// The relation the two bounds exist for: the smallest amount a funding moves is the gap between
-    /// them, and it has to clear the minimum the burn is held to. Derived, it holds for any input
-    /// rather than for the pairs a proposal happens to set.
     #[test]
     fn should_leave_headroom_above_the_minimum_withdrawal_amount() {
         for minimum in [

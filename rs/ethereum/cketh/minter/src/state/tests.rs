@@ -333,9 +333,7 @@ mod upgrade {
         use crate::state::State;
         use crate::test_fixtures::valid_init_arg;
 
-        // 0.09 ETH exceeded the 0.08 ETH of headroom the fixed default bounds used to leave, which
-        // failed the install outright. Derived bounds scale with the minimum instead.
-        let minimum = 90_000_000_000_000_000_u128;
+        let minimum = 90_000_000_000_000_000_u128; // above the 0.08 ETH the fixed bounds left
         let state = State::try_from(InitArg {
             minimum_withdrawal_amount: Nat::from(minimum),
             ..valid_init_arg()
@@ -1610,8 +1608,7 @@ mod eth_balance {
         assert_eq!(balance_after_erc20_deposit, balance_before);
     }
 
-    /// Both outcomes of one withdrawal flow, applied to independent copies of the same starting
-    /// state so a test can compare them directly.
+    /// Both outcomes of one flow, each applied to its own copy of the starting state.
     struct BothOutcomes {
         after_success: State,
         after_failure: State,
@@ -1619,10 +1616,8 @@ mod eth_balance {
         receipt_failed: TransactionReceipt,
     }
 
-    /// Runs the shared 21'000-gas flow against `state_before` twice, once finalizing successfully and
-    /// once with a failure receipt, leaving each caller to assert only what its request type makes
-    /// different. The gas fixture comes from a real Sepolia transaction and over-provisions the fee,
-    /// so part of it is always recorded as unspent.
+    /// Runs the 21'000-gas flow twice, once finalizing successfully and once with a failure
+    /// receipt. The gas fixture over-provisions the fee, so part of it is always left unspent.
     fn apply_eth_transfer_both_ways<T: Into<WithdrawalRequest>>(
         state_before: &State,
         request: T,
@@ -1846,11 +1841,6 @@ mod eth_balance {
         );
     }
 
-    /// Funding takes its own arm in the balance accounting, so the ckETH and ckERC20 cases above
-    /// cannot reach it. What is asserted is the same shape as a ckETH withdrawal — a success debits
-    /// the transferred ETH plus the fee actually paid, a failure debits only that fee — because
-    /// funding is an ordinary withdrawal to the accounting. What differs is that nothing is ever
-    /// reimbursed, which is why the failing case must still leave the fee counters moving.
     #[test]
     fn should_update_after_successful_and_failed_sweeper_funding() {
         let mut state_before_funding = initial_state();
@@ -1877,9 +1867,7 @@ mod eth_balance {
         let receipt_succeeded = &outcomes.receipt_succeeded;
         let after_success = outcomes.after_success.eth_balance.clone();
 
-        // Asserted as the identity the accounting has to satisfy rather than as a fixed number: the
-        // funding ceiling covers both the ETH delivered and the fee, so whatever part of the fee
-        // went unspent is exactly what stays with the minter.
+        // An identity rather than a fixed number: the ceiling covers the ETH delivered plus the fee.
         let unspent = after_success
             .total_unspent_tx_fees
             .checked_sub(eth_balance_before_funding.total_unspent_tx_fees)
