@@ -782,7 +782,8 @@ impl Player {
             // case the checkpoint to persist already exists and re-running the replay
             // must not deliver yet another extra batch: it would move the checkpoint
             // (and thereby change the state hash) one height further on every re-run,
-            // and only a run over pristine data would reproduce that hash.
+            // making the hash depend on how many times the replay was run rather
+            // than only on the replayed data.
             let latest_state_height = self.state_manager.latest_state_height();
             if latest_state_height > target_height {
                 println!(
@@ -794,8 +795,8 @@ impl Player {
         }
         // `deliver_batches()` deliberately does not force a checkpoint at the replay
         // target height: that height has to be executed exactly the way the subnet
-        // executed it, so that the resulting certified state can be compared against
-        // the subnet's certification shares (see `redeliver_certifications`).
+        // executed it, so that the resulting certified state is identical to the one
+        // the subnet certified at that height (see `redeliver_certifications`).
         // Therefore we always deliver at least one extra batch after replaying the
         // consensus pool; the final extra batch is a `BatchContent::Checkpointing`
         // one, whose round creates the checkpoint without executing anything.
