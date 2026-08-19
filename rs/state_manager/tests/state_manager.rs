@@ -8480,6 +8480,15 @@ fn can_rename_canister() {
     can_rename_canister_impl(CertificationScope::Full);
 }
 
+/// Tests that a canister dropped by `ReplicatedState::online_split()` is removed
+/// from the tip by the flush of the recorded `UnflushedCheckpointOp::DeleteCanister`,
+/// i.e. without relying on `FilterTipCanisters`.
+///
+/// Note that in production a splitting batch always requires a full state hash (see
+/// `Batch::requires_full_state_hash()`), so the split round is always a checkpoint
+/// round and `FilterTipCanisters` would remove the directory in the same round
+/// anyway. The `CertificationScope::Metadata` case below therefore exercises the
+/// flush mechanism in isolation, not a state reachable in production.
 #[test]
 fn canister_dropped_by_split_is_removed_from_tip() {
     fn canister_dropped_by_split_is_removed_from_tip_impl(certification_scope: CertificationScope) {
@@ -8551,8 +8560,9 @@ fn canister_dropped_by_split_is_removed_from_tip() {
             }
             state_manager.flush_tip_channel();
 
-            // The dropped canister's directory is gone from the tip, even without a
-            // checkpoint, i.e. without `FilterTipCanisters` having run.
+            // The dropped canister's directory is gone from the tip. In the
+            // `Metadata` case this is solely due to the flushed delete operation, as
+            // `FilterTipCanisters` only runs when a checkpoint is created.
             assert_eq!(tip.canister_ids().unwrap(), vec![RETAINED]);
             // And the checkpoint op has been flushed.
             let (_height, state) = state_manager.take_tip();

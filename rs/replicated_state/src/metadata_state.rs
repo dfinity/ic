@@ -1335,7 +1335,7 @@ impl SystemMetadata {
             // retaining everything else on subnet A'.
             blockmaker_metrics_time_series,
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
-            // for the snapshots of no longer hosted canisters.
+            // for the canisters dropped by the split.
             unflushed_checkpoint_ops,
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
