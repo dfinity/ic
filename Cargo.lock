@@ -17985,6 +17985,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-http-endpoints-public",
  "ic-http-endpoints-test-agent",
+ "ic-https-outcalls-pricing",
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-message",
