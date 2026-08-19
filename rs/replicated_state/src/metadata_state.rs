@@ -2462,6 +2462,8 @@ pub mod testing {
         fn routing_table_mut(&mut self) -> &mut RoutingTable;
         /// Sets the routing table.
         fn set_routing_table(&mut self, routing_table: RoutingTable);
+        /// Returns a reference to `full_topology`.
+        fn full_topology(&self) -> Option<&FullTopology>;
         /// Sets the full (unfiltered) topology for the state tree.
         fn set_full_topology(&mut self, full_topology: Option<FullTopology>);
     }
@@ -2478,6 +2480,9 @@ pub mod testing {
         }
         fn set_routing_table(&mut self, routing_table: RoutingTable) {
             self.routing_table = Arc::new(routing_table);
+        }
+        fn full_topology(&self) -> Option<&FullTopology> {
+            self.full_topology.as_ref()
         }
         fn set_full_topology(&mut self, full_topology: Option<FullTopology>) {
             self.full_topology = full_topology;
