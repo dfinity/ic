@@ -188,6 +188,12 @@ async fn add_necessary_ports_registry_rule(
     // The global scope does not necessarily start out empty — the local backend
     // seeds a rule that lets the test driver reach the nodes — and the proposal
     // has to carry a hash of the rule set it applies to.
+    //
+    // The rule goes to position 0, which is the only valid position when the
+    // scope does start out empty, as it does on Farm. Where it does not, the
+    // position is immaterial: both this rule and the seeded one are `Allow`, and
+    // a packet is accepted by whichever it matches first, so their relative
+    // order cannot change the outcome.
     let previous_rules = topology_snapshot
         .firewall_rules(&FirewallRulesScope::Global)
         .expect("Could not read the global firewall rules");

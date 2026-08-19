@@ -51,6 +51,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
+use itertools::Itertools;
 use slog::{Logger, debug, info, warn};
 use std::{
     collections::BTreeMap,
@@ -265,17 +266,23 @@ pub fn init_ic(
         SystemTestBackend::Local
     ) {
         let group_name = GroupSetup::read_attribute(test_env).infra_group_name;
-        let prefixes: Vec<String> = LocalBackend::group_driver_ipv6_prefixes(&group_name)
+        // Deduplicated: these become anonymous nftables sets
+        // (`ip6 saddr { ... }`), and `nft` rejects a set with a repeated
+        // element, taking the whole ruleset down with it. A test can introduce
+        // one easily enough — calling `with_extra_firewall_whitelist` twice, or
+        // passing a port that is already in `LOCAL_WHITELISTED_PORTS`.
+        let prefixes = LocalBackend::group_driver_ipv6_prefixes(&group_name)
             .into_iter()
             .chain(ic.extra_firewall_whitelist_prefixes.iter().cloned())
-            .collect();
-        let ports: Vec<String> = LOCAL_WHITELISTED_PORTS
+            .unique()
+            .join(",");
+        let ports = LOCAL_WHITELISTED_PORTS
             .iter()
             .chain(ic.extra_firewall_whitelist_ports.iter())
-            .map(|port| port.to_string())
-            .collect();
-        ic_config.set_whitelisted_prefixes(Some(prefixes.join(",")));
-        ic_config.set_whitelisted_ports(Some(ports.join(",")));
+            .unique()
+            .join(",");
+        ic_config.set_whitelisted_prefixes(Some(prefixes));
+        ic_config.set_whitelisted_ports(Some(ports));
     }
 
     for dc_record in &ic.data_centers {
