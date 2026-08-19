@@ -165,7 +165,7 @@ pub fn plan_funding(state: &State, sweeper_balance: Wei) -> FundingDecision {
     if let Some(in_flight) = state.sweeper_funding.in_flight_funding() {
         return FundingDecision::AlreadyInFlight(in_flight);
     }
-    match state.sweeper_funding_config.amount_due(sweeper_balance) {
+    match state.sweeper_funding_config().amount_due(sweeper_balance) {
         None => FundingDecision::NotDue,
         Some(amount) => {
             // Funding debits `eth_balance`, which counts only ETH received through deposits, so

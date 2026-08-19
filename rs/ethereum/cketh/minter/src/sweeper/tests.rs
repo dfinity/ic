@@ -32,21 +32,17 @@ fn should_preserve_the_invariant_across_consecutive_fundings() {
 mod concurrent_fundings {
     use crate::numeric::{LedgerBurnIndex, Wei};
     use crate::state::State;
-    use crate::state::sweeper_funding::SweeperFundingConfig;
     use crate::sweeper::{FundingDecision, plan_funding};
     use crate::test_fixtures::initial_state;
 
     const CREATED_AT: Option<u64> = Some(1_700_000_000_000_000_000);
-    const LOW_WATER_MARK: u128 = 20_000_000_000_000_000; // 0.02 ETH
-    const TARGET: u128 = 100_000_000_000_000_000; // 0.1 ETH
-    const MINIMUM_BURN: u128 = 30_000_000_000_000_000; // 0.03 ETH
+    const MINIMUM_BURN: u128 = 30_000_000_000_000_000; // 0.03 ETH, ckETH's mainnet minimum
+    /// The bounds the fixture's minimum implies, rather than a pair of its own: the target is ten
+    /// times the minimum withdrawal amount, and refilling starts at half of that.
+    const TARGET: u128 = 10 * MINIMUM_BURN;
 
     fn state() -> State {
         let mut state = initial_state();
-        state.sweeper_funding_config = SweeperFundingConfig {
-            low_water_mark: Wei::new(LOW_WATER_MARK),
-            target: Wei::new(TARGET),
-        };
         state.cketh_minimum_withdrawal_amount = Wei::new(MINIMUM_BURN);
         // Funding is capped by the ETH the minter received through deposits, so a fixture with none
         // could never fund at all.
