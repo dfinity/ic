@@ -97,6 +97,9 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_fire_and_forget))
                 // System subnet (free for outcalls despite a normal cost schedule).
                 .add_test(systest!(test_system_subnet_outcall))
+                // What a caller has to pay, which is the one thing that does
+                // differ between the free and the paying subnet.
+                .add_test(systest!(test_no_cycles_attached))
                 // Transform behavior.
                 .add_test(systest!(test_transform_appends_context))
                 .add_test(systest!(test_transform_sets_status_and_headers))
@@ -1610,6 +1613,34 @@ async fn cycle_balance(proxy: &Canister<'_>) -> Result<u128> {
         .query_("cycle_balance", candid_one::<u128, ()>, ())
         .await
         .map_err(|err| anyhow::anyhow!("querying the proxy canister's balance failed: {err}"))
+}
+
+/// An outcall with nothing attached succeeds where outcalls are free and is
+/// rejected where they are paid for — the base fee is the one thing a caller has
+/// to cover up front.
+fn test_no_cycles_attached(env: TestEnv) {
+    let make_args = |env: &TestEnv| get_args(format!("{}/ascii/unpaid", webserver_base(env)));
+
+    run_flexible_test_on(
+        &env,
+        CanisterCyclesCostSchedule::Free,
+        "an outcall with no cycles attached succeeds where outcalls are free",
+        0,
+        &make_args,
+        &|result| {
+            let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
+            expect_all_bodies(&payloads, b"unpaid")
+        },
+    );
+
+    run_flexible_test_on(
+        &env,
+        CanisterCyclesCostSchedule::Normal,
+        "an outcall with no cycles attached is rejected where outcalls are paid for",
+        0,
+        &make_args,
+        &|result| expect_rejection(result, "cycles are required"),
+    );
 }
 
 /// A successful outcall costs the caller something, but nowhere near the payment

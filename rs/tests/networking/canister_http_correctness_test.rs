@@ -30,17 +30,18 @@ use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, FlexibleHttpRequestResult, HttpHeader,
-    HttpMethod, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext, TransformFunc,
+    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext,
+    TransformFunc,
 };
 use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,
     driver::{
         group::{SystemTestGroup, SystemTestSubGroup},
         test_env::TestEnv,
-        test_env_api::HasTopologySnapshot,
+        test_env_api::IcNodeSnapshot,
     },
     retry_agent_on_transport_errors, systest,
-    util::{block_on, get_app_subnet_and_node},
+    util::block_on,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -71,40 +72,56 @@ const HTTP_REQUEST_CYCLE_PAYMENT: u64 = 500_000_000_000;
 // content-type, access-control-allow-origin, access-control-allow-credentials, date, content-length.
 const HTTPBIN_OVERHEAD_RESPONSE_HEADERS: usize = 5;
 
+/// The subnet a test talks to, and the proxy canister installed on it.
 struct Handlers<'a> {
     subnet_size: usize,
     runtime: Runtime,
+    node: IcNodeSnapshot,
+    proxy_canister_id: PrincipalId,
     env: &'a TestEnv,
 }
 
 impl<'a> Handlers<'a> {
+    /// Handlers for the application subnet, which charges for HTTP outcalls.
     fn new(env: &'a TestEnv) -> Handlers<'a> {
-        let subnet_size = get_node_snapshots(env).count();
+        Self::on_subnet(env, get_node_snapshots(env), get_proxy_canister_id(env))
+    }
 
-        let runtime = {
-            let mut nodes = get_node_snapshots(env);
-            let node = nodes.next().expect("there is no application node");
-            get_runtime_from_node(&node)
-        };
+    /// Handlers for the system subnet, which charges nothing for HTTP outcalls
+    /// despite its normal cost schedule — the free counterpart of
+    /// [`Handlers::new`].
+    fn on_system_subnet(env: &'a TestEnv) -> Handlers<'a> {
+        Self::on_subnet(
+            env,
+            get_system_subnet_node_snapshots(env),
+            get_system_proxy_canister_id(env),
+        )
+    }
+
+    fn on_subnet(
+        env: &'a TestEnv,
+        nodes: impl Iterator<Item = IcNodeSnapshot>,
+        proxy_canister_id: PrincipalId,
+    ) -> Handlers<'a> {
+        let nodes: Vec<_> = nodes.collect();
+        let node = nodes.first().expect("the subnet has no nodes").clone();
 
         Handlers {
-            runtime,
-            subnet_size,
+            runtime: get_runtime_from_node(&node),
+            subnet_size: nodes.len(),
+            node,
+            proxy_canister_id,
             env,
         }
     }
 
     fn proxy_canister(&self) -> Canister<'_> {
-        let principal_id = get_proxy_canister_id(self.env);
-        let canister_id = CanisterId::unchecked_from_principal(principal_id);
+        let canister_id = CanisterId::unchecked_from_principal(self.proxy_canister_id);
         Canister::new(&self.runtime, canister_id)
     }
 
     async fn agent(&self) -> Agent {
-        let topology_snapshot = self.env.topology_snapshot();
-        let (_, app_node) = get_app_subnet_and_node(&topology_snapshot);
-
-        app_node.build_canister_agent().await.agent
+        self.node.build_canister_agent().await.agent
     }
 }
 
@@ -212,6 +229,8 @@ fn main() -> Result<()> {
         // from the same canister would perturb.
         .add_test(systest!(test_pay_as_you_go_charges_and_refunds))
         .add_test(systest!(test_pay_as_you_go_out_of_cycles))
+        // Reads the proxy canister's balance too, on the system subnet.
+        .add_test(systest!(test_free_subnet_charges_nothing))
         .execute_from_args()?;
 
     Ok(())
@@ -410,40 +429,48 @@ fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
     );
 }
 
+/// An outcall with nothing attached is rejected where outcalls are paid for,
+/// whichever pricing version it asks for: legacy has to cover the full request
+/// fee up front, pay-as-you-go the base fee.
+///
+/// See [`test_free_subnet_charges_nothing`] for the free counterpart.
 fn test_no_cycles_attached(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let (response, _) = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("http://[{webserver_ipv6}]"),
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
+    for pricing_version in [PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO] {
+        let (response, _) = block_on(submit_outcall(
+            &handlers,
+            RemoteHttpRequest {
+                request: UnvalidatedCanisterHttpRequestArgs {
+                    url: format!("http://[{webserver_ipv6}]"),
+                    headers: vec![],
+                    method: HttpMethod::GET,
+                    body: Some("".as_bytes().to_vec()),
+                    transform: Some(TransformContext {
+                        function: TransformFunc(candid::Func {
+                            principal: get_proxy_canister_id(&env).into(),
+                            method: "transform".to_string(),
+                        }),
+                        context: vec![0, 1, 2],
                     }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: None,
-                is_replicated: None,
-                pricing_version: None,
+                    max_response_bytes: None,
+                    is_replicated: None,
+                    pricing_version: Some(pricing_version),
+                },
+                cycles: 0,
             },
-            cycles: 0,
-        },
-    ));
+        ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
+        assert_matches!(
+            response,
+            Err(RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                ..
+            }),
+            "expected pricing version {pricing_version} to reject an unpaid outcall"
+        );
+    }
 }
 
 fn test_max_possible_request_size(env: TestEnv) {
@@ -2923,6 +2950,69 @@ fn test_pay_as_you_go_out_of_cycles(env: TestEnv) {
         ),
         other => panic!("expected an out-of-cycles rejection, got: {other:?}"),
     }
+}
+
+/// Where HTTP outcalls are free, an outcall succeeds whatever it attaches —
+/// nothing at all, or a payment that comes back in full — and the caller's
+/// balance is left untouched. Holds under both pricing versions.
+///
+/// The free subnet here is the system subnet, which charges nothing for outcalls
+/// despite its normal cost schedule and already carries a proxy canister, so this
+/// needs no extra subnet in the topology. What a free *cost schedule* does
+/// differently is only how it reaches the same pinned schedule in the request
+/// context, which the execution-environment tests cover directly.
+///
+/// The free counterpart of [`test_no_cycles_attached`] and, for the payment case,
+/// of [`test_pay_as_you_go_charges_and_refunds`].
+fn test_free_subnet_charges_nothing(env: TestEnv) {
+    let handlers = Handlers::on_system_subnet(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    block_on(async {
+        for pricing_version in [PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO] {
+            for payment in [0, HTTP_REQUEST_CYCLE_PAYMENT] {
+                let before = proxy_cycle_balance(&handlers).await;
+
+                let (response, refunded_cycles) = submit_outcall(
+                    &handlers,
+                    RemoteHttpRequest {
+                        request: UnvalidatedCanisterHttpRequestArgs {
+                            url: format!("https://[{webserver_ipv6}]/ascii/free"),
+                            headers: vec![],
+                            method: HttpMethod::GET,
+                            body: Some("".as_bytes().to_vec()),
+                            transform: None,
+                            max_response_bytes: None,
+                            is_replicated: None,
+                            pricing_version: Some(pricing_version),
+                        },
+                        cycles: payment,
+                    },
+                )
+                .await;
+
+                let context = format!(
+                    "a free outcall paying {payment} cycles under pricing version \
+                     {pricing_version}"
+                );
+                assert_matches!(
+                    &response,
+                    Ok(ok) if ok.status == 200,
+                    "{context} did not succeed: {response:?}"
+                );
+                // Nothing is charged, so the whole payment is refunded with the
+                // response rather than any of it being kept or withheld as an
+                // allowance.
+                assert_eq!(
+                    refunded_cycles,
+                    RefundedCycles::Cycles(payment),
+                    "{context} was not refunded in full"
+                );
+                let after = proxy_cycle_balance(&handlers).await;
+                assert_eq!(after, before, "{context} moved the caller's balance");
+            }
+        }
+    });
 }
 
 /// Pricing function of canister http requests.
