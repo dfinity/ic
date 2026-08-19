@@ -26,7 +26,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
-use transactions::EthTransactions;
+use transactions::WithdrawalTransactions;
 
 pub mod audit;
 pub mod automatic_deposits;
@@ -73,7 +73,7 @@ pub struct State {
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
-    pub eth_transactions: EthTransactions,
+    pub withdrawal_transactions: WithdrawalTransactions,
     pub skipped_blocks: BTreeMap<Address, BTreeSet<BlockNumber>>,
 
     /// Current balance of ETH held by the minter.
@@ -362,7 +362,8 @@ impl State {
             "BUG: unsupported ERC-20 token {}",
             request.erc20_contract_address
         );
-        self.eth_transactions.record_withdrawal_request(request);
+        self.withdrawal_transactions
+            .record_withdrawal_request(request);
     }
 
     pub fn record_finalized_transaction(
@@ -370,7 +371,7 @@ impl State {
         withdrawal_id: &LedgerBurnIndex,
         receipt: &TransactionReceipt,
     ) {
-        self.eth_transactions
+        self.withdrawal_transactions
             .record_finalized_transaction(*withdrawal_id, receipt.clone());
         self.update_balance_upon_withdrawal(withdrawal_id, receipt);
     }
@@ -399,11 +400,11 @@ impl State {
     ) {
         let tx_fee = receipt.effective_transaction_fee();
         let tx = self
-            .eth_transactions
+            .withdrawal_transactions
             .get_finalized_transaction(withdrawal_id)
             .expect("BUG: missing finalized transaction");
         let withdrawal_request = self
-            .eth_transactions
+            .withdrawal_transactions
             .get_processed_withdrawal_request(withdrawal_id)
             .expect("BUG: missing withdrawal request");
         let charged_tx_fee = match withdrawal_request {
@@ -520,7 +521,8 @@ impl State {
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
                 .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
-            self.eth_transactions.update_next_transaction_nonce(nonce);
+            self.withdrawal_transactions
+                .update_next_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
@@ -631,8 +633,8 @@ impl State {
             other.sweeper_contract_address
         );
 
-        self.eth_transactions
-            .is_equivalent_to(&other.eth_transactions)
+        self.withdrawal_transactions
+            .is_equivalent_to(&other.withdrawal_transactions)
     }
 
     pub fn eth_balance(&self) -> &EthBalance {
