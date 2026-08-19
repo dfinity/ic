@@ -34,7 +34,7 @@ use ic_protobuf::types::v1::{
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
-use ic_types_cycles::NominalCycles;
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 use std::hash::{Hash, Hasher};
 
 use num_traits::cast::ToPrimitive;
@@ -42,7 +42,14 @@ pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpC
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::mem::size_of;
-use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+    error::Error,
+    fmt,
+    slice::Iter,
+    str::FromStr,
+};
 use strum_macros::{Display, EnumCount, EnumIter, EnumString};
 
 /// The id of the management canister.
@@ -1606,12 +1613,51 @@ impl DefiniteCanisterSettingsArgs {
 
 impl Payload<'_> for DefiniteCanisterSettingsArgs {}
 
-#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct QueryStats {
     num_calls_total: candid::Nat,
     num_instructions_total: candid::Nat,
     request_payload_bytes_total: candid::Nat,
     response_payload_bytes_total: candid::Nat,
+}
+
+impl QueryStats {
+    pub fn new(
+        num_calls_total: u128,
+        num_instructions_total: u128,
+        request_payload_bytes_total: u128,
+        response_payload_bytes_total: u128,
+    ) -> Self {
+        Self {
+            num_calls_total: candid::Nat::from(num_calls_total),
+            num_instructions_total: candid::Nat::from(num_instructions_total),
+            request_payload_bytes_total: candid::Nat::from(request_payload_bytes_total),
+            response_payload_bytes_total: candid::Nat::from(response_payload_bytes_total),
+        }
+    }
+
+    pub fn num_calls_total(&self) -> u128 {
+        saturating_u128(&self.num_calls_total)
+    }
+
+    pub fn num_instructions_total(&self) -> u128 {
+        saturating_u128(&self.num_instructions_total)
+    }
+
+    pub fn request_payload_bytes_total(&self) -> u128 {
+        saturating_u128(&self.request_payload_bytes_total)
+    }
+
+    pub fn response_payload_bytes_total(&self) -> u128 {
+        saturating_u128(&self.response_payload_bytes_total)
+    }
+}
+
+/// Reads a `nat` back as a `u128`, saturating at `u128::MAX`. Amounts that
+/// large cannot occur for values reported by a canister, but the payloads
+/// carrying them are decoded from untrusted input.
+fn saturating_u128(amount: &candid::Nat) -> u128 {
+    amount.0.to_u128().unwrap_or(u128::MAX)
 }
 
 /// Struct used for encoding/decoding
@@ -1620,6 +1666,8 @@ pub struct QueryStats {
 ///   status : variant { running; stopping; stopped };
 ///   ready_for_migration : bool;
 ///   version : nat64;
+///   canister_creation_timestamp : opt nat64;
+///   log_memory_store_next_idx : nat64;
 ///   settings : definite_canister_settings;
 ///   module_hash : opt blob;
 ///   controller : principal;
@@ -1653,6 +1701,8 @@ pub struct CanisterStatusResultV2 {
     status: CanisterStatusType,
     ready_for_migration: bool,
     version: u64,
+    canister_creation_timestamp: Option<u64>,
+    log_memory_store_next_idx: u64,
     module_hash: Option<Vec<u8>>,
     controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
@@ -1686,6 +1736,8 @@ impl CanisterStatusResultV2 {
         status: CanisterStatusType,
         ready_for_migration: bool,
         version: u64,
+        canister_creation_timestamp: Option<u64>,
+        log_memory_store_next_idx: u64,
         module_hash: Option<Vec<u8>>,
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1723,6 +1775,8 @@ impl CanisterStatusResultV2 {
             status,
             ready_for_migration,
             version,
+            canister_creation_timestamp,
+            log_memory_store_next_idx,
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
@@ -1760,12 +1814,12 @@ impl CanisterStatusResultV2 {
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
             reserved_cycles: candid::Nat::from(reserved_cycles),
-            query_stats: QueryStats {
-                num_calls_total: candid::Nat::from(query_num_calls),
-                num_instructions_total: candid::Nat::from(query_num_instructions),
-                request_payload_bytes_total: candid::Nat::from(query_ingress_payload_size),
-                response_payload_bytes_total: candid::Nat::from(query_egress_payload_size),
-            },
+            query_stats: QueryStats::new(
+                query_num_calls,
+                query_num_instructions,
+                query_ingress_payload_size,
+                query_egress_payload_size,
+            ),
         }
     }
 
@@ -1779,6 +1833,23 @@ impl CanisterStatusResultV2 {
 
     pub fn version(&self) -> u64 {
         self.version
+    }
+
+    /// The time at which the canister was created, in nanoseconds since the
+    /// Unix epoch. `None` for canisters created before the replica started
+    /// recording creation timestamps.
+    pub fn canister_creation_timestamp(&self) -> Option<u64> {
+        self.canister_creation_timestamp
+    }
+
+    /// The index that the next log record appended to the canister's log
+    /// memory store will be assigned.
+    pub fn log_memory_store_next_idx(&self) -> u64 {
+        self.log_memory_store_next_idx
+    }
+
+    pub fn query_stats(&self) -> &QueryStats {
+        &self.query_stats
     }
 
     /// Helper to facilitate comparing canister settings that differ only in the canister version.
@@ -5068,6 +5139,27 @@ pub enum CanisterSnapshotDataOffset {
 ///     canister_id : principal;
 ///     version : nat64;
 ///     total_num_changes : nat64;
+///     canister_creation_timestamp : opt nat64;
+///     log_memory_store_next_idx : nat64;
+///     canister_metrics : record {
+///       cycles_consumed : record {
+///         memory : nat;
+///         compute_allocation : nat;
+///         ingress_induction : nat;
+///         instructions : nat;
+///         request_and_response_transmission : nat;
+///         uninstall : nat;
+///         canister_creation : nat;
+///         http_outcalls : nat;
+///         burned_cycles : nat;
+///       };
+///     };
+///     query_stats : record {
+///       num_calls_total : nat;
+///       num_instructions_total : nat;
+///       request_payload_bytes_total : nat;
+///       response_payload_bytes_total : nat;
+///     };
 ///   };
 ///   requested_by : principal;
 ///   sender_canister_version : nat64;
@@ -5098,11 +5190,26 @@ impl RenameCanisterArgs {
     }
 }
 
+/// The properties that the renamed canister adopts from the canister whose id
+/// it takes over.
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RenameToArgs {
     pub canister_id: PrincipalId,
     pub version: u64,
     pub total_num_changes: u64,
+    /// The creation timestamp to adopt, in nanoseconds since the Unix epoch.
+    /// This is always set to the creation timestamp of the canister whose id is
+    /// taken over, including when that canister has none.
+    pub canister_creation_timestamp: Option<u64>,
+    /// The log record index that the renamed canister's log memory store
+    /// continues from.
+    pub log_memory_store_next_idx: u64,
+    /// The canister metrics to adopt, as served by the `canister_metrics`
+    /// endpoint for the canister whose id is taken over.
+    pub canister_metrics: CanisterMetricsResult,
+    /// The query stats to adopt, as served by `canister_status` for the
+    /// canister whose id is taken over.
+    pub query_stats: QueryStats,
 }
 
 impl RenameToArgs {
@@ -5164,6 +5271,74 @@ impl CyclesConsumed {
             burned_cycles: candid::Nat::from(burned_cycles.get()),
         }
     }
+
+    pub fn memory(&self) -> &candid::Nat {
+        &self.memory
+    }
+
+    pub fn compute_allocation(&self) -> &candid::Nat {
+        &self.compute_allocation
+    }
+
+    pub fn ingress_induction(&self) -> &candid::Nat {
+        &self.ingress_induction
+    }
+
+    pub fn instructions(&self) -> &candid::Nat {
+        &self.instructions
+    }
+
+    pub fn request_and_response_transmission(&self) -> &candid::Nat {
+        &self.request_and_response_transmission
+    }
+
+    pub fn uninstall(&self) -> &candid::Nat {
+        &self.uninstall
+    }
+
+    pub fn canister_creation(&self) -> &candid::Nat {
+        &self.canister_creation
+    }
+
+    pub fn http_outcalls(&self) -> &candid::Nat {
+        &self.http_outcalls
+    }
+
+    pub fn burned_cycles(&self) -> &candid::Nat {
+        &self.burned_cycles
+    }
+
+    /// The per-use-case consumed cycles counters this value was built from,
+    /// i.e. the inverse of [`Self::new`]. Amounts exceeding `u128` are
+    /// saturated; they cannot occur for values reported by a canister.
+    pub fn by_use_case(&self) -> BTreeMap<CyclesUseCase, NominalCycles> {
+        fn nominal(amount: &candid::Nat) -> NominalCycles {
+            NominalCycles::from_raw_amount(saturating_u128(amount))
+        }
+        BTreeMap::from([
+            (CyclesUseCase::Memory, nominal(&self.memory)),
+            (
+                CyclesUseCase::ComputeAllocation,
+                nominal(&self.compute_allocation),
+            ),
+            (
+                CyclesUseCase::IngressInduction,
+                nominal(&self.ingress_induction),
+            ),
+            (CyclesUseCase::Instructions, nominal(&self.instructions)),
+            (
+                CyclesUseCase::RequestAndResponseTransmission,
+                nominal(&self.request_and_response_transmission),
+            ),
+            (CyclesUseCase::Uninstall, nominal(&self.uninstall)),
+            (
+                CyclesUseCase::CanisterCreation,
+                nominal(&self.canister_creation),
+            ),
+            (CyclesUseCase::HTTPOutcalls, nominal(&self.http_outcalls)),
+            (CyclesUseCase::BurnedCycles, nominal(&self.burned_cycles)),
+        ])
+    }
 }
 
 impl Payload<'_> for CyclesConsumed {}
@@ -5195,6 +5370,10 @@ pub struct CanisterMetricsResult {
 impl CanisterMetricsResult {
     pub fn new(cycles_consumed: CyclesConsumed) -> Self {
         Self { cycles_consumed }
+    }
+
+    pub fn cycles_consumed(&self) -> &CyclesConsumed {
+        &self.cycles_consumed
     }
 }
 

@@ -29,9 +29,9 @@ use ic_management_canister_types_private::{
     CanisterMetricsResult, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash,
     CyclesConsumed, EmptyBlob, Global, GlobalTimer, Method as Ic00Method, Payload as _,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse, UploadChunkReply,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, RenameToArgs,
+    SnapshotSource, StoredChunksReply, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -60,7 +60,7 @@ use ic_types::messages::{
 use ic_types::{
     CanisterId, CanisterTimer, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
     MAX_STABLE_MEMORY_IN_BYTES, MIN_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes, NumInstructions,
-    PrincipalId, SnapshotId, Time,
+    PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
 };
 use ic_types_cycles::{
     CanisterCreation, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
@@ -1189,6 +1189,11 @@ impl CanisterManager {
             canister.status(),
             ready_for_migration,
             version,
+            canister
+                .system_state
+                .canister_creation_timestamp
+                .map(|timestamp| timestamp.as_nanos_since_unix_epoch()),
+            canister.system_state.log_memory_store.next_idx(),
             canister
                 .execution_state
                 .as_ref()
@@ -3094,14 +3099,15 @@ impl CanisterManager {
         canister: &mut CanisterState,
         origin: CanisterChangeOrigin,
         old_id: CanisterId,
-        new_id: CanisterId,
-        to_version: u64,
-        to_total_num_changes: u64,
+        rename_to: RenameToArgs,
         requested_by: PrincipalId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
+        let new_id = rename_to.get_canister_id();
+        let to_version = rename_to.version;
+        let to_total_num_changes = rename_to.total_num_changes;
         // In addition to this endpoint only being available from the NNS subnet, the calling canister
         // has to be a controller of the canister to be renamed.
         validate_controller(canister, &sender)?;
@@ -3138,15 +3144,29 @@ impl CanisterManager {
         let canister_snapshot = canister.clone();
         let round_limits_snapshot = round_limits.clone();
 
-        canister
-            .system_state
-            .rename_canister(new_id, to_version, to_total_num_changes);
+        canister.system_state.rename_canister(
+            new_id,
+            to_version,
+            to_total_num_changes,
+            rename_to
+                .canister_creation_timestamp
+                .map(Time::from_nanos_since_unix_epoch),
+            rename_to.log_memory_store_next_idx,
+            rename_to.canister_metrics.cycles_consumed().by_use_case(),
+            TotalQueryStats {
+                num_calls: rename_to.query_stats.num_calls_total(),
+                num_instructions: rename_to.query_stats.num_instructions_total(),
+                ingress_payload_size: rename_to.query_stats.request_payload_bytes_total(),
+                egress_payload_size: rename_to.query_stats.response_payload_bytes_total(),
+            },
+        );
         // Recording the `rename_canister` canister history entry is the only memory
-        // change here, so the new memory usage (read after recording it) differs from
-        // the old one exactly by that entry. Account for it against the subnet
-        // available execution memory (and the canister's cycles), just like any other
-        // canister memory, failing if the subnet cannot account for the canister
-        // history.
+        // change here (clearing the log records above frees no memory: the log
+        // memory store keeps its ring buffer capacity), so the new memory usage
+        // (read after recording it) differs from the old one exactly by that entry.
+        // Account for it against the subnet available execution memory (and the
+        // canister's cycles), just like any other canister memory, failing if the
+        // subnet cannot account for the canister history.
         let old_memory_usage = canister.memory_usage();
         canister.add_canister_change(
             state.time(),
@@ -3180,6 +3200,9 @@ impl CanisterManager {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
             execution_state.wasm_binary.clear_compilation_cache();
+            // The code is effectively (re)deployed under the new id, just like
+            // when it is restored from a snapshot.
+            execution_state.last_install_timestamp = Some(state.time());
         }
 
         // Carry over the scheduling priority.

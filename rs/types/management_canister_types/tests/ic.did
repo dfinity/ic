@@ -302,6 +302,8 @@ type canister_status_result = record {
     status : variant { running; stopping; stopped };
     version : nat64;
     ready_for_migration : bool;
+    canister_creation_timestamp : opt nat64;
+    log_memory_store_next_idx : nat64;
     settings : definite_canister_settings;
     module_hash : opt blob;
     memory_size : nat;
@@ -659,6 +661,27 @@ type rename_canister_args = record {
      canister_id : principal;
      version : nat64;
      total_num_changes : nat64;
+     canister_creation_timestamp : opt nat64;
+     log_memory_store_next_idx : nat64;
+     canister_metrics : record {
+       cycles_consumed : record {
+         memory : nat;
+         compute_allocation : nat;
+         ingress_induction : nat;
+         instructions : nat;
+         request_and_response_transmission : nat;
+         uninstall : nat;
+         canister_creation : nat;
+         http_outcalls : nat;
+         burned_cycles : nat;
+       };
+     };
+     query_stats : record {
+       num_calls_total : nat;
+       num_instructions_total : nat;
+       request_payload_bytes_total : nat;
+       response_payload_bytes_total : nat;
+     };
    };
    requested_by : principal;
    sender_canister_version : nat64;

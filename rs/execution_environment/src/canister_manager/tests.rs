@@ -42,7 +42,7 @@ use ic_management_canister_types_private::{
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, CyclesConsumed, EmptyBlob, EnvironmentVariable, IC_00,
     InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
-    OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs, QueryStats,
     RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
     SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
     UploadChunkReply, WasmMemoryPersistence,
@@ -85,8 +85,9 @@ use ic_test_utilities_types::{
     messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, MIN_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
-    NumBytes, NumInstructions, SubnetId, UserId,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MIN_AGGREGATE_LOG_MEMORY_LIMIT,
+    MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time, UserId,
+    batch::TotalQueryStats,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CanisterCall, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
@@ -7102,6 +7103,51 @@ fn install_two_universal_canisters(
     (canister_id1, canister_id2)
 }
 
+/// The canister metrics carried by a `rename_canister` request, with a distinct
+/// amount per use case so that a test can tell them apart.
+fn rename_canister_metrics(amounts: [u128; 9]) -> CanisterMetricsResult {
+    let [
+        memory,
+        compute_allocation,
+        ingress_induction,
+        instructions,
+        request_and_response_transmission,
+        uninstall,
+        canister_creation,
+        http_outcalls,
+        burned_cycles,
+    ] = amounts.map(NominalCycles::new);
+    CanisterMetricsResult::new(CyclesConsumed::new(
+        memory,
+        compute_allocation,
+        ingress_induction,
+        instructions,
+        request_and_response_transmission,
+        uninstall,
+        canister_creation,
+        http_outcalls,
+        burned_cycles,
+    ))
+}
+
+/// The properties adopted by the renamed canister, with the ones that a test
+/// does not exercise left empty.
+fn rename_to_args(
+    new_canister_id: CanisterId,
+    new_version: u64,
+    new_num_changes: u64,
+) -> RenameToArgs {
+    RenameToArgs {
+        canister_id: new_canister_id.into(),
+        version: new_version,
+        total_num_changes: new_num_changes,
+        canister_creation_timestamp: None,
+        log_memory_store_next_idx: 0,
+        canister_metrics: rename_canister_metrics([0; 9]),
+        query_stats: QueryStats::new(0, 0, 0, 0),
+    }
+}
+
 /// Trigger a rename for a setup according to `install_two_universal_canisters`.
 fn rename_canister(
     env1: &StateMachine,
@@ -7111,6 +7157,26 @@ fn rename_canister(
     new_canister_id: CanisterId,
     new_version: u64,
     new_num_changes: u64,
+    send_to_subnet: bool,
+) -> WasmResult {
+    rename_canister_to(
+        env1,
+        env2,
+        sender_canister,
+        old_canister_id,
+        rename_to_args(new_canister_id, new_version, new_num_changes),
+        send_to_subnet,
+    )
+}
+
+/// Same as `rename_canister`, but with all the properties that the renamed
+/// canister adopts spelled out.
+fn rename_canister_to(
+    env1: &StateMachine,
+    env2: &StateMachine,
+    sender_canister: CanisterId,
+    old_canister_id: CanisterId,
+    rename_to: RenameToArgs,
     send_to_subnet: bool,
 ) -> WasmResult {
     const MAX_TICKS: usize = 100;
@@ -7125,11 +7191,7 @@ fn rename_canister(
 
     let arguments = RenameCanisterArgs {
         canister_id: old_canister_id.into(),
-        rename_to: RenameToArgs {
-            canister_id: new_canister_id.into(),
-            version: new_version,
-            total_num_changes: new_num_changes,
-        },
+        rename_to,
         requested_by: sender_canister.into(),
         sender_canister_version,
     };
@@ -7391,6 +7453,199 @@ fn can_rename_canister() {
     );
 }
 
+/// Creates a stopped canister with installed code controlled by the migration
+/// canister, seeds it with the state that a rename is expected to overwrite or
+/// clear, and renames it via a `rename_canister` subnet message originating
+/// from the migration canister. Returns the test (for inspecting the resulting
+/// state) and the new canister id.
+fn rename_canister_with_seeded_state(rename_to: RenameToArgs) -> (ExecutionTest, CanisterId) {
+    let own_subnet = subnet_test_id(1);
+    let caller_subnet = subnet_test_id(2);
+    // The migration canister is the only authorized sender and must be a controller.
+    let migration_canister = crate::util::MIGRATION_CANISTER_ID;
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(caller_subnet, migration_canister)
+        .build();
+
+    let old_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![migration_canister.get(), test.user_id().get()])
+                .with_freezing_threshold(0)
+                .build(),
+        )
+        .unwrap();
+    test.install_canister(old_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    test.stop_canister(old_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(old_id).status(),
+        CanisterStatusType::Stopped
+    );
+
+    // Seed the state that belongs to the canister under its old id, so that the
+    // assertions below distinguish "adopted from the new id" from "left as is".
+    {
+        let system_state = &mut test.canister_state_mut(old_id).system_state;
+        system_state.canister_creation_timestamp = Some(Time::from_nanos_since_unix_epoch(11));
+        system_state.total_query_stats = TotalQueryStats {
+            num_calls: 12,
+            num_instructions: 13,
+            ingress_payload_size: 14,
+            egress_payload_size: 15,
+        };
+        system_state
+            .canister_metrics_mut()
+            .set_consumed_cycles_by_use_cases_as_counters(btreemap! {
+                CyclesUseCase::Memory => NominalCycles::new(16),
+                // A use case that the proxied metrics do not carry, so that the
+                // assertions catch stale entries surviving the rename.
+                CyclesUseCase::DeletedCanisters => NominalCycles::new(17),
+            });
+        let log_memory_store = &mut system_state.log_memory_store;
+        log_memory_store.resize_for_testing(MIN_AGGREGATE_LOG_MEMORY_LIMIT);
+        let mut delta_log = CanisterLog::new_delta_with_next_index(
+            log_memory_store.next_idx(),
+            MIN_AGGREGATE_LOG_MEMORY_LIMIT,
+        );
+        delta_log.add_record(18, b"a log record".to_vec());
+        log_memory_store.append_delta_log(&mut delta_log);
+        assert_eq!(log_memory_store.next_idx(), 1);
+        assert!(!log_memory_store.is_empty());
+    }
+
+    // Advance the round time so that the rename time differs from the time at
+    // which the code above was installed.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+
+    let new_id = rename_to.get_canister_id();
+    let args = RenameCanisterArgs {
+        canister_id: old_id.into(),
+        rename_to,
+        requested_by: test.user_id().get(),
+        sender_canister_version: 0,
+    };
+    test.inject_call_to_ic00(Method::RenameCanister, args.encode(), Cycles::new(0));
+    test.execute_subnet_message();
+
+    // The canister was renamed: it moved from the old id to the new id.
+    assert!(test.state().canister_state(&old_id).is_none());
+    assert!(test.state().canister_state(&new_id).is_some());
+
+    (test, new_id)
+}
+
+/// A fresh canister id in the subnet's range that `rename_canister_with_seeded_state`
+/// has not allocated yet (its setup creates exactly one canister, taking the first
+/// id in the range).
+fn unallocated_canister_id() -> CanisterId {
+    CanisterId::from(CANISTER_IDS_PER_SUBNET + 1)
+}
+
+/// The renamed canister takes over the creation timestamp, log record index and
+/// canister metrics and query stats of the canister whose id it adopts, drops
+/// the log records it accumulated under its old id, and records the rename as
+/// the time at which its code was installed.
+#[test]
+fn rename_canister_adopts_properties_of_the_adopted_id() {
+    let canister_creation_timestamp = 123_456_789;
+    let log_memory_store_next_idx = 987;
+    let canister_metrics = rename_canister_metrics([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    let query_stats = QueryStats::new(21, 22, 23, 24);
+    let (mut test, new_id) = rename_canister_with_seeded_state(RenameToArgs {
+        canister_creation_timestamp: Some(canister_creation_timestamp),
+        log_memory_store_next_idx,
+        canister_metrics: canister_metrics.clone(),
+        query_stats: query_stats.clone(),
+        ..rename_to_args(unallocated_canister_id(), 42, 50)
+    });
+    let rename_time = test.state().time();
+
+    let canister = test.canister_state(new_id);
+    let system_state = &canister.system_state;
+    // The creation timestamp, the log record index, the canister metrics and
+    // the query stats of the adopted id were taken over.
+    assert_eq!(
+        system_state.canister_creation_timestamp,
+        Some(Time::from_nanos_since_unix_epoch(
+            canister_creation_timestamp
+        ))
+    );
+    assert_eq!(
+        system_state.log_memory_store.next_idx(),
+        log_memory_store_next_idx
+    );
+    assert_eq!(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters(),
+        &canister_metrics.cycles_consumed().by_use_case()
+    );
+    assert_eq!(
+        system_state.total_query_stats,
+        TotalQueryStats {
+            num_calls: 21,
+            num_instructions: 22,
+            ingress_payload_size: 23,
+            egress_payload_size: 24,
+        }
+    );
+    // The log records collected under the old id were dropped.
+    assert!(system_state.log_memory_store.is_empty());
+    assert_eq!(
+        system_state.log_memory_store.all_records_for_testing(),
+        vec![]
+    );
+    // The code counts as (re)deployed under the new id at the time of the rename.
+    assert_eq!(
+        canister
+            .execution_state
+            .as_ref()
+            .and_then(|es| es.last_install_timestamp),
+        Some(rename_time)
+    );
+
+    // The management canister endpoints serve the adopted properties.
+    let status = test.canister_status(new_id).unwrap();
+    assert_eq!(
+        status.canister_creation_timestamp(),
+        Some(canister_creation_timestamp)
+    );
+    assert_eq!(
+        status.log_memory_store_next_idx(),
+        log_memory_store_next_idx
+    );
+    assert_eq!(status.query_stats(), &query_stats);
+    assert_eq!(test.canister_metrics(new_id).unwrap(), canister_metrics);
+}
+
+/// The creation timestamp of the adopted id is taken over even when it is
+/// absent, i.e. it overwrites the creation timestamp of the renamed canister
+/// rather than being left as is.
+#[test]
+fn rename_canister_adopts_absent_creation_timestamp_of_the_adopted_id() {
+    let (mut test, new_id) = rename_canister_with_seeded_state(RenameToArgs {
+        canister_creation_timestamp: None,
+        ..rename_to_args(unallocated_canister_id(), 42, 50)
+    });
+
+    assert_eq!(
+        test.canister_state(new_id)
+            .system_state
+            .canister_creation_timestamp,
+        None
+    );
+    assert_eq!(
+        test.canister_status(new_id)
+            .unwrap()
+            .canister_creation_timestamp(),
+        None
+    );
+}
+
 #[test]
 fn cannot_rename_from_ingress() {
     let env = StateMachineBuilder::new().build();
@@ -7400,11 +7655,7 @@ fn cannot_rename_from_ingress() {
     let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
     let arguments = RenameCanisterArgs {
         canister_id: canister_id.into(),
-        rename_to: RenameToArgs {
-            canister_id: new_canister_id.into(),
-            version: 0,
-            total_num_changes: 0,
-        },
+        rename_to: rename_to_args(new_canister_id, 0, 0),
         requested_by: PrincipalId::new_anonymous(),
         sender_canister_version: 0,
     };
@@ -7629,11 +7880,7 @@ fn rename_canister_with_available_memory(
 
     let args = RenameCanisterArgs {
         canister_id: old_id.into(),
-        rename_to: RenameToArgs {
-            canister_id: new_id.into(),
-            version: 42,
-            total_num_changes: 50,
-        },
+        rename_to: rename_to_args(new_id, 42, 50),
         requested_by: test.user_id().get(),
         sender_canister_version: 0,
     };
