@@ -29,7 +29,7 @@ use ic_types::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
         ChainKeyData, ConsensusResponse,
     },
-    consensus::{Block, BlockPayload, HasVersion, dkg::RemoteTranscriptResult, idkg},
+    consensus::{BlockPayload, HasVersion, dkg::RemoteTranscriptResult, idkg},
     crypto::{
         randomness_from_crypto_hashable,
         threshold_sig::{
@@ -174,14 +174,8 @@ fn deliver_batches(
         };
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
-        if block.payload.is_summary() {
-            info!(
-                log,
-                "Delivering finalized batch at CUP height of {}", height
-            );
-        }
-        // When we are not delivering CUP block, we must check if the subnet is halted.
-        else {
+        if !block.payload.is_summary() {
+            // When delivering a data block, we must check if the subnet is halted.
             match status::get_status(
                 height,
                 &summary_block,
@@ -211,8 +205,6 @@ fn deliver_batches(
             }
         }
 
-        let randomness = randomness_from_crypto_hashable(&tape);
-
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let (mut idkg_subnet_public_keys, idkg_pre_signatures) =
             get_idkg_subnet_public_keys_and_pre_signatures(
@@ -223,90 +215,98 @@ fn deliver_batches(
                 block_stats.idkg_stats.as_mut(),
             );
         chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
-
         // Add vetKD keys to this map as well
         let (mut nidkg_subnet_public_keys, nidkg_ids) = get_vetkey_public_keys(dkg_summary, log);
         chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
-
-        // If the subnet contains chain keys, log them on every summary block
-        if !chain_key_subnet_public_keys.is_empty() && block.payload.is_summary() {
-            info!(
-                log,
-                "Subnet {} contains chain keys: {:?}", subnet_id, chain_key_subnet_public_keys
-            );
-        }
-
-        let mut batch_stats = BatchStats::new(height);
-
         let chain_key_data = ChainKeyData {
             master_public_keys: chain_key_subnet_public_keys,
             idkg_pre_signatures,
             nidkg_ids,
         };
-        let (consensus_responses, canister_http_spent) =
-            generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
-        let batch_content = match block.payload.as_ref() {
-            BlockPayload::Summary(_summary_payload) => {
-                if let Some(scheduled) = subnet_splitting::is_split_scheduled(&block) {
-                    let node_id =
-                        maybe_node_id.expect("Subnet splitting not yet supported in ic-replay");
-                    let subnet_splitting::PostSplitAssignment {
-                        new_subnet_id,
-                        other_subnet_id,
-                    } = match subnet_splitting::get_post_split_subnet_assignment(
-                        node_id,
-                        &block,
-                        registry_client,
-                        scheduled,
-                    ) {
-                        Ok(assignment) => assignment,
-                        Err(err) => {
-                            warn!(
-                                every_n_seconds => 30,
-                                log,
-                                "Error getting new subnet assignment: {}",
-                                err
-                            );
-                            break;
+
+        let (batch_content, batch_stats) = match block.payload.as_ref() {
+            BlockPayload::Summary(summary_payload) => {
+                info!(
+                    log,
+                    "Delivering finalized DKG summary at height {} with config ids: {:?}",
+                    height,
+                    summary_payload.dkg.configs.keys().collect::<Vec<_>>()
+                );
+
+                // If the subnet contains chain keys, log them on every summary block
+                if !chain_key_data.master_public_keys.is_empty() {
+                    info!(
+                        log,
+                        "Subnet {} contains chain keys: {:?}",
+                        subnet_id,
+                        chain_key_data.master_public_keys
+                    );
+                }
+
+                let batch_stats = BatchStats {
+                    batch_height: height.get(),
+                    ..Default::default()
+                };
+
+                let batch_content =
+                    if let Some(scheduled) = subnet_splitting::is_split_scheduled(&block) {
+                        let node_id =
+                            maybe_node_id.expect("Subnet splitting not yet supported in ic-replay");
+                        let subnet_splitting::PostSplitAssignment {
+                            new_subnet_id,
+                            other_subnet_id,
+                        } = match subnet_splitting::get_post_split_subnet_assignment(
+                            node_id,
+                            &block,
+                            registry_client,
+                            scheduled,
+                        ) {
+                            Ok(assignment) => assignment,
+                            Err(err) => {
+                                warn!(
+                                    every_n_seconds => 30,
+                                    log,
+                                    "Error getting new subnet assignment: {}",
+                                    err
+                                );
+                                break;
+                            }
+                        };
+
+                        info!(
+                            log,
+                            "Delivering splitting block. New subnet assignment: {}", new_subnet_id
+                        );
+
+                        BatchContent::Splitting {
+                            new_subnet_id,
+                            other_subnet_id,
+                        }
+                    } else {
+                        BatchContent::Data {
+                            batch_messages: BatchMessages::default(),
+                            chain_key_data,
+                            consensus_responses: vec![],
+                            canister_http_spent: Default::default(),
+                            requires_full_state_hash: true,
                         }
                     };
 
-                    info!(
-                        log,
-                        "Delivering splitting block. New subnet assignment: {}", new_subnet_id
-                    );
-
-                    BatchContent::Splitting {
-                        new_subnet_id,
-                        other_subnet_id,
-                    }
-                } else {
-                    BatchContent::Data {
-                        batch_messages: BatchMessages::default(),
-                        chain_key_data,
-                        consensus_responses,
-                        canister_http_spent,
-                        requires_full_state_hash: true,
-                    }
-                }
+                (batch_content, batch_stats)
             }
             BlockPayload::Data(data_payload) => {
-                batch_stats.add_from_payload(&data_payload.batch);
-                BatchContent::Data {
-                    batch_messages: data_payload
-                        .batch
-                        .clone()
-                        .into_messages()
-                        .map_err(|err| {
-                            error!(log, "batch payload deserialization failed: {:?}", err);
-                            err
-                        })
-                        .unwrap_or_default(),
+                let (batch_messages, consensus_responses, batch_stats, canister_http_spent) =
+                    get_messages_responses_stats_and_http_spent(height, &data_payload, log);
+
+                let batch_content = BatchContent::Data {
+                    batch_messages,
                     chain_key_data,
                     consensus_responses,
                     canister_http_spent,
                     requires_full_state_hash: false,
-                }
+                };
+
+                (batch_content, batch_stats)
             }
         };
 
@@ -341,6 +341,8 @@ fn deliver_batches(
             failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
         };
 
+        let randomness = randomness_from_crypto_hashable(&tape);
+
         let next_checkpoint_height = dkg_summary.get_next_start_height();
         let current_interval_length = dkg_summary.interval_length;
         let batch = Batch {
@@ -351,7 +353,6 @@ fn deliver_batches(
             }),
             content: batch_content,
             randomness,
-
             registry_version: block.context.registry_version,
             time: block.context.time,
             blockmaker_metrics: Some(blockmaker_metrics),
@@ -375,44 +376,50 @@ fn deliver_batches(
 /// - Initial NiDKG transcript creation, where a response may come from data payloads.
 /// - Canister threshold signature creation, where a response may come from from data payloads.
 /// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
-fn generate_responses_to_subnet_calls(
-    block: &Block,
-    stats: &mut BatchStats,
+fn get_messages_responses_stats_and_http_spent(
+    height: Height,
+    data_payload: &DataPayload,
     log: &ReplicaLogger,
-) -> (Vec<ConsensusResponse>, CanisterHttpSpent) {
-    let mut consensus_responses = Vec::new();
-    let canister_http_spent = match block.payload.as_ref() {
-        BlockPayload::Summary(summary_payload) => {
-            info!(
-                log,
-                "New DKG summary with config ids created: {:?}",
-                summary_payload.dkg.configs.keys().collect::<Vec<_>>()
-            );
-            CanisterHttpSpent::default()
-        }
-        BlockPayload::Data(data_payload) => {
-            consensus_responses.append(&mut generate_responses_to_remote_dkgs(
-                &data_payload.dkg.transcripts_for_remote_subnets,
-                log,
-            ));
+) -> (
+    BatchMessages,
+    Vec<ConsensusResponse>,
+    BatchStats,
+    CanisterHttpSpent,
+) {
+    let messages = data_payload
+        .batch
+        .clone()
+        .into_messages()
+        .map_err(|err| {
+            error!(log, "batch payload deserialization failed: {:?}", err);
+            err
+        })
+        .unwrap_or_default();
 
-            if let Some(payload) = &data_payload.idkg {
-                consensus_responses
-                    .append(&mut generate_responses_to_initial_dealings_calls(payload));
-            }
+    let mut responses = Vec::new();
+    responses.append(&mut generate_responses_to_remote_dkgs(
+        &data_payload.dkg.transcripts_for_remote_subnets,
+        log,
+    ));
 
-            let (mut http_responses, http_spent, http_stats) =
-                CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
-            consensus_responses.append(&mut http_responses);
-            stats.canister_http = http_stats;
+    if let Some(payload) = &data_payload.idkg {
+        responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
+    }
 
-            let mut chain_key_responses =
-                ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
-            consensus_responses.append(&mut chain_key_responses);
-            http_spent
-        }
+    let (mut http_responses, canister_http_spent, http_stats) =
+        CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
+    responses.append(&mut http_responses);
+
+    let mut chain_key_responses =
+        ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
+    responses.append(&mut chain_key_responses);
+
+    let stats = BatchStats {
+        canister_http: http_stats,
+        ..BatchStats::from_payload(height, &data_payload.batch)
     };
-    (consensus_responses, canister_http_spent)
+
+    (messages, responses, stats, canister_http_spent)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -640,21 +647,17 @@ mod tests {
         subnet_test_id, test_platform_version, test_replica_version,
     };
     use ic_types::{
-        PrincipalId, RegistryVersion, SubnetId,
-        batch::{BatchPayload, ValidationContext},
+        PrincipalId, SubnetId,
+        batch::BatchPayload,
         consensus::{
-            DataPayload, HashedBlock, Payload as ConsensusPayload, Rank,
+            DataPayload, HashedBlock,
             dkg::{DkgDataPayload, RemoteTranscriptResult, SplittingArgs, SubnetSplittingStatus},
         },
-        crypto::{
-            CryptoHash, CryptoHashOf,
-            threshold_sig::ni_dkg::{
-                NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
-            },
+        crypto::threshold_sig::ni_dkg::{
+            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
         messages::{CallbackId, Payload},
         replica_config::ReplicaConfig,
-        time::UNIX_EPOCH,
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2};
     use rstest::rstest;
@@ -838,30 +841,16 @@ mod tests {
             ],
         };
 
-        let block_payload = BlockPayload::Data(DataPayload {
+        let block_payload = DataPayload {
             batch: BatchPayload::default(),
             dkg: dkg_data,
             idkg: None,
-        });
-
-        let payload = ConsensusPayload::new(ic_types::crypto::crypto_hash, block_payload);
-
-        let block = Block::new(
-            CryptoHashOf::from(CryptoHash(vec![0_u8; 32])),
-            payload,
+        };
+        let (_, responses, _, _) = get_messages_responses_stats_and_http_spent(
             Height::from(1),
-            Rank(0),
-            ValidationContext {
-                registry_version: RegistryVersion::from(1),
-                certified_height: Height::from(0),
-                time: UNIX_EPOCH,
-            },
-            test_replica_version(),
+            &block_payload,
+            &no_op_logger(),
         );
-
-        let mut batch_stats = BatchStats::new(Height::from(1));
-        let (responses, _canister_http_spent) =
-            generate_responses_to_subnet_calls(&block, &mut batch_stats, &no_op_logger());
 
         assert_eq!(
             responses.len(),
