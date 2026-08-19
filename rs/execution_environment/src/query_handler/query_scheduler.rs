@@ -69,4 +69,15 @@ impl QueryScheduler {
     {
         self.scheduler.push(canister_id, Query(Box::new(query)));
     }
+
+    /// Adds the continuation of a query that was already started, ahead of
+    /// queries that have not: it has already spent part of its walltime budget
+    /// waiting.
+    pub fn push_resumed<F>(&self, canister_id: CanisterId, query: F)
+    where
+        F: FnOnce() -> Duration + Send + 'static,
+    {
+        self.scheduler
+            .push_resumed(canister_id, Query(Box::new(query)));
+    }
 }

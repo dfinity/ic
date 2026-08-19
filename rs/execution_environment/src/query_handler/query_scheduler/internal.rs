@@ -50,6 +50,7 @@ pub(crate) struct CanisterData {
     // the previous batch that did not get enough execution time. These queries
     // will be executed in subsequent batches and take priority over `incoming`
     // queries.
+    // Continuations of suspended queries share this queue.
     leftover: VecDeque<Query>,
 
     // The average query execution duration observed so far.
@@ -154,11 +155,26 @@ impl QuerySchedulerCore {
     /// Adds the given query to the `incoming` queue of the given canister.
     /// It also adds the canister to the round-robin queue if needed.
     fn push(&mut self, canister_id: CanisterId, query: Query) {
+        self.enqueue(canister_id, query, /*resumed=*/ false);
+    }
+
+    /// Ahead of queries that have not started: a resumed query has already
+    /// spent part of its walltime budget. Only overtakes what is queued;
+    /// queries already executing are left alone.
+    fn push_resumed(&mut self, canister_id: CanisterId, query: Query) {
+        self.enqueue(canister_id, query, /*resumed=*/ true);
+    }
+
+    fn enqueue(&mut self, canister_id: CanisterId, query: Query, resumed: bool) {
         let canister = self
             .canisters
             .entry(canister_id)
             .or_insert_with(CanisterData::new);
-        canister.incoming.push_back(query);
+        if resumed {
+            canister.leftover.push_back(query);
+        } else {
+            canister.incoming.push_back(query);
+        }
 
         self.metrics
             .queue_length
@@ -296,6 +312,14 @@ impl QuerySchedulerInternal {
     pub fn push(&self, canister_id: CanisterId, query: Query) {
         let mut core = self.core.lock().unwrap();
         core.push(canister_id, query);
+        if !core.scheduled.is_empty() {
+            self.work_is_available.notify_one();
+        }
+    }
+
+    pub fn push_resumed(&self, canister_id: CanisterId, query: Query) {
+        let mut core = self.core.lock().unwrap();
+        core.push_resumed(canister_id, query);
         if !core.scheduled.is_empty() {
             self.work_is_available.notify_one();
         }

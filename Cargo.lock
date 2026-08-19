@@ -13689,6 +13689,7 @@ dependencies = [
  "ic-http-endpoints-public",
  "ic-http-endpoints-xnet",
  "ic-https-outcalls-adapter-client",
+ "ic-https-outcalls-socks-proxy",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",

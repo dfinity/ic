@@ -31,12 +31,14 @@ pub use hypervisor::{
     CanisterMemoryHandling, Hypervisor, HypervisorMetrics, MemoryHandling, MemorySource,
 };
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config, flag_status::FlagStatus, subnet_config::SubnetConfig,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::WasmExecutor;
 use ic_interfaces::execution_environment::{
-    IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
-    TransformExecutionService,
+    IngressFilterService, IngressHistoryReader, QueryExecutionService, QueryOutcallService,
+    Scheduler, TransformExecutionService,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
@@ -125,7 +127,21 @@ impl ExecutionServices {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
         temp_dir: &Path,
+        query_outcall_service: Option<QueryOutcallService>,
     ) -> ExecutionServices {
+        // Outcalls from queries need a service to perform them. Forcing the flag
+        // off when there is none keeps "the feature is enabled" and "the feature
+        // can work" from disagreeing, and makes the driver's missing-service
+        // branch genuinely unreachable.
+        let config = if query_outcall_service.is_none() {
+            Config {
+                query_http_requests: FlagStatus::Disabled,
+                ..config
+            }
+        } else {
+            config
+        };
+
         let (
             ingress_filter,
             ingress_history_writer,
@@ -162,6 +178,7 @@ impl ExecutionServices {
             metrics_registry,
             "regular",
             true,
+            query_outcall_service,
         );
         let transform_execution_service = HttpQueryHandler::new_transform_service(
             Arc::clone(&sync_query_handler) as Arc<_>,

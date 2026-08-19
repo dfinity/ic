@@ -23,11 +23,11 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
-    TransformExecutionInput, TransformExecutionService,
+    QueryOutcallService, TransformExecutionInput, TransformExecutionService,
 };
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::{ReplicaLogger, error};
-use ic_metrics::MetricsRegistry;
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
@@ -52,7 +52,7 @@ use std::{
     time::Instant,
 };
 use tokio::sync::oneshot;
-use tower::{Service, util::BoxCloneService};
+use tower::{Service, ServiceExt, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::QueryScheduler;
 
@@ -70,7 +70,10 @@ pub(crate) struct SuspendedQuery {
 
 /// The outcome of one execution step of a query.
 pub(crate) enum QueryStep {
-    Finished(Result<WasmResult, UserError>),
+    Finished {
+        result: Result<WasmResult, UserError>,
+        batch_time: Time,
+    },
     Suspended {
         suspended: Box<SuspendedQuery>,
         outcall: QueryOutcallRequest,
@@ -176,6 +179,7 @@ impl InternalHttpQueryHandler {
             suspension_limiter: Arc::new(suspension_limiter::SuspendedQueryLimiter::new(
                 max_concurrent_query_outcalls,
                 max_concurrent_query_outcalls_per_canister,
+                metrics_registry,
             )),
         }
     }
@@ -233,9 +237,15 @@ impl InternalHttpQueryHandler {
 
         // Serve the query locally if it is addressed to the management canister.
         if query.receiver == CanisterId::ic_00() {
+            let batch_time = state.get_ref().metadata.batch_time;
             let method = match subnet_query::parse_user_query_method(&query.method_name) {
                 Ok(method) => method,
-                Err(err) => return QueryStep::Finished(Err(err)),
+                Err(err) => {
+                    return QueryStep::Finished {
+                        result: Err(err),
+                        batch_time,
+                    };
+                }
             };
             let since = Instant::now(); // Start logging execution time.
             let result = subnet_query::execute_subnet_query(
@@ -251,7 +261,10 @@ impl InternalHttpQueryHandler {
                 since.elapsed().as_secs_f64(),
                 &result,
             );
-            return QueryStep::Finished(result.map(WasmResult::Reply));
+            return QueryStep::Finished {
+                result: result.map(WasmResult::Reply),
+                batch_time,
+            };
         }
 
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
@@ -277,7 +290,10 @@ impl InternalHttpQueryHandler {
                 self.query_cache
                     .get_valid_result(&key, state, query_stats_collector.as_deref())
             {
-                return QueryStep::Finished(result);
+                return QueryStep::Finished {
+                    result,
+                    batch_time: state.metadata.batch_time,
+                };
             }
             Some(key)
         } else {
@@ -391,9 +407,10 @@ impl InternalHttpQueryHandler {
         batch_time: Time,
     ) -> QueryStep {
         match outcome {
-            query_context::RunOutcome::Finished(result) => {
-                QueryStep::Finished(self.finalize(&mut context, result, cache_entry_key))
-            }
+            query_context::RunOutcome::Finished(result) => QueryStep::Finished {
+                result: self.finalize(&mut context, result, cache_entry_key),
+                batch_time,
+            },
             query_context::RunOutcome::Suspended(call_graph, pending) => {
                 let outcall = pending.outcall.clone();
                 QueryStep::Suspended {
@@ -429,7 +446,7 @@ impl InternalHttpQueryHandler {
             instruction_observation,
             max_instructions,
         ) {
-            QueryStep::Finished(result) => result,
+            QueryStep::Finished { result, .. } => result,
             QueryStep::Suspended { .. } => {
                 error!(
                     self.log,
@@ -472,7 +489,7 @@ impl InternalHttpQueryHandler {
         );
         loop {
             match step {
-                QueryStep::Finished(result) => return result,
+                QueryStep::Finished { result, .. } => return result,
                 QueryStep::Suspended { suspended, outcall } => {
                     let result = outcall_handler(outcall);
                     step = self.resume_query(suspended, result);
@@ -510,20 +527,88 @@ impl InternalHttpQueryHandler {
 #[derive(Clone)]
 struct HttpQueryHandlerMetrics {
     pub height_diff_during_query_scheduling: Histogram,
+    /// The wait is recorded nowhere else: the `execution_query_*` histograms
+    /// measure only on-thread time.
+    pub outcall_wait_duration_seconds: Histogram,
+    /// If this grows, resumed queries are being starved by a canister's backlog
+    /// and will start failing the walltime check.
+    pub resume_scheduling_delay_seconds: Histogram,
+    /// End-to-end duration of a query, executing and waiting together.
+    pub total_walltime_seconds: Histogram,
+    /// The number of HTTP outcalls a single query performed.
+    pub outcalls_per_query: Histogram,
 }
 
 impl HttpQueryHandlerMetrics {
     pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
+        let query_type = || labels! {"query_type".to_string() => namespace.to_string()};
         Self {
             height_diff_during_query_scheduling: metrics_registry.register(
                 Histogram::with_opts(histogram_opts!(
                     "execution_query_height_diff_during_query_scheduling",
                     "The height difference between the latest certified height before query scheduling and state height used for execution",
                     vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
-                    labels! {"query_type".to_string() => namespace.to_string()}
+                    query_type()
+                )).unwrap(),
+            ),
+            outcall_wait_duration_seconds: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_outcall_wait_duration_seconds",
+                    "The duration of one HTTP outcall a query waited for, excluding the time the query spent executing",
+                    decimal_buckets(-3, 1),
+                    query_type()
+                )).unwrap(),
+            ),
+            resume_scheduling_delay_seconds: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_resume_scheduling_delay_seconds",
+                    "The delay between an HTTP outcall response arriving and the query resuming on a thread",
+                    decimal_buckets(-4, 1),
+                    query_type()
+                )).unwrap(),
+            ),
+            total_walltime_seconds: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_total_walltime_seconds",
+                    "The end-to-end duration of a query, including any time spent waiting for HTTP outcalls",
+                    decimal_buckets(-3, 1),
+                    query_type()
+                )).unwrap(),
+            ),
+            outcalls_per_query: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_outcalls_per_query",
+                    "The number of HTTP outcalls performed by a single query",
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0],
+                    query_type()
                 )).unwrap(),
             ),
         }
+    }
+}
+
+/// Observes the end-to-end duration of one query, however it ends.
+///
+/// On drop rather than at each return, so that a query cancelled while waiting
+/// for an outcall is measured too: from the node's point of view it occupied the
+/// same resources as one that ran to completion.
+struct WalltimeObserver {
+    histogram: Histogram,
+    started: Instant,
+}
+
+impl WalltimeObserver {
+    fn new(histogram: Histogram) -> Self {
+        Self {
+            histogram,
+            started: Instant::now(),
+        }
+    }
+}
+
+impl Drop for WalltimeObserver {
+    fn drop(&mut self) {
+        self.histogram.observe(self.started.elapsed().as_secs_f64());
     }
 }
 
@@ -535,9 +620,13 @@ pub(crate) struct HttpQueryHandler {
     query_scheduler: QueryScheduler,
     metrics: Arc<HttpQueryHandlerMetrics>,
     enable_query_stats_tracking: bool,
+    /// Performs the HTTP outcalls that queries request. `None` when outcalls
+    /// from queries are not available on this node.
+    outcall_service: Option<QueryOutcallService>,
 }
 
 impl HttpQueryHandler {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_query_service(
         internal: Arc<InternalHttpQueryHandler>,
         query_scheduler: QueryScheduler,
@@ -545,6 +634,7 @@ impl HttpQueryHandler {
         metrics_registry: &MetricsRegistry,
         namespace: &str,
         enable_query_stats_tracking: bool,
+        outcall_service: Option<QueryOutcallService>,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
@@ -552,6 +642,7 @@ impl HttpQueryHandler {
             query_scheduler,
             metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
             enable_query_stats_tracking,
+            outcall_service,
         })
     }
 
@@ -569,6 +660,9 @@ impl HttpQueryHandler {
             query_scheduler,
             metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
             enable_query_stats_tracking,
+            // A transform runs as a `Pure` query, which cannot make calls and so
+            // cannot reach the management canister to request an outcall.
+            outcall_service: None,
         })
     }
 }
@@ -592,71 +686,160 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);
-        let (tx, rx) = oneshot::channel();
+        let query_scheduler = self.query_scheduler.clone();
+        let outcall_service = self.outcall_service.clone();
         let canister_id = query.receiver;
+        // Captured synchronously, so that the metric measures how long the query
+        // waited to be scheduled rather than how long this future waited to be
+        // polled.
         let latest_certified_height_pre_schedule = state_reader.latest_certified_height();
         let http_query_handler_metrics = Arc::clone(&self.metrics);
         let enable_query_stats_tracking = self.enable_query_stats_tracking;
-        self.query_scheduler.push(canister_id, move || {
-            let start = std::time::Instant::now();
-            if !tx.is_closed() {
-                // We managed to upgrade the weak pointer, so the query was not cancelled.
-                // Canceling the query after this point will have no effect: the query will
-                // be executed anyway. That is fine because the execution will take O(ms).
 
-                // Retrieving the state must be done here in the query handler, and should be immediately used.
-                // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
-                // with a reference to older states which can cause out-of-memory crashes.
+        Box::pin(async move {
+            let _walltime =
+                WalltimeObserver::new(http_query_handler_metrics.total_walltime_seconds.clone());
+            let mut outcalls_performed = 0_u64;
+            let (tx, rx) = oneshot::channel();
+            {
+                let internal = Arc::clone(&internal);
+                let http_query_handler_metrics = Arc::clone(&http_query_handler_metrics);
+                query_scheduler.push(canister_id, move || {
+                    let start = std::time::Instant::now();
+                    if !tx.is_closed() {
+                        // The query was not cancelled. Cancelling it after this
+                        // point has no effect: this step runs anyway, which is
+                        // fine because a step takes O(ms).
 
-                let (certificate_delegation, certificate_delegation_metadata) =
-                    match certificate_delegation_with_metadata {
-                        Some((delegation, metadata)) => (Some(delegation), Some(metadata)),
-                        None => (None, None),
-                    };
+                        // Retrieving the state must be done here in the query handler, and should be immediately used.
+                        // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
+                        // with a reference to older states which can cause out-of-memory crashes.
 
-                let result = match get_latest_certified_state_and_data_certificate(
-                    state_reader,
-                    certificate_delegation,
-                    query.receiver,
-                ) {
-                    Some((state, cert)) => {
-                        let time = state.get_ref().metadata.batch_time;
-
-                        let certified_height_used_for_execution = state.height();
-                        let height_diff = certified_height_used_for_execution
-                            .get()
-                            .saturating_sub(latest_certified_height_pre_schedule.get());
-                        http_query_handler_metrics
-                            .height_diff_during_query_scheduling
-                            .observe(height_diff as f64);
-
-                        let data_certificate_with_delegation_metadata =
-                            DataCertificateWithDelegationMetadata {
-                                data_certificate: cert,
-                                certificate_delegation_metadata,
+                        let (certificate_delegation, certificate_delegation_metadata) =
+                            match certificate_delegation_with_metadata {
+                                Some((delegation, metadata)) => (Some(delegation), Some(metadata)),
+                                None => (None, None),
                             };
 
-                        let response = internal.query(
-                            query,
-                            state,
-                            Some(data_certificate_with_delegation_metadata),
-                            enable_query_stats_tracking,
-                            None,
-                            None,
-                        );
+                        let step = match get_latest_certified_state_and_data_certificate(
+                            state_reader,
+                            certificate_delegation,
+                            query.receiver,
+                        ) {
+                            Some((state, cert)) => {
+                                let certified_height_used_for_execution = state.height();
+                                let height_diff = certified_height_used_for_execution
+                                    .get()
+                                    .saturating_sub(latest_certified_height_pre_schedule.get());
+                                http_query_handler_metrics
+                                    .height_diff_during_query_scheduling
+                                    .observe(height_diff as f64);
 
-                        Ok((response, time))
+                                let data_certificate_with_delegation_metadata =
+                                    DataCertificateWithDelegationMetadata {
+                                        data_certificate: cert,
+                                        certificate_delegation_metadata,
+                                    };
+
+                                Ok(internal.start_query(
+                                    query,
+                                    state,
+                                    Some(data_certificate_with_delegation_metadata),
+                                    enable_query_stats_tracking,
+                                    None,
+                                    None,
+                                ))
+                            }
+                            None => Err(QueryExecutionError::CertifiedStateUnavailable),
+                        };
+
+                        let _ = tx.send(step);
                     }
-                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
+                    // Only the time actually spent on the thread. Reporting the
+                    // time an outcall took would poison this canister's average
+                    // query duration and collapse its scheduling time slice.
+                    start.elapsed()
+                });
+            }
+
+            let mut step = match rx.await {
+                Ok(Ok(step)) => step,
+                Ok(Err(err)) => return Ok(Err(err)),
+                Err(_) => {
+                    // The scheduler dropped the closure without running it, which
+                    // happens only while it is shutting down.
+                    panic!("The sender was dropped before sending the message.")
+                }
+            };
+
+            // Each iteration performs one outcall the query asked for and hands
+            // the result back to it. While the outcall is in flight the query
+            // holds no query-execution thread, which is the point: there are only
+            // a handful of them, shared with the ingress filter.
+            loop {
+                let (suspended, outcall) = match step {
+                    QueryStep::Finished { result, batch_time } => {
+                        http_query_handler_metrics
+                            .outcalls_per_query
+                            .observe(outcalls_performed as f64);
+                        return Ok(Ok((result, batch_time)));
+                    }
+                    QueryStep::Suspended { suspended, outcall } => (suspended, outcall),
+                };
+                let batch_time = suspended.batch_time;
+
+                let Some(outcall_service) = outcall_service.clone() else {
+                    // Unreachable: outcalls from queries are forced off when no
+                    // service is available. Fail closed rather than panicking.
+                    return Ok(Ok((
+                        Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet",
+                        )),
+                        batch_time,
+                    )));
                 };
 
-                let _ = tx.send(Ok(result));
+                // Dropping this future -- because the client went away -- aborts
+                // the outcall and releases the suspended query along with the
+                // state snapshot it pinned.
+                let waited_from = Instant::now();
+                let Ok(result) = outcall_service.oneshot(outcall).await;
+                http_query_handler_metrics
+                    .outcall_wait_duration_seconds
+                    .observe(waited_from.elapsed().as_secs_f64());
+                outcalls_performed += 1;
+
+                let (tx, rx) = oneshot::channel();
+                let internal = Arc::clone(&internal);
+                let resume_pushed_at = Instant::now();
+                let scheduling_delay = http_query_handler_metrics
+                    .resume_scheduling_delay_seconds
+                    .clone();
+                query_scheduler.push_resumed(canister_id, move || {
+                    // Measured before anything else: this is the queueing delay
+                    // the resume priority exists to keep small.
+                    scheduling_delay.observe(resume_pushed_at.elapsed().as_secs_f64());
+                    let start = std::time::Instant::now();
+                    if !tx.is_closed() {
+                        let _ = tx.send(internal.resume_query(suspended, result));
+                    }
+                    start.elapsed()
+                });
+
+                step = match rx.await {
+                    Ok(step) => step,
+                    Err(_) => {
+                        return Ok(Ok((
+                            Err(UserError::new(
+                                ErrorCode::QueryCallGraphInternal,
+                                "Query execution was aborted",
+                            )),
+                            batch_time,
+                        )));
+                    }
+                };
             }
-            start.elapsed()
-        });
-        Box::pin(async move {
-            rx.await
-                .expect("The sender was dropped before sending the message.")
         })
     }
 }

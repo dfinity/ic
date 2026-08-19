@@ -4,6 +4,8 @@
 //! against, blocking garbage collection for that height.
 
 use ic_base_types::CanisterId;
+use ic_metrics::MetricsRegistry;
+use prometheus::IntGauge;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -16,10 +18,12 @@ pub(super) struct SuspensionPermit {
     _permit: OwnedSemaphorePermit,
     per_canister: Arc<Mutex<HashMap<CanisterId, usize>>>,
     canister_id: CanisterId,
+    suspended: IntGauge,
 }
 
 impl Drop for SuspensionPermit {
     fn drop(&mut self) {
+        self.suspended.dec();
         let mut per_canister = self.per_canister.lock().unwrap();
         match per_canister.get_mut(&self.canister_id) {
             Some(count) if *count > 1 => *count -= 1,
@@ -35,14 +39,25 @@ pub(super) struct SuspendedQueryLimiter {
     total: Arc<Semaphore>,
     per_canister_limit: usize,
     per_canister: Arc<Mutex<HashMap<CanisterId, usize>>>,
+    /// Driven by permit acquisition and release, so it counts exactly the
+    /// queries that are suspended right now, however they end.
+    suspended: IntGauge,
 }
 
 impl SuspendedQueryLimiter {
-    pub(super) fn new(total_limit: usize, per_canister_limit: usize) -> Self {
+    pub(super) fn new(
+        total_limit: usize,
+        per_canister_limit: usize,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
         Self {
             total: Arc::new(Semaphore::new(total_limit)),
             per_canister_limit,
             per_canister: Arc::new(Mutex::new(HashMap::new())),
+            suspended: metrics_registry.int_gauge(
+                "execution_query_suspended_queries",
+                "The number of queries currently suspended waiting for an HTTP outcall.",
+            ),
         }
     }
 
@@ -63,10 +78,12 @@ impl SuspendedQueryLimiter {
         *count += 1;
         drop(per_canister);
 
+        self.suspended.inc();
         Some(SuspensionPermit {
             _permit: permit,
             per_canister: Arc::clone(&self.per_canister),
             canister_id,
+            suspended: self.suspended.clone(),
         })
     }
 
@@ -84,7 +101,7 @@ mod tests {
 
     #[test]
     fn enforces_the_total_limit() {
-        let limiter = SuspendedQueryLimiter::new(2, 10);
+        let limiter = SuspendedQueryLimiter::new(2, 10, &MetricsRegistry::new());
 
         let first = limiter.try_acquire(canister_test_id(1));
         let second = limiter.try_acquire(canister_test_id(2));
@@ -102,7 +119,7 @@ mod tests {
 
     #[test]
     fn enforces_the_per_canister_limit() {
-        let limiter = SuspendedQueryLimiter::new(10, 1);
+        let limiter = SuspendedQueryLimiter::new(10, 1, &MetricsRegistry::new());
 
         let held = limiter.try_acquire(canister_test_id(1));
         assert!(held.is_some());
@@ -124,7 +141,7 @@ mod tests {
     /// total, or a canister at its own limit would starve the whole node.
     #[test]
     fn a_per_canister_refusal_does_not_consume_a_total_slot() {
-        let limiter = SuspendedQueryLimiter::new(2, 1);
+        let limiter = SuspendedQueryLimiter::new(2, 1, &MetricsRegistry::new());
 
         let held = limiter.try_acquire(canister_test_id(1));
         assert!(held.is_some());
@@ -141,7 +158,7 @@ mod tests {
 
     #[test]
     fn releases_slots_when_permits_are_dropped() {
-        let limiter = SuspendedQueryLimiter::new(4, 4);
+        let limiter = SuspendedQueryLimiter::new(4, 4, &MetricsRegistry::new());
 
         let permits: Vec<_> = (0..4)
             .map(|_| limiter.try_acquire(canister_test_id(1)).unwrap())

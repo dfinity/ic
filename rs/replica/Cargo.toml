@@ -25,6 +25,7 @@ ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-http-endpoints-xnet = { path = "../http_endpoints/xnet" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
+ic-https-outcalls-socks-proxy = { path = "../https_outcalls/socks_proxy" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }

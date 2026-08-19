@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/http_endpoints/public",
     "//rs/http_endpoints/xnet",
     "//rs/https_outcalls/client",
+    "//rs/https_outcalls/socks_proxy",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",

@@ -9,7 +9,10 @@ use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_xnet::XNetEndpoint;
-use ic_https_outcalls_adapter_client::{setup_canister_http_channel, setup_canister_http_client};
+use ic_https_outcalls_adapter_client::{
+    setup_canister_http_channel, setup_canister_http_client, setup_query_outcall_service,
+};
+use ic_https_outcalls_socks_proxy::RegistrySocksProxyProvider;
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
@@ -200,6 +203,24 @@ pub fn construct_ic_stack(
         &config.adapters_config,
         log,
     );
+    // A separate client: consensus drives its own from a polling loop, which is
+    // the wrong shape for a caller that awaits a single future.
+    let socks_proxy_errors = metrics_registry.int_counter_vec(
+        "query_http_outcall_socks_proxy_errors_total",
+        "Failures resolving the SOCKS proxies for HTTP outcalls made from queries.",
+        &["reason"],
+    );
+    let query_outcall_service = setup_query_outcall_service(
+        canister_http_channel.clone(),
+        Arc::new(
+            RegistrySocksProxyProvider::new(registry.clone(), subnet_type, log.clone())
+                .with_error_observer(Arc::new(move |label: &str| {
+                    socks_proxy_errors.with_label_values(&[label]).inc()
+                })),
+        ),
+        metrics_registry,
+        log.clone(),
+    );
 
     let subnet_config = SubnetConfig::new(subnet_type);
 
@@ -214,6 +235,7 @@ pub fn construct_ic_stack(
         state_manager.get_fd_factory(),
         completed_execution_messages_tx,
         &state_manager.state_layout().tmp(),
+        Some(query_outcall_service),
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
     let certified_stream_store = Arc::clone(&state_manager);

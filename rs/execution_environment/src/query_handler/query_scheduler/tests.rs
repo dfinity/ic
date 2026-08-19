@@ -237,3 +237,78 @@ fn query_scheduler_properly_reads_leftover_queries() {
 
     assert_eq!(queries.len(), 1);
 }
+
+/// A resumed query runs before queries that arrived while it was suspended.
+///
+/// A query resumed after an HTTP outcall has already spent part of its walltime
+/// budget waiting. Queueing it behind a busy canister's backlog would let that
+/// backlog push it past its deadline, so it goes to the front.
+#[test]
+fn query_scheduler_runs_resumed_queries_before_new_ones() {
+    let metrics_registry = MetricsRegistry::new();
+    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
+    let order = Arc::new(Mutex::new(vec![]));
+
+    // A backlog of queries that have not started yet.
+    for i in 0..5 {
+        let order = Arc::clone(&order);
+        scheduler.push(
+            canister_test_id(0),
+            Query(Box::new(move || {
+                order.lock().unwrap().push(format!("new{i}"));
+                Duration::from_millis(1)
+            })),
+        );
+    }
+    // A query resuming after an outcall.
+    {
+        let order = Arc::clone(&order);
+        scheduler.push_resumed(
+            canister_test_id(0),
+            Query(Box::new(move || {
+                order.lock().unwrap().push("resumed".to_string());
+                Duration::from_millis(1)
+            })),
+        );
+    }
+
+    let (_, queries) = scheduler.pop().unwrap();
+    for query in queries {
+        query.execute();
+    }
+
+    assert_eq!(
+        order.lock().unwrap().first().map(String::as_str),
+        Some("resumed"),
+        "the resumed query must run before the queries that arrived while it waited"
+    );
+}
+
+/// A query that suspends reports only the time it spent on the thread, so its
+/// canister stays immediately schedulable and its average duration is not
+/// poisoned by the wait.
+#[test]
+fn query_scheduler_suspending_query_releases_its_thread() {
+    let metrics_registry = MetricsRegistry::new();
+    let scheduler = QuerySchedulerInternal::new(1, Duration::from_millis(100), &metrics_registry);
+
+    scheduler.push(
+        canister_test_id(0),
+        Query(Box::new(|| Duration::from_millis(1))),
+    );
+
+    let (canister_id, queries) = scheduler.pop().unwrap();
+    let elapsed: Duration = queries.into_iter().map(|q| q.execute()).sum();
+    scheduler.notify_finished_execution(canister_id, elapsed, vec![]);
+
+    // The canister holds no threads, so its continuation can be scheduled at once
+    // even with a per-canister limit of one.
+    scheduler.push_resumed(
+        canister_test_id(0),
+        Query(Box::new(|| Duration::from_millis(1))),
+    );
+    assert!(
+        scheduler.pop().is_some(),
+        "a suspended query must not keep its canister's thread slot"
+    );
+}
