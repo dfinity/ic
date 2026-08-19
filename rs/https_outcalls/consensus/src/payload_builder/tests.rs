@@ -14,7 +14,8 @@ use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{
-    consensus_fee, flexible_initial_spent, min_flexible_consensus_cost, non_flexible_initial_spent,
+    consensus_fee, flexible_initial_spent, max_usage_fee, min_flexible_consensus_cost,
+    non_flexible_initial_spent,
 };
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
@@ -58,6 +59,7 @@ use ic_types::{
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus, MAX_CANISTER_HTTP_RESPONSE_BYTES,
         MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion, RefundStatus, Replication,
+        canister_http_threshold, max_http_outcall_response_size,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -115,7 +117,7 @@ fn single_request_test() {
                     add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
                     add_received_shares_to_pool(
                         pool_access.deref_mut(),
-                        shares[1..subnet_size - get_faults_tolerated(subnet_size)].to_vec(),
+                        shares[1..canister_http_threshold(subnet_size)].to_vec(),
                     );
                 }
 
@@ -5452,7 +5454,7 @@ fn flexible_response_group_is_not_funded_by_a_delivering_replica() {
 #[test]
 fn fully_replicated_response_waits_for_shares_covering_consensus_cost() {
     let num_nodes = 4;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let cb_id = 0;
     let (response, metadata) = test_response_and_metadata(cb_id);
     let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
@@ -5506,7 +5508,7 @@ fn assert_responses_from_threshold_shares(
     expected_out_of_cycles: usize,
 ) {
     let cb_id = 0;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let (response, metadata) = test_response_and_metadata(cb_id);
     // Ensure that the consensus cost is nonzero, so that the test only passes if the unspent
     // allowance is sufficient, or if the consensus cost isn't enforced (free and legacy requests).
@@ -5573,7 +5575,7 @@ fn initial_spent_is_limited_under_pay_as_you_go_pricing() {
 #[test]
 fn initial_spent_is_covered_under_pay_as_you_go_pricing() {
     let num_nodes = 4;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let (_, metadata) = test_response_and_metadata(0);
     let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
     let allowance = Cycles::new(consensus_cost.get().div_ceil(threshold as u128));
@@ -6958,7 +6960,7 @@ fn validate_payload_fails_for_an_oversized_non_flexible_response() {
     let num_nodes = 4;
     let cb_id = 0;
     let designated = node_test_id(0);
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     // One byte more than the largest response the replica could have returned.
     let oversized = (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES) as usize + 1;
     let (response, metadata) = test_response_and_metadata_with_content(
@@ -7025,7 +7027,7 @@ fn validate_payload_fails_for_an_oversized_non_flexible_response() {
 #[test]
 fn validate_payload_fails_for_initial_spent_exceeding_allowance() {
     let num_nodes = 4;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let cb_id = 0;
     let (response, metadata) = test_response_and_metadata(cb_id);
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
@@ -7080,7 +7082,7 @@ fn validate_payload_fails_for_initial_spent_exceeding_allowance() {
 #[test]
 fn validate_payload_accepts_initial_spent_within_the_collective_allowance() {
     let num_nodes = 4;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let cb_id = 0;
     let (response, metadata) = test_response_and_metadata(cb_id);
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
@@ -7132,6 +7134,61 @@ fn validate_payload_accepts_initial_spent_within_the_collective_allowance() {
                 InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit { .. },
             ),
         ))
+    );
+}
+
+/// The allowance a fully-replicated request receives leaves its response
+/// deliverable by the fewest replicas that can produce the response.
+#[test]
+fn validate_payload_accepts_a_threshold_signed_response_at_the_quoted_price() {
+    let num_nodes = 13;
+    let threshold = canister_http_threshold(num_nodes);
+    let cb_id = 0;
+    let subnet_size = NumberOfNodes::from(num_nodes as u32);
+
+    // The per-replica allowance `ExecutionEnvironment` withholds from a request that
+    // attached the recommended amount of cycles.
+    let allowance = max_usage_fee(&Replication::FullyReplicated, None, subnet_size) / num_nodes;
+
+    // The largest response an outcall without a response limit may deliver, which is
+    // the one whose consensus fee the allowances have to stretch to.
+    let content_size = max_http_outcall_response_size(None);
+    let (response, metadata) = test_response_and_metadata_with_content(
+        cb_id,
+        CanisterHttpResponseContent::Success(vec![0; content_size as usize]),
+    );
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for signer in 0..threshold as u64 {
+        add_signer_to_proof(&mut proof, node_test_id(signer));
+    }
+    proof.initial_spent = non_flexible_initial_spent(&proof.proof, subnet_size);
+    assert_eq!(
+        proof.initial_spent,
+        consensus_fee(content_size as u128, subnet_size),
+        "the signers claim no spend, so the whole initial spend is the consensus fee"
+    );
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            CallbackId::new(cb_id),
+            with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
+        )],
+        |payload_builder, _pool| {
+            let payload = CanisterHttpPayload {
+                responses: vec![proof.clone()],
+                ..Default::default()
+            };
+            assert_matches!(
+                payload_builder.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&default_validation_context()),
+                    &payload_to_bytes_max_4mb(payload),
+                    &[],
+                ),
+                Ok(())
+            );
+        },
     );
 }
 

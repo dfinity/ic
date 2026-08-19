@@ -87,8 +87,8 @@ impl Cycles {
         self.0.checked_mul(rhs as u128).map(Cycles::from)
     }
 
-    /// Divides by `rhs`, rounding up, i.e. the smallest amount of cycles that `rhs`
-    /// of them cover `self`. The `Div` impls truncate instead.
+    /// Divides by `rhs`, rounding up, i.e. the smallest amount of cycles such that
+    /// `rhs` of them cover `self`. The `Div` impls truncate instead.
     ///
     /// # Panics
     ///
@@ -420,8 +420,13 @@ mod test {
         assert_eq!(Cycles::from(9_u128).div_ceil(3), Cycles::from(3_u128));
         assert_eq!(Cycles::from(10_u128).div_ceil(3), Cycles::from(4_u128));
         assert_eq!(Cycles::from(12_u128).div_ceil(3), Cycles::from(4_u128));
+        // Including a divisor larger than the dividend: a single cycle is the smallest
+        // amount of which `rhs` cover a non-zero `self`.
+        assert_eq!(Cycles::from(1_u128).div_ceil(3), Cycles::from(1_u128));
+        assert_eq!(Cycles::from(u128::MAX).div_ceil(u128::MAX), Cycles::new(1));
         // Which is what tells it apart from the truncating `Div`.
         assert_eq!(Cycles::from(10_u128) / 3_u128, Cycles::from(3_u128));
+        assert_eq!(Cycles::from(1_u128) / 3_u128, Cycles::zero());
     }
 
     #[test]

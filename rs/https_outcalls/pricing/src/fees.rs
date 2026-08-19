@@ -25,9 +25,8 @@ use ic_types::{
     canister_http::{
         CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseShare,
         MAX_CANISTER_HTTP_REJECT_BYTES, MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication,
-        ReplicationKind, max_http_outcall_response_size,
+        ReplicationKind, canister_http_threshold, max_http_outcall_response_size,
     },
-    consensus::get_faults_tolerated,
 };
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig, HTTPOutcalls};
 use std::collections::BTreeMap;
@@ -211,9 +210,11 @@ fn flexible_extra_response_fee(extra_responses: u32, subnet_size: NumberOfNodes)
 /// delivered into a block. Used by canisters to estimate the cost of an outcall.
 ///
 /// Since neither how many replicas will respond nor which result they will produce is
-/// known ahead of time, this is the most such an outcall can cost: every replica of the
-/// (flexible) committee is assumed to attempt it, and the most expensive result that
-/// could come out of it to be delivered (see [`max_consensus_fee`]).
+/// known ahead of time, this is what an outcall has to *pay up front* rather than what
+/// it ends up costing: every replica of the (flexible) committee is assumed to attempt
+/// the call. The consensus fee is reserved for the result that is most expensive to
+/// fund — which is more than any result actually charges (see [`max_consensus_fee`]).
+/// Whatever of that is not spent is refunded once the request is settled.
 pub fn total_fee(
     request_size: NumBytes,
     http_roundtrip_time: Duration,
@@ -271,12 +272,11 @@ fn usage_fee(
         + gossip_fee;
     let replicas = replication_kind.node_count(subnet_size);
 
-    (per_replica_fee * replicas + consensus_fee).div_ceil(replicas as u128) * replicas
+    (per_replica_fee + consensus_fee.div_ceil(replicas as u128)) * replicas
 }
 
-/// The most the consensus fee of delivering the response(s) of an outcall of the
-/// given `replication_kind` can be, each response `transformed_response_size` bytes
-/// large.
+/// The consensus fee an outcall of the given `replication_kind` reserves for delivering
+/// its response(s), each `transformed_response_size` bytes large.
 ///
 /// The fee has to be paid out of the replica's unspent allowances. Therefore, the
 /// returned fee is priced such that every deliverable result is self-funding. Specifically,
@@ -295,15 +295,15 @@ pub(crate) fn max_consensus_fee(
     let response_bytes =
         (transformed_response_size.get() as u128).max(MAX_CANISTER_HTTP_REJECT_BYTES as u128);
     match replication_kind {
-        // The designated replica is the only contributor, and it holds the whole
-        // allowance of the request.
         ReplicationKind::NonReplicated => consensus_fee(response_bytes, subnet_size),
         ReplicationKind::FullyReplicated => {
-            let n = (subnet_size.get() as usize).max(1);
-            let threshold = (n - get_faults_tolerated(n)) as u128;
-            // The consensus fee that delivering the response will cost, which the `threshold`
-            // contributing ones have to cover between them, times the `n` replicas the
-            // allowance is split across.
+            // The replicas the reserve is split across, i.e. the whole subnet, and the
+            // quorum of them a response proof needs.
+            let n = replication_kind.node_count(subnet_size);
+            let threshold = canister_http_threshold(n) as u128;
+            // The fee delivering the response will cost, cut into the share each of the
+            // `threshold` contributors has to cover, times the `n` replicas the reserve is
+            // split across.
             consensus_fee(response_bytes, subnet_size).div_ceil(threshold) * n
         }
         ReplicationKind::Flexible {
@@ -328,15 +328,21 @@ pub(crate) fn max_consensus_fee(
 
 // ============================= Maximum usage fee =============================
 
-/// The most an HTTP outcall with the given `replication` and `max_response_bytes`
-/// can ever spend, i.e. its [`usage_fee`] in the worst case: a response of the
-/// largest permitted size, downloaded over the full `MAX_RESPONSE_TIME`,
-/// transformed with the full query instruction limit and delivered as a maximally
-/// large transformed response.
+/// The largest [`usage_fee`] an HTTP outcall with the given `replication` and
+/// `max_response_bytes` can have, i.e. its worst case: a response of the largest
+/// permitted size, downloaded over the full `MAX_RESPONSE_TIME`, transformed with the
+/// full query instruction limit and delivered as a maximally large transformed response.
 ///
-/// Like any [`usage_fee`] it is a multiple of the number of participating replicas, so
-/// that splitting it evenly among them always yields allowances that add up to at least
-/// the worst case.
+/// This is what bounds how much of a request's payment is withheld as allowances;
+/// anything beyond it could never be spent, so withholding it would only lock up the
+/// caller's cycles until the request is settled.
+///
+/// This is an upper bound on what an outcall can be *charged*, not the charge itself: the
+/// consensus fee it reserves exceeds what delivering any single result costs (see
+/// [`max_consensus_fee`]), and the excess is refunded.
+///
+/// Being a [`usage_fee`], it is a whole multiple of the number of participating replicas,
+/// so splitting it evenly among them loses nothing.
 pub fn max_usage_fee(
     replication: &Replication,
     max_response_bytes: Option<NumBytes>,
@@ -1033,13 +1039,12 @@ mod tests {
             Cycles::new(38_482_600 + 13 * USAGE_FEE + 27_415_557)
         );
 
-        // The parts add up to the single-expression formula of
-        // `ic0.cost_http_request_v2`, with the consensus fee's `10 * N + 600` as the
-        // per-transformed-byte coefficient, cut into the share each of the `threshold`
-        // contributors must cover and multiplied back up by the `N` replicas the
-        // allowance is split across.
+        // The parts add up to the formula reported by `ic0.cost_http_request_v2`, with
+        // `(10 * N + 600) * N` as the consensus fee's per-transformed-byte coefficient,
+        // cut into the share each of the `threshold` contributors must cover and
+        // multiplied back up by the `N` replicas the reserve is split across.
         let n = 13_u128;
-        let threshold = 9_u128; // 13 - get_faults_tolerated(13)
+        let threshold = 9_u128; // canister_http_threshold(13)
         assert_eq!(
             fee.real(),
             Cycles::new(
@@ -1074,9 +1079,9 @@ mod tests {
     fn total_fee_flexible_charges_every_delegated_replica_and_response() {
         // 3 delegated replicas, 2 of whose responses suffice, so all 3 perform the
         // outcall and gossip their own response, and up to 3 responses are delivered
-        // — one of them beyond `min_responses`. All 3 responses are also what a
-        // `TooManyRejects` would deliver here, but at 2_000 bytes each the responses
-        // asked for are the more expensive of the two.
+        // — one of them beyond `min_responses`. The consensus term is priced for a
+        // response from every one of the 3, which is also what a `TooManyRejects`
+        // delivers here, so the same fee funds either result.
         //   base fee    = 13 * (1_000_000 + 50*100 + 90_000*13 + 2_000*13*2 + 100_000*2)
         //                                                          = 31_551_000
         //   per replica = 3 * (650_002 + 50*2_000*13)              =  5_850_006
@@ -1090,6 +1095,19 @@ mod tests {
         assert_eq!(
             fee.real(),
             Cycles::new(31_551_000 + 3 * (USAGE_FEE + 50 * 2_000 * 13) + 62_093_070 + 1_638_000)
+        );
+
+        // Asking for fewer responses than there are delegated replicas does not lower
+        // the price: every one of them is still priced for delivering a response, since
+        // each holds only a third of the fee.
+        assert_eq!(
+            total_fee_of(ReplicationKind::Flexible {
+                total_requests: 3,
+                min_responses: 2,
+                max_responses: 2,
+            })
+            .real(),
+            fee.real()
         );
     }
 
@@ -1215,10 +1233,12 @@ mod tests {
             ReplicationKind::FullyReplicated | ReplicationKind::NonReplicated => {
                 let min_contributors = match replication_kind {
                     ReplicationKind::NonReplicated => 1,
-                    _ => {
-                        let n = (subnet_size.get() as usize).max(1);
-                        n - get_faults_tolerated(n)
+                    // The threshold of agreeing signers a response proof needs, i.e. the
+                    // fewest replicas a delivered response can come from.
+                    ReplicationKind::FullyReplicated => {
+                        canister_http_threshold(replication_kind.node_count(subnet_size))
                     }
+                    ReplicationKind::Flexible { .. } => unreachable!(),
                 };
                 for content_size in [transformed_bytes, MAX_CANISTER_HTTP_REJECT_BYTES] {
                     let proof = proof(content_size as u32, &vec![0; min_contributors]);
@@ -1494,42 +1514,69 @@ mod tests {
     }
 
     #[test]
-    fn max_usage_fee_is_a_whole_number_of_allowances() {
-        // Whatever the worst case, the reported maximum is a multiple of the number of
-        // participating replicas, so that splitting it evenly always covers that worst
-        // case. It is [`usage_fee`] that rounds up to one (see
-        // [`usage_fee_is_a_whole_number_of_allowances`]), so the maximum adds nothing of
-        // its own on top of the worst case it reports.
+    fn max_usage_fee_is_a_whole_number_of_allowances_and_bounds_every_usage() {
+        // The reported maximum is a multiple of the number of participating replicas, so
+        // that splitting it into allowances loses nothing. It is [`usage_fee`] that rounds
+        // up to one (see [`usage_fee_is_a_whole_number_of_allowances`]), so the maximum
+        // adds nothing of its own on top of the worst case it reports.
         for replication in [
             Replication::FullyReplicated,
             Replication::NonReplicated(node(0)),
-            // A committee of 4, i.e. fewer allowances than the subnet has replicas.
+            // A committee of 11, i.e. fewer allowances than the subnet has replicas, and
+            // one whose worst case is not a whole number of them before the rounding.
             Replication::Flexible {
-                committee: (0..4).map(node).collect(),
+                committee: (0..11).map(node).collect(),
                 min_responses: 2,
-                max_responses: 3,
+                max_responses: 7,
             },
         ] {
             let subnet_size = NumberOfNodes::from(13);
             let replication_kind = replication.kind();
             let node_count = replication_kind.node_count(subnet_size) as u128;
-            let worst_case = usage_fee(
-                replication_kind,
-                MAX_RESPONSE_TIME,
-                NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
-                MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
-                NumBytes::from(max_http_outcall_response_size(None)),
-                subnet_size,
-            );
             let reported = max_usage_fee(&replication, None, subnet_size);
 
             assert_eq!(reported.get() % node_count, 0, "{replication:?}");
-            assert_eq!(reported, worst_case, "{replication:?}");
-            // Splitting it evenly covers the worst case, which is the point.
-            assert!(
-                reported / node_count * node_count >= worst_case,
+            // The worst case reaches the reported maximum exactly, so it is not just an
+            // upper bound but the one an outcall without a response limit can hit ...
+            assert_eq!(
+                usage_fee(
+                    replication_kind,
+                    MAX_RESPONSE_TIME,
+                    NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                    MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
+                    NumBytes::from(max_http_outcall_response_size(None)),
+                    subnet_size,
+                ),
+                reported,
                 "{replication:?}"
             );
+            // ... and nothing short of it is priced above it.
+            for (roundtrip, raw_bytes, instructions, transformed_bytes) in [
+                (Duration::ZERO, 0, 0, 0),
+                (Duration::from_millis(1), 1, 1, 1),
+                (Duration::from_secs(30), 1_000_000, 2_500_000_000, 1_000_000),
+                (
+                    MAX_RESPONSE_TIME,
+                    MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                    MAX_INSTRUCTIONS_PER_QUERY_MESSAGE.get(),
+                    max_http_outcall_response_size(None) - 1,
+                ),
+            ] {
+                let usage = usage_fee(
+                    replication_kind,
+                    roundtrip,
+                    NumBytes::from(raw_bytes),
+                    NumInstructions::from(instructions),
+                    NumBytes::from(transformed_bytes),
+                    subnet_size,
+                );
+                assert!(
+                    usage <= reported,
+                    "{replication:?}: the usage fee {usage} of a {raw_bytes}-byte response \
+                     transformed into {transformed_bytes} bytes exceeds the reported \
+                     maximum {reported}"
+                );
+            }
         }
     }
 }
