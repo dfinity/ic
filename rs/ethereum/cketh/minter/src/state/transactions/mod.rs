@@ -1205,12 +1205,7 @@ impl WithdrawalTransactions {
     pub fn has_pending_requests(&self) -> bool {
         self.pipeline.has_pending_requests()
     }
-}
 
-/// The withdrawal-status queries backing the minter's `retrieve_eth_status` and
-/// `withdrawal_status` endpoints. They read the pipeline and the reimbursement records together,
-/// which is why they live on the wrapper; the sweeper pipeline answers no such endpoint.
-impl WithdrawalTransactions {
     pub fn withdrawal_status(
         &self,
         parameter: &WithdrawalSearchParameter,
