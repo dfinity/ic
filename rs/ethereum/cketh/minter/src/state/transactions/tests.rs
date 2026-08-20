@@ -2650,9 +2650,10 @@ mod create_transaction {
 
 mod withdrawal_flow {
     use super::arbitrary::{arb_checked_amount_of, arb_gas_fee_estimate, arb_withdrawal_request};
+    use crate::lifecycle::EthereumNetwork;
     use crate::numeric::TransactionNonce;
     use crate::state::transactions::tests::sign_transaction;
-    use crate::state::transactions::{EthereumNetwork, PipelineRequest, WithdrawalTransactions};
+    use crate::state::transactions::{PipelineRequest, WithdrawalTransactions};
     use crate::withdraw::estimate_gas_limit;
     use proptest::proptest;
     use std::cell::RefCell;
