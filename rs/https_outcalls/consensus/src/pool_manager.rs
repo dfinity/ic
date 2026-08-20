@@ -195,7 +195,7 @@ impl CanisterHttpPoolManagerImpl {
         let allowed_boundary_nodes = allowed_boundary_nodes.unwrap_or_else(|e| {
             warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
             self.metrics
-                .pool_manager_errors_inc("boundary_node_ids_lookup_failed");
+                .observe_pool_manager_error("boundary_node_ids_lookup_failed");
             Vec::new()
         });
         let num_boundary_nodes = allowed_boundary_nodes.len();
@@ -230,7 +230,7 @@ impl CanisterHttpPoolManagerImpl {
 
         if addrs.len() != num_boundary_nodes {
             self.metrics
-                .pool_manager_errors_inc("socks_proxy_addrs_unresolved");
+                .observe_pool_manager_error("socks_proxy_addrs_unresolved");
         }
         addrs
     }
@@ -264,7 +264,7 @@ impl CanisterHttpPoolManagerImpl {
                         e
                     );
                     self.metrics
-                        .pool_manager_errors_inc("committee_membership_lookup_failed");
+                        .observe_pool_manager_error("committee_membership_lookup_failed");
                 }),
             Replication::NonReplicated(delegated_node_id) => Ok(node_id == delegated_node_id),
             Replication::Flexible { committee, .. } => Ok(committee.contains(node_id)),
@@ -335,7 +335,7 @@ impl CanisterHttpPoolManagerImpl {
                         "Failed to add canister http request to queue {:?}", err
                     );
                     // The id is not cached, so the request is retried next round.
-                    self.metrics.pool_manager_errors_inc(match err {
+                    self.metrics.observe_pool_manager_error(match err {
                         SendError::Full(_) => "adapter_queue_full",
                         SendError::BrokenConnection => "adapter_connection_broken",
                     });
@@ -417,7 +417,7 @@ impl CanisterHttpPoolManagerImpl {
                         // Our own adapter produced a response no honest replica could
                         // have produced, so no peer would accept a share for it.
                         self.metrics
-                            .pool_manager_errors_inc("own_response_too_large");
+                            .observe_pool_manager_error("own_response_too_large");
                         continue;
                     }
 
@@ -430,7 +430,7 @@ impl CanisterHttpPoolManagerImpl {
                         )
                         .map_err(|err| {
                             error!(self.log, "Failed to sign http response {}", err);
-                            self.metrics.pool_manager_errors_inc("sign_share_failed");
+                            self.metrics.observe_pool_manager_error("sign_share_failed");
                         }) {
                         signature
                     } else {

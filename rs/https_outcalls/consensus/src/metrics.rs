@@ -70,7 +70,7 @@ impl CanisterHttpPoolManagerMetrics {
     }
 
     /// Records a failed operation of the given kind.
-    pub(crate) fn pool_manager_errors_inc(&self, label: &str) {
+    pub(crate) fn observe_pool_manager_error(&self, label: &str) {
         self.pool_manager_errors.with_label_values(&[label]).inc();
     }
 }
