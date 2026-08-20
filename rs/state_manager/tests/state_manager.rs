@@ -57,7 +57,7 @@ use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, Labels, fetch_gauge, fetch_histogram_stats, fetch_histogram_vec_stats,
-    fetch_int_counter_vec, fetch_int_gauge,
+    fetch_int_counter_vec, fetch_int_gauge, metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
@@ -7036,7 +7036,7 @@ fn can_delete_canister() {
         let (_height, mut state) = state_manager.take_tip();
 
         // Delete the canister
-        let _deleted_canister = state.take_canister_state(&canister_test_id(100));
+        let _deleted_canister = state.remove_canister(&canister_test_id(100));
 
         // Commit two rounds, once without checkpointing and once with
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
@@ -8624,6 +8624,49 @@ fn deleted_canister_is_removed_from_tip() {
     }
     deleted_canister_is_removed_from_tip_impl(CertificationScope::Metadata);
     deleted_canister_is_removed_from_tip_impl(CertificationScope::Full);
+}
+
+/// Tests that `FilterTipCanisters` raises a critical error if it actually removes a
+/// canister directory from tip: every such removal is expected to be covered by an
+/// explicit `UnflushedCheckpointOp::DeleteCanister`, so filtering is only a safety net.
+#[test]
+fn filtering_canister_from_tip_raises_critical_error() {
+    state_manager_test(|metrics, state_manager| {
+        let canister_id = canister_test_id(100);
+
+        // Install a canister and checkpoint the state, so that the canister has a
+        // directory in the tip.
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let (height, mut state) = state_manager.take_tip();
+        let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+            state_manager.state_layout().raw_path().join("tip"),
+            height,
+        )
+        .unwrap();
+        assert_eq!(tip.canister_ids().unwrap(), vec![canister_id]);
+        assert_error_counters(metrics);
+
+        // Drop the canister from the state without recording a `DeleteCanister`
+        // operation, so that its directory is only removed by `FilterTipCanisters`.
+        let mut canister_states = state.take_canister_states();
+        canister_states.remove(&canister_id);
+        state.put_canister_states(canister_states);
+        assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        // The canister directory is gone from the tip, but a critical error was raised.
+        assert!(tip.canister_ids().unwrap().is_empty());
+        assert_eq!(
+            metric_vec(&[(&[("error", "state_manager_tip_canisters_filtered")], 1)]),
+            nonzero_values(fetch_int_counter_vec(metrics, "critical_errors"))
+        );
+    });
 }
 
 #[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]

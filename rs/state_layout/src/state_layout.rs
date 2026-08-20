@@ -493,13 +493,16 @@ impl TipHandler {
     }
 
     /// Deletes canisters from tip if they are not in `ids`.
+    ///
+    /// Returns the IDs of the deleted canisters.
     pub fn filter_tip_canisters(
         &mut self,
         height: Height,
         ids: &BTreeSet<CanisterId>,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<Vec<CanisterId>, LayoutError> {
         let tip = self.tip(height)?;
         let canisters_on_disk = tip.canister_ids()?;
+        let mut deleted_canister_ids = Vec::new();
         for id in canisters_on_disk {
             if !ids.contains(&id) {
                 let canister_path = tip.canister(&id)?.raw_path();
@@ -508,9 +511,10 @@ impl TipHandler {
                     message: "Cannot remove canister.".to_string(),
                     io_err: err,
                 })?;
+                deleted_canister_ids.push(id);
             }
         }
-        Ok(())
+        Ok(deleted_canister_ids)
     }
 
     /// Deletes snapshots from tip if they are not in `ids`.
