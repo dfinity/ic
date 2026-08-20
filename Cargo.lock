@@ -360,7 +360,7 @@ dependencies = [
  "alternative_guestos",
  "anyhow",
  "candid",
- "clap 4.6.0",
+ "clap",
  "ic-agent",
  "ic-certification 3.1.0",
  "ic-nns-constants",
