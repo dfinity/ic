@@ -5,7 +5,6 @@ use super::{CreateTransactionError, EthWithdrawalRequest, TransactionCallData, W
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei};
 use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy};
-use ic_ethereum_types::Address;
 use std::fmt;
 
 /// A request that can flow through a [`TransactionPipeline`]: it carries an identity used as the
@@ -25,16 +24,14 @@ pub trait PipelineRequest {
     /// The identity of this request, used as the pipeline's alternate map key.
     fn id(&self) -> Self::Id;
 
-    /// Address the transaction is sent to.
-    fn destination(&self) -> Address;
-
     /// IC time at which the request was created, if tracked.
     fn created_at(&self) -> Option<u64>;
 
     /// The fee-bump strategy for this request's resubmitted transactions.
     fn resubmission_strategy(&self) -> ResubmissionStrategy;
 
-    /// Assert that a freshly created transaction is consistent with the request (amount).
+    /// Assert that a freshly created transaction is consistent with the request: it goes to the
+    /// right address, and moves the right amount.
     fn assert_created_transaction(&self, transaction: &Eip1559TransactionRequest);
 
     /// Creates the EIP-1559 transaction that fulfils this request.
@@ -58,10 +55,6 @@ impl PipelineRequest for WithdrawalRequest {
         self.cketh_ledger_burn_index()
     }
 
-    fn destination(&self) -> Address {
-        WithdrawalRequest::destination(self)
-    }
-
     fn created_at(&self) -> Option<u64> {
         WithdrawalRequest::created_at(self)
     }
@@ -80,6 +73,11 @@ impl PipelineRequest for WithdrawalRequest {
     }
 
     fn assert_created_transaction(&self, transaction: &Eip1559TransactionRequest) {
+        assert_eq!(
+            self.destination(),
+            transaction.destination,
+            "BUG: request and transaction destination mismatch"
+        );
         match self {
             WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => {
                 assert!(

@@ -499,11 +499,6 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
             .position(|req| req.id() == id)
             .unwrap_or_else(|| panic!("BUG: request {id:?} not found"));
         let request = &self.pending_requests[position];
-        assert_eq!(
-            request.destination(),
-            transaction.destination,
-            "BUG: request and transaction destination mismatch"
-        );
         request.assert_created_transaction(&transaction);
         let resubmission = request.resubmission_strategy();
         let nonce = self.next_nonce;
