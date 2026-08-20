@@ -18,7 +18,7 @@ use ic_cketh_minter::state::audit::EventType as ET;
 use ic_cketh_minter::state::event::Event;
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest,
+    ReimbursementRequest, SweepId, SweepRequest,
 };
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
@@ -304,6 +304,62 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 transaction_receipt,
             } => ET::FinalizedTransaction {
                 withdrawal_id: map_nat(withdrawal_id),
+                transaction_receipt: TransactionReceipt {
+                    block_hash: transaction_receipt.block_hash.parse().unwrap(),
+                    block_number: transaction_receipt.block_number.try_into().unwrap(),
+                    effective_gas_price: transaction_receipt
+                        .effective_gas_price
+                        .try_into()
+                        .unwrap(),
+                    gas_used: transaction_receipt.gas_used.try_into().unwrap(),
+                    status: match transaction_receipt.status {
+                        CandidTransactionStatus::Success => TransactionStatus::Success,
+                        CandidTransactionStatus::Failure => TransactionStatus::Failure,
+                    },
+                    transaction_hash: transaction_receipt.transaction_hash.parse().unwrap(),
+                },
+            },
+            EventPayload::AcceptedSweepRequest {
+                sweep_id,
+                destination,
+                amount,
+                data,
+                max_transaction_fee,
+                created_at,
+            } => ET::AcceptedSweepRequest(SweepRequest {
+                id: SweepId(sweep_id.0.to_u64().unwrap()),
+                destination: destination.parse().unwrap(),
+                amount: amount.try_into().unwrap(),
+                data: hex::decode(data.strip_prefix("0x").unwrap_or(&data)).unwrap(),
+                max_transaction_fee: max_transaction_fee.try_into().unwrap(),
+                created_at,
+            }),
+            EventPayload::CreatedSweeperTransaction {
+                sweep_id,
+                transaction,
+            } => ET::CreatedSweeperTransaction {
+                sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                transaction: map_unsigned_transaction(transaction),
+            },
+            EventPayload::SignedSweeperTransaction {
+                sweep_id,
+                raw_transaction,
+            } => ET::SignedSweeperTransaction {
+                sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                transaction: map_signed_transaction(&raw_transaction),
+            },
+            EventPayload::ReplacedSweeperTransaction {
+                sweep_id,
+                transaction,
+            } => ET::ReplacedSweeperTransaction {
+                sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                transaction: map_unsigned_transaction(transaction),
+            },
+            EventPayload::FinalizedSweeperTransaction {
+                sweep_id,
+                transaction_receipt,
+            } => ET::FinalizedSweeperTransaction {
+                sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
                 transaction_receipt: TransactionReceipt {
                     block_hash: transaction_receipt.block_hash.parse().unwrap(),
                     block_number: transaction_receipt.block_number.try_into().unwrap(),

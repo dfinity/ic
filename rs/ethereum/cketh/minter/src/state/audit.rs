@@ -112,6 +112,44 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         } => {
             state.record_finalized_transaction(withdrawal_id, transaction_receipt);
         }
+        EventType::AcceptedSweepRequest(request) => {
+            state.next_sweep_id = request.id.next();
+            state.sweeper_transactions.record_request(request.clone());
+        }
+        EventType::CreatedSweeperTransaction {
+            sweep_id,
+            transaction,
+        } => {
+            state
+                .sweeper_transactions
+                .record_created_transaction(*sweep_id, transaction.clone());
+        }
+        EventType::SignedSweeperTransaction {
+            sweep_id: _,
+            transaction,
+        } => {
+            state
+                .sweeper_transactions
+                .record_signed_transaction(transaction.clone());
+        }
+        EventType::ReplacedSweeperTransaction {
+            sweep_id: _,
+            transaction,
+        } => {
+            state
+                .sweeper_transactions
+                .record_resubmit_transaction(transaction.clone());
+        }
+        EventType::FinalizedSweeperTransaction {
+            sweep_id,
+            transaction_receipt,
+        } => {
+            // The sweeper pipeline is never reimbursed and holds no ckETH balance, so unlike the main
+            // pipeline there is no reimbursement tail or balance update — just the finalize mechanics.
+            let _ = state
+                .sweeper_transactions
+                .record_finalized_transaction(*sweep_id, transaction_receipt);
+        }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
             burn_in_block: withdrawal_id,
             reimbursed_in_block,

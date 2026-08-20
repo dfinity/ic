@@ -3,7 +3,7 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
-use crate::state::transactions::WithdrawalTransactions;
+use crate::state::transactions::{SweepId, TransactionPipeline, WithdrawalTransactions};
 use crate::state::{InvalidStateError, State};
 use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
 use candid::types::number::Nat;
@@ -98,6 +98,10 @@ impl TryFrom<InitArg> for State {
             pending_withdrawal_principals: Default::default(),
             pending_deposit_principals: Default::default(),
             withdrawal_transactions: WithdrawalTransactions::new(initial_nonce),
+            // A freshly derived sweeper address has never sent a transaction, so its pipeline starts at
+            // nonce 0; existing minters set it via `UpgradeArg::next_sweeper_transaction_nonce`.
+            sweeper_transactions: TransactionPipeline::new(TransactionNonce::ZERO),
+            next_sweep_id: SweepId(0),
             cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
             ethereum_block_height,

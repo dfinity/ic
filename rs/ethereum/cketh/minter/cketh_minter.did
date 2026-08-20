@@ -151,6 +151,11 @@ type UpgradeArg = record {
 
     // Change the sweeper smart contract address.
     ethereum_sweeper_contract_address : opt text;
+
+    // Change the nonce of the next transaction sent from the dedicated sweeper address (its own
+    // nonce sequence, kept separate from the main address' so a stuck sweep cannot delay a
+    // withdrawal). Defaults to 0 at install.
+    next_sweeper_transaction_nonce : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -611,6 +616,31 @@ type Event = record {
         };
         FinalizedTransaction : record {
             withdrawal_id : nat;
+            transaction_receipt : TransactionReceipt;
+        };
+        AcceptedSweepRequest : record {
+            sweep_id : nat;
+            destination : text;
+            amount : nat;
+            // Hex-encoded transaction call data (the delegate sweep call).
+            data : text;
+            max_transaction_fee : nat;
+            created_at : nat64;
+        };
+        CreatedSweeperTransaction : record {
+            sweep_id : nat;
+            transaction : UnsignedTransaction;
+        };
+        SignedSweeperTransaction : record {
+            sweep_id : nat;
+            raw_transaction : text;
+        };
+        ReplacedSweeperTransaction : record {
+            sweep_id : nat;
+            transaction : UnsignedTransaction;
+        };
+        FinalizedSweeperTransaction : record {
+            sweep_id : nat;
             transaction_receipt : TransactionReceipt;
         };
         ReimbursedEthWithdrawal : record {
