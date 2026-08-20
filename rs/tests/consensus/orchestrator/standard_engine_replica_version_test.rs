@@ -136,7 +136,9 @@ const ENGINE_NODE_COUNT: usize = 4;
 const NUM_ENGINES: usize = 2;
 
 fn setup(env: TestEnv) {
-    // [Step 0] Create an IC.
+    let logger = env.logger();
+
+    info!(logger, "[Step 0] Create an IC.");
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes_playnet(1)
         .add_fast_single_node_subnet(SubnetType::System);
@@ -153,7 +155,7 @@ fn setup(env: TestEnv) {
     ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    // [Step 1] Install NNS.
+    info!(logger, "[Step 1] Install NNS.");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations {
@@ -229,12 +231,14 @@ fn test(env: TestEnv) {
         "original replica version: {original_replica_version}"
     );
 
-    // [Step 2] Elect another replica version.
+    info!(logger, "[Step 2] Elect another replica version.");
     let new_replica_version = elect_target_version(&env, &nns_node);
 
-    // [Step 3] Upsert StandardEngineReplicaVersionRecord to
-    // {old: original_replica_version, new: new_replica_version,
-    // deployment_progress: 1.0}.
+    info!(
+        logger,
+        "[Step 3] Upsert StandardEngineReplicaVersionRecord to {{old: \
+         original_replica_version, new: new_replica_version, deployment_progress: 1.0}}."
+    );
     update_standard_engine_replica_version(
         &governance,
         proposal_sender.clone(),
@@ -245,7 +249,10 @@ fn test(env: TestEnv) {
         &logger,
     );
 
-    // [Step 4] Create 2 Cloud Engines, both with a blank replica_version_id.
+    info!(
+        logger,
+        "[Step 4] Create 2 Cloud Engines, both with a blank replica_version_id."
+    );
     let topology_snapshot = env.topology_snapshot();
     let unassigned_node_ids: Vec<Principal> = topology_snapshot
         .unassigned_nodes()
@@ -269,8 +276,10 @@ fn test(env: TestEnv) {
         "Created Cloud Engines: subnets {engine_a_id} and {engine_b_id}"
     );
 
-    // [Step 5] Verify that both Cloud Engines are running
-    // new_replica_version.
+    info!(
+        logger,
+        "[Step 5] Verify that both Cloud Engines are running new_replica_version."
+    );
     let topology_snapshot = block_on(topology_snapshot.block_for_newer_registry_version())
         .expect("failed to observe the newly-created Cloud Engine subnets in the topology");
     let engine_a_nodes = get_engine_nodes(&topology_snapshot, engine_a_id);
@@ -284,9 +293,11 @@ fn test(env: TestEnv) {
          replica version ({new_replica_version})."
     );
 
-    // [Step 6] Compute each Cloud Engines upgrade priority. Then, choose
-    // `deployment_progress` between them. That way, only one of them will be
-    // rolled back.
+    info!(
+        logger,
+        "[Step 6] Compute each Cloud Engines upgrade priority. Then, choose \
+         `deployment_progress` between them. That way, only one of them will be rolled back."
+    );
 
     // Calculate upgrade priorities.
     let upgrade_priority_a = engine_upgrade_priority(engine_a_id, new_replica_version.as_ref());
@@ -332,7 +343,10 @@ fn test(env: TestEnv) {
         )
     };
 
-    // [Step 7] Verify that ONLY the higher-priority engine rolled back.
+    info!(
+        logger,
+        "[Step 7] Verify that ONLY the higher-priority engine rolled back."
+    );
     for node in &high_priority_nodes {
         assert_assigned_replica_version(node, &original_replica_version, logger.clone());
     }
@@ -345,8 +359,11 @@ fn test(env: TestEnv) {
          {low_priority_engine_id} stayed on {new_replica_version}."
     );
 
-    // [Step 8] Increase deployment_progress back to 1.0, so that we can verify
-    // that rolling forward also works (not just rolling back).
+    info!(
+        logger,
+        "[Step 8] Increase deployment_progress back to 1.0, so that we can verify that \
+         rolling forward also works (not just rolling back)."
+    );
     update_standard_engine_replica_version(
         &governance,
         proposal_sender,
@@ -357,9 +374,12 @@ fn test(env: TestEnv) {
         &logger,
     );
 
-    // [Step 9] Verify that the high priority Cloud Engine rolled FORWARD, back
-    // to new_replica_version. Similarly, verify that the low priority Cloud Engine
-    // has continued on new_replica_version.
+    info!(
+        logger,
+        "[Step 9] Verify that the high priority Cloud Engine rolled FORWARD, back to \
+         new_replica_version. Similarly, verify that the low priority Cloud Engine has \
+         continued on new_replica_version."
+    );
     for node in &high_priority_nodes {
         assert_assigned_replica_version(node, &new_replica_version, logger.clone());
     }
