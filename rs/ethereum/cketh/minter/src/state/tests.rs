@@ -350,6 +350,17 @@ mod upgrade {
         );
 
         let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                minimum_withdrawal_amount: Some(Nat(BigUint::from_bytes_be(
+                    &ethnum::u256::MAX.to_be_bytes(),
+                ))),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidMinimumWithdrawalAmount(_))
+        );
+
+        let mut state = initial_state();
         state.ethereum_network = EthereumNetwork::Mainnet;
         assert_matches!(
             state.upgrade(UpgradeArg {
