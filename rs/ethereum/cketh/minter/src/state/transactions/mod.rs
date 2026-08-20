@@ -432,7 +432,7 @@ pub enum TransactionStage<'a> {
 /// re-sign (paired with its pipeline id), or why it could not be bumped.
 type ResubmitResult<Id> = Result<(Id, Eip1559TransactionRequest), ResubmitTransactionError<Id>>;
 
-impl<R: PipelineRequest> TransactionPipeline<R> {
+impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
     pub fn new(next_nonce: TransactionNonce) -> Self {
         Self {
             pending_requests: VecDeque::new(),
@@ -822,7 +822,7 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
     pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
         use ic_utils_ensure::ensure_eq;
 
-        fn sorted_requests<R: PipelineRequest>(requests: &VecDeque<R>) -> Vec<R> {
+        fn sorted_requests<R: PipelineRequest + Clone>(requests: &VecDeque<R>) -> Vec<R> {
             let mut buf: Vec<_> = requests.iter().cloned().collect();
             buf.sort_unstable_by_key(|req| req.id());
             buf

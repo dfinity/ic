@@ -13,7 +13,7 @@ use std::fmt;
 ///
 /// Implemented so far only by [`WithdrawalRequest`], the minter's main-address pipeline
 /// (`Id = LedgerBurnIndex`); a second sender address will bring a second implementation.
-pub trait PipelineRequest: Clone + Eq + fmt::Debug {
+pub trait PipelineRequest {
     /// The pipeline's alternate map key — a ckETH `LedgerBurnIndex` for withdrawals.
     type Id: Copy + Ord + fmt::Debug + fmt::Display;
 
