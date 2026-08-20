@@ -29,7 +29,7 @@ use ic_replicated_state::{
     canister_state::canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::{
-        ApiBoundaryNodeEntry,
+        ApiBoundaryNodeEntry, UnflushedCheckpointOp,
         testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     page_map::{PageIndex, Shard, StorageLayout},
@@ -8258,14 +8258,6 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
-/// Drops a canister from the state the same way `online_split()` does, i.e. without
-/// recording an `UnflushedCheckpointOp::DeleteCanister`: canisters dropped during a
-/// subnet split are removed from tip by `FilterTipCanisters` instead.
-fn drop_canister(state: &mut ReplicatedState, canister_id: &CanisterId) {
-    state.take_canister_state(canister_id).unwrap();
-    state.metadata.subnet_schedule.remove(canister_id);
-}
-
 #[test]
 fn can_split_with_inflight_restore_snapshot() {
     // We will be splitting subnet A into A' and B.
@@ -8348,11 +8340,11 @@ fn can_split_with_inflight_restore_snapshot() {
             if subnet_id == SUBNET_A {
                 other_subnet_id = SUBNET_B;
                 // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
-                drop_canister(&mut expected, &CANISTER_2);
+                expected.remove_canister(&CANISTER_2);
             } else if subnet_id == SUBNET_B {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
-                drop_canister(&mut expected, &CANISTER_1);
+                expected.remove_canister(&CANISTER_1);
             } else {
                 unreachable!("Unexpected subnet ID: {:?}", subnet_id);
             }
@@ -8486,6 +8478,99 @@ fn can_rename_canister() {
     }
     can_rename_canister_impl(CertificationScope::Metadata);
     can_rename_canister_impl(CertificationScope::Full);
+}
+
+/// Tests that a canister dropped by `ReplicatedState::online_split()` is removed
+/// from the tip by the flush of the recorded `UnflushedCheckpointOp::DeleteCanister`,
+/// i.e. without relying on `FilterTipCanisters`.
+///
+/// Note that in production a splitting batch always requires a full state hash (see
+/// `Batch::requires_full_state_hash()`), so the split round is always a checkpoint
+/// round and `FilterTipCanisters` would remove the directory in the same round
+/// anyway. The `CertificationScope::Metadata` case below therefore exercises the
+/// flush mechanism in isolation, not a state reachable in production.
+#[test]
+fn canister_dropped_by_split_is_removed_from_tip() {
+    fn canister_dropped_by_split_is_removed_from_tip_impl(certification_scope: CertificationScope) {
+        const SUBNET_A: SubnetId = SUBNET_1;
+        const SUBNET_B: SubnetId = SUBNET_2;
+        const RETAINED: CanisterId = CanisterId::from_u64(100);
+        const DROPPED: CanisterId = CanisterId::from_u64(200);
+
+        state_manager_test(|_metrics, state_manager| {
+            // Install both canisters and checkpoint the state, so that both have a
+            // directory in the tip.
+            let (_height, mut state) = state_manager.take_tip();
+            state.metadata.own_subnet_id = SUBNET_A;
+            insert_dummy_canister(&mut state, RETAINED);
+            insert_dummy_canister(&mut state, DROPPED);
+            state_manager.commit_and_certify(state, CertificationScope::Full, None);
+            state_manager.flush_tip_channel();
+
+            let (height, mut state) = state_manager.take_tip();
+            let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+                state_manager.state_layout().raw_path().join("tip"),
+                height,
+            )
+            .unwrap();
+            assert_eq!(tip.canister_ids().unwrap(), vec![RETAINED, DROPPED]);
+
+            // Retain `RETAINED` on `SUBNET_A`, migrate `DROPPED` to `SUBNET_B`.
+            let routing_table = RoutingTable::try_from(btreemap! {
+                CanisterIdRange {start: CanisterId::from_u64(0), end: RETAINED} => SUBNET_A,
+                CanisterIdRange {start: DROPPED, end: DROPPED} => SUBNET_B,
+                CanisterIdRange {start: CanisterId::from_u64(201), end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
+            })
+            .unwrap();
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.set_routing_table(routing_table);
+            });
+
+            // Split the subnet, retaining `SUBNET_A`.
+            let state = state.online_split(SUBNET_A, SUBNET_B).unwrap();
+            assert_eq!(
+                state.canister_states().all_keys().collect::<Vec<_>>(),
+                vec![&RETAINED]
+            );
+            // The canister dropped by the split was recorded as deleted.
+            assert_eq!(
+                state
+                    .system_metadata()
+                    .unflushed_checkpoint_ops
+                    .clone()
+                    .take(),
+                vec![UnflushedCheckpointOp::DeleteCanister(DROPPED)]
+            );
+
+            // Trigger a flush either at the checkpoint or by committing exactly
+            // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
+            if certification_scope == CertificationScope::Full {
+                state_manager.commit_and_certify(state, certification_scope.clone(), None);
+            } else {
+                state_manager.commit_and_certify(
+                    state,
+                    certification_scope.clone(),
+                    Some(BatchSummary {
+                        next_checkpoint_height: Height(
+                            2 + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+                        ),
+                        current_interval_length: Height(500),
+                    }),
+                );
+            }
+            state_manager.flush_tip_channel();
+
+            // The dropped canister's directory is gone from the tip. In the
+            // `Metadata` case this is solely due to the flushed delete operation, as
+            // `FilterTipCanisters` only runs when a checkpoint is created.
+            assert_eq!(tip.canister_ids().unwrap(), vec![RETAINED]);
+            // And the checkpoint op has been flushed.
+            let (_height, state) = state_manager.take_tip();
+            assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+        });
+    }
+    canister_dropped_by_split_is_removed_from_tip_impl(CertificationScope::Metadata);
+    canister_dropped_by_split_is_removed_from_tip_impl(CertificationScope::Full);
 }
 
 #[test]

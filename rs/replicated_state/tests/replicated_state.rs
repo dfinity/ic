@@ -1255,13 +1255,6 @@ fn split() {
     assert_eq!(expected, state_b);
 }
 
-/// Drops a canister from the state the same way `online_split()` does, i.e. without
-/// recording an `UnflushedCheckpointOp::DeleteCanister`.
-fn drop_canister(state: &mut ReplicatedState, canister_id: &CanisterId) {
-    state.take_canister_state(canister_id).unwrap();
-    state.metadata.subnet_schedule.remove(canister_id);
-}
-
 #[test]
 fn online_split() {
     // We will be splitting subnet A into A' and B.
@@ -1381,7 +1374,7 @@ fn online_split() {
     // Start off with the original state (plus new routing table).
     let mut expected = fixture.state.clone();
     // Only `CANISTER_1` should be left.
-    drop_canister(&mut expected, &CANISTER_2);
+    expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state_arc = expected.take_canister_state(&CANISTER_1).unwrap();
     let canister_state = Arc::make_mut(&mut canister_state_arc);
@@ -1414,7 +1407,7 @@ fn online_split() {
     // New subnet ID.
     expected.metadata.own_subnet_id = SUBNET_B;
     // Only `CANISTER_2` should be hosted.
-    drop_canister(&mut expected, &CANISTER_1);
+    expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state_arc = expected.take_canister_state(&CANISTER_2).unwrap();
     let canister_state = Arc::make_mut(&mut canister_state_arc);

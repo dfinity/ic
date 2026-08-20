@@ -1194,8 +1194,9 @@ impl SystemMetadata {
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
     ///  * `unflushed_checkpoint_ops` contains both arbitrary pending operations;
-    ///    and delete operations for the snapshots of non-local canisters. It is
-    ///    therefore preserved untouched.
+    ///    and the delete operations recorded by `ReplicatedState::online_split()`
+    ///    for the canisters dropped by the split. It is therefore preserved
+    ///    untouched.
     pub fn online_split(
         self,
         subnet_id: SubnetId,
@@ -1337,7 +1338,7 @@ impl SystemMetadata {
             // retaining everything else on subnet A'.
             blockmaker_metrics_time_series,
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
-            // for the snapshots of no longer hosted canisters.
+            // for the canisters dropped by the split.
             unflushed_checkpoint_ops,
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
