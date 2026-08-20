@@ -1,4 +1,4 @@
-use crate::protocol::structures::*;
+use super::{Request, Response};
 
 /// Parse a response in a json string to a `Response` struct.
 pub fn parse_response(json_str: &str) -> Response {

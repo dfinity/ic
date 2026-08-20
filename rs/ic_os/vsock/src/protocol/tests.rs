@@ -1,5 +1,5 @@
-use crate::protocol::structures::*;
-use crate::protocol::utils::*;
+use super::utils::*;
+use super::*;
 
 #[test]
 fn test_request_serialization() {
