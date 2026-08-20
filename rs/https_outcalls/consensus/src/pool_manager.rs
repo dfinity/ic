@@ -192,11 +192,15 @@ impl CanisterHttpPoolManagerImpl {
             }
         };
 
-        allowed_boundary_nodes
-            .unwrap_or_else(|e| {
-                warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
-                Vec::new()
-            })
+        let allowed_boundary_nodes = allowed_boundary_nodes.unwrap_or_else(|e| {
+            warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
+            self.metrics
+                .pool_manager_errors_inc("boundary_node_ids_lookup_failed");
+            Vec::new()
+        });
+        let num_boundary_nodes = allowed_boundary_nodes.len();
+
+        let addrs = allowed_boundary_nodes
             .into_iter()
             .filter_map(|id| {
                 self.registry_client
@@ -222,7 +226,13 @@ impl CanisterHttpPoolManagerImpl {
                     })
                     .map(|http_info| format!("socks5h://[{0}]:1080", http_info.ip_addr))
             })
-            .collect::<Vec<String>>()
+            .collect::<Vec<String>>();
+
+        if addrs.len() != num_boundary_nodes {
+            self.metrics
+                .pool_manager_errors_inc("socks_proxy_addrs_unresolved");
+        }
+        addrs
     }
 
     /// Returns whether `node_id` belongs to the committee responsible for the
@@ -253,6 +263,8 @@ impl CanisterHttpPoolManagerImpl {
                         context.registry_version,
                         e
                     );
+                    self.metrics
+                        .pool_manager_errors_inc("committee_membership_lookup_failed");
                 }),
             Replication::NonReplicated(delegated_node_id) => Ok(node_id == delegated_node_id),
             Replication::Flexible { committee, .. } => Ok(committee.contains(node_id)),
@@ -321,9 +333,16 @@ impl CanisterHttpPoolManagerImpl {
                     warn!(
                         self.log,
                         "Failed to add canister http request to queue {:?}", err
-                    )
+                    );
+                    // The id is not cached, so the request is retried next round.
+                    self.metrics.pool_manager_errors_inc(match err {
+                        SendError::Full(_) => "adapter_queue_full",
+                        SendError::BrokenConnection => "adapter_connection_broken",
+                    });
                 } else {
                     self.requested_id_cache.borrow_mut().insert(*id);
+                    self.metrics
+                        .pool_manager_metrics_inc("request_sent_to_adapter");
                 }
             }
         }
@@ -348,21 +367,34 @@ impl CanisterHttpPoolManagerImpl {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
                 Ok((response, payment_receipt)) => {
+                    self.metrics
+                        .pool_manager_metrics_inc("adapter_response_received");
                     // Drop the response if its context is no longer present in the replicated state.
                     // We continue gossiping a share even if a response to the context has already
                     // been delivered, in order to report the amount of cycles spent.
-                    let Some(context) = active_contexts
-                        .get(&response.id)
-                        .or_else(|| delivered_contexts.get(&response.id))
-                    else {
-                        warn!(
-                            self.log,
-                            "Dropping http response for request ID {}: \
-                             corresponding context is no longer in the replicated state.",
-                            response.id,
-                        );
-                        self.requested_id_cache.borrow_mut().remove(&response.id);
-                        continue;
+                    let context = match active_contexts.get(&response.id) {
+                        Some(context) => context,
+                        None => match delivered_contexts.get(&response.id) {
+                            Some(context) => {
+                                // Consensus already answered this request; we only sign a
+                                // share to report the cycles we spent on it.
+                                self.metrics
+                                    .pool_manager_metrics_inc("response_for_delivered_context");
+                                context
+                            }
+                            None => {
+                                warn!(
+                                    self.log,
+                                    "Dropping http response for request ID {}: \
+                                     corresponding context is no longer in the replicated state.",
+                                    response.id,
+                                );
+                                self.metrics
+                                    .pool_manager_metrics_inc("response_dropped_context_timed_out");
+                                self.requested_id_cache.borrow_mut().remove(&response.id);
+                                continue;
+                            }
+                        },
                     };
 
                     let receipt_share = CanisterHttpResponseReceipt {
@@ -381,6 +413,10 @@ impl CanisterHttpPoolManagerImpl {
                             self.log,
                             "Http Response for request ID {} is too large: {}", response.id, err
                         );
+                        // Our own adapter produced a response no honest replica could
+                        // have produced, so no peer would accept a share for it.
+                        self.metrics
+                            .pool_manager_errors_inc("own_response_too_large");
                         continue;
                     }
 
@@ -391,8 +427,10 @@ impl CanisterHttpPoolManagerImpl {
                             self.replica_config.node_id,
                             context.registry_version,
                         )
-                        .map_err(|err| error!(self.log, "Failed to sign http response {}", err))
-                    {
+                        .map_err(|err| {
+                            error!(self.log, "Failed to sign http response {}", err);
+                            self.metrics.pool_manager_errors_inc("sign_share_failed");
+                        }) {
                         signature
                     } else {
                         continue;
@@ -454,6 +492,8 @@ impl CanisterHttpPoolManagerImpl {
 
                 // Reject shares from different replica versions
                 if !is_current_protocol_version(share.content.replica_version()) {
+                    self.metrics
+                        .pool_manager_metrics_inc("share_dropped_unknown_version");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 }
 
@@ -468,6 +508,8 @@ impl CanisterHttpPoolManagerImpl {
                     .get(&share.content.id())
                     .or_else(|| delivered_contexts.get(&share.content.id()))
                 else {
+                    self.metrics
+                        .pool_manager_metrics_inc("share_dropped_unknown_context");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
@@ -657,6 +699,7 @@ pub mod test {
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::CountBytes;
     use ic_types::crypto::crypto_hash;
@@ -1047,6 +1090,7 @@ pub mod test {
                 let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
+                let metrics_registry = MetricsRegistry::new();
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
                     shim,
@@ -1055,7 +1099,7 @@ pub mod test {
                     replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
+                    metrics_registry.clone(),
                     log,
                 );
 
@@ -1065,6 +1109,15 @@ pub mod test {
                 // The share is dropped silently (removed, not marked invalid).
                 assert_eq!(changes.len(), 1);
                 assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
+                // Dropping it is expected during an upgrade, so it is not an error.
+                assert_eq!(
+                    metric_vec(&[(&[("type", "share_dropped_unknown_version")], 1)]),
+                    fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_metrics")
+                );
+                assert!(
+                    fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_errors")
+                        .is_empty()
+                );
             })
         });
     }
@@ -1168,6 +1221,7 @@ pub mod test {
                 let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
+                let metrics_registry = MetricsRegistry::new();
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
                     shim,
@@ -1176,7 +1230,7 @@ pub mod test {
                     replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
+                    metrics_registry.clone(),
                     log,
                 );
 
