@@ -91,9 +91,13 @@ fn rpc_client_with_threshold(
         .build()
 }
 
-/// The `total` Sepolia services to query. Mainnet leaves the choice to the EVM RPC canister's own
-/// defaults, but on Sepolia the services are named, and `ConsensusStrategy::Threshold` demands
-/// exactly as many named services as it queries — so a client querying fewer takes a prefix.
+/// The `total` Sepolia services to query, from the set this minter is willing to use.
+///
+/// Mainnet leaves the choice to the EVM RPC canister, which ranks its supported providers by how
+/// recently each last answered. Sepolia names them instead because that canister's supported set
+/// also holds `rpc.sepolia.org`, which this minter dropped, and naming is the only way to exclude
+/// it. Naming then fixes the count too — `ConsensusStrategy::Threshold` rejects a `total` that
+/// differs from the number of named services — so a client querying fewer takes a prefix.
 fn sepolia_services(total: u8) -> Vec<EthSepoliaService> {
     const SERVICES: &[EthSepoliaService] = &[
         EthSepoliaService::BlockPi,
