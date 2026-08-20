@@ -863,6 +863,7 @@ impl WithdrawalTransactions {
             reimbursed: Default::default(),
         }
     }
+
     /// Record a created transaction, and remember that the request may still need paying back.
     pub fn record_created_transaction(
         &mut self,
@@ -874,6 +875,7 @@ impl WithdrawalTransactions {
             assert!(self.maybe_reimburse.insert(id));
         }
     }
+
     /// Whether a failed transaction for this request would pay the requester back. A sweeper
     /// funding never is, so it is never armed for reimbursement in the first place.
     fn is_reimbursable(&self, withdrawal_id: &LedgerBurnIndex) -> bool {
@@ -882,6 +884,7 @@ impl WithdrawalTransactions {
             .expect("BUG: missing processed withdrawal request")
             .is_reimbursable()
     }
+
     /// Finalize the transaction for `ledger_burn_index` matching `receipt`, then — if it failed on
     /// chain — record the corresponding ckETH/ckERC20 reimbursement.
     pub fn record_finalized_transaction(
@@ -957,6 +960,7 @@ impl WithdrawalTransactions {
         };
         self.record_reimbursement_request(index, reimbursement);
     }
+
     pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
         use ic_utils_ensure::ensure_eq;
 
@@ -965,24 +969,30 @@ impl WithdrawalTransactions {
         ensure_eq!(self.reimbursed, other.reimbursed);
         self.pipeline.is_equivalent_to(&other.pipeline)
     }
+
     pub fn next_transaction_nonce(&self) -> TransactionNonce {
         self.pipeline.next_transaction_nonce()
     }
+
     pub fn update_next_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
         self.pipeline.update_next_transaction_nonce(new_nonce)
     }
+
     pub fn record_request<Req: Into<WithdrawalRequest>>(&mut self, request: Req) {
         self.pipeline.record_request(request)
     }
+
     pub fn reschedule_request<Req: Into<WithdrawalRequest>>(&mut self, request: Req) {
         self.pipeline.reschedule_request(request)
     }
+
     pub fn record_signed_transaction(
         &mut self,
         signed_transaction: SignedEip1559TransactionRequest,
     ) {
         self.pipeline.record_signed_transaction(signed_transaction)
     }
+
     pub fn create_resubmit_transactions(
         &self,
         latest_transaction_count: TransactionCount,
@@ -991,9 +1001,11 @@ impl WithdrawalTransactions {
         self.pipeline
             .create_resubmit_transactions(latest_transaction_count, current_gas_fee)
     }
+
     pub fn record_resubmit_transaction(&mut self, new_tx: Eip1559TransactionRequest) {
         self.pipeline.record_resubmit_transaction(new_tx)
     }
+
     pub fn sent_transactions_to_finalize(
         &self,
         finalized_transaction_count: &TransactionCount,
@@ -1001,15 +1013,19 @@ impl WithdrawalTransactions {
         self.pipeline
             .sent_transactions_to_finalize(finalized_transaction_count)
     }
+
     pub fn requests_batch(&self, requested_batch_size: usize) -> Vec<WithdrawalRequest> {
         self.pipeline.requests_batch(requested_batch_size)
     }
+
     pub fn requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
         self.pipeline.requests_iter()
     }
+
     pub fn requests_len(&self) -> usize {
         self.pipeline.requests_len()
     }
+
     pub fn transactions_to_sign_iter(
         &self,
     ) -> impl Iterator<
@@ -1021,12 +1037,14 @@ impl WithdrawalTransactions {
     > {
         self.pipeline.transactions_to_sign_iter()
     }
+
     pub fn transactions_to_sign_batch(
         &self,
         batch_size: usize,
     ) -> Vec<(LedgerBurnIndex, Eip1559TransactionRequest)> {
         self.pipeline.transactions_to_sign_batch(batch_size)
     }
+
     pub fn transactions_to_send_batch(
         &self,
         latest_transaction_count: TransactionCount,
@@ -1035,6 +1053,7 @@ impl WithdrawalTransactions {
         self.pipeline
             .transactions_to_send_batch(latest_transaction_count, batch_size)
     }
+
     pub fn sent_transactions_iter(
         &self,
     ) -> impl Iterator<
@@ -1046,18 +1065,21 @@ impl WithdrawalTransactions {
     > {
         self.pipeline.sent_transactions_iter()
     }
+
     pub fn get_finalized_transaction(
         &self,
         burn_index: &LedgerBurnIndex,
     ) -> Option<&FinalizedEip1559Transaction> {
         self.pipeline.get_finalized_transaction(burn_index)
     }
+
     pub fn get_processed_request(
         &self,
         burn_index: &LedgerBurnIndex,
     ) -> Option<&WithdrawalRequest> {
         self.pipeline.get_processed_request(burn_index)
     }
+
     pub fn finalized_transactions_iter(
         &self,
     ) -> impl Iterator<
@@ -1069,22 +1091,27 @@ impl WithdrawalTransactions {
     > {
         self.pipeline.finalized_transactions_iter()
     }
+
     pub fn is_sent_tx_empty(&self) -> bool {
         self.pipeline.is_sent_tx_empty()
     }
+
     pub fn has_pending_requests(&self) -> bool {
         self.pipeline.has_pending_requests()
     }
+
     pub fn reimbursement_requests_iter(
         &self,
     ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursementRequest)> {
         self.reimbursement_requests.iter()
     }
+
     pub fn reimbursed_transactions_iter(
         &self,
     ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursedResult)> {
         self.reimbursed.iter()
     }
+
     fn find_reimbursed_transaction_by_cketh_ledger_burn_index(
         &self,
         searched_burn_index: &LedgerBurnIndex,
@@ -1104,6 +1131,7 @@ impl WithdrawalTransactions {
                 _ => None,
             })
     }
+
     /// Quarantine the reimbursement request identified by its index to prevent double minting.
     /// WARNING!: It's crucial that this method does not panic,
     /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
@@ -1112,6 +1140,7 @@ impl WithdrawalTransactions {
         self.reimbursed
             .insert(index, Err(ReimbursedError::Quarantined));
     }
+
     pub fn record_finalized_reimbursement(
         &mut self,
         index: ReimbursementIndex,
@@ -1135,6 +1164,7 @@ impl WithdrawalTransactions {
             None
         );
     }
+
     /// Arm the reimbursement for a withdrawal whose transaction failed on chain.
     ///
     /// # Panics
@@ -1161,11 +1191,13 @@ impl WithdrawalTransactions {
             "BUG: reimbursement request for withdrawal {index:?} already exists"
         );
     }
+
     fn maybe_reimburse_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
         self.maybe_reimburse
             .iter()
             .filter_map(|index| self.pipeline.get_processed_request(index))
     }
+
     /// Whether any request is still in flight, either awaiting a transaction or a reimbursement.
     pub fn oldest_incomplete_request_timestamp(&self) -> Option<u64> {
         self.requests_iter()
@@ -1173,6 +1205,7 @@ impl WithdrawalTransactions {
             .flat_map(|req| req.created_at().into_iter())
             .min()
     }
+
     pub fn withdrawal_status(
         &self,
         parameter: &WithdrawalSearchParameter,
@@ -1211,6 +1244,7 @@ impl WithdrawalTransactions {
 
         pending.chain(processed).collect()
     }
+
     pub fn transaction_status(&self, burn_index: &LedgerBurnIndex) -> RetrieveEthStatus {
         if self
             .pipeline
@@ -1221,6 +1255,7 @@ impl WithdrawalTransactions {
         }
         self.processed_transaction_status(burn_index).0
     }
+
     fn processed_transaction_status(
         &self,
         burn_index: &LedgerBurnIndex,
