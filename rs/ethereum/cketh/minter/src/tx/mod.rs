@@ -5,6 +5,7 @@ mod eip_1559;
 mod eip_7702;
 mod finalized;
 mod signed;
+mod sweep;
 
 pub use eip_1559::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, SignedEip1559TransactionRequest,
@@ -15,6 +16,7 @@ pub use eip_7702::{
 };
 pub use finalized::Finalized;
 pub use signed::{SignableTransaction, Signed, TransactionSignature, sign};
+pub use sweep::{SignedSweepTransaction, SweepTransaction};
 
 use crate::{
     eth_rpc::Hash,

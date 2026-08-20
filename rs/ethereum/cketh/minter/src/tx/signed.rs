@@ -1,4 +1,4 @@
-use super::{TransactionPrice, compute_recovery_id, encode_u256, split_in_two};
+use super::{AccessList, TransactionPrice, compute_recovery_id, encode_u256, split_in_two};
 use crate::{
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
@@ -37,6 +37,8 @@ pub trait SignableTransaction: rlp::Encodable {
     /// RLP-encode the transaction payload, i.e. without the type prefix nor the signature.
     fn rlp_inner(&self, rlp: &mut RlpStream);
 
+    fn chain_id(&self) -> u64;
+
     fn nonce(&self) -> TransactionNonce;
 
     fn gas_limit(&self) -> GasAmount;
@@ -53,6 +55,9 @@ pub trait SignableTransaction: rlp::Encodable {
 
     /// The transaction's call data.
     fn data(&self) -> &[u8];
+
+    /// Addresses and storage keys the transaction pre-declares access to.
+    fn access_list(&self) -> &AccessList;
 
     /// The same transaction at a different price and amount, e.g. to bump the fee of a
     /// transaction that is not being mined.

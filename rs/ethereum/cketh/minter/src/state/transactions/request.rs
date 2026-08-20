@@ -9,6 +9,7 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei};
 use crate::tx::{
     Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy, SignableTransaction,
+    SweepTransaction,
 };
 use std::convert::Infallible;
 use std::fmt;
@@ -201,7 +202,7 @@ impl PipelineRequest for WithdrawalRequest {
 
 impl PipelineRequest for SweepRequest {
     type Id = SweepId;
-    type Transaction = Eip1559TransactionRequest;
+    type Transaction = SweepTransaction;
     /// A sweep pays its gas from the sweeper's own prepaid balance rather than out of the amount
     /// moved, so there is no fee for it to fail to cover.
     type Error = Infallible;
@@ -220,43 +221,56 @@ impl PipelineRequest for SweepRequest {
         }
     }
 
-    fn assert_created_transaction(&self, transaction: &Eip1559TransactionRequest) {
+    fn assert_created_transaction(&self, transaction: &SweepTransaction) {
         assert_eq!(
-            self.destination, transaction.destination,
+            &self.destination,
+            transaction.destination(),
             "BUG: request and transaction destination mismatch"
         );
         assert_eq!(
-            transaction.amount, self.amount,
+            transaction.amount(),
+            &self.amount,
             "BUG: sweep transaction amount should equal the request amount"
         );
         assert_eq!(
-            transaction.data, self.data,
+            transaction.data(),
+            self.data,
             "BUG: sweep transaction should carry the request's call data"
+        );
+        assert_eq!(
+            transaction.authorizations(),
+            self.authorizations.as_slice(),
+            "BUG: sweep transaction should install exactly the request's delegations"
         );
     }
 
+    /// A sweep that must still install delegations becomes an EIP-7702 transaction, and a sweep of
+    /// addresses already delegated a plain EIP-1559 one.
     fn create_transaction(
         &self,
         nonce: TransactionNonce,
         gas_fee_estimate: GasFeeEstimate,
         gas_limit: GasAmount,
         ethereum_network: EthereumNetwork,
-    ) -> Result<Eip1559TransactionRequest, Infallible> {
+    ) -> Result<SweepTransaction, Infallible> {
         assert!(
             gas_limit > GasAmount::ZERO,
             "BUG: gas limit should be non-zero"
         );
         let transaction_price = gas_fee_estimate.to_price(gas_limit);
-        Ok(Eip1559TransactionRequest {
-            chain_id: ethereum_network.chain_id(),
-            nonce,
-            max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
-            max_fee_per_gas: transaction_price.max_fee_per_gas,
-            gas_limit: transaction_price.gas_limit,
-            destination: self.destination,
-            amount: self.amount,
-            data: self.data.clone(),
-            access_list: Default::default(),
-        })
+        Ok(SweepTransaction::new(
+            Eip1559TransactionRequest {
+                chain_id: ethereum_network.chain_id(),
+                nonce,
+                max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
+                max_fee_per_gas: transaction_price.max_fee_per_gas,
+                gas_limit: transaction_price.gas_limit,
+                destination: self.destination,
+                amount: self.amount,
+                data: self.data.clone(),
+                access_list: Default::default(),
+            },
+            self.authorizations.clone(),
+        ))
     }
 }
