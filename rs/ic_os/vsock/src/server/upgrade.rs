@@ -6,29 +6,27 @@ use crate::protocol::{Payload, Response, UpgradeData};
 
 use ic_http_utils::file_downloader::FileDownloader;
 
-// upgrade
+use tokio::runtime::Runtime;
+
 const UPGRADE_FILE_PATH: &str = "/tmp/upgrade";
 const INSTALL_UPGRADE_FILE_PATH: &str = "/opt/ic/bin/install-upgrade.sh";
 
-async fn create_hostos_upgrade_file(
-    upgrade_url: &str,
-    file_path: &str,
-    target_hash: &str,
-) -> Result<(), String> {
-    println!("Starting download from: {}", upgrade_url);
+pub(crate) fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
+    println!("Trying to fetch hostOS upgrade file from request: {upgrade_data:?}");
+
+    println!("Starting download from: {}", upgrade_data.url);
     let file_downloader = FileDownloader::new_with_timeout(None, Duration::from_secs(120));
 
-    file_downloader
-        .download_file(
-            upgrade_url,
-            Path::new(file_path),
-            Some(target_hash.to_string()),
-        )
-        .await
+    Runtime::new().map_err(|e| e.to_string()).and_then(|rt| {
+        rt.block_on(file_downloader.download_file(
+            &upgrade_data.url,
+            Path::new(UPGRADE_FILE_PATH),
+            Some(upgrade_data.target_hash.to_string()),
+        ))
         .map_err(|e| e.to_string())
-}
+    })?;
 
-fn run_upgrade() -> Response {
+    println!("Download completed, starting upgrade installation...");
     let command_output = std::process::Command::new(INSTALL_UPGRADE_FILE_PATH)
         .arg(UPGRADE_FILE_PATH)
         .output();
@@ -41,20 +39,6 @@ fn run_upgrade() -> Response {
         .output();
 
     handle_command_output(command_output)
-}
-
-pub(crate) async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
-    println!("Trying to fetch hostOS upgrade file from request: {upgrade_data:?}");
-
-    create_hostos_upgrade_file(
-        &upgrade_data.url,
-        UPGRADE_FILE_PATH,
-        &upgrade_data.target_hash,
-    )
-    .await?;
-
-    println!("Download completed, starting upgrade installation...");
-    run_upgrade()
 }
 
 pub(crate) fn start_upgrade_guest_vm() -> Response {
