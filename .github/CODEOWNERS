@@ -78,11 +78,11 @@ go.sum                    @dfinity/infra
 /.github/workflows/                                                      @dfinity/infra
 /.github/workflows/container-scan-nightly.yml                            @dfinity/infra @dfinity/node
 /.github/workflows/ledger-suite-release.yml                              @dfinity/defi @dfinity/infra
-/.github/workflows/publish-crates.yml                                    @dfinity/infra
+/.github/workflows/publish-crates.yml                                    @dfinity/infra @dfinity/security
 /.github/workflows/repro-check.yml                                       @dfinity/dre @dfinity/infra
 /.github/workflows/rosetta-release.yml                                   @dfinity/defi @dfinity/infra
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
-.github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/infra
+.github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/infra @dfinity/security
 /ci/                                                                     @dfinity/infra
 /ci/src/dependencies/                                                    @dfinity/node
 /ci/src/dependencies/integration/github/github_api.py                    @dfinity/infra @dfinity/node
