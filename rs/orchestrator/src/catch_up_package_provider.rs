@@ -576,7 +576,7 @@ impl CatchUpPackageProvider {
         // version A creates a local unsigned CUP from the registry contents, persists it, then
         // detects a new replica version B, upgrades to it and starts the replica on the previously
         // created CUP. Now since such a case might happen on a new subnet creation or during a
-        // subnet recover with failover nodes, all nodes before upgrading to B might have been on
+        // subnet recovery with failover nodes, all nodes before upgrading to B might have been on
         // different versions and hence might have created different CUPs, which are then consumed
         // by the same replica version B, which is not guaranteed to be deterministic.
         //
