@@ -518,19 +518,23 @@ impl TipHandler {
     }
 
     /// Deletes snapshots from tip if they are not in `ids`.
+    ///
+    /// Returns the IDs of the deleted snapshots.
     pub fn filter_tip_snapshots(
         &mut self,
         height: Height,
         ids: &BTreeSet<SnapshotId>,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<Vec<SnapshotId>, LayoutError> {
         let tip = self.tip(height)?;
         let snapshots_on_disk = tip.snapshot_ids()?;
+        let mut deleted_snapshot_ids = Vec::new();
         for id in snapshots_on_disk {
             if !ids.contains(&id) {
-                tip.snapshot(&id)?.delete_dir()?;
+                tip.delete_snapshot_dir(&id)?;
+                deleted_snapshot_ids.push(id);
             }
         }
-        Ok(())
+        Ok(deleted_snapshot_ids)
     }
 
     /// Deletes the directory of the given canister from tip.
@@ -544,6 +548,19 @@ impl TipHandler {
     ) -> Result<(), LayoutError> {
         let tip = self.tip(height)?;
         tip.delete_canister_dir(&canister_id)
+    }
+
+    /// Deletes the directory of the given snapshot from tip.
+    ///
+    /// This is a no-op if the snapshot has no directory in tip, e.g. because it was
+    /// created from uploaded metadata and deleted before the next checkpoint.
+    pub fn delete_snapshot_directory(
+        &mut self,
+        height: Height,
+        snapshot_id: SnapshotId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        tip.delete_snapshot_dir(&snapshot_id)
     }
 
     /// Moves the entire canister directory from one canister id to another.
@@ -1886,16 +1903,19 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         &self,
         snapshot_id: &SnapshotId,
     ) -> Result<SnapshotLayout<Permissions>, LayoutError> {
-        SnapshotLayout::new(
-            self.0
-                .root
-                .join(SNAPSHOTS_DIR)
-                .join(hex::encode(
-                    snapshot_id.get_canister_id().get_ref().as_slice(),
-                ))
-                .join(hex::encode(snapshot_id.as_slice())),
-            self,
-        )
+        SnapshotLayout::new(self.snapshot_path(snapshot_id), self)
+    }
+
+    /// The path of the given snapshot's directory. As opposed to `snapshot()`, this
+    /// does not create the directory.
+    fn snapshot_path(&self, snapshot_id: &SnapshotId) -> PathBuf {
+        self.0
+            .root
+            .join(SNAPSHOTS_DIR)
+            .join(hex::encode(
+                snapshot_id.get_canister_id().get_ref().as_slice(),
+            ))
+            .join(hex::encode(snapshot_id.as_slice()))
     }
 
     pub fn height(&self) -> Height {
@@ -2064,6 +2084,15 @@ where
                 io_err: err,
             }),
         }
+    }
+
+    /// Removes the entire directory of the given snapshot; and the enclosing directory
+    /// named after the snapshot's canister, if this was the canister's last snapshot.
+    ///
+    /// This is a no-op if the snapshot has no directory, e.g. because it was created
+    /// from uploaded metadata and deleted before the next checkpoint.
+    pub fn delete_snapshot_dir(&self, snapshot_id: &SnapshotId) -> Result<(), LayoutError> {
+        delete_snapshot_dir(&self.snapshot_path(snapshot_id))
     }
 }
 
@@ -2542,24 +2571,37 @@ where
 {
     /// Remove the entire directory for the snapshot.
     pub fn delete_dir(&self) -> Result<(), LayoutError> {
-        let map_error = |err| LayoutError::IoError {
-            path: self.raw_path(),
-            message: "Cannot remove snapshot.".to_string(),
-            io_err: err,
-        };
-
-        std::fs::remove_dir_all(self.raw_path()).map_err(map_error)?;
-
-        // Remove the parent directory named after the canister if this was the last snapshot of that canister.
-        // Unwrap is safe as snapshots are not at located at `/`.
-        let parent = self.raw_path().parent().unwrap().to_owned();
-
-        if parent.read_dir().map_err(map_error)?.next().is_none() {
-            std::fs::remove_dir(&parent).map_err(map_error)?;
-        }
-
-        Ok(())
+        delete_snapshot_dir(&self.raw_path())
     }
+}
+
+/// Removes the entire directory of a snapshot; and the enclosing directory named after
+/// the snapshot's canister, if this was the canister's last snapshot.
+///
+/// This is a no-op if the snapshot has no directory, e.g. because it was created from
+/// uploaded metadata and deleted before the next checkpoint.
+fn delete_snapshot_dir(snapshot_path: &Path) -> Result<(), LayoutError> {
+    let map_error = |err| LayoutError::IoError {
+        path: snapshot_path.to_path_buf(),
+        message: "Cannot remove snapshot.".to_string(),
+        io_err: err,
+    };
+
+    match std::fs::remove_dir_all(snapshot_path) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(map_error(err)),
+    }
+
+    // Remove the parent directory named after the canister if this was the last snapshot of that canister.
+    // Unwrap is safe as snapshots are not at located at `/`.
+    let parent = snapshot_path.parent().unwrap();
+
+    if parent.read_dir().map_err(map_error)?.next().is_none() {
+        std::fs::remove_dir(parent).map_err(map_error)?;
+    }
+
+    Ok(())
 }
 
 fn open_for_write(path: &Path) -> Result<std::fs::File, LayoutError> {
