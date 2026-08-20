@@ -73,6 +73,7 @@ use std::{
 };
 
 mod allowances;
+mod block_schema;
 pub mod fee_collector;
 pub mod icrc_106;
 pub mod metrics;
@@ -1615,7 +1616,7 @@ where
     let mut prev_hash = None;
 
     // Check that the hash chain is correct.
-    for block in archived_blocks.into_iter().chain(resp.blocks.into_iter()) {
+    for block in archived_blocks.into_iter().chain(resp.blocks) {
         assert_eq!(
             prev_hash,
             get_phash(&block).expect("cannot get the hash of the previous block")
@@ -1629,29 +1630,27 @@ where
     assert_eq!(0, missing_blocks_reply.archived_blocks.len());
 }
 
-// Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
+// Generate random blocks and check that their CBOR encoding complies with the
+// ledger block CBOR schema (see the `block_schema` module).
 pub fn block_encoding_agrees_with_the_schema<Tokens: TokensType>() {
-    use std::path::PathBuf;
-
-    let block_cddl_path =
-        PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("block.cddl");
-    let block_cddl =
-        String::from_utf8(std::fs::read(block_cddl_path).expect("failed to read block.cddl file"))
-            .unwrap();
-
     let mut runner = TestRunner::default();
     runner
         .run(&arb_block::<Tokens>(), |block| {
-            let cbor_bytes = block.encode().into_vec();
-            cddl::validate_cbor_from_slice(&block_cddl, &cbor_bytes, None).map_err(|e| {
+            let encoded_block = block.encode();
+            block_schema::validate(&encoded_block).map_err(|e| {
                 TestCaseError::fail(format!(
                     "Failed to validate CBOR: {} (inspect it on https://cbor.me), error: {}",
-                    hex::encode(&cbor_bytes),
+                    hex::encode(encoded_block.as_slice()),
                     e
                 ))
             })
         })
         .unwrap();
+}
+
+// Check that the ledger block CBOR schema validator rejects malformed blocks.
+pub fn block_encoding_schema_catches_malformed_blocks() {
+    block_schema::assert_catches_malformed_blocks();
 }
 
 pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
@@ -2069,7 +2068,7 @@ pub fn icrc1_test_block_transformation<T, Tokens>(
     for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
         .blocks
         .into_iter()
-        .zip(resp_post_upgrade.blocks.into_iter())
+        .zip(resp_post_upgrade.blocks)
     {
         assert!(
             equivalent_values(&block_pre_upgrade, &block_post_upgrade),
@@ -3396,6 +3395,117 @@ where
     assert_eq!(block_index, 1);
     assert_eq!(balance_of(&env, canister_id, from.0), 60_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+}
+
+/// A spend needs no allowance only when the spender *is* the account it spends from — which the
+/// ledger decides on the whole account, subaccount included. Owning the principal is not enough,
+/// so a caller holding funds under a subaccount must name that subaccount to reach them.
+pub fn test_transfer_from_self_subaccount<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let to = PrincipalId::new_user_test_id(2);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, 100_000)]);
+
+    // Same owner, but the spender is {owner, None} while the funds are under {owner, SUBACCOUNT}:
+    // two different accounts, so this needs an allowance it does not have.
+    let mut transfer_from_args = default_transfer_from_args(from, to.0, 30_000);
+    transfer_from_args.spender_subaccount = None;
+    assert_eq!(
+        send_transfer_from(&env, canister_id, owner.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0_u8)
+        })
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 0);
+
+    // Naming the account's own subaccount makes it a self-spend, which needs no allowance.
+    transfer_from_args.spender_subaccount = Some(SUBACCOUNT);
+    let block_index = send_transfer_from(&env, canister_id, owner.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(
+        block_index, 1,
+        "the rejected spend must not have written a block"
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000 - 30_000 - FEE);
+    assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+}
+
+/// Burns from `{P, Some(s)}` with the spender naming that same subaccount, and reports what the
+/// ledger made of it — the two ledgers disagree, so the caller states which outcome its own owes.
+///
+/// ICRC ledgers accept it: burning is how an account holding tokens under a subaccount gives them
+/// up, and naming the account's own subaccount makes it a self-spend. The ICP ledger rejects it,
+/// because `Operation::Burn` (`rs/ledger_suite/icp/src/lib.rs`) checks an allowance for any spender
+/// — exempting the self-spend only when *consuming* one, not when checking.
+///
+/// Either way the books must stay consistent, which is asserted here: an accepted burn is fee-free
+/// and reduces the supply, a rejected one moves nothing at all.
+pub fn test_transfer_from_self_subaccount_burn<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) -> Result<BlockIndex, TransferFromError>
+where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+    const INITIAL_BALANCE: u64 = 100_000;
+    const BURN_AMOUNT: u64 = 20_000;
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, INITIAL_BALANCE)]);
+
+    let minter = minting_account(&env, canister_id).expect("the ledger has a minting account");
+    let supply_before = total_supply(&env, canister_id);
+    let mut burn_args = default_transfer_from_args(from, minter, BURN_AMOUNT);
+    burn_args.spender_subaccount = Some(SUBACCOUNT);
+    burn_args.fee = None;
+
+    let result = send_transfer_from(&env, canister_id, owner.0, &burn_args);
+
+    match result {
+        Ok(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE - BURN_AMOUNT,
+                "a burn is fee-free, so only the burned amount leaves the account"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before - BURN_AMOUNT,
+                "burning must reduce the supply rather than move the tokens"
+            );
+        }
+        Err(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE,
+                "a rejected burn must not move funds"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before,
+                "a rejected burn must not change the supply"
+            );
+        }
+    }
+    result
 }
 
 pub fn test_transfer_from_minter<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)

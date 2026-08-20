@@ -693,6 +693,8 @@ pub mod proposal {
         LoadCanisterSnapshot(super::LoadCanisterSnapshot),
         /// Create a canister in a (possibly non-NNS) subnet and install code into it.
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Change what replica version(s) are run by Cloud Engines.
+        UpdateStandardEngineReplicaVersion(super::UpdateStandardEngineReplicaVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1454,6 +1456,7 @@ pub enum ProposalActionRequest {
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeRequest),
+    UpdateStandardEngineReplicaVersion(UpdateStandardEngineReplicaVersion),
 }
 
 #[derive(
@@ -2576,9 +2579,35 @@ pub struct InstallCode {
 
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub arg_hash: Option<Vec<u8>>,
+
+    /// Options that only apply when install_mode is Upgrade.
+    pub canister_upgrade_options: Option<install_code::CanisterUpgradeOptions>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        Default,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook.
+        pub skip_pre_upgrade: Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. When the previous WASM had a custom
+        /// section named "icp:private enhanced-orthogonal-persistence", then
+        /// upgrading gets blocked if this is not set. The integer value
+        /// corresponds to `ic_protobuf::types::v1::WasmMemoryPersistence`.
+        pub wasm_memory_persistence: Option<i32>,
+    }
+
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2637,6 +2666,8 @@ pub struct InstallCodeRequest {
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+    /// Options that only apply when install_mode is Upgrade.
+    pub canister_upgrade_options: ::core::option::Option<install_code::CanisterUpgradeOptions>,
 }
 
 #[derive(
@@ -2841,6 +2872,15 @@ pub struct BlessAlternativeGuestOsVersion {
     pub chip_ids: Option<Vec<Vec<u8>>>,
     pub rootfs_hash: Option<String>,
     pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct UpdateStandardEngineReplicaVersion {
+    pub new_replica_version_id: Option<String>,
+    pub old_replica_version_id: Option<String>,
+    pub deployment_progress: Option<f64>,
 }
 
 /// See also the definition of GuestLaunchMeasurements (plural!) in
@@ -4115,13 +4155,14 @@ pub enum NnsFunction {
     /// the Wasm module of the target canister, the proposal can also set the
     /// authorization information and the allocations.
     NnsCanisterUpgrade = 4,
-    /// A proposal to bless a new version to which the replicas can be
+    /// (obsolete) A proposal to bless a new version to which the replicas can be
     /// upgraded.
     /// The proposal registers a replica version (identified by the hash of the
     /// installation image) in the registry. Besides creating a record for that
     /// version, the proposal also appends that version to the list of "blessed
     /// versions" that can be installed on a subnet. By itself, this proposal
     /// does not effect any upgrade.
+    /// Superseded by ReviseElectedGuestosVersions.
     BlessReplicaVersion = 5,
     /// Update a subnet's recovery CUP (used to recover subnets that have stalled).
     /// Nodes that find a recovery CUP for their subnet will load that CUP from
@@ -4218,16 +4259,16 @@ pub enum NnsFunction {
     UpdateSnsWasmSnsSubnetIds = 34,
     /// Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
     UpdateAllowedPrincipals = 35,
-    /// A proposal to retire previously elected and unused replica versions.
+    /// (obsolete) A proposal to retire previously elected and unused replica versions.
     /// The specified versions are removed from the registry and the "blessed versions" record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
+    /// Superseded by ReviseElectedGuestosVersions.
     RetireReplicaVersion = 36,
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
     /// A proposal to change the set of elected GuestOS versions. The version to elect (identified by
-    /// the hash of the installation image) is added to the registry. Besides creating a record for
-    /// that version, the proposal also appends that version to the list of elected versions that can
-    /// be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+    /// the commit hash of the installation image) is added to the registry. This version can then be
+    /// used to upgrade nodes.
     ReviseElectedGuestosVersions = 38,
     BitcoinSetConfig = 39,
     /// OBSOLETE: use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead
@@ -4283,9 +4324,9 @@ pub enum NnsFunction {
     /// The proposal requests to split a subnet.
     SplitSubnet = 56,
     /// Delete a subnet. The subnet record, catch-up package, threshold signing key
-    /// and routing table entries are removed from the registry, and the subnet's
-    /// nodes become unassigned.
-    /// Currently limited to CloudEngine subnets.
+    /// and routing table entries are removed from the registry, the subnet is
+    /// removed from the subnet list, and the subnet's nodes become unassigned.
+    /// System subnets (e.g. the NNS or II subnet) cannot be deleted.
     DeleteSubnet = 57,
     /// Set or unset the default subnet to which `SetupInitialDKG` management
     /// canister calls are routed when no subnet is specified explicitly. If unset,

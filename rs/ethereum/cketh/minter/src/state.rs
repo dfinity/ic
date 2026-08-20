@@ -1,5 +1,6 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::endpoints::CandidBlockTag;
+use crate::deposit_address::{DepositAddressSchema, deposit_address};
+use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -10,23 +11,29 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
+use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
+use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
+use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
-use ic_cdk::management_canister::EcdsaPublicKeyResult;
+use ic_cdk_management_canister::EcdsaPublicKeyResult;
 use ic_ethereum_types::Address;
 use ic_secp256k1::PublicKey;
+use icrc_ledger_types::icrc1::account::Account;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
-use transactions::EthTransactions;
+use transactions::WithdrawalTransactions;
 
 pub mod audit;
+pub mod automatic_deposits;
 pub mod eth_logs_scraping;
 pub mod event;
+pub mod sweeper_funding;
 pub mod transactions;
 
 #[cfg(test)]
@@ -61,10 +68,14 @@ pub struct State {
     pub ethereum_block_height: CandidBlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
+    /// Latest block height observed across all providers, refreshed on its own
+    /// timer and used to schedule ckERC20 deposit-address balance scans. Volatile
+    /// runtime cache, not event-sourced.
+    pub latest_block_height: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
-    pub eth_transactions: EthTransactions,
+    pub withdrawal_transactions: WithdrawalTransactions,
     pub skipped_blocks: BTreeMap<Address, BTreeSet<BlockNumber>>,
 
     /// Current balance of ETH held by the minter.
@@ -77,6 +88,9 @@ pub struct State {
 
     /// Per-principal lock for pending withdrawals
     pub pending_withdrawal_principals: BTreeSet<Principal>,
+
+    /// Per-principal lock for in-flight `deposit_erc20` calls
+    pub pending_deposit_principals: BTreeSet<Principal>,
 
     /// Locks preventing concurrent execution timer tasks
     pub active_tasks: HashSet<TaskType>,
@@ -100,6 +114,17 @@ pub struct State {
     /// - secondary key: ERC-20 contract address on Ethereum
     /// - value: ckERC20 token symbol
     pub ckerc20_tokens: DedupMultiKeyMap<Principal, Address, CkTokenSymbol>,
+
+    /// ckERC20 deposit addresses registered via `deposit_erc20`, individually
+    /// derived for each user and watched for incoming deposits.
+    pub automatic_deposits: AutomaticDeposits,
+
+    /// Address of the sweeper smart contract on Ethereum, which the minter
+    /// delegates to when sweeping funded deposit addresses.
+    pub sweeper_contract_address: Option<Address>,
+
+    /// Burn-first accounting for sweeper fee funding.
+    pub sweeper_funding: SweeperFundingAccounting,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -107,8 +132,7 @@ pub enum InvalidStateError {
     InvalidTransactionNonce(String),
     InvalidEcdsaKeyName(String),
     InvalidLedgerId(String),
-    InvalidEthereumContractAddress(String),
-    InvalidErc20HelperContractAddress(String),
+    InvalidContractAddress(String),
     InvalidMinimumWithdrawalAmount(String),
     InvalidLastScrapedBlockNumber(String),
     InvalidLastErc20ScrapedBlockNumber(String),
@@ -162,12 +186,52 @@ impl State {
             EthereumNetwork::Mainnet => Wei::new(2_000_000_000_000),
             EthereumNetwork::Sepolia => Wei::new(10_000_000_000),
         };
+        if SweeperFundingConfig::for_minimum_withdrawal_amount(self.cketh_minimum_withdrawal_amount)
+            .is_none()
+        {
+            return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(format!(
+                "minimum_withdrawal_amount {} is too large: the sweeper funding target is {} \
+                 times it, which does not fit",
+                self.cketh_minimum_withdrawal_amount,
+                crate::state::sweeper_funding::SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS,
+            )));
+        }
         if self.cketh_minimum_withdrawal_amount < cketh_ledger_transfer_fee {
             return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
                 "minimum_withdrawal_amount must cover ledger transaction fee, \
                 otherwise ledger can return a BadBurn error that should be returned to the user"
                     .to_string(),
             ));
+        }
+
+        // Every contract the minter interacts with must have a distinct, non-zero address. Carry a
+        // human label for each so both the zero and the duplicate error name which contract(s) are
+        // at fault (the `seen` map keeps the earlier label to name the other side of a collision).
+        let labelled_contracts = self
+            .log_scrapings
+            .iter()
+            .filter_map(|(id, scraping)| {
+                scraping
+                    .contract_address()
+                    .map(|addr| (id.to_string(), addr))
+            })
+            .chain(
+                self.sweeper_contract_address
+                    .as_ref()
+                    .map(|addr| ("sweeper".to_string(), addr)),
+            );
+        let mut seen_contract_addresses: BTreeMap<&Address, String> = BTreeMap::new();
+        for (label, address) in labelled_contracts {
+            if address == &Address::ZERO {
+                return Err(InvalidStateError::InvalidContractAddress(format!(
+                    "the {label} contract address must not be zero"
+                )));
+            }
+            if let Some(previous) = seen_contract_addresses.insert(address, label.clone()) {
+                return Err(InvalidStateError::InvalidContractAddress(format!(
+                    "the {previous} and {label} contract addresses must be distinct (both are {address})"
+                )));
+            }
         }
         Ok(())
     }
@@ -236,6 +300,11 @@ impl State {
                 erc20_ethereum_network: self.ethereum_network,
                 ckerc20_token_symbol: symbol.clone(),
             })
+    }
+
+    /// Whether `erc20_contract_address` is a ckERC20 token supported by the minter.
+    pub fn is_supported_ckerc20(&self, erc20_contract_address: &Address) -> bool {
+        self.ckerc20_tokens.contains_alt(erc20_contract_address)
     }
 
     /// Quarantine the deposit event to prevent double minting.
@@ -308,7 +377,8 @@ impl State {
             "BUG: unsupported ERC-20 token {}",
             request.erc20_contract_address
         );
-        self.eth_transactions.record_withdrawal_request(request);
+        self.withdrawal_transactions
+            .record_withdrawal_request(request);
     }
 
     pub fn record_finalized_transaction(
@@ -316,7 +386,7 @@ impl State {
         withdrawal_id: &LedgerBurnIndex,
         receipt: &TransactionReceipt,
     ) {
-        self.eth_transactions
+        self.withdrawal_transactions
             .record_finalized_transaction(*withdrawal_id, receipt.clone());
         self.update_balance_upon_withdrawal(withdrawal_id, receipt);
     }
@@ -345,15 +415,15 @@ impl State {
     ) {
         let tx_fee = receipt.effective_transaction_fee();
         let tx = self
-            .eth_transactions
+            .withdrawal_transactions
             .get_finalized_transaction(withdrawal_id)
             .expect("BUG: missing finalized transaction");
         let withdrawal_request = self
-            .eth_transactions
+            .withdrawal_transactions
             .get_processed_withdrawal_request(withdrawal_id)
             .expect("BUG: missing withdrawal request");
         let charged_tx_fee = match withdrawal_request {
-            WithdrawalRequest::CkEth(req) => req
+            WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => req
                 .withdrawal_amount
                 .checked_sub(tx.transaction().amount)
                 .expect("BUG: withdrawal amount MUST always be at least the transaction amount"),
@@ -373,6 +443,15 @@ impl State {
         self.eth_balance.eth_balance_sub(debited_amount);
         self.eth_balance.total_effective_tx_fees_add(tx_fee);
         self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
+
+        if matches!(withdrawal_request, WithdrawalRequest::SweeperFunding(_)) {
+            let transferred = match receipt.status {
+                TransactionStatus::Success => tx.transaction().amount,
+                TransactionStatus::Failure => Wei::ZERO,
+            };
+            self.sweeper_funding
+                .record_finalized_funding(transferred, tx_fee);
+        }
 
         if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
             let TransactionCallData::Erc20Transfer { to: _, value } = TransactionCallData::decode(
@@ -461,11 +540,13 @@ impl State {
             evm_rpc_id,
             deposit_with_subaccount_helper_contract_address,
             last_deposit_with_subaccount_scraped_block_number,
+            ethereum_sweeper_contract_address,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
                 .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
-            self.eth_transactions.update_next_transaction_nonce(nonce);
+            self.withdrawal_transactions
+                .update_next_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
@@ -475,29 +556,23 @@ impl State {
         }
         if let Some(address) = ethereum_contract_address {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
+                InvalidStateError::InvalidContractAddress(format!("ethereum_contract_address: {e}"))
             })?;
-            self.log_scrapings
-                .set_contract_address(
-                    LogScrapingId::EthDepositWithoutSubaccount,
-                    eth_helper_contract_address,
-                )
-                .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
-                })?;
+            self.log_scrapings.set_contract_address(
+                LogScrapingId::EthDepositWithoutSubaccount,
+                eth_helper_contract_address,
+            );
         }
         if let Some(address) = erc20_helper_contract_address {
             let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {e}"))
+                InvalidStateError::InvalidContractAddress(format!(
+                    "erc20_helper_contract_address: {e}"
+                ))
             })?;
-            self.log_scrapings
-                .set_contract_address(
-                    LogScrapingId::Erc20DepositWithoutSubaccount,
-                    erc20_helper_contract_address,
-                )
-                .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
-                })?;
+            self.log_scrapings.set_contract_address(
+                LogScrapingId::Erc20DepositWithoutSubaccount,
+                erc20_helper_contract_address,
+            );
         }
         if let Some(block_number) = last_erc20_scraped_block_number {
             self.log_scrapings.set_last_scraped_block_number(
@@ -509,13 +584,12 @@ impl State {
         }
         if let Some(address) = deposit_with_subaccount_helper_contract_address {
             let address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {e}"))
+                InvalidStateError::InvalidContractAddress(format!(
+                    "deposit_with_subaccount_helper_contract_address: {e}"
+                ))
             })?;
             self.log_scrapings
-                .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, address)
-                .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
-                })?;
+                .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, address);
         }
         if let Some(block_number) = last_deposit_with_subaccount_scraped_block_number {
             self.log_scrapings.set_last_scraped_block_number(
@@ -534,7 +608,22 @@ impl State {
         if let Some(evm_id) = evm_rpc_id {
             self.evm_rpc_id = evm_id;
         }
+        if let Some(address) = ethereum_sweeper_contract_address {
+            let address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidContractAddress(format!(
+                    "ethereum_sweeper_contract_address: {e}"
+                ))
+            })?;
+            self.sweeper_contract_address = Some(address);
+        }
         self.validate_config()
+    }
+
+    /// When to top the sweeper address up, and to what: derived from the minimum withdrawal
+    /// amount, which [`Self::validate_config`] keeps small enough for the derivation to fit.
+    pub fn sweeper_funding_config(&self) -> SweeperFundingConfig {
+        SweeperFundingConfig::for_minimum_withdrawal_amount(self.cketh_minimum_withdrawal_amount)
+            .expect("BUG: validate_config rejects a minimum withdrawal amount this large")
     }
 
     /// Checks whether two states are equivalent.
@@ -569,9 +658,15 @@ impl State {
             other.ledger_suite_orchestrator_id
         );
         ensure_eq!(self.ckerc20_tokens, other.ckerc20_tokens);
+        ensure_eq!(self.automatic_deposits, other.automatic_deposits);
+        ensure_eq!(
+            self.sweeper_contract_address,
+            other.sweeper_contract_address
+        );
+        ensure_eq!(self.sweeper_funding, other.sweeper_funding);
 
-        self.eth_transactions
-            .is_equivalent_to(&other.eth_transactions)
+        self.withdrawal_transactions
+            .is_equivalent_to(&other.withdrawal_transactions)
     }
 
     pub fn eth_balance(&self) -> &EthBalance {
@@ -586,6 +681,51 @@ impl State {
 
     pub const fn evm_rpc_id(&self) -> Principal {
         self.evm_rpc_id
+    }
+
+    pub fn public_key_and_chain_code(&self) -> Option<(PublicKey, [u8; 32])> {
+        self.ecdsa_public_key.as_ref().map(|response| {
+            let public_key =
+                PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
+                    ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
+                });
+            let chain_code =
+                <[u8; 32]>::try_from(response.chain_code.as_slice()).unwrap_or_else(|_| {
+                    ic_cdk::trap(format!(
+                        "BUG: expected a chain code of length 32, got {}",
+                        response.chain_code.len()
+                    ))
+                });
+            (public_key, chain_code)
+        })
+    }
+
+    /// Derive the ckERC20 deposit address for `account` from the minter's master
+    /// threshold-ECDSA public key and add it to the watchlist of automatic deposits.
+    ///
+    /// Returns the deposit address together with the timestamp until which a
+    /// deposit to it is guaranteed to be noticed. Fails with
+    /// [`DepositErc20Error::TemporarilyUnavailable`] if the minter's public key
+    /// has not been fetched yet.
+    pub fn register_deposit_address(
+        &mut self,
+        now: Timestamp,
+        account: Account,
+        token: Address,
+    ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
+        let (master_public_key, chain_code) =
+            self.public_key_and_chain_code()
+                .ok_or(DepositErc20Error::TemporarilyUnavailable(
+                    "Minter's ECDSA public key not yet initialized".to_string(),
+                ))?;
+        let address = deposit_address(
+            &master_public_key,
+            &chain_code,
+            DepositAddressSchema::CkErc20,
+            &account,
+        );
+        self.automatic_deposits
+            .watch_deposit(now, account, token, address)
     }
 }
 
@@ -607,19 +747,27 @@ where
     })
 }
 
-pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
-    use ic_cdk::management_canister::{
+pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32]) {
+    use ic_cdk_management_canister::{
         EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, ecdsa_public_key,
     };
 
-    fn to_public_key(response: &EcdsaPublicKeyResult) -> PublicKey {
-        PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
+    fn to_public_key_and_chain_code(response: &EcdsaPublicKeyResult) -> (PublicKey, [u8; 32]) {
+        let public_key = PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
             ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
-        })
+        });
+        let chain_code =
+            <[u8; 32]>::try_from(response.chain_code.as_slice()).unwrap_or_else(|_| {
+                ic_cdk::trap(format!(
+                    "BUG: expected a chain code of length 32, got {}",
+                    response.chain_code.len()
+                ))
+            });
+        (public_key, chain_code)
     }
 
     if let Some(ecdsa_pk_response) = read_state(|s| s.ecdsa_public_key.clone()) {
-        return to_public_key(&ecdsa_pk_response);
+        return to_public_key_and_chain_code(&ecdsa_pk_response);
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     log!(DEBUG, "Fetching the ECDSA public key {key_name}");
@@ -637,7 +785,11 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     .await
     .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
-    to_public_key(&response)
+    to_public_key_and_chain_code(&response)
+}
+
+pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
+    lazy_call_ecdsa_public_key_with_chain_code().await.0
 }
 
 pub async fn minter_address() -> Address {
@@ -778,4 +930,6 @@ pub enum TaskType {
     RefreshGasFeeEstimate,
     Reimbursement,
     MintCkErc20,
+    RefreshLatestBlockHeight,
+    BalanceScan,
 }

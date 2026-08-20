@@ -206,7 +206,7 @@ pub struct NiDkgDealing {
 
 impl fmt::Display for NiDkgDealing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self)
+        write!(f, "{:?}", self)
     }
 }
 
@@ -300,7 +300,7 @@ impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
 
 impl fmt::Display for NiDkgTranscript {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self)
+        write!(f, "{:?}", self)
     }
 }
 

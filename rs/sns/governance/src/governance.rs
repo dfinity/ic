@@ -97,6 +97,7 @@ use ic_canister_profiler::SpanStats;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
+    CanisterInstallModeV2,
 };
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
@@ -2708,6 +2709,7 @@ impl Governance {
             // For more details, please refer to the comments above the (definition of the)
             // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
+            let mode = CanisterInstallModeV2::from(mode);
 
             let mut change_canister_arg =
                 ChangeCanisterRequest::new(stop_before_installing, mode, canister_id)

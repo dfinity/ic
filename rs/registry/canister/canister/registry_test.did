@@ -84,6 +84,8 @@ type CompleteCanisterMigrationPayload = record {
 type ResourceLimits = record {
   maximum_state_size : opt nat64;
   maximum_state_delta : opt nat64;
+  maximum_query_instructions : opt nat64;
+  maximum_query_walltime_seconds : opt nat64;
 };
 
 type CreateSubnetPayload = record {
@@ -540,6 +542,12 @@ type UpdateUnassignedNodesConfigPayload = record {
   ssh_readonly_access : opt vec text;
 };
 
+type UpdateStandardEngineReplicaVersionPayload = record {
+  new_replica_version_id : text;
+  old_replica_version_id : text;
+  deployment_progress : float64;
+};
+
 type MigrateNodeOperatorPayload = record {
   new_node_operator_id : opt principal;
   old_node_operator_id : opt principal;
@@ -669,6 +677,9 @@ service : {
   update_nodes_hostos_version : (UpdateNodesHostosVersionPayload) -> ();
   update_ssh_readonly_access_for_all_unassigned_nodes : (
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
+  ) -> ();
+  update_standard_engine_replica_version : (
+    UpdateStandardEngineReplicaVersionPayload
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
   update_subnet_admins : (UpdateSubnetAdminsPayload) -> ();

@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::{
     canister_api::CanisterApi,
     pb::v1::{
@@ -20,7 +19,7 @@ use crate::{
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::api::stable::StableMemory;
+use ic_cdk::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE, hash_to_hex_string};
 use ic_nervous_system_proto::pb::v1::Canister;
@@ -53,7 +52,7 @@ use ic_cdk::println;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
-const INITIAL_CANISTER_CREATION_CYCLES: u64 = 3 * ONE_TRILLION;
+const INITIAL_CANISTER_CREATION_CYCLES: u128 = 3 * ONE_TRILLION as u128;
 
 /// The number of canisters that the SNS-WASM canister will install when deploying
 /// an SNS. This constant is different than `SNS_CANISTER_COUNT` due to the Archive
@@ -64,7 +63,7 @@ const INITIAL_CANISTER_CREATION_CYCLES: u64 = 3 * ONE_TRILLION;
 ///   - SNS Swap Canister
 ///   - ICRC Ledger Canister
 ///   - ICRC Index Canister
-pub const SNS_CANISTER_COUNT_AT_INSTALL: u64 = 5;
+pub const SNS_CANISTER_COUNT_AT_INSTALL: u128 = 5;
 
 /// The total number of SNS canister types that make up an SNS. These are:
 ///   - SNS Governance Canister
@@ -73,7 +72,7 @@ pub const SNS_CANISTER_COUNT_AT_INSTALL: u64 = 5;
 ///   - ICRC Ledger Canister
 ///   - ICRC Index Canister
 ///   - ICRC Ledger Archive Canister
-pub const SNS_CANISTER_TYPE_COUNT: u64 = 6;
+pub const SNS_CANISTER_TYPE_COUNT: u128 = 6;
 
 impl From<SnsCanisterIds> for DeployedSns {
     fn from(src: SnsCanisterIds) -> Self {
@@ -1233,14 +1232,14 @@ where
     async fn create_sns_canisters(
         canister_api: &impl CanisterApi,
         subnet_id: SubnetId,
-        initial_cycles_per_canister: u64,
+        initial_cycles_per_canister: u128,
     ) -> Result<SnsCanisterIds, (String, Option<SnsCanisterIds>)> {
         let this_canister_id = canister_api.local_canister_id().get();
         let new_canister = |canister_type: SnsCanisterType| {
             canister_api.create_canister(
                 subnet_id,
                 this_canister_id,
-                Cycles::new(initial_cycles_per_canister.into()),
+                Cycles::new(initial_cycles_per_canister),
                 if canister_type == SnsCanisterType::Governance {
                     DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT
                 } else {
@@ -1620,22 +1619,27 @@ where
 
         let canister_status_result = call_response.map_err(|(code, description)| {
             format!(
-                "Could not get the controllers of {target_canister_id:?} \
-                    due to an error from the replica. {code:?}:{description:?}"
+                "Could not get the controllers of canister {target_canister_id} \
+                due to an error from the replica. {code:?}:{description:?}"
             )
         })?;
 
         Ok(canister_status_result.settings.controllers)
     }
 
-    /// Get an available subnet to create canisters on
+    /// Get an available subnet to create canisters on.
+    ///
+    /// Distributes deployments across all configured SNS subnets by rotating on
+    /// the number of SNSs already deployed, instead of always using the first
+    /// subnet.
     fn get_available_sns_subnet(&self) -> Result<SubnetId, String> {
-        // TODO We need a way to find "available" subnets based on SNS deployments (limiting numbers per Subnet)
-        if !self.sns_subnet_ids.is_empty() {
-            Ok(self.sns_subnet_ids[0])
-        } else {
-            Err("No SNS Subnet is available".to_string())
+        if self.sns_subnet_ids.is_empty() {
+            return Err("No SNS Subnet is available".to_string());
         }
+
+        let index = self.deployed_sns_list.len() % self.sns_subnet_ids.len();
+
+        Ok(self.sns_subnet_ids[index])
     }
 
     /// Given the SnsVersion of an SNS instance, returns the SnsVersion that this SNS instance
@@ -2080,7 +2084,7 @@ mod test {
         vec,
     };
 
-    const CANISTER_CREATION_CYCLES: u64 = INITIAL_CANISTER_CREATION_CYCLES * 5;
+    const CANISTER_CREATION_CYCLES: u128 = INITIAL_CANISTER_CREATION_CYCLES * 5;
 
     struct TestCanisterApi {
         canisters_created: Arc<Mutex<u64>>,
@@ -2089,14 +2093,14 @@ mod test {
         pub install_wasm_calls: Arc<Mutex<Vec<(CanisterId, Vec<u8>, Vec<u8>)>>>,
         #[allow(clippy::type_complexity)]
         pub set_controllers_calls: Arc<Mutex<Vec<(CanisterId, Vec<PrincipalId>)>>>,
-        pub cycles_accepted: Arc<Mutex<Vec<u64>>>,
+        pub cycles_accepted: Arc<Mutex<Vec<u128>>>,
         #[allow(clippy::type_complexity)]
-        pub cycles_sent: Arc<Mutex<Vec<(CanisterId, u64)>>>,
+        pub cycles_sent: Arc<Mutex<Vec<(CanisterId, u128)>>>,
         pub canisters_deleted: Arc<Mutex<Vec<CanisterId>>>,
         /// How many cycles the canister has.
-        pub canister_cycles_balance: Arc<Mutex<u64>>,
+        pub canister_cycles_balance: Arc<Mutex<u128>>,
         /// How many cycles does the pretend request contain.
-        pub cycles_found_in_request: Arc<Mutex<u64>>,
+        pub cycles_found_in_request: Arc<Mutex<u128>>,
         /// Errors that can be thrown at some nth function call.
         pub errors_on_create_canister: Arc<Mutex<Vec<Option<String>>>>,
         pub errors_on_set_controller: Arc<Mutex<Vec<Option<String>>>>,
@@ -2184,7 +2188,7 @@ mod test {
             Ok(())
         }
 
-        fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
+        fn this_canister_has_enough_cycles(&self, required_cycles: u128) -> Result<u128, String> {
             let amount = *self.canister_cycles_balance.lock().unwrap();
             if amount < required_cycles {
                 return Err(format!(
@@ -2194,7 +2198,7 @@ mod test {
             Ok(amount)
         }
 
-        fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
+        fn message_has_enough_cycles(&self, required_cycles: u128) -> Result<u128, String> {
             let amount = *self.cycles_found_in_request.lock().unwrap();
             if amount < required_cycles {
                 return Err(format!(
@@ -2204,7 +2208,7 @@ mod test {
             Ok(amount)
         }
 
-        fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
+        fn accept_message_cycles(&self, cycles: Option<u128>) -> Result<u128, String> {
             let cycles = cycles.unwrap_or_else(|| *self.cycles_found_in_request.lock().unwrap());
             self.message_has_enough_cycles(cycles)?;
             self.cycles_accepted.lock().unwrap().push(cycles);
@@ -2217,7 +2221,7 @@ mod test {
         async fn send_cycles_to_canister(
             &self,
             target_canister: CanisterId,
-            cycles: u64,
+            cycles: u128,
         ) -> Result<(), String> {
             self.cycles_sent
                 .lock()
@@ -2457,6 +2461,66 @@ mod test {
 
         let response3 = canister.get_sns_subnet_ids();
         assert_eq!(response3.sns_subnet_ids, vec![principal2]);
+    }
+
+    // Appends `count` placeholder deployments so that `deployed_sns_list.len()`
+    // reflects the number of SNSs already deployed.
+    fn push_dummy_deployments(
+        canister: &mut SnsWasmCanister<TestCanisterStableMemory>,
+        count: u64,
+    ) {
+        for i in 0..count {
+            let base = 1_000 + i * 10;
+            canister.deployed_sns_list.push(DeployedSns {
+                root_canister_id: Some(CanisterId::from_u64(base).into()),
+                governance_canister_id: Some(CanisterId::from_u64(base + 1).into()),
+                ledger_canister_id: Some(CanisterId::from_u64(base + 2).into()),
+                swap_canister_id: Some(CanisterId::from_u64(base + 3).into()),
+                index_canister_id: Some(CanisterId::from_u64(base + 4).into()),
+            });
+        }
+    }
+
+    #[test]
+    fn test_get_available_sns_subnet_errors_when_no_subnets_configured() {
+        // Step 1: Prepare the world.
+        let canister = new_wasm_canister();
+
+        // Step 2: Run the code under test.
+        let result = canister.get_available_sns_subnet();
+
+        // Step 3: Verify result.
+        assert!(result.is_err(), "expected an error, got {result:?}");
+    }
+
+    #[test]
+    fn test_get_available_sns_subnet_returns_only_subnet() {
+        // Step 1: Prepare the world.
+        let mut canister = new_wasm_canister();
+        let only_subnet = subnet_test_id(1);
+        canister.set_sns_subnets(vec![only_subnet]);
+
+        // Step 2 & 3: With a single subnet, every deployment count maps to it.
+        for _ in 0..5 {
+            push_dummy_deployments(&mut canister, 1);
+            assert_eq!(canister.get_available_sns_subnet(), Ok(only_subnet));
+        }
+    }
+
+    #[test]
+    fn test_get_available_sns_subnet_rotates_across_subnets() {
+        // Step 1: Prepare the world.
+        let mut canister = new_wasm_canister();
+        let subnets = vec![subnet_test_id(1), subnet_test_id(2), subnet_test_id(3)];
+        canister.set_sns_subnets(subnets.clone());
+
+        // Step 2 & 3: Selection rotates by the number of deployments so far.
+        // deployed_sns_list lengths 0,1,2,3,4 -> subnets 0,1,2,0,1.
+        let expected_order = vec![subnets[0], subnets[1], subnets[2], subnets[0], subnets[1]];
+        for expected_subnet in expected_order {
+            assert_eq!(canister.get_available_sns_subnet(), Ok(expected_subnet));
+            push_dummy_deployments(&mut canister, 1);
+        }
     }
 
     #[test]
@@ -4327,8 +4391,8 @@ mod test {
         nns_root_canister_client: &SpyNnsRootCanisterClient,
         available_subnet: Option<SubnetId>,
         wasm_available: bool,
-        expected_accepted_cycles: Vec<u64>,
-        expected_sent_cycles: Vec<(CanisterId, u64)>,
+        expected_accepted_cycles: Vec<u128>,
+        expected_sent_cycles: Vec<(CanisterId, u128)>,
         expected_canisters_destroyed: Vec<CanisterId>,
         expected_set_controllers_calls: Vec<(CanisterId, Vec<PrincipalId>)>,
         expected_change_canister_controllers_calls: Vec<(PrincipalId, Vec<PrincipalId>)>,
@@ -4369,8 +4433,8 @@ mod test {
         available_subnet: Option<SubnetId>,
         wasm_available: bool,
         caller: PrincipalId,
-        expected_accepted_cycles: Vec<u64>,
-        expected_sent_cycles: Vec<(CanisterId, u64)>,
+        expected_accepted_cycles: Vec<u128>,
+        expected_sent_cycles: Vec<(CanisterId, u128)>,
         expected_canisters_destroyed: Vec<CanisterId>,
         expected_set_controllers_calls: Vec<(CanisterId, Vec<PrincipalId>)>,
         expected_change_canister_controllers_calls: Vec<(PrincipalId, Vec<PrincipalId>)>,
@@ -4971,8 +5035,8 @@ mod test {
                 canisters: None,
                 error: Some(SnsWasmError {
                     message: "Could not get the controllers of all dapp_canisters for the following reason(s):\n  \
-                    -Could not get the controllers of CanisterId(heic2-yaaaa-aaaaa-aapuq-cai) due to an error from the replica. None:\"Something went wrong\"\n  \
-                    -Could not get the controllers of CanisterId(hnljg-oiaaa-aaaaa-aapva-cai) due to an error from the replica. None:\"Something else went wrong\""
+                    -Could not get the controllers of canister heic2-yaaaa-aaaaa-aapuq-cai due to an error from the replica. None:\"Something went wrong\"\n  \
+                    -Could not get the controllers of canister hnljg-oiaaa-aaaaa-aapva-cai due to an error from the replica. None:\"Something else went wrong\""
                     .to_string(),
                 }),
                 dapp_canisters_transfer_result: Some(DappCanistersTransferResult {

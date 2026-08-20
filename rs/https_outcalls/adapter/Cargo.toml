@@ -36,15 +36,16 @@ tower = { workspace = true }
 [dev-dependencies]
 async-stream = { workspace = true }
 bytes = { workspace = true }
-once_cell = "1.13.1"
+ic-test-utilities-net = { path = "../../test_utilities/net" }
+once_cell = { workspace = true }
 rustls = { workspace = true }
-rustls-pemfile = "2.1.2"
+rustls-pemfile = { workspace = true }
 rstest = { workspace = true }
 socks5-impl = { version = "0.6", features = ["tokio"] }
 tempfile = { workspace = true }
 tokio-rustls = { workspace = true }
 uuid = { workspace = true }
-warp = { version = "0.3.7", features = ["tls"] }
+warp = { workspace = true }
 
 [features]
 http = []

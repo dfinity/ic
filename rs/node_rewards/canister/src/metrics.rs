@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
 use ic_cdk::call::CallResult;
-use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+use ic_cdk_management_canister::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
 use rewards_calculation::types::{NodeMetricsDailyRaw, UnixTsNanos};
@@ -13,6 +13,12 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
 pub type RetryCount = u64;
+
+/// How many failing subnets to name in the aggregated error log line. Failures
+/// are correlated (an unreachable subnet fails on every retry, and exhausted
+/// call capacity fails all of them at once), so naming a handful is enough to
+/// diagnose without emitting one line per subnet per retry forever.
+const MAX_LOGGED_FAILURES: usize = 5;
 
 #[async_trait]
 pub trait ManagementCanisterClient {
@@ -33,7 +39,7 @@ impl ManagementCanisterClient for ICCanisterClient {
         &self,
         args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
-        ic_cdk::management_canister::node_metrics_history(args).await
+        ic_cdk_management_canister::node_metrics_history(args).await
     }
 }
 
@@ -103,7 +109,7 @@ where
         &self,
         subnets: Vec<SubnetId>,
     ) -> Result<NaiveDate, String> {
-        let mut success = true;
+        let mut failures: Vec<(SubnetId, String)> = Vec::new();
         let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
         let subnets_metrics = self.fetch_subnets_metrics(&last_timestamp_per_subnet).await;
         for (subnet_id, call_result) in subnets_metrics {
@@ -147,17 +153,31 @@ where
                     }
                 }
                 Err(e) => {
-                    success = false;
-                    ic_cdk::println!(
-                        "Error fetching metrics for subnet {}: ERROR: {}",
-                        subnet_id,
-                        e
-                    );
+                    failures.push((subnet_id, e.to_string()));
                 }
             }
         }
 
-        if success {
+        // One line per sync rather than one per failing subnet: a subnet that
+        // is unreachable fails on every retry, and when the canister runs out
+        // of call capacity every subnet fails at once, so per-subnet logging
+        // turns a single stuck subnet into millions of NNS log lines an hour.
+        if !failures.is_empty() {
+            let sample = failures
+                .iter()
+                .take(MAX_LOGGED_FAILURES)
+                .map(|(subnet_id, e)| format!("{subnet_id}: {e}"))
+                .join(", ");
+            ic_cdk::println!(
+                "Error fetching metrics for {} of {} subnets (showing up to {}): {}",
+                failures.len(),
+                last_timestamp_per_subnet.len(),
+                MAX_LOGGED_FAILURES,
+                sample,
+            );
+        }
+
+        if failures.is_empty() {
             let max_ts_update = self
                 .last_timestamp_per_subnet(subnets)
                 .into_values()
@@ -260,7 +280,7 @@ pub mod management_canister_client_test {
     use chrono::DateTime;
     use ic_base_types::SubnetId;
     use ic_cdk::call::CallResult;
-    use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+    use ic_cdk_management_canister::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
     use ic_nervous_system_canisters::registry::RegistryCanister;
     use ic_registry_canister_client::StableCanisterRegistryClient;
     use std::sync::Arc;
@@ -285,7 +305,7 @@ pub mod management_canister_client_test {
             use crate::canister::current_time;
             use crate::registry_querier::RegistryQuerier;
             use ic_base_types::PrincipalId;
-            use ic_management_canister_types::NodeMetrics;
+            use ic_cdk_management_canister::NodeMetrics;
             use ic_protobuf::registry::subnet::v1::SubnetRecord;
             use ic_registry_canister_client::CanisterRegistryClient;
             use ic_registry_keys::make_subnet_record_key;

@@ -36,6 +36,7 @@ use serde_with::{DisplayFromStr, serde_as};
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::num::NonZeroU8;
 use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
@@ -341,6 +342,28 @@ pub struct FixedIpv6Config {
     // Fixed ipv6 address includes subnet mask /64
     pub address: String,
     pub gateway: Ipv6Addr,
+}
+
+#[derive(Copy, Clone)]
+pub enum VmSlot {
+    Plain,
+    Multi(NonZeroU8),
+}
+
+impl VmSlot {
+    pub fn new(slot: u8) -> Self {
+        match slot {
+            0 => VmSlot::Plain,
+            v => VmSlot::Multi(NonZeroU8::new(v).unwrap()),
+        }
+    }
+
+    pub fn to_suffix(&self) -> String {
+        match self {
+            VmSlot::Plain => String::new(),
+            VmSlot::Multi(v) => format!("{}", v),
+        }
+    }
 }
 
 #[cfg(test)]

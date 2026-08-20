@@ -2,16 +2,19 @@ use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use MessageBuilder::*;
 use assert_matches::assert_matches;
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumBytes, NumSeconds};
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
-use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::testing::heap_delta_capacity_for_message_memory;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, Stream, SubnetTopology,
-    metadata_state::{StreamMap, testing::NetworkTopologyTesting},
+    metadata_state::{
+        StreamMap,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    },
     replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
     testing::{OutputRequestBuilder, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
@@ -38,6 +41,7 @@ use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 const LOCAL_SUBNET: SubnetId = SUBNET_12; // g24bn-xymaa-aaaaa-aaaap-yai
 const REMOTE_SUBNET: SubnetId = SUBNET_23; // 5h3gz-qaxaa-aaaaa-aaaap-yai
@@ -373,78 +377,32 @@ fn induct_loopback_stream_success() {
 /// `StreamHandlerImpl::induct_loopback_stream()`.
 #[test]
 fn induct_loopback_stream_with_subnet_message_memory_limit() {
-    // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        guaranteed_response_message_memory_capacity: NumBytes::new(
-            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
-        ),
-        ..Default::default()
-    });
-}
-
-/// Tests that wasm custom sections memory capacity does not affect
-/// `StreamHandlerImpl::induct_loopback_stream()`.
-#[test]
-fn induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
-    // A stream handler with a subnet message memory limit that only allows up to 3 reservations
-    // and no allowance for wasm custom sections.
-    induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        guaranteed_response_message_memory_capacity: NumBytes::new(
-            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
-        ),
-        subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
-        ..Default::default()
-    });
-}
-
-/// Tests that subnet memory limit is ignored by
-/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
-#[test]
-fn system_subnet_induct_loopback_stream_ignores_subnet_memory_limit() {
-    // A stream handler with a subnet memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
-        ..Default::default()
-    });
+    // A subnet message memory limit that only allows up to 3 reservations.
+    induct_loopback_stream_with_memory_limit_impl(Some(heap_delta_capacity_for_message_memory(
+        NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+    )));
 }
 
 /// Tests that subnet message memory limit is ignored by
 /// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
 #[test]
 fn system_subnet_induct_loopback_stream_ignores_subnet_message_memory_limit() {
-    // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        guaranteed_response_message_memory_capacity: NumBytes::new(
-            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
-        ),
-        ..Default::default()
-    });
-}
-
-/// Tests that subnet wasm custom sections memory limit is ignored by
-/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
-#[test]
-fn system_subnet_induct_loopback_stream_ignores_subnet_wasm_custom_sections_memory_limit() {
-    // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        guaranteed_response_message_memory_capacity: NumBytes::new(
-            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
-        ),
-        subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
-        ..Default::default()
-    });
+    // A subnet message memory limit that only allows up to 3 reservations.
+    induct_loopback_stream_ignores_memory_limit_impl(Some(heap_delta_capacity_for_message_memory(
+        NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+    )));
 }
 
 /// Common initial state setup for `StreamHandlerImpl::induct_loopback_stream()`
 /// memory limit tests.
 fn with_induct_loopback_stream_setup(
-    config: HypervisorConfig,
+    maximum_state_delta: Option<NumBytes>,
     subnet_type: SubnetType,
     certification_version: CertificationVersion,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
 ) {
     with_local_test_setup_and_config(
-        config,
+        maximum_state_delta,
         subnet_type,
         certification_version,
         btreemap![LOCAL_SUBNET => StreamConfig {
@@ -470,9 +428,9 @@ fn with_induct_loopback_stream_setup(
 /// loopback requests and a loopback stream containing said requests. Tries to
 /// induct the loopback stream and expects the first request to be inducted; and
 /// the second request to fail to be inducted due to lack of memory.
-fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
+fn induct_loopback_stream_with_memory_limit_impl(maximum_state_delta: Option<NumBytes>) {
     with_induct_loopback_stream_setup(
-        config,
+        maximum_state_delta,
         SubnetType::Application,
         CURRENT_CERTIFICATION_VERSION,
         |stream_handler, state, metrics| {
@@ -530,9 +488,9 @@ fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
 /// loopback requests and a loopback stream containing said requests. Tries to
 /// induct the loopback stream and expects both requests to be inducted
 /// successfully.
-fn induct_loopback_stream_ignores_memory_limit_impl(config: HypervisorConfig) {
+fn induct_loopback_stream_ignores_memory_limit_impl(maximum_state_delta: Option<NumBytes>) {
     with_induct_loopback_stream_setup(
-        config,
+        maximum_state_delta,
         SubnetType::System,
         CURRENT_CERTIFICATION_VERSION,
         |stream_handler, state, metrics| {
@@ -2626,13 +2584,10 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
 ///    guaranteed response memory for one request.
 fn induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
     with_test_setup_and_config(
-        // A config with only enough subnet message memory for one request + epsilon.
-        HypervisorConfig {
-            guaranteed_response_message_memory_capacity: NumBytes::new(
-                MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
-            ),
-            ..Default::default()
-        },
+        // A subnet message memory limit with only enough for one request + epsilon.
+        Some(heap_delta_capacity_for_message_memory(NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
+        ))),
         subnet_type,
         CURRENT_CERTIFICATION_VERSION,
         // An empty outgoing stream.
@@ -2837,13 +2792,15 @@ fn induct_stream_slices_drops_refund_at_engine_boundary() {
             }],
             |stream_handler, mut state, slices, metrics| {
                 // Mark REMOTE_SUBNET as a CloudEngine.
-                state.metadata.network_topology.subnets_mut().insert(
-                    REMOTE_SUBNET,
-                    SubnetTopology {
-                        subnet_type: SubnetType::CloudEngine,
-                        ..Default::default()
-                    },
-                );
+                state.metadata.modify_network_topology(|network_topology| {
+                    network_topology.subnets_mut().insert(
+                        REMOTE_SUBNET,
+                        SubnetTopology {
+                            subnet_type: SubnetType::CloudEngine,
+                            ..Default::default()
+                        },
+                    );
+                });
 
                 // Expected state: a stream with one accept signal, no induction, cycles lost.
                 let refund = *refund_in_slice(slices.get(&REMOTE_SUBNET), 0);
@@ -3312,13 +3269,15 @@ fn induct_stream_slices_engine_src_guaranteed_response_request_critical_error() 
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Expect a stream with a reject signal (EngineNotAllowed) for the guaranteed-response request.
             let mut expected_state = state.clone();
@@ -3361,13 +3320,15 @@ fn induct_stream_slices_engine_src_best_effort_request_inducted() {
         btreemap![],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Build a best-effort request (deadline != NO_DEADLINE, payment = 0).
             let best_effort_request = RequestBuilder::new()
@@ -3412,13 +3373,15 @@ fn induct_stream_slices_engine_src_best_effort_request_with_cycles_rejected() {
         btreemap![],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Build a best-effort request carrying cycles
             // (deadline != NO_DEADLINE, payment > 0).
@@ -3487,13 +3450,15 @@ fn induct_stream_slices_engine_src_best_effort_response_inducted() {
         }],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Build a best-effort response with no cycles using the callback registered by setup.
             let best_effort_response = ResponseBuilder::new()
@@ -3552,13 +3517,15 @@ fn induct_stream_slices_engine_boundary_drops_forged_response() {
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Expected state: response dropped (no induction), accept signal pushed,
             // cycles attached to the forged response observed as lost.
@@ -3615,13 +3582,15 @@ fn induct_stream_slices_engine_boundary_strips_and_inducts_guaranteed_response()
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // The framework attaches cycles to the response, so the stripping is meaningful.
             assert!(response_in_slice(slices.get(&REMOTE_SUBNET), 0).refund > Cycles::zero());
@@ -3682,13 +3651,15 @@ fn induct_stream_slices_engine_boundary_drops_best_effort_response_with_cycles()
         }],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // A best-effort response carrying cycles, matching the callback registered by setup.
             let payment = Cycles::new(1_000);
@@ -3751,7 +3722,7 @@ fn with_test_setup(
     ),
 ) {
     with_test_setup_and_config(
-        HypervisorConfig::default(),
+        None,
         SubnetType::Application,
         CURRENT_CERTIFICATION_VERSION,
         stream_configs,
@@ -3767,7 +3738,7 @@ fn with_test_setup(
 /// API been used to arrive at it, i.e. responses and (reject) responses generated from these requests
 /// can be successfully inducted into the state. Same for the generated stream slices.
 fn with_test_setup_and_config(
-    hypervisor_config: HypervisorConfig,
+    maximum_state_delta: Option<NumBytes>,
     subnet_type: SubnetType,
     certification_version: CertificationVersion,
     stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
@@ -3783,10 +3754,12 @@ fn with_test_setup_and_config(
         // Generate an empty `ReplicatedState` for `LOCAL_SUBNET`.
         let mut state = ReplicatedState::new(LOCAL_SUBNET, subnet_type);
         state.metadata.certification_version = certification_version;
+        let mut own_subnet_info = (*state.metadata.own_subnet_info).clone();
+        own_subnet_info.resource_limits.maximum_state_delta = maximum_state_delta;
+        state.metadata.own_subnet_info = Arc::new(own_subnet_info);
         let metrics_registry = MetricsRegistry::new();
         let stream_handler = StreamHandlerImpl::new(
             LOCAL_SUBNET,
-            hypervisor_config,
             &metrics_registry,
             &MessageRoutingMetrics::new(&metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -3819,17 +3792,14 @@ fn with_test_setup_and_config(
             routing_table.lookup_entry(*REMOTE_CANISTER)
         );
         assert!(routing_table.lookup_entry(*UNKNOWN_CANISTER).is_none());
-        state
-            .metadata
-            .network_topology
-            .set_routing_table(routing_table);
-        for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
-            state
-                .metadata
-                .network_topology
-                .subnets_mut()
-                .insert(subnet, Default::default());
-        }
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+            for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
+                network_topology
+                    .subnets_mut()
+                    .insert(subnet, Default::default());
+            }
+        });
 
         // Generate testing canister using `LOCAL_CANISTER` as the canister ID.
         let mut canister_state = CanisterStateBuilder::new()
@@ -3969,14 +3939,14 @@ fn with_local_test_setup(
 /// Generates a local test setup, i.e. without incoming stream slices.
 /// For details see `with_test_setup_and_config()`.
 fn with_local_test_setup_and_config(
-    hypervisor_config: HypervisorConfig,
+    maximum_state_delta: Option<NumBytes>,
     subnet_type: SubnetType,
     certification_version: CertificationVersion,
     stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
 ) {
     with_test_setup_and_config(
-        hypervisor_config,
+        maximum_state_delta,
         subnet_type,
         certification_version,
         stream_configs,
@@ -4377,7 +4347,9 @@ fn prepare_canister_migration(
     canister_migrations
         .insert_ranges(canister_id_ranges, from_subnet, to_subnet)
         .unwrap();
-    state.metadata.network_topology.canister_migrations = Arc::new(canister_migrations);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.canister_migrations = Arc::new(canister_migrations);
+    });
 
     state
 }
@@ -4404,10 +4376,9 @@ fn complete_canister_migration(
     routing_table
         .assign_ranges(canister_id_ranges, destination)
         .unwrap();
-    state
-        .metadata
-        .network_topology
-        .set_routing_table(routing_table);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table(routing_table);
+    });
 
     state
 }

@@ -6,6 +6,7 @@ use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
     CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
 };
+use prometheus::Registry;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
@@ -141,7 +142,7 @@ pub fn activate_crypt_device(
     passphrase: &[u8],
     flags: CryptActivate,
     verify_luks_params: bool,
-    metrics_file: Option<&Path>,
+    metrics_registry: Option<&Registry>,
 ) -> Result<(CryptDevice, u32)> {
     let mut crypt_device = open_luks2_device(device_path, header_location)?;
 
@@ -153,9 +154,9 @@ pub fn activate_crypt_device(
         .activate_by_passphrase(Some(name), None, passphrase, flags)
         .context("Failed to activate cryptographic device")?;
 
-    if let Some(metrics_file) = metrics_file {
+    if let Some(registry) = metrics_registry {
         let log_result = luks_parameters.and_then(|luks_parameters| {
-            export_luks_parameters(metrics_file, &luks_parameters, device_path, active_keyslot)
+            export_luks_parameters(registry, &luks_parameters, device_path, active_keyslot)
         });
         if let Err(e) = log_result {
             warn!("Failed to export LUKS parameters: {e:#}");
@@ -210,6 +211,10 @@ pub fn format_crypt_device(
             .context("Failed to create detached LUKS header file")?
             .set_len(16 * 1024 * 1024)
             .context("Failed to set size of detached LUKS header file")?;
+        // The replica (running as user ic-replica) needs read access to the detached header so
+        // that it can share it during an upgrade.
+        fs::set_permissions(header_path, fs::Permissions::from_mode(0o644))
+            .context("Failed to set permissions on detached LUKS header file")?;
     }
 
     let mut crypt_device = obtain_crypt_device_handle(device_path, header_location)?;
@@ -267,46 +272,6 @@ pub fn check_encryption_key(
         .activate_handle()
         .activate_by_passphrase(None, None, encryption_key, CryptActivate::empty())
         .context("Failed to activate device")?;
-
-    Ok(())
-}
-
-pub fn backup_luks_header_to_file(device_path: &Path, header_path: &Path) -> Result<()> {
-    let parent_dir = header_path
-        .parent()
-        .context("LUKS header path does not have a parent directory")?;
-    fs::create_dir_all(parent_dir).with_context(|| {
-        format!(
-            "Failed to create parent directory for LUKS header {}",
-            header_path.display()
-        )
-    })?;
-
-    // Export into a temporary sibling path and rename it into place so we only replace an existing
-    // detached header once cryptsetup has produced a complete backup.
-    let temp_dir = tempfile::tempdir_in(parent_dir)
-        .context("Failed to create temporary directory for LUKS header backup")?;
-    let temp_header_path = temp_dir.path().join("header");
-
-    let mut crypt_device = open_luks2_device(device_path, LuksHeaderLocation::Attached)
-        .context("Failed to open LUKS2 device for header backup")?;
-    crypt_device
-        .backup_handle()
-        .header_backup(Some(EncryptionFormat::Luks2), &temp_header_path)
-        .with_context(|| {
-            format!(
-                "Failed to back up LUKS header to {}",
-                temp_header_path.display()
-            )
-        })?;
-
-    // We allow every user to read the header. The replica (running as user ic-replica) needs
-    // access to this file so that it can share it during an upgrade.
-    fs::set_permissions(&temp_header_path, fs::Permissions::from_mode(0o644))
-        .context("Failed to set permissions on temporary detached LUKS header file")?;
-
-    fs::rename(&temp_header_path, header_path)
-        .with_context(|| format!("Failed to persist LUKS header to {}", header_path.display()))?;
 
     Ok(())
 }

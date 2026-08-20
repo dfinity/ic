@@ -1,0 +1,130 @@
+# rules_rust drops the cc_toolchain's static C++ runtime
+# (`static_runtime_lib`: hermetic-llvm's libc++/libc++abi/libunwind, the
+# sole provider of the `_Unwind_*` symbols rust std needs since the
+# toolchain links with `--unwindlib=none`) in two places this patch fixes:
+# `rust_doc_test` links (every doc test fails to link with undefined
+# `_Unwind_*`) and dylib/cdylib links (rules_rust links the — here empty —
+# dynamic runtime instead, and since shared-library links don't fail on
+# undefined symbols the breakage only surfaces at runtime: dlopen of e.g.
+# libnss_icos.so fails, leaving GuestOS unable to resolve "hostos" and
+# nft unable to load the orchestrator's firewall rules).
+diff -ruN a/rust/private/rustc.bzl b/rust/private/rustc.bzl
+--- a/rust/private/rustc.bzl	2026-08-02 08:25:10.631982814 +0000
++++ b/rust/private/rustc.bzl	2026-08-02 08:31:11.230009543 +0000
+@@ -774,9 +774,21 @@
+     if not cc_toolchain:
+         runtime_libs = depset()
+     elif crate_info.type in ["dylib", "cdylib"]:
+-        # For shared libraries we want to link C++ runtime library dynamically
+-        # (for example libstdc++.so or libc++.so).
+-        runtime_libs = cc_toolchain.dynamic_runtime_lib(feature_configuration = feature_configuration)
++        # For shared libraries we prefer the static C++ runtime when the
++        # toolchain provides one (`static_runtime_lib`), falling back to the
++        # dynamic runtime (e.g. the system libstdc++.so with local
++        # toolchains, which provide no static runtime). Hermetic toolchains
++        # like hermetic-llvm only usably ship a static runtime, and its
++        # libunwind is the sole provider of the `_Unwind_*` symbols rust std
++        # needs since the toolchain links with `--unwindlib=none`; their
++        # dynamic runtime consists of versioned library files (libunwind.so.1)
++        # that a `-l` flag never matches, so linking it silently produces a
++        # shared library with undefined `_Unwind_*` symbols that only fails
++        # at dlopen time (shared-library links don't fail on undefined
++        # symbols).
++        runtime_libs = cc_toolchain.static_runtime_lib(feature_configuration = feature_configuration)
++        if not runtime_libs.to_list():
++            runtime_libs = cc_toolchain.dynamic_runtime_lib(feature_configuration = feature_configuration)
+     else:
+         runtime_libs = cc_toolchain.static_runtime_lib(feature_configuration = feature_configuration)
+
+@@ -2874,18 +2886,25 @@
+
+     if cc_toolchain:
+         if crate_type in ["dylib", "cdylib"]:
+-            # For shared libraries we want to link C++ runtime library dynamically
+-            # (for example libstdc++.so or libc++.so).
++            # For shared libraries we prefer the static C++ runtime when the
++            # toolchain provides one, falling back to the dynamic runtime
++            # (e.g. the system libstdc++.so with local toolchains). See the
++            # matching branch in `collect_inputs` for the full rationale.
++            runtime_lib = cc_toolchain.static_runtime_lib(feature_configuration = feature_configuration)
++            lib_flag_format = "-lstatic=%s"
++            if not runtime_lib.to_list():
++                runtime_lib = cc_toolchain.dynamic_runtime_lib(feature_configuration = feature_configuration)
++                lib_flag_format = "-ldylib=%s"
+             args.add_all(
+-                cc_toolchain.dynamic_runtime_lib(feature_configuration = feature_configuration),
++                runtime_lib,
+                 map_each = _get_dirname,
+                 format_each = "-Lnative=%s",
+             )
+             if include_link_flags:
+                 args.add_all(
+-                    cc_toolchain.dynamic_runtime_lib(feature_configuration = feature_configuration),
++                    runtime_lib,
+                     map_each = get_lib_name,
+-                    format_each = "-ldylib=%s",
++                    format_each = lib_flag_format,
+                 )
+         else:
+             # For all other crate types we want to link C++ runtime library statically
+diff -ruN a/rust/private/rustdoc.bzl b/rust/private/rustdoc.bzl
+--- a/rust/private/rustdoc.bzl	2026-08-02 07:55:05.399576081 +0000
++++ b/rust/private/rustdoc.bzl	2026-08-02 07:55:32.292520039 +0000
+@@ -170,6 +170,26 @@
+                 else:
+                     rustdoc_flags.append("-Clink-arg=%s" % arg)
+
++        # `include_link_flags = False` below also drops the `-lstatic` flags for
++        # the C++ runtime libraries the cc_toolchain links via
++        # `static_runtime_lib` (e.g. libc++, libc++abi and libunwind for
++        # toolchains that pass `--unwindlib=none`, such as hermetic-llvm).
++        # Without them doc test binaries fail to link with undefined
++        # `_Unwind_*` symbols, so add the equivalent `-Clink-arg` flags here.
++        # The matching `-Lnative` search paths are always emitted by
++        # `construct_arguments` below.
++        if cc_toolchain:
++            for lib in cc_toolchain.static_runtime_lib(
++                feature_configuration = feature_configuration,
++            ).to_list():
++                arg = get_lib_name(lib)
++                if not for_windows:
++                    arg = "-l" + arg
++                if type(rustdoc_flags) == "Args":
++                    rustdoc_flags.add("-Clink-arg=%s" % arg)
++                else:
++                    rustdoc_flags.append("-Clink-arg=%s" % arg)
++
+     args, env = construct_arguments(
+         ctx = ctx,
+         attr = ctx.attr,
+diff -ruN a/rust/private/rustdoc_test.bzl b/rust/private/rustdoc_test.bzl
+--- a/rust/private/rustdoc_test.bzl	2026-08-02 07:55:05.404576070 +0000
++++ b/rust/private/rustdoc_test.bzl	2026-08-02 07:55:32.292520039 +0000
+@@ -18,7 +18,7 @@
+ load("//rust/private:common.bzl", "rust_common")
+ load("//rust/private:providers.bzl", "CrateInfo")
+ load("//rust/private:rustdoc.bzl", "rustdoc_compile_action")
+-load("//rust/private:utils.bzl", "dedent", "find_toolchain", "transform_deps")
++load("//rust/private:utils.bzl", "dedent", "find_cc_toolchain", "find_toolchain", "transform_deps")
+
+ def _collect_library_roots(roots, deps):
+     for dep in deps.to_list():
+@@ -89,6 +89,18 @@
+         if dep_cc_info:
+             _collect_library_roots(roots, dep_cc_info.linking_context.linker_inputs)
+
++    # The `-Lnative` flags for the cc_toolchain's static C++ runtime libraries
++    # (`static_runtime_lib`, e.g. hermetic toolchains' libc++/libunwind) point
++    # into the toolchain's own configuration root, which the dependency roots
++    # collected above don't cover. Strip it too so those search paths resolve
++    # from the runfiles directory at test runtime.
++    cc_toolchain, feature_configuration = find_cc_toolchain(ctx)
++    if cc_toolchain:
++        for lib in cc_toolchain.static_runtime_lib(
++            feature_configuration = feature_configuration,
++        ).to_list():
++            roots.append(lib.root.path)
++
+     writer_args.add_all(roots, format_each = "--strip_substring=%s/", uniquify = True)
+
+     # Indicate that the rustdoc_test args are over.

@@ -33,6 +33,11 @@ message SubnetTopology {
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
   registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
   repeated types.v1.PrincipalId subnet_admins = 8;
+  // Whether the subnet is "cooling down", i.e. quiescing.
+  //
+  // See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+  // semantics.
+  bool cooling_down = 9;
 }
 
 message SubnetsEntry {
@@ -57,6 +62,7 @@ message NetworkTopology {
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
   FullTopology full_topology = 9;
   types.v1.SubnetId default_initial_dkg_subnet_id = 10;
+  repeated ApiBoundaryNodeEntry api_boundary_nodes = 11;
 }
 
 message FullTopology {
@@ -162,6 +168,8 @@ message CanisterHttpRequestContext {
   optional PricingVersion pricing_version = 12;
   optional RefundStatus refund_status = 13;
   uint64 registry_version = 14;
+  uint32 subnet_size = 15;
+  registry.subnet.v1.CanisterCyclesCostSchedule cost_schedule = 16;
   reserved 5;
 }
 
@@ -338,6 +346,12 @@ message NodePublicKeyEntry {
   bytes public_key = 2;
 }
 
+message OwnSubnetInfo {
+  registry.subnet.v1.SubnetFeatures subnet_features = 1;
+  registry.subnet.v1.ResourceLimits resource_limits = 2;
+  repeated NodePublicKeyEntry node_public_keys = 3;
+}
+
 message ApiBoundaryNodeEntry {
   types.v1.NodeId node_id = 1;
   string domain = 2;
@@ -377,6 +391,8 @@ message SystemMetadata {
   NetworkTopology network_topology = 6;
   types.v1.SubnetId own_subnet_id = 7;
   SubnetCallContextManager subnet_call_context_manager = 8;
+  OwnSubnetInfo own_subnet_info = 26;
+
   types.v1.SubnetId subnet_split_from = 23;
 
   // Canister ID ranges allocated (exclusively) to this subnet, to generate
@@ -399,6 +415,10 @@ message SystemMetadata {
 
   uint64 heap_delta_estimate = 11;
 
+  // `own_subnet_features`, `node_public_keys` and `own_resource_limits` moved
+  // into `own_subnet_info` (field 26); these are kept as legacy mirrors (still
+  // written and read back) so that checkpoints remain compatible in both
+  // directions across the transition.
   registry.subnet.v1.SubnetFeatures own_subnet_features = 13;
 
   SubnetMetrics subnet_metrics = 15;
@@ -432,4 +452,11 @@ message SplitFrom {
   // If present, the subnet is mid-way through a split. Identifies the original
   // subnet that this was split from.
   types.v1.SubnetId subnet_id = 1;
+}
+
+message SubnetMerged {
+  // Whether the subnet is the result of a subnet merge. Because `false` is
+  // encoded as an empty message, the enclosing file is not written at all in
+  // that case.
+  bool merged = 1;
 }

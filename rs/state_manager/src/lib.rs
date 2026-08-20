@@ -122,6 +122,13 @@ pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
 const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
     "state_manager_replicated_state_altered_after_checkpoint";
 
+/// Critical error tracking canister directories unexpectedly removed from tip by
+/// `TipRequest::FilterTipCanisters`, which is only meant to be a safety net: every
+/// canister directory removal should be covered by an explicit
+/// `UnflushedCheckpointOp::DeleteCanister`.
+pub(crate) const CRITICAL_ERROR_TIP_CANISTERS_FILTERED: &str =
+    "state_manager_tip_canisters_filtered";
+
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
@@ -193,10 +200,13 @@ pub struct StateManagerMetrics {
     merge_metrics: MergeMetrics,
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
+    hash_tree_size: Histogram,
+    hash_tree_reused_stubs: Histogram,
+    hash_tree_parallel_built_children: Histogram,
     fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
     skip_optimization_missing_cert_count: IntCounter,
-    skipped_state_observations: IntCounter,
+    state_observation_blocked_duration: Histogram,
 }
 
 #[derive(Clone)]
@@ -233,6 +243,7 @@ pub struct CheckpointMetrics {
     load_canister_step_duration: HistogramVec,
     load_checkpoint_soft_invariant_broken: IntCounter,
     replicated_state_altered_after_checkpoint: IntCounter,
+    tip_canisters_filtered: IntCounter,
     tip_handler_request_duration: HistogramVec,
     num_page_maps_by_load_status: IntGaugeVec,
     num_loaded_wasm_files_by_source: IntGaugeVec,
@@ -270,6 +281,9 @@ impl CheckpointMetrics {
         let replicated_state_altered_after_checkpoint = metrics_registry
             .error_counter(CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT);
 
+        let tip_canisters_filtered =
+            metrics_registry.error_counter(CRITICAL_ERROR_TIP_CANISTERS_FILTERED);
+
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
             "Duration to execute requests to Tip handling thread in seconds.",
@@ -295,6 +309,7 @@ impl CheckpointMetrics {
             load_canister_step_duration,
             load_checkpoint_soft_invariant_broken,
             replicated_state_altered_after_checkpoint,
+            tip_canisters_filtered,
             tip_handler_request_duration,
             num_page_maps_by_load_status,
             num_loaded_wasm_files_by_source,
@@ -489,6 +504,27 @@ impl StateManagerMetrics {
             "Largest index in the latest hash tree.",
         );
 
+        let hash_tree_size = metrics_registry.histogram(
+            "state_manager_hash_tree_size",
+            "Number of digests in the hash tree.",
+            // 1, 2, 5, …, 1M, 2M, 5M
+            decimal_buckets(0, 6),
+        );
+
+        let hash_tree_reused_stubs = metrics_registry.histogram(
+            "state_manager_hash_tree_reused_stubs",
+            "Number of digests (stubs) reused from the previous hash tree.",
+            // 1, 2, 5, …, 1M, 2M, 5M
+            decimal_buckets(0, 6),
+        );
+
+        let hash_tree_parallel_built_children = metrics_registry.histogram(
+            "state_manager_hash_tree_parallel_built_children",
+            "Number of children built in parallel during the construction of the hash tree.",
+            // 1, 2, 5, …, 1M, 2M, 5M
+            decimal_buckets(0, 6),
+        );
+
         let fast_forward_height = metrics_registry.int_gauge(
             "state_manager_fast_forward_height",
             "Height below which states do not need to be cloned and hashed.",
@@ -504,9 +540,10 @@ impl StateManagerMetrics {
             "How often we could have skipped state cloning but did not because no certification was available.",
         );
 
-        let skipped_state_observations = metrics_registry.int_counter(
-            "state_manager_skipped_state_observations",
-            "Number of `ReplicatedStateMetrics::observe` invocations skipped because the background metrics thread was still busy.",
+        let metrics_observation_blocked_duration = metrics_registry.histogram(
+            "state_manager_observe_metrics_blocked_duration_seconds",
+            "Duration spent blocked on the critical path handing off a `ReplicatedStateMetrics::observe` invocation to the background metrics thread, in seconds. Zero when enqueued immediately.",
+            decimal_buckets_with_zero(-3, 0),
         );
 
         Self {
@@ -535,10 +572,13 @@ impl StateManagerMetrics {
             merge_metrics: MergeMetrics::new(metrics_registry),
             latest_hash_tree_size,
             latest_hash_tree_max_index,
+            hash_tree_size,
+            hash_tree_reused_stubs,
+            hash_tree_parallel_built_children,
             fast_forward_height,
             no_state_clone_count,
             skip_optimization_missing_cert_count,
-            skipped_state_observations,
+            state_observation_blocked_duration: metrics_observation_blocked_duration,
         }
     }
 
@@ -972,12 +1012,17 @@ pub struct StateManagerImpl {
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     deallocator_thread: DeallocatorThread,
-    // Cached latest state height.  We cache it separately because it's
-    // requested quite often and this causes high contention on the lock.
+    /// Cached latest state height.  We cache it separately because it's
+    /// requested quite often and this causes high contention on the lock.
     latest_state_height: Arc<AtomicU64>,
     latest_certified_height: Arc<AtomicU64>,
     fast_forward_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
+    /// Queue of checkpoint work, processed sequentially by the tip thread.
+    ///
+    /// `ComputeManifest` requests (only) are forwarded by the tip thread to a
+    /// dedicated manifest thread, to be processed concurrently with validation. The
+    /// tip thread then publishes the result via a paired `WaitForManifest` request.
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
     hash_channel: Sender<HashRequest>,
@@ -1320,12 +1365,13 @@ fn persist_metadata_or_die(
 }
 
 struct CreateCheckpointResult {
-    // ReplicatedState switched to the new checkpoint.
+    /// ReplicatedState switched to the new checkpoint.
     state: Arc<ReplicatedState>,
     state_metadata: StateMetadata,
-    // TipRequest to compute manifest.
-    compute_manifest_request: TipRequest,
-    // Other TipRequests to perform after the compute manifest.
+    /// TipRequests to enqueue after `ValidateReplicatedStateAndFinalize`: the
+    /// paired `WaitForManifest` (iff a manifest is not already available, e.g. from
+    /// state sync), which publishes the manifest once the checkpoint is verified;
+    /// followed by `ResetTipAndMerge`.
     tip_requests: Vec<TipRequest>,
 }
 
@@ -1370,7 +1416,11 @@ impl StateManagerImpl {
             invariants: replicated_state_invariants.map(Arc::new),
             worker_thread: WorkerThread::new(
                 "StateMetrics",
-                metrics.skipped_state_observations.clone(),
+                // One slot of slack, so that we need not block if the worker thread has not
+                // been scheduled since the previous round. May hold on to a `ReplicatedState`
+                // (which the State Manager likely also holds, as the latest state).
+                1,
+                metrics.state_observation_blocked_duration.clone(),
             ),
         };
 
@@ -1654,14 +1704,28 @@ impl StateManagerImpl {
                     _ => None,
                 });
 
+            // Same split as the steady-state path: compute on the manifest thread, publish
+            // via `WaitForManifest` on the tip thread. Here the recovered checkpoint is
+            // already verified, so the two are enqueued back-to-back (no concurrent
+            // validation).
+            let height = checkpoint_layout.height();
+            #[allow(clippy::disallowed_methods)]
+            let (manifest_sender, manifest_receiver) = crossbeam_channel::unbounded();
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
                     base_manifest_info,
+                    manifest_sender,
+                })
+                .expect("failed to send ComputeManifest");
+            tip_channel
+                .send(TipRequest::WaitForManifest {
+                    height,
                     states: states.clone(),
                     persist_metadata_guard: persist_metadata_guard.clone(),
+                    manifest_receiver,
                 })
-                .expect("failed to send ComputeManifestRequest");
+                .expect("failed to send WaitForManifest");
         }
 
         report_last_diverged_state(&log, &metrics, &state_layout);
@@ -1913,15 +1977,23 @@ impl StateManagerImpl {
             })
     }
 
+    /// Computes the certification metadata (hash tree, root hash, height
+    /// witness) for `state` at `height`.
+    ///
+    /// If a `baseline` hash tree (typically the immediately preceding height's)
+    /// is provided, the stubbed subtrees that are unchanged relative to the
+    /// baseline (i.e. backed by the same `Arc`) are reused instead of being
+    /// recomputed.
     fn compute_certification_metadata(
         state: &ReplicatedState,
         height: Height,
+        baseline: Option<&HashTree>,
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
     ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree)?;
+        let hash_tree = hash_lazy_tree(&lazy_tree, baseline)?;
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
@@ -1961,8 +2033,9 @@ impl StateManagerImpl {
 
         for (checkpoint_layout, state) in states {
             let height = checkpoint_layout.height();
-            let certification = Self::compute_certification_metadata(&state, height, metrics, log)
-                .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
+            let certification =
+                Self::compute_certification_metadata(&state, height, None, metrics, log)
+                    .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
             info!(
                 log,
                 "Certification hash for height {} at startup: {:?}",
@@ -2052,7 +2125,7 @@ impl StateManagerImpl {
         states: &mut RwLockWriteGuard<'_, SharedState>,
     ) {
         let lazy_tree = replicated_state_as_lazy_tree(&state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree)
+        let hash_tree = hash_lazy_tree(&lazy_tree, None)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
         update_hash_tree_metrics(&hash_tree, &self.metrics);
         let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
@@ -2547,7 +2620,16 @@ impl StateManagerImpl {
         heights.into_iter().collect()
     }
 
-    // Creates a checkpoint and switches state to it.
+    /// Creates a checkpoint and switches state to it.
+    ///
+    /// Issues and awaits the completion of a `TipToCheckpointAndSwitch` request to
+    /// the tip thread, to serialize the Wasms and protos to disk and create an
+    /// unvalidated checkpoint. Then enqueues a `ValidateReplicatedStateAndFinalize`
+    /// request and (if the manifest is not already available, e.g. from state sync)
+    /// a `ComputeManifest` request to the tip thread. Returns the checkpoint layout
+    /// and the list of tip requests to be enqueued after `states_metadata` has been
+    /// populated with the root hash (`WaitForManifest`, if needed, and
+    /// `ResetTipAndMerge`).
     fn create_checkpoint_and_switch(
         &self,
         state: ReplicatedState,
@@ -2608,6 +2690,55 @@ impl StateManagerImpl {
             )
         });
 
+        // One-shot channel carrying the computed manifest from the manifest thread to
+        // the tip thread's `WaitForManifest` handler.
+        #[allow(clippy::disallowed_methods)]
+        let (manifest_sender, manifest_receiver) = crossbeam_channel::unbounded();
+
+        // Enqueue `ComputeManifest` *before* `ValidateReplicatedStateAndFinalize`: the
+        // tip thread forwards it to the dedicated manifest thread only _after_ the
+        // preceding `TipToCheckpointAndSwitch` has finished serializing the protos;
+        // then `ValidateReplicatedStateAndFinalize` runs validation concurrently with
+        // manifest computation; finally, `WaitForManifest` waits for the manifest
+        // computation to complete and publishes the manifest.
+        //
+        // Skip it (and the paired `WaitForManifest`) iff a manifest is already present
+        // (e.g. populated by state sync).
+        let already_has_manifest = self
+            .states
+            .read()
+            .states_metadata
+            .get(&height)
+            .and_then(|m| m.bundled_manifest.as_ref())
+            .is_some();
+        let mut tip_requests = Vec::new();
+        if !already_has_manifest {
+            let base_manifest_info =
+                previous_checkpoint_info.map(|(base_manifest, checkpoint_layout)| {
+                    manifest::BaseManifestInfo {
+                        base_manifest,
+                        base_height: checkpoint_layout.height(),
+                        target_height: height,
+                        base_checkpoint: checkpoint_layout,
+                    }
+                });
+            self.tip_channel
+                .send(TipRequest::ComputeManifest {
+                    checkpoint_layout: cp_layout.clone(),
+                    base_manifest_info,
+                    manifest_sender,
+                })
+                .expect("failed to send ComputeManifest");
+
+            // Publish the computed manifest once the checkpoint is verified.
+            tip_requests.push(TipRequest::WaitForManifest {
+                height,
+                states: self.states.clone(),
+                persist_metadata_guard: self.persist_metadata_guard.clone(),
+                manifest_receiver,
+            });
+        }
+
         self.tip_channel
             .send(TipRequest::ValidateReplicatedStateAndFinalize {
                 checkpoint_layout: cp_layout.clone(),
@@ -2617,23 +2748,6 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
-        let base_manifest_info = {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
-                .with_label_values(&["base_manifest_info"])
-                .start_timer();
-            previous_checkpoint_info.map(|(base_manifest, checkpoint_layout)| {
-                manifest::BaseManifestInfo {
-                    base_manifest,
-                    base_height: checkpoint_layout.height(),
-                    target_height: height,
-                    base_checkpoint: checkpoint_layout,
-                }
-            })
-        };
-
         let result = {
             let _timer = self
                 .metrics
@@ -2641,24 +2755,18 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
-            let tip_requests = vec![TipRequest::ResetTipAndMerge {
+            tip_requests.push(TipRequest::ResetTipAndMerge {
                 checkpoint_layout: cp_layout.clone(),
                 pagemaptypes: PageMapType::list_all(&state),
-            }];
+            });
 
             CreateCheckpointResult {
                 tip_requests,
                 state,
                 state_metadata: StateMetadata {
-                    checkpoint_layout: Some(cp_layout.clone()),
+                    checkpoint_layout: Some(cp_layout),
                     bundled_manifest: None,
                     state_sync_file_group: None,
-                },
-                compute_manifest_request: TipRequest::ComputeManifest {
-                    checkpoint_layout: cp_layout,
-                    base_manifest_info,
-                    states: self.states.clone(),
-                    persist_metadata_guard: self.persist_metadata_guard.clone(),
                 },
             }
         };
@@ -2740,10 +2848,18 @@ fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
 
 /// Helper function to set metrics related to hash trees
 fn update_hash_tree_metrics(hash_tree: &HashTree, metrics: &StateManagerMetrics) {
-    metrics.latest_hash_tree_size.set(hash_tree.size() as i64);
+    let hash_tree_size = hash_tree.size();
+    metrics.latest_hash_tree_size.set(hash_tree_size as i64);
     metrics
         .latest_hash_tree_max_index
         .set(hash_tree.max_index() as i64);
+    metrics.hash_tree_size.observe(hash_tree_size as f64);
+    metrics
+        .hash_tree_reused_stubs
+        .observe(hash_tree.reused_stubs() as f64);
+    metrics
+        .hash_tree_parallel_built_children
+        .observe(hash_tree.parallel_built_children() as f64);
 }
 
 impl StateManager for StateManagerImpl {
@@ -3381,6 +3497,7 @@ impl StateManager for StateManagerImpl {
                 let certification = StateManagerImpl::compute_certification_metadata(
                     initial_state,
                     prev_height,
+                    None,
                     &self.metrics,
                     &self.log,
                 )
@@ -3491,7 +3608,6 @@ impl StateManager for StateManagerImpl {
             .set(self.tip_channel.len() as i64);
 
         let mut state_metadata: Option<StateMetadata> = None;
-        let mut compute_manifest_request: Option<TipRequest> = None;
         let mut follow_up_tip_requests = Vec::new();
 
         let state = match scope {
@@ -3499,11 +3615,9 @@ impl StateManager for StateManagerImpl {
                 let CreateCheckpointResult {
                     state,
                     state_metadata: metadata,
-                    compute_manifest_request: req,
                     tip_requests,
                 } = self.create_checkpoint_and_switch(state, height);
                 state_metadata = Some(metadata);
-                compute_manifest_request = Some(req);
                 follow_up_tip_requests = tip_requests;
 
                 state
@@ -3553,30 +3667,6 @@ impl StateManager for StateManagerImpl {
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
 
         assert_tip_is_none(&states);
-
-        if let Some(compute_manifest_request) = compute_manifest_request {
-            // The hash thread inserted `states_metadata` for this height under the same
-            // lock, and we just awaited it above via `flush_hash_channel`, so an entry
-            // must be present.
-            debug_assert!(states.states_metadata.contains_key(&height));
-            debug_assert!(self.tip_channel.len() <= 2);
-            // Skip the manifest request only if a manifest is already present (e.g.
-            // populated by state sync). Otherwise — including the case where the entry
-            // is unexpectedly missing in release — send the request; the tip thread
-            // handles a missing `states_metadata` entry gracefully.
-            let already_has_manifest = states
-                .states_metadata
-                .get(&height)
-                .and_then(|m| m.bundled_manifest.as_ref())
-                .is_some();
-            if !already_has_manifest {
-                self.tip_channel
-                    .send(compute_manifest_request)
-                    .expect("failed to send ComputeManifestRequest message");
-            }
-        } else {
-            debug_assert!(scope != CertificationScope::Full);
-        }
 
         self.metrics
             .resident_state_count
@@ -3703,9 +3793,23 @@ fn spawn_hash_thread(
                             max_certified_height_tx,
                             state_metadata,
                         } => {
+                            // Reuse the most recent resident hash tree as a baseline: the state being
+                            // hashed derives from it via copy-on-write, so unchanged stubbed subtrees share
+                            // the same underlying `Arc` and can be reused directly.
+                            let baseline = states
+                                .read()
+                                .certifications_metadata
+                                .last_key_value()
+                                .and_then(|(_, md)| {
+                                    md.hash_tree.as_ref().map(|(tree, _)| Arc::clone(tree))
+                                });
                             let mut certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
-                                    &state, height, &metrics, &log,
+                                    &state,
+                                    height,
+                                    baseline.as_deref(),
+                                    &metrics,
+                                    &log,
                                 )
                                 .unwrap_or_else(|err| {
                                     fatal!(log, "Failed to compute hash tree: {:?}", err)
@@ -4406,11 +4510,8 @@ impl PageAllocatorFileDescriptorImpl {
             return self.create_backing_file_portable();
         }
 
-        match nix::sys::memfd::memfd_create(
-            &std::ffi::CString::default(),
-            nix::sys::memfd::MemFdCreateFlag::empty(),
-        ) {
-            Ok(fd) => fd,
+        match nix::sys::memfd::memfd_create(c"", nix::sys::memfd::MFdFlags::empty()) {
+            Ok(fd) => fd.into_raw_fd(),
             Err(err) => {
                 panic!("MmapPageAllocatorCore failed to create the memory backing file {err}")
             }
@@ -4452,9 +4553,9 @@ impl ReplicatedStateMetricsThread {
     /// Enqueues background metric observations and invariant checks for the given
     /// state.
     ///
-    /// No-op if the worker thread is backlogged with earlier enqueued tasks. Since
-    /// neither metrics nor invariant checks are critical to correct functioning of
-    /// the replica, this is preferable to blocking on the critical path.
+    /// Blocks if the worker thread has not yet picked up the previously enqueued
+    /// observation, recording the time spent blocked in
+    /// `state_manager_observe_metrics_blocked_duration_seconds`.
     fn enqueue_observe_and_check(
         &self,
         state: Arc<ReplicatedState>,

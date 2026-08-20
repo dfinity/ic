@@ -8,8 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
+
+### Changed
+- No hard TTL is set on PocketIC servers started implicitly by the library (e.g. by `PocketIc::new` or `PocketIcBuilder::build`); previously a default of 10 minutes was used.
+  The hard TTL is an absolute deadline measured from the server's launch which is not extended by activity, so a test suite whose total runtime exceeded it had its server terminated while still serving requests, failing in-flight calls with `Connection reset by peer`.
+  Orphaned servers remain bounded by the (activity-based) soft TTL.
+  Callers who want a hard TTL can still set one explicitly via `StartServerParams::hard_ttl` and pass the resulting server URL to `PocketIcBuilder::with_server_url`.
+
+
+
+## 15.0.0 - 2026-06-26
+
+### Added
 - Added the `PATCH` variant to the `CanisterHttpMethod` enum (canister HTTPS outcalls). Note: `PATCH` outcalls are currently rejected by the execution layer until support has rolled out to all replicas.
 - The function `PocketIc::delete_subnet` to delete a subnet. Only non-named subnets (application, cloud engine, system, or verified application) can be deleted.
+
+
 
 ## 14.0.0 - 2026-05-26
 

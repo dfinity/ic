@@ -836,7 +836,7 @@ fn idkg_retain_active_dealing_encryption_public_keys<P: PublicKeyStore>(
             PublicKeyRetainError::OldestPublicKeyNotFound => IDkgRetainKeysError::InternalError {
                 internal_error: format!(
                     "Could not find oldest IDKG public key {:?} locally",
-                    &oldest_public_key
+                    oldest_public_key
                 ),
             },
         })
@@ -863,7 +863,7 @@ fn would_idkg_retain_modify_public_key_store<P: PublicKeyStore>(
                 IDkgRetainKeysError::InternalError {
                     internal_error: format!(
                         "Could not find oldest IDKG public key {:?} locally",
-                        &oldest_public_key
+                        oldest_public_key
                     ),
                 }
             }

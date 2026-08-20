@@ -163,6 +163,10 @@ message ExecutionStateBits {
   bytes binary_hash = 6;
   optional NextScheduledMethod next_scheduled_method = 7;
   bool is_wasm64 = 8;
+  // The round time at which this code was installed/upgraded or restored from a
+  // snapshot, in nanoseconds since the Unix epoch. Absent for execution states
+  // persisted before this field was introduced.
+  optional uint64 last_install_timestamp_nanos = 9;
 }
 
 message StopCanisterContext {
@@ -397,6 +401,18 @@ message SnapshotVisibility {
   }
 }
 
+message StatusVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId principals = 1;
+}
+
+message StatusVisibility {
+  oneof status_visibility {
+    int32 controllers = 1;
+    int32 public = 2;
+    StatusVisibilityAllowedViewers allowed_viewers = 3;
+  }
+}
+
 message CanisterLogRecord {
   uint64 idx = 1;
   uint64 timestamp_nanos = 2;
@@ -430,9 +446,9 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 69
+// Next ID: 71
 message CanisterStateBits {
-  reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 48, 49, 52, 53;
+  reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 43, 44, 47, 48, 49, 52, 53, 66;
 
   uint64 compute_allocation = 4;
   ExecutionStateBits execution_state_bits = 7;
@@ -474,6 +490,9 @@ message CanisterStateBits {
   optional uint64 global_timer_nanos = 33;
   // Canister version.
   uint64 canister_version = 34;
+  // The round time at which the canister was created, in nanoseconds since the
+  // Unix epoch. Absent for canisters created before this field was introduced.
+  optional uint64 canister_creation_timestamp_nanos = 70;
   // Consumed cycles by use case presented as gauges. When prepayments happen
   // the respective amount is added to the consumed amount while when a refund
   // happens the refund amount is subtracted from consumed amount.
@@ -498,13 +517,6 @@ message CanisterStateBits {
   LogVisibilityV2 log_visibility_v2 = 51;
   // The capacity of the canister log in bytes.
   uint64 log_memory_limit = 56;
-  // Log records of the canister.
-  repeated CanisterLogRecord canister_log_records = 43;
-  // The index of the next log record to be created.
-  uint64 next_canister_log_record_idx = 44;
-  // Whether the one-time migration from CanisterLog to LogMemoryStore has
-  // already been performed for this canister.
-  bool log_memory_store_migrated = 66;
   // The persistent high-water mark for log record indexing in LogMemoryStore.
   uint64 log_memory_store_persistent_next_idx = 67;
   // The Wasm memory limit. This is a field in developer-visible canister
@@ -522,4 +534,6 @@ message CanisterStateBits {
   map<string, string> environment_variables = 55;
   // Snapshot visibility for the canister.
   SnapshotVisibility snapshot_visibility = 64;
+  // Status visibility for the canister.
+  StatusVisibility status_visibility = 69;
 }

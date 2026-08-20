@@ -6,7 +6,7 @@ pub use super::event::{Event, EventType};
 use crate::erc20::CkTokenSymbol;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
-use crate::state::transactions::{Reimbursed, ReimbursementIndex};
+use crate::state::transactions::{Reimbursed, ReimbursementIndex, WithdrawalRequest};
 use crate::storage::{record_event, with_event_iter};
 
 /// Updates the state to reflect the given state transition.
@@ -71,15 +71,23 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         }
         EventType::AcceptedEthWithdrawalRequest(request) => {
             state
-                .eth_transactions
+                .withdrawal_transactions
                 .record_withdrawal_request(request.clone());
+        }
+        EventType::AcceptedSweeperFundingRequest(request) => {
+            state.sweeper_funding.record_burn(request.withdrawal_amount);
+            // Named explicitly: the payload converts to `CkEth` on its own, which would make the
+            // funding reimbursable.
+            state
+                .withdrawal_transactions
+                .record_withdrawal_request(WithdrawalRequest::SweeperFunding(request.clone()));
         }
         EventType::CreatedTransaction {
             withdrawal_id,
             transaction,
         } => {
             state
-                .eth_transactions
+                .withdrawal_transactions
                 .record_created_transaction(*withdrawal_id, transaction.clone());
         }
         EventType::SignedTransaction {
@@ -87,7 +95,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             transaction,
         } => {
             state
-                .eth_transactions
+                .withdrawal_transactions
                 .record_signed_transaction(transaction.clone());
         }
         EventType::ReplacedTransaction {
@@ -95,7 +103,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             transaction,
         } => {
             state
-                .eth_transactions
+                .withdrawal_transactions
                 .record_resubmit_transaction(transaction.clone());
         }
         EventType::FinalizedTransaction {
@@ -110,12 +118,14 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             reimbursed_amount: _,
             transaction_hash: _,
         }) => {
-            state.eth_transactions.record_finalized_reimbursement(
-                ReimbursementIndex::CkEth {
-                    ledger_burn_index: *withdrawal_id,
-                },
-                *reimbursed_in_block,
-            );
+            state
+                .withdrawal_transactions
+                .record_finalized_reimbursement(
+                    ReimbursementIndex::CkEth {
+                        ledger_burn_index: *withdrawal_id,
+                    },
+                    *reimbursed_in_block,
+                );
         }
         EventType::SkippedBlockForContract {
             contract_address,
@@ -134,17 +144,19 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             ckerc20_ledger_id,
             reimbursed,
         } => {
-            state.eth_transactions.record_finalized_reimbursement(
-                ReimbursementIndex::CkErc20 {
-                    cketh_ledger_burn_index: *cketh_ledger_burn_index,
-                    ledger_id: *ckerc20_ledger_id,
-                    ckerc20_ledger_burn_index: reimbursed.burn_in_block,
-                },
-                reimbursed.reimbursed_in_block,
-            );
+            state
+                .withdrawal_transactions
+                .record_finalized_reimbursement(
+                    ReimbursementIndex::CkErc20 {
+                        cketh_ledger_burn_index: *cketh_ledger_burn_index,
+                        ledger_id: *ckerc20_ledger_id,
+                        ckerc20_ledger_burn_index: reimbursed.burn_in_block,
+                    },
+                    reimbursed.reimbursed_in_block,
+                );
         }
         EventType::FailedErc20WithdrawalRequest(cketh_reimbursement_request) => {
-            state.eth_transactions.record_reimbursement_request(
+            state.withdrawal_transactions.record_reimbursement_request(
                 ReimbursementIndex::CkEth {
                     ledger_burn_index: cketh_reimbursement_request.ledger_burn_index,
                 },
@@ -156,7 +168,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         }
         EventType::QuarantinedReimbursement { index } => {
             state
-                .eth_transactions
+                .withdrawal_transactions
                 .record_quarantined_reimbursement(index.clone());
         }
         EventType::SyncedDepositWithSubaccountToBlock { block_number } => {
@@ -165,6 +177,12 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 *block_number,
             );
         }
+        EventType::RegisteredDepositAddresses(registry) => {
+            state.automatic_deposits.rebuild_watchlist(registry)
+        }
+        EventType::AutomaticDepositReceived(automatic_deposit) => state
+            .automatic_deposits
+            .record_automatic_deposit_received(automatic_deposit),
     }
 }
 

@@ -20,6 +20,7 @@ use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
 };
+use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
     AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
 };
@@ -174,7 +175,7 @@ fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequ
         ),
     };
 
-    let signature = ic_cketh_minter::tx::Eip1559Signature {
+    let signature = ic_cketh_minter::tx::TransactionSignature {
         signature_y_parity: decoded_sig.recovery_id().unwrap().is_y_odd(),
         r: map_ethers_u256(decoded_sig.r),
         s: map_ethers_u256(decoded_sig.s),
@@ -255,6 +256,21 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 from_subaccount,
                 created_at,
             } => ET::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
+                withdrawal_amount: withdrawal_amount.try_into().unwrap(),
+                destination: destination.parse().unwrap(),
+                ledger_burn_index: map_nat(ledger_burn_index),
+                from,
+                from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
+                created_at,
+            }),
+            EventPayload::AcceptedSweeperFundingRequest {
+                withdrawal_amount,
+                destination,
+                ledger_burn_index,
+                from,
+                from_subaccount,
+                created_at,
+            } => ET::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
                 withdrawal_amount: withdrawal_amount.try_into().unwrap(),
                 destination: destination.parse().unwrap(),
                 ledger_burn_index: map_nat(ledger_burn_index),
@@ -407,6 +423,49 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                     block_number: block_number.try_into().unwrap(),
                 }
             }
+            EventPayload::RegisteredDepositAddresses {
+                scan_window_nanos,
+                capacity,
+                registrations,
+            } => ET::RegisteredDepositAddresses(
+                ic_cketh_minter::state::event::DepositAddressRegistry {
+                    scan_window_nanos,
+                    capacity,
+                    registrations: registrations
+                        .into_iter()
+                        .map(
+                            |a| ic_cketh_minter::state::event::DepositAddressRegistration {
+                                owner: a.owner,
+                                subaccount: a.subaccount,
+                                erc20_contract_address: a.erc20_contract_address.parse().unwrap(),
+                                address: a.address.parse().unwrap(),
+                                expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
+                                last_scanned_block: a
+                                    .last_scanned_block
+                                    .map(|b| b.try_into().unwrap()),
+                                scan_count: a.scan_count.try_into().unwrap(),
+                            },
+                        )
+                        .collect(),
+                },
+            ),
+            EventPayload::AutomaticDepositReceived {
+                owner,
+                subaccount,
+                address,
+                erc20_contract_address,
+                last_scanned_block,
+                scan_count,
+                scanned_balance,
+            } => ET::AutomaticDepositReceived(ic_cketh_minter::state::event::AutomaticDeposit {
+                owner,
+                subaccount,
+                address: address.parse().unwrap(),
+                erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                last_scanned_block: last_scanned_block.try_into().unwrap(),
+                scan_count: scan_count.try_into().unwrap(),
+                scanned_balance: scanned_balance.try_into().unwrap(),
+            }),
         },
     }
 }

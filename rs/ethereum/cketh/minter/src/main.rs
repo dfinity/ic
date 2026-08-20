@@ -4,7 +4,8 @@ use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
-use ic_cketh_minter::deposit::scrape_logs;
+use ic_cketh_minter::balance_scan::balance_scan;
+use ic_cketh_minter::deposit::{refresh_latest_block_height, scrape_logs};
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
@@ -12,7 +13,8 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, Eip1559TransactionPrice,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
+    DepositErc20Error, DepositErc20Response, DepositMode, Eip1559TransactionPrice,
     Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
     RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
@@ -20,7 +22,7 @@ use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
     EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
 };
-use ic_cketh_minter::guard::retrieve_withdraw_guard;
+use ic_cketh_minter::guard::{deposit_erc20_guard, retrieve_withdraw_guard};
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
@@ -35,14 +37,15 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
+use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
     CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
     process_reimbursement, process_retrieve_eth_requests,
 };
 use ic_cketh_minter::{
-    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL,
-    state, storage,
+    BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
+    REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -84,11 +87,25 @@ fn setup_timers() {
     ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, async || {
         scrape_logs().await;
     });
+    // Refresh the latest block height immediately after the install, then repeat
+    // with the interval.
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        refresh_latest_block_height().await;
+    });
+    ic_cdk_timers::set_timer_interval(REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, async || {
+        refresh_latest_block_height().await;
+    });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
         process_retrieve_eth_requests().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
         process_reimbursement().await;
+    });
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        balance_scan().await;
+    });
+    ic_cdk_timers::set_timer_interval(BALANCE_SCAN_INTERVAL, async || {
+        balance_scan().await;
     });
 }
 
@@ -128,6 +145,11 @@ fn emit_preupgrade_events() {
             storage::record_event(event);
         }
     });
+
+    let registry = read_state(|s| s.automatic_deposits.watchlist_snapshot());
+    if !registry.registrations.is_empty() {
+        storage::record_event(EventType::RegisteredDepositAddresses(registry));
+    }
 }
 
 #[pre_upgrade]
@@ -151,6 +173,64 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 #[update]
 async fn minter_address() -> String {
     state::minter_address().await.to_string()
+}
+
+#[update]
+async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
+    validate_ckerc20_active();
+    let caller = validate_caller_not_anonymous();
+    // Held for the whole call, including across the ECDSA public key fetch below, so that the
+    // status check and the registration that follows it cannot be interleaved with another
+    // `deposit_erc20` from the same principal.
+    let _guard = deposit_erc20_guard(caller).unwrap_or_else(|e| {
+        ic_cdk::trap(format!(
+            "Failed retrieving guard for principal {caller}: {e:?}"
+        ))
+    });
+    let token = Address::from_str(&arg.erc20_contract_address)
+        .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: invalid ERC-20 contract address: {e}")));
+    if !read_state(|s| s.is_supported_ckerc20(&token)) {
+        let supported_tokens: BTreeSet<_> = read_state(|s| {
+            s.supported_ck_erc20_tokens()
+                .map(|token| token.into())
+                .collect()
+        });
+        return Err(DepositErc20Error::TokenNotSupported {
+            supported_tokens: Vec::from_iter(supported_tokens),
+        });
+    }
+    let subaccount = match arg.mode {
+        DepositMode::Unsponsored { subaccount } => subaccount,
+    };
+    let account = Account {
+        owner: caller,
+        subaccount,
+    };
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
+
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+    {
+        return Ok(status);
+    }
+
+    // Not armed yet: register. Ensure the minter's ECDSA public key has been fetched and cached in
+    // the state so that the (synchronous) registration below can derive the address.
+    state::lazy_call_ecdsa_public_key_with_chain_code().await;
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
+    // Re-check the status after the await: a concurrent balance scan may have detected a deposit and
+    // moved this pair into the sweep queue while we waited for the ECDSA key (only possible right
+    // after an upgrade, before the key is cached). Returning its status here keeps `register_deposit_
+    // address` from trying to re-arm an already-swept pair. From here on the call is synchronous, so
+    // no further scan can interleave before the registration below.
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+    {
+        return Ok(status);
+    }
+    mutate_state(|s| s.register_deposit_address(now, account, token))?;
+    Ok(
+        read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
+            .expect("BUG: a just-registered pair must report a Scanning status"),
+    )
 }
 
 #[query]
@@ -240,6 +320,7 @@ async fn get_minter_info() -> MinterInfo {
             eth_helper_contract_address,
             erc20_helper_contract_address,
             deposit_with_subaccount_helper_contract_address,
+            sweeper_contract_address: s.sweeper_contract_address.map(|a| a.to_string()),
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.clone()),
@@ -342,7 +423,10 @@ async fn withdraw_eth(
 #[update]
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     let ledger_burn_index = LedgerBurnIndex::new(block_index);
-    read_state(|s| s.eth_transactions.transaction_status(&ledger_burn_index))
+    read_state(|s| {
+        s.withdrawal_transactions
+            .transaction_status(&ledger_burn_index)
+    })
 }
 
 #[query]
@@ -350,14 +434,16 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
     use transactions::WithdrawalRequest::*;
     let parameter = transactions::WithdrawalSearchParameter::try_from(parameter).unwrap();
     read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .withdrawal_status(&parameter)
             .into_iter()
             .map(|(request, status, tx)| WithdrawalDetail {
                 withdrawal_id: *request.cketh_ledger_burn_index().as_ref(),
                 recipient_address: request.payee().to_string(),
                 token_symbol: match request {
-                    CkEth(_) => CkTokenSymbol::cketh_symbol_from_state(s).to_string(),
+                    CkEth(_) | SweeperFunding(_) => {
+                        CkTokenSymbol::cketh_symbol_from_state(s).to_string()
+                    }
                     CkErc20(r) => s
                         .ckerc20_tokens
                         .get_alt(&r.erc20_contract_address)
@@ -367,10 +453,14 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 withdrawal_amount: match request {
                     CkEth(r) => r.withdrawal_amount.into(),
                     CkErc20(r) => r.withdrawal_amount.into(),
+                    SweeperFunding(r) => r.withdrawal_amount.into(),
                 },
                 max_transaction_fee: match (request, tx) {
-                    (CkEth(_), None) => None,
+                    (CkEth(_) | SweeperFunding(_), None) => None,
                     (CkEth(r), Some(tx)) => {
+                        r.withdrawal_amount.checked_sub(tx.amount).map(|x| x.into())
+                    }
+                    (SweeperFunding(r), Some(tx)) => {
                         r.withdrawal_amount.checked_sub(tx.amount).map(|x| x.into())
                     }
                     (CkErc20(r), _) => Some(r.max_transaction_fee.into()),
@@ -574,8 +664,8 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
 }
 
 #[update]
-async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
-    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+async fn get_canister_status() -> ic_cdk_management_canister::CanisterStatusResult {
+    ic_cdk_management_canister::canister_status(&ic_cdk_management_canister::CanisterStatusArgs {
         canister_id: ic_cdk::api::canister_self(),
     })
     .await
@@ -666,10 +756,38 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
     }
 
     fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
-        use ic_cketh_minter::endpoints::events::EventPayload as EP;
+        use ic_cketh_minter::endpoints::events::{
+            DepositAddressRegistration as CandidDepositAddressRegistration, EventPayload as EP,
+        };
         CandidEvent {
             timestamp,
             payload: match payload {
+                EventType::RegisteredDepositAddresses(registry) => EP::RegisteredDepositAddresses {
+                    scan_window_nanos: registry.scan_window_nanos,
+                    capacity: registry.capacity,
+                    registrations: registry
+                        .registrations
+                        .into_iter()
+                        .map(|r| CandidDepositAddressRegistration {
+                            owner: r.owner,
+                            subaccount: r.subaccount,
+                            erc20_contract_address: r.erc20_contract_address.to_string(),
+                            address: r.address.to_string(),
+                            expires_at_nanos: r.expires_at_nanos.as_nanos(),
+                            last_scanned_block: r.last_scanned_block.map(Into::into),
+                            scan_count: r.scan_count.into(),
+                        })
+                        .collect(),
+                },
+                EventType::AutomaticDepositReceived(deposit) => EP::AutomaticDepositReceived {
+                    owner: deposit.owner,
+                    subaccount: deposit.subaccount,
+                    address: deposit.address.to_string(),
+                    erc20_contract_address: deposit.erc20_contract_address.to_string(),
+                    last_scanned_block: deposit.last_scanned_block.into(),
+                    scan_count: deposit.scan_count.into(),
+                    scanned_balance: deposit.scanned_balance.into(),
+                },
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),
                 EventType::AcceptedDeposit(ReceivedEthEvent {
@@ -741,6 +859,21 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_subaccount,
                     created_at,
                 }) => EP::AcceptedEthWithdrawalRequest {
+                    withdrawal_amount: withdrawal_amount.into(),
+                    destination: destination.to_string(),
+                    ledger_burn_index: ledger_burn_index.get().into(),
+                    from,
+                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
+                    created_at,
+                },
+                EventType::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
+                    withdrawal_amount,
+                    destination,
+                    ledger_burn_index,
+                    from,
+                    from_subaccount,
+                    created_at,
+                }) => EP::AcceptedSweeperFundingRequest {
                     withdrawal_amount: withdrawal_amount.into(),
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),
@@ -939,6 +1072,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The last Ethereum block the ckETH minter observed.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_latest_block_height",
+                    s.latest_block_height.map(|n| n.as_f64()).unwrap_or(0.0),
+                    "The latest Ethereum block height the ckETH minter observed for scheduling balance scans.",
+                )?;
+
                 for (id, scraping_state) in s.log_scrapings.iter() {
                     w.encode_gauge(
                         last_processed_block_metric_name(id),
@@ -996,7 +1135,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
                 let now_nanos = ic_cdk::api::time();
                 let age_nanos = now_nanos.saturating_sub(
-                    s.eth_transactions
+                    s.withdrawal_transactions
                         .oldest_incomplete_withdrawal_timestamp()
                         .unwrap_or(now_nanos),
                 );

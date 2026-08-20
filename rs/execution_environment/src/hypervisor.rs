@@ -5,7 +5,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnet
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
-    wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_executor::{CreatedExecutionState, WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
     wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, sandbox_safe_system_state::SandboxSafeSystemState,
@@ -19,11 +19,14 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
-use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
+use ic_replicated_state::{
+    ExecutionState, Memory, NetworkTopology, NumWasmPages, ReplicatedState, SystemState,
+    canister_state::{execution_state::WasmExecutionMode, num_bytes_try_from},
+};
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
-    methods::FuncRef,
+    CanisterId, DiskBytes, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
+    NumInstructions, SubnetId, Time, messages::RequestMetadata, methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -44,6 +47,7 @@ pub struct HypervisorMetrics {
     compilation_cache_size: IntGaugeVec,
     code_section_size: Histogram,
     canister_log_delta_memory_usage: Histogram,
+    max_num_locals: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -86,6 +90,16 @@ impl HypervisorMetrics {
                 // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
                 binary_buckets_with_zero(10, 23),
             ),
+            max_num_locals: metrics_registry.histogram(
+                "hypervisor_max_num_locals",
+                "The maximum number of Wasm function locals.",
+                vec![
+                    0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 200.0, 300.0,
+                    400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0, 2000.0, 3000.0, 4000.0,
+                    5000.0, 6000.0, 7000.0, 8000.0, 9000.0, 10000.0, 20000.0, 30000.0, 40000.0,
+                    50000.0,
+                ],
+            ),
         }
     }
 
@@ -100,6 +114,7 @@ impl HypervisorMetrics {
             compilation_time,
             max_complexity,
             code_section_size,
+            max_num_locals,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
@@ -113,6 +128,7 @@ impl HypervisorMetrics {
         self.compilation_cache_size
             .with_label_values(&["disk"])
             .set(cache_disk_size as i64);
+        self.max_num_locals.observe(*max_num_locals as f64);
     }
 }
 
@@ -120,6 +136,56 @@ impl CanisterLogMetrics for HypervisorMetrics {
     fn observe_delta_log_size(&self, size: usize) {
         self.canister_log_delta_memory_usage.observe(size as f64);
     }
+}
+
+/// Indicates whether the memory is kept or replaced with new (initial) memory.
+/// Applicable to both the stable memory and the main memory of a canister.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum MemoryHandling {
+    /// Retain the memory.
+    Keep,
+    /// Reset the memory.
+    Replace,
+}
+
+/// Specifies the handling of the canister's memories.
+/// * On install and re-install:
+///   - Replace both the stable memory and the main memory.
+/// * On upgrade:
+///   - Always retain the stable memory.
+///   - Retain the main memory if and only if the `wasm_memory_persistence: opt keep`
+///     upgrade option is used, and erase it otherwise. That option is meant for
+///     canisters with enhanced orthogonal persistence (Motoko) and is only valid
+///     for those; such a canister may still opt into erasing its main memory by
+///     passing `wasm_memory_persistence: opt replace`.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct CanisterMemoryHandling {
+    pub stable_memory_handling: MemoryHandling,
+    pub main_memory_handling: MemoryHandling,
+}
+
+/// Specifies where the memories of a newly created execution state come from.
+///
+/// `Hypervisor::create_execution_state` always builds the initial memories of
+/// the new Wasm module (the module's declared minimum memory with its data
+/// segments applied); this type tells it what to do with them afterwards.
+#[derive(Debug)]
+// The `Explicit` variant is much larger than the others, but a `MemorySource`
+// is constructed once per operation and consumed right away.
+#[allow(clippy::large_enum_variant)]
+pub enum MemorySource<'a> {
+    /// Install and re-install: use the newly installed module's initial memories.
+    Fresh,
+    /// Upgrade: carry over the memories of `old` as directed by `handling`.
+    Preserve {
+        old: &'a ExecutionState,
+        handling: CanisterMemoryHandling,
+    },
+    /// Snapshot restore: install the memories provided by the caller.
+    Explicit {
+        wasm_memory: Memory,
+        stable_memory: Memory,
+    },
 }
 
 #[doc(hidden)]
@@ -132,7 +198,6 @@ pub struct Hypervisor {
     compilation_cache: Arc<CompilationCache>,
     create_execution_state_base_cost: NumInstructions,
     cost_to_compile_wasm_instruction: NumInstructions,
-    dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
 }
 
@@ -145,8 +210,10 @@ impl Hypervisor {
         &self,
         canister_module: CanisterModule,
         canister_id: CanisterId,
+        last_install_timestamp: Time,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
+        new_memories: MemorySource<'_>,
     ) -> (NumInstructions, HypervisorResult<ExecutionState>) {
         // If a wasm instruction has no arguments then it can be represented as
         // a single byte. So taking the length of the wasm source is a
@@ -172,7 +239,12 @@ impl Hypervisor {
             Arc::clone(&self.compilation_cache),
         );
         match creation_result {
-            Ok((execution_state, compilation_cost, compilation_result)) => {
+            Ok(CreatedExecutionState {
+                mut execution_state,
+                compilation_cost,
+                compilation_result,
+                declares_wasm_memory,
+            }) => {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
@@ -180,10 +252,48 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
+                // The Wasm memory of the freshly created execution state is the
+                // module's initial memory, i.e. its declared minimum memory.
+                let declared_wasm_memory_size =
+                    declares_wasm_memory.then_some(execution_state.wasm_memory.size);
+                // Stamp the deployment-round install time onto the freshly
+                // created execution state. This is the single choke point for
+                // creating execution states, so every install/upgrade/snapshot
+                // restore is forced to provide it.
+                execution_state.last_install_timestamp = Some(last_install_timestamp);
+                // Same for the memories: the embedder always creates the
+                // initial memories of the new module, which the caller may want
+                // to replace with the preserved (or snapshotted) ones.
+                match new_memories {
+                    MemorySource::Fresh => {}
+                    MemorySource::Preserve { old, handling } => {
+                        // Cloning a `Memory` is cheap: cloning its page delta,
+                        // a persistent map, only clones the root node of its
+                        // tree, whose subtrees are `Arc`s, and its checkpoint
+                        // files, page allocator and sandbox handle are `Arc`s
+                        // as well.
+                        if handling.stable_memory_handling == MemoryHandling::Keep {
+                            execution_state.stable_memory = old.stable_memory.clone();
+                        }
+                        if handling.main_memory_handling == MemoryHandling::Keep {
+                            execution_state.wasm_memory = old.wasm_memory.clone();
+                        }
+                    }
+                    MemorySource::Explicit {
+                        wasm_memory,
+                        stable_memory,
+                    } => {
+                        execution_state.wasm_memory = wasm_memory;
+                        execution_state.stable_memory = stable_memory;
+                    }
+                }
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
                 round_limits.instructions -= as_round_instructions(total_cost);
-                (total_cost, Ok(execution_state))
+                let result =
+                    Self::validate_wasm_memory(&execution_state, declared_wasm_memory_size)
+                        .map(|()| execution_state);
+                (total_cost, result)
             }
             Err(err) => {
                 let total_cost = self.create_execution_state_base_cost + compilation_cost;
@@ -191,6 +301,58 @@ impl Hypervisor {
                 (total_cost, Err(err))
             }
         }
+    }
+
+    /// Checks that the Wasm memory of a newly created execution state is
+    /// compatible with the Wasm module that the execution state was created for.
+    /// `declared_wasm_memory_size` is the minimum memory size declared by the
+    /// module and `None` if the module declares no Wasm memory.
+    fn validate_wasm_memory(
+        execution_state: &ExecutionState,
+        declared_wasm_memory_size: Option<NumWasmPages>,
+    ) -> HypervisorResult<()> {
+        let max_wasm_memory_size = match execution_state.wasm_execution_mode {
+            WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
+        };
+        let wasm_memory_size = execution_state.wasm_memory_usage();
+        if wasm_memory_size > max_wasm_memory_size {
+            return Err(HypervisorError::InvalidWasmMemory {
+                message: format!(
+                    "the Wasm memory ({wasm_memory_size} bytes) exceeds the maximum \
+                     Wasm memory ({max_wasm_memory_size} bytes) allowed for the Wasm \
+                     execution mode of the canister module."
+                ),
+            });
+        }
+
+        match declared_wasm_memory_size {
+            None => {
+                if wasm_memory_size.get() != 0 {
+                    return Err(HypervisorError::InvalidWasmMemory {
+                        message: format!(
+                            "the Wasm memory ({wasm_memory_size} bytes) is not empty \
+                             although the canister module declares no Wasm memory."
+                        ),
+                    });
+                }
+            }
+            Some(declared_wasm_memory_size) => {
+                let declared_wasm_memory_size = num_bytes_try_from(declared_wasm_memory_size)
+                    .expect("could not convert from wasm memory number of pages to bytes");
+                if wasm_memory_size < declared_wasm_memory_size {
+                    return Err(HypervisorError::InvalidWasmMemory {
+                        message: format!(
+                            "the Wasm memory ({wasm_memory_size} bytes) is smaller than \
+                             the minimum Wasm memory ({declared_wasm_memory_size} bytes) \
+                             declared by the canister module."
+                        ),
+                    });
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub(crate) fn new(
@@ -248,7 +410,6 @@ impl Hypervisor {
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
-            dirty_page_overhead,
             canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
@@ -261,7 +422,6 @@ impl Hypervisor {
         wasm_executor: Arc<dyn WasmExecutor>,
         create_execution_state_base_cost: NumInstructions,
         cost_to_compile_wasm_instruction: NumInstructions,
-        dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
@@ -278,7 +438,6 @@ impl Hypervisor {
             ),
             create_execution_state_base_cost,
             cost_to_compile_wasm_instruction,
-            dirty_page_overhead,
             canister_guaranteed_callback_quota,
         }
     }
@@ -301,7 +460,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         mut execution_state: ExecutionState,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
         state_changes_error: &IntCounter,
         call_tree_metrics: &dyn CallTreeMetrics,
@@ -312,7 +471,19 @@ impl Hypervisor {
             execution_parameters.instruction_limits.message(),
             execution_parameters.instruction_limits.slice()
         );
-        let is_composite_query = matches!(api_type, ApiType::CompositeQuery { .. });
+        // Every execution that is part of a composite query, not just its entry
+        // point: the reply and reject callbacks can make calls themselves and so
+        // must route calls to the management canister in the same way. The cleanup
+        // callback cannot currently make calls at all (`ic0.call_new` is not
+        // available to it), but it is covered here so that the flag means "is part
+        // of a composite query" rather than "can currently make calls".
+        let is_composite_query = matches!(
+            api_type,
+            ApiType::CompositeQuery { .. }
+                | ApiType::CompositeReplyCallback { .. }
+                | ApiType::CompositeRejectCallback { .. }
+                | ApiType::CompositeCleanup { .. }
+        );
         let execution_result = self.execute_dts(
             api_type,
             &execution_state,
@@ -323,7 +494,7 @@ impl Hypervisor {
             func_ref,
             RequestMetadata::for_new_call_tree(time),
             round_limits,
-            network_topology,
+            network_topology.clone(),
             subnet_cycles_config,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
@@ -342,7 +513,7 @@ impl Hypervisor {
             &mut output,
             round_limits,
             time,
-            network_topology,
+            &network_topology,
             self.own_subnet_id,
             &self.metrics,
             &self.log,
@@ -368,7 +539,7 @@ impl Hypervisor {
         func_ref: FuncRef,
         request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> WasmExecutionResult {
         assert_ge!(
@@ -392,7 +563,6 @@ impl Hypervisor {
             system_state,
             *self.cycles_account_manager,
             network_topology,
-            self.dirty_page_overhead,
             execution_parameters.compute_allocation,
             available_callbacks,
             request_metadata,

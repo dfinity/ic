@@ -59,19 +59,20 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    InstallCodeArgs, ListCanisterSnapshotArgs, ListCanisterSnapshotResponse, MasterPublicKeyId,
-    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse,
+    self as ic00, CanisterIdRecord, CanisterLogRecord, CanisterSnapshotDataKind,
+    CanisterSnapshotDataOffset, InstallCodeArgs, ListCanisterSnapshotArgs,
+    ListCanisterSnapshotResponse, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
-    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SetupInitialDKGResponse,
-    SignWithECDSAReply, SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadChunkArgs, UploadChunkReply, VetKdDeriveKeyResult,
+    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, CanisterStatusResultV2,
+    ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId, InstallChunkedCodeArgs, LoadCanisterSnapshotArgs,
+    SchnorrAlgorithm, SetupInitialDKGResponse, SignWithECDSAReply, SignWithSchnorrReply,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    VetKdDeriveKeyResult,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -141,13 +142,12 @@ use ic_test_utilities_registry::{
 use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
-    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
-    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
-    SubnetId, UserId,
+    CanisterId, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes,
+    PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId, SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
-        ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
+        ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
         ValidationContext, XNetPayload,
     },
     canister_http::{
@@ -354,6 +354,7 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
     // replica version record
     let replica_version = ReplicaVersion::default();
     let replica_version_record = ReplicaVersionRecord {
+        replica_version_id: Some(replica_version.to_string()),
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,
@@ -682,6 +683,7 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 pub struct StateMachineConfig {
     subnet_config: SubnetConfig,
     hypervisor_config: HypervisorConfig,
+    resource_limits: ResourceLimits,
 }
 
 impl StateMachineConfig {
@@ -689,7 +691,13 @@ impl StateMachineConfig {
         Self {
             subnet_config,
             hypervisor_config,
+            resource_limits: ResourceLimits::default(),
         }
+    }
+
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = resource_limits;
+        self
     }
 }
 
@@ -1254,7 +1262,6 @@ pub struct StateMachine {
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    hypervisor_config: HypervisorConfig,
 }
 
 impl Default for StateMachine {
@@ -1925,7 +1932,7 @@ impl StateMachine {
         let xnet_payload = batch_payload.xnet.clone();
         let ingress = &batch_payload.ingress;
         let ingress_messages = ingress.clone().try_into().unwrap();
-        let (http_responses, _) =
+        let (http_responses, http_spent, _) =
             CanisterHttpPayloadBuilderImpl::into_messages(&batch_payload.canister_http);
         let inducted: Vec<_> = http_responses
             .clone()
@@ -1984,6 +1991,7 @@ impl StateMachine {
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
             .with_consensus_responses(consensus_responses)
+            .with_canister_http_spent(http_spent)
             .with_query_stats(query_stats)
             .with_self_validating(self_validating);
         if let Some(blockmaker_metrics) = blockmaker_metrics {
@@ -2438,7 +2446,6 @@ impl StateMachine {
             chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
-            hypervisor_config,
         }
     }
 
@@ -2468,6 +2475,7 @@ impl StateMachine {
                 }
                 Err(sm) => {
                     state_manager = sm;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
                 }
             }
             if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
@@ -2763,7 +2771,7 @@ impl StateMachine {
         contents: Vec<CanisterHttpResponseContent>,
     ) {
         assert_eq!(contents.len(), self.nodes.len());
-        for (node, content) in std::iter::zip(self.nodes.iter(), contents.into_iter()) {
+        for (node, content) in std::iter::zip(self.nodes.iter(), contents) {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
@@ -2773,7 +2781,6 @@ impl StateMachine {
             let receipt_share = CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CallbackId::from(request_id),
-                    registry_version,
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: content.count_bytes() as u32,
                     is_reject: content.is_reject(),
@@ -3104,6 +3111,7 @@ impl StateMachine {
                 nidkg_ids: self.ni_dkg_ids.clone(),
             },
             consensus_responses: payload.consensus_responses,
+            canister_http_spent: payload.canister_http_spent,
             requires_full_state_hash,
         };
         let blockmaker_metrics = payload
@@ -3890,7 +3898,15 @@ impl StateMachine {
 
     /// Creates a new canister and returns the canister principal.
     pub fn create_canister(&self, settings: Option<CanisterSettingsArgs>) -> CanisterId {
-        self.create_canister_with_cycles(None, Cycles::new(0), settings)
+        // This helper creates the canister with zero cycles, which cannot account
+        // for its `canister_creation` history entry under a non-zero freezing
+        // threshold. Default the freezing threshold to zero unless the caller
+        // explicitly set one.
+        let mut settings = settings.unwrap_or_else(|| CanisterSettingsArgsBuilder::new().build());
+        if settings.freezing_threshold.is_none() {
+            settings.freezing_threshold = Some(candid::Nat::from(0_u64));
+        }
+        self.create_canister_with_cycles(None, Cycles::new(0), Some(settings))
     }
 
     /// Creates a new canister and returns the canister principal.
@@ -5025,13 +5041,25 @@ impl StateMachine {
         dst
     }
 
-    /// Returns the canister log of the specified canister.
-    pub fn canister_log(&self, canister_id: CanisterId) -> CanisterLog {
+    /// Returns all canister log records of the specified canister.
+    pub fn canister_log_records(&self, canister_id: CanisterId) -> Vec<CanisterLogRecord> {
         let replicated_state = self.state_manager.get_latest_state().take();
         let canister_state = replicated_state
             .canister_state(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
-        canister_state.system_state.canister_log.clone()
+        canister_state
+            .system_state
+            .log_memory_store
+            .all_records_for_testing()
+    }
+
+    /// Returns the number of bytes used by the canister log of the specified canister.
+    pub fn canister_log_bytes_used(&self, canister_id: CanisterId) -> usize {
+        let replicated_state = self.state_manager.get_latest_state().take();
+        let canister_state = replicated_state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
+        canister_state.system_state.log_memory_store.bytes_used()
     }
 
     /// Sets the content of the stable memory for the specified canister.
@@ -5330,9 +5358,9 @@ impl StateMachine {
                 }
             }
         });
-        let mut available_guaranteed_response_memory = self
-            .hypervisor_config
-            .guaranteed_response_message_memory_capacity
+        let mut available_guaranteed_response_memory = replicated_state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
             .get() as i64
             - replicated_state
                 .guaranteed_response_message_memory_taken()
@@ -5416,6 +5444,7 @@ pub struct PayloadBuilder {
     ingress_messages: Vec<SignedIngress>,
     xnet_payload: XNetPayload,
     consensus_responses: Vec<ConsensusResponse>,
+    canister_http_spent: CanisterHttpSpent,
     query_stats: Option<QueryStatsPayload>,
     self_validating: Option<SelfValidatingPayload>,
     blockmaker_metrics: Option<BlockmakerMetrics>,
@@ -5429,6 +5458,7 @@ impl Default for PayloadBuilder {
             ingress_messages: Default::default(),
             xnet_payload: Default::default(),
             consensus_responses: Default::default(),
+            canister_http_spent: Default::default(),
             query_stats: Default::default(),
             self_validating: Default::default(),
             blockmaker_metrics: Default::default(),
@@ -5482,6 +5512,13 @@ impl PayloadBuilder {
     pub fn with_consensus_responses(self, consensus_responses: Vec<ConsensusResponse>) -> Self {
         Self {
             consensus_responses,
+            ..self
+        }
+    }
+
+    pub fn with_canister_http_spent(self, canister_http_spent: CanisterHttpSpent) -> Self {
+        Self {
+            canister_http_spent,
             ..self
         }
     }
@@ -5602,6 +5639,7 @@ fn multi_subnet_setup(
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
     StateMachineBuilder::new()
+        .with_resource_limits(config.resource_limits)
         .with_config(Some(config))
         .with_subnet_seed([subnet_seed; 32])
         .with_subnet_type(subnet_type)

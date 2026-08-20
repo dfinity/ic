@@ -62,7 +62,7 @@ pub struct SystemMetadata {
     /// system.
     pub ingress_history: IngressHistoryState,
 
-    /// XNet stream state indexed by the _destination_ subnet id.
+    /// XNet stream state indexed by the _destination_ subnet ID.
     pub(super) streams: Arc<StreamMap>,
 
     /// Scheduling priorities of the canisters on this subnet.
@@ -87,20 +87,15 @@ pub struct SystemMetadata {
     /// increasing).
     pub batch_time: Time,
 
-    pub network_topology: NetworkTopology,
+    pub network_topology: Arc<NetworkTopology>,
 
     pub own_subnet_id: SubnetId,
 
     pub own_subnet_type: SubnetType,
 
-    pub own_subnet_features: SubnetFeatures,
-
-    pub own_resource_limits: ResourceLimits,
-
-    /// DER-encoded public keys of the subnet's nodes.
-    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
-
-    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
+    /// Registry-derived information about this subnet (its features, resource
+    /// limits and node public keys).
+    pub own_subnet_info: Arc<OwnSubnetInfo>,
 
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
@@ -115,6 +110,14 @@ pub struct SystemMetadata {
     /// newly created subnet). Reset in the very next round, once a metric is
     /// exported.
     pub subnet_split_from: Option<SubnetId>,
+
+    /// "Subnet was merged" marker: `true` if this subnet is the result of a subnet
+    /// merge.
+    ///
+    /// Like `split_from`, persisted in its own `subnet_merged.pbuf` file rather than
+    /// as a `SystemMetadata` proto field. A `false` flag encodes to an empty message,
+    /// so the file is absent in that case.
+    pub subnet_merged: bool,
 
     /// Asynchronously handled subnet messages.
     pub subnet_call_context_manager: SubnetCallContextManager,
@@ -174,7 +177,7 @@ pub struct SystemMetadata {
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
-    /// by aggregating them and storing a running total over multiple days by node id and
+    /// by aggregating them and storing a running total over multiple days by node ID and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
 
@@ -182,17 +185,13 @@ pub struct SystemMetadata {
     /// This field is transient and is emptied before writing the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 
-    /// Whether the logs have been migrated from `CanisterLog` to `LogMemoryStore`
-    /// or from `LogMemoryStore` to `CanisterLog`, as per the
-    /// `log_memory_store_feature` flag.
+    /// The subnet list from network topology that was last used by
+    /// `generate_reject_responses_for_deleted_subnets()`. The function
+    /// exits early if the subnet list has not changed since the last call.
     ///
-    /// This is a (temporary) transient field tracking whether all canisters are
-    /// definitely using the log store required by the `log_memory_store_feature`
-    /// flag. It is intended to be used as a one-time trigger (when `false`) to
-    /// launch the (idempotent, if already performed) logs migration exactly once
-    /// per replica process (since the flag is hardcoded into the binary).
+    /// Transient: reset to `None` on checkpoint load.
     #[validate_eq(Ignore)]
-    pub logs_migrated: bool,
+    pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -244,9 +243,12 @@ pub struct NetworkTopology {
     full_topology: Option<FullTopology>,
 
     /// Subnet to which `SetupInitialDKG` management canister calls are routed
-    /// by default, i.e., when no subnet id is specified explicitly in the
+    /// by default, i.e., when no subnet ID is specified explicitly in the
     /// request. If `None`, such requests are routed to the calling subnet.
     pub default_initial_dkg_subnet_id: Option<SubnetId>,
+
+    /// API boundary nodes, indexed by `NodeId`.
+    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -276,6 +278,7 @@ impl Default for NetworkTopology {
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
             default_initial_dkg_subnet_id: None,
+            api_boundary_nodes: Default::default(),
         }
     }
 }
@@ -292,6 +295,7 @@ impl NetworkTopology {
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
         default_initial_dkg_subnet_id: Option<SubnetId>,
+        api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
     ) -> Self {
         Self {
             subnets,
@@ -303,6 +307,7 @@ impl NetworkTopology {
             bitcoin_mainnet_canister_id,
             full_topology,
             default_initial_dkg_subnet_id,
+            api_boundary_nodes,
         }
     }
 
@@ -328,6 +333,16 @@ impl NetworkTopology {
         self.subnets
             .get(subnet_id)
             .map(|subnet_topology| subnet_topology.nodes.len())
+    }
+
+    /// Returns whether the given subnet is cooling down. Unknown subnets are
+    /// not considered to be cooling down.
+    ///
+    /// See [`SubnetTopology::cooling_down`] for the exact semantics.
+    pub fn is_cooling_down(&self, subnet_id: &SubnetId) -> bool {
+        self.subnets
+            .get(subnet_id)
+            .is_some_and(|subnet_topology| subnet_topology.cooling_down)
     }
 
     /// Returns the cycles cost schedule of the given subnet.
@@ -375,7 +390,7 @@ impl NetworkTopology {
             .unwrap_or(&self.routing_table)
     }
 
-    /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
+    /// Find the subnet for `principal_id`. The input can either be a canister ID, or a subnet ID.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
         let as_subnet_id = SubnetId::from(principal_id);
         if self.subnets.contains_key(&as_subnet_id) {
@@ -411,6 +426,20 @@ pub struct SubnetTopology {
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_admins: BTreeSet<PrincipalId>,
+
+    /// Whether the subnet is "cooling down", i.e. quiescing. While a subnet is
+    /// cooling down:
+    ///
+    ///  * it inducts no ingress messages, so the ingress history becomes free of
+    ///    expiring message statuses;
+    ///  * (on all subnets) no messages are routed to a cooling down subnet --
+    ///    including into the cooling down subnet's own loopback stream -- but
+    ///    retained in their respective output queues, so that streams to the
+    ///    cooling down subnet can be emptied;
+    ///  * it routes no messages from its canisters' output queues into streams
+    ///    -- including its own loopback stream -- but retains them in output
+    ///    queues, so streams from the cooling down subnet can be emptied.
+    pub cooling_down: bool,
 }
 
 /// Only rented subnets, i.e., application subnets on a "free" cost schedule,
@@ -423,6 +452,18 @@ pub fn can_have_subnet_admins(
     (subnet_type == SubnetType::Application && cost_schedule == CanisterCyclesCostSchedule::Free)
         || (subnet_type == SubnetType::CloudEngine
             && cost_schedule == CanisterCyclesCostSchedule::Free)
+}
+
+/// Registry-derived information about the subnet that this replicated state
+/// belongs to. Repopulated from the registry at the start of every round.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct OwnSubnetInfo {
+    pub subnet_features: SubnetFeatures,
+
+    pub resource_limits: ResourceLimits,
+
+    /// DER-encoded public keys of the subnet's nodes.
+    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
@@ -460,6 +501,11 @@ impl SubnetMetrics {
             .consumed_cycles_by_use_case_as_counters
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
+
+        // Migrate the legacy scalar outcall fields into the use-case map. This
+        // runs on every observed use case, independently of whether the scalar
+        // fields themselves are observed.
+        self.migrate_outcalls_cycles_to_use_cases();
     }
 
     pub fn observe_consumed_cycles_by_deleted_canisters(&mut self, cycles: NominalCycles) {
@@ -482,8 +528,81 @@ impl SubnetMetrics {
         self.consumed_cycles_ecdsa_outcalls += cycles;
     }
 
+    /// Migrates the cycles consumed by HTTP and ECDSA outcalls that are tracked
+    /// in the legacy scalar fields (`consumed_cycles_http_outcalls` /
+    /// `consumed_cycles_ecdsa_outcalls`) into the corresponding entries of
+    /// `consumed_cycles_by_use_case`.
+    ///
+    /// The scalar fields predate use-case tracking, so they are a superset of
+    /// the corresponding use-case entries. We therefore bring the use-case
+    /// entries up to the scalar value (via `max`), which backfills the history
+    /// that predates use-case tracking while avoiding double counting the
+    /// overlapping period.
+    ///
+    /// This runs whenever a use case is observed (see
+    /// `observe_consumed_cycles_with_use_case`), i.e. independently of whether
+    /// the scalar fields themselves are observed, so the use-case entries also
+    /// catch up on subnets that stop performing outcalls.
+    ///
+    /// Only the `consumed_cycles_by_use_case` map is migrated; the monotonic
+    /// `consumed_cycles_by_use_case_as_counters` map is intentionally left
+    /// untouched (backfilling it would introduce a spurious counter jump).
+    ///
+    /// The scalar fields are intentionally kept (and kept up to date) rather
+    /// than zeroed, so that they remain the source of truth for readers such as
+    /// `consumed_cycles_total` (which still reads them for now) and so that
+    /// downgrading to an earlier replica version observes the correct totals.
+    fn migrate_outcalls_cycles_to_use_cases(&mut self) {
+        for (scalar, use_case) in [
+            (
+                self.consumed_cycles_http_outcalls,
+                CyclesUseCase::HTTPOutcalls,
+            ),
+            (
+                self.consumed_cycles_ecdsa_outcalls,
+                CyclesUseCase::ECDSAOutcalls,
+            ),
+        ] {
+            if scalar.get() == 0 {
+                continue;
+            }
+            let entry = self
+                .consumed_cycles_by_use_case
+                .entry(use_case)
+                .or_insert_with(NominalCycles::zero);
+            *entry = (*entry).max(scalar);
+        }
+    }
+
     pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
         self.consumed_cycles_ecdsa_outcalls
+    }
+
+    /// Cycles consumed by Schnorr threshold-signature outcalls. Unlike ECDSA and
+    /// HTTP outcalls, this use case has no dedicated field; it is only tracked in
+    /// the by-use-case map (it can never originate from a deleted canister, so
+    /// the map entry is exactly the subnet-level consumption).
+    pub fn get_consumed_cycles_schnorr_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::SchnorrOutcalls)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
+    }
+
+    /// Cycles consumed by VetKd outcalls. See `get_consumed_cycles_schnorr_outcalls`.
+    pub fn get_consumed_cycles_vetkd(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::VetKd)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
+    }
+
+    /// Cycles lost due to dropped messages. See `get_consumed_cycles_schnorr_outcalls`.
+    pub fn get_consumed_cycles_dropped_messages(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::DroppedMessages)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
     }
 
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
@@ -496,7 +615,78 @@ impl SubnetMetrics {
         &self.consumed_cycles_by_use_case_as_counters
     }
 
+    /// Computes the total consumed cycles on the subnet.
+    ///
+    /// This is the current computation, which avoids double counting the cycles
+    /// consumed by deleted canisters. The canonical state consumer uses it
+    /// starting with certification version `V29`, adding on top the cycles
+    /// consumed by all non-deleted canisters; for earlier certification
+    /// versions the consumer uses the legacy [`Self::consumed_cycles_total_v28`]
+    /// instead.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
+        let mut total = NominalCycles::zero();
+
+        total += self.consumed_cycles_by_deleted_canisters;
+        total += self.consumed_cycles_http_outcalls;
+        total += self.consumed_cycles_ecdsa_outcalls;
+
+        for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
+            match use_case {
+                // Skip the use cases that are already fully accounted for by the
+                // scalar metrics added above:
+                //
+                // - `ECDSAOutcalls` and `HTTPOutcalls` are supersets of the
+                //   corresponding use case entries (see
+                //   `consumed_cycles_ecdsa_outcalls` and
+                //   `consumed_cycles_http_outcalls`).
+                // - `DeletedCanisters` holds the leftover cycles of deleted
+                //   canisters, which are already included in
+                //   `consumed_cycles_by_deleted_canisters`.
+                // - The remaining canister-level use cases below
+                //   (`Memory`, `ComputeAllocation`, `IngressInduction`,
+                //   `Instructions`, `RequestAndResponseTransmission`,
+                //   `Uninstall`, `CanisterCreation`, `BurnedCycles`) only ever
+                //   end up in this map when a canister is deleted, at which point
+                //   the deleted canister's total consumption (the sum of these
+                //   use cases) is also added to
+                //   `consumed_cycles_by_deleted_canisters`. Summing them here as
+                //   well would double count the cycles consumed by deleted
+                //   canisters.
+                CyclesUseCase::ECDSAOutcalls
+                | CyclesUseCase::HTTPOutcalls
+                | CyclesUseCase::DeletedCanisters
+                | CyclesUseCase::Memory
+                | CyclesUseCase::ComputeAllocation
+                | CyclesUseCase::IngressInduction
+                | CyclesUseCase::Instructions
+                | CyclesUseCase::RequestAndResponseTransmission
+                | CyclesUseCase::Uninstall
+                | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::BurnedCycles => {}
+                // The remaining use cases are only ever recorded at the subnet
+                // level (never charged to a canister's balance), so they are not
+                // covered by any of the scalar metrics above and must be added to
+                // the total.
+                CyclesUseCase::SchnorrOutcalls
+                | CyclesUseCase::VetKd
+                | CyclesUseCase::DroppedMessages => total += *cycles,
+            }
+        }
+
+        total
+    }
+
+    /// Legacy computation of the total consumed cycles, used by the canonical
+    /// state consumer for certification versions up to and including `V28`.
+    ///
+    /// This version double counts the cycles consumed by deleted canisters: at
+    /// deletion, a canister's per-use-case consumption is added both to
+    /// `consumed_cycles_by_deleted_canisters` and to the
+    /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
+    /// unchanged to preserve the certified state for certification versions up
+    /// to and including `V28`; [`Self::consumed_cycles_total`] fixes the double
+    /// counting starting with certification version `V29`.
+    pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
@@ -530,6 +720,39 @@ impl SubnetMetrics {
     }
 }
 
+const GIB: u64 = 1024 * 1024 * 1024;
+
+/// The upper limit on the total size of all guaranteed response messages on a
+/// subnet.
+///
+/// Guaranteed response message memory usage is the total size of enqueued
+/// guaranteed responses plus the maximum allowed response size per reserved
+/// guaranteed response slot.
+const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
+
+/// The limit on the total size of all best-effort messages on a subnet,
+/// restored at the end of each round by shedding messages.
+const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(5 * GIB);
+
+/// Message memory is capped at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of the
+/// subnet's heap delta capacity.
+const MESSAGE_MEMORY_HEAP_DELTA_DIVISOR: u64 = 3;
+
+/// Caps `configured_default_capacity` at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR`
+/// of `heap_delta_capacity`.
+///
+/// Message memory is held in RAM alongside the heap delta pages, so this bounds
+/// message memory relative to a subnet's heap delta capacity (which is itself
+/// sized relative to available RAM).
+fn message_memory_capacity(
+    configured_default_capacity: NumBytes,
+    heap_delta_capacity: NumBytes,
+) -> NumBytes {
+    configured_default_capacity.min(NumBytes::new(
+        heap_delta_capacity.get() / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR,
+    ))
+}
+
 impl SystemMetadata {
     /// Creates a new empty system metadata state.
     pub fn new(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Self {
@@ -544,12 +767,10 @@ impl SystemMetadata {
             batch_time: UNIX_EPOCH,
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
-            own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: Default::default(),
-            node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
+            own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
+            subnet_merged: false,
 
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -563,7 +784,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            logs_migrated: false,
+            subnet_ids_at_last_reject_generation: None,
         }
     }
 
@@ -593,6 +814,40 @@ impl SystemMetadata {
     pub fn own_reference_subnet_size(&self) -> Option<usize> {
         self.network_topology
             .get_reference_subnet_size(&self.own_subnet_id)
+    }
+
+    /// Returns whether this subnet is cooling down. Defaults to `false` if
+    /// `network_topology` is not populated.
+    ///
+    /// See [`SubnetTopology::cooling_down`] for the exact semantics.
+    pub fn is_cooling_down(&self) -> bool {
+        self.network_topology.is_cooling_down(&self.own_subnet_id)
+    }
+
+    /// Returns the subnet's guaranteed response message memory capacity, capped
+    /// relative to the subnet's heap delta capacity.
+    pub fn guaranteed_response_message_memory_capacity(&self) -> NumBytes {
+        message_memory_capacity(
+            SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
+            self.heap_delta_capacity(),
+        )
+    }
+
+    /// Returns the subnet's best-effort message memory capacity, capped relative
+    /// to the subnet's heap delta capacity.
+    pub fn best_effort_message_memory_capacity(&self) -> NumBytes {
+        message_memory_capacity(
+            SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
+            self.heap_delta_capacity(),
+        )
+    }
+
+    /// The effective heap delta capacity: the registry override if set, else the
+    /// protocol default.
+    fn heap_delta_capacity(&self) -> NumBytes {
+        self.own_subnet_info
+            .resource_limits
+            .maximum_state_delta_or(ic_config::execution_environment::SUBNET_HEAP_DELTA_CAPACITY)
     }
 
     /// One-off initialization: populate `canister_allocation_ranges` with the only
@@ -747,6 +1002,10 @@ impl SystemMetadata {
     ///
     /// In phase 2 (see [`Self::after_split()`]) the ingress history is pruned and
     /// the split marker is reset.
+    ///
+    /// `unflushed_checkpoint_ops` (holding the delete operations recorded by
+    /// `ReplicatedState::split()` for the canisters dropped by the split) is preserved
+    /// on both subnets, so that the dropped canisters' directories are deleted from tip.
     pub fn split(
         mut self,
         subnet_id: SubnetId,
@@ -754,6 +1013,7 @@ impl SystemMetadata {
     ) -> Result<Self, String> {
         assert_eq!(None, self.split_from);
         assert_eq!(None, self.subnet_split_from);
+        assert!(!self.subnet_merged);
         assert_eq!(0, self.heap_delta_estimate.get());
         assert!(self.expected_compiled_wasms.is_empty());
 
@@ -777,6 +1037,10 @@ impl SystemMetadata {
 
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
+
+        // Preserve the delete operations recorded by `ReplicatedState::split()` for the
+        // canisters dropped by the split, so that their directories are deleted from tip.
+        res.unflushed_checkpoint_ops = self.unflushed_checkpoint_ops;
 
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
@@ -854,14 +1118,10 @@ impl SystemMetadata {
             // subnet registry record, do not touch it.
             own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            own_subnet_features: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            own_resource_limits: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            node_public_keys: _,
-            api_boundary_nodes: _,
+            own_subnet_info: _,
             ref mut split_from,
             subnet_split_from,
+            subnet_merged,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
             state_sync_version: _,
@@ -873,12 +1133,13 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
-            logs_migrated: _,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
         assert_eq!(None, subnet_split_from);
+        assert!(!subnet_merged);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -941,8 +1202,9 @@ impl SystemMetadata {
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
     ///  * `unflushed_checkpoint_ops` contains both arbitrary pending operations;
-    ///    and delete operations for the snapshots of non-local canisters. It is
-    ///    therefore preserved untouched.
+    ///    and the delete operations recorded by `ReplicatedState::online_split()`
+    ///    for the canisters dropped by the split. It is therefore preserved
+    ///    untouched.
     pub fn online_split(
         self,
         subnet_id: SubnetId,
@@ -963,12 +1225,10 @@ impl SystemMetadata {
             network_topology,
             own_subnet_id,
             own_subnet_type,
-            own_subnet_features,
-            own_resource_limits,
-            node_public_keys,
-            api_boundary_nodes,
+            own_subnet_info,
             split_from,
             mut subnet_split_from,
+            subnet_merged,
             mut subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -978,11 +1238,12 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
-            logs_migrated,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         assert_eq!(None, split_from);
         assert_eq!(None, subnet_split_from);
+        assert!(!subnet_merged);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -1068,13 +1329,12 @@ impl SystemMetadata {
             // New subnet ID.
             own_subnet_id: subnet_id,
             own_subnet_type,
-            own_subnet_features,
-            own_resource_limits,
             // Already populated from the registry.
-            node_public_keys,
-            api_boundary_nodes,
+            own_subnet_info,
             split_from,
             subnet_split_from,
+            // Just asserted to be `false`; a subnet split does not set it.
+            subnet_merged,
             subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -1086,9 +1346,11 @@ impl SystemMetadata {
             // retaining everything else on subnet A'.
             blockmaker_metrics_time_series,
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
-            // for the snapshots of no longer hosted canisters.
+            // for the canisters dropped by the split.
             unflushed_checkpoint_ops,
-            logs_migrated,
+            // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
+            // runs unconditionally on the first post-split round.
+            subnet_ids_at_last_reject_generation: None,
         })
     }
 
@@ -1567,6 +1829,8 @@ pub struct IngressHistoryState {
     next_terminal_time: Time,
     /// Transient: memory usage of the ingress history.
     memory_usage: usize,
+    /// Transient: number of entries in each `IngressState`.
+    state_counts: IngressHistoryStats,
 }
 
 impl Default for IngressHistoryState {
@@ -1576,6 +1840,64 @@ impl Default for IngressHistoryState {
             pruning_times: Arc::new(BTreeMap::new()),
             next_terminal_time: UNIX_EPOCH,
             memory_usage: 0,
+            state_counts: IngressHistoryStats::default(),
+        }
+    }
+}
+
+/// The number of ingress history entries in each `IngressState`.
+///
+/// `IngressStatus::Unknown` does not describe an entry at all: it is the stand-in
+/// for a message with no ingress history entry, so recording one is
+/// `debug_assert`ed against in `IngressHistoryState::insert()`. It is still given
+/// a count of its own rather than being ignored, as a release build backstop: this
+/// way the counts always add up to `IngressHistoryState::len()` and a non-zero
+/// `unknown` count reveals that something did record one.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub struct IngressHistoryStats {
+    pub received: usize,
+    pub processing: usize,
+    pub completed: usize,
+    pub failed: usize,
+    pub done: usize,
+    pub unknown: usize,
+}
+
+impl IngressHistoryStats {
+    /// Returns the counts as `(state name, count)` pairs.
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, usize)> {
+        [
+            ("received", self.received),
+            ("processing", self.processing),
+            ("completed", self.completed),
+            ("failed", self.failed),
+            ("done", self.done),
+            ("unknown", self.unknown),
+        ]
+        .into_iter()
+    }
+
+    /// Records the insertion of an entry with the given status.
+    fn on_insert(&mut self, status: &IngressStatus) {
+        *self.count_mut(status) += 1;
+    }
+
+    /// Records the removal of an entry with the given status.
+    fn on_remove(&mut self, status: &IngressStatus) {
+        *self.count_mut(status) -= 1;
+    }
+
+    /// Returns a mutable reference to the count matching the given status.
+    fn count_mut(&mut self, status: &IngressStatus) -> &mut usize {
+        match status {
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Received => &mut self.received,
+                IngressState::Processing => &mut self.processing,
+                IngressState::Completed(_) => &mut self.completed,
+                IngressState::Failed(_) => &mut self.failed,
+                IngressState::Done => &mut self.done,
+            },
+            IngressStatus::Unknown => &mut self.unknown,
         }
     }
 }
@@ -1599,7 +1921,17 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
-        // Store the associated expiry time for the given message id only for a
+        // `IngressStatus::Unknown` stands for the absence of an entry, so it must
+        // never be recorded as the status of a message. Note that
+        // `IngressStatus::is_valid_state_transition()` (checked by the callers) can
+        // only catch this if there already is an entry, as it allows any transition
+        // away from `Unknown`, i.e. from "no entry".
+        debug_assert!(
+            !matches!(status, IngressStatus::Unknown),
+            "Attempted to record `IngressStatus::Unknown` for message {message_id}"
+        );
+
+        // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
         if let IngressStatus::Known { state, .. } = &status
@@ -1618,9 +1950,11 @@ impl IngressHistoryState {
                 .insert(message_id.clone());
         }
         self.memory_usage += status.payload_bytes();
+        self.state_counts.on_insert(&status);
         let old_status = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
         if let Some(old) = &old_status {
             self.memory_usage -= old.payload_bytes();
+            self.state_counts.on_remove(old);
         }
 
         if self.memory_usage > ingress_memory_capacity.get() as usize {
@@ -1635,16 +1969,26 @@ impl IngressHistoryState {
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
         );
+        debug_assert_eq!(
+            Self::compute_state_counts(&self.statuses),
+            self.state_counts
+        );
 
         old_status.unwrap_or_else(|| IngressStatus::Unknown.into())
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
-    /// message id.
+    /// message ID.
     pub fn statuses(&self) -> impl Iterator<Item = (&MessageId, &IngressStatus)> {
         self.statuses
             .iter()
             .map(|(id, status)| (id, status.as_ref()))
+    }
+
+    /// Returns an iterator over the backing `Arc<IngressStatus>` of each entry,
+    /// sorted lexicographically by message ID.
+    pub fn statuses_arc(&self) -> impl Iterator<Item = (&MessageId, &Arc<IngressStatus>)> {
+        self.statuses.iter()
     }
 
     /// Returns an iterator over pruning times statuses, sorted
@@ -1678,6 +2022,7 @@ impl IngressHistoryState {
             for message_id in pruning_times {
                 if let Some(removed) = statuses.remove(message_id) {
                     self.memory_usage -= removed.payload_bytes();
+                    self.state_counts.on_remove(&removed);
                 }
             }
         }
@@ -1686,6 +2031,10 @@ impl IngressHistoryState {
         debug_assert_eq!(
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
+        );
+        debug_assert_eq!(
+            Self::compute_state_counts(&self.statuses),
+            self.state_counts
         );
     }
 
@@ -1743,12 +2092,14 @@ impl IngressHistoryState {
                             state: IngressState::Done,
                         });
                         self.memory_usage += done_status.payload_bytes();
+                        self.state_counts.on_insert(&done_status);
 
                         // We can safely unwrap here because we know there must be an
                         // ingress status with the given `id` in `statuses` in this
                         // branch.
                         let old_status = statuses.insert(id.clone(), done_status).unwrap();
                         self.memory_usage -= old_status.payload_bytes();
+                        self.state_counts.on_remove(&old_status);
                     }
                     _ => continue,
                 }
@@ -1761,6 +2112,10 @@ impl IngressHistoryState {
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
         );
+        debug_assert_eq!(
+            Self::compute_state_counts(&self.statuses),
+            self.state_counts
+        );
     }
 
     /// Returns the memory usage of the statuses in the ingress history. See the
@@ -1770,8 +2125,23 @@ impl IngressHistoryState {
         NumBytes::new(self.memory_usage as u64)
     }
 
+    /// Returns the number of statuses in the ingress history, by `IngressState`.
+    pub fn state_counts(&self) -> IngressHistoryStats {
+        self.state_counts
+    }
+
     fn compute_memory_usage(statuses: &BTreeMap<MessageId, Arc<IngressStatus>>) -> usize {
         statuses.values().map(|status| status.payload_bytes()).sum()
+    }
+
+    fn compute_state_counts(
+        statuses: &BTreeMap<MessageId, Arc<IngressStatus>>,
+    ) -> IngressHistoryStats {
+        let mut state_counts = IngressHistoryStats::default();
+        for status in statuses.values() {
+            state_counts.on_insert(status);
+        }
+        state_counts
     }
 
     /// Prunes the ingress history as part of subnet splitting, retaining:
@@ -1792,6 +2162,7 @@ impl IngressHistoryState {
             pruning_times: _,
             next_terminal_time: _,
             memory_usage,
+            state_counts,
         } = self;
 
         // Filters for messages in terminal states or addressed to local canisters.
@@ -1815,6 +2186,7 @@ impl IngressHistoryState {
             .collect();
         mut_statuses.retain(|message_id, _| message_ids_to_retain.contains(message_id));
         *memory_usage = Self::compute_memory_usage(mut_statuses);
+        *state_counts = Self::compute_state_counts(mut_statuses);
     }
 }
 
@@ -2011,6 +2383,8 @@ pub enum UnflushedCheckpointOp {
     LoadSnapshot(CanisterId, SnapshotId),
     /// A canister was renamed.
     RenameCanister(CanisterId, CanisterId),
+    /// A canister was deleted.
+    DeleteCanister(CanisterId),
 }
 
 /// A collection of unflushed checkpoint operations in the order that they were applied to the state.
@@ -2057,10 +2431,38 @@ impl UnflushedCheckpointOps {
             new_canister_id,
         ));
     }
+
+    /// Records the deletion of a canister. Private to the crate because the only way
+    /// of permanently removing a canister is `ReplicatedState::remove_canister()`,
+    /// which calls this on the caller's behalf.
+    pub(crate) fn delete_canister(&mut self, canister_id: CanisterId) {
+        self.operations
+            .push(UnflushedCheckpointOp::DeleteCanister(canister_id));
+    }
 }
 
 pub mod testing {
     use super::*;
+
+    /// Test helper for configuring a subnet's `maximum_state_delta`: returns the
+    /// heap delta capacity required to allow `message_memory` of message memory,
+    /// i.e. the inverse of the cap applied by `message_memory_capacity`. Lives
+    /// here so the message-memory/heap-delta factor stays confined to this
+    /// module rather than being duplicated across tests.
+    pub fn heap_delta_capacity_for_message_memory(message_memory: NumBytes) -> NumBytes {
+        NumBytes::new(message_memory.get() * MESSAGE_MEMORY_HEAP_DELTA_DIVISOR)
+    }
+
+    /// Exposes `SystemMetadata` internals for use in tests.
+    pub trait SystemMetadataTesting {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology));
+    }
+
+    impl SystemMetadataTesting for SystemMetadata {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology)) {
+            f(Arc::make_mut(&mut self.network_topology));
+        }
+    }
 
     /// Exposes `NetworkTopology` internals for use in tests.
     pub trait NetworkTopologyTesting {
@@ -2157,6 +2559,7 @@ pub mod testing {
             pruning_times: Default::default(),
             next_terminal_time: UNIX_EPOCH,
             memory_usage: Default::default(),
+            state_counts: Default::default(),
         };
         //
         // DO NOT MODIFY WITHOUT READING DOC COMMENT!
@@ -2175,12 +2578,10 @@ pub mod testing {
             network_topology: Default::default(),
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
-            own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: Default::default(),
-            node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
+            own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
+            subnet_merged: false,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,
@@ -2190,7 +2591,7 @@ pub mod testing {
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            logs_migrated: false,
+            subnet_ids_at_last_reject_generation: None,
         };
     }
 }

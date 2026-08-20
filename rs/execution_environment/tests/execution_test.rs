@@ -13,15 +13,15 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse,
     CanisterMetricsArgs, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload, SignWithECDSAArgs,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    ListCanistersResponse, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_test_utilities_execution_environment::get_reply;
+use ic_test_utilities_execution_environment::{get_reject, get_reply};
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
@@ -2530,85 +2530,6 @@ fn no_critical_error_on_empty_data_segment() {
     );
 }
 
-#[test]
-fn failed_stable_memory_grow_cost_and_time_single_canister() {
-    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
-
-    let env = StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .build();
-
-    let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
-
-    let timer = std::time::Instant::now();
-    let initial_balance = env.cycle_balance(canister_id);
-    let _res = env.execute_ingress(
-        canister_id,
-        "update",
-        wasm()
-            .stable64_grow(num_wasm_pages)
-            .stable64_write(0, &[42])
-            .trap()
-            .build(),
-    );
-    let elapsed_ms = timer.elapsed().as_millis();
-    let cycles_m = (initial_balance - env.cycle_balance(canister_id)) / 1000 / 1000;
-    assert_lt!(
-        elapsed_ms,
-        10_000,
-        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
-    );
-    assert_gt!(cycles_m, 5);
-}
-
-#[test]
-fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
-    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
-    let num_canisters = 128;
-
-    let env = StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .build();
-
-    let mut canister_ids = vec![];
-    for _ in 0..num_canisters {
-        let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
-        canister_ids.push(canister_id);
-    }
-
-    let timer = std::time::Instant::now();
-    let mut total_initial_balance = 0;
-    let mut payload = ic_state_machine_tests::PayloadBuilder::new();
-    for canister_id in &canister_ids {
-        let balance = env.cycle_balance(*canister_id);
-        total_initial_balance += balance;
-        payload = payload.ingress(
-            PrincipalId::new_anonymous(),
-            *canister_id,
-            "update",
-            wasm()
-                .stable64_grow(num_wasm_pages)
-                .stable64_write(0, &[42])
-                .trap()
-                .build(),
-        );
-    }
-    env.execute_payload(payload);
-    let elapsed_ms = timer.elapsed().as_millis();
-    let mut total_balance = 0;
-    for canister_id in &canister_ids {
-        let balance = env.cycle_balance(*canister_id);
-        total_balance += balance;
-    }
-    let cycles_m = (total_initial_balance - total_balance) / 1000 / 1000;
-    assert_lt!(
-        elapsed_ms,
-        10_000,
-        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
-    );
-    assert_gt!(cycles_m, 800);
-}
-
 /// Verifies that canister liquid cycle balance can be used to transfer as many cycles as possible.
 #[test]
 fn test_canister_liquid_cycle_balance() {
@@ -2759,121 +2680,205 @@ fn get_canister_metadata() {
     );
 }
 
-fn canister_status_count(env: &StateMachine) -> u64 {
+fn list_canisters_count(env: &StateMachine) -> u64 {
     fetch_histogram_vec_stats(
         env.metrics_registry(),
-        "execution_subnet_query_message_duration_seconds",
+        "execution_subnet_message_duration_seconds",
     )
     .get(&labels(&[
-        ("method_name", "query_ic00_canister_status"),
+        ("method_name", "ic00_list_canisters"),
+        ("outcome", "finished"),
         ("status", "success"),
+        ("speed", "fast"),
     ]))
     .map_or(0, |stats| stats.count)
 }
 
+// `list_canisters` consumes round instructions according to its cost model (a
+// base cost plus a per-canister cost). This test checks that the round
+// instruction limit is respected: when many `list_canisters` calls are pending
+// at once, the per-round subnet-message instruction budget only allows some of
+// them to execute per round, so the rest are deferred to later rounds (i.e. not
+// all calls execute in the same round).
 #[test]
-fn canister_status_via_query_call_by_controller_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+fn list_canisters_respects_round_instruction_limit() {
+    // Keep in sync with `list_canisters_instructions` in `execution/common.rs`.
+    const BASE_INSTRUCTIONS: u64 = 20_000_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
+    // Number of concurrent `list_canisters` calls. Chosen large enough that they
+    // cannot all fit within a single round's subnet-message instruction budget
+    // (`max_instructions_per_round / 16`, which with the default configuration
+    // fits at most ~12 calls of ~20M instructions each).
+    const NUM_CALLS: u64 = 30;
+
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .build();
-    let canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-
-    assert_eq!(canister_status_count(&env), 0);
-
-    let result = env.query(
-        CanisterId::ic_00(),
-        "canister_status",
-        CanisterIdRecord::from(canister_id).encode(),
-    );
-
-    assert!(result.is_ok());
-    assert_eq!(canister_status_count(&env), 1);
-}
-
-#[test]
-fn canister_status_via_query_call_by_subnet_admin_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let subnet_admin = user_test_id(100);
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
+            SubnetConfig::new(SubnetType::Application),
             HypervisorConfig::default(),
         )))
         .with_subnet_type(SubnetType::Application)
         .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        .with_subnet_admins(vec![subnet_admin.get()])
+        .with_subnet_admins(vec![admin.get()])
         .build();
-    let canister_id = create_universal_canister_with_cycles(
+
+    let admin_canister = create_universal_canister_with_cycles(
         &env,
         Some(CanisterSettingsArgsBuilder::new().build()),
         INITIAL_CYCLES_BALANCE,
     );
-    // Get the first canister controller.
-    let controller = env.get_controllers(canister_id).unwrap()[0];
+    assert_eq!(admin_canister, admin);
 
-    assert_eq!(canister_status_count(&env), 0);
-    assert_ne!(subnet_admin.get(), controller);
-
-    let result = env.query_as(
-        subnet_admin.get(),
-        CanisterId::ic_00(),
-        "canister_status",
-        CanisterIdRecord::from(canister_id).encode(),
-    );
-    assert!(result.is_ok());
-    assert_eq!(canister_status_count(&env), 1);
-}
-
-#[test]
-fn canister_status_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let subnet_admin = user_test_id(100);
-    let test_user = user_test_id(101);
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .with_subnet_type(SubnetType::Application)
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        .with_subnet_admins(vec![subnet_admin.get()])
-        .build();
-    let canister_id = create_universal_canister_with_cycles(
+    // Create an additional canister so that the subnet hosts more than just
+    // the admin canister, exercising the per-canister cost of `list_canisters`.
+    create_universal_canister_with_cycles(
         &env,
         Some(CanisterSettingsArgsBuilder::new().build()),
         INITIAL_CYCLES_BALANCE,
     );
-    // Get the first canister controller.
-    let controller = env.get_controllers(canister_id).unwrap()[0];
 
-    assert_eq!(canister_status_count(&env), 0);
-    assert_ne!(subnet_admin.get(), controller);
-    assert_ne!(test_user.get(), controller);
+    let num_canisters = env.get_latest_state().num_canisters() as u64;
+    assert_eq!(num_canisters, 2);
+    let cost_per_call = BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters;
 
-    let err = env
-        .query_as(
-            test_user.get(),
+    // Build an update that fires `NUM_CALLS` concurrent `list_canisters`
+    // inter-canister calls (ignoring their responses) and then replies. After
+    // this single message executes, all `NUM_CALLS` calls are pending as subnet
+    // messages at the same time.
+    let mut update = wasm();
+    for _ in 0..NUM_CALLS {
+        update = update.call_simple(
             CanisterId::ic_00(),
-            "canister_status",
-            CanisterIdRecord::from(canister_id).encode(),
-        )
-        .unwrap_err();
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+        );
+    }
+    let update = update.reply().build();
+
+    // `send_ingress` executes a single round in which the update runs and
+    // enqueues all `NUM_CALLS` calls; they are only drained in subsequent rounds.
+    let instructions_baseline = env.subnet_message_instructions();
+    let calls_baseline = list_canisters_count(&env);
+    assert_eq!(calls_baseline, 0);
+    env.send_ingress(
+        PrincipalId::new_anonymous(),
+        admin_canister,
+        "update",
+        update,
     );
-    assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
-    )));
-    assert_eq!(canister_status_count(&env), 0);
+
+    // Execute rounds one at a time, tracking after each round how many
+    // `list_canisters` calls have been executed so far, using the
+    // `execution_subnet_message_duration_seconds` metric to count them
+    // explicitly (rather than inferring the count from consumed instructions).
+    let executed_so_far = || list_canisters_count(&env) - calls_baseline;
+    let mut executed_per_round = vec![];
+    for _ in 0..100 {
+        env.tick();
+        executed_per_round.push(executed_so_far());
+        if executed_so_far() == NUM_CALLS {
+            break;
+        }
+    }
+
+    // Not all `list_canisters` calls were executed in the same round: there is a
+    // round after which some but not all of them had been executed.
+    assert!(
+        executed_per_round.iter().any(|&n| n > 0 && n < NUM_CALLS),
+        "expected list_canisters calls to be spread across rounds, got progression {:?}",
+        executed_per_round,
+    );
+    // Eventually all of them were executed.
+    assert_eq!(*executed_per_round.last().unwrap(), NUM_CALLS);
+    // Each executed call was charged exactly per the cost model, confirming the
+    // round instruction accounting.
+    assert_eq!(
+        env.subnet_message_instructions() - instructions_baseline,
+        (NUM_CALLS * cost_per_call) as f64
+    );
+}
+
+// A subnet admin canister can call `list_canisters` via an inter-canister
+// call and receives a successful response. Coalescing of the returned
+// canister ID ranges is tested separately by `test_list_canisters_success` in
+// `query_handler/tests.rs`.
+#[test]
+fn list_canisters_via_inter_canister_call_succeeds() {
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+
+    let admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    assert_eq!(admin_canister, admin);
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args().other_side(EmptyBlob.encode()),
+        )
+        .build();
+    let reply = get_reply(env.execute_ingress(admin_canister, "update", list_canisters));
+    ListCanistersResponse::decode(&reply).unwrap();
+}
+
+// A non-admin canister calling `list_canisters` via an inter-canister call is
+// rejected, and the rejected call must not consume any round instructions:
+// instructions are only deducted from the round limits for a successful call,
+// per the cost model checked by `list_canisters_respects_round_instruction_limit`
+// above.
+#[test]
+fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
+    let admin = user_test_id(100).get();
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+
+    let non_admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let instructions_baseline = env.subnet_message_instructions();
+    let reject = get_reject(env.execute_ingress(non_admin_canister, "update", list_canisters));
+    assert!(reject.contains("Only the subnet admins can perform certain actions"));
+
+    assert_eq!(env.subnet_message_instructions(), instructions_baseline);
 }
 
 #[test]
@@ -2882,6 +2887,7 @@ fn maximum_state_size() {
     let resource_limits = ResourceLimits {
         maximum_state_size: Some(maximum_state_size),
         maximum_state_delta: None,
+        ..Default::default()
     };
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let hypervisor_config = HypervisorConfig {
@@ -2920,6 +2926,7 @@ fn maximum_state_delta() {
     let resource_limits = ResourceLimits {
         maximum_state_size: None,
         maximum_state_delta: Some(maximum_state_delta),
+        ..Default::default()
     };
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     // We disable per-canister rate-limiting of heap delta to simplify the test.
@@ -3246,4 +3253,59 @@ fn canister_metrics_via_query_call_by_neither_controller_nor_subnet_admin_fails(
         "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
     )));
     assert_eq!(canister_metrics_count(&env), 0);
+}
+
+/// Build a gzip stream made of DEFLATE stored blocks that decompresses
+/// to the 8-byte empty WebAssembly module `\0asm\x01\x00\x00\x00`.
+///
+/// The first `blocks - 1` blocks are empty non-final stored blocks and the last
+/// is a final stored block carrying the wasm payload, wrapped in a gzip header/trailer.
+pub fn make_large_deflate_stream(blocks: usize) -> Vec<u8> {
+    /// The minimal valid WebAssembly module.
+    const WASM: [u8; 8] = [0x00, b'a', b's', b'm', 0x01, 0x00, 0x00, 0x00];
+    /// Gzip header. CM=deflate, OS=unknown.
+    const HEADER: [u8; 10] = [0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03];
+    /// A non-final DEFLATE stored block of length zero: BFINAL=0, LEN=0, NLEN=0xffff.
+    const EMPTY_NONFINAL_STORED_BLOCK: [u8; 5] = [0x00, 0x00, 0x00, 0xff, 0xff];
+    /// Compute the IEEE CRC-32 (as used by gzip) of `data`.
+    fn crc32(data: &[u8]) -> u32 {
+        let mut crc: u32 = 0xffff_ffff;
+        for &byte in data {
+            crc ^= byte as u32;
+            for _ in 0..8 {
+                let mask = (crc & 1).wrapping_neg();
+                crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+            }
+        }
+        !crc
+    }
+
+    let len = WASM.len() as u16;
+    let mut payload =
+        Vec::with_capacity(HEADER.len() + (blocks - 1) * EMPTY_NONFINAL_STORED_BLOCK.len() + 21);
+    payload.extend_from_slice(&HEADER);
+    for _ in 0..(blocks - 1) {
+        payload.extend_from_slice(&EMPTY_NONFINAL_STORED_BLOCK);
+    }
+    // Final stored block: BFINAL byte, then LEN and its ones-complement NLEN
+    // then the raw stored bytes.
+    payload.push(1);
+    payload.extend_from_slice(&len.to_le_bytes());
+    payload.extend_from_slice(&(!len).to_le_bytes());
+    payload.extend_from_slice(&WASM);
+    // gzip trailer: CRC32 of the uncompressed data, then ISIZE mod 2^32.
+    payload.extend_from_slice(&crc32(&WASM).to_le_bytes());
+    payload.extend_from_slice(&(WASM.len() as u32).to_le_bytes());
+    payload
+}
+
+#[test]
+fn large_zipped_wasm() {
+    let env = StateMachine::new();
+
+    let compressed_wasm = make_large_deflate_stream(250000);
+    let compressed_hash = ic_crypto_sha2::Sha256::hash(&compressed_wasm);
+
+    let canister_id = env.install_canister(compressed_wasm, vec![], None).unwrap();
+    assert_eq!(env.module_hash(canister_id), Some(compressed_hash));
 }

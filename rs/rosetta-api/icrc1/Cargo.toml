@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.2.9"
+version = "1.2.10"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -32,16 +32,16 @@ ic-rosetta-api = { path = "../icp" }
 ic-sys = { path = "../../sys" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-indicatif = "0.17.3"
+indicatif = { workspace = true }
 lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
-rolling-file = "0.2.0"
+rolling-file = { workspace = true }
 rosetta-core = { path = "../common/rosetta_core" }
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { workspace = true, features = ["bundled"] }
 tokio-rusqlite = "0.7"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -73,7 +73,7 @@ ic-management-canister-types = { workspace = true }
 ic-rosetta-test-utils = { path = "../icp/test_utils" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-utils = { workspace = true }
-once_cell = "1.8.0"
+once_cell = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 prometheus-parse = { workspace = true }
 url = { workspace = true }

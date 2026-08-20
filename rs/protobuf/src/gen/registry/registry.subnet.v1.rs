@@ -16,7 +16,21 @@ pub struct SubnetRecord {
     /// propagation.
     #[prost(uint64, tag = "8")]
     pub initial_notary_delay_millis: u64,
-    /// ID of the Replica version to run
+    /// Replica version IDs are generally git commit IDs in the ic git repository,
+    /// pointing to the sources from which the Replica was built.
+    ///
+    /// Must refer to an "elected" Replica version. Concretely, this means that
+    /// there is a Registry record (of type ReplicaVersionRecord) with
+    /// replica_version\_${replica_version_id} as its key.
+    ///
+    /// Exception: For Cloud Engines, this is typically blank. When blank, the
+    /// Cloud Engine's replica version is determined by
+    /// StandardEngineReplicaVersionRecord (see
+    /// registry/standard_engine_replica_version/v1/standard_engine_replica_version.proto).
+    /// This means that Registry must have a StandardEngineReplicaVersionRecord in
+    /// order for Cloud Engines to have a blank replica_version_id. But since
+    /// StandardEngineReplicaVersionRecord generally exists, this is a minor
+    /// technicality.
     #[prost(string, tag = "9")]
     pub replica_version_id: ::prost::alloc::string::String,
     /// The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
@@ -169,7 +183,7 @@ pub struct CatchUpPackageContents {
 /// Nested message and enum types in `CatchUpPackageContents`.
 pub mod catch_up_package_contents {
     /// / The purpose of the CUP.
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum CupType {
         /// / Initial CUP used to bootstrap a subnet.
         #[prost(message, tag = "9")]
@@ -182,13 +196,15 @@ pub mod catch_up_package_contents {
         SubnetSplitting(super::SubnetSplittingArgs),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq, Hash, ::prost::Message,
+)]
 pub struct GenesisArgs {
     /// Initial height of the subnet
     #[prost(uint64, tag = "1")]
     pub height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RecoveryArgs {
     /// The blockchain height that the CUP should have
     #[prost(uint64, tag = "1")]
@@ -200,13 +216,13 @@ pub struct RecoveryArgs {
     #[prost(bytes = "vec", tag = "3")]
     pub state_hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubnetSplittingArgs {
     /// / The ID of the subnet created by the split.
     #[prost(message, optional, tag = "1")]
     pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RegistryStoreUri {
     /// / The uri at which the registry store data should be retrieved. The data
     /// / must be provided as gzipped tar archive
@@ -221,14 +237,14 @@ pub struct RegistryStoreUri {
     pub registry_version: u64,
 }
 /// Contains information pertaining to all subnets in the IC and their params.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubnetListRecord {
     /// A list of subnet ids of all subnets present in this instance of the IC.
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub subnets: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// Initial non-interactive DKG transcript record
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct InitialNiDkgTranscriptRecord {
     #[prost(message, optional, tag = "1")]
     pub id: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
@@ -241,7 +257,7 @@ pub struct InitialNiDkgTranscriptRecord {
     #[prost(bytes = "vec", tag = "5")]
     pub internal_csp_transcript: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgTranscriptId {
     #[prost(uint64, tag = "1")]
     pub id: u64,
@@ -280,14 +296,14 @@ pub struct IDkgTranscript {
     #[prost(bytes = "vec", tag = "8")]
     pub raw_transcript: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DealerTuple {
     #[prost(message, optional, tag = "1")]
     pub dealer_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
     #[prost(uint32, tag = "2")]
     pub dealer_index: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SignatureTuple {
     #[prost(message, optional, tag = "1")]
     pub signer: ::core::option::Option<super::super::super::types::v1::NodeId>,
@@ -312,7 +328,7 @@ pub struct IDkgTranscriptParams {
     #[prost(message, repeated, tag = "7")]
     pub idkg_transcript_operation_args: ::prost::alloc::vec::Vec<IDkgTranscript>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgDealing {
     #[prost(message, optional, tag = "1")]
     pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
@@ -320,7 +336,7 @@ pub struct IDkgDealing {
     #[prost(bytes = "vec", tag = "2")]
     pub raw_dealing: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgSignedDealingTuple {
     #[prost(message, optional, tag = "1")]
     pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
@@ -338,7 +354,7 @@ pub struct InitialIDkgDealings {
     #[prost(message, repeated, tag = "4")]
     pub signed_dealings: ::prost::alloc::vec::Vec<IDkgSignedDealingTuple>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgComplaint {
     #[prost(message, optional, tag = "1")]
     pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
@@ -347,7 +363,7 @@ pub struct IDkgComplaint {
     #[prost(bytes = "vec", tag = "3")]
     pub raw_complaint: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IDkgOpening {
     #[prost(message, optional, tag = "1")]
     pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
@@ -356,7 +372,7 @@ pub struct IDkgOpening {
     #[prost(bytes = "vec", tag = "3")]
     pub raw_opening: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExtendedDerivationPath {
     #[prost(message, optional, tag = "1")]
     pub caller: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
@@ -367,10 +383,11 @@ pub struct ExtendedDerivationPath {
     serde::Serialize,
     serde::Deserialize,
     candid::CandidType,
-    Eq,
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SubnetFeatures {
@@ -386,7 +403,7 @@ pub struct SubnetFeatures {
     #[prost(bool, optional, tag = "9")]
     pub sev_enabled: ::core::option::Option<bool>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KeyConfig {
     /// The key's identifier.
     #[prost(message, optional, tag = "1")]
@@ -422,10 +439,11 @@ pub struct ChainKeyConfig {
     serde::Serialize,
     serde::Deserialize,
     candid::CandidType,
-    Eq,
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ResourceLimits {
@@ -433,6 +451,17 @@ pub struct ResourceLimits {
     pub maximum_state_size: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "2")]
     pub maximum_state_delta: ::core::option::Option<u64>,
+    /// The maximum number of instructions a query may consume. This applies both to a single
+    /// (non-composite) query method execution and to the total across an entire composite query
+    /// call graph.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[prost(uint64, optional, tag = "3")]
+    pub maximum_query_instructions: ::core::option::Option<u64>,
+    /// The maximum wall-clock time, in seconds, that a query (including a composite query call
+    /// graph) is allowed to run.
+    /// The protocol uses a default value if the limit of `0` is specified.
+    #[prost(uint64, optional, tag = "4")]
+    pub maximum_query_walltime_seconds: ::core::option::Option<u64>,
 }
 #[derive(
     serde::Serialize,

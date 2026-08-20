@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:72798a5bed36f7174d2a318efe1996ed44d598c37f8cf3c909e6dec53cb73812",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:657e582dca33b7dba6fa8bd30f755fcf49b9c034474fbc7fe45dbf9049bb2d1c",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -10,25 +10,26 @@
     "--cgroupns",
     "host",
     "--add-host",
-    "devenv-container:127.0.0.1"
+    "devenv-container:127.0.0.1",
+    // expected by ic-os build (same as ci/container/container-run.sh and the CI
+    // workflows); declared here rather than in "mounts" because the
+    // devcontainer mount schema only covers bind & volume mounts.
+    "--mount",
+    "type=tmpfs,target=/tmp/containers"
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
-  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.cache/zig-cache ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
+  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
   "postStartCommand": "/ic/ci/container/init.sh",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
-    "USER": "${localEnv:USER}"
+    "USER": "${localEnv:USER}",
+    "LANG": "C.UTF-8"
   },
   "mounts": [
     {
       "source": "${localEnv:HOME}/.cache",
       "target": "/home/ubuntu/.cache",
-      "type": "bind"
-    },
-    {
-      "source": "${localEnv:HOME}/.cache/zig-cache",
-      "target": "/tmp/zig-cache",
       "type": "bind"
     },
     {
@@ -78,6 +79,18 @@
           "bazel-ic/": true,
           "bazel-out/": true,
           "targets/": true
+        },
+        // rust-analyzer runs `cargo` with RUSTUP_AUTO_INSTALL=0, so a freshly
+        // (re)built dev container that lacks the toolchain pinned in
+        // rust-toolchain.toml fails to load the workspace until it's installed
+        // by hand. Overriding it back to 1 lets rust-analyzer's own cargo
+        // invocation install the pinned toolchain on demand. extraEnv is
+        // applied after rust-analyzer sets the =0 default, so this wins.
+        "rust-analyzer.cargo.extraEnv": {
+          "RUSTUP_AUTO_INSTALL": "1"
+        },
+        "rust-analyzer.check.extraEnv": {
+          "RUSTUP_AUTO_INSTALL": "1"
         }
       }
     }

@@ -16,10 +16,10 @@ mod types;
 pub mod units;
 pub mod util;
 
+pub use crate::canister_logs::fetch_canister_logs_response_for_bench;
 pub use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use canister_manager::types::WasmSource;
-pub use canister_manager::wasm_execution_mode;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
@@ -27,7 +27,9 @@ pub use execution_environment::{
     as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-pub use hypervisor::{Hypervisor, HypervisorMetrics};
+pub use hypervisor::{
+    CanisterMemoryHandling, Hypervisor, HypervisorMetrics, MemoryHandling, MemorySource,
+};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -180,7 +182,6 @@ impl ExecutionServices {
             logger,
             config.rate_limiting_of_heap_delta,
             config.rate_limiting_of_instructions,
-            config.log_memory_store_feature,
             Arc::clone(&fd_factory),
         ));
 
@@ -343,7 +344,6 @@ fn setup_execution_helper(
             wasm_executor,
             config.embedders_config.create_execution_state_base_cost,
             config.embedders_config.cost_to_compile_wasm_instruction,
-            config.embedders_config.dirty_page_overhead,
             config.canister_guaranteed_callback_quota,
         ),
     });
@@ -375,12 +375,12 @@ fn setup_execution_helper(
         config.embedders_config.wasm_max_size,
         scheduler_config.canister_snapshot_baseline_instructions,
         scheduler_config.canister_snapshot_data_baseline_instructions,
+        scheduler_config.canister_log_resize_instructions_per_byte,
         config.default_wasm_memory_limit,
         config.max_number_of_snapshots_per_canister,
         config.max_environment_variables,
         config.max_environment_variable_name_length,
         config.max_environment_variable_value_length,
-        config.log_memory_store_feature,
     );
     let canister_manager = Arc::new(CanisterManager::new(
         Arc::clone(&hypervisor),

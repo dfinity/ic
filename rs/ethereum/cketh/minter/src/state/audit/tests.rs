@@ -9,6 +9,7 @@ use crate::state::audit::{Event, replay_events_internal};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest,
 };
+use crate::timed_sized_map::Timestamp;
 use crate::tx::{
     AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
     StorageKey,
@@ -31,7 +32,7 @@ async fn should_replay_events_for_mainnet() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Mainnet);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(640_429_147_162_525_727_658_u128)
+        Wei::from(1_000_616_547_349_206_734_546_u128)
     );
 }
 
@@ -46,7 +47,7 @@ async fn should_replay_events_for_sepolia() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Sepolia);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(23_921_238_021_909_121_554_717_u128)
+        Wei::from(23_928_676_179_573_185_792_826_u128)
     );
 }
 
@@ -164,7 +165,7 @@ impl GetEventsFile {
         }
 
         fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequest {
-            use crate::tx::Eip1559Signature;
+            use crate::tx::TransactionSignature;
             use ethers_core::types::transaction::eip2718::TypedTransaction;
             use ethnum::u256;
             use ic_ethereum_types::Address;
@@ -229,7 +230,7 @@ impl GetEventsFile {
                 ),
             };
 
-            let signature = Eip1559Signature {
+            let signature = TransactionSignature {
                 signature_y_parity: decoded_sig.recovery_id().unwrap().is_y_odd(),
                 r: map_ethers_u256(decoded_sig.r),
                 s: map_ethers_u256(decoded_sig.s),
@@ -307,6 +308,21 @@ impl GetEventsFile {
                     from_subaccount,
                     created_at,
                 } => ET::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
+                    withdrawal_amount: withdrawal_amount.try_into().unwrap(),
+                    destination: destination.parse().unwrap(),
+                    ledger_burn_index: map_nat(ledger_burn_index),
+                    from,
+                    from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
+                    created_at,
+                }),
+                EventPayload::AcceptedSweeperFundingRequest {
+                    withdrawal_amount,
+                    destination,
+                    ledger_burn_index,
+                    from,
+                    from_subaccount,
+                    created_at,
+                } => ET::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
                     withdrawal_amount: withdrawal_amount.try_into().unwrap(),
                     destination: destination.parse().unwrap(),
                     ledger_burn_index: map_nat(ledger_burn_index),
@@ -459,6 +475,43 @@ impl GetEventsFile {
                         block_number: block_number.try_into().unwrap(),
                     }
                 }
+                EventPayload::RegisteredDepositAddresses {
+                    scan_window_nanos,
+                    capacity,
+                    registrations,
+                } => ET::RegisteredDepositAddresses(crate::state::event::DepositAddressRegistry {
+                    scan_window_nanos,
+                    capacity,
+                    registrations: registrations
+                        .into_iter()
+                        .map(|a| crate::state::event::DepositAddressRegistration {
+                            owner: a.owner,
+                            subaccount: a.subaccount,
+                            erc20_contract_address: a.erc20_contract_address.parse().unwrap(),
+                            address: a.address.parse().unwrap(),
+                            expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
+                            last_scanned_block: None,
+                            scan_count: 0,
+                        })
+                        .collect(),
+                }),
+                EventPayload::AutomaticDepositReceived {
+                    owner,
+                    subaccount,
+                    address,
+                    erc20_contract_address,
+                    last_scanned_block,
+                    scan_count,
+                    scanned_balance,
+                } => ET::AutomaticDepositReceived(crate::state::event::AutomaticDeposit {
+                    owner,
+                    subaccount,
+                    address: address.parse().unwrap(),
+                    erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                    last_scanned_block: last_scanned_block.try_into().unwrap(),
+                    scan_count: scan_count.try_into().unwrap(),
+                    scanned_balance: scanned_balance.try_into().unwrap(),
+                }),
             },
         }
     }

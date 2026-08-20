@@ -48,6 +48,7 @@ upload() {
         --s3-region=eu-central-1 \
         --s3-env-auth \
         copy \
+        --copy-links \
         --files-from <(echo "$(basename "$artifact_localpath")") \
         --no-traverse \
         --immutable \
@@ -69,6 +70,7 @@ upload() {
         --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
         --s3-env-auth \
         copy \
+        --copy-links \
         --files-from <(echo "$(basename "$artifact_localpath")") \
         --no-traverse \
         --immutable \
@@ -98,11 +100,8 @@ for fullrelpath in $(find -L "$BUNDLE" -type f); do
     log
     log "-- uploading '$artifact_basename' (remote path: '$bucket_path') --"
 
-    # rclone reads the $(dirname $f) to get file attributes.
-    # Therefore symlink should be resolved.
-    artifact_fullpath="$(readlink -f "$fullrelpath")"
-    upload "$artifact_fullpath" "$bucket_path"
+    upload "$fullrelpath" "$bucket_path"
 
-    artifact_checksum="$(sha256sum "$artifact_fullpath" | cut -d' ' -f1)"
+    artifact_checksum="$(sha256sum "$fullrelpath" | cut -d' ' -f1)"
     echo "$artifact_checksum,https://download.dfinity.systems/$bucket_path"
 done

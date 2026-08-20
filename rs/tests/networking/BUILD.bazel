@@ -53,6 +53,7 @@ HTTP_ENDPOINTS_DEPS = [
 system_test_nns(
     name = "canister_http_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -65,6 +66,10 @@ system_test_nns(
 system_test_nns(
     name = "canister_http_flexible_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
+    tags = [
+        "long_test",  # since it exercises many outcall scenarios.
+    ],
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
@@ -78,6 +83,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + (1 + 13 + 28 + 40 + 1) * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 83 IC Node VMs (1 system + 13+28+40 app + 1 API BN) + 1 UVM, 6 vCPUs each.
     enable_metrics = True,
+    enable_uvm = True,
     tags = ["manual"],  # not meant to be run on CI
     test_timeout = "eternal",
     vm_allocation_mode = "performanceOptimizedAllocation",
@@ -102,6 +108,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + (1 + 13 + 28 + 40 + 1) * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 83 IC Node VMs (1 system + 13+28+40 app + 1 API BN) + 1 UVM, 6 vCPUs each.
     enable_metrics = True,
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -140,6 +147,7 @@ system_test_nns(
     # the nodes (e.g. via a local DNS resolver).
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 7 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 7 IC Node VMs (1 system + 4 app + 2 API BN) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
     tags = [
         "dynamic_testnet",
         "long_test",
@@ -157,6 +165,7 @@ system_test_nns(
 system_test_nns(
     name = "canister_http_correctness_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
@@ -182,6 +191,7 @@ system_test_nns(
 system_test_nns(
     name = "canister_http_fault_tolerance_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
     tags = [
         "long_test",
     ],
@@ -201,6 +211,7 @@ system_test_nns(
 system_test_nns(
     name = "canister_http_non_replicated_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
@@ -210,6 +221,7 @@ system_test_nns(
 system_test_nns(
     name = "canister_http_time_out_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
     tags = [
         "long_test",
     ],
@@ -366,6 +378,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + (1 + 13) * 16 + 1 * 16,  # 14 IC Node VMs (1 system + 13 app) + 1 Jaeger UVM, 16 vCPUs each (resource override).
     enable_metrics = True,
+    enable_uvm = True,
     env = {
         "DOWNLOAD_P8S_DATA_COOLDOWN_SECS": "3600",
     },

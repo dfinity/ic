@@ -2,6 +2,19 @@
 
 This directory is intended to contain the various canisters, and possibly command-line tools, used for decentralized control of the Internet Computer.
 
+## Canister call graph
+
+The diagram below shows how NNS backend canisters talk to one another,
+giving an overview of the system.
+
+image::docs/canister_call_graph.svg[NNS backend canisters: inter-canister call graph,width=900]
+
+To regenerate `rs/nns/docs/canister_call_graph.svg` after editing `rs/nns/docs/canister_call_graph.dot`, run:
+[code,shell]
+----
+dot -Tsvg rs/nns/docs/canister_call_graph.dot -o rs/nns/docs/canister_call_graph.svg
+----
+
 ## Deploying the NNS canisters
 
 Before using the NNS a range of canisters must be deployed into the
@@ -85,10 +98,10 @@ dfx canister call neurons forward_vote --type=idl '( 4368585614685248742, 1, var
 
 Change deadline, execute proposal.
 
-Check blessed versions:
+Check elected versions:
 [code,shell]
 ----
-cargo run --bin ic-admin -- --nns-url=http://localhost:8080 get-blessed-replica-versions
+cargo run --bin ic-admin -- --nns-url=http://localhost:8080 get-elected-replica-versions
 ----
 
 ## An example of a demo scenario for subnet creation

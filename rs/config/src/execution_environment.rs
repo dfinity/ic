@@ -11,27 +11,12 @@ const MIB: u64 = 1024 * KIB;
 const GIB: u64 = 1024 * MIB;
 const TIB: u64 = 1024 * GIB;
 
-const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Disabled;
+const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Enabled;
 
 const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Disabled;
 
-// TODO(DSM-105): remove after the feature is enabled by default.
-pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = true;
-pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    FlagStatus::Enabled
-} else {
-    FlagStatus::Disabled
-};
-pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    4 * KIB
-} else {
-    0
-};
-pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT // header, index table, data region
-} else {
-    0
-};
+pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4 * KIB;
+pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = 4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT; // header, index table, data region
 
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
@@ -45,21 +30,6 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(750 * GIB);
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
 const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * TIB);
-
-/// This is the upper limit on how much memory can be used by all guaranteed
-/// response canister messages on a given subnet.
-///
-/// Guaranteed response message memory usage is calculated as the total size of
-/// enqueued guaranteed responses; plus the maximum allowed response size per
-/// reserved guaranteed response slot.
-const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
-
-/// The limit on how much memory may be used by all guaranteed response messages
-/// on a given subnet at the end of a round.
-///
-/// During the round, the best-effort message memory usage may exceed the limit,
-/// but the constraint is restored at the end of the round by shedding messages.
-const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(5 * GIB);
 
 /// This is the upper limit on how much memory can be used by the ingress
 /// history on a given subnet. It is lower than the subnet message memory
@@ -110,7 +80,7 @@ pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60)
 /// potential fragmentation. This limit should be larger than the maximum
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
+pub const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
 
 /// The maximum number of instructions for inspect_message calls.
 const MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS: NumInstructions =
@@ -195,7 +165,7 @@ pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
 
 /// Default maximum number of canisters per subnet if not set in the registry.
-pub const DEFAULT_MAX_NUMBER_OF_CANISTERS: u64 = 120_000;
+pub const DEFAULT_MAX_NUMBER_OF_CANISTERS: u64 = 250_000;
 
 /// Maximum number of canister snapshots that can be stored for a single canister.
 pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 10;
@@ -243,14 +213,6 @@ pub struct Config {
     /// The maximum amount of logical storage available to all the canisters on
     /// the subnet.
     pub subnet_memory_capacity: NumBytes,
-
-    /// The maximum amount of logical storage available to guaranteed response
-    /// canister messages across the whole subnet.
-    pub guaranteed_response_message_memory_capacity: NumBytes,
-
-    /// The maximum amount of logical storage available to best-effort canister
-    /// messages across the whole subnet.
-    pub best_effort_message_memory_capacity: NumBytes,
 
     /// The maximum amount of logical storage available to the ingress history
     /// across the whole subnet.
@@ -381,9 +343,6 @@ pub struct Config {
     /// Enables the replicated inter-canister calls to `fetch_canister_logs`.
     pub replicated_inter_canister_log_fetch: FlagStatus,
 
-    /// Enables the log memory store feature.
-    pub log_memory_store_feature: FlagStatus,
-
     /// Enables the flexible HTTP outcalls API (`flexible_http_request`).
     pub flexible_http_requests: FlagStatus,
 }
@@ -413,9 +372,6 @@ impl Default for Config {
                 MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS,
             subnet_memory_threshold: SUBNET_MEMORY_THRESHOLD,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
-            guaranteed_response_message_memory_capacity:
-                SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
-            best_effort_message_memory_capacity: SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
@@ -471,7 +427,6 @@ impl Default for Config {
             max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
             replicated_inter_canister_log_fetch: REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE,
-            log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
             flexible_http_requests: FLEXIBLE_HTTP_REQUESTS_FEATURE,
         }
     }

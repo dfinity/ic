@@ -11,6 +11,129 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-14: Proposal 143579
+
+http://dashboard.internetcomputer.org/proposal/143579
+
+## Added
+
+Add a `replica_version_id` to `ReplicaVersionRecord`s, and backfill with a data migration.
+
+## Changed
+
+* Guest launch measurements are now required (when electing a new GuestOS version).
+
+## Removed
+
+The `blessed_replica_versions` record has been removed.
+
+
+# 2026-08-07: Proposal 143409
+
+http://dashboard.internetcomputer.org/proposal/143409
+
+## Added
+
+* Added `maximum_query_instructions` and `maximum_query_walltime_seconds` fields to the
+  subnet record's `ResourceLimits`, allowing the query instruction limit and the maximum query
+  wall-clock time to be configured per subnet via `create_subnet` and `update_subnet`.
+  `maximum_query_instructions` applies both to a single (non-composite) query method execution
+  and to the total across a composite query call graph; `maximum_query_walltime_seconds`
+  bounds the wall-clock time a query (including a composite query call graph) may run. For each,
+  a value of `0` (or unset) means the replica's default is used.
+
+## Changed
+
+* Cloud Engines are now allowed to have blank `replica_version_id` (in their
+  `SubnetRecord`). In this case, `StandardEngineReplicaVersionRecord` is used to
+  determine the Cloud Engine's replica version.
+
+
+# 2026-07-31: Proposal 143259
+
+http://dashboard.internetcomputer.org/proposal/143259
+
+## Fixed
+
+* `do_split_subnet` - don't assume that all the registry entries exist when checking whether the
+  entries changed across await point
+
+
+# 2026-07-24: Proposal 143074
+
+http://dashboard.internetcomputer.org/proposal/143074
+
+New code for blank replica_version_id is not active yet. Therefore, this is
+"just a maintenance" release.
+
+
+# 2026-07-17: Proposal 142937
+
+http://dashboard.internetcomputer.org/proposal/142937
+
+## Added
+
+* A new method: update_standard_engine_replica_version. As usual, only callable
+  by Governance, and so far, Governance does not call this, so this code is for
+  all practical purposes not active yet, but the entry point is visible in
+  registry.did now.
+
+
+# 2026-07-10: Proposal 142805
+
+http://dashboard.internetcomputer.org/proposal/142805
+
+## Changed
+
+* `delete_subnet` may now delete any non-System subnet, lifting the previous
+  restriction to `CloudEngine` subnets. Authorization by subnet type:
+  System subnets (e.g. the NNS) may never be deleted; the engine controller
+  canister may only delete `CloudEngine` subnets; governance may delete any
+  non-System subnet.
+
+
+# 2026-07-03: Proposal 142680
+
+http://dashboard.internetcomputer.org/proposal/142680
+
+## Changed
+
+* A hardcoded allowlist of trusted node providers is now granted elevated
+  (10x) node operator and node provider rate limits. The elevated limits apply
+  to all node operator operations (node add/remove and the direct node config
+  updates), mirroring the scope of the standard node operator rate limiter.
+  This is a temporary measure to allow these providers to onboard nodes in bulk
+  (e.g. on-demand cloud provisioning). All other node providers remain subject
+  to the standard limits, and the per-IP `add_node` rate limit continues to
+  apply to everyone.
+* `change_subnet_membership` may now be called by the engine controller canister
+  in addition to the governance canister. When invoked by the engine controller,
+  the target subnet must be of type `CloudEngine`; governance retains
+  unrestricted access to any subnet.
+
+
+# 2026-06-26: Proposal 142586
+
+http://dashboard.internetcomputer.org/proposal/142586
+
+## Added
+
+* The firewall rule endpoints (`add_firewall_rules`, `remove_firewall_rules`, and
+  `update_firewall_rules`) now accept a new `cloud_engines` scope
+  (`FirewallRulesScope::CloudEngines`). Firewall rules registered under this scope are
+  applied by assigned cloud engine nodes.
+
+## Changed
+* Tightened chain-key config validation and invariants:
+  `pre_signatures_to_create_in_advance` must be non-zero for keys that require pre-signatures,
+  and must be `None` for keys that do not.
+
+## Removed
+* Removed the completed `fix_vetkd_pre_signatures_field` post-upgrade data migration and its
+  migration-specific unit test.
+* The `BlessedReplicaVersions` list is no longer updated with changes to elected versions.
+
+
 # 2026-06-19: Proposal 142453
 
 http://dashboard.internetcomputer.org/proposal/142453

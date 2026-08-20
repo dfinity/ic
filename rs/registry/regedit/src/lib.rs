@@ -32,7 +32,7 @@ fn registry_spec_to_delta_pb(
 ) -> Result<(Vec<u8>, RegistryVersion)> {
     let (mut registry_changelogs, latest_registry_version) = source::get_changelog(source_spec)?;
     // Sort according to registry versions.
-    registry_changelogs.sort_by(|a, b| a.version.cmp(&b.version));
+    registry_changelogs.sort_by_key(|a| a.version);
     // Clip registry versions that are not within requested interval.
     registry_changelogs.retain(|a| {
         a.version >= start_version

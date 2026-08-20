@@ -10,8 +10,8 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemMetadata;
 use ic_state_layout::{
-    INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, STATS_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
-    canister_id_from_path,
+    INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, STATS_FILE, SUBNET_MERGED_FILE, SUBNET_QUEUES_FILE,
+    SYSTEM_METADATA_FILE, canister_id_from_path,
 };
 use ic_types::Time;
 use ic_types::state_sync::StateSyncVersion;
@@ -106,6 +106,13 @@ pub fn split_manifest(
                 Some(SPLIT_MARKER_FILE) => {
                     return Err(ManifestValidationError::InconsistentManifest {
                         reason: "state is already undergoing a split".into(),
+                    });
+                }
+                Some(SUBNET_MERGED_FILE) => {
+                    // `SystemMetadata::split()` asserts that the state was not just
+                    // merged, so this manifest cannot be the input of a split.
+                    return Err(ManifestValidationError::InconsistentManifest {
+                        reason: "state was just merged".into(),
                     });
                 }
                 Some(SUBNET_QUEUES_FILE) => {

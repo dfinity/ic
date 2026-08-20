@@ -10,7 +10,7 @@ use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTabl
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, CanisterStates, InputQueueType, ReplicatedState, Stream, SubnetTopology,
-    metadata_state::testing::NetworkTopologyTesting,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
     testing::{
         CanisterQueuesTesting, OutputRequestBuilder, ReplicatedStateTesting, StreamTesting,
         SystemStateTesting,
@@ -18,8 +18,8 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    MetricVec, fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
-    nonzero_values,
+    MetricVec, fetch_histogram_stats, fetch_int_counter, fetch_int_counter_vec,
+    fetch_int_gauge_vec, metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::ids::{
@@ -172,11 +172,13 @@ fn reject_local_request() {
 fn build_streams_success() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
-        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
-            btreemap! {
-                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
-            },
-        ).unwrap());
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(RoutingTable::try_from(
+                btreemap! {
+                    CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
+                },
+            ).unwrap());
+        });
 
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
 
@@ -297,8 +299,9 @@ fn build_streams_local_canisters() {
         }).unwrap();
         provided_state
             .metadata
-            .network_topology
-            .set_routing_table(routing_table.clone());
+            .modify_network_topology(|network_topology| {
+                network_topology.set_routing_table(routing_table.clone());
+            });
 
         // Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
@@ -324,8 +327,9 @@ fn build_streams_local_canisters() {
 
         expected_state
             .metadata
-            .network_topology
-            .set_routing_table(routing_table.clone());
+            .modify_network_topology(|network_topology| {
+                network_topology.set_routing_table(routing_table.clone());
+            });
 
         let result_state = stream_builder.build_streams(provided_state);
 
@@ -382,11 +386,13 @@ fn build_streams_at_limit_leaves_state_untouched_impl(
             target_stream_size_bytes,
             SYSTEM_SUBNET_STREAM_MSG_LIMIT,
         );
-        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
-            btreemap! {
-                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
-            },
-        ).unwrap());
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(RoutingTable::try_from(
+                btreemap! {
+                    CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
+                },
+            ).unwrap());
+        });
 
         // We put an empty stream for the destination subnet into the state because
         // the implementation of stream builder will always allow one message if
@@ -471,11 +477,13 @@ fn build_streams_respects_limits(
             target_stream_size_bytes,
             SYSTEM_SUBNET_STREAM_MSG_LIMIT,
         );
-        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
-            btreemap! {
-                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
-            },
-        ).unwrap());
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(RoutingTable::try_from(
+                btreemap! {
+                    CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
+                },
+            ).unwrap());
+        });
 
         assert!(
             msg_count > expected_messages as usize,
@@ -638,16 +646,14 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         // Ensure the routing table knows about the `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
-            btreemap! {
-                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
-            },
-        ).unwrap());
-        provided_state
-            .metadata
-            .network_topology
-            .subnets_mut()
-            .insert(REMOTE_SUBNET, Default::default());
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(RoutingTable::try_from(
+                btreemap! {
+                    CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
+                },
+            ).unwrap());
+            network_topology.subnets_mut().insert(REMOTE_SUBNET, Default::default());
+        });
 
         // Set up the provided_canister_states.
         let provided_canister_states = canister_states_with_outputs(msgs.clone());
@@ -731,18 +737,20 @@ fn build_streams_with_best_effort_messages_impl(
 
         let (stream_builder, mut provided_state, _) = new_fixture(&log);
 
-        // Set the subnet types of the local and remote subnets.
-        provided_state.metadata.network_topology.set_subnets(btreemap! {
-            LOCAL_SUBNET => SubnetTopology {subnet_type: local_subnet_type, ..Default::default()},
-            REMOTE_SUBNET => SubnetTopology {subnet_type: remote_subnet_type, ..Default::default()},
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            // Set the subnet types of the local and remote subnets.
+            network_topology.set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology {subnet_type: local_subnet_type, ..Default::default()},
+                REMOTE_SUBNET => SubnetTopology {subnet_type: remote_subnet_type, ..Default::default()},
+            });
+            // Ensure that the routing table knows about `LOCAL_SUBNET` and `REMOTE_SUBNET`.
+            network_topology.set_routing_table(RoutingTable::try_from(
+                btreemap! {
+                    CanisterIdRange{ start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                    CanisterIdRange{ start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+                },
+            ).unwrap());
         });
-        // Ensure that the routing table knows about `LOCAL_SUBNET` and `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
-            btreemap! {
-                CanisterIdRange{ start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
-                CanisterIdRange{ start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
-            },
-        ).unwrap());
 
         // Set up a canister with `msgs` in its output queues.
         let provided_canister_states = canister_states_with_outputs(msgs.clone());
@@ -820,17 +828,19 @@ fn build_streams_engine_src_rejects_guaranteed_response_request() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
-        provided_state.metadata.network_topology.set_subnets(btreemap! {
-            LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
-            REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
+                REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+            });
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                    CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+                })
+                .unwrap(),
+            );
         });
-        provided_state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
-                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
-            })
-            .unwrap(),
-        );
 
         let provided_canister_states = canister_states_with_outputs(vec![msg]);
         provided_state.put_canister_states(provided_canister_states);
@@ -887,17 +897,19 @@ fn build_streams_engine_src_rejects_cycles_request() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
-        provided_state.metadata.network_topology.set_subnets(btreemap! {
-            LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
-            REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
+                REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+            });
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                    CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+                })
+                .unwrap(),
+            );
         });
-        provided_state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
-                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
-            })
-            .unwrap(),
-        );
 
         let provided_canister_states = canister_states_with_outputs(vec![msg]);
         provided_state.put_canister_states(provided_canister_states);
@@ -957,17 +969,19 @@ fn build_streams_engine_src_drops_cycles_response() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
-        provided_state.metadata.network_topology.set_subnets(btreemap! {
-            LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
-            REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
+                REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+            });
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                    CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+                })
+                .unwrap(),
+            );
         });
-        provided_state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
-                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
-            })
-            .unwrap(),
-        );
 
         let provided_canister_states =
             canister_states_with_outputs(vec![RequestOrResponse::Response(response)]);
@@ -1027,17 +1041,19 @@ fn build_streams_engine_src_strips_and_routes_guaranteed_response() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
-        provided_state.metadata.network_topology.set_subnets(btreemap! {
-            LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
-            REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
+                REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+            });
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                    CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+                })
+                .unwrap(),
+            );
         });
-        provided_state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
-                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
-            })
-            .unwrap(),
-        );
 
         let provided_canister_states =
             canister_states_with_outputs(vec![RequestOrResponse::Response(response)]);
@@ -1094,20 +1110,19 @@ fn build_streams_drops_refunds_at_engine_boundary() {
             let (stream_builder, mut provided_state, _) = new_fixture(&log);
 
             provided_state.metadata.own_subnet_type = own_subnet_type;
-            provided_state
-                .metadata
-                .network_topology
-                .set_subnets(btreemap! {
+            provided_state.metadata.modify_network_topology(|network_topology| {
+                network_topology.set_subnets(btreemap! {
                     LOCAL_SUBNET => SubnetTopology { subnet_type: own_subnet_type, ..Default::default() },
                     REMOTE_SUBNET => SubnetTopology { subnet_type: remote_subnet_type, ..Default::default() },
                 });
-            provided_state.metadata.network_topology.set_routing_table(
-                RoutingTable::try_from(btreemap! {
-                    CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
-                    CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
-                })
-                .unwrap(),
-            );
+                network_topology.set_routing_table(
+                    RoutingTable::try_from(btreemap! {
+                        CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                        CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+                    })
+                    .unwrap(),
+                );
+            });
 
             // Add a refund destined for the canister on the other side of the engine boundary.
             provided_state.add_refund(remote_canister_id, Cycles::new(100));
@@ -1133,6 +1148,380 @@ fn build_streams_drops_refunds_at_engine_boundary() {
                  remote_subnet_type={remote_subnet_type:?})",
             );
         });
+    }
+}
+
+/// Tests around subnets that are cooling down.
+mod cooling_down {
+    use super::*;
+    // Explicit import, to disambiguate from the `std` macro of the same name
+    // (both are in scope via the glob import above).
+    use pretty_assertions::assert_eq;
+
+    /// The remote subnet that is cooling down in the tests below.
+    const COOLING_DOWN_SUBNET: SubnetId = REMOTE_SUBNET;
+    /// A third subnet, never cooling down, used to check that only the messages to
+    /// cooling down subnets are held back.
+    const OTHER_SUBNET: SubnetId = SUBNET_3;
+
+    /// The sender of all messages in the tests below, hosted by `LOCAL_SUBNET`.
+    const SENDER_CANISTER: CanisterId = CanisterId::from_u64(0);
+    /// The destination canister, hosted by the cooling down subnet (which is
+    /// `LOCAL_SUBNET` itself in `new_local_cooling_down_fixture()`).
+    const COOLING_DOWN_CANISTER: CanisterId = CanisterId::from_u64(1);
+    /// A canister hosted by `OTHER_SUBNET`.
+    const OTHER_CANISTER: CanisterId = CanisterId::from_u64(2);
+
+    /// The non-zero amount of cycles attached by `cooling_down_message_matrix()`.
+    const ONE_TRILLION_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+
+    /// Sets up a fixture with `SENDER_CANISTER` hosted by `LOCAL_SUBNET`,
+    /// `COOLING_DOWN_CANISTER` by `COOLING_DOWN_SUBNET` (which is cooling down) and
+    /// `OTHER_CANISTER` by `OTHER_SUBNET` (which is not).
+    fn new_cooling_down_fixture(
+        log: &ReplicaLogger,
+    ) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
+        let (stream_builder, mut state, metrics_registry) = new_fixture(log);
+
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology::default(),
+                COOLING_DOWN_SUBNET => SubnetTopology { cooling_down: true, ..Default::default() },
+                OTHER_SUBNET => SubnetTopology::default(),
+            });
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange { start: SENDER_CANISTER, end: SENDER_CANISTER } => LOCAL_SUBNET,
+                    CanisterIdRange { start: COOLING_DOWN_CANISTER, end: COOLING_DOWN_CANISTER } => COOLING_DOWN_SUBNET,
+                    CanisterIdRange { start: OTHER_CANISTER, end: OTHER_CANISTER } => OTHER_SUBNET,
+                })
+                .unwrap(),
+            );
+        });
+
+        (stream_builder, state, metrics_registry)
+    }
+
+    /// Same as `new_cooling_down_fixture()`, except that `COOLING_DOWN_CANISTER` is
+    /// hosted by `LOCAL_SUBNET` and it is `LOCAL_SUBNET` that is cooling down. I.e.
+    /// `LOCAL_SUBNET` is both the source subnet of all messages below and the
+    /// destination subnet of the messages to `COOLING_DOWN_CANISTER` (which would go
+    /// into the loopback stream); while `OTHER_SUBNET` is not cooling down.
+    fn new_local_cooling_down_fixture(
+        log: &ReplicaLogger,
+    ) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
+        let (stream_builder, mut state, metrics_registry) = new_fixture(log);
+
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology { cooling_down: true, ..Default::default() },
+                OTHER_SUBNET => SubnetTopology::default(),
+            });
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange { start: SENDER_CANISTER, end: COOLING_DOWN_CANISTER } => LOCAL_SUBNET,
+                    CanisterIdRange { start: OTHER_CANISTER, end: OTHER_CANISTER } => OTHER_SUBNET,
+                })
+                .unwrap(),
+            );
+        });
+
+        (stream_builder, state, metrics_registry)
+    }
+
+    /// Marks `subnet_id` as no longer cooling down.
+    fn clear_cooling_down(state: &mut ReplicatedState, subnet_id: SubnetId) {
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology
+                .subnets_mut()
+                .get_mut(&subnet_id)
+                .unwrap()
+                .cooling_down = false;
+        });
+    }
+
+    /// A request from `SENDER_CANISTER` to `receiver`, with the given callback ID.
+    ///
+    /// `canister_states_with_outputs()` requires the callback IDs of a canister's
+    /// requests to match the ones that its `CallContextManager` generates, i.e. to
+    /// start at 1 and be consecutive in push order.
+    fn request_from_sender_with_callback(
+        receiver: CanisterId,
+        deadline: CoarseTime,
+        payment: Cycles,
+        callback_id: u64,
+    ) -> RequestOrResponse {
+        RequestBuilder::new()
+            .sender(SENDER_CANISTER)
+            .receiver(receiver)
+            .sender_reply_callback(CallbackId::from(callback_id))
+            .deadline(deadline)
+            .payment(payment)
+            .build()
+            .into()
+    }
+
+    /// A request from `SENDER_CANISTER` to `receiver`, as the sender's first call.
+    fn request_from_sender(
+        receiver: CanisterId,
+        deadline: CoarseTime,
+        payment: Cycles,
+    ) -> RequestOrResponse {
+        request_from_sender_with_callback(receiver, deadline, payment, 1)
+    }
+
+    /// A response from `SENDER_CANISTER` to `originator`.
+    fn response_from_sender(
+        originator: CanisterId,
+        deadline: CoarseTime,
+        refund: Cycles,
+    ) -> RequestOrResponse {
+        RequestOrResponse::Response(Arc::new(Response {
+            originator,
+            respondent: SENDER_CANISTER,
+            originator_reply_callback: CallbackId::from(1),
+            refund,
+            response_payload: Payload::Data(vec![]),
+            deadline,
+        }))
+    }
+
+    /// The matrix of canister messages from `SENDER_CANISTER` to `receiver` covered by
+    /// the cooling down tests: a request or a response; unbounded-wait or bounded-wait;
+    /// with no cycles or 1T cycles attached.
+    ///
+    /// None of these dimensions makes any difference to a message headed for a cooling
+    /// down subnet; contrast with `is_illegal_engine_msg` in `build_streams_impl()`.
+    fn cooling_down_message_matrix(
+        receiver: CanisterId,
+    ) -> impl Iterator<Item = RequestOrResponse> {
+        [NO_DEADLINE, SOME_DEADLINE]
+            .into_iter()
+            .flat_map(|deadline| {
+                [Cycles::zero(), ONE_TRILLION_CYCLES]
+                    .into_iter()
+                    .map(move |cycles| (deadline, cycles))
+            })
+            .flat_map(move |(deadline, cycles)| {
+                [
+                    request_from_sender(receiver, deadline, cycles),
+                    response_from_sender(receiver, deadline, cycles),
+                ]
+            })
+    }
+
+    /// Asserts that no canister message was routed into the stream to `subnet_id`.
+    fn assert_no_messages_routed(state: &ReplicatedState, subnet_id: SubnetId) {
+        assert_eq!(
+            Vec::<StreamMessage>::new(),
+            routed_messages(state, subnet_id)
+        );
+    }
+
+    /// Returns the canister messages routed into the stream to `subnet_id`.
+    fn routed_messages(state: &ReplicatedState, subnet_id: SubnetId) -> Vec<StreamMessage> {
+        state
+            .streams()
+            .get(&subnet_id)
+            .map_or(Vec::new(), |stream| {
+                stream
+                    .messages()
+                    .iter()
+                    .map(|(_, msg)| msg.clone())
+                    .collect()
+            })
+    }
+
+    /// Returns the raw contents of `sender`'s output queue to `receiver`.
+    fn output_queue_contents(
+        state: &ReplicatedState,
+        sender: CanisterId,
+        receiver: CanisterId,
+    ) -> Vec<RequestOrResponse> {
+        state
+            .canister_state(&sender)
+            .unwrap()
+            .system_state
+            .queues()
+            .output_queue_iter_for_testing(&receiver)
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect()
+    }
+
+    /// Retrieves the `METRIC_COOLING_DOWN_SKIPPED_QUEUES` counter's value.
+    fn fetch_cooling_down_skipped_queues(metrics_registry: &MetricsRegistry) -> u64 {
+        fetch_int_counter(metrics_registry, METRIC_COOLING_DOWN_SKIPPED_QUEUES)
+            .unwrap_or_else(|| panic!("Counter not found: {METRIC_COOLING_DOWN_SKIPPED_QUEUES}"))
+    }
+
+    /// Tests that a canister message to a cooling down subnet is retained in the
+    /// sending canister's output queue -- rather than routed, rejected or dropped --
+    /// and that it is routed as soon as the destination subnet stops cooling down.
+    ///
+    /// Covers the full matrix of: request vs. response; addressed to a canister hosted
+    /// by the cooling down subnet vs. to the subnet itself (i.e. its management
+    /// canister); unbounded-wait vs. bounded-wait; and with no cycles vs. 1T cycles
+    /// attached. Every combination is exercised twice: with a remote subnet cooling
+    /// down; and with `LOCAL_SUBNET` itself cooling down, i.e. the loopback stream is
+    /// not exempt either.
+    ///
+    /// See `build_streams_retains_messages_from_cooling_down_subnet()` for the
+    /// mirror image, i.e. a cooling down source subnet.
+    #[test]
+    fn build_streams_retains_messages_to_cooling_down_subnet() {
+        for cooling_down_subnet in [COOLING_DOWN_SUBNET, LOCAL_SUBNET] {
+            // A canister hosted by the cooling down subnet; and the subnet itself, i.e.
+            // its management canister.
+            for receiver in [COOLING_DOWN_CANISTER, CanisterId::from(cooling_down_subnet)] {
+                for msg in cooling_down_message_matrix(receiver) {
+                    with_test_replica_logger(|log| {
+                        let (stream_builder, mut provided_state, metrics_registry) =
+                            if cooling_down_subnet == LOCAL_SUBNET {
+                                new_local_cooling_down_fixture(&log)
+                            } else {
+                                new_cooling_down_fixture(&log)
+                            };
+                        provided_state
+                            .put_canister_states(canister_states_with_outputs(vec![msg.clone()]));
+
+                        let mut result_state = stream_builder.build_streams(provided_state);
+
+                        // Nothing was routed into the stream to the cooling down subnet; the
+                        // message is still in the sender's output queue; and no reject
+                        // response was generated for it.
+                        assert_no_messages_routed(&result_state, cooling_down_subnet);
+                        assert_eq!(
+                            vec![msg.clone()],
+                            output_queue_contents(&result_state, SENDER_CANISTER, receiver)
+                        );
+                        assert!(
+                            !result_state
+                                .canister_state(&SENDER_CANISTER)
+                                .unwrap()
+                                .has_input()
+                        );
+
+                        assert_routed_messages_eq(MetricVec::new(), &metrics_registry);
+                        assert_eq!(1, fetch_cooling_down_skipped_queues(&metrics_registry));
+                        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+
+                        // And it is routed as soon as the subnet stops cooling down.
+                        clear_cooling_down(&mut result_state, cooling_down_subnet);
+                        let result_state = stream_builder.build_streams(result_state);
+                        assert_eq!(
+                            vec![StreamMessage::from(msg)],
+                            routed_messages(&result_state, cooling_down_subnet)
+                        );
+                    });
+                }
+            }
+        }
+    }
+
+    /// Tests that only the messages to the cooling down subnet are held back: a
+    /// message from the same canister to a canister on a subnet that is not cooling
+    /// down is routed in the very same round.
+    #[test]
+    fn build_streams_routes_messages_to_other_subnets_while_one_is_cooling_down() {
+        with_test_replica_logger(|log| {
+            let retained = request_from_sender(COOLING_DOWN_CANISTER, NO_DEADLINE, Cycles::zero());
+            // The sender's second call, so it must carry callback ID 2.
+            let routed =
+                request_from_sender_with_callback(OTHER_CANISTER, NO_DEADLINE, Cycles::zero(), 2);
+
+            let (stream_builder, mut provided_state, metrics_registry) =
+                new_cooling_down_fixture(&log);
+            provided_state.put_canister_states(canister_states_with_outputs(vec![
+                retained.clone(),
+                routed.clone(),
+            ]));
+
+            let result_state = stream_builder.build_streams(provided_state);
+
+            assert_no_messages_routed(&result_state, COOLING_DOWN_SUBNET);
+            assert_eq!(
+                vec![retained],
+                output_queue_contents(&result_state, SENDER_CANISTER, COOLING_DOWN_CANISTER)
+            );
+            assert_eq!(
+                vec![StreamMessage::from(routed)],
+                routed_messages(&result_state, OTHER_SUBNET)
+            );
+            assert_routed_messages_eq(
+                metric_vec(&[(
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                        (LABEL_STATUS, LABEL_VALUE_STATUS_SUCCESS),
+                    ],
+                    1,
+                )]),
+                &metrics_registry,
+            );
+            assert_eq!(1, fetch_cooling_down_skipped_queues(&metrics_registry));
+            assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+        });
+    }
+
+    /// Tests that a canister message from a canister on a cooling down subnet is
+    /// retained in the sending canister's output queue -- rather than routed,
+    /// rejected or dropped -- even though the destination subnet is not cooling
+    /// down; and that it is routed as soon as the source subnet stops cooling down.
+    ///
+    /// Covers the full matrix of: request vs. response; unbounded-wait vs.
+    /// bounded-wait; and with no cycles vs. 1T cycles attached; addressed to a
+    /// canister on a subnet that is not cooling down and to that subnet itself (i.e.
+    /// its management canister); as well as to a local canister and to `LOCAL_SUBNET`
+    /// itself, i.e. the loopback stream is not exempt either (which is also covered
+    /// by `build_streams_retains_messages_to_cooling_down_subnet()`, the source and
+    /// the destination subnet being one and the same for a loopback message).
+    #[test]
+    fn build_streams_retains_messages_from_cooling_down_subnet() {
+        for (receiver, dst_subnet) in [
+            (OTHER_CANISTER, OTHER_SUBNET),
+            (CanisterId::from(OTHER_SUBNET), OTHER_SUBNET),
+            (COOLING_DOWN_CANISTER, LOCAL_SUBNET),
+            (CanisterId::from(LOCAL_SUBNET), LOCAL_SUBNET),
+        ] {
+            for msg in cooling_down_message_matrix(receiver) {
+                with_test_replica_logger(|log| {
+                    let (stream_builder, mut provided_state, metrics_registry) =
+                        new_local_cooling_down_fixture(&log);
+                    provided_state
+                        .put_canister_states(canister_states_with_outputs(vec![msg.clone()]));
+
+                    let mut result_state = stream_builder.build_streams(provided_state);
+
+                    // Nothing was routed into the stream to the destination subnet; the
+                    // message is still in the sender's output queue; and no reject response
+                    // was generated for it.
+                    assert_no_messages_routed(&result_state, dst_subnet);
+                    assert_eq!(
+                        vec![msg.clone()],
+                        output_queue_contents(&result_state, SENDER_CANISTER, receiver)
+                    );
+                    assert!(
+                        !result_state
+                            .canister_state(&SENDER_CANISTER)
+                            .unwrap()
+                            .has_input()
+                    );
+
+                    assert_routed_messages_eq(MetricVec::new(), &metrics_registry);
+                    assert_eq!(1, fetch_cooling_down_skipped_queues(&metrics_registry));
+                    assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+
+                    // And it is routed as soon as the source subnet stops cooling down.
+                    clear_cooling_down(&mut result_state, LOCAL_SUBNET);
+                    let result_state = stream_builder.build_streams(result_state);
+                    assert_eq!(
+                        vec![StreamMessage::from(msg)],
+                        routed_messages(&result_state, dst_subnet)
+                    );
+                });
+            }
+        }
     }
 }
 
@@ -1205,22 +1594,20 @@ fn build_streams_with_refunds(
             system_subnet_stream_msg_limit,
         );
 
-        // Set the type of both subnets.
-        provided_state
-            .metadata
-            .network_topology
-            .set_subnets(btreemap! {
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            // Set the type of both subnets.
+            network_topology.set_subnets(btreemap! {
                 LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
                 REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
             });
-
-        // Map local canisters to `LOCAL_SUBNET`, remote canisters to `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
-            btreemap! {
-                CanisterIdRange{ start: first_local_canister, end: last_local_canister } => LOCAL_SUBNET,
-                CanisterIdRange{ start: first_remote_canister, end: last_remote_canister } => REMOTE_SUBNET,
-            },
-        ).unwrap());
+            // Map local canisters to `LOCAL_SUBNET`, remote canisters to `REMOTE_SUBNET`.
+            network_topology.set_routing_table(RoutingTable::try_from(
+                btreemap! {
+                    CanisterIdRange{ start: first_local_canister, end: last_local_canister } => LOCAL_SUBNET,
+                    CanisterIdRange{ start: first_remote_canister, end: last_remote_canister } => REMOTE_SUBNET,
+                },
+            ).unwrap());
+        });
 
         // Loopback and remote streams pre-populated with `initial_refunds` and
         // `initial_messages` each.
@@ -1504,13 +1891,15 @@ fn build_streams_with_oversized_payloads() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         // Map local canister to `LOCAL_SUBNET` and remote canister to `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
-                CanisterIdRange{ start: remote_canister, end: remote_canister } => REMOTE_SUBNET,
-            })
-            .unwrap(),
-        );
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
+                    CanisterIdRange{ start: remote_canister, end: remote_canister } => REMOTE_SUBNET,
+                })
+                .unwrap(),
+            );
+        });
 
         // Provided_canister_states with oversized payload messages as outputs.
         let provided_canister_states = canister_states_with_outputs::<RequestOrResponse>(vec![
@@ -1615,28 +2004,29 @@ fn test_observe_misrouted_messages_on_splitting_subnet() {
         let canister_on_b = canister_test_id(400);
         let canister_on_z = canister_test_id(500);
 
-        // Routing table: `migrating_canister` is still hosted by the local subnet;
-        // `migrated_canister` has already migrated from the local subnet to B.
-        state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
-                CanisterIdRange{ start: migrating_canister, end: migrating_canister } => LOCAL_SUBNET,
-                CanisterIdRange{ start: migrated_canister, end: migrated_canister } => REMOTE_SUBNET_B,
-                CanisterIdRange{ start: canister_on_b, end: canister_on_b } => REMOTE_SUBNET_B,
-                CanisterIdRange{ start: canister_on_z, end: canister_on_z } => REMOTE_SUBNET_Z,
-            })
-            .unwrap(),
-        );
-
-        // Canister migrations: both `migrating_canister` and `migrated_canister` are
-        // migrating from the local subnet to B.
-        state.metadata.network_topology.canister_migrations = Arc::new(
-            CanisterMigrations::try_from(btreemap! {
-                CanisterIdRange{ start: migrating_canister, end: migrating_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET_B],
-                CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET_B],
-            })
-            .unwrap(),
-        );
+        state.metadata.modify_network_topology(|network_topology| {
+            // Routing table: `migrating_canister` is still hosted by the local subnet;
+            // `migrated_canister` has already migrated from the local subnet to B.
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
+                    CanisterIdRange{ start: migrating_canister, end: migrating_canister } => LOCAL_SUBNET,
+                    CanisterIdRange{ start: migrated_canister, end: migrated_canister } => REMOTE_SUBNET_B,
+                    CanisterIdRange{ start: canister_on_b, end: canister_on_b } => REMOTE_SUBNET_B,
+                    CanisterIdRange{ start: canister_on_z, end: canister_on_z } => REMOTE_SUBNET_Z,
+                })
+                .unwrap(),
+            );
+            // Canister migrations: both `migrating_canister` and `migrated_canister` are
+            // migrating from the local subnet to B.
+            network_topology.canister_migrations = Arc::new(
+                CanisterMigrations::try_from(btreemap! {
+                    CanisterIdRange{ start: migrating_canister, end: migrating_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET_B],
+                    CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET_B],
+                })
+                .unwrap(),
+            );
+        });
 
         let message_to = |receiver: CanisterId| {
             RequestBuilder::default()
@@ -1726,29 +2116,30 @@ fn test_observe_misrouted_messages_on_third_party_subnet() {
         let canister_on_b = canister_test_id(500);
         let canister_on_z = canister_test_id(600);
 
-        // Routing table: `migrating_canister` is still hosted by subnet A;
-        // `migrated_canister` has already migrated from A to B.
-        state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
-                CanisterIdRange{ start: canister_on_a, end: canister_on_a } => REMOTE_SUBNET_A,
-                CanisterIdRange{ start: migrating_canister, end: migrating_canister } => REMOTE_SUBNET_A,
-                CanisterIdRange{ start: migrated_canister, end: migrated_canister } => REMOTE_SUBNET_B,
-                CanisterIdRange{ start: canister_on_b, end: canister_on_b } => REMOTE_SUBNET_B,
-                CanisterIdRange{ start: canister_on_z, end: canister_on_z } => REMOTE_SUBNET_Z,
-            })
-            .unwrap(),
-        );
-
-        // Canister migrations: both `migrating_canister` and `migrated_canister` are
-        // migrating from A to B.
-        state.metadata.network_topology.canister_migrations = Arc::new(
-            CanisterMigrations::try_from(btreemap! {
-                CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![REMOTE_SUBNET_A, REMOTE_SUBNET_B],
-                CanisterIdRange{ start: migrating_canister, end: migrating_canister } => vec![REMOTE_SUBNET_A, REMOTE_SUBNET_B],
-            })
-            .unwrap(),
-        );
+        state.metadata.modify_network_topology(|network_topology| {
+            // Routing table: `migrating_canister` is still hosted by subnet A;
+            // `migrated_canister` has already migrated from A to B.
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
+                    CanisterIdRange{ start: canister_on_a, end: canister_on_a } => REMOTE_SUBNET_A,
+                    CanisterIdRange{ start: migrating_canister, end: migrating_canister } => REMOTE_SUBNET_A,
+                    CanisterIdRange{ start: migrated_canister, end: migrated_canister } => REMOTE_SUBNET_B,
+                    CanisterIdRange{ start: canister_on_b, end: canister_on_b } => REMOTE_SUBNET_B,
+                    CanisterIdRange{ start: canister_on_z, end: canister_on_z } => REMOTE_SUBNET_Z,
+                })
+                .unwrap(),
+            );
+            // Canister migrations: both `migrating_canister` and `migrated_canister` are
+            // migrating from A to B.
+            network_topology.canister_migrations = Arc::new(
+                CanisterMigrations::try_from(btreemap! {
+                    CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![REMOTE_SUBNET_A, REMOTE_SUBNET_B],
+                    CanisterIdRange{ start: migrating_canister, end: migrating_canister } => vec![REMOTE_SUBNET_A, REMOTE_SUBNET_B],
+                })
+                .unwrap(),
+            );
+        });
 
         let message_to = |receiver: CanisterId| {
             RequestBuilder::default()
@@ -2046,7 +2437,6 @@ fn assert_eq_critical_errors(
 ) {
     assert_eq!(
         nonzero_values(metric_vec(&[
-            (&[("error", &CRITICAL_ERROR_INFINITE_LOOP)], 0),
             (
                 &[("error", &CRITICAL_ERROR_PAYLOAD_TOO_LARGE)],
                 payload_too_large

@@ -224,6 +224,16 @@ impl RegistryHelper {
             .map(|(subnet_id, _subnet_type)| subnet_id))
     }
 
+    pub(crate) fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<SubnetType>> {
+        self.registry_client
+            .get_subnet_type(subnet_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
+    }
+
     /// Get the replica version of the given subnet in the given registry
     /// version
     pub(crate) fn get_replica_version(
@@ -231,9 +241,18 @@ impl RegistryHelper {
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<ReplicaVersion> {
-        let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
-        ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
-            .map_err(OrchestratorError::ReplicaVersionParseError)
+        let replica_version = self
+            .registry_client
+            .get_replica_version(subnet_id, registry_version)?;
+
+        let Some(replica_version) = replica_version else {
+            return Err(OrchestratorError::SubnetMissingError(
+                subnet_id,
+                registry_version,
+            ));
+        };
+
+        Ok(replica_version)
     }
 
     /// Get the recalled replica versions of the given subnet in the given registry
@@ -385,11 +404,15 @@ impl RegistryHelper {
     pub(crate) fn get_node_domain_name(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<String>> {
+    ) -> OrchestratorResult<String> {
         let result = self
             .registry_client
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
-        Ok(result)
+        result.ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id, version))
     }
 }
+
+#[cfg(test)]
+#[path = "./registry_helper_tests.rs"]
+mod tests;

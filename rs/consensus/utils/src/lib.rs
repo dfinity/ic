@@ -12,7 +12,10 @@ use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegist
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
-    consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold},
+    consensus::{
+        Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold,
+        dkg::SubnetSplittingStatus,
+    },
     crypto::{
         Signed,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
@@ -25,6 +28,7 @@ pub mod chain_key;
 pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
+pub mod subnet_splitting;
 
 /// When purging consensus or certification artifacts, we always keep a
 /// minimum chain length below the catch-up height.
@@ -325,6 +329,14 @@ pub fn active_high_threshold_committee(
     })
 }
 
+/// Return the subnet splitting status for the given height if it was found.
+pub fn subnet_splitting_status_at_height(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<SubnetSplittingStatus> {
+    get_active_data_at(reader, height, get_subnet_splitting_status_at_given_summary)
+}
+
 /// Return the active DKGData active at the given height if it was found.
 fn get_active_data_at<T>(
     reader: &dyn ConsensusPoolCache,
@@ -401,6 +413,19 @@ fn get_transcript_data_at_given_summary<T>(
     }
 }
 
+fn get_subnet_splitting_status_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+) -> Option<SubnetSplittingStatus> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+
+    if dkg_summary.current_interval_includes(height) {
+        Some(dkg_summary.subnet_splitting_status())
+    } else {
+        None
+    }
+}
+
 /// Check if the [`ReplicaVersion`] is the current version
 ///
 /// # Arguments
@@ -456,10 +481,20 @@ pub fn get_oldest_state_registry_version(state: &ReplicatedState) -> Option<Regi
         .map(|context| context.registry_version)
         .min();
 
-    [oldest_chain_key_version, oldest_setup_initial_dkg_version]
-        .into_iter()
-        .flatten()
-        .min()
+    let oldest_canister_http_version = call_context_manager
+        .canister_http_request_contexts
+        .values()
+        .map(|context| context.registry_version)
+        .min();
+
+    [
+        oldest_chain_key_version,
+        oldest_setup_initial_dkg_version,
+        oldest_canister_http_version,
+    ]
+    .into_iter()
+    .flatten()
+    .min()
 }
 
 /// Calculate the number of heights in the given range (inclusive)
@@ -482,7 +517,7 @@ mod tests {
     };
 
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         SetupInitialDkgContext, SignWithThresholdContext,
@@ -490,12 +525,18 @@ mod tests {
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
     use ic_types::{
+        NumberOfNodes,
+        canister_http::{
+            CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus,
+            Replication,
+        },
         consensus::{Rank, get_faults_tolerated, idkg::PreSigId},
         crypto::{ThresholdSigShare, ThresholdSigShareOf, threshold_sig::ni_dkg::NiDkgTargetId},
         messages::CallbackId,
         signature::ThresholdSignatureShare,
         time::UNIX_EPOCH,
     };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
 
     /// Test that two shares with the same content are grouped together, and
     /// that a different share is grouped by itself
@@ -569,6 +610,7 @@ mod tests {
     fn fake_state_with_contexts(
         sign_with_threshold: Vec<SignWithThresholdContext>,
         setup_initial_dkg: Vec<SetupInitialDkgContext>,
+        canister_http: Vec<CanisterHttpRequestContext>,
     ) -> ReplicatedState {
         let mut state = ReplicatedStateBuilder::default().build();
         state
@@ -590,12 +632,21 @@ mod tests {
                 .map(|(i, c)| (CallbackId::from(i as u64), c)),
         );
         state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts = BTreeMap::from_iter(
+            canister_http
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| (CallbackId::from(i as u64), c)),
+        );
+        state
     }
 
     fn fake_state_with_signature_contexts(
         contexts: Vec<SignWithThresholdContext>,
     ) -> ReplicatedState {
-        fake_state_with_contexts(contexts, vec![])
+        fake_state_with_contexts(contexts, vec![], vec![])
     }
 
     fn fake_setup_initial_dkg_context(registry_version: RegistryVersion) -> SetupInitialDkgContext {
@@ -611,7 +662,7 @@ mod tests {
     fn fake_state_with_setup_initial_dkg_contexts(
         contexts: Vec<SetupInitialDkgContext>,
     ) -> ReplicatedState {
-        fake_state_with_contexts(vec![], contexts)
+        fake_state_with_contexts(vec![], contexts, vec![])
     }
 
     fn fake_key_ids() -> Vec<MasterPublicKeyId> {
@@ -699,6 +750,62 @@ mod tests {
         );
     }
 
+    fn fake_canister_http_context(registry_version: RegistryVersion) -> CanisterHttpRequestContext {
+        CanisterHttpRequestContext {
+            request: RequestBuilder::new().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus::default(),
+            registry_version,
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+        }
+    }
+
+    #[test]
+    fn test_get_oldest_state_registry_version_canister_http_only() {
+        let state = fake_state_with_contexts(
+            vec![],
+            vec![],
+            vec![
+                fake_canister_http_context(RegistryVersion::from(8)),
+                fake_canister_http_context(RegistryVersion::from(4)),
+                fake_canister_http_context(RegistryVersion::from(6)),
+            ],
+        );
+        assert_eq!(
+            Some(RegistryVersion::from(4)),
+            get_oldest_state_registry_version(&state)
+        );
+    }
+
+    #[test]
+    fn test_get_oldest_state_registry_version_canister_http_younger_than_others() {
+        // Sign and setup-dkg contexts at v5, canister http at v2: the canister
+        // http version must be reflected as the oldest.
+        let key_id = fake_key_ids().into_iter().next().unwrap();
+        let state = fake_state_with_contexts(
+            vec![fake_signature_request_context_with_registry_version(
+                Some(PreSigId(0)),
+                &key_id,
+                RegistryVersion::from(5),
+            )],
+            vec![fake_setup_initial_dkg_context(RegistryVersion::from(5))],
+            vec![fake_canister_http_context(RegistryVersion::from(2))],
+        );
+        assert_eq!(
+            Some(RegistryVersion::from(2)),
+            get_oldest_state_registry_version(&state)
+        );
+    }
+
     #[test]
     fn test_get_oldest_state_registry_version_setup_initial_dkg_younger_than_sign() {
         let signature_contexts = fake_key_ids()
@@ -715,6 +822,7 @@ mod tests {
         let state = fake_state_with_contexts(
             signature_contexts,
             vec![fake_setup_initial_dkg_context(RegistryVersion::from(2))],
+            vec![],
         );
         assert_eq!(
             Some(RegistryVersion::from(2)),
@@ -738,6 +846,7 @@ mod tests {
         let state = fake_state_with_contexts(
             signature_contexts,
             vec![fake_setup_initial_dkg_context(RegistryVersion::from(11))],
+            vec![],
         );
         assert_eq!(
             Some(RegistryVersion::from(2)),
@@ -749,7 +858,8 @@ mod tests {
     fn test_ignore_disqualified_ranks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             const SUBNET_SIZE: u64 = 10;
-            let Dependencies { mut pool, .. } = dependencies(pool_config, SUBNET_SIZE);
+            let Dependencies { mut pool, .. } =
+                DependenciesBuilder::new(pool_config, SUBNET_SIZE).build();
 
             let height = Height::new(1);
 

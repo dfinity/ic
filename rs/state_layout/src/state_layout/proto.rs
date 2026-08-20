@@ -40,6 +40,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
+            canister_creation_timestamp_nanos: item.canister_creation_timestamp_nanos,
             consumed_cycles_by_use_cases: item
                 .consumed_cycles_by_use_cases
                 .into_iter()
@@ -69,15 +70,11 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 &item.snapshot_visibility,
             )
             .into(),
+            status_visibility: pb_canister_state_bits::StatusVisibility::from(
+                &item.status_visibility,
+            )
+            .into(),
             log_memory_limit: item.log_memory_limit.get(),
-            canister_log_records: item
-                .canister_log
-                .records()
-                .iter()
-                .map(|record| record.into())
-                .collect(),
-            next_canister_log_record_idx: item.next_canister_log_record_idx,
-            log_memory_store_migrated: item.log_memory_store_migrated,
             log_memory_store_persistent_next_idx: item.log_memory_store_persistent_next_idx,
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
@@ -116,12 +113,14 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let cycles_debit = value
             .cycles_debit
-            .map(|c| c.into())
+            .map(Cycles::try_from)
+            .transpose()?
             .unwrap_or_else(Cycles::zero);
 
         let reserved_balance = value
             .reserved_balance
-            .map(|c| c.into())
+            .map(Cycles::try_from)
+            .transpose()?
             .unwrap_or_else(Cycles::zero);
 
         let mut consumed_cycles_by_use_cases = BTreeMap::new();
@@ -173,10 +172,14 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_balance,
             cycles_debit,
             reserved_balance,
-            reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
+            reserved_balance_limit: value
+                .reserved_balance_limit
+                .map(Cycles::try_from)
+                .transpose()?,
             minimum_incoming_canister_call_cycles: value
                 .minimum_incoming_canister_call_cycles
-                .map(|v| v.into())
+                .map(Cycles::try_from)
+                .transpose()?
                 .unwrap_or_default(),
             status: try_from_option_field(
                 value.canister_status,
@@ -197,6 +200,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )?,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
+            canister_creation_timestamp_nanos: value.canister_creation_timestamp_nanos,
             consumed_cycles_by_use_cases,
             consumed_cycles_by_use_cases_as_counters,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
@@ -225,17 +229,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::snapshot_visibility",
             )
             .unwrap_or_default(),
+            status_visibility: try_from_option_field(
+                value.status_visibility,
+                "CanisterStateBits::status_visibility",
+            )
+            .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),
-            canister_log: CanisterLog::new_aggregate(
-                value.next_canister_log_record_idx,
-                value
-                    .canister_log_records
-                    .into_iter()
-                    .map(|record| record.into())
-                    .collect(),
-            ),
-            next_canister_log_record_idx: value.next_canister_log_record_idx,
-            log_memory_store_migrated: value.log_memory_store_migrated,
             log_memory_store_persistent_next_idx: value.log_memory_store_persistent_next_idx,
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
@@ -268,6 +267,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
             last_executed_round: item.last_executed_round.get(),
             metadata: Some((&item.metadata).into()),
             binary_hash: item.binary_hash.to_vec(),
+            last_install_timestamp_nanos: item.last_install_timestamp_nanos,
             next_scheduled_method: Some(
                 pb_canister_state_bits::NextScheduledMethod::from(item.next_scheduled_method)
                     .into(),
@@ -302,6 +302,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
             binary_hash: WasmHash::from(binary_hash),
+            last_install_timestamp_nanos: value.last_install_timestamp_nanos,
             next_scheduled_method: match value.next_scheduled_method {
                 Some(method_id) => pb_canister_state_bits::NextScheduledMethod::try_from(method_id)
                     .unwrap_or_default()
@@ -338,6 +339,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                 .on_low_wasm_memory_hook_status
                 .map(|x| pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&x).into()),
             source: pb_canister_state_bits::SnapshotSource::from(item.source).into(),
+            restored: item.restored,
         }
     }
 }
@@ -392,6 +394,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             global_timer,
             on_low_wasm_memory_hook_status,
             source,
+            restored: item.restored,
         })
     }
 }

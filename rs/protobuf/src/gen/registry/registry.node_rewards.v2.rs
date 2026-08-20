@@ -7,6 +7,8 @@
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NodeRewardRate {

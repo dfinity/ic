@@ -10,7 +10,7 @@ load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
-ROSETTA_VERSION = "1.2.9"
+ROSETTA_VERSION = "1.2.10"
 
 LOCAL_REPLICA_DATA = [
     "//rs/canister_sandbox",
@@ -394,10 +394,10 @@ rust_test_suite_with_extra_srcs(
         "ROSETTA_CLI": "$(rootpath //:rosetta-cli)",
         "RUST_TEST_THREADS": "4",
     },
+    exec_properties = {"cpu": "4"},
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    tags = ["cpu:4"],
     deps = [
         # Keep sorted.
         ":ic-icrc-rosetta",

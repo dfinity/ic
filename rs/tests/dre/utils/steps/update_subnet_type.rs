@@ -225,11 +225,7 @@ async fn assert_version_on_all_nodes(
         })
     });
 
-    if join_all(threads.into_iter())
-        .await
-        .iter()
-        .any(|r| r.is_err())
-    {
+    if join_all(threads).await.iter().any(|r| r.is_err()) {
         anyhow::bail!(
             "Failed to ensure replica version {} on the current subnet",
             version

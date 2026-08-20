@@ -67,6 +67,7 @@ const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
 pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 1024 * 1024;
+pub const MAX_WASM_FUNCTION_NUM_LOCALS: usize = 10_000;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -805,6 +806,16 @@ fn get_valid_system_apis_common(
             )],
         ),
         (
+            "subnet_self_node_count",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![DataType::I32],
+                },
+            )],
+        ),
+        (
             "cost_call",
             vec![(
                 API_VERSION_IC0,
@@ -1045,7 +1056,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                     } else {
                         return Err(WasmValidationError::InvalidImportSection(format!(
                             "Function import doesn't have a function type. Type found: {:?}",
-                            &module.types.types[&TypeID(*index)]
+                            module.types.types[&TypeID(*index)]
                         )));
                     };
                     set_imports_details(&mut imports_details, import_module, field);
@@ -1287,13 +1298,14 @@ fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), Wa
     Ok(())
 }
 
-// Checks that no more than `max_functions` are defined in the
-// module and all function names are less than MAX_WASM_FUNCTION_NAME_LENGTH
-// bytes.
+/// Checks that no more than `max_functions` are defined in the
+/// module and all function names are less than MAX_WASM_FUNCTION_NAME_LENGTH
+/// bytes.
+/// Returns the maximum number of locals across all Wasm functions.
 fn validate_function_section(
     module: &Module,
     max_functions: usize,
-) -> Result<(), WasmValidationError> {
+) -> Result<u64, WasmValidationError> {
     let local_indexes = module
         .functions
         .iter()
@@ -1311,6 +1323,7 @@ fn validate_function_section(
     }
     // We only need to look at local functions, since `validate_import_section`
     // already checks and only allows a fixed set of valid imports.
+    let mut max_num_locals = 0;
     for id in local_indexes {
         if let Some(name) = module.functions.get_name(id)
             && name.len() > MAX_WASM_FUNCTION_NAME_LENGTH
@@ -1325,9 +1338,26 @@ fn validate_function_section(
                 name: truncated_name,
             });
         }
+        // Check number of locals
+        let num_locals = module
+            .functions
+            .get(id) /* we retrieved the id from the same module */
+            .kind()
+            .unwrap_local() /* we are looping over locals only */
+            .unwrap()
+            .body
+            .num_locals;
+        if num_locals > MAX_WASM_FUNCTION_NUM_LOCALS as u32 {
+            return Err(WasmValidationError::TooManyLocals {
+                index: *id as usize,
+                defined: num_locals as usize,
+                allowed: MAX_WASM_FUNCTION_NUM_LOCALS,
+            });
+        }
+        max_num_locals = max_num_locals.max(num_locals);
     }
 
-    Ok(())
+    Ok(max_num_locals as u64)
 }
 
 // Checks if the module has a Wasm64 memory.
@@ -1714,6 +1744,9 @@ pub fn wasmtime_validation_config(_embedders_config: &EmbeddersConfig) -> wasmti
     config.wasm_backtrace_max_frames(NonZero::new(20_usize));
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
+    // The exception-handling proposal is enabled by default since wasmtime v47,
+    // but it is not supported on the IC.
+    config.wasm_exceptions(false);
     config.wasm_function_references(false);
     config.wasm_gc(false);
     config.wasm_memory64(true);
@@ -1740,7 +1773,11 @@ pub fn wasmtime_validation_config(_embedders_config: &EmbeddersConfig) -> wasmti
         .memory_reservation(MAX_STABLE_MEMORY_IN_BYTES)
         .guard_before_linear_memory(true)
         .memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
-        .max_wasm_stack(MAX_WASM_STACK_SIZE);
+        .max_wasm_stack(MAX_WASM_STACK_SIZE)
+        // We don't use wasmtime's async support, but since wasmtime v47 the
+        // engine refuses to be created unless `async_stack_size` is at least
+        // as large as `max_wasm_stack`.
+        .async_stack_size(MAX_WASM_STACK_SIZE);
     config
 }
 
@@ -1819,7 +1856,7 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_table_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
-    validate_function_section(&module, config.max_functions)?;
+    let max_num_locals = validate_function_section(&module, config.max_functions)?;
     // The maximum Wasm memory size is different for Wasm32 and Wasm64 and
     // each needs to be validated accordingly.
     let max_wasm_memory_size = if has_wasm64_memory(&module) {
@@ -1837,6 +1874,7 @@ pub(super) fn validate_wasm_binary<'a>(
             largest_function_instruction_count,
             max_complexity,
             code_section_size,
+            max_num_locals,
         },
         module,
     ))

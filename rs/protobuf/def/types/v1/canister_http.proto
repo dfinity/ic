@@ -7,7 +7,7 @@ import "types/v1/errors.proto";
 import "types/v1/types.proto";
 
 message CanisterHttpPaymentReceipt {
-  state.queues.v1.Cycles refund = 1;
+  state.queues.v1.Cycles spent = 1;
 }
 
 message HttpHeader {
@@ -29,10 +29,9 @@ message CanisterHttpResponse {
 }
 
 message CanisterHttpResponseMetadata {
+  reserved 2, 4;
   uint64 id = 1;
-  reserved 2;
   bytes content_hash = 3;
-  uint64 registry_version = 4;
   string replica_version = 5;
   uint32 content_size = 6;
   bool is_reject = 7;
@@ -60,16 +59,14 @@ message CanisterHttpResponseSignature {
 }
 
 message CanisterHttpResponseWithConsensus {
+  reserved 3, 4, 5, 6;
   CanisterHttpResponse response = 1;
   bytes hash = 2;
-  uint64 registry_version = 3;
   string replica_version = 8;
-  reserved 4;
-  reserved 5;
-  reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
   uint32 content_size = 9;
   bool is_reject = 10;
+  state.queues.v1.Cycles initial_spent = 11;
 }
 
 message CanisterHttpShare {
@@ -81,6 +78,13 @@ message CanisterHttpResponseDivergence {
   repeated CanisterHttpShare shares = 1;
 }
 
+message CanisterHttpOutOfCycles {
+  uint64 callback_id = 1;
+  repeated CanisterHttpShare shares = 2;
+  state.queues.v1.Cycles min_cost = 3;
+  state.queues.v1.Cycles unspent_allowance = 4;
+}
+
 message FlexibleCanisterHttpResponseWithProof {
   CanisterHttpResponse response = 1;
   CanisterHttpShare proof = 2;
@@ -89,6 +93,8 @@ message FlexibleCanisterHttpResponseWithProof {
 message FlexibleCanisterHttpResponses {
   uint64 callback_id = 1;
   repeated FlexibleCanisterHttpResponseWithProof responses = 2;
+  state.queues.v1.Cycles initial_spent = 3;
+  repeated CanisterHttpShare extra_shares = 4;
 }
 
 message FlexibleCanisterHttpTimeout {}
@@ -101,6 +107,14 @@ message FlexibleCanisterHttpResponsesTooLarge {
 
 message FlexibleCanisterHttpTooManyRejects {
   repeated FlexibleCanisterHttpResponseWithProof reject_responses = 1;
+  state.queues.v1.Cycles initial_spent = 2;
+  repeated CanisterHttpShare extra_shares = 3;
+}
+
+message FlexibleCanisterHttpOutOfCycles {
+  repeated CanisterHttpShare all_seen_shares = 1;
+  state.queues.v1.Cycles min_cost = 2;
+  state.queues.v1.Cycles unspent_allowance = 3;
 }
 
 message FlexibleCanisterHttpError {
@@ -109,6 +123,7 @@ message FlexibleCanisterHttpError {
     FlexibleCanisterHttpTimeout timeout = 2;
     FlexibleCanisterHttpResponsesTooLarge responses_too_large = 3;
     FlexibleCanisterHttpTooManyRejects too_many_rejects = 4;
+    FlexibleCanisterHttpOutOfCycles out_of_cycles = 5;
   }
 }
 
@@ -119,6 +134,8 @@ message CanisterHttpResponseMessage {
     CanisterHttpResponseDivergence divergence_response = 3;
     FlexibleCanisterHttpResponses flexible_responses = 4;
     FlexibleCanisterHttpError flexible_error = 5;
+    CanisterHttpOutOfCycles out_of_cycles = 6;
+    CanisterHttpShare async_receipt = 7;
   }
 }
 

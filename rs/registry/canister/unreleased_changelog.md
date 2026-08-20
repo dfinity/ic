@@ -9,17 +9,14 @@ on the process that this file is part of, see
 
 ## Added
 
-* The firewall rule endpoints (`add_firewall_rules`, `remove_firewall_rules`, and
-  `update_firewall_rules`) now accept a new `cloud_engines` scope
-  (`FirewallRulesScope::CloudEngines`). Firewall rules registered under this scope are
-  applied by assigned cloud engine nodes.
+* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
+  `guest_launch_measurements`.
 
 ## Changed
 
 ## Deprecated
 
 ## Removed
-* The `BlessedReplicaVersions` list is no longer updated with changes to elected versions.
 
 ## Fixed
 

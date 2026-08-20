@@ -370,6 +370,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
                 in the previous install_code messages"
         }
         CanisterHeapDeltaRateLimited => "Canister Heap Delta Rate Limited",
+        SubnetCoolingDown => "Subnet Cooling Down",
         // 3xx -- `RejectCode::DestinationInvalid`
         CanisterNotFound => "Canister Not Found",
         CanisterSnapshotNotFound => "Canister Snapshot Not Found",
@@ -396,6 +397,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterStoppingCancelled => "Canister Stopping Cancelled",
         CanisterInvalidController => "Canister Invalid Controller",
         CanisterInvalidControllerOrSubnetAdmin => "Canister Invalid Controller Or Subnet Admin",
+        CanisterStatusAccessDenied => "Canister Status Access Denied",
         CanisterFunctionNotFound => "Canister Function Not Found",
         CanisterNonEmpty => "Canister Non-Empty",
         QueryCallGraphLoopDetected => "Loop in inter-canister query call graph",

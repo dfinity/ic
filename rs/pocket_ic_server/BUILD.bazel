@@ -62,7 +62,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
     "@crate_index//:axum-server",
-    "@crate_index//:backoff",
+    "@crate_index//:backon",
     "@crate_index//:base64",
     "@crate_index//:bitcoin_dogecoin",
     "@crate_index//:bytes",
@@ -77,9 +77,9 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-bn-lib-common",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-management-canister",
     "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
@@ -126,6 +126,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-management-canister",
     "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
@@ -266,14 +267,14 @@ MAINNET_NNS_CANISTER_ENV = {
         ] + glob([
             "src/state_api/**/*.rs",
         ]),
-        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data,
+        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data + ["templates/dashboard.html"],
         crate_name = "pocket_ic_server",
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:async-trait",
         ],
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "14.0.0",
+        version = "15.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [
@@ -354,8 +355,8 @@ rust_test(
             "II_FRONTEND_WASM": "$(rootpath @mainnet_canisters//:internet_identity_frontend.wasm.gz)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },
+        exec_properties = {"cpu": "8"},
         tags = [
-            "cpu:8",
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
             # Failed to bind PocketIC server to address 127.0.0.1:0
             "requires-network",

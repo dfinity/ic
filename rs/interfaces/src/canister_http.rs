@@ -1,6 +1,5 @@
 //! Canister Http related public interfaces.
 use crate::validation::ValidationError;
-use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     NodeId,
@@ -48,20 +47,58 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A timeout refers to a CallbackId that is unknown by the StateManager
     UnknownCallbackId(CallbackId),
+    /// An asynchronous receipt refers to a CallbackId that the StateManager does not
+    /// know as an already responded to request, i.e. one that is not among the
+    /// `delivered_canister_http_request_contexts`.
+    UnknownDeliveredCallbackId(CallbackId),
+    /// An asynchronous receipt refers to an already responded to request whose
+    /// delivered context has timed out, i.e. one that message routing settles and
+    /// drops in this very block, leaving nothing left to refund.
+    DeliveredCallbackTimedOut(CallbackId),
+    /// An asynchronous receipt reports a replica whose spend has already been
+    /// accounted for, either in the certified state or in a past payload.
+    AlreadyRefunded {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
     /// A CallbackId was included as a timeout, however the Request has not timed out at all
     NotTimedOut(CallbackId),
-    /// The registry version of a response does not match the validation context
-    RegistryVersionMismatch {
-        expected: RegistryVersion,
-        received: RegistryVersion,
-    },
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
-    /// A payment receipt claims a refund larger than the per-replica allowance
-    /// derived from the request's payment.
-    RefundExceedsAllowance {
-        refund: Cycles,
+    /// A payment receipt claims the replica spent more than it was allowed to:
+    /// the per-replica allowance derived from the request's payment on a
+    /// charging subnet, or the free-subnet maximum on a free subnet.
+    SpentExceedsLimit {
+        spent: Cycles,
+        limit: Cycles,
+    },
+    /// A share claims a `content_size` larger than the largest response the replica
+    /// could have produced, i.e. [`CanisterHttpRequestContext::max_http_outcall_content_size`].
+    ///
+    /// [`CanisterHttpRequestContext::max_http_outcall_content_size`]: ic_types::canister_http::CanisterHttpRequestContext::max_http_outcall_content_size
+    ContentSizeExceedsLimit {
+        callback_id: CallbackId,
+        content_size: u32,
+        limit: u64,
+    },
+    /// The collective initial spent cycles included in the payload do not match
+    /// the value recomputed from the request context's subnet size and the
+    /// signed per-replica receipts.
+    InitialSpentMismatch {
+        callback_id: CallbackId,
+        /// The initial spend received in the payload.
+        received: Cycles,
+        /// The initial spend the validator recomputed and expected.
+        expected: Cycles,
+    },
+    /// The collective initial spent cycles of a response exceed the collective
+    /// allowance of the replicas that contributed to it, i.e. the sum of their
+    /// per-replica allowances.
+    InitialSpentExceedsLimit {
+        callback_id: CallbackId,
+        initial_spent: Cycles,
         per_replica_allowance: Cycles,
+        num_replicas: usize,
     },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
@@ -80,8 +117,14 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
-    /// The callback_id in a flexible response group does not match a response or proof within it.
-    FlexibleCallbackIdMismatch {
+    /// A divergence proof contains more than one share from the same signer.
+    DivergenceDuplicateSigner {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
+    /// The callback_id a share or response is signed for does not match the one of
+    /// the payload section it appears in.
+    ShareCallbackIdMismatch {
         callback_id: CallbackId,
         mismatched_id: CallbackId,
     },
@@ -92,13 +135,14 @@ pub enum InvalidCanisterHttpPayloadReason {
         min_responses: u32,
         max_responses: u32,
     },
-    /// A flexible response group has duplicate signers.
-    FlexibleDuplicateSigner {
+    /// A payload section carrying individual shares has more than one from the same
+    /// signer.
+    DuplicateShareSigner {
         callback_id: CallbackId,
         signer: NodeId,
     },
-    /// A signer in a flexible response group is not part of the flexible committee.
-    FlexibleSignerNotInCommittee {
+    /// A share is signed by a node that is not part of the request's committee.
+    ShareSignerNotInCommittee {
         callback_id: CallbackId,
         signer: NodeId,
     },
@@ -133,6 +177,29 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
     FlexibleResponsesNotTooLarge(CallbackId),
+    /// A figure an OutOfCycles error reports to the caller does not match the value
+    /// recomputed from the request context and the signed receipts.
+    OutOfCyclesFigureMismatch {
+        callback_id: CallbackId,
+        field: &'static str,
+        /// The figure received in the payload.
+        received: Cycles,
+        /// The figure the validator recomputed and expected.
+        expected: Cycles,
+    },
+    /// An OutOfCycles error is invalid: what is left of the committee's
+    /// per-replica allowances can still cover the cost of delivering a response.
+    NotOutOfCycles {
+        callback_id: CallbackId,
+        /// The committee's collective allowance that is still unspent, assuming
+        /// that every committee member that has not reported a spend yet has
+        /// spent nothing; or `None` if the outcall has no per-replica allowance to
+        /// spend in the first place, and so none to run out of.
+        unspent_allowance: Option<Cycles>,
+        /// The least it can cost to deliver a response, or `None` if no response
+        /// can be delivered any more, in which case there is no cost to cover.
+        min_cost: Option<Cycles>,
+    },
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
 }
@@ -142,8 +209,6 @@ pub enum InvalidCanisterHttpPayloadReason {
 pub enum CanisterHttpPayloadValidationFailure {
     /// The state was not available at the time of validation
     StateUnavailable,
-    /// The consensus registry version could not be retrieved from the summary
-    ConsensusRegistryVersionUnavailable,
     /// The feature is not enabled
     Disabled,
     /// Membership Issue

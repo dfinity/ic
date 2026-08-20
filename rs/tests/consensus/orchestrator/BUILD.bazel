@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MAINNET_TYPES_TEST_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -78,27 +78,18 @@ system_test_nns(
 
 system_test(
     name = "cup_compatibility_test",
-    # TODO: support this test on the local backend (drop `backend = "farm"`).
-    # The test downloads the mainnet `types-test` tool from:
-    # https://download.dfinity.systems/ic/{hash}/release/types-test.gz
-    # which requires external network access which is only available on the farm backend.
-    # Provide this dependency as a bazel dependency. Also see the same TODO in:
-    # rs/tests/consensus/orchestrator/cup_compatibility_test.rs.
-    backend = "farm",
     cpus = MIN_LOCAL_CPUS,  # Empty setup (|_| ()), no VMs deployed.
     env = MAINNET_ENV,
-    runtime_deps = {
+    guestos = False,  # The setup is `|_| ()` so no GuestOS image is ever booted.
+    runtime_deps = MAINNET_TYPES_TEST_RUNTIME_DEPS | {
         "TYPES_TEST_PATH": "//rs/types/types:types_test",
     },
     deps = [
         # Keep sorted.
-        "//rs/recovery",
-        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
-        "@crate_index//:tempfile",
     ],
 )
 
@@ -135,6 +126,80 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test(
+    name = "cloud_engine_ic_gateway_test",
+    # Excluded from automatic runs while ic-gateway launching is gated off in the
+    # orchestrator (see IC_GATEWAY_LAUNCH_ENABLED in
+    # rs/orchestrator/src/processes.rs). Remove this tag when enabling the launch.
+    tags = ["manual"],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:url",
+    ],
+)
+
+system_test_nns(
+    name = "standard_engine_replica_version_test",
+    # TODO: Remove this once PR 11208 is in master.
+    # Why: This test needs an API Boundary Node, and those do not work
+    # when you do `bazel test //rs/tests:widget_test_local`. This test
+    # only works, when run in Farm. This blocks `_local`.
+    #
+    # Ok, but why is API BN needed: Cloud Engines.
+    #
+    # Ok, but why do Cloud Engines need API BNs? They are not allowed
+    # to talk NATIVELY to canisters that live in other subnets, but
+    # they need to talk to the Registry canister, which lives in the NNS
+    # subnet.
+    #
+    # To satisfy these conflicting requirements, Cloud Engines talk to
+    # Registry via API BNs.
+    backend = "farm",
+    # 1 API BN + 1 System + 2 * 4 Cloud Engine = 10 IC Node VMs * 6 vCPUs.
+    cpus = MIN_LOCAL_CPUS + 10 * DEFAULT_VCPUS_PER_VM,
+    # This is needed so that the test can elect a second Guestos/Replica version.
+    guestos_update = "test",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    # Time out after 1 hour, because 15 minutes is not enough. Just to give
+    # an idea of why this takes so long, we need 2 engines to show that
+    # the fleet can be mixed. Each has a minimum of 4 nodes. Multiple rounds
+    # of upgrading take place. Each node upgrade requires downloading a VM
+    # image, and VM images are fairly large.
+    test_timeout = "eternal",
+    deps = [
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/engine_controller:ic_engine_controller",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/helpers",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/consensus/upgrade:common",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
         "@crate_index//:slog",
     ],
 )

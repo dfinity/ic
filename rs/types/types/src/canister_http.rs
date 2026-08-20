@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
@@ -56,13 +56,15 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
     DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, FlexibleCanisterHttpRequestArgs, HttpHeader,
-    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext,
+    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts,
+    TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
+    registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto,
     state::system_metadata::v1 as pb_metadata,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
@@ -89,6 +91,25 @@ pub const MAX_CANISTER_HTTP_REQUEST_BYTES: u64 = 2_000_000;
 
 /// Maximum number of response bytes for a canister http request.
 pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
+
+/// Maximum size of a canister http reject message.
+pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
+
+/// The [`count_bytes`](CanisterHttpReject::count_bytes) of the largest
+/// [`CanisterHttpReject`] there is: a reject code plus a message of the maximum
+/// length.
+///
+/// Unlike a successful response, a reject is *not* bounded by the request's
+/// `max_response_bytes` (see
+/// [`CanisterHttpRequestContext::max_http_outcall_content_size`]), so this is the
+/// response size any outcall may end up delivering, whatever size it asked for.
+pub const MAX_CANISTER_HTTP_REJECT_BYTES: u64 =
+    CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES) as u64;
+
+/// Bytes reserved on top of a request's `max_response_bytes` for the Candid
+/// encoding of the response, since `max_response_bytes` is enforced on the
+/// response before it is encoded.
+pub const CANDID_OVERHEAD_RESERVE_BYTES: u64 = 1024; // 1KB
 
 /// Maximum number of bytes to represent URL for a canister http request.
 pub const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
@@ -139,6 +160,10 @@ pub struct CanisterHttpRequestContext {
     pub refund_status: RefundStatus,
     /// The registry version at which this request is being processed.
     pub registry_version: RegistryVersion,
+    /// The subnet size at the registry version above.
+    pub subnet_size: NumberOfNodes,
+    /// The cycles cost schedule at the registry version above.
+    pub cost_schedule: CanisterCyclesCostSchedule,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -182,13 +207,89 @@ pub enum Replication {
 }
 
 impl Replication {
-    /// Returns true if the given node is authorized to sign a share, assuming
-    /// it is part of the canister HTTP committee.
-    pub fn is_authorized_signer(&self, signer: &NodeId) -> bool {
+    /// Returns the [`ReplicationKind`] of this request.
+    pub fn kind(&self) -> ReplicationKind {
         match self {
-            Replication::FullyReplicated => true,
-            Replication::NonReplicated(node_id) => node_id == signer,
-            Replication::Flexible { committee, .. } => committee.contains(signer),
+            Replication::FullyReplicated => ReplicationKind::FullyReplicated,
+            Replication::NonReplicated(_) => ReplicationKind::NonReplicated,
+            Replication::Flexible {
+                committee,
+                min_responses,
+                max_responses,
+            } => ReplicationKind::Flexible {
+                total_requests: committee.len() as u32,
+                min_responses: *min_responses,
+                max_responses: *max_responses,
+            },
+        }
+    }
+
+    /// The number of nodes that will attempt the HTTP request. `subnet_size` is
+    /// the size of the subnet at the time the request was made.
+    ///
+    /// This is both the divisor that splits a request's `refundable_cycles` into
+    /// its `per_replica_allowance` and the number of allowances that have to be
+    /// accounted for before the request is fully settled.
+    pub fn node_count(&self, subnet_size: NumberOfNodes) -> usize {
+        self.kind().node_count(subnet_size)
+    }
+}
+
+/// The kind of replication of a request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplicationKind {
+    FullyReplicated,
+    Flexible {
+        total_requests: u32,
+        min_responses: u32,
+        max_responses: u32,
+    },
+    NonReplicated,
+}
+
+impl ReplicationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ReplicationKind::FullyReplicated => "fully_replicated",
+            ReplicationKind::Flexible { .. } => "flexible",
+            ReplicationKind::NonReplicated => "non_replicated",
+        }
+    }
+
+    /// The response counts for a flexible request that does not specify its own:
+    /// Every node attempts the outcall and `floor(2/3 * N) + 1` responses are required.
+    pub fn default_flexible_counts(subnet_size: NumberOfNodes) -> ReplicationCounts {
+        let n = subnet_size.get();
+        ReplicationCounts {
+            total_requests: n,
+            min_responses: (2 * n) / 3 + 1,
+            max_responses: n,
+        }
+    }
+
+    /// The response counts for a flexible request that does not specify its own:
+    /// Every node attempts the outcall and `floor(2/3 * N) + 1` responses are required.
+    pub fn default_flexible(subnet_size: NumberOfNodes) -> Self {
+        Self::from(&Self::default_flexible_counts(subnet_size))
+    }
+
+    /// The number of replicas that will attempt the outcall, see
+    /// [`Replication::node_count`].
+    pub fn node_count(&self, subnet_size: NumberOfNodes) -> usize {
+        match self {
+            Self::FullyReplicated => (subnet_size.get() as usize).max(1),
+            Self::NonReplicated => 1,
+            Self::Flexible { total_requests, .. } => (*total_requests as usize).max(1),
+        }
+    }
+}
+
+impl From<&ReplicationCounts> for ReplicationKind {
+    fn from(counts: &ReplicationCounts) -> Self {
+        Self::Flexible {
+            total_requests: counts.total_requests,
+            min_responses: counts.min_responses,
+            max_responses: counts.max_responses,
         }
     }
 }
@@ -284,6 +385,8 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             pricing_version: Some(pricing_message),
             refund_status: Some(refund_status),
             registry_version: context.registry_version.get(),
+            subnet_size: context.subnet_size.get(),
+            cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(context.cost_schedule)),
         }
     }
 }
@@ -339,15 +442,18 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             Some(refund_status) => RefundStatus {
                 refundable_cycles: refund_status
                     .refundable_cycles
-                    .map(Into::into)
+                    .map(Cycles::try_from)
+                    .transpose()?
                     .unwrap_or_default(),
                 per_replica_allowance: refund_status
                     .per_replica_allowance
-                    .map(Into::into)
+                    .map(Cycles::try_from)
+                    .transpose()?
                     .unwrap_or_default(),
                 refunded_cycles: refund_status
                     .refunded_cycles
-                    .map(Into::into)
+                    .map(Cycles::try_from)
+                    .transpose()?
                     .unwrap_or_default(),
                 refunding_nodes: refund_status
                     .refunding_nodes
@@ -409,6 +515,17 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             pricing_version,
             refund_status,
             registry_version: RegistryVersion::from(context.registry_version),
+            subnet_size: NumberOfNodes::from(context.subnet_size),
+            cost_schedule: CanisterCyclesCostSchedule::from(
+                CanisterCyclesCostScheduleProto::try_from(context.cost_schedule).map_err(|err| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "CanisterCyclesCostSchedule",
+                        err: format!(
+                            "Failed to convert CanisterCyclesCostSchedule for CanisterHttpRequestContext: {err:?}"
+                        ),
+                    }
+                })?,
+            ),
         })
     }
 }
@@ -491,6 +608,31 @@ fn validate_url_length(url: &str) -> Result<(), CanisterHttpRequestContextError>
     Ok(())
 }
 
+/// Validate the requested `max_response_bytes` and convert it to [`NumBytes`].
+///
+/// A value exceeding [`MAX_CANISTER_HTTP_RESPONSE_BYTES`] is rejected; `None`
+/// (i.e. no limit specified by the caller) is passed through unchanged.
+fn validate_max_response_bytes(
+    max_response_bytes: Option<u64>,
+) -> Result<Option<NumBytes>, CanisterHttpRequestContextError> {
+    match max_response_bytes {
+        Some(max_response_bytes) => {
+            if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
+                Err(CanisterHttpRequestContextError::MaxResponseBytes(
+                    InvalidMaxResponseBytes {
+                        min: 0,
+                        max: MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                        given: max_response_bytes,
+                    },
+                ))
+            } else {
+                Ok(Some(NumBytes::from(max_response_bytes)))
+            }
+        }
+        None => Ok(None),
+    }
+}
+
 impl CanisterHttpRequestContext {
     /// Calculate the size of all unbounded struct elements.
     pub fn variable_parts_size(&self) -> NumBytes {
@@ -513,6 +655,7 @@ impl CanisterHttpRequestContext {
         args: CanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
+        cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
@@ -522,22 +665,7 @@ impl CanisterHttpRequestContext {
             return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
         }
 
-        let max_response_bytes = match args.max_response_bytes {
-            Some(max_response_bytes) => {
-                if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
-                    Err(CanisterHttpRequestContextError::MaxResponseBytes(
-                        InvalidMaxResponseBytes {
-                            min: 0,
-                            max: MAX_CANISTER_HTTP_RESPONSE_BYTES,
-                            given: max_response_bytes,
-                        },
-                    ))
-                } else {
-                    Ok(Some(NumBytes::from(max_response_bytes)))
-                }
-            }
-            None => Ok(None),
-        }?;
+        let max_response_bytes = validate_max_response_bytes(args.max_response_bytes)?;
 
         // Allow PUT, DELETE, and PATCH only in non-replicated mode to avoid
         // confusing race conditions that may occur.
@@ -590,6 +718,8 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
+            subnet_size: NumberOfNodes::from(node_ids.len() as u32),
+            cost_schedule,
         })
     }
 
@@ -599,14 +729,21 @@ impl CanisterHttpRequestContext {
         args: FlexibleCanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
+        cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
+        pricing_version: PricingVersion,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
         validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
+        let max_response_bytes = validate_max_response_bytes(args.max_response_bytes)?;
 
         let n = node_ids.len() as u32;
-        let (total_requests, min_responses, max_responses) = match args.replication {
+        let ReplicationCounts {
+            total_requests,
+            min_responses,
+            max_responses,
+        } = match args.replication {
             Some(counts) => {
                 let total = counts.total_requests;
                 let min = counts.min_responses;
@@ -634,14 +771,13 @@ impl CanisterHttpRequestContext {
                         format!("max_responses ({max}) must not exceed total_requests ({total})"),
                     ));
                 }
-                (total, min, max)
+                counts
             }
             None => {
                 if n == 0 {
                     return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
                 }
-                let default_min = (2 * n) / 3 + 1; // floor(2/3 * n) + 1
-                (n, default_min, n)
+                ReplicationKind::default_flexible_counts(NumberOfNodes::from(n))
             }
         };
         // From here, the following invariants are expected to hold:
@@ -679,7 +815,7 @@ impl CanisterHttpRequestContext {
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
-            max_response_bytes: None,
+            max_response_bytes,
             headers: args.headers.get().iter().cloned().map(Into::into).collect(),
             body: args.body,
             http_method: args.method.into(),
@@ -690,11 +826,13 @@ impl CanisterHttpRequestContext {
                 min_responses,
                 max_responses,
             },
-            pricing_version: PricingVersion::PayAsYouGo,
+            pricing_version,
             // The refund status is populated in `try_add_http_context_to_replicated_state`
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
+            subnet_size: NumberOfNodes::from(n),
+            cost_schedule,
         })
     }
 }
@@ -889,13 +1027,20 @@ impl From<&CanisterHttpReject> for RejectContext {
     }
 }
 
+impl CanisterHttpReject {
+    /// Same calculation as `Self::count_bytes` but from decomposed parts.
+    pub const fn count_bytes_from_parts(message_len: usize) -> usize {
+        size_of::<RejectCode>() + message_len
+    }
+}
+
 impl CountBytes for CanisterHttpReject {
     fn count_bytes(&self) -> usize {
         let CanisterHttpReject {
-            reject_code,
+            reject_code: _,
             message,
         } = &self;
-        size_of_val(reject_code) + message.len()
+        Self::count_bytes_from_parts(message.len())
     }
 }
 
@@ -990,12 +1135,18 @@ impl From<HttpMethod> for CanisterHttpMethod {
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
+    /// The total amount of cycles spent by the subnet to produce this response.
+    pub initial_spent: Cycles,
 }
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponseWithConsensus { content, proof } = &self;
-        proof.count_bytes() + content.count_bytes()
+        let CanisterHttpResponseWithConsensus {
+            content,
+            proof,
+            initial_spent,
+        } = &self;
+        proof.count_bytes() + content.count_bytes() + size_of_val(initial_spent)
     }
 }
 
@@ -1021,16 +1172,93 @@ impl CountBytes for CanisterHttpResponseDivergence {
 #[derive(Clone, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpPaymentReceipt {
-    /// The amount of cycles, out of the per-replica allowance, that the
-    /// replica did not use and wishes to refund to the caller.
-    pub refund: Cycles,
+    /// The amount of cycles, out of the per-replica allowance, that the replica
+    /// has spent. The cycles to refund to the caller are derived downstream as
+    /// `per_replica_allowance - spent`. On free subnets it may exceed the (zero)
+    /// allowance, since it is only used for cost accounting, but it may never
+    /// exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+    ///
+    /// Encoded as a pair of `u64`s: this struct is part of the CBOR signed bytes
+    /// of [`CanisterHttpResponseReceipt`], and CBOR cannot represent a bare
+    /// `u128` above `u64::MAX`.
+    #[serde(with = "ic_types_cycles::serde_as_u64_pair")]
+    pub spent: Cycles,
 }
 
 impl CountBytes for CanisterHttpPaymentReceipt {
     fn count_bytes(&self) -> usize {
-        let Self { refund } = self;
-        size_of_val(refund)
+        let Self { spent } = self;
+        size_of_val(spent)
     }
+}
+
+/// The maximum cycles a single replica may report having spent on an HTTP
+/// outcall when the subnet uses a [`CanisterCyclesCostSchedule::Free`] schedule.
+///
+/// Free subnets charge nothing, so the reported spend (used only for cost
+/// accounting) is not bounded by the per-replica allowance. To keep it from
+/// being arbitrarily large, it is instead bounded by this constant, which is
+/// above the largest per-replica cost the pay-as-you-go tracker can ever compute
+/// for a single outcall.
+///
+/// That maximum cost (see the fee formula in `ic-https-outcalls-pricing`) is
+/// reached by a full 2 MB response, downloaded over the 60 s cap, transformed
+/// with the 5 B-instruction query limit, then gossiped as another 2 MB response
+/// to every node of the subnet:
+///
+/// ```text
+///     50 cycles/byte * 2_000_000 B                       =        100_000_000  (download)
+///   + 300 cycles/ms  * 60_000 ms                         =         18_000_000  (latency)
+///   + 1/13 cycle/instr * 5_000_000_000 instr             =        384_615_384  (transform)
+///   + 50 cycles/byte/node * 2_000_000 B * N nodes        =    100_000_000 * N  (gossip)
+///                                                        ≈ 5 * 10^8 + 10^8 * N cycles
+/// ```
+///
+/// At 10^12 (1 trillion) this bound is not reached for subnets up to ~10_000 nodes. Because
+/// the producer ([`CanisterHttpPaymentReceipt`] creation) and the validators enforce
+/// this same bound, honest shares are never rejected for any choice of the constant;
+/// a too-tight value would only under-report the spend metric, never break validation.
+///
+pub const MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET: Cycles = Cycles::new(1_000_000_000_000);
+
+impl CanisterHttpRequestContext {
+    /// Returns the maximum cycles a single replica may report having `spent` on
+    /// this outcall, derived from the cost schedule and per-replica allowance
+    /// pinned in the context.
+    ///
+    /// On a [`CanisterCyclesCostSchedule::Normal`] schedule this is the
+    /// `per_replica_allowance` (a replica may never spend more than it was
+    /// granted). On a [`CanisterCyclesCostSchedule::Free`] schedule nothing is
+    /// charged, so the spend is instead bounded by
+    /// [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+    pub fn max_http_outcall_spend(&self) -> Cycles {
+        match self.cost_schedule {
+            CanisterCyclesCostSchedule::Free => MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
+            CanisterCyclesCostSchedule::Normal => self.refund_status.per_replica_allowance,
+        }
+    }
+
+    /// Returns the maximum [`CanisterHttpResponseMetadata::content_size`] a single
+    /// replica's response to this outcall may have, i.e. the size of the largest
+    /// [`CanisterHttpResponseContent`] it could legitimately have produced.
+    pub fn max_http_outcall_content_size(&self, is_reject: bool) -> u64 {
+        if is_reject {
+            MAX_CANISTER_HTTP_REJECT_BYTES
+        } else {
+            max_http_outcall_response_size(self.max_response_bytes)
+        }
+    }
+}
+
+/// The largest [`CanisterHttpResponseContent::Success`] an outcall with the given
+/// `max_response_bytes` may deliver.
+///
+/// A response is delivered Candid-encoded, so it may exceed `max_response_bytes` by
+/// [`CANDID_OVERHEAD_RESERVE_BYTES`].
+pub fn max_http_outcall_response_size(max_response_bytes: Option<NumBytes>) -> u64 {
+    max_response_bytes
+        .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
+        .saturating_add(CANDID_OVERHEAD_RESERVE_BYTES)
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
@@ -1041,7 +1269,6 @@ pub struct CanisterHttpResponseMetadata {
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub content_size: u32,
     pub is_reject: bool,
-    pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
 
@@ -1052,14 +1279,12 @@ impl CountBytes for CanisterHttpResponseMetadata {
             content_hash,
             content_size,
             is_reject,
-            registry_version,
             replica_version,
         } = self;
         size_of_val(id)
             + content_hash.get_ref().0.len()
             + size_of_val(content_size)
             + size_of_val(is_reject)
-            + size_of_val(registry_version)
             + replica_version.as_ref().len()
     }
 }
@@ -1101,16 +1326,12 @@ impl CanisterHttpResponseReceipt {
         self.metadata.is_reject
     }
 
-    pub fn registry_version(&self) -> RegistryVersion {
-        self.metadata.registry_version
-    }
-
     pub fn replica_version(&self) -> &ReplicaVersion {
         &self.metadata.replica_version
     }
 
-    pub fn refund(&self) -> Cycles {
-        self.payment_receipt.refund
+    pub fn spent(&self) -> Cycles {
+        self.payment_receipt.spent
     }
 }
 
@@ -1167,12 +1388,6 @@ impl CountBytes for CanisterHttpResponseProof {
     }
 }
 
-impl CanisterHttpResponseProof {
-    pub fn registry_version(&self) -> RegistryVersion {
-        self.metadata.registry_version
-    }
-}
-
 /// A signature share of [`CanisterHttpResponseReceipt`].
 pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceipt>;
 
@@ -1203,7 +1418,11 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 
 #[cfg(test)]
 mod tests {
-    use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH};
+    use crate::{
+        crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
+        messages::NO_DEADLINE,
+        time::UNIX_EPOCH,
+    };
 
     use super::*;
 
@@ -1217,6 +1436,76 @@ mod tests {
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
     use strum::IntoEnumIterator;
+
+    /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
+    /// any `spent` amount in the whole `Cycles` (`u128`) range.
+    ///
+    /// CBOR cannot represent a bare integer above `u64::MAX`, so a receipt holding
+    /// a transparently serialized `Cycles` used to panic while being signed or
+    /// verified.
+    #[test]
+    fn signed_bytes_of_exhaustive_receipts_round_trip() {
+        use crate::exhaustive::ExhaustiveSet;
+        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
+        let mut rng = reproducible_rng();
+        let receipts = CanisterHttpResponseReceipt::exhaustive_set(&mut rng);
+        assert!(receipts.iter().any(|r| r.spent() > Cycles::from(u64::MAX)));
+
+        for receipt in receipts {
+            let mut bytes = Vec::new();
+            receipt.write_signed_bytes_without_domain_separator(&mut bytes);
+            assert!(!bytes.is_empty());
+
+            let decoded: CanisterHttpResponseReceipt = serde_cbor::from_slice(&bytes)
+                .unwrap_or_else(|err| panic!("failed to decode {receipt:?}: {err}"));
+            assert_eq!(receipt, decoded);
+        }
+    }
+
+    /// The signed bytes must distinguish receipts that differ only in `spent`,
+    /// including beyond `u64::MAX`.
+    #[test]
+    fn signed_bytes_are_injective_in_spent() {
+        let signed_bytes = |spent: Cycles| {
+            let mut bytes = Vec::new();
+            CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: CallbackId::new(1),
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
+                    content_size: 0,
+                    is_reject: false,
+                    replica_version: ReplicaVersion::default(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt { spent },
+            }
+            .write_signed_bytes_without_domain_separator(&mut bytes);
+            bytes
+        };
+
+        let amounts = [
+            Cycles::zero(),
+            Cycles::new(1),
+            Cycles::from(u64::MAX),
+            Cycles::from(u64::MAX) + Cycles::new(1),
+            Cycles::new(u128::MAX),
+        ];
+        let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
+        assert_eq!(encodings.len(), amounts.len());
+    }
+
+    #[test]
+    fn max_canister_http_reject_bytes_is_the_size_of_the_largest_reject() {
+        // The pricing of an outcall floors every response size at this constant (see
+        // `ic_https_outcalls_pricing::fees::max_consensus_fee`), so it has to be the
+        // `content_size` of an actual maximally large reject rather than an
+        // approximation of it.
+        let largest = CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "x".repeat(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES),
+        });
+        assert_eq!(largest.count_bytes() as u64, MAX_CANISTER_HTTP_REJECT_BYTES);
+    }
 
     #[test]
     fn test_request_arg_variable_size() {
@@ -1248,6 +1537,8 @@ mod tests {
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         let expected_size = context.url.len()
@@ -1294,6 +1585,8 @@ mod tests {
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         let expected_size = context.url.len()
@@ -1341,67 +1634,94 @@ mod tests {
         ];
 
         for replication in replications {
-            let initial = CanisterHttpRequestContext {
-                url: "https://example.com".to_string(),
-                headers: vec![CanisterHttpHeader {
-                    name: "Content-Type".to_string(),
-                    value: "application/json".to_string(),
-                }],
-                body: Some(b"{\"hello\":\"world\"}".to_vec()),
-                max_response_bytes: Some(NumBytes::from(1234)),
-                http_method: CanisterHttpMethod::POST,
-                transform: Some(Transform {
-                    method_name: "transform_response".to_string(),
-                    context: vec![1, 2, 3],
-                }),
-                request: Request {
-                    receiver: CanisterId::ic_00(),
-                    sender: CanisterId::ic_00(),
-                    sender_reply_callback: CallbackId::from(3),
-                    payment: Cycles::new(10),
-                    method_name: "transform".to_string(),
-                    method_payload: Vec::new(),
-                    metadata: Default::default(),
-                    deadline: NO_DEADLINE,
-                },
-                time: UNIX_EPOCH,
-                replication,
-                pricing_version: PricingVersion::PayAsYouGo,
-                refund_status: RefundStatus {
-                    refundable_cycles: Cycles::new(13_000_000),
-                    per_replica_allowance: Cycles::new(1_000_000),
-                    refunded_cycles: Cycles::new(123),
-                    refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
-                },
-                registry_version: RegistryVersion::from(7),
-            };
+            for pricing_version in [PricingVersion::Legacy, PricingVersion::PayAsYouGo] {
+                let initial = CanisterHttpRequestContext {
+                    url: "https://example.com".to_string(),
+                    headers: vec![CanisterHttpHeader {
+                        name: "Content-Type".to_string(),
+                        value: "application/json".to_string(),
+                    }],
+                    body: Some(b"{\"hello\":\"world\"}".to_vec()),
+                    max_response_bytes: Some(NumBytes::from(1234)),
+                    http_method: CanisterHttpMethod::POST,
+                    transform: Some(Transform {
+                        method_name: "transform_response".to_string(),
+                        context: vec![1, 2, 3],
+                    }),
+                    request: Request {
+                        receiver: CanisterId::ic_00(),
+                        sender: CanisterId::ic_00(),
+                        sender_reply_callback: CallbackId::from(3),
+                        payment: Cycles::new(10),
+                        method_name: "transform".to_string(),
+                        method_payload: Vec::new(),
+                        metadata: Default::default(),
+                        deadline: NO_DEADLINE,
+                    },
+                    time: UNIX_EPOCH,
+                    replication: replication.clone(),
+                    pricing_version,
+                    refund_status: RefundStatus {
+                        refundable_cycles: Cycles::new(13_000_000),
+                        per_replica_allowance: Cycles::new(1_000_000),
+                        refunded_cycles: Cycles::new(123),
+                        refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
+                    },
+                    registry_version: RegistryVersion::from(7),
+                    subnet_size: NumberOfNodes::from(13),
+                    cost_schedule: CanisterCyclesCostSchedule::Free,
+                };
 
-            let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
-            let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
-            assert_eq!(initial, round_trip);
+                let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
+                let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+                assert_eq!(initial, round_trip);
+            }
         }
     }
 
     #[test]
-    fn replication_authorized_signer() {
-        let node1 = node_test_id(1);
-        let node2 = node_test_id(2);
-
-        let fully_replicated = Replication::FullyReplicated;
-        assert!(fully_replicated.is_authorized_signer(&node1));
-        assert!(fully_replicated.is_authorized_signer(&node2));
-
-        let non_replicated = Replication::NonReplicated(node1);
-        assert!(non_replicated.is_authorized_signer(&node1));
-        assert!(!non_replicated.is_authorized_signer(&node2));
-
-        let flexible = Replication::Flexible {
-            committee: BTreeSet::from([node1, node_test_id(3)]),
-            min_responses: 1,
-            max_responses: 2,
+    fn canister_http_request_context_cost_schedule_proto_round_trip() {
+        let base = CanisterHttpRequestContext {
+            request: Request {
+                receiver: CanisterId::ic_00(),
+                sender: CanisterId::ic_00(),
+                sender_reply_callback: CallbackId::from(3),
+                payment: Cycles::new(10),
+                method_name: "transform".to_string(),
+                method_payload: Vec::new(),
+                metadata: Default::default(),
+                deadline: NO_DEADLINE,
+            },
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
-        assert!(flexible.is_authorized_signer(&node1));
-        assert!(!flexible.is_authorized_signer(&node2));
+
+        // Every populated cost schedule round-trips unchanged.
+        for cost_schedule in [
+            CanisterCyclesCostSchedule::Normal,
+            CanisterCyclesCostSchedule::Free,
+        ] {
+            let initial = CanisterHttpRequestContext {
+                cost_schedule,
+                ..base.clone()
+            };
+
+            let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
+            let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+            assert_eq!(round_trip.cost_schedule, cost_schedule);
+            assert_eq!(initial, round_trip);
+        }
     }
 
     #[rstest]
@@ -1518,6 +1838,7 @@ mod tests {
         }];
         let args = FlexibleCanisterHttpRequestArgs {
             url: "https://example.com".to_string(),
+            max_response_bytes: None,
             headers: BoundedHttpHeaders::new(headers),
             body: None,
             method: HttpMethod::GET,
@@ -1670,7 +1991,7 @@ mod tests {
     }
 
     #[test]
-    fn flexible_max_response_bytes_is_none() {
+    fn flexible_max_response_bytes_defaults_to_none() {
         let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
         let args = dummy_flexible_args(Some(ReplicationCounts {
             total_requests: 2,
@@ -1686,6 +2007,45 @@ mod tests {
                 max_response_bytes: None,
                 ..
             })
+        );
+    }
+
+    #[test]
+    fn flexible_accepts_max_response_bytes_at_limit() {
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let mut args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 2,
+            min_responses: 1,
+            max_responses: 2,
+        }));
+        args.max_response_bytes = Some(MAX_CANISTER_HTTP_RESPONSE_BYTES);
+
+        let ctx = generate_flexible_context(&node_ids, args);
+
+        assert_matches!(
+            ctx,
+            Ok(CanisterHttpRequestContext {
+                max_response_bytes: Some(bytes),
+                ..
+            }) if bytes == NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)
+        );
+    }
+
+    #[test]
+    fn flexible_rejects_max_response_bytes_too_large() {
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let mut args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 2,
+            min_responses: 1,
+            max_responses: 2,
+        }));
+        args.max_response_bytes = Some(MAX_CANISTER_HTTP_RESPONSE_BYTES + 1);
+
+        let result = generate_flexible_context(&node_ids, args);
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::MaxResponseBytes(_))
         );
     }
 
@@ -1854,6 +2214,7 @@ mod tests {
     ) -> FlexibleCanisterHttpRequestArgs {
         FlexibleCanisterHttpRequestArgs {
             url: "https://example.com".to_string(),
+            max_response_bytes: None,
             headers: BoundedHttpHeaders::new(vec![]),
             body: None,
             method: HttpMethod::GET,
@@ -1863,7 +2224,8 @@ mod tests {
     }
 
     /// Generates a context from `args` and `node_ids`, filling in dummy values
-    /// for the time, request, registry version, and rng.
+    /// for the time, request, registry version, cost schedule, and
+    /// rng.
     fn generate_context(
         node_ids: &BTreeSet<NodeId>,
         args: CanisterHttpRequestArgs,
@@ -1874,12 +2236,14 @@ mod tests {
             args,
             node_ids,
             RegistryVersion::from(1),
+            CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
         )
     }
 
     /// Generates a context from flexible `args` and `node_ids`, filling in dummy
-    /// values for the time, request, registry version, and rng.
+    /// values for the time, request, registry version, cost
+    /// schedule, and rng.
     fn generate_flexible_context(
         node_ids: &BTreeSet<NodeId>,
         args: FlexibleCanisterHttpRequestArgs,
@@ -1890,7 +2254,9 @@ mod tests {
             args,
             node_ids,
             RegistryVersion::from(1),
+            CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
+            PricingVersion::PayAsYouGo,
         )
     }
 }

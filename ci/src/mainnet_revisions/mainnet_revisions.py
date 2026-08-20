@@ -18,6 +18,21 @@ app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
 SAVED_VERSIONS_CANISTERS_FILE = "mainnet-canister-revisions.json"
 
+# Release binaries (published on the CDN under `.../binaries/x86_64-linux/` as
+# `<name>.gz`) whose sha256 we record for every mainnet revision. They are exposed
+# to Bazel by //bazel:mainnet-icos-binaries.bzl and consumed by system-tests that
+# have to run a binary built at a mainnet version.
+# Keep sorted; this determines the key order in the generated JSON.
+MAINNET_BINARIES = [
+    "canister_sandbox",
+    "compiler_sandbox",
+    "ic-replay",
+    "replicated-state-test",
+    "sandbox_launcher",
+    "state-layout-test",
+    "types-test",
+]
+
 
 class Command(Enum):
     ICOS = 1
@@ -31,6 +46,15 @@ class VersionInfo:
     dev_hash: str
     launch_measurements: dict
     dev_measurements: dict
+    # SHA256 of the setup-os disk-img.tar.zst (prod and dev channels). Unlike
+    # `hash` (the NNS-elected update image), the setup-os image is not elected
+    # via the NNS, so this is read from the CDN SHA256SUMS file.
+    setupos_hash: str
+    setupos_dev_hash: str
+    # SHA256 of each of MAINNET_BINARIES as published (gzipped) on the CDN under
+    # `binaries/x86_64-linux/`, read from that directory's SHA256SUMS. Consumed by
+    # //bazel:mainnet-icos-binaries.bzl.
+    binaries: dict
 
 
 def sync_main_branch_and_checkout_branch(
@@ -152,7 +176,7 @@ def get_replica_version_info(replica_version: str) -> VersionInfo:
 
     version = response["payload"]["replica_version_to_elect"]
     hash = response["payload"]["release_package_sha256_hex"]
-    launch_measurements = decode_measurements(response["payload"]["guest_launch_measurements"])
+    launch_measurements = get_launch_measurements(version, response["payload"]["guest_launch_measurements"])
 
     dev_hash = download_and_hash_file(
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
@@ -162,7 +186,22 @@ def get_replica_version_info(replica_version: str) -> VersionInfo:
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
     )
 
-    return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements)
+    setupos_base = f"https://download.dfinity.systems/ic/{version}/setup-os"
+    setupos_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img/SHA256SUMS", "disk-img.tar.zst")
+    setupos_dev_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img-dev/SHA256SUMS", "disk-img.tar.zst")
+
+    binaries = get_binary_hashes(version)
+
+    return VersionInfo(
+        version,
+        hash,
+        dev_hash,
+        launch_measurements,
+        dev_measurements,
+        setupos_hash,
+        setupos_dev_hash,
+        binaries,
+    )
 
 
 def get_latest_replica_version_info() -> VersionInfo:
@@ -182,7 +221,9 @@ def get_latest_replica_version_info() -> VersionInfo:
 
     version = latest_elect_proposal["payload"]["replica_version_to_elect"]
     hash = latest_elect_proposal["payload"]["release_package_sha256_hex"]
-    launch_measurements = decode_measurements(latest_elect_proposal["payload"]["guest_launch_measurements"])
+    launch_measurements = get_launch_measurements(
+        version, latest_elect_proposal["payload"]["guest_launch_measurements"]
+    )
 
     dev_hash = download_and_hash_file(
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
@@ -192,7 +233,22 @@ def get_latest_replica_version_info() -> VersionInfo:
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
     )
 
-    return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements)
+    setupos_base = f"https://download.dfinity.systems/ic/{version}/setup-os"
+    setupos_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img/SHA256SUMS", "disk-img.tar.zst")
+    setupos_dev_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img-dev/SHA256SUMS", "disk-img.tar.zst")
+
+    binaries = get_binary_hashes(version)
+
+    return VersionInfo(
+        version,
+        hash,
+        dev_hash,
+        launch_measurements,
+        dev_measurements,
+        setupos_hash,
+        setupos_dev_hash,
+        binaries,
+    )
 
 
 def get_latest_hostos_version_info(logger: logging.Logger) -> VersionInfo:
@@ -226,7 +282,16 @@ def get_latest_hostos_version_info(logger: logging.Logger) -> VersionInfo:
         )
         raise
 
-    return VersionInfo(version, hash, dev_hash, replica_info.launch_measurements, replica_info.dev_measurements)
+    return VersionInfo(
+        version,
+        hash,
+        dev_hash,
+        replica_info.launch_measurements,
+        replica_info.dev_measurements,
+        replica_info.setupos_hash,
+        replica_info.setupos_dev_hash,
+        replica_info.binaries,
+    )
 
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
@@ -239,8 +304,8 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    existing_version = data.get("guestos", {}).get("subnets", {}).get(subnet, {}).get("version", "")
-    if existing_version == replica_info.version:
+    existing = data.get("guestos", {}).get("subnets", {}).get(subnet, {})
+    if is_record_up_to_date(existing, replica_info.version):
         logger.info("Subnet revision already updated to version %s. Skipping update.", replica_info.version)
         return
 
@@ -248,6 +313,9 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
         "version": replica_info.version,
         "update_img_hash": replica_info.hash,
         "update_img_hash_dev": replica_info.dev_hash,
+        "setupos_disk_img_hash": replica_info.setupos_hash,
+        "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
+        "binaries": replica_info.binaries,
         "launch_measurements": replica_info.launch_measurements,
         "launch_measurements_dev": replica_info.dev_measurements,
     }
@@ -270,8 +338,8 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    existing_version = data.get("guestos", {}).get("latest_release", {}).get("version", "")
-    if existing_version == replica_info.version:
+    existing = data.get("guestos", {}).get("latest_release", {})
+    if is_record_up_to_date(existing, replica_info.version):
         logger.info("Latest revision already updated to version %s. Skipping update.", replica_info.version)
         return
 
@@ -279,6 +347,9 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
         "version": replica_info.version,
         "update_img_hash": replica_info.hash,
         "update_img_hash_dev": replica_info.dev_hash,
+        "setupos_disk_img_hash": replica_info.setupos_hash,
+        "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
+        "binaries": replica_info.binaries,
         "launch_measurements": replica_info.launch_measurements,
         "launch_measurements_dev": replica_info.dev_measurements,
     }
@@ -299,8 +370,8 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    existing_version = data.get("hostos", {}).get("latest_release", {}).get("version", "")
-    if existing_version == replica_info.version:
+    existing = data.get("hostos", {}).get("latest_release", {})
+    if is_record_up_to_date(existing, replica_info.version):
         logger.info("Hostos revision already updated to version %s. Skipping update.", replica_info.version)
         return
 
@@ -309,6 +380,9 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
             "version": replica_info.version,
             "update_img_hash": replica_info.hash,
             "update_img_hash_dev": replica_info.dev_hash,
+            "setupos_disk_img_hash": replica_info.setupos_hash,
+            "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
+            "binaries": replica_info.binaries,
             "launch_measurements": replica_info.launch_measurements,
             "launch_measurements_dev": replica_info.dev_measurements,
         }
@@ -352,6 +426,47 @@ def download_and_read_file(url: str):
         urllib.request.urlretrieve(url, tmp_file.name)
         with open(tmp_file.name, "rb") as f:
             return json.loads(f.read().decode())
+
+
+def download_sha256sums(url: str) -> dict:
+    """Download a SHA256SUMS file and return a mapping from filename to its hex sha256."""
+    with tempfile.NamedTemporaryFile() as tmp_file:
+        urllib.request.urlretrieve(url, tmp_file.name)
+        with open(tmp_file.name, "r", encoding="utf-8") as f:
+            return {p[1]: p[0] for p in (line.split() for line in f) if len(p) == 2}
+
+
+def download_and_read_sha256sums(url: str, filename: str) -> str:
+    """Download a SHA256SUMS file and return the hex sha256 recorded for `filename`."""
+    sha256 = download_sha256sums(url).get(filename)
+    if sha256 is None:
+        raise Exception(f"No sha256 for {filename} in {url}")
+    return sha256
+
+
+def get_binary_hashes(version: str) -> dict:
+    """
+    Return {binary name: sha256 of <name>.gz} for MAINNET_BINARIES at `version`.
+
+    Read from the SHA256SUMS of the very directory that
+    //bazel:mainnet-icos-binaries.bzl downloads the binaries from, so the recorded
+    hash and the verified download can never refer to different copies.
+
+    Raises if a binary is missing: failing the updater's own PR is much better than
+    recording nothing and breaking `bazel build` for everyone once the repository
+    rule can no longer find it.
+    """
+    url = f"https://download.dfinity.systems/ic/{version}/binaries/x86_64-linux/SHA256SUMS"
+    sums = download_sha256sums(url)
+    missing = [name for name in MAINNET_BINARIES if f"{name}.gz" not in sums]
+    if missing:
+        raise Exception(f"No sha256 for {', '.join(missing)} in {url}")
+    return {name: sums[f"{name}.gz"] for name in MAINNET_BINARIES}
+
+
+def is_record_up_to_date(existing: dict, version: str) -> bool:
+    """Whether `existing` is on `version` and already has every field we record."""
+    return existing.get("version", "") == version and all(f in existing for f in ("setupos_disk_img_hash", "binaries"))
 
 
 def get_logger(level) -> logging.Logger:
@@ -461,6 +576,19 @@ def decode_measurements(launch_measurements):
     for measurement in launch_measurements["guest_launch_measurements"]:
         measurement["measurement"] = list(bytes.fromhex(measurement["measurement"]))
     return launch_measurements
+
+
+def get_launch_measurements(version, payload_measurements):
+    # `guest_launch_measurements` can be null in the NNS proposal payload
+    # (observed for a version elected via a "Security patch update" proposal).
+    # In that case, fall back to the measurements published on the CDN alongside
+    # the prod update image, which are already in the byte-list format used in
+    # this file (unlike the hex format in the proposal payload).
+    if payload_measurements is None:
+        return download_and_read_file(
+            f"https://download.dfinity.systems/ic/{version}/guest-os/update-img/launch-measurements.json"
+        )
+    return decode_measurements(payload_measurements)
 
 
 if __name__ == "__main__":

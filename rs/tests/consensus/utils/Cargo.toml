@@ -29,7 +29,7 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
-leb128 = "0.2.5"
+leb128 = { workspace = true }
 openssh-keys = "0.5.0"
 prost = { workspace = true }
 rand = { workspace = true }

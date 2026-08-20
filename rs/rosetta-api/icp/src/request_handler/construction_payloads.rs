@@ -29,7 +29,6 @@ use ic_types::{
     messages::{Blob, HttpCanisterUpdate, MessageId},
 };
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
-use rand::Rng;
 use rosetta_core::convert::principal_id_from_public_key;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tracing::log::debug;
@@ -133,12 +132,16 @@ impl RosettaRequestHandler {
             .map(ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch)
             .unwrap_or_else(|| std::time::SystemTime::now().into());
 
-        // FIXME: the memo field needs to be associated with the operation
+        // When the caller does not specify a memo, default to Memo(0) rather
+        // than a random memo. A random memo would change the transaction hash
+        // on every reconstruction of the same transfer, defeating the ledger's
+        // created_at_time based deduplication and allowing a retried transfer
+        // to be applied twice.
         let memo: Memo = meta
             .as_ref()
             .and_then(|meta| meta.memo)
             .map(Memo)
-            .unwrap_or_else(|| Memo(rand::thread_rng().r#gen()));
+            .unwrap_or(Memo(0));
 
         validate_ingress_window(ic_types::time::current_time(), ingress_start, ingress_end)?;
 

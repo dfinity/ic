@@ -129,16 +129,6 @@ pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// cover the cost of the subnet.
 pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 
-/// Pay-as-you-go base-fee pricing constants for HTTP outcalls, charged upfront
-/// for every request by `CyclesAccountManager::http_request_base_fee`.
-pub const HTTP_REQUEST_BASE_FEE: u128 = 1_000_000;
-pub const HTTP_REQUEST_PER_BYTE_FEE: u128 = 50;
-pub const HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE: u128 = 140_000;
-pub const HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE: u128 = 800;
-pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE: u128 = 90_000;
-pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE: u128 = 2_000;
-pub const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: u128 = 100_000;
-
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
@@ -149,7 +139,7 @@ pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 pub const SEV_REFERENCE_SUBNET_SIZE: usize = 7;
 
 /// Costs for each newly created dirty page in stable memory.
-const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
+pub const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(5_000);
 
 /// Accumulated priority reset interval, rounds.
 ///
@@ -179,6 +169,16 @@ pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
 /// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
 pub const DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS: NumInstructions =
     NumInstructions::new(5_000_000);
+
+/// Instructions charged per byte of stored log data when resizing the canister
+/// log memory.
+///
+/// When the log memory limit changes, all existing records must be read from
+/// the old ring buffer into heap memory, re-encoded, and written into a newly
+/// allocated ring buffer. The cost is proportional to the bytes currently
+/// stored (not the allocated capacity).
+pub const DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE: NumInstructions =
+    NumInstructions::new(32);
 
 /// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
 /// This overhead is a multiplier over the cost of executing the same instructions
@@ -290,6 +290,10 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
+
+    /// Number of instructions to count per byte of stored log data when resizing
+    /// the canister log memory.
+    pub canister_log_resize_instructions_per_byte: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -321,6 +325,8 @@ impl SchedulerConfig {
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
+            canister_log_resize_instructions_per_byte:
+                DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE,
         }
     }
 
@@ -365,6 +371,7 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
+            canister_log_resize_instructions_per_byte: NumInstructions::from(0),
         }
     }
 
@@ -460,12 +467,6 @@ pub struct CyclesAccountManagerConfig {
     /// The default value of the reserved balance limit for the case when the
     /// canister doesn't have it set in the settings.
     pub default_reserved_balance_limit: Cycles,
-
-    /// Base fee for fetching canister logs.
-    pub fetch_canister_logs_base_fee: Cycles,
-
-    /// Fee per byte for fetching canister logs.
-    pub fetch_canister_logs_per_byte_fee: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
@@ -502,8 +503,6 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::new(800),
             max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
-            fetch_canister_logs_base_fee: Cycles::new(5_000_000),
-            fetch_canister_logs_per_byte_fee: Cycles::new(80),
         }
     }
 
@@ -544,8 +543,6 @@ impl CyclesAccountManagerConfig {
             // This effectively disables the storage reservation mechanism on system subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
-            fetch_canister_logs_base_fee: Cycles::new(0),
-            fetch_canister_logs_per_byte_fee: Cycles::new(0),
         }
     }
 
@@ -572,8 +569,6 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::zero(),
             max_storage_reservation_period: Duration::from_secs(u64::MAX),
             default_reserved_balance_limit: Cycles::zero(),
-            fetch_canister_logs_base_fee: Cycles::zero(),
-            fetch_canister_logs_per_byte_fee: Cycles::zero(),
         }
     }
 

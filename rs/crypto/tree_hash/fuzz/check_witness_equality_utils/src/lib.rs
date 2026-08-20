@@ -19,7 +19,7 @@ mod tests;
 /// - and combinations of the former with existing paths in the tree
 ///   the witness looks the same for both implementations.
 pub fn test_absence_witness<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut R) {
-    let hash_tree = hash_lazy_tree(&as_lazy(full_tree)).expect("failed to create hash tree");
+    let hash_tree = hash_lazy_tree(&as_lazy(full_tree), None).expect("failed to create hash tree");
     let witness_gen = build_witness_gen(full_tree);
 
     // Traverse the tree and produce a list of paths and absent ranges,

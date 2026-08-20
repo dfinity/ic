@@ -13,6 +13,7 @@ use ic_nns_test_utils::registry::{
 };
 use ic_protobuf::registry::subnet::v1::SubnetListRecord as SubnetListRecordPb;
 use ic_registry_keys::make_subnet_list_record_key;
+use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use pocket_ic::PocketIcBuilder;
 use pocket_ic::nonblocking::PocketIc;
 use registry_canister::{
@@ -23,7 +24,8 @@ mod common;
 
 use common::test_helpers::{
     get_subnet_list_record, install_registry_canister_with_payload_builder,
-    prepare_registry_with_cloud_engine_subnet, prepare_registry_with_nodes,
+    prepare_registry_with_application_subnet, prepare_registry_with_cloud_engine_subnet,
+    prepare_registry_with_nodes,
 };
 
 /// Installs an invariant-compliant registry (which already contains a single,
@@ -46,6 +48,48 @@ async fn setup_with_existing_subnet() -> (PocketIc, Principal) {
     let subnet_id = Principal::try_from(subnet_id.as_slice()).unwrap();
 
     (pocket_ic, subnet_id)
+}
+
+/// Installs an invariant-compliant registry augmented with the subnet described
+/// by `subnet_mutate` (e.g. the output of a `prepare_registry_with_*_subnet`
+/// helper) and returns the running `PocketIc`.
+async fn setup_with_subnet(subnet_mutate: RegistryAtomicMutateRequest) -> PocketIc {
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0));
+    builder.push_init_mutate_request(subnet_mutate);
+    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
+
+    pocket_ic
+}
+
+/// Calls `delete_subnet` on the registry canister as `caller` and returns the
+/// decoded result. Panics only if the call itself is rejected, which is never
+/// expected for the authorized callers used in these tests.
+async fn delete_subnet(
+    pocket_ic: &PocketIc,
+    caller: PrincipalId,
+    subnet_id: Principal,
+) -> Result<(), String> {
+    let payload = DeleteSubnetPayload { subnet_id };
+    let response = pocket_ic
+        .update_call(
+            REGISTRY_CANISTER_ID.get().0,
+            caller.0,
+            "delete_subnet",
+            Encode!(&payload).unwrap(),
+        )
+        .await
+        .unwrap();
+    Decode!(&response, Result<(), String>).unwrap()
+}
+
+/// Returns the current list of subnet IDs (as raw bytes) recorded in the registry.
+async fn subnet_ids(pocket_ic: &PocketIc) -> Vec<Vec<u8>> {
+    decode_registry_value::<SubnetListRecordPb>(pocket_ic, make_subnet_list_record_key())
+        .await
+        .subnets
 }
 
 #[tokio::test]
@@ -173,47 +217,32 @@ async fn test_engine_controller_can_delete_a_cloud_engine_subnet() {
 }
 
 #[tokio::test]
-async fn test_authorized_callers_cannot_delete_a_non_cloud_engine_subnet() {
+async fn test_authorized_callers_cannot_delete_a_system_subnet() {
     let (pocket_ic, subnet_id) = setup_with_existing_subnet().await;
 
-    let payload = DeleteSubnetPayload { subnet_id };
-
-    // The existing subnet is a system subnet, not a CloudEngine. Even authorized
-    // callers must not be able to delete it: the call passes the authorization
-    // check but is then rejected by the business logic. Deletion fails, so the
-    // subnet is not consumed and both callers can be checked against it.
+    // The existing subnet is a system subnet (the NNS). System subnets may never
+    // be deleted, so even authorized callers must fail: the call passes the
+    // authorization check but is then rejected by the business logic. Deletion
+    // fails, so the subnet is not consumed and both callers can be checked
+    // against it.
     for caller in [
         GOVERNANCE_CANISTER_ID.get(),
         ENGINE_CONTROLLER_CANISTER_ID.get(),
     ] {
-        let response = pocket_ic
-            .update_call(
-                REGISTRY_CANISTER_ID.get().0,
-                caller.0,
-                "delete_subnet",
-                Encode!(&payload).unwrap(),
-            )
-            .await
-            .unwrap_or_else(|err| {
-                panic!("delete_subnet call by authorized caller {caller} was unexpectedly rejected: {err:?}")
-            });
-
-        let result = Decode!(&response, Result<(), String>).unwrap();
+        let result = delete_subnet(&pocket_ic, caller, subnet_id).await;
         assert_eq!(
             result,
-            Err("Only CloudEngines may be deleted".to_string()),
-            "caller {caller} should not be able to delete a non-cloud-engine subnet"
+            Err("System subnets may not be deleted".to_string()),
+            "caller {caller} should not be able to delete a system subnet"
         );
     }
 
     // The subnet should still be present.
-    let subnets =
-        decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
-            .await
-            .subnets;
     assert!(
-        subnets.contains(&subnet_id.as_slice().to_vec()),
-        "the non-cloud-engine subnet should not have been deleted"
+        subnet_ids(&pocket_ic)
+            .await
+            .contains(&subnet_id.as_slice().to_vec()),
+        "the system subnet should not have been deleted"
     );
 }
 
@@ -221,33 +250,12 @@ async fn test_authorized_callers_cannot_delete_a_non_cloud_engine_subnet() {
 /// that may be deleted) and verifies that `caller` is authorized to delete it
 /// and that the subnet is actually removed from the registry.
 async fn cloud_engine_subnet_can_be_deleted_by(caller: PrincipalId) {
-    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
-
     let (cloud_engine_mutate, cloud_engine_subnet_id) =
         prepare_registry_with_cloud_engine_subnet(4, INITIAL_MUTATION_ID);
-
-    let mut builder = RegistryCanisterInitPayloadBuilder::new();
-    builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0));
-    builder.push_init_mutate_request(cloud_engine_mutate);
-    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
+    let pocket_ic = setup_with_subnet(cloud_engine_mutate).await;
 
     // Delete the CloudEngine subnet via the caller under test.
-    let payload = DeleteSubnetPayload {
-        subnet_id: cloud_engine_subnet_id.get().0,
-    };
-    let response = pocket_ic
-        .update_call(
-            REGISTRY_CANISTER_ID.get().0,
-            caller.0,
-            "delete_subnet",
-            Encode!(&payload).unwrap(),
-        )
-        .await
-        .unwrap_or_else(|err| {
-            panic!("delete_subnet call by authorized caller {caller} was unexpectedly rejected: {err:?}")
-        });
-
-    let result = Decode!(&response, Result<(), String>).unwrap();
+    let result = delete_subnet(&pocket_ic, caller, cloud_engine_subnet_id.get().0).await;
     assert_eq!(
         result,
         Ok(()),
@@ -255,12 +263,67 @@ async fn cloud_engine_subnet_can_be_deleted_by(caller: PrincipalId) {
     );
 
     // The subnet should no longer be in the subnet list.
-    let subnets =
-        decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
-            .await
-            .subnets;
     assert!(
-        !subnets.contains(&cloud_engine_subnet_id.get().to_vec()),
+        !subnet_ids(&pocket_ic)
+            .await
+            .contains(&cloud_engine_subnet_id.get().to_vec()),
         "the cloud engine subnet should have been removed from the subnet list"
+    );
+}
+
+#[tokio::test]
+async fn test_governance_can_delete_an_application_subnet() {
+    let (application_mutate, application_subnet_id) =
+        prepare_registry_with_application_subnet(4, INITIAL_MUTATION_ID);
+    let pocket_ic = setup_with_subnet(application_mutate).await;
+
+    // Governance may delete any non-System subnet, including Application subnets.
+    let result = delete_subnet(
+        &pocket_ic,
+        GOVERNANCE_CANISTER_ID.get(),
+        application_subnet_id.get().0,
+    )
+    .await;
+    assert_eq!(
+        result,
+        Ok(()),
+        "governance should be able to delete an application subnet"
+    );
+
+    // The subnet should no longer be in the subnet list.
+    assert!(
+        !subnet_ids(&pocket_ic)
+            .await
+            .contains(&application_subnet_id.get().to_vec()),
+        "the application subnet should have been removed from the subnet list"
+    );
+}
+
+#[tokio::test]
+async fn test_engine_controller_cannot_delete_an_application_subnet() {
+    let (application_mutate, application_subnet_id) =
+        prepare_registry_with_application_subnet(4, INITIAL_MUTATION_ID);
+    let pocket_ic = setup_with_subnet(application_mutate).await;
+
+    // The engine controller may only delete CloudEngine subnets: the call passes
+    // the authorization check but is then rejected by the business logic.
+    let result = delete_subnet(
+        &pocket_ic,
+        ENGINE_CONTROLLER_CANISTER_ID.get(),
+        application_subnet_id.get().0,
+    )
+    .await;
+    assert_eq!(
+        result,
+        Err("The engine controller may only delete CloudEngine subnets".to_string()),
+        "the engine controller should not be able to delete an application subnet"
+    );
+
+    // The subnet should still be present.
+    assert!(
+        subnet_ids(&pocket_ic)
+            .await
+            .contains(&application_subnet_id.get().to_vec()),
+        "the application subnet should not have been deleted"
     );
 }

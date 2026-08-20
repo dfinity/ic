@@ -10,7 +10,7 @@ documentation.workspace = true
 base64 = { workspace = true }
 bincode = { workspace = true }
 bytes = { workspace = true }
-educe = "0.4"
+educe = "0.5"
 futures = { workspace = true }
 hex = { workspace = true }
 ic-adapter-metrics-client = { path = "../../../monitoring/adapter_metrics/client" }
@@ -52,12 +52,15 @@ slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 stubborn-io = "0.3.2"
-tarpc = { version = "0.34", features = ["full"] }
+# Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
+tarpc = { git = "https://github.com/dfinity/tarpc", rev = "cddf1c64011d00f36016146e8447bef99531030c", features = [
+    "full",
+] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
-tokio-serde = { version = "0.8", features = ["json", "bincode"] }
+tokio-serde = { version = "0.9", features = ["json", "bincode"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 x509-parser = { workspace = true }
@@ -81,6 +84,7 @@ ic-crypto-utils-basic-sig = { path = "../../utils/basic_sig" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
+ic-test-utilities-privileges = { path = "../../../test_utilities/privileges" }
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 mockall = { workspace = true }

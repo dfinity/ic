@@ -19,8 +19,8 @@ use ic_cketh_minter::state::transactions::{
 };
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::tx::{
-    Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest,
-    TransactionPrice,
+    Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest, TransactionPrice,
+    TransactionSignature,
 };
 use ic_ethereum_types::Address;
 use maplit::{btreemap, btreeset};
@@ -47,7 +47,18 @@ fn should_display_metadata() {
         .has_minimum_withdrawal_amount("10_000_000_000_000_000")
         .has_eth_balance("0")
         .has_total_effective_tx_fees("0")
-        .has_total_unspent_tx_fees("0");
+        .has_total_unspent_tx_fees("0")
+        .has_no_elements_matching("#sweeper-contract-address");
+
+    let dashboard = DashboardTemplate {
+        sweeper_contract_address: Some(
+            Address::from_str("0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38").unwrap(),
+        ),
+        ..dashboard
+    };
+
+    DashboardAssert::assert_that(dashboard)
+        .has_sweeper_contract_address("0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38");
 }
 
 #[test]
@@ -147,8 +158,7 @@ fn should_display_helper_smart_contracts() {
     ) {
         dashboard
             .log_scrapings
-            .set_contract_address(id, contract_address.parse().unwrap())
-            .unwrap();
+            .set_contract_address(id, contract_address.parse().unwrap());
         dashboard
             .log_scrapings
             .set_last_scraped_block_number(id, BlockNumber::from(last_scraped_block_number));
@@ -884,12 +894,16 @@ fn should_display_reimbursed_requests() {
                                 },
                             );
                         }
+                        WithdrawalRequest::SweeperFunding(_) => {
+                            unreachable!("sweeper funding is never reimbursed")
+                        }
                     }
                 } else {
                     apply_state_transition(
                         &mut state,
                         &EventType::QuarantinedReimbursement {
-                            index: ReimbursementIndex::from(&req),
+                            index: ReimbursementIndex::try_from(&req)
+                                .expect("BUG: this test's fixtures are all user withdrawals"),
                         },
                     )
                 }
@@ -1146,6 +1160,7 @@ fn initial_state() -> State {
         next_transaction_nonce: TransactionNonce::ZERO.into(),
         last_scraped_block_number: candid::Nat::from(INITIAL_LAST_SCRAPED_BLOCK_NUMBER),
         evm_rpc_id: None,
+        ethereum_sweeper_contract_address: None,
     })
     .expect("valid init args")
 }
@@ -1423,7 +1438,7 @@ fn cketh_withdrawal_flow(
         data: vec![],
         access_list: Default::default(),
     };
-    let dummy_signature = Eip1559Signature {
+    let dummy_signature = TransactionSignature {
         signature_y_parity: false,
         r: Default::default(),
         s: Default::default(),
@@ -1476,7 +1491,7 @@ fn ckerc20_withdrawal_flow(
         EthereumNetwork::Sepolia,
     )
     .unwrap();
-    let dummy_signature = Eip1559Signature {
+    let dummy_signature = TransactionSignature {
         signature_y_parity: false,
         r: Default::default(),
         s: Default::default(),
@@ -1608,6 +1623,14 @@ mod assertions {
                 "#minter-address > td",
                 expected_address,
                 "wrong minter address",
+            )
+        }
+
+        pub fn has_sweeper_contract_address(&self, expected_address: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-contract-address > td",
+                expected_address,
+                "wrong sweeper contract address",
             )
         }
 

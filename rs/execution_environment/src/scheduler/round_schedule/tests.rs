@@ -299,6 +299,7 @@ impl RoundScheduleFixture {
         )]));
         self.canister_state(&canister_id).execution_state = Some(ExecutionState::new(
             WasmBinary::new(CanisterModule::new(vec![])),
+            None,
             exports,
             Memory::new_for_testing(),
             Memory::new_for_testing(),

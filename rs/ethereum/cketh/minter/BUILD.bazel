@@ -53,6 +53,7 @@ filegroup(
             "@crate_index//:ic-canister-log",
             "@crate_index//:ic-canister-runtime",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-cdk-management-canister",
             "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-sha3",
             "@crate_index//:ic-stable-structures",
@@ -167,6 +168,7 @@ rust_test(
         "@crate_index//:hex",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:minicbor",
@@ -200,10 +202,16 @@ rust_ic_test_suite(
     timeout = "long",
     srcs = glob(
         ["tests/**/*.rs"],
-        exclude = ["tests/dump_stable_memory.rs"],
+        exclude = [
+            "tests/dump_stable_memory.rs",
+            # Run against a local foundry anvil node, not the IC test suite.
+            "tests/deposit_from_cex_demo.rs",
+            "tests/deposit_from_cex.rs",
+        ],
     ),
     data = [
         ":cketh_minter_debug.wasm.gz",
+        "//:pocket-ic-server",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
         "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
@@ -218,6 +226,7 @@ rust_ic_test_suite(
         "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
         "EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)",
+        "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
     },
     proc_macro_deps = [],
     deps = [
@@ -225,21 +234,99 @@ rust_ic_test_suite(
         ":minter",
         "//packages/ic-ethereum-types",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//packages/pocket-ic",
         "//rs/ethereum/cketh/test_utils",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
-        "//rs/state_machine_tests",
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ethers-core",
         "@crate_index//:hex",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "deposit_from_cex_demo_test",
+    size = "small",
+    srcs = ["tests/deposit_from_cex_demo.rs"],
+    data = [
+        "//:anvil",
+        "//:solc",
+        # Contract sources compiled at test time by the vendored solc.
+        "DepositHelperWithSubaccount.sol",
+        "tests/deposit_from_cex_demo/CkSweeperAttested.sol",
+        "tests/deposit_from_cex_demo/CkSweeperViaHelper.sol",
+        "tests/deposit_from_cex_demo/MockUSDT.sol",
+    ],
+    env = {
+        "ANVIL_BIN": "$(rootpath //:anvil)",
+        "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
+        "CKSWEEPER_ATTESTED_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperAttested.sol)",
+        "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperViaHelper.sol)",
+        "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
+        "SOLC_BIN": "$(rootpath //:solc)",
+    },
+    deps = [
+        # Keep sorted.
+        ":minter",
+        "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
+        "@crate_index//:candid",
+        "@crate_index//:ethers-core",
+        "@crate_index//:ethnum",
+        "@crate_index//:hex",
+        "@crate_index//:ic-sha3",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "deposit_from_cex",
+    # The end-to-end balance-scan test runs a live PocketIC and waits (wall-clock) for the minter's
+    # periodic scan, so it needs a larger timeout than the pure-anvil tests.
+    size = "medium",
+    srcs = ["tests/deposit_from_cex.rs"],
+    data = [
+        "//:anvil",
+        "//:solc",
+        # Reuses the mock ERC-20 source compiled at test time by the vendored solc.
+        "tests/deposit_from_cex_demo/MockUSDT.sol",
+        # End-to-end balance scan on a live PocketIC + local anvil node.
+        ":cketh_minter_debug.wasm.gz",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+        "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "@evm_rpc.wasm.gz//file",
+    ],
+    env = {
+        "ANVIL_BIN": "$(rootpath //:anvil)",
+        "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
+        "SOLC_BIN": "$(rootpath //:solc)",
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
+        "EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)",
+        "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    deps = [
+        # Keep sorted.
+        ":minter",
+        "//packages/ic-ethereum-types",
+        "//rs/ethereum/cketh/test_utils",
+        "@crate_index//:assert_matches",
     ],
 )
 
@@ -328,6 +415,7 @@ rust_canbench(
         "@crate_index//:hex",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:minicbor",

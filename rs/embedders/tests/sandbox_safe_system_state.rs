@@ -1,6 +1,6 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
 use ic_config::execution_environment::SUBNET_CALLBACK_SOFT_LIMIT;
-use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig};
+use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::wasmtime_embedder::system_api::SystemApiImpl;
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
@@ -71,8 +71,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -123,8 +122,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -166,8 +164,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -225,8 +222,7 @@ fn correct_charging_source_canister_for_a_request() {
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -441,8 +437,7 @@ fn is_controller_test() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),
@@ -535,8 +530,7 @@ fn test_inter_canister_call(
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        topo,
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(topo.clone()),
         ComputeAllocation::default(),
         SUBNET_CALLBACK_SOFT_LIMIT as u64,
         Default::default(),

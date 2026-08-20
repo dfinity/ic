@@ -29,7 +29,7 @@ use std::cmp::Ordering;
 /// ```
 pub fn left_outer_join<'l, 'r, L, R, K, LV, RK, RV>(
     left: L,
-    right: R,
+    mut right: R,
 ) -> LeftOuterJoin<L, R, K, LV, RK, RV>
 where
     L: Iterator<Item = (K, LV)>,
@@ -39,11 +39,10 @@ where
     RK: Borrow<K>,
     RV: 'r,
 {
-    let mut right_iter = right;
-    let right_peek = right_iter.next();
+    let right_peek = right.next();
     LeftOuterJoin {
         left,
-        right: right_iter,
+        right,
         right_peek,
     }
 }
@@ -58,7 +57,65 @@ where
 {
     left: L,
     right: R,
+    /// The next right entry, peeked. `Some` while the right side is still active
+    /// ("joining"); `None` once the right side is drained. `next` dispatches on
+    /// this.
     right_peek: Option<(RK, RV)>,
+}
+
+impl<L, R, K, LV, RK, RV> LeftOuterJoin<L, R, K, LV, RK, RV>
+where
+    L: Iterator<Item = (K, LV)>,
+    R: Iterator<Item = (RK, RV)>,
+    K: Ord,
+    RK: Borrow<K>,
+{
+    /// Behavior while the right side is active: matches the next left entry against
+    /// the peeked right entry. Only ever called while `right_peek` is `Some`.
+    #[inline]
+    fn next_joining(&mut self) -> Option<(K, LV, Option<RV>)> {
+        let (left_key, left_value) = self.left.next()?;
+
+        loop {
+            let (right_key, right_value) = self
+                .right_peek
+                .take()
+                .expect("right_peek is None during joining phase");
+
+            match right_key.borrow().cmp(&left_key) {
+                // This right entry precedes the left key, so it has no match; skip past
+                // it and re-compare, or drain the right side if it was the last one.
+                Ordering::Less => {
+                    self.right_peek = self.right.next();
+                    if self.right_peek.is_none() {
+                        return Some((left_key, left_value, None));
+                    }
+                }
+
+                // Match: emit the paired value and advance the right side.
+                Ordering::Equal => {
+                    self.right_peek = self.right.next();
+                    return Some((left_key, left_value, Some(right_value)));
+                }
+
+                // No right entry for this left key; restore the peeked right entry
+                // (it may match a later left key) and emit the left entry unmatched.
+                Ordering::Greater => {
+                    self.right_peek = Some((right_key, right_value));
+                    return Some((left_key, left_value, None));
+                }
+            }
+        }
+    }
+
+    /// Behavior once the right side is drained (`right_peek` is `None`): every
+    /// remaining left entry simply pairs with `None`.
+    #[inline]
+    fn next_drained(&mut self) -> Option<(K, LV, Option<RV>)> {
+        self.left
+            .next()
+            .map(|(left_key, left_value)| (left_key, left_value, None))
+    }
 }
 
 impl<L, R, K, LV, RK, RV> Iterator for LeftOuterJoin<L, R, K, LV, RK, RV>
@@ -70,35 +127,13 @@ where
 {
     type Item = (K, LV, Option<RV>);
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let (left_key, left_value) = self.left.next()?;
-
-        loop {
-            let right_cmp = self
-                .right_peek
-                .as_ref()
-                .map(|(right_key, _)| right_key.borrow().cmp(&left_key));
-
-            match right_cmp {
-                None => {
-                    return Some((left_key, left_value, None));
-                }
-                Some(Ordering::Less) => {
-                    self.right_peek = self.right.next();
-                    continue;
-                }
-                Some(Ordering::Equal) => {
-                    let (_, right_value) = self
-                        .right_peek
-                        .take()
-                        .expect("right_peek must be Some when Ordering::Equal");
-                    self.right_peek = self.right.next();
-                    return Some((left_key, left_value, Some(right_value)));
-                }
-                Some(Ordering::Greater) => {
-                    return Some((left_key, left_value, None));
-                }
-            }
+        // Split into a "joining" and a "drained" behavior.
+        if self.right_peek.is_some() {
+            self.next_joining()
+        } else {
+            self.next_drained()
         }
     }
 }
@@ -158,5 +193,30 @@ mod tests {
                 (&3, &"C", Some(&"c"))
             ]
         );
+    }
+
+    #[test]
+    fn left_outer_join_empty_right() {
+        let left = BTreeMap::from([(1_u32, "a"), (2, "b"), (3, "c")]);
+        let right = BTreeMap::<u32, &str>::new();
+
+        let joined: Vec<_> = left_outer_join(left.iter(), right.iter()).collect();
+
+        assert_eq!(
+            joined,
+            vec![(&1, &"a", None), (&2, &"b", None), (&3, &"c", None)]
+        );
+    }
+
+    #[test]
+    fn left_outer_join_right_drained_after_skipping() {
+        // All right keys precede the first left key, so the right side is drained
+        // after skipping only `Ordering::Less` entries.
+        let left = BTreeMap::from([(4_u32, "d"), (5, "e")]);
+        let right = BTreeMap::from([(1_u32, "A"), (2, "B"), (3, "C")]);
+
+        let joined: Vec<_> = left_outer_join(left.iter(), right.iter()).collect();
+
+        assert_eq!(joined, vec![(&4, &"d", None), (&5, &"e", None)]);
     }
 }

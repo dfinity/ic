@@ -28,11 +28,7 @@ pub fn has_ipv6_connectivity(
     // Format with the prefix length
     let ip = format!("{generated_ipv6}/{ipv6_prefix_length}");
 
-    eprintln!(
-        "Bringing {} up with ip address {}",
-        &interface.name,
-        &ip.to_string()
-    );
+    eprintln!("Bringing {} up with ip address {}", interface.name, ip);
 
     get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name])?;
     activate_link(&interface.name)?;

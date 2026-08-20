@@ -104,9 +104,18 @@ impl IngressSelector for IngressManager {
         let max_expiry = context.time + MAX_INGRESS_TTL;
         let expiry_range = min_expiry..=max_expiry;
 
-        let settings = self
-            .get_ingress_message_settings(context.registry_version)
-            .expect("Couldn't fetch ingress message parameters from the registry.");
+        let settings = match self.get_ingress_message_settings(context.registry_version) {
+            Ok(settings) => settings,
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "Failed to get the ingress message settings from the registry: {err}"
+                );
+
+                return PayloadWithSizeEstimate::default();
+            }
+        };
 
         // Select valid ingress messages and stop once the total size
         // becomes greater than byte_limit.
@@ -332,9 +341,26 @@ impl IngressSelector for IngressManager {
             .start_timer();
 
         let certified_height = context.certified_height;
-        let settings = self
-            .get_ingress_message_settings(context.registry_version)
-            .expect("Couldn't get IngressMessageSettings from the registry.");
+        let settings = match self.get_ingress_message_settings(context.registry_version) {
+            Ok(settings) => settings,
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Failed to get the ingress message settings from the registry \
+                    at version {}: {:?}",
+                    context.registry_version,
+                    err
+                );
+
+                return Err(ValidationError::ValidationFailed(
+                    IngressPayloadValidationFailure::GetIngressMessageSettingsFailed(
+                        context.registry_version,
+                        err,
+                    ),
+                ));
+            }
+        };
 
         let past_ingress = match IngressSetChain::new(context.time, past_ingress, || {
             IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
@@ -379,6 +405,16 @@ impl IngressSelector for IngressManager {
             ));
         }
 
+        let size_estimates = self.payload_size_estimates(payload);
+        if size_estimates.memory.get() > settings.max_ingress_bytes_per_block as u64 {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::IngressPayloadTooBig(
+                    size_estimates.memory.get() as usize,
+                    settings.max_ingress_bytes_per_block,
+                ),
+            ));
+        }
+
         // Tracks the sum of cycles needed per canister.
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
 
@@ -416,8 +452,6 @@ impl IngressSelector for IngressManager {
                 &mut cycles_needed,
             )?;
         }
-
-        let size_estimates = self.payload_size_estimates(payload);
 
         Ok(size_estimates.wire)
     }
@@ -496,6 +530,19 @@ impl IngressManager {
         num_messages: usize,
         cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
     ) -> ValidationResult<IngressPayloadValidationError> {
+        // A cooling down subnet inducts no ingress messages at all. This check is the
+        // only thing that guarantees it, both when building and when validating a
+        // payload. The ingress filter on the receiving nodes applies the same check,
+        // but only as an optimization (and in order to return a meaningful error to
+        // the user): messages already in the ingress pool when the subnet starts
+        // cooling down are not affected by it; and a malicious node may ignore it
+        // altogether.
+        if state.metadata.is_cooling_down() {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::SubnetCoolingDown,
+            ));
+        }
+
         let ingress_message_size = signed_ingress.count_bytes();
         // The message is invalid if its size is larger than the configured maximum.
         if ingress_message_size > settings.max_ingress_bytes_per_message {
@@ -784,6 +831,9 @@ pub(crate) mod tests {
     use ic_management_canister_types_private::{CanisterIdRecord, IC_00, Payload};
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
+    use ic_replicated_state::metadata_state::testing::{
+        NetworkTopologyTesting, SystemMetadataTesting,
+    };
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
         cycles_account_manager::CyclesAccountManagerBuilder,
@@ -883,6 +933,116 @@ pub(crate) mod tests {
                 ),)
             );
         })
+    }
+
+    #[rstest]
+    fn test_validate_ingress_payload_max_block_bytes(
+        #[values[true, false]] hashes_in_blocks_enabled: bool,
+    ) {
+        let subnet_id = subnet_test_id(0);
+
+        const MAX_INGRESS_BYTES_PER_MESSAGE: usize = 4 * 1024 * 1024;
+
+        // Two payloads differing by exactly one ~1 KiB message. We set the
+        // per-block byte cap to the exact in-memory size of the smaller one, so
+        // the larger one is one message over it.
+        let build_message = |nonce: u64| {
+            SignedIngressBuilder::new()
+                .canister_id(canister_test_id(0))
+                .method_name("update")
+                .method_payload(vec![0_u8; 1024])
+                .nonce(nonce)
+                .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
+                .build()
+        };
+        let at_limit_msgs: Vec<_> = (0..4_u64).map(build_message).collect();
+        let over_limit_msgs: Vec<_> = (0..5_u64).map(build_message).collect();
+
+        // Each message individually respects the per-message size cap, so only
+        // the *cumulative* per-block cap is exercised below.
+        for msg in over_limit_msgs.iter() {
+            assert!(msg.count_bytes() <= MAX_INGRESS_BYTES_PER_MESSAGE);
+        }
+
+        let at_limit = IngressPayload::from(at_limit_msgs);
+        let over_limit = IngressPayload::from(over_limit_msgs);
+        // The in-memory size estimate is independent of the hashes-in-blocks
+        // feature, so the cap can be derived without an `IngressManager`.
+        let block_byte_cap = (at_limit.total_messages_size_estimate()
+            + at_limit.total_ids_size_estimate())
+        .get() as usize;
+
+        let registry = set_up_registry(
+            subnet_id,
+            Some(block_byte_cap), // max_ingress_bytes_per_block == `at_limit`'s size
+            1000,                 // max_ingress_messages_per_block
+            MAX_INGRESS_BYTES_PER_MESSAGE,
+        );
+
+        setup_with_params(
+            None,
+            Some((registry, subnet_id)),
+            None,
+            Some(
+                ReplicatedStateBuilder::new()
+                    .with_subnet_id(subnet_id)
+                    .with_canister(
+                        CanisterStateBuilder::new()
+                            .with_canister_id(canister_test_id(0))
+                            .with_cycles(u128::MAX)
+                            .build(),
+                    )
+                    .build(),
+            ),
+            /*ingress_pool_max_count=*/ None,
+            |mut ingress_manager, _| {
+                ingress_manager.hashes_in_blocks_enabled_in_tests = hashes_in_blocks_enabled;
+
+                let context = ValidationContext {
+                    time: UNIX_EPOCH,
+                    registry_version: RegistryVersion::from(1),
+                    certified_height: Height::from(0),
+                };
+
+                // A payload whose cumulative in-memory size is *exactly* the cap
+                // must validate. Validation returns the payload's wire size
+                // estimate, which with hashes-in-blocks enabled is just the
+                // message ids.
+                assert_eq!(
+                    ingress_manager
+                        .payload_size_estimates(&at_limit)
+                        .memory
+                        .get() as usize,
+                    block_byte_cap
+                );
+                let expected_wire = ingress_manager.payload_size_estimates(&at_limit).wire;
+                assert_eq!(
+                    ingress_manager.validate_ingress_payload(&at_limit, &HashSet::new(), &context),
+                    Ok(expected_wire)
+                );
+
+                // One additional message pushes the payload just over the cap,
+                // so it must be rejected regardless of the hashes-in-blocks
+                // feature.
+                assert!(
+                    ingress_manager
+                        .payload_size_estimates(&over_limit)
+                        .memory
+                        .get() as usize
+                        > block_byte_cap
+                );
+                assert_matches!(
+                    ingress_manager.validate_ingress_payload(
+                        &over_limit,
+                        &HashSet::new(),
+                        &context
+                    ),
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressPayloadTooBig(_, _),
+                    ))
+                );
+            },
+        );
     }
 
     #[test]
@@ -1074,6 +1234,74 @@ pub(crate) mod tests {
                 ))
             );
         });
+    }
+
+    /// Tests that while the subnet is cooling down, ingress messages are neither
+    /// included into a payload nor accepted as part of one.
+    #[test]
+    fn test_cooling_down_subnet_inducts_no_ingress_messages() {
+        let mut state = ReplicatedStateBuilder::default()
+            .with_canister(
+                CanisterStateBuilder::default()
+                    .with_canister_id(canister_test_id(0))
+                    .build(),
+            )
+            .build();
+        let own_subnet_id = state.metadata.own_subnet_id;
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology
+                .subnets_mut()
+                .get_mut(&own_subnet_id)
+                .unwrap()
+                .cooling_down = true;
+        });
+
+        setup_with_params(
+            None,
+            None,
+            None,
+            Some(state),
+            /*ingress_pool_max_count=*/ None,
+            |ingress_manager, ingress_pool| {
+                let time_source = FastForwardTimeSource::new();
+                let validation_context = ValidationContext {
+                    time: UNIX_EPOCH,
+                    registry_version: RegistryVersion::from(1),
+                    certified_height: Height::from(0),
+                };
+
+                let ingress_msg = SignedIngressBuilder::new()
+                    .canister_id(canister_test_id(0))
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
+                    .build();
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![ingress_msg.clone()],
+                    &ingress_pool,
+                    time_source.get_relative_time(),
+                );
+
+                // The message is not included into a payload.
+                let payload = ingress_manager.get_ingress_payload(
+                    &HashSet::new(),
+                    &validation_context,
+                    MAX_WIRE_BYTES,
+                );
+                assert_eq!(0, payload.payload.message_count());
+
+                // And a payload containing it is invalid.
+                let ingress_validation = ingress_manager.validate_ingress_payload(
+                    &IngressPayload::from(vec![ingress_msg]),
+                    &HashSet::new(),
+                    &validation_context,
+                );
+                assert_matches!(
+                    ingress_validation,
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::SubnetCoolingDown
+                    ))
+                );
+            },
+        )
     }
 
     #[test]

@@ -1,5 +1,5 @@
-use ic_cdk::management_canister::{CanisterStatusArgs, CanisterStatusResult, canister_status};
 use ic_cdk::{init, post_upgrade, query, update};
+use ic_cdk_management_canister::{CanisterStatusArgs, CanisterStatusResult, canister_status};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;

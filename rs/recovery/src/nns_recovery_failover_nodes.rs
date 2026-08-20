@@ -184,6 +184,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
         // Depending on the next step we might require some user interaction before we can execute
         // it.
         match step_type {
+            #[allow(clippy::collapsible_match)]
             StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState => {
                 if self.params.download_node.is_none() {
                     // We could pick a node with highest finalization and CUP height automatically,
@@ -200,6 +201,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             _ => {}
         }
         match step_type {
+            #[allow(clippy::collapsible_match)]
             StepType::DownloadState => {
                 if self.params.download_state_height.is_none() {
                     self.params.download_state_height = read_optional(
@@ -223,6 +225,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::DownloadParentNNSStore => {
                 if self.params.parent_nns_host_ip.is_none() {
                     self.params.parent_nns_host_ip = read_optional(
@@ -232,6 +235,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::ICReplayWithRegistryContent => {
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
@@ -256,6 +260,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::WaitForCUP => {
                 if self.params.upload_method.is_none() {
                     self.params.upload_method = read_optional_data_location(

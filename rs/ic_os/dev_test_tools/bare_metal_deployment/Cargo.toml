@@ -8,8 +8,10 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+config_types = { path = "../../config/types" }
 deterministic_ips = { path = "../../networking/deterministic_ips" }
 clap = { workspace = true }
+grub = { path = "../../boot/grub" }
 http = { workspace = true }
 macaddr = { workspace = true }
 rust-ini = { workspace = true }

@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -94,5 +95,16 @@ generated_files_check(
         "//rs/test_utilities/compare_dirs",
         "//rs/types/base_types/protobuf_generator:lib",
         "@crate_index//:tempfile",
+    ],
+)
+
+rust_bench(
+    name = "canister_id_bench",
+    srcs = ["benches/canister_id.rs"],
+    crate_root = "benches/canister_id.rs",
+    deps = [
+        # Keep sorted.
+        ":base_types",
+        "@crate_index//:criterion",
     ],
 )

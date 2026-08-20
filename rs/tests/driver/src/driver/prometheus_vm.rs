@@ -23,7 +23,7 @@ use crate::driver::{
     ic_gateway_vm::{HasIcGatewayVm, Playnet},
     log_events,
     nested::HasNestedVms,
-    resource::{DiskImage, ImageType},
+    resource::DiskImage,
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
@@ -116,22 +116,27 @@ impl TestEnvAttribute for PrometheusConfigHash {
     }
 }
 
-impl Default for PrometheusVm {
-    fn default() -> Self {
-        PrometheusVm::new(PROMETHEUS_VM_NAME.to_string())
-    }
-}
-
 impl PrometheusVm {
-    pub fn new(name: String) -> Self {
+    pub fn new(env: &TestEnv) -> Self {
+        let disk_image = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => DiskImage::Url {
+                ic_os_image: false,
+                url: Url::parse(&get_default_prometheus_vm_img_url()).expect("should not fail!"),
+                sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
+            },
+            SystemTestBackend::Local => {
+                let var = "ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH";
+                DiskImage::Local {
+                    path: PathBuf::from(
+                        std::env::var(var)
+                            .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                    ),
+                }
+            }
+        };
         PrometheusVm {
-            universal_vm: UniversalVm::new(name)
-                .with_primary_image(DiskImage::Url {
-                    image_type: ImageType::PrometheusImage,
-                    url: Url::parse(&get_default_prometheus_vm_img_url())
-                        .expect("should not fail!"),
-                    sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
-                })
+            universal_vm: UniversalVm::new(PROMETHEUS_VM_NAME.to_string())
+                .with_primary_image(disk_image)
                 .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
@@ -355,7 +360,7 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             }
             SystemTestBackend::Local => {
                 // No playnet DNS on Local; expose Prometheus/Grafana via raw
-                // IPv6 inside the libvirt network.
+                // IPv6 inside the local backend's network.
                 // TODO: this won't actually work since the nginx on the PrometheusVm is configured using virtualHosts.
                 let deployed_prometheus_vm = env.get_deployed_universal_vm(vm_name).unwrap();
                 let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();

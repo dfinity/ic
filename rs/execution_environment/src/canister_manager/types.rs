@@ -75,12 +75,12 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) wasm_chunk_store_max_size: NumBytes,
     pub(crate) canister_snapshot_baseline_instructions: NumInstructions,
     pub(crate) canister_snapshot_data_baseline_instructions: NumInstructions,
+    pub(crate) canister_log_resize_instructions_per_byte: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
     pub(crate) max_environment_variables: usize,
     pub(crate) max_environment_variable_name_length: usize,
     pub(crate) max_environment_variable_value_length: usize,
-    pub(crate) log_memory_store_feature: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -100,12 +100,12 @@ impl CanisterMgrConfig {
         wasm_chunk_store_max_size: NumBytes,
         canister_snapshot_baseline_instructions: NumInstructions,
         canister_snapshot_data_baseline_instructions: NumInstructions,
+        canister_log_resize_instructions_per_byte: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
         max_environment_variables: usize,
         max_environment_variable_name_length: usize,
         max_environment_variable_value_length: usize,
-        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self {
             default_provisional_cycles_balance,
@@ -122,12 +122,12 @@ impl CanisterMgrConfig {
             wasm_chunk_store_max_size,
             canister_snapshot_baseline_instructions,
             canister_snapshot_data_baseline_instructions,
+            canister_log_resize_instructions_per_byte,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
             max_environment_variables,
             max_environment_variable_name_length,
             max_environment_variable_value_length,
-            log_memory_store_feature,
         }
     }
 }
@@ -331,6 +331,10 @@ pub(crate) struct CanisterManagerResponse {
     /// Stop canister request contexts (for requests other than the current request)
     /// that must be rejected (because the canister was restarted by the current request).
     pub stop_contexts_to_reject: Vec<StopCanisterContext>,
+    /// A snapshot that must be marked as immutable (because it was loaded onto
+    /// a canister by the current request). The snapshot may belong to a canister
+    /// other than the target canister of the current request.
+    pub snapshot_to_make_immutable: Option<SnapshotId>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -497,13 +501,16 @@ pub(crate) enum CanisterManagerError {
         bytes: NumBytes,
         limit: NumBytes,
     },
+    CanisterLogMemoryLimitIsTooLow {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
     CanisterSnapshotAccessDenied {
         caller: PrincipalId,
         method_name: String,
     },
-    FetchCanisterLogsNotEnoughCycles {
-        sent: Cycles,
-        required: Cycles,
+    CanisterStatusAccessDenied {
+        caller: PrincipalId,
     },
     FetchCanisterLogsAccessDenied {
         caller: PrincipalId,
@@ -684,7 +691,7 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "not-enough-cycles".to_string(),
             },
             CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
-                suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                suggestion: "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister.".to_string(),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
@@ -761,6 +768,11 @@ impl AsErrorHelp for CanisterManagerError {
                     .to_string(),
                 doc_link: doc_ref("invalid-controller"),
             },
+            CanisterManagerError::CanisterStatusAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a principal with canister status read access."
+                    .to_string(),
+                doc_link: "".to_string(),
+            },
             CanisterManagerError::FetchCanisterLogsAccessDenied { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a controller of the target canister or \
                 a principal with log read access."
@@ -771,8 +783,10 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
                 doc_link: "".to_string(),
             },
-            CanisterManagerError::FetchCanisterLogsNotEnoughCycles { .. } => ErrorHelp::UserError {
-                suggestion: "Try sending more cycles with the request.".to_string(),
+            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
+                suggestion: "Set a higher canister log memory limit, \
+                or zero to disable canister logging."
+                    .to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -806,7 +820,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterNotFound(canister_id) => Self::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found.{additional_help}", &canister_id),
+                format!("Canister {} not found.{additional_help}", canister_id),
             ),
             CanisterIdAlreadyExists(canister_id) => Self::new(
                 ErrorCode::CanisterIdAlreadyExists,
@@ -1085,7 +1099,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,
-                "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister.".to_string(),
             ),
             CanisterSnapshotNotController {
                 sender,
@@ -1201,16 +1215,26 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 format!("Caller {caller} is not allowed to call {method_name}"),
             ),
+            CanisterStatusAccessDenied { caller } => Self::new(
+                // `CanisterStatusAccessDenied` is a dedicated error code that is
+                // mapped to the same reject code (`CanisterError`) as the
+                // `CanisterInvalidController` error code that governed access to
+                // `canister_status` before the status visibility feature was
+                // introduced.
+                ErrorCode::CanisterStatusAccessDenied,
+                format!("Caller {caller} is not allowed to read the canister status"),
+            ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "The canister log memory limit {bytes} is too high. It must be at most {limit}."
                 ),
             ),
-            FetchCanisterLogsNotEnoughCycles { sent, required } => Self::new(
+            CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "fetch_canister_logs request sent with {sent} cycles, but {required} cycles are required."
+                    "The canister log memory limit {bytes} is too low. \
+                    It must be either zero or at least {limit}."
                 ),
             ),
             FetchCanisterLogsAccessDenied { caller } => Self::new(

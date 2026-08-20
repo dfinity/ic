@@ -1,4 +1,5 @@
 use crate::{
+    MAIN_DERIVATION_PATH,
     eth_logs::LedgerSubaccount,
     eth_rpc_client::{
         AnyOf, MIN_ATTACHED_CYCLES, MinByKey, MultiCallError, NoReduction, ToReducedWithStrategy,
@@ -24,6 +25,7 @@ use evm_rpc_types::{
 };
 use futures::future::join_all;
 use ic_canister_log::log;
+use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -53,7 +55,7 @@ pub async fn process_reimbursement() {
     };
 
     let reimbursements: Vec<(ReimbursementIndex, ReimbursementRequest)> = read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .reimbursement_requests_iter()
             .map(|(index, request)| (index.clone(), request.clone()))
             .collect()
@@ -159,7 +161,7 @@ pub async fn process_retrieve_eth_requests() {
         }
     };
 
-    if read_state(|s| !s.eth_transactions.has_pending_requests()) {
+    if read_state(|s| !s.withdrawal_transactions.has_pending_requests()) {
         return;
     }
 
@@ -181,7 +183,7 @@ pub async fn process_retrieve_eth_requests() {
     send_transactions_batch(latest_transaction_count).await;
     finalize_transactions_batch().await;
 
-    if read_state(|s| s.eth_transactions.has_pending_requests()) {
+    if read_state(|s| s.withdrawal_transactions.has_pending_requests()) {
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
             async { process_retrieve_eth_requests().await },
@@ -209,7 +211,7 @@ async fn resubmit_transactions_batch(
     latest_transaction_count: Option<TransactionCount>,
     gas_fee_estimate: &GasFeeEstimate,
 ) {
-    if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
+    if read_state(|s| s.withdrawal_transactions.is_sent_tx_empty()) {
         return;
     }
     let latest_transaction_count = match latest_transaction_count {
@@ -219,7 +221,7 @@ async fn resubmit_transactions_batch(
         }
     };
     let transactions_to_resubmit = read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .create_resubmit_transactions(latest_transaction_count, gas_fee_estimate.clone())
     });
     for result in transactions_to_resubmit {
@@ -248,12 +250,12 @@ async fn resubmit_transactions_batch(
 
 fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
     for request in read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .withdrawal_requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
     }) {
         log!(DEBUG, "[create_transactions_batch]: processing {request:?}",);
         let ethereum_network = read_state(State::ethereum_network);
-        let nonce = read_state(|s| s.eth_transactions.next_transaction_nonce());
+        let nonce = read_state(|s| s.withdrawal_transactions.next_transaction_nonce());
         let gas_limit = estimate_gas_limit(&request);
         match create_transaction(
             &request,
@@ -287,7 +289,10 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
                     INFO,
                     "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}. Request moved back to end of queue."
                 );
-                mutate_state(|s| s.eth_transactions.reschedule_withdrawal_request(request));
+                mutate_state(|s| {
+                    s.withdrawal_transactions
+                        .reschedule_withdrawal_request(request)
+                });
             }
         };
     }
@@ -295,21 +300,28 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
 
 pub fn estimate_gas_limit(withdrawal_request: &WithdrawalRequest) -> GasAmount {
     match withdrawal_request {
-        WithdrawalRequest::CkEth(_) => CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+        WithdrawalRequest::CkEth(_) | WithdrawalRequest::SweeperFunding(_) => {
+            CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT
+        }
         WithdrawalRequest::CkErc20(_) => CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
     }
 }
 
 async fn sign_transactions_batch() {
     let transactions_batch: Vec<_> = read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .transactions_to_sign_batch(TRANSACTIONS_TO_SIGN_BATCH_SIZE)
     });
     log!(DEBUG, "Signing transactions {transactions_batch:?}");
     let results = join_all(
         transactions_batch
             .into_iter()
-            .map(|(withdrawal_id, tx)| async move { (withdrawal_id, tx.sign().await) }),
+            .map(|(withdrawal_id, tx)| async move {
+                (
+                    withdrawal_id,
+                    crate::tx::sign(tx, DerivationPath::new(MAIN_DERIVATION_PATH)).await,
+                )
+            }),
     )
     .await;
     let mut errors = Vec::new();
@@ -345,14 +357,14 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
         }
     };
     let transactions_to_send: Vec<_> = read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .transactions_to_send_batch(latest_transaction_count, TRANSACTIONS_TO_SEND_BATCH_SIZE)
     });
 
     let rpc_client = read_state(rpc_client);
     let results = join_all(transactions_to_send.iter().map(async |tx| {
         rpc_client
-            .send_raw_transaction(tx.raw_transaction_hex())
+            .send_raw_transaction(tx.raw_transaction_bytes())
             .with_cycles(MIN_ATTACHED_CYCLES)
             .try_send()
             .await
@@ -384,14 +396,14 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
 }
 
 async fn finalize_transactions_batch() {
-    if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
+    if read_state(|s| s.withdrawal_transactions.is_sent_tx_empty()) {
         return;
     }
 
     match finalized_transaction_count().await {
         Ok(finalized_tx_count) => {
             let txs_to_finalize = read_state(|s| {
-                s.eth_transactions
+                s.withdrawal_transactions
                     .sent_transactions_to_finalize(&finalized_tx_count)
             });
             let expected_finalized_withdrawal_ids: BTreeSet<_> =

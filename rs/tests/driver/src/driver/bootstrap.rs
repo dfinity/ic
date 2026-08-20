@@ -27,7 +27,9 @@ use crate::driver::{
 };
 use anyhow::{Context, Result, bail};
 use bare_metal_deployment::SshAuthMethod;
-use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal};
+use bare_metal_deployment::deploy::{
+    DeploymentConfig, GuestOsDeploymentConfig, ImageSource, deploy_to_bare_metal,
+};
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::setupos::{
     config_ini::ConfigIniSettings,
@@ -737,7 +739,7 @@ pub fn setup_baremetal_instance(
 
     let config = DeploymentConfig {
         hostos_upgrade_image: Some(ImageSource::Url(hostos_url)),
-        guestos_image: Some(guestos_image_source),
+        guestos: Some(GuestOsDeploymentConfig::full(guestos_image_source)),
         setupos_config_image: Some(ImageSource::File(config_image.to_path_buf())),
     };
 
@@ -864,6 +866,8 @@ fn create_setupos_config_image(
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
+    // The MKFS_FAT/MCOPY/MLABEL env vars are set on the test process by the system_test rule and
+    // inherited by this child script.
     let status = Command::new(build_setupos_config_image)
         .arg(config_dir)
         .arg(data_dir)

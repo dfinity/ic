@@ -11,6 +11,7 @@ candid = { workspace = true }
 hex = { workspace = true }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
+ic-https-outcalls-pricing = { path = "../pricing" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -24,7 +25,6 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 ic-types-cycles = { path = "../../types/cycles" }
-ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }

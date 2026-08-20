@@ -86,14 +86,15 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # Size when constraint addded: 447_593 bytes
     "ic-btc-checker.wasm.gz": 6,
     # Size when constraint addded: 802_894 bytes
-    "ic-ckbtc-minter.wasm.gz": 9,
+    # Size is currently at 923_414 bytes.
+    "ic-ckbtc-minter.wasm.gz": 10,
     # Size when constraint addded: 1_230_630 bytes
     "ic-cketh-minter.wasm.gz": 13,
     # The orchestrator needs to embed 3 wasms at compile time
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
     # Size when constraint addded: 1_704_979 bytes
-    "ic-ledger-suite-orchestrator-canister.wasm.gz": 18,
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": 19,
 
     # -- BN team --
     # Size when constraint addded: 540_349 bytes
@@ -153,7 +154,6 @@ artifact_bundle(
         testonly = True,
         src = target + ".didfile",
         out = name + ".did",
-        allow_symlink = False,
     )
     for (name, target) in CANISTERS.items()
     if (

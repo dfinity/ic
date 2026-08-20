@@ -289,6 +289,7 @@ pub fn construct_ic_stack(
         subnet_id,
         subnet_type,
         root_subnet_id,
+        state_manager.clone(),
         registry.clone(),
         Arc::clone(&crypto) as Arc<_>,
         cancellation_token.child_token(),

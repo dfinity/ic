@@ -17,6 +17,7 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -43,6 +44,7 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -70,6 +72,7 @@ rust_test(
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -100,10 +103,10 @@ rust_test(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "RUST_TEST_THREADS": "4",  # running too many PocketIC tests in parallel affects overall performance
     },
+    exec_properties = {"cpu": "16"},
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    tags = ["cpu:16"],
     deps = [
         # Keep sorted
         "//packages/ic-http-types",

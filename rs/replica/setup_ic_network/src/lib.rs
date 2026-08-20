@@ -144,7 +144,6 @@ struct Bouncers {
 
 impl Bouncers {
     fn new(
-        log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         subnet_id: SubnetId,
         time_source: Arc<dyn TimeSource>,
@@ -166,11 +165,7 @@ impl Bouncers {
             state_reader.clone(),
         ));
 
-        let https_outcalls = Arc::new(CanisterHttpGossipImpl::new(
-            consensus_pool_cache.clone(),
-            state_reader.clone(),
-            log.clone(),
-        ));
+        let https_outcalls = Arc::new(CanisterHttpGossipImpl::new(state_reader.clone()));
 
         Self {
             ingress,
@@ -207,7 +202,6 @@ impl AbortableBroadcastChannels {
     ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
         let bouncers = Bouncers::new(
-            log,
             metrics_registry,
             subnet_id,
             time_source.clone(),

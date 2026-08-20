@@ -23,6 +23,7 @@ def system_test(
         tags = [],
         backend = None,
         test_timeout = "long",
+        enable_uvm = False,
         enable_metrics = False,
         prometheus_vm_required_host_features = [],
         prometheus_vm_resources = default_vm_resources,
@@ -44,6 +45,7 @@ def system_test(
         logs = True,
         vm_allocation_mode = None,
         cpus = None,
+        cpus_oversubscription_factor = 3,
         **kwargs):
     """Declares a system-test.
 
@@ -58,6 +60,7 @@ def system_test(
         If "local" the non `_local` variants will be tagged as "manual".
         If None, both the `_local` and the non `_local` variants won't be tagged as "manual" and will run by default.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
+      enable_uvm: if True, depend on the @farm_universal_vm_img for local system-tests.
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
       prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
@@ -98,9 +101,15 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
-      cpus: Optional number of CPU cores to reserve for the local variant of the test.
-        This will translate into a `cpu:N` tag for the `_local` variant.
-        Heuristic: set it to MIN_LOCAL_CPUS + number of vCPUs required for the whole testnet. DEFAULT_VCPUS_PER_VM can be used for the default number of vCPUs per VM if not overridden.
+      cpus: Optional number of CPU cores the test actually needs.
+        Heuristic: MIN_LOCAL_CPUS + the number of vCPUs required for the whole testnet
+          (DEFAULT_VCPUS_PER_VM is the per-VM default).
+        Must be an int >= 1. Note that the `_local` variant doesn't reserve `cpus` but only
+        ceil(cpus / cpus_oversubscription_factor) via exec_properties.
+      cpus_oversubscription_factor: positive integer by which `cpus` is divided to
+        determine how many CPUs to reserve. Reserving less than the test uses lets
+        more system-tests be packed onto a single worker, at the cost of
+        deliberately overloading it. A factor of 1 disables oversubscription.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -137,6 +146,15 @@ def system_test(
     _runtime_deps = dict(runtime_deps)
 
     _runtime_deps["TEST_BIN"] = test_driver_target
+
+    # Bazel-built FAT tools the driver uses to assemble config images for
+    # universal VMs / SetupOS / GuestOS, instead of system dosfstools/mtools.
+    # These are set on the test process and read (by name) from the driver and
+    # the config-image scripts it spawns; see run_systest.sh (symlink handling)
+    # and colocate_test.rs.
+    _runtime_deps["MKFS_FAT"] = "@dosfstools//:mkfs.fat"
+    _runtime_deps["MCOPY"] = "@mtools//:mcopy"
+    _runtime_deps["MLABEL"] = "@mtools//:mlabel"
 
     env_var_files = {}
     icos_images = dict()
@@ -261,12 +279,12 @@ def system_test(
     # network namespace, where the user-namespaced sandbox process lacks effective
     # CAP_NET_ADMIN and bridge creation fails with
     #`RTNETLINK answers: Operation not permitted`.
-    farm_tags = tags + ["requires-network"]
+    farm_tags = tags + ["requires-network", "farm_system_test"]
 
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
-    # Runtime deps that are only needed when running on the local (libvirt-based) backend.
+    # Runtime deps that are only needed when running on the local (QEMU-based) backend.
     _local_only_deps = {
         image_name + "_PATH": image_path
         for image_name, image_path in icos_images.items()
@@ -281,16 +299,26 @@ def system_test(
     for image_name, image_path in icos_config.local_only_icos_images.items():
         _local_only_deps[image_name + "_PATH"] = image_path
 
-    _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
-    _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
-    _local_only_deps["ENV_DEPS__LIBVIRTD_PATH"] = "//rs/tests:libvirtd"
-    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "//rs/tests:dnsmasq"
+    if enable_uvm:
+        _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+
+    if enable_metrics:
+        _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+
+    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
+    _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_X86_64_PATH"] = "@qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu//:qemu-system-x86_64"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_DATA_PATH"] = "@qemu_system_data_prebuilt_linux_amd64//:qemu-system-data"
+
+    # Split OVMF (UEFI) firmware for the QEMU VMs (see local_backend.rs). The
+    # code image is mounted read-only and shared; the vars image is a per-VM
+    # writable varstore template.
+    _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
+    _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
 
     local_dep_env = {
         name: "$(rootpath {})".format(dep)
         for name, dep in _local_only_deps.items()
-    } | {
-        "NET_ADMIN_LAUNCHER_PATH": "/usr/local/bin/ic-net-admin",
     }
 
     # The local backend runs in a sandbox without external network access, so it
@@ -300,7 +328,18 @@ def system_test(
     # (--stream-console-logs).
     local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
 
-    reserve_cpus = [] if cpus == None else ["cpu:{}".format(cpus)]
+    if type(cpus_oversubscription_factor) != "int" or cpus_oversubscription_factor < 1:
+        fail("Invalid cpus_oversubscription_factor {}: must be an int >= 1".format(
+            repr(cpus_oversubscription_factor),
+        ))
+
+    reserved_cpus = None
+    if cpus != None:
+        if type(cpus) != "int" or cpus < 1:
+            fail("Invalid cpus {}: must be an int >= 1".format(repr(cpus)))
+
+        # Starlark has no math.ceil() so we round up using integer division.
+        reserved_cpus = (cpus + cpus_oversubscription_factor - 1) // cpus_oversubscription_factor
 
     sh_test(
         name = test_name + "_local",
@@ -313,7 +352,9 @@ def system_test(
             "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
         },
         env_inherit = env_inherit,
-        tags = tags + ["local_system_test"] + reserve_cpus + (["manual"] if backend == "farm" else []),
+        tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
+        exec_properties = {"cpu": str(reserved_cpus)} if reserved_cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
@@ -456,16 +497,10 @@ def uvm_config_image(name, tags = None, visibility = None, srcmap = None, teston
         name = name + "_vfat",
         srcs = [":" + name + "_size"],
         outs = [name + "_vfat.img"],
-        tools = ["//:mkfs.fat"],
-        # //:mkfs.fat resolves to the dosfstools bundle (mkfs.fat + fatlabel),
-        # so pick out the mkfs.fat binary by name.
+        tools = ["@dosfstools//:mkfs.fat"],
         cmd = """
-        mkfs_fat=
-        for f in $(locations //:mkfs.fat); do
-            case "$$f" in */mkfs.fat) mkfs_fat="$$f" ;; esac
-        done
         truncate -s $$(cat $<) $@
-        "$$mkfs_fat" -i "0" -n CONFIG $@
+        $(location @dosfstools//:mkfs.fat) -i 0 -n CONFIG $@
         """,
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],

@@ -663,10 +663,7 @@ impl CanisterQueues {
         F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
     {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
-            loop {
-                let Some(reference) = queue.peek() else {
-                    break;
-                };
+            while let Some(reference) = queue.peek() {
                 let queue = Arc::make_mut(queue);
                 let Some(msg) = self.store.pool.get(reference) else {
                     // Expired / dropped message. Pop it and advance.

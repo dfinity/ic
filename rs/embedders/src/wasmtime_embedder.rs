@@ -415,9 +415,12 @@ impl WasmtimeEmbedder {
             bytemap_name: Some(STABLE_BYTEMAP_MEMORY_NAME),
             memory: stable_memory.clone(),
             memory_type: CanisterMemoryType::Stable,
-            // Wasm native stable memory will always be tracked by a
-            // bytemap within the wasm module.
-            dirty_page_tracking: DirtyPageTracking::Ignore,
+            // Wasm native stable memory is tracked by a
+            // bytemap within the wasm module, but that's used
+            // only for limiting the memory. The deterministic
+            // memory tracker accounts for page fault charging,
+            // same as for the heap pages.
+            dirty_page_tracking,
         });
 
         result
@@ -510,12 +513,15 @@ impl WasmtimeEmbedder {
             let instance_globals = get_exported_globals(&instance, &mut store);
 
             if exported_globals.len() != instance_globals.len() {
-                fatal!(
-                    self.log,
-                    "Given number of exported globals {} is not equal to the number of instance exported globals {}",
-                    exported_globals.len(),
-                    instance_globals.len()
+                let err = HypervisorError::WasmEngineError(
+                    WasmEngineError::FailedToInstantiateModule(format!(
+                        "Given number of exported globals {} is not equal to the number of \
+                         instance exported globals {}",
+                        exported_globals.len(),
+                        instance_globals.len(),
+                    )),
                 );
+                return Err((err, store.into_data().system_api));
             }
 
             // set the globals to persisted values
@@ -525,33 +531,31 @@ impl WasmtimeEmbedder {
                 .zip(instance_globals.iter())
             {
                 if instance_global.ty(&mut store).mutability() == Mutability::Var {
-                    instance_global
-                        .set(
-                            &mut store,
-                            match v {
-                                Global::I32(val) => Val::I32(*val),
-                                Global::I64(val) => Val::I64(*val),
-                                Global::F32(val) => Val::F32((val).to_bits()),
-                                Global::F64(val) => Val::F64((val).to_bits()),
-                                Global::V128(val) => Val::V128((*val).into()),
-                            },
-                        )
-                        .unwrap_or_else(|e| {
-                            let v = match v {
-                                Global::I32(val) => (val).to_string(),
-                                Global::I64(val) => (val).to_string(),
-                                Global::F32(val) => (val).to_string(),
-                                Global::F64(val) => (val).to_string(),
-                                Global::V128(val) => (val).to_string(),
-                            };
-                            fatal!(
-                                self.log,
+                    if let Err(e) = instance_global.set(
+                        &mut store,
+                        match v {
+                            Global::I32(val) => Val::I32(*val),
+                            Global::I64(val) => Val::I64(*val),
+                            Global::F32(val) => Val::F32((val).to_bits()),
+                            Global::F64(val) => Val::F64((val).to_bits()),
+                            Global::V128(val) => Val::V128((*val).into()),
+                        },
+                    ) {
+                        let val = match v {
+                            Global::I32(val) => (val).to_string(),
+                            Global::I64(val) => (val).to_string(),
+                            Global::F32(val) => (val).to_string(),
+                            Global::F64(val) => (val).to_string(),
+                            Global::V128(val) => (val).to_string(),
+                        };
+                        let err = HypervisorError::WasmEngineError(
+                            WasmEngineError::FailedToInstantiateModule(format!(
                                 "error while setting exported global {} to {}: {}",
-                                ix,
-                                v,
-                                e
-                            )
-                        })
+                                ix, val, e,
+                            )),
+                        );
+                        return Err((err, store.into_data().system_api));
+                    }
                 } else {
                     debug!(
                         self.log,
@@ -639,20 +643,12 @@ impl WasmtimeEmbedder {
             main_memory_type = WasmMemoryType::Wasm64;
         }
 
-        let dirty_page_overhead = match main_memory_type {
-            WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,
-            WasmMemoryType::Wasm64 => NumInstructions::from(
-                self.config.dirty_page_overhead.get()
-                    * self.config.wasm64_dirty_page_overhead_multiplier,
-            ),
-        };
-
         let memory_trackers = sigsegv_memory_tracker(
             memories,
             &mut *store,
             self.log.clone(),
             self.config.feature_flags.deterministic_memory_tracker,
-            /*dirty_page_overhead*/ NumInstructions::new(1),
+            self.config.dirty_page_overhead,
             subtract_instruction_counter,
         );
 
@@ -664,7 +660,6 @@ impl WasmtimeEmbedder {
             instance_stats: InstanceStats::default(),
             store,
             modification_tracking,
-            dirty_page_overhead,
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: current_dirty_page_limit,
             stable_memory_page_access_limit: current_accessed_limit,
@@ -687,9 +682,15 @@ impl WasmtimeEmbedder {
 
             if current_size < requested_size {
                 let delta = requested_size - current_size;
-                instance_memory
-                    .grow(&mut store, delta)
-                    .expect("memory grow failed");
+                if instance_memory.grow(&mut store, delta).is_err() {
+                    return Err(HypervisorError::WasmEngineError(
+                        WasmEngineError::FailedToInstantiateModule(format!(
+                            "Failed to grow wasm memory by {} page(s) to {} page(s): \
+                             exceeds module's declared maximum",
+                            delta, requested_size,
+                        )),
+                    ));
+                }
             }
             let start = MemoryStart(instance_memory.data_ptr(&store) as usize);
             let mut created_memories = self.created_memories.lock().unwrap();
@@ -771,7 +772,8 @@ impl WasmtimeEmbedder {
                 // SAFETY: This is the array we created in the host_memory creator, so we know it is a valid memory region that we own.
                 unsafe {
                     mman::mprotect(
-                        addr as *mut _,
+                        std::ptr::NonNull::new(addr as *mut std::ffi::c_void)
+                            .expect("mprotect address is null"),
                         size_in_bytes,
                         mman::ProtFlags::PROT_READ | mman::ProtFlags::PROT_WRITE,
                     )
@@ -927,6 +929,7 @@ pub struct PageAccessResults {
     pub stable_mprotect_count: usize,
     pub stable_copy_page_count: usize,
     pub stable_sigsegv_handler_duration: Duration,
+    pub dmt_projected_message_cost: usize,
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
@@ -938,7 +941,6 @@ pub struct WasmtimeInstance {
     instance_stats: InstanceStats,
     store: Pin<Box<wasmtime::Store<StoreData>>>,
     modification_tracking: ModificationTracking,
-    dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]
     #[allow(dead_code)]
     stable_memory_dirty_page_limit: ic_types::NumOsPages,
@@ -1060,6 +1062,9 @@ impl WasmtimeInstance {
             let stable_sigsegv_handler_duration =
                 stable_tracker.metrics().sigsegv_handler_duration();
 
+            // total cost of the message if the DMT charges for all page accesses. Overwritten later.
+            let dmt_projected_page_cost = 0;
+
             Ok(PageAccessResults {
                 wasm_dirty_pages,
                 wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
@@ -1083,6 +1088,7 @@ impl WasmtimeInstance {
                 stable_mprotect_count: stable_tracker.metrics().mprotect_count(),
                 stable_copy_page_count: stable_tracker.metrics().copy_page_count(),
                 stable_sigsegv_handler_duration,
+                dmt_projected_message_cost: dmt_projected_page_cost,
             })
         }
     }
@@ -1126,6 +1132,7 @@ impl WasmtimeInstance {
             stable_mprotect_count: res.stable_mprotect_count,
             stable_copy_page_count: res.stable_copy_page_count,
             stable_sigsegv_handler_duration: res.stable_sigsegv_handler_duration,
+            dmt_projected_message_cost: res.dmt_projected_message_cost,
         };
     }
 
@@ -1204,13 +1211,7 @@ impl WasmtimeInstance {
         let access = self.page_accesses()?;
         self.set_instance_stats(&access);
 
-        // Charge for dirty wasm heap pages.
-        let x = self.instruction_counter().saturating_sub_unsigned(
-            self.dirty_page_overhead
-                .get()
-                .saturating_mul(access.wasm_dirty_pages.len() as u64),
-        );
-        self.set_instruction_counter(x);
+        // No need to charge for dirty wasm heap pages anymore: The DMT charges directly.
 
         match result {
             Ok(_) => Ok(InstanceRunResult {

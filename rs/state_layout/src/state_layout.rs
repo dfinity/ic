@@ -2,6 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource, SnapshotVisibility,
+    StatusVisibility,
 };
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::state::{
@@ -19,8 +20,8 @@ use ic_replicated_state::{
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound, Height,
-    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
+    CanisterId, CanisterTimer, ComputeAllocation, ExecutionRound, Height, MemoryAllocation,
+    NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils::thread::maybe_parallel_map;
@@ -64,6 +65,7 @@ pub const QUEUES_FILE: &str = "queues.pbuf";
 pub const CANISTER_FILE: &str = "canister.pbuf";
 pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
 pub const SPLIT_MARKER_FILE: &str = "split_from.pbuf";
+pub const SUBNET_MERGED_FILE: &str = "subnet_merged.pbuf";
 pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
 pub const REFUNDS_FILE: &str = "refunds.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
@@ -158,6 +160,10 @@ pub struct ExecutionStateBits {
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
     pub binary_hash: WasmHash,
+    /// The round time at which this code was installed/upgraded or restored from
+    /// a snapshot, in nanoseconds since the Unix epoch. `None` for execution
+    /// states persisted before this field was introduced.
+    pub last_install_timestamp_nanos: Option<u64>,
     pub next_scheduled_method: NextScheduledMethod,
     pub is_wasm64: bool,
 }
@@ -190,6 +196,7 @@ pub struct CanisterStateBits {
     pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
+    pub canister_creation_timestamp_nanos: Option<u64>,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
     pub instructions_executed: NumInstructions,
@@ -203,10 +210,8 @@ pub struct CanisterStateBits {
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
     pub snapshot_visibility: SnapshotVisibility,
+    pub status_visibility: StatusVisibility,
     pub log_memory_limit: NumBytes,
-    pub canister_log: CanisterLog,
-    pub next_canister_log_record_idx: u64,
-    pub log_memory_store_migrated: bool,
     pub log_memory_store_persistent_next_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
@@ -244,6 +249,9 @@ pub struct CanisterSnapshotBits {
     pub global_timer: Option<CanisterTimer>,
     /// The state of the low memory hook.
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
+    /// Whether this snapshot has been loaded onto a canister and is therefore
+    /// immutable.
+    pub restored: bool,
 }
 
 #[derive(Clone)]
@@ -312,6 +320,7 @@ struct CheckpointRefData {
 /// │   │           └── vmemory_0.bin
 /// │   ├── ingress_history.pbuf
 /// │   ├── split_from.pbuf
+/// │   ├── subnet_merged.pbuf
 /// │   ├── subnet_queues.pbuf
 /// │   └── system_metadata.pbuf
 /// │
@@ -335,6 +344,7 @@ struct CheckpointRefData {
 /// │      │           └── vmemory_0.bin
 /// │      ├── ingress_history.pbuf
 /// │      ├── split_from.pbuf
+/// │      ├── subnet_merged.pbuf
 /// │      ├── subnet_queues.pbuf
 /// │      └── system_metadata.pbuf
 /// │
@@ -483,13 +493,16 @@ impl TipHandler {
     }
 
     /// Deletes canisters from tip if they are not in `ids`.
+    ///
+    /// Returns the IDs of the deleted canisters.
     pub fn filter_tip_canisters(
         &mut self,
         height: Height,
         ids: &BTreeSet<CanisterId>,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<Vec<CanisterId>, LayoutError> {
         let tip = self.tip(height)?;
         let canisters_on_disk = tip.canister_ids()?;
+        let mut deleted_canister_ids = Vec::new();
         for id in canisters_on_disk {
             if !ids.contains(&id) {
                 let canister_path = tip.canister(&id)?.raw_path();
@@ -498,9 +511,10 @@ impl TipHandler {
                     message: "Cannot remove canister.".to_string(),
                     io_err: err,
                 })?;
+                deleted_canister_ids.push(id);
             }
         }
-        Ok(())
+        Ok(deleted_canister_ids)
     }
 
     /// Deletes snapshots from tip if they are not in `ids`.
@@ -517,6 +531,19 @@ impl TipHandler {
             }
         }
         Ok(())
+    }
+
+    /// Deletes the directory of the given canister from tip.
+    ///
+    /// This is a no-op if the canister has no directory in tip, e.g. because it was
+    /// created and deleted without any of its `PageMap`s having been flushed.
+    pub fn delete_canister_directory(
+        &mut self,
+        height: Height,
+        canister_id: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        tip.delete_canister_dir(&canister_id)
     }
 
     /// Moves the entire canister directory from one canister id to another.
@@ -702,6 +729,11 @@ impl StateLayout {
     /// Returns the the raw root path for state
     pub fn raw_path(&self) -> &Path {
         &self.root
+    }
+
+    /// `syncfs` the filesystem holding the state.
+    pub fn syncfs(&self) -> std::io::Result<()> {
+        syncfs(&self.root)
     }
 
     /// Returns the path to the temporary directory.
@@ -1313,7 +1345,7 @@ impl StateLayout {
         let cp_path = self.diverged_checkpoints().join(&checkpoint_name);
         let tmp_path = self
             .fs_tmp()
-            .join(format!("diverged_checkpoint_{}", &checkpoint_name));
+            .join(format!("diverged_checkpoint_{}", checkpoint_name));
         self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
@@ -1363,7 +1395,7 @@ impl StateLayout {
     pub fn remove_backup(&self, height: Height) -> Result<(), LayoutError> {
         let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
-        let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
+        let tmp_path = self.fs_tmp().join(format!("backup_{}", backup_name));
         self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: backup_path.clone(),
@@ -1752,6 +1784,14 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         self.0.root.join(SPLIT_MARKER_FILE).into()
     }
 
+    /// The "subnet was merged" marker, backing `SystemMetadata::subnet_merged`.
+    ///
+    /// A `false` flag encodes to an empty message, so (as with all other empty
+    /// protos) the file is not written at all in that case.
+    pub fn subnet_merged_marker(&self) -> ProtoFileWith<pb_metadata::SubnetMerged, Permissions> {
+        self.0.root.join(SUBNET_MERGED_FILE).into()
+    }
+
     pub fn stats(&self) -> ProtoFileWith<pb_stats::Stats, Permissions> {
         self.0.root.join(STATS_FILE).into()
     }
@@ -1774,13 +1814,16 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         &self,
         canister_id: &CanisterId,
     ) -> Result<CanisterLayout<Permissions>, LayoutError> {
-        CanisterLayout::new(
-            self.0
-                .root
-                .join(CANISTER_STATES_DIR)
-                .join(hex::encode(canister_id.get_ref().as_slice())),
-            self,
-        )
+        CanisterLayout::new(self.canister_path(canister_id), self)
+    }
+
+    /// The path of the given canister's directory. As opposed to `canister()`, this
+    /// does not create the directory.
+    fn canister_path(&self, canister_id: &CanisterId) -> PathBuf {
+        self.0
+            .root
+            .join(CANISTER_STATES_DIR)
+            .join(hex::encode(canister_id.get_ref().as_slice()))
     }
 
     /// Lists all snapshots in the checkpoint.
@@ -2004,6 +2047,23 @@ where
             message: "Failed to sync checkpoint directory for the creation of the state sync checkpoint marker".to_string(),
             io_err: err,
         })
+    }
+
+    /// Removes the entire directory of the given canister.
+    ///
+    /// This is a no-op if the canister has no directory, e.g. because it was created
+    /// and deleted without any of its `PageMap`s having been flushed.
+    pub fn delete_canister_dir(&self, canister_id: &CanisterId) -> Result<(), LayoutError> {
+        let canister_path = self.canister_path(canister_id);
+        match std::fs::remove_dir_all(&canister_path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(LayoutError::IoError {
+                path: canister_path,
+                message: "Cannot remove canister.".to_string(),
+                io_err: err,
+            }),
+        }
     }
 }
 
@@ -2853,6 +2913,26 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// Synchronizes the filesystem containing the given path.
+///
+/// On Linux, this uses `syncfs` to synchronize the entire filesystem. On other
+/// platforms it falls back to `File::sync_all()`.
+fn syncfs<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    let f = std::fs::File::open(&path)?;
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        if unsafe { libc::syncfs(f.as_raw_fd()) } == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        f.sync_all()?;
+    }
+    Ok(())
 }
 
 fn dir_list_recursive(

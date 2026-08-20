@@ -328,6 +328,7 @@ mod execution_tests {
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -381,6 +382,7 @@ mod execution_tests {
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -396,6 +398,7 @@ mod execution_tests {
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -446,6 +449,7 @@ mod execution_tests {
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
             WasmBinary::new(CanisterModule::new(b"\x00asm invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -503,6 +507,7 @@ mod execution_tests {
         canister_state.execution_state = Some(ExecutionState::new(
             // Without the '\x00asm' prefix, the check for wasm code length will fail.
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()

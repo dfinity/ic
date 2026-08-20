@@ -296,15 +296,29 @@ impl Registry {
         routing_table_into_registry_mutation(self, routing_table)
     }
 
+    /// Subnet deletion is (currently) a manual process and we don't expect to actually delete
+    /// a subnet while a canister migration is ongoing (instead we expect to disable the
+    /// canister migration API first and only delete a subnet once there's no ongoing canister
+    /// migration). However, e.g., if a subnet is permanently stuck, it might be impossible to
+    /// successfully complete an ongoing canister migration and in this case, we'd like to still
+    /// be able to delete such a subnet. In this case, the outcome should be as if the migration
+    /// completed before the subnet got deleted.
     pub fn migrate_canisters_to_subnet(
         &self,
         version: u64,
         canister_ids: Vec<CanisterId>,
-        subnet_id: SubnetId,
+        target_subnet_id: SubnetId,
     ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
+            let target_subnet_in_routing_table = routing_table
+                .iter()
+                .any(|(_range, sid)| *sid == target_subnet_id);
             for canister_id in canister_ids {
-                routing_table.assign_canister(canister_id, subnet_id);
+                if target_subnet_in_routing_table {
+                    routing_table.assign_canister(canister_id, target_subnet_id);
+                } else {
+                    routing_table.unassign_canister(canister_id);
+                }
             }
             routing_table.optimize();
         })

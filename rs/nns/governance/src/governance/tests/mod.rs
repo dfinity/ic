@@ -1003,7 +1003,7 @@ mod metrics_tests {
         assert!(s.contains(&format!(
             "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"1\",proposal_topic=\"{}\",proposal_type=\"{}\"}} {} 10",
             Topic::NeuronManagement.as_str_name(),
-            &manage_neuron_action.as_str_name(),
+            manage_neuron_action.as_str_name(),
             deadline_ts,
         )));
 
@@ -1013,7 +1013,7 @@ mod metrics_tests {
         assert!(s.contains(&format!(
             "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"3\",proposal_topic=\"{}\",proposal_type=\"{}\"}} {} 10",
             Topic::Governance.as_str_name(),
-            &motion_action.as_str_name(),
+            motion_action.as_str_name(),
             deadline_ts,
         )));
 
@@ -1397,6 +1397,66 @@ fn test_validate_execute_nns_function() {
         let actual_result = governance.validate_execute_nns_function(&valid_execute_nns_function);
         assert_eq!(actual_result, Ok(()));
     }
+}
+
+/// A node provider stored with id = None (possible from pre-validation-era state) must not
+/// cause validate_assign_noid_payload to panic. It should be treated as non-matching and
+/// the function should return a clean "not registered" error.
+#[test]
+fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
+    // Step 1: Prepare the world.
+    // Mix a legacy entry (id = None) with a valid entry to ensure neither panics nor false match.
+    let governance = Governance::new(
+        api::Governance {
+            economics: Some(api::NetworkEconomics::with_default_values()),
+            node_providers: vec![
+                api::NodeProvider {
+                    // This used to cause a panic in the code under test,
+                    // whereas, now, it just logs a warning.
+                    id: None,
+                    ..Default::default()
+                },
+                api::NodeProvider {
+                    id: Some(PrincipalId::new_node_test_id(1)),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        },
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    let new_valid_assign_node_operator_proposal_action = |node_provider_principal_id| {
+        let payload = Encode!(&AddNodeOperatorPayload {
+            node_provider_principal_id: Some(node_provider_principal_id),
+            ..Default::default()
+        })
+        .unwrap();
+        ValidExecuteNnsFunction::try_from(ExecuteNnsFunction {
+            nns_function: NnsFunction::AssignNoid as i32,
+            payload,
+        })
+        .unwrap()
+    };
+
+    // Step 2: Run the code under test.
+    // The following calls must not panic — that's the main thing this test verifies.
+    let unregistered_node_provider_result = governance.validate_execute_nns_function(
+        &new_valid_assign_node_operator_proposal_action(PrincipalId::new_node_test_id(99)),
+    );
+    let registered_node_provider_result = governance.validate_execute_nns_function(
+        &new_valid_assign_node_operator_proposal_action(PrincipalId::new_node_test_id(1)),
+    );
+
+    // Step 3: Verify result(s).
+    // Unregistered provider → clean error, no panic.
+    let err = unregistered_node_provider_result.unwrap_err();
+    assert!(err.error_message.contains("not registered"));
+    // Registered provider → ok.
+    assert_eq!(registered_node_provider_result, Ok(()));
 }
 
 #[test]

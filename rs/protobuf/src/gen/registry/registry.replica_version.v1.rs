@@ -12,6 +12,13 @@ pub struct ReplicaVersionRecord {
     /// The SEV-SNP measurements that belong to this release
     #[prost(message, optional, tag = "9")]
     pub guest_launch_measurements: ::core::option::Option<GuestLaunchMeasurements>,
+    /// Replica version IDs are generally git commit IDs in the ic git repository,
+    /// pointing to the sources from which the Replica was built. Currently this
+    /// matches the suffix of the key for this record in the registry, and is
+    /// included here to make it easier to work with the generated Rust types. A
+    /// ReplicaVersionRecord almost always travels with its ID String.
+    #[prost(string, optional, tag = "10")]
+    pub replica_version_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
     serde::Serialize,
@@ -33,11 +40,12 @@ pub struct GuestLaunchMeasurements {
 #[derive(
     serde::Serialize,
     serde::Deserialize,
-    Eq,
     candid::CandidType,
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GuestLaunchMeasurement {
@@ -51,11 +59,12 @@ pub struct GuestLaunchMeasurement {
 #[derive(
     serde::Serialize,
     serde::Deserialize,
-    Eq,
     candid::CandidType,
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GuestLaunchMeasurementMetadata {
@@ -68,14 +77,4 @@ pub struct GuestLaunchMeasurementMetadata {
     /// Supported values can be found in ic-os/defs.bzl under `vcpu_types`.
     #[prost(string, optional, tag = "2")]
     pub vcpu_type: ::core::option::Option<::prost::alloc::string::String>,
-}
-/// A list of blessed versions of the IC Replica
-///
-/// New versions are added here after a vote has been accepted by token
-/// holders. Subnetworks can then be upgraded to any of those version.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct BlessedReplicaVersions {
-    /// A list of version information ids.
-    #[prost(string, repeated, tag = "1")]
-    pub blessed_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }

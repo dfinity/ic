@@ -16,8 +16,7 @@ use crate::{
     CreateCanisterParams, CreateCanisterPlacement, IngressStatusResult, PocketIcBuilder,
     PocketIcState, RejectResponse, StartServerParams, TickConfigs, Time, copy_dir, start_server,
 };
-use backoff::backoff::Backoff;
-use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use backon::{BackoffBuilder, ExponentialBuilder};
 use candid::{
     Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -49,9 +48,6 @@ use tracing_subscriber::EnvFilter;
 
 // wait time between polling requests
 const POLLING_PERIOD_MS: u64 = 10;
-
-// the default value of the `--hard-ttl` CLI option of the PocketIC server
-const HARD_TTL_SECS: u64 = 600; // 10 minutes
 
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
@@ -157,7 +153,7 @@ impl PocketIc {
                 server_binary,
                 reuse: true,
                 ttl: None,
-                hard_ttl: Some(Duration::from_secs(HARD_TTL_SECS)),
+                hard_ttl: None,
             })
             .await;
             server_url
@@ -823,16 +819,19 @@ impl PocketIc {
         &self,
         message_id: RawMessageId,
     ) -> Result<Vec<u8>, RejectResponse> {
-        let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
-            .with_initial_interval(Duration::from_millis(10))
-            .with_max_interval(Duration::from_secs(1))
-            .with_multiplier(2.0)
+        let mut retry_policy = ExponentialBuilder::new()
+            .with_min_delay(Duration::from_millis(10))
+            .with_max_delay(Duration::from_secs(1))
+            .with_factor(2.0)
+            .with_jitter()
+            .with_total_delay(Some(Duration::from_secs(15 * 60)))
+            .without_max_times()
             .build();
         loop {
             if let Some(ingress_status) = self.ingress_status(message_id.clone()).await {
                 break ingress_status;
             }
-            tokio::time::sleep(retry_policy.next_backoff().unwrap()).await;
+            tokio::time::sleep(retry_policy.next().unwrap()).await;
         }
     }
 
@@ -1420,6 +1419,8 @@ impl PocketIc {
             (TakeCanisterSnapshotArgs {
                 canister_id,
                 replace_snapshot,
+                uninstall_code: None,
+                sender_canister_version: None,
             },),
         )
         .await
