@@ -23,9 +23,10 @@
 
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
-use ic_cketh_minter::endpoints::CandidBlockTag;
+use ic_cketh_minter::endpoints::{CandidBlockTag, RetrieveEthStatus};
 use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
 use ic_ethereum_types::Address;
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{FeatureFlags, LedgerArgument};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
@@ -206,18 +207,52 @@ impl SweeperFundingSetup {
         }
     }
 
-    /// The sweeper address the minter derived, scraped from its log line: there is no getter for it
-    /// yet, and it cannot be derived test-side without the master public key.
+    /// The sweeper address the minter derived, read from its dashboard: available as soon as the
+    /// master public key is, i.e. before the funding task has decided anything.
     pub fn sweeper_address(&self) -> Option<Address> {
-        self.minter_logs().iter().find_map(|line| {
-            let rest = line.split("[fund_sweeper]: ").nth(1)?;
-            let hex = rest.split_whitespace().next()?;
-            hex.parse().ok()
-        })
+        let dashboard = self.dashboard_html();
+        let row = dashboard.split(r#"id="sweeper-address""#).nth(1)?;
+        // Bounded to the row: until the minter has cached its key the cell holds no address at all,
+        // and an unbounded search then runs on into later rows and returns an unrelated one — the
+        // deposit helper contract's — as if it were the sweeper's, leaving a test to arrange the
+        // wrong account. Returning `None` is what keeps `await_sweeper_address` waiting.
+        let row = row.split("</tr>").next()?;
+        let start = row.find("0x")?;
+        row.get(start..start + 42)?.parse().ok()
     }
 
-    /// Waits until the funding task has logged the sweeper address, polling a canister meanwhile.
-    pub fn await_funding_decision(&self, deadline: Duration) -> Address {
+    /// The minter's rendered dashboard.
+    pub fn dashboard_html(&self) -> String {
+        let request = HttpRequest {
+            method: "GET".to_string(),
+            url: "/dashboard".to_string(),
+            headers: vec![],
+            body: serde_bytes::ByteBuf::new(),
+        };
+        let reply = self
+            .env
+            .query_call(
+                self.minter_id,
+                Principal::anonymous(),
+                "http_request",
+                Encode!(&request).unwrap(),
+            )
+            .expect("the dashboard query was rejected");
+        let response = Decode!(&reply, HttpResponse).unwrap();
+        String::from_utf8_lossy(&response.body).to_string()
+    }
+
+    /// The value rendered in a dashboard row, e.g. `sweeper-cketh-burned`.
+    pub fn dashboard_row(&self, id: &str) -> Option<String> {
+        let dashboard = self.dashboard_html();
+        let row = dashboard.split(&format!(r#"id="{id}""#)).nth(1)?;
+        let cell = row.split("<td>").nth(1)?.split("</td>").next()?;
+        Some(cell.trim().to_string())
+    }
+
+    /// Waits until the minter has derived its sweeper address, which happens once the master public
+    /// key is cached — before the first funding check acts on it.
+    pub fn await_sweeper_address(&self, deadline: Duration) -> Address {
         let start = Instant::now();
         loop {
             if let Some(address) = self.sweeper_address() {
@@ -225,11 +260,116 @@ impl SweeperFundingSetup {
             }
             assert!(
                 start.elapsed() <= deadline,
-                "the funding task did not decide to fund within {deadline:?}; minter logs:\n{}",
+                "the minter did not derive a sweeper address within {deadline:?}; minter logs:\n{}",
                 self.minter_logs().join("\n")
             );
             std::thread::sleep(Duration::from_secs(2));
         }
+    }
+
+    /// Credits `address` with `wei` on the owned anvil node.
+    pub fn set_eth_balance(&self, address: &Address, wei: u128) {
+        self.anvil.set_balance(address, wei);
+    }
+
+    /// Waits until the minter has logged a line containing `needle`, polling its log endpoint.
+    pub fn await_minter_log(&self, needle: &str, deadline: Duration) {
+        let start = Instant::now();
+        loop {
+            let logs = self.minter_logs();
+            if logs.iter().any(|line| line.contains(needle)) {
+                return;
+            }
+            assert!(
+                start.elapsed() <= deadline,
+                "the minter never logged {needle:?} within {deadline:?}; logs:\n{}",
+                logs.join("\n")
+            );
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    }
+
+    /// Places code at `address`, so a plain value transfer to it no longer succeeds: with the
+    /// 21'000 gas of a bare transfer there is nothing left to execute it.
+    pub fn set_code(&self, address: &Address, code: &[u8]) {
+        self.anvil.set_code(address, code);
+    }
+
+    /// The runtime bytecode at `address`, so a test can check that what it arranged is where it
+    /// meant to put it rather than assuming so.
+    pub fn code(&self, address: &Address) -> Vec<u8> {
+        self.anvil.code(address)
+    }
+
+    /// Asserts that `address` receives no ETH for `window`, polling a canister throughout so the
+    /// PocketIC instance stays alive. A bounded negative check — the best available shape for
+    /// "the minter must not do this" — sized well beyond one withdrawal-timer tick.
+    pub fn assert_no_eth_received(&self, address: &Address, window: Duration) {
+        let start = Instant::now();
+        while start.elapsed() <= window {
+            self.anvil.mine(1);
+            let balance = self.anvil.eth_balance(address, "latest");
+            assert_eq!(
+                balance,
+                0,
+                "{address} unexpectedly received {balance} wei; minter logs:\n{}",
+                self.minter_logs().join("\n")
+            );
+            // Keeps the instance alive, and its timers with it.
+            let _ = self.cketh_total_supply();
+            std::thread::sleep(Duration::from_secs(5));
+        }
+    }
+
+    /// Waits until the in-flight funding row clears, i.e. its transaction has finalized, mining
+    /// meanwhile so the minter's `finalized` view keeps advancing.
+    ///
+    /// Polls the dashboard rather than the status endpoint: that endpoint is an update call, and
+    /// several minutes of ingress messages at a few seconds apart is enough load to destabilise the
+    /// PocketIC instance.
+    pub fn await_funding_finalized(&self, deadline: Duration) {
+        let start = Instant::now();
+        loop {
+            if self.dashboard_row("sweeper-in-flight-funding").as_deref() == Some("none") {
+                return;
+            }
+            assert!(
+                start.elapsed() <= deadline,
+                "the funding had not finalized after {deadline:?}; minter logs:\n{}",
+                self.minter_logs().join("\n")
+            );
+            self.anvil.mine(1);
+            // Deliberately short: the PocketIC client panics on a transient HTTP failure rather
+            // than retrying, and a pooled connection left idle for ~10s gets closed server-side,
+            // which surfaces as `hyper::Error(IncompleteMessage)` on the next request.
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    }
+
+    /// The burn index of the funding currently in flight, read from the dashboard. `None` once it has
+    /// finalized, so a test needing it must read it between the burn and the finalization.
+    pub fn in_flight_funding_burn_index(&self) -> Option<u64> {
+        let row = self.dashboard_row("sweeper-in-flight-funding")?;
+        let rest = row.strip_prefix("burn index ")?;
+        rest.split(',').next()?.trim().parse().ok()
+    }
+
+    /// The minter's public status for `burn_index`, rendered.
+    pub fn withdrawal_status(&self, burn_index: u64) -> String {
+        let message_id = self
+            .env
+            .submit_call(
+                self.minter_id,
+                Principal::anonymous(),
+                "retrieve_eth_status",
+                Encode!(&burn_index).unwrap(),
+            )
+            .expect("retrieve_eth_status submission rejected");
+        let reply = self
+            .env
+            .await_call_no_ticks(message_id)
+            .expect("retrieve_eth_status rejected");
+        Decode!(&reply, RetrieveEthStatus).unwrap().to_string()
     }
 
     fn fetch_minter_address(&self) -> Address {
