@@ -1,7 +1,7 @@
-mod guest;
+mod client;
 #[cfg(target_os = "linux")]
-pub use guest::LinuxVSockClient;
-pub use guest::{MockVSockClient, VSockClient};
+pub use client::LinuxVSockClient;
+pub use client::{MockVSockClient, VSockClient};
 
 #[cfg(target_os = "linux")]
 mod host;
