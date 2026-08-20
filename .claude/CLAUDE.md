@@ -114,3 +114,29 @@ After the PR has been created or updated, request a review from the GitHub Copil
 gh api repos/dfinity/ic/pulls/<PULL_REQUEST_NUMBER>/requested_reviewers --method POST --raw-field 'reviewers[]=copilot-pull-request-reviewer[bot]'
 ```
 where `<PULL_REQUEST_NUMBER>` is the number of the Pull Request.
+
+To confirm the request landed, check the issue timeline for a `review_requested`
+event naming `Copilot`:
+```
+gh api repos/dfinity/ic/issues/<PULL_REQUEST_NUMBER>/timeline --paginate \
+  --jq '.[] | select(.event == "review_requested") | "\(.created_at) \(.requested_reviewer.login // .requested_team.name)"'
+```
+
+Do **not** confirm it by reading the requested-reviewers list — neither
+```
+gh api repos/dfinity/ic/pulls/<PULL_REQUEST_NUMBER>/requested_reviewers
+gh pr view <PULL_REQUEST_NUMBER> --json reviewRequests
+```
+reports the Copilot bot. That endpoint returns only `.users[]` and `.teams[]`,
+and Copilot is a `Bot` actor, so a *successful* request still reads back as an
+empty list. Retrying on the strength of that empty list is pointless: the POST
+is idempotent, so the extra calls add no timeline events and change nothing.
+A pending request is also cleared once the review is submitted, so on an
+already-reviewed PR the timeline keeps its `review_requested` event while the
+requested-reviewers list is empty — that is success, not failure.
+
+Two more things that are *not* the problem, so don't go chasing them:
+* Draft status does not block a Copilot review request.
+* `gh pr edit <PULL_REQUEST_NUMBER> --add-reviewer 'copilot-pull-request-reviewer[bot]'`
+  fails with `Could not resolve user with login` because it goes through GraphQL,
+  which cannot resolve the bot login. Use the REST call above instead.
