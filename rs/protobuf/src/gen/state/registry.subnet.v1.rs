@@ -148,7 +148,8 @@ pub mod chain_key_initialization {
 }
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
-/// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
+/// construct the genesis CUP, a recovery CUP in the event of a subnet stall, or a post-split CUP
+/// when the subnet is split in two.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpPackageContents {
     /// Initial non-interactive low-threshold DKG transcript
