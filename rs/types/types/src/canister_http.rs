@@ -1,5 +1,7 @@
 //! Types necessary for consensus to perform http requests.
 //!
+//! The lifecycle below is that of an outcall made from an *update* call. An
+//! outcall made from a query skips all of it: see [`QueryOutcallRequest`].
 //! The lifecycle of a request looks as follows:
 //!
 //! 1a. When a canister makes a http request, the [`CanisterHttpRequestContext`] is stored in the state.
@@ -41,6 +43,13 @@
 //! The blockmaker indicates, which requests have timed out, i.e. the blocktime of the latest finalized block is higher than
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
+//!
+//! ## Outcalls made from a query
+//!
+//! The node serving the query performs the request itself and hands the result
+//! straight back: nothing is stored in the replicated state, signed, gossiped or
+//! agreed upon, and the only timeout is the query's own walltime budget. Such a
+//! request must be non-replicated, and is described by [`QueryOutcallRequest`].
 use crate::{
     CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},

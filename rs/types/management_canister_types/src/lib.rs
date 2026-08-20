@@ -87,6 +87,17 @@ pub enum Method {
     CreateCanister,
     DeleteCanister,
     DepositCycles,
+    /// Makes an HTTP outcall.
+    ///
+    /// Callable from an update call, and -- when the subnet enables it -- from a
+    /// composite query, where the request must be non-replicated
+    /// (`is_replicated = false`): the single node serving the query performs it,
+    /// so the response is neither agreed upon nor recorded in the replicated
+    /// state.
+    ///
+    /// Note that this is deliberately *not* a [`QueryMethod`]: a query addressed
+    /// directly to the management canister must never be able to make an outcall,
+    /// since there is no calling canister on whose behalf it would be made.
     HttpRequest,
     FlexibleHttpRequest,
     ECDSAPublicKey,
