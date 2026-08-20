@@ -16,7 +16,7 @@ const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Enab
 const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Enabled;
 
 /// Enables non-replicated HTTP outcalls from composite queries.
-const QUERY_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Disabled;
+const QUERY_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Enabled;
 
 /// Backstop for what the instruction charge does not bound: outcalls that are
 /// individually cheap stay cheap however many there are.

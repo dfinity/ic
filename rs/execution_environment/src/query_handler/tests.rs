@@ -2163,7 +2163,9 @@ fn query_method_enum_does_not_contain_http_request() {
 /// method.
 #[test]
 fn composite_query_http_outcall_is_not_a_method_when_disabled() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .without_query_http_requests()
+        .build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let result = test.non_replicated_query(

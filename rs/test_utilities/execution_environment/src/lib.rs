@@ -2796,6 +2796,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn without_query_http_requests(mut self) -> Self {
+        self.execution_config.query_http_requests = FlagStatus::Disabled;
+        self
+    }
+
     pub fn with_max_query_outcalls_per_query(
         mut self,
         max_query_outcalls_per_query: usize,

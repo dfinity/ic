@@ -15,15 +15,9 @@ Runbook::
 4. Make a composite query call to the proxy canister.
 
 Success::
-1. The outcall is rejected, because outcalls from queries are not enabled on the
-   subnet.
-
-Note that the replica configuration in a system test comes from the GuestOS
-template, which the test driver cannot override per test. So while the feature
-ships disabled this asserts the *disabled* behaviour -- which still exercises the
-whole path from the canister through the management canister to the query
-handler. The assertions for the enabled behaviour are written below and ignored;
-they are enabled together with the feature.
+1. Received http response with status 200, without a consensus round trip.
+2. A request that asks to be replicated is rejected: a query is served by one
+   node, so there is nothing to replicate it across.
 
 end::catalog[] */
 #![allow(deprecated)]
@@ -64,7 +58,7 @@ pub fn test(env: TestEnv) {
 
     block_on(async {
         let url = format!("https://[{webserver_ipv6}]/random");
-        test_outcall_from_query_is_not_enabled(&proxy_canister, url, &logger).await;
+        test_outcall_from_query_works(&proxy_canister, url, &logger).await;
     });
 }
 
@@ -98,10 +92,9 @@ async fn make_query_outcall(
         .expect("Query call to proxy canister failed")
 }
 
-/// While the feature is disabled, `http_request` is not a management canister
-/// method a composite query can call, so the attempt is rejected as an unknown
-/// method -- exactly what a canister saw before the feature existed.
-async fn test_outcall_from_query_is_not_enabled(
+/// A composite query's outcall reaches the webserver and its response reaches
+/// the canister -- without going through consensus.
+async fn test_outcall_from_query_works(
     proxy_canister: &Canister<'_>,
     url: String,
     logger: &Logger,
@@ -117,34 +110,18 @@ async fn test_outcall_from_query_is_not_enabled(
         RETRY_BACKOFF,
         || async {
             let res = make_query_outcall(proxy_canister, url.clone(), Some(false)).await;
-            match res {
-                Err((_, ref message)) if message.contains("http_request") => {
-                    info!(logger, "Outcall from a query was rejected: {:?}", res);
-                    Ok(())
-                }
-                other => bail!("Expected the outcall to be rejected, got: {:?}", other),
+            if !matches!(res, Ok(ref x) if x.status == 200) {
+                bail!("Http outcall from a query failed: {:?}", res);
             }
+            info!(logger, "Outcall from a query succeeded! {:?}", res);
+            Ok(())
         }
     )
     .await
-    .expect("Timeout waiting for the composite query to be rejected");
-}
+    .expect("Timeout on doing an HTTP outcall from a composite query");
 
-/// Enable together with `query_http_requests`.
-#[allow(dead_code)]
-async fn test_outcall_from_query_works(
-    proxy_canister: &Canister<'_>,
-    url: String,
-    logger: &Logger,
-) {
-    let res = make_query_outcall(proxy_canister, url.clone(), Some(false)).await;
-    assert!(
-        matches!(res, Ok(ref x) if x.status == 200),
-        "Http outcall from a query failed: {res:?}"
-    );
-    info!(logger, "Outcall from a query succeeded: {:?}", res);
-
-    // Replication is not a choice a query has.
+    // Replication is not a choice a query has: one node serves it, so there is
+    // nothing to replicate the request across.
     for is_replicated in [None, Some(true)] {
         let res = make_query_outcall(proxy_canister, url.clone(), is_replicated).await;
         assert!(
