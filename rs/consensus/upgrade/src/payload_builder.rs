@@ -111,7 +111,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             }],
             height,
             &membership.current_members,
-        ) <= limits.reboot_capacity;
+        ) <= limits.permits;
         if needs_reboot && !upgrade_state.authorized.contains(&self.node_id) && request_fits {
             actions.push(UpgradePermitAction::Request {
                 requestor_node: self.node_id,
@@ -184,18 +184,18 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                             },
                         ));
                     }
-                    // Capacity binds at request time; authorizations are
-                    // slot-neutral.
+                    // The permit limit binds at request time;
+                    // authorizations are slot-neutral.
                     let slots_in_use = upgrade_state.slots_in_use_after(
                         &actions,
                         height,
                         &membership.current_members,
                     );
-                    if slots_in_use > limits.reboot_capacity {
+                    if slots_in_use > limits.permits {
                         return Err(invalid_upgrade(
                             InvalidUpgradePayloadReason::SlotsExhausted {
                                 slots_in_use,
-                                capacity: limits.reboot_capacity,
+                                permits: limits.permits,
                             },
                         ));
                     }

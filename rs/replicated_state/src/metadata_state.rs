@@ -108,8 +108,6 @@ impl UpgradeState {
         self.authorized.retain(|node| members.contains(node));
     }
 
-    /// Reboot slots held by staying members; leaving members are
-    /// accounted through the capacity reduction instead.
     /// Total reboot slots held, by staying and leaving members alike.
     pub fn slots_in_use(&self) -> usize {
         self.requested.len() + self.authorized.len()
