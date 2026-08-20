@@ -136,6 +136,7 @@ const ENGINE_NODE_COUNT: usize = 4;
 const NUM_ENGINES: usize = 2;
 
 fn setup(env: TestEnv) {
+    // [Step 0] Create an IC.
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes_playnet(1)
         .add_fast_single_node_subnet(SubnetType::System);
@@ -152,6 +153,7 @@ fn setup(env: TestEnv) {
     ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
+    // [Step 1] Install NNS.
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations {
