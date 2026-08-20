@@ -210,8 +210,8 @@ fn canister_init() {
     {
         use registry_canister::flags::temporary_overrides::{
             test_set_blank_replica_version_id_for_cloud_engines_enabled,
-            test_set_swapping_enabled_subnets, test_set_swapping_status,
-            test_set_swapping_whitelisted_callers,
+            test_set_subnet_splitting_enabled, test_set_swapping_enabled_subnets,
+            test_set_swapping_status, test_set_swapping_whitelisted_callers,
         };
 
         println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
@@ -244,6 +244,13 @@ fn canister_init() {
             init_payload
                 .is_blank_replica_version_id_for_cloud_engines_enabled
                 .unwrap_or_default(),
+        );
+        println!(
+            "{LOG_PREFIX}canister_init: Subnet Splitting enabled: {:?}",
+            init_payload.is_subnet_splitting_enabled
+        );
+        test_set_subnet_splitting_enabled(
+            init_payload.is_subnet_splitting_enabled.unwrap_or_default(),
         );
     }
 }
