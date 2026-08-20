@@ -114,6 +114,11 @@ type InitArg = record {
 
     // Address of the sweeper smart contract.
     ethereum_sweeper_contract_address : opt text;
+
+    // Nonce of the next transaction to be sent from the dedicated sweeper address (its own nonce
+    // sequence, kept separate from the main address' so a stuck sweep cannot delay a withdrawal).
+    // Defaults to 0, which is correct for a sweeper address that has never sent a transaction.
+    next_sweeper_transaction_nonce : opt nat;
 };
 
 type UpgradeArg = record {
@@ -154,7 +159,7 @@ type UpgradeArg = record {
 
     // Change the nonce of the next transaction sent from the dedicated sweeper address (its own
     // nonce sequence, kept separate from the main address' so a stuck sweep cannot delay a
-    // withdrawal). Defaults to 0 at install.
+    // withdrawal).
     next_sweeper_transaction_nonce : opt nat;
 };
 
