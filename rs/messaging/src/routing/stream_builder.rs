@@ -480,6 +480,9 @@ impl StreamBuilderImpl {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
+                    let dst_subnet_topology = network_topology.subnets().get(&dst_subnet_id);
+                    let dst_subnet_type = dst_subnet_topology
+                        .map_or(SubnetType::Application, |topology| topology.subnet_type);
 
                     // No messages from canister output queues are routed while either
                     // this subnet (the source) or the destination subnet is cooling down;
@@ -488,7 +491,7 @@ impl StreamBuilderImpl {
                     // cooling down anymore, rather than rejecting or dropping it.
                     if !is_from_subnet_queues
                         && (own_subnet_is_cooling_down
-                            || network_topology.is_cooling_down(&dst_subnet_id))
+                            || dst_subnet_topology.is_some_and(|topology| topology.cooling_down))
                     {
                         self.metrics.cooling_down_skipped_queues.inc();
                         output_iter.exclude_queue();
@@ -496,15 +499,7 @@ impl StreamBuilderImpl {
                     }
 
                     let dst_stream_entry = streams.entry(dst_subnet_id);
-                    if !is_loopback_stream
-                        && is_at_limit(
-                            &dst_stream_entry,
-                            network_topology
-                                .subnets()
-                                .get(&dst_subnet_id)
-                                .map_or(SubnetType::Application, |topology| topology.subnet_type),
-                        )
-                    {
+                    if !is_loopback_stream && is_at_limit(&dst_stream_entry, dst_subnet_type) {
                         // Stream full, skip all other messages to this destination.
                         output_iter.exclude_queue();
                         continue;
@@ -513,11 +508,8 @@ impl StreamBuilderImpl {
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, &msg);
 
-                    let is_engine_dst = !is_loopback_stream
-                        && network_topology
-                            .subnets()
-                            .get(&dst_subnet_id)
-                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+                    let is_engine_dst =
+                        !is_loopback_stream && dst_subnet_type == SubnetType::CloudEngine;
                     let is_engine_src =
                         !is_loopback_stream && own_subnet_type == SubnetType::CloudEngine;
 
