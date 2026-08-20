@@ -457,6 +457,7 @@ impl StreamBuilderImpl {
         // identifies the messages taken from the subnet's own output queues. Those are
         // only ever responses, as the management canister makes no calls of its own.
         let own_subnet_as_canister_id = CanisterId::from(self.subnet_id);
+
         let own_subnet_is_cooling_down = network_topology.is_cooling_down(&self.subnet_id);
 
         let mut requests_to_reject = Vec::new();
