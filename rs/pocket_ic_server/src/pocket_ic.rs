@@ -55,6 +55,7 @@ use ic_https_outcalls_adapter::{
 };
 use ic_https_outcalls_adapter_client::{
     CanisterHttpAdapterClientImpl, setup_canister_http_channel, setup_canister_http_client,
+    setup_query_outcall_service,
 };
 use ic_https_outcalls_pricing::{NetworkUsage, PricingError, PricingFactory};
 use ic_https_outcalls_service::HttpsOutcallRequest;
@@ -62,6 +63,7 @@ use ic_https_outcalls_service::HttpsOutcallResponse;
 use ic_https_outcalls_service::HttpsOutcallResult;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
+use ic_https_outcalls_socks_proxy::NoSocksProxyProvider;
 use ic_icp_index::{IndexArg as IcpIndexArg, InitArg as IcpIndexInitArg};
 use ic_icrc1_index_ng::{IndexArg as CyclesLedgerIndexArg, InitArg as CyclesLedgerIndexInitArg};
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
@@ -503,6 +505,16 @@ impl Subnet {
             &adapter_config,
             &state_machine.replica_logger,
         );
+        // Outcalls made from queries go through the same adapter, but through
+        // their own client: consensus drives its client from a synchronous poll
+        // loop, whereas a query needs one awaitable future it can drop.
+        state_machine.set_query_outcall_service(setup_query_outcall_service(
+            channel.clone(),
+            // PocketIC has no API boundary nodes to proxy through.
+            Arc::new(NoSocksProxyProvider),
+            &state_machine.metrics_registry,
+            state_machine.replica_logger.clone(),
+        ));
         let client = setup_canister_http_client(
             state_machine.runtime.handle().clone(),
             channel,

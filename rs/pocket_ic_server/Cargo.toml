@@ -45,6 +45,7 @@ ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-https-outcalls-pricing = { path = "../https_outcalls/pricing" }
+ic-https-outcalls-socks-proxy = { path = "../https_outcalls/socks_proxy" }
 ic-https-outcalls-service = { path = "../https_outcalls/service" }
 ic-icp-index = { path = "../ledger_suite/icp/index" }
 ic-icrc1-index-ng = { path = "../ledger_suite/icrc1/index-ng" }

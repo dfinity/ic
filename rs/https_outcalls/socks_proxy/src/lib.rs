@@ -99,6 +99,16 @@ fn socks_proxy_addr_of(
         .map(|http_info| format!("socks5h://[{0}]:{SOCKS_PROXY_PORT}", http_info.ip_addr))
 }
 
+/// Offers no proxies, for environments with no API boundary nodes: an outcall
+/// either reaches its target directly or fails.
+pub struct NoSocksProxyProvider;
+
+impl SocksProxyProvider for NoSocksProxyProvider {
+    fn socks_proxy_addrs(&self) -> Vec<String> {
+        Vec::new()
+    }
+}
+
 /// A [`SocksProxyProvider`] backed by the registry, memoized per registry
 /// version: the addresses are a pure function of it, so there is no staleness
 /// to invalidate, and resolving costs a lookup per boundary node. Failures are

@@ -15,6 +15,10 @@ pub fn hypervisor_config() -> HypervisorConfig {
             },
             ..Default::default()
         },
+        // HTTP outcalls from composite queries. PocketIC runs a real outcalls
+        // adapter, so this is where the feature gets end-to-end exercise before
+        // it is enabled on real subnets.
+        query_http_requests: FlagStatus::Enabled,
         ..Default::default()
     }
 }

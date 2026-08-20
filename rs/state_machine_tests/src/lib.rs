@@ -38,7 +38,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusTime,
     execution_environment::{
         IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
-        QueryOutcallOutcome, QueryOutcallService, TransformExecutionService,
+        QueryOutcallService, TransformExecutionService,
     },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
@@ -154,7 +154,8 @@ use ic_types::{
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestContext,
         CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseMetadata, CanisterHttpResponseReceipt, QueryOutcallRequest,
+        CanisterHttpResponseMetadata, CanisterHttpResponseReceipt, QueryOutcallOutcome,
+        QueryOutcallRequest,
     },
     consensus::{
         block_maker::SubnetRecords,
@@ -1253,9 +1254,8 @@ pub struct StateMachine {
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler: Arc<Mutex<QueryExecutionService>>,
     pub transform_handler: Arc<Mutex<TransformExecutionService>>,
-    /// Answers HTTP outcalls made by queries. See
-    /// [`StateMachine::set_query_outcall_handler`].
-    query_outcall_handler: Arc<Mutex<Option<QueryOutcallHandler>>>,
+    /// Performs HTTP outcalls made by queries.
+    query_outcall_service: Arc<Mutex<Option<QueryOutcallService>>>,
     /// The HTTP outcalls that queries have made, in order.
     query_outcalls: Arc<Mutex<Vec<QueryOutcallRequest>>>,
     pub runtime: Arc<Runtime>,
@@ -1677,7 +1677,8 @@ impl StateMachineBuilder {
     }
 
     pub fn build_internal(self) -> StateMachine {
-        StateMachine::setup_from_dir(
+        let query_outcall_service = self.query_outcall_service;
+        let state_machine = StateMachine::setup_from_dir(
             self.state_dir,
             self.nonce,
             self.time,
@@ -1712,14 +1713,16 @@ impl StateMachineBuilder {
             self.cost_schedule,
             self.subnet_admins,
             self.resource_limits,
-            self.query_outcall_service,
-        )
+        );
+        // Read at call time, so it need not exist before the execution env.
+        if let Some(query_outcall_service) = query_outcall_service {
+            state_machine.set_query_outcall_service(query_outcall_service);
+        }
+        state_machine
     }
 
-    /// Performs HTTP outcalls made by queries with the given service, instead of
-    /// with the mock a test would otherwise install.
-    ///
-    /// For environments that have a real HTTPS outcalls adapter to talk to.
+    /// Uses the given service instead of the mock, for environments with a real
+    /// adapter to talk to.
     pub fn with_query_outcall_service(
         mut self,
         query_outcall_service: QueryOutcallService,
@@ -2118,9 +2121,6 @@ impl StateMachine {
         cost_schedule: CanisterCyclesCostSchedule,
         subnet_admins: Vec<PrincipalId>,
         resource_limits: ResourceLimits,
-        // Performs HTTP outcalls made by queries. `None` installs a mock whose
-        // answers a test supplies with `StateMachine::set_query_outcall_handler`.
-        query_outcall_service: Option<QueryOutcallService>,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
@@ -2260,33 +2260,34 @@ impl StateMachine {
         // The API state machine provides is blocking anyway.
         // A shared cell because the service must exist before the execution
         // services, but the handler is installed after `build`.
-        let query_outcall_handler: Arc<Mutex<Option<QueryOutcallHandler>>> =
+        let query_outcall_service: Arc<Mutex<Option<QueryOutcallService>>> =
             Arc::new(Mutex::new(None));
         let query_outcalls: Arc<Mutex<Vec<QueryOutcallRequest>>> = Arc::new(Mutex::new(Vec::new()));
-        let query_outcall_service = query_outcall_service.unwrap_or_else(|| {
-            let handler = Arc::clone(&query_outcall_handler);
+        let query_outcall_service_for_execution = {
+            let installed = Arc::clone(&query_outcall_service);
             let recorded = Arc::clone(&query_outcalls);
             BoxCloneService::new(tower::service_fn(move |request: QueryOutcallRequest| {
-                let handler = Arc::clone(&handler);
+                let installed = Arc::clone(&installed);
                 let recorded = Arc::clone(&recorded);
                 async move {
                     recorded.lock().unwrap().push(request.clone());
-                    // Cloned out of the lock, so that answering one outcall
-                    // does not block answering another.
-                    let handler = handler.lock().unwrap().clone();
-                    let response = match handler {
-                        Some(handler) => handler(&request),
-                        None => Err(CanisterHttpReject {
-                            reject_code: RejectCode::SysFatal,
-                            message: "No query outcall handler installed. Install one with \
+                    // Cloned out of the lock, so outcalls do not block each other.
+                    let installed = installed.lock().unwrap().clone();
+                    match installed {
+                        Some(service) => service.oneshot(request).await,
+                        None => Ok::<_, Infallible>(QueryOutcallOutcome {
+                            result: Err(CanisterHttpReject {
+                                reject_code: RejectCode::SysFatal,
+                                message: "No query outcall service installed. Install one with \
                                           `StateMachine::set_query_outcall_handler`."
-                                .to_string(),
+                                    .to_string(),
+                            }),
+                            spent: Cycles::zero(),
                         }),
-                    };
-                    Ok::<_, Infallible>(response)
+                    }
                 }
             }))
-        });
+        };
 
         let execution_services = runtime.block_on(async {
             ExecutionServices::setup_execution(
@@ -2300,7 +2301,7 @@ impl StateMachine {
                 Arc::clone(&state_manager.get_fd_factory()),
                 completed_execution_messages_tx,
                 &state_manager.state_layout().tmp(),
-                Some(query_outcall_service),
+                Some(query_outcall_service_for_execution),
             )
         });
 
@@ -2511,7 +2512,7 @@ impl StateMachine {
             metrics_registry: metrics_registry.clone(),
             query_handler: Arc::new(Mutex::new(execution_services.query_execution_service)),
             transform_handler: Arc::new(Mutex::new(execution_services.transform_execution_service)),
-            query_outcall_handler,
+            query_outcall_service,
             query_outcalls,
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
@@ -2892,7 +2893,23 @@ impl StateMachine {
         + Sync
         + 'static,
     ) {
-        *self.query_outcall_handler.lock().unwrap() = Some(Arc::new(handler));
+        // `Arc`, because `BoxCloneService` needs the closure to be `Clone`.
+        let handler = Arc::new(handler);
+        self.set_query_outcall_service(BoxCloneService::new(tower::service_fn(
+            move |request: QueryOutcallRequest| {
+                // A canned answer costs nothing.
+                std::future::ready(Ok::<_, Infallible>(QueryOutcallOutcome {
+                    result: handler(&request),
+                    spent: Cycles::zero(),
+                }))
+            },
+        )));
+    }
+
+    /// For callers that control *when* an outcall completes, or have a real
+    /// adapter to talk to.
+    pub fn set_query_outcall_service(&self, service: QueryOutcallService) {
+        *self.query_outcall_service.lock().unwrap() = Some(service);
     }
 
     /// The HTTP outcalls that queries have made so far, clearing the record.

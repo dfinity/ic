@@ -20143,6 +20143,7 @@ dependencies = [
  "ic-https-outcalls-adapter-client",
  "ic-https-outcalls-pricing",
  "ic-https-outcalls-service",
+ "ic-https-outcalls-socks-proxy",
  "ic-icp-index",
  "ic-icrc1-index-ng",
  "ic-interfaces",

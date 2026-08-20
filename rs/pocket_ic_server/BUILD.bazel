@@ -23,6 +23,7 @@ LIB_DEPENDENCIES = [
     "//rs/https_outcalls/client",
     "//rs/https_outcalls/pricing",
     "//rs/https_outcalls/service",
+    "//rs/https_outcalls/socks_proxy",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
     "//rs/interfaces/registry",
