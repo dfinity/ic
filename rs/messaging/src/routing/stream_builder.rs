@@ -412,7 +412,7 @@ impl StreamBuilderImpl {
         // Tests whether a stream is over the message count limit, byte limit or (if
         // directed at a system subnet) over `2 * system_subnet_stream_msg_limit`.
         let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
-                           destination_subnet_type: SubnetType|
+                           destination_subnet_type: Option<SubnetType>|
          -> bool {
             let stream = match stream {
                 btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
@@ -431,7 +431,7 @@ impl StreamBuilderImpl {
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
             // subnets). And only applies to canister messages, not refunds.
-            destination_subnet_type == SubnetType::System
+            destination_subnet_type == Some(SubnetType::System)
                 && stream_messages_len - stream.refund_count()
                     >= 2 * self.system_subnet_stream_msg_limit
         };
@@ -481,8 +481,7 @@ impl StreamBuilderImpl {
                 Some(dst_subnet_id) => {
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
                     let dst_subnet_topology = network_topology.subnets().get(&dst_subnet_id);
-                    let dst_subnet_type = dst_subnet_topology
-                        .map_or(SubnetType::Application, |topology| topology.subnet_type);
+                    let dst_subnet_type = dst_subnet_topology.map(|topology| topology.subnet_type);
 
                     // No messages from canister output queues are routed while either
                     // this subnet (the source) or the destination subnet is cooling down;
@@ -509,7 +508,7 @@ impl StreamBuilderImpl {
                     let mut msg = validated_next(&mut output_iter, &msg);
 
                     let is_engine_dst =
-                        !is_loopback_stream && dst_subnet_type == SubnetType::CloudEngine;
+                        !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
                     let is_engine_src =
                         !is_loopback_stream && own_subnet_type == SubnetType::CloudEngine;
 
