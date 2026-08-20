@@ -681,6 +681,7 @@ prop_compose! {
         last_scraped_block_number in arb_nat(),
         evm_rpc_id in proptest::option::of(arb_principal()),
         sweeper_contract_address in proptest::option::of(arb_address()),
+        next_sweeper_transaction_nonce in proptest::option::of(arb_nat()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -693,6 +694,7 @@ prop_compose! {
             last_scraped_block_number,
             evm_rpc_id,
             ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
+            next_sweeper_transaction_nonce,
         }
     }
 }

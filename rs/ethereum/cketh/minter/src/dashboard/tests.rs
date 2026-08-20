@@ -1155,6 +1155,7 @@ fn initial_state() -> State {
         last_scraped_block_number: candid::Nat::from(INITIAL_LAST_SCRAPED_BLOCK_NUMBER),
         evm_rpc_id: None,
         ethereum_sweeper_contract_address: None,
+        next_sweeper_transaction_nonce: None,
     })
     .expect("valid init args")
 }
