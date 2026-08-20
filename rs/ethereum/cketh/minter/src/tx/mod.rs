@@ -3,6 +3,7 @@ mod tests;
 
 mod eip_1559;
 mod eip_7702;
+mod finalized;
 mod signed;
 
 pub use eip_1559::{
@@ -12,6 +13,7 @@ pub use eip_1559::{
 pub use eip_7702::{
     Authorization, Eip7702TransactionRequest, SignedAuthorization, SignedEip7702TransactionRequest,
 };
+pub use finalized::Finalized;
 pub use signed::{SignableTransaction, Signed, TransactionSignature, sign};
 
 use crate::{
@@ -94,6 +96,45 @@ impl<T> Resubmittable<T> {
             transaction: other,
             resubmission: self.resubmission.clone(),
         }
+    }
+}
+
+impl<T: SignableTransaction> Resubmittable<Signed<T>> {
+    /// The same transaction at the price needed to resubmit it under `new_gas_fee`, or `None` if
+    /// its current price is still enough.
+    ///
+    /// # Errors
+    /// * [`ResubmitTransactionError::InsufficientTransactionFee`] if the new price exceeds the
+    ///   transaction fee the resubmission strategy allows.
+    pub fn resubmit(
+        &self,
+        new_gas_fee: GasFeeEstimate,
+    ) -> Result<Option<T>, ResubmitTransactionError> {
+        let transaction = self.transaction.transaction();
+        let last_tx_price = transaction.transaction_price();
+        let new_tx_price = last_tx_price
+            .clone()
+            .resubmit_transaction_price(new_gas_fee);
+        if new_tx_price == last_tx_price {
+            return Ok(None);
+        }
+
+        if new_tx_price.max_transaction_fee() > self.resubmission.allowed_max_transaction_fee() {
+            return Err(ResubmitTransactionError::InsufficientTransactionFee {
+                allowed_max_transaction_fee: self.resubmission.allowed_max_transaction_fee(),
+                actual_max_transaction_fee: new_tx_price.max_transaction_fee(),
+            });
+        }
+        let new_amount = match self.resubmission {
+            ResubmissionStrategy::ReduceEthAmount { withdrawal_amount } => {
+                withdrawal_amount.checked_sub(new_tx_price.max_transaction_fee())
+                    .expect("BUG: withdrawal_amount covers new transaction fee because it was checked before")
+            }
+            ResubmissionStrategy::GuaranteeEthAmount { .. } => *transaction.amount(),
+        };
+        Ok(Some(
+            transaction.with_price_and_amount(new_tx_price, new_amount),
+        ))
     }
 }
 
