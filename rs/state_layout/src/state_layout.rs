@@ -553,7 +553,9 @@ impl TipHandler {
     /// Deletes the directory of the given snapshot from tip.
     ///
     /// This is a no-op if the snapshot has no directory in tip, e.g. because it was
-    /// created from uploaded metadata and deleted before the next checkpoint.
+    /// created from uploaded metadata (which copies no files from the canister, so no
+    /// directory is created for it) and deleted before the first flush of its
+    /// `PageMap`s.
     pub fn delete_snapshot_directory(
         &mut self,
         height: Height,
@@ -2090,7 +2092,8 @@ where
     /// named after the snapshot's canister, if this was the canister's last snapshot.
     ///
     /// This is a no-op if the snapshot has no directory, e.g. because it was created
-    /// from uploaded metadata and deleted before the next checkpoint.
+    /// from uploaded metadata (which copies no files from the canister, so no directory
+    /// is created for it) and deleted before the first flush of its `PageMap`s.
     pub fn delete_snapshot_dir(&self, snapshot_id: &SnapshotId) -> Result<(), LayoutError> {
         delete_snapshot_dir(&self.snapshot_path(snapshot_id))
     }
@@ -2579,7 +2582,8 @@ where
 /// the snapshot's canister, if this was the canister's last snapshot.
 ///
 /// This is a no-op if the snapshot has no directory, e.g. because it was created from
-/// uploaded metadata and deleted before the next checkpoint.
+/// uploaded metadata (which copies no files from the canister, so no directory is
+/// created for it) and deleted before the first flush of its `PageMap`s.
 fn delete_snapshot_dir(snapshot_path: &Path) -> Result<(), LayoutError> {
     let map_error = |err| LayoutError::IoError {
         path: snapshot_path.to_path_buf(),

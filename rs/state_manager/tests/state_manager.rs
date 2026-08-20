@@ -17,7 +17,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
-    TakeCanisterSnapshotArgs, UploadChunkArgs,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
@@ -26,13 +26,13 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
-    canister_state::canister_snapshots::CanisterSnapshot,
+    canister_state::canister_snapshots::{CanisterSnapshot, ValidatedSnapshotMetadata},
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::{
         ApiBoundaryNodeEntry, UnflushedCheckpointOp, UnflushedCheckpointOps,
         testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
-    page_map::{PageIndex, Shard, StorageLayout},
+    page_map::{PageIndex, Shard, StorageLayout, TestPageAllocatorFileDescriptorImpl},
     testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
 use ic_state_layout::{
@@ -8719,8 +8719,10 @@ fn deleted_snapshot_is_removed_from_tip() {
 /// This is the case for a snapshot created from uploaded metadata (see
 /// `CanisterManager::create_snapshot_from_metadata()`, which records no
 /// `UnflushedCheckpointOp::TakeSnapshot` as there is nothing to copy from the canister)
-/// and deleted before the next checkpoint, at which point its directory would have been
-/// created.
+/// and deleted before the first `TipRequest::FlushPageMapDelta` that still sees it in
+/// the state, which is what would have created its directory: the snapshot's `PageMap`s
+/// start out with no files in tip, so they are always flushed (and hence their layout,
+/// and with it the snapshot's directory, created) even though they hold no data.
 #[test]
 fn deleting_snapshot_without_tip_directory_is_a_noop() {
     state_manager_test(|metrics, state_manager| {
@@ -8741,14 +8743,36 @@ fn deleting_snapshot_without_tip_directory_is_a_noop() {
         .unwrap();
         assert!(tip.snapshot_ids().unwrap().is_empty());
 
-        // Add a snapshot without recording an `UnflushedCheckpointOp::TakeSnapshot`, as
-        // `create_snapshot_from_metadata()` does, so that it has no directory in the
-        // tip; and delete it again before the next checkpoint.
-        let snapshot = CanisterSnapshot::from_canister(
-            state.canister_state(&canister_id).unwrap(),
+        // Create a snapshot from uploaded metadata, as
+        // `CanisterManager::create_snapshot_from_metadata()` does: its `PageMap`s are
+        // brand new (as opposed to a snapshot taken from a canister, whose `PageMap`s
+        // are clones of the canister's), so they hold no data and have no files in tip.
+        // Add it without recording an `UnflushedCheckpointOp::TakeSnapshot`, and delete
+        // it again within the same round, i.e. before any flush sees it in the state.
+        // Its directory is therefore never created in the tip.
+        let metadata =
+            ValidatedSnapshotMetadata::validate(UploadCanisterSnapshotMetadataArgs::new(
+                canister_id,
+                None,
+                4, // wasm_module_size
+                vec![],
+                0, // wasm_memory_size
+                0, // stable_memory_size
+                vec![],
+                None,
+                None,
+            ))
+            .unwrap();
+        let snapshot = CanisterSnapshot::from_metadata(
+            &metadata,
             state.time(),
-        )
-        .unwrap();
+            state
+                .canister_state(&canister_id)
+                .unwrap()
+                .system_state
+                .canister_version(),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        );
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         canister
             .canister_snapshots

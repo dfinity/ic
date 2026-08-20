@@ -1224,8 +1224,8 @@ fn can_add_and_delete_canister_snapshots(
 /// snapshot that has no directory is a no-op rather than a `NotFound` I/O error.
 ///
 /// This is relied upon by the flush of `UnflushedCheckpointOp::DeleteSnapshot`: a
-/// snapshot created from uploaded metadata has no directory in tip until the next
-/// checkpoint, so deleting it before then would otherwise fail.
+/// snapshot created from uploaded metadata has no directory in tip until its `PageMap`s
+/// are first flushed, so deleting it before then would otherwise fail.
 #[test]
 fn delete_snapshot_dir_is_idempotent() {
     let tmp = tmpdir("checkpoint");
