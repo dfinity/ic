@@ -235,7 +235,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             }
             BlockPayload::Data(data_payload) => {
                 let (batch_messages, consensus_responses, batch_stats, canister_http_spent) =
-                    get_messages_responses_stats_and_http_spent(height, &data_payload, log);
+                    get_messages_responses_stats_and_http_spent(height, data_payload, log);
 
                 let batch_content = BatchContent::Data {
                     batch_messages,
@@ -733,14 +733,14 @@ mod tests {
             ],
         };
 
-        let block_payload = DataPayload {
+        let data_payload = DataPayload {
             batch: BatchPayload::default(),
             dkg: dkg_data,
             idkg: None,
         };
         let (_, responses, _, _) = get_messages_responses_stats_and_http_spent(
             Height::from(1),
-            &block_payload,
+            &data_payload,
             &no_op_logger(),
         );
 
