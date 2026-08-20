@@ -48,9 +48,6 @@ system_test_nns(
 
 system_test_nns(
     name = "node_registration_with_max_rewardable_nodes_test",
-    # TODO: support this test on the local backend (drop `backend = "farm"`).
-    # The reason it fails is the same as is documented for //rs/tests/node:ipv4_integration_test.
-    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 1 fast single-node System + 1 unassigned = 2 IC Node VMs * 6 vCPUs.
     deps = [
         # Keep sorted.
@@ -63,9 +60,6 @@ system_test_nns(
 
 system_test_nns(
     name = "node_registration_with_node_allowance_test",
-    # TODO: support this test on the local backend (drop `backend = "farm"`).
-    # The reason it fails is the same as is documented for //rs/tests/node:ipv4_integration_test.
-    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 1 fast single-node System + 1 unassigned = 2 IC Node VMs * 6 vCPUs.
     deps = [
         # Keep sorted.

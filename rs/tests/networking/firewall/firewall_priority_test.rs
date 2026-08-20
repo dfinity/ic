@@ -37,6 +37,7 @@ use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
+        local_backend::LocalBackend,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
@@ -141,13 +142,14 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     // On the Local backend the driver reaches the nodes from a per-group
     // management address that lives *outside* the node `/64` (so the GuestOS
     // firewall's built-in accept for the node's own prefix does not shadow the
-    // rules under test). That source is in the ULA range `fd00::/8`, which the
-    // Farm `default_rules` prefixes do not cover, so add it explicitly here;
-    // otherwise the deny rule would never match the driver and the port would
-    // stay reachable. Node-to-node traffic on 8080 is unaffected: it is allowed
-    // at higher priority by the orchestrator's automatic node whitelisting.
+    // rules under test). That source is in the backend's own range
+    // (`LocalBackend::GROUP_PREFIX`), which the Farm `default_rules` prefixes do
+    // not cover, so add it explicitly here; otherwise the deny rule would never
+    // match the driver and the port would stay reachable. Node-to-node traffic
+    // on 8080 is unaffected: it is allowed at higher priority by the
+    // orchestrator's automatic node whitelisting.
     if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
-        deny_prefixes.push("fd00::/8".to_string());
+        deny_prefixes.push(LocalBackend::GROUP_PREFIX.to_string());
     }
     let mut node_rules = vec![FirewallRule {
         ipv4_prefixes: vec![],

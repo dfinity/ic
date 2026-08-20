@@ -241,7 +241,7 @@ pub fn init_ic(
     // the nodes reachable from the driver. Port 8080 is always added by
     // `ic-prep`.
     //
-    // Only the driver is whitelisted, not the group's whole ULA range `fd00::/8`
+    // Only the driver is whitelisted, not the group's whole range `2001:db8::/32`
     // that every VM — the nodes included — is addressed out of. Whitelisting
     // that range would open these ports, 8080 among them, between all nodes, so
     // node↔node traffic would no longer be governed by the registry's

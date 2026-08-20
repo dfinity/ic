@@ -40,7 +40,7 @@ use std::time::{Duration, Instant};
 
 /// The domain under which the group's `dnsmasq` synthesises a DNS name for every
 /// address in the group's `/64`, by writing the address with `:` replaced by `-`
-/// (e.g. `fd00-1-2--3.ipv6.nip.io`).
+/// (e.g. `2001-db8-1-2--3.ipv6.nip.io`).
 ///
 /// This mirrors the public `nip.io` wildcard DNS service, which is what system
 /// tests use when they need to reach a VM by a *name* rather than by an address
@@ -407,14 +407,27 @@ impl LocalBackend {
     }
 
     /// Returns the per-group IPv6 prefix (a deterministic /64 in the
-    /// ULA range `fd00::/8`).
+    /// documentation range [`GROUP_PREFIX`](Self::GROUP_PREFIX)).
+    ///
+    /// The prefix is deliberately *not* a ULA: the orchestrator reads a ULA or
+    /// link-local address as a sign that it is running in a cloud and goes off
+    /// to query the cloud metadata server for its public address before it can
+    /// register itself (`assemble_add_node_message` in
+    /// `rs/orchestrator/src/registration.rs`). There is no metadata server here,
+    /// so a node could never self-register. Farm hands out globally routable
+    /// addresses and so never takes that branch; this keeps the local backend
+    /// on the same side of it.
+    ///
+    /// `2001:db8::/32` leaves 16 bits for the group before the `/48` the
+    /// subnet-ids below need, so the group digest is shorter than the bridge's
+    /// and TAP's (see [`bridge_name`](Self::bridge_name)). A collision between
+    /// two groups is unobservable regardless: each test owns a private network
+    /// namespace (see
+    /// [`ensure_administrable_netns`](Self::ensure_administrable_netns)).
     fn group_ipv6_prefix(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}::",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("2001:db8:{:02x}{:02x}::", hash[0], hash[1])
     }
 
     /// Returns the per-group IPv6 gateway address (`<prefix>1`). Assigned to the
@@ -448,10 +461,7 @@ impl LocalBackend {
     pub fn group_mgmt_ipv6(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:1::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("2001:db8:{:02x}{:02x}:1::1", hash[0], hash[1])
     }
 
     /// Returns the per-group IPv6 address the driver streams the nodes' journald
@@ -469,10 +479,7 @@ impl LocalBackend {
     pub fn group_logs_ipv6(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:2::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("2001:db8:{:02x}{:02x}:2::1", hash[0], hash[1])
     }
 
     /// Returns the per-group IPv6 address the file server
@@ -492,18 +499,21 @@ impl LocalBackend {
     pub fn group_files_ipv6(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:3::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("2001:db8:{:02x}{:02x}:3::1", hash[0], hash[1])
     }
 
-    /// The IPv6 ULA range every address the local backend hands out lives in:
-    /// the nodes' `/64`, the driver's own addresses and any other VM in the
-    /// group. Offered to tests that have to whitelist the *whole* group on the
-    /// nodes' firewall; see
+    /// The IPv6 range every address the local backend hands out lives in: the
+    /// nodes' `/64`, the driver's own addresses and any other VM in the group.
+    /// Offered to tests that have to whitelist the *whole* group on the nodes'
+    /// firewall; see
     /// [`InternetComputer::with_group_wide_firewall_whitelist`](crate::driver::ic::InternetComputer::with_group_wide_firewall_whitelist).
-    pub const GROUP_ULA_PREFIX: &'static str = "fd00::/8";
+    ///
+    /// `2001:db8::/32` is the range RFC 3849 reserves for documentation, so
+    /// nothing can legitimately route it. That is what the backend needs: the
+    /// addresses never leave its network namespace, yet they must not look
+    /// local to the node software — see
+    /// [`group_ipv6_prefix`](Self::group_ipv6_prefix).
+    pub const GROUP_PREFIX: &'static str = "2001:db8::/32";
 
     /// The three addresses the test driver reaches the group's VMs from: the
     /// management source ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)), the

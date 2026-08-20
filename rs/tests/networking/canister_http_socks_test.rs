@@ -152,7 +152,7 @@ fn setup_and_run_subnet_test(
 
     // The outcall has to target a *host name*, not an address literal: the
     // adapter's socks connector always encodes the SOCKS5 target as a domain
-    // name, and for an IPv6 URL that string keeps its brackets (`[fd00::1]`),
+    // name, and for an IPv6 URL that string keeps its brackets (`[2001:db8::1]`),
     // which the dante server on the API boundary node cannot resolve.
     //
     // So name the webserver after its own address, the way the public `nip.io`

@@ -271,7 +271,7 @@ impl InternetComputer {
     }
 
     /// Whitelist every VM in the test group on the nodes' firewall, by adding
-    /// the local backend's ULA range ([`LocalBackend::GROUP_ULA_PREFIX`]) to the
+    /// the local backend's whole range ([`LocalBackend::GROUP_PREFIX`]) to the
     /// whitelist.
     ///
     /// A shorthand for the common case of
@@ -279,7 +279,7 @@ impl InternetComputer {
     /// and what the local backend did unconditionally before the whitelist was
     /// narrowed to the driver's own addresses.
     pub fn with_group_wide_firewall_whitelist(self) -> Self {
-        self.with_extra_firewall_whitelist(vec![LocalBackend::GROUP_ULA_PREFIX.to_string()], vec![])
+        self.with_extra_firewall_whitelist(vec![LocalBackend::GROUP_PREFIX.to_string()], vec![])
     }
 
     /// Add a single unassigned node with the given IPv4 configuration
