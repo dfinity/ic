@@ -1,5 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::deposit_address::{DepositAddressSchema, deposit_address};
+use crate::deposit_address::{DepositAddressSchema, deposit_address, sweeper_address};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
@@ -247,6 +247,12 @@ impl State {
                 ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
             });
         Some(ecdsa_public_key_to_address(&pubkey))
+    }
+
+    /// The minter's dedicated sweeper address, `None` until the ECDSA public key is cached.
+    pub fn sweeper_address(&self) -> Option<Address> {
+        let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
+        Some(sweeper_address(&master_public_key, &chain_code))
     }
 
     pub fn is_ckerc20_feature_active(&self) -> bool {
@@ -946,4 +952,5 @@ pub enum TaskType {
     MintCkErc20,
     RefreshLatestBlockHeight,
     BalanceScan,
+    SweeperSend,
 }

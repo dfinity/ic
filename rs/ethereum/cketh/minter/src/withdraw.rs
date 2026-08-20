@@ -18,7 +18,7 @@ use crate::{
             ReimbursementRequest, WithdrawalRequest,
         },
     },
-    tx::{GasFeeEstimate, SignedEip1559TransactionRequest, lazy_refresh_gas_fee_estimate},
+    tx::{GasFeeEstimate, SignableTransaction, Signed, lazy_refresh_gas_fee_estimate},
 };
 use candid::Nat;
 use evm_rpc_types::{
@@ -364,10 +364,11 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     send_signed_transactions(&transactions_to_send).await;
 }
 
-/// Broadcast already-signed transactions via the EVM RPC canister. Sender-agnostic, so both the
-/// main-address withdrawal pipeline and the sweeper-address pipeline reuse it.
-pub(crate) async fn send_signed_transactions(
-    transactions_to_send: &[SignedEip1559TransactionRequest],
+/// Broadcast already-signed transactions via the EVM RPC canister. Sender- and
+/// transaction-type-agnostic, so both the main-address withdrawal pipeline (type `0x02`) and the
+/// sweeper-address pipeline (type `0x02` or `0x04`) reuse it.
+pub(crate) async fn send_signed_transactions<T: SignableTransaction + std::fmt::Debug>(
+    transactions_to_send: &[Signed<T>],
 ) {
     let rpc_client = read_state(rpc_client);
     let results = join_all(transactions_to_send.iter().map(async |tx| {
