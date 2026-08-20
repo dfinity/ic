@@ -293,6 +293,7 @@ impl DkgSummary {
         next_interval_length: Height,
         height: Height,
         remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
+        subnet_splitting_status: SubnetSplittingStatus,
     ) -> Self {
         Self {
             configs: configs
@@ -307,7 +308,7 @@ impl DkgSummary {
             next_interval_length,
             height,
             remote_dkg_attempts,
-            subnet_splitting_status: BackwardsCompatible::new(SubnetSplittingStatus::NotScheduled),
+            subnet_splitting_status: BackwardsCompatible::new(subnet_splitting_status),
         }
     }
 
@@ -777,6 +778,7 @@ pub enum DkgPayloadCreationError {
     FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
     FailedToGetVetKdKeyList(RegistryClientError),
+    SubnetSplittingStatusError(String),
 }
 
 /// Reasons for why a dkg payload might be invalid.

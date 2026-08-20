@@ -7580,6 +7580,7 @@ dependencies = [
  "prometheus",
  "prost",
  "rayon",
+ "rstest",
  "slog",
 ]
 
