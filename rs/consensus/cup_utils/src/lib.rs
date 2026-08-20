@@ -7,7 +7,9 @@ use ic_consensus_idkg::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, warn};
-use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents, catch_up_package_contents::CupType,
+};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     Height, RegistryVersion, SubnetId, Time,
@@ -24,8 +26,10 @@ use ic_types::{
 };
 use phantom_newtype::Id;
 
-/// Constructs a genesis/recovery CUP from the CUP contents associated with the
-/// given subnet from the provided CUP contents
+/// Constructs a genesis/recovery CUP from the CUP contents associated with the given subnet from
+/// the provided CUP contents.
+/// Registry CUPs intended for subnet splitting are explicitely excluded here as they are used for a
+/// different purpose, directly by Consensus
 pub fn make_registry_cup_from_cup_contents(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
@@ -33,6 +37,15 @@ pub fn make_registry_cup_from_cup_contents(
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
+    // If the CUP we are about to build is a subnet splitting CUP, return early. It makes no sense
+    // to build a registry CUP out of subnet splitting CUP contents because the transcripts here are
+    // used directly by consensus to build the CUP themselves, i.e. nodes threshold-sign it, instead
+    // of blindly taking it from the registry here.
+    match cup_contents.cup_type {
+        Some(CupType::SubnetSplitting(..)) => return None,
+        Some(CupType::Genesis(..)) | Some(CupType::Recovery(..)) | None => {}
+    }
+
     let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
         err => {
