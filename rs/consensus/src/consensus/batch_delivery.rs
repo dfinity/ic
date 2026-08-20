@@ -314,11 +314,19 @@ pub(crate) fn deliver_batches_with_result_processor(
     Ok(last_delivered_batch_height)
 }
 
-/// This function creates responses to the system calls that are redirected to
-/// consensus. There are two types of calls being handled here:
-/// - Initial NiDKG transcript creation, where a response may come from data payloads.
-/// - Canister threshold signature creation, where a response may come from from data payloads.
-/// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
+/// Extracts from a data payload everything needed to deliver it as a batch, in the order returned:
+///
+/// - The [`BatchMessages`] of the batch payload.
+/// - The responses to the system calls that are redirected to consensus. There are three types of
+///   calls being handled here:
+///   - Initial NiDKG transcript creation.
+///   - Canister threshold signature creation.
+///   - CanisterHttpResponse handling, i.e. responses to canister http requests.
+///
+///   All of them are answered from the data payload; summary payloads carry no responses.
+/// - The [`BatchStats`] of the payload, including the canister http stats.
+/// - The cycles spent on the canister http requests answered by this payload and/or by previous
+///   payloads.
 fn get_messages_responses_stats_and_http_spent(
     height: Height,
     data_payload: &DataPayload,
