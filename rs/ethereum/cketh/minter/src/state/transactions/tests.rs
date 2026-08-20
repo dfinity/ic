@@ -498,7 +498,7 @@ mod withdrawal_transactions {
                     }
                 );
                 assert_eq!(
-                    transactions.pipeline.next_nonce,
+                    transactions.next_transaction_nonce(),
                     TransactionNonce::from(i + 1)
                 );
             }
@@ -540,7 +540,7 @@ mod withdrawal_transactions {
                     }
                 );
                 assert_eq!(
-                    transactions.pipeline.next_nonce,
+                    transactions.next_transaction_nonce(),
                     TransactionNonce::from(i + 1)
                 );
             }
@@ -610,7 +610,7 @@ mod withdrawal_transactions {
         use crate::numeric::TransactionNonce;
         use crate::state::transactions::tests::{
             create_and_record_ck_withdrawal_requests, create_and_record_transaction,
-            gas_fee_estimate, sign_transaction, signed_transaction_with_nonce,
+            gas_fee_estimate, sent_transactions, sign_transaction, signed_transaction_with_nonce,
         };
         use crate::state::transactions::{WithdrawalRequest, WithdrawalTransactions};
         use crate::test_fixtures::expect_panic_with_message;
@@ -644,11 +644,7 @@ mod withdrawal_transactions {
 
                 assert_eq!(transactions.transactions_to_sign_iter().next(), None);
                 assert_eq!(
-                    transactions
-                        .pipeline
-                        .sent_tx
-                        .get_alt(&cketh_ledger_burn_index)
-                        .map(|txs| txs.iter().map(|tx| tx.as_ref()).collect()),
+                    sent_transactions(&transactions, &cketh_ledger_burn_index),
                     Some(vec![&signed_tx])
                 );
             }
@@ -705,7 +701,8 @@ mod withdrawal_transactions {
             cketh_withdrawal_request_with_index, create_and_record_ck_withdrawal_requests,
             create_and_record_ckerc20_withdrawal_requests,
             create_and_record_cketh_withdrawal_requests, create_and_record_signed_transaction,
-            create_and_record_transaction, double_and_increment, gas_fee_estimate,
+            create_and_record_transaction, double_and_increment, first_sent_transaction,
+            gas_fee_estimate,
         };
         use crate::state::transactions::{
             ResubmitTransactionError, WithdrawalRequest, WithdrawalTransactions,
@@ -944,13 +941,7 @@ mod withdrawal_transactions {
                 .map(|res| res.unwrap())
                 .enumerate()
             {
-                let initial_transaction = transactions
-                    .pipeline
-                    .sent_tx
-                    .get_alt(&withdrawal_id)
-                    .unwrap()[0]
-                    .as_ref()
-                    .transaction();
+                let initial_transaction = first_sent_transaction(&transactions, &withdrawal_id);
                 let expected_amount = initial_transaction
                     .amount
                     .checked_sub(Wei::from(2 * 21_000_u32))
@@ -1014,13 +1005,7 @@ mod withdrawal_transactions {
                 .map(|res| res.unwrap())
                 .enumerate()
             {
-                let initial_transaction = transactions
-                    .pipeline
-                    .sent_tx
-                    .get_alt(&withdrawal_id)
-                    .unwrap()[0]
-                    .as_ref()
-                    .transaction();
+                let initial_transaction = first_sent_transaction(&transactions, &withdrawal_id);
                 assert_eq!(
                     resubmitted_tx,
                     Eip1559TransactionRequest {
@@ -1501,8 +1486,8 @@ mod withdrawal_transactions {
     }
 
     mod record_finalized_transaction {
+        use crate::endpoints::RetrieveEthStatus;
         use crate::eth_rpc_client::responses::TransactionReceipt;
-        use crate::map::MultiKeyMap;
         use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
         use crate::state::transactions::tests::{
             ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
@@ -1803,23 +1788,23 @@ mod withdrawal_transactions {
             let signed_tx =
                 create_and_record_signed_transaction(&mut transactions, created_tx.clone());
             transactions.record_resubmit_transaction(created_tx.clone());
-            assert!(
-                transactions
-                    .pipeline
-                    .created_tx
-                    .contains_alt(&cketh_ledger_burn_index)
+            assert_eq!(
+                transactions.transaction_status(&cketh_ledger_burn_index),
+                RetrieveEthStatus::TxCreated
             );
 
             let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
 
             assert_eq!(
-                transactions.pipeline.finalized_tx,
-                MultiKeyMap::from_iter(vec![(
-                    TransactionNonce::ZERO,
-                    cketh_ledger_burn_index,
-                    signed_tx.try_finalize(receipt).unwrap()
-                )])
+                transactions
+                    .finalized_transactions_iter()
+                    .collect::<Vec<_>>(),
+                vec![(
+                    &TransactionNonce::ZERO,
+                    &cketh_ledger_burn_index,
+                    &signed_tx.try_finalize(receipt).unwrap()
+                )]
             );
             assert_eq!(transactions.transactions_to_sign_iter().next(), None);
             assert_eq!(transactions.sent_transactions_iter().next(), None);
@@ -3074,7 +3059,6 @@ fn create_and_record_transaction<R: Into<WithdrawalRequest>>(
     gas_fee_estimate: GasFeeEstimate,
 ) -> Eip1559TransactionRequest {
     let withdrawal_request = withdrawal_request.into();
-    let burn_index = withdrawal_request.cketh_ledger_burn_index();
     let tx = create_transaction(
         &withdrawal_request,
         transactions.next_transaction_nonce(),
@@ -3083,14 +3067,26 @@ fn create_and_record_transaction<R: Into<WithdrawalRequest>>(
         EthereumNetwork::Sepolia,
     )
     .expect("failed to create transaction");
-    transactions.record_created_transaction(withdrawal_request.cketh_ledger_burn_index(), tx);
+    let burn_index = withdrawal_request.cketh_ledger_burn_index();
+    transactions.record_created_transaction(burn_index, tx.clone());
+    tx
+}
+
+fn sent_transactions<'a>(
+    transactions: &'a WithdrawalTransactions,
+    burn_index: &LedgerBurnIndex,
+) -> Option<Vec<&'a SignedEip1559TransactionRequest>> {
     transactions
-        .pipeline
-        .created_tx
-        .get_alt(&burn_index)
-        .unwrap()
-        .as_ref()
-        .clone()
+        .sent_transactions_iter()
+        .find(|(_nonce, index, _txs)| *index == burn_index)
+        .map(|(_nonce, _index, txs)| txs)
+}
+
+fn first_sent_transaction<'a>(
+    transactions: &'a WithdrawalTransactions,
+    burn_index: &LedgerBurnIndex,
+) -> &'a Eip1559TransactionRequest {
+    sent_transactions(transactions, burn_index).expect("BUG: no sent transaction")[0].transaction()
 }
 
 fn create_and_record_signed_transaction(

@@ -379,7 +379,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 
 /// State machine holding Ethereum transactions issued by the minter.
 /// Overall the transaction lifecycle is as follows:
-/// 1. The user's withdrawal request is enqueued and processed in a FIFO order.
+/// 1. A withdrawal request is enqueued and processed in a FIFO order.
 /// 2. A transaction is created by either consuming a withdrawal request
 ///    (the first time a transaction is created for that nonce and burn index)
 ///    or re-submitting an already sent transaction for that nonce and burn index.
@@ -387,10 +387,9 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    previously created transaction or re-submitting an already sent transaction as is.
 /// 4. The transaction is sent to Ethereum. There may have been multiple
 ///    sent transactions for that nonce and burn index in case of resubmissions.
-/// 5. For a given nonce (and burn index), at most one sent transaction is finalized.
-///    The others sent transactions for that nonce were never mined and can be discarded.
-/// 6. For a given nonce, at most one sent transaction is finalized; a failed one is reported as
-///    such. Paying the requester back is not the pipeline's concern — see
+/// 5. For a given nonce (and burn index), at most one sent transaction is finalized; a failed
+///    one is reported as such. The other sent transactions for that nonce were never mined and
+///    can be discarded. Paying the requester back is not the pipeline's concern — see
 ///    [`WithdrawalTransactions`].
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(in crate::state) struct TransactionPipeline {
@@ -425,7 +424,7 @@ pub enum ResubmitTransactionError {
 /// How far a transaction has got through the pipeline. Carries the transaction itself, since
 /// every caller that asks the stage also wants the transaction at it.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum TransactionStage<'a> {
+pub(in crate::state) enum TransactionStage<'a> {
     Created(&'a Eip1559TransactionRequest),
     /// The most recently sent transaction, i.e. the one with the highest fee.
     Sent(&'a SignedTransactionRequest),
@@ -1012,11 +1011,14 @@ impl WithdrawalTransactions {
                     INFO,
                     "[record_finalized_transaction]: UNEXPECTED: sweeper funding {} of {} to {} \
                      FAILED (tx {}), which should be impossible for a transfer to an address the \
-                     minter controls; the burn is NOT reimbursed",
+                     minter controls; the burn is NOT reimbursed: no ETH reached the sweeper, the \
+                     failed transaction still paid {} of gas, and the rest of the burn now \
+                     over-backs ckETH",
                     ledger_burn_index,
                     request.withdrawal_amount,
                     request.destination,
                     receipt.transaction_hash,
+                    receipt.effective_transaction_fee(),
                 );
                 return;
             }
@@ -1252,16 +1254,9 @@ impl WithdrawalTransactions {
     }
 
     pub fn maybe_reimburse_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
-        self.pipeline
-            .processed_withdrawal_requests
+        self.maybe_reimburse
             .iter()
-            .filter_map(|(index, request)| {
-                if self.maybe_reimburse.contains(index) {
-                    Some(request)
-                } else {
-                    None
-                }
-            })
+            .filter_map(|index| self.pipeline.get_processed_withdrawal_request(index))
     }
 
     pub fn oldest_incomplete_withdrawal_timestamp(&self) -> Option<u64> {
@@ -1350,6 +1345,13 @@ impl WithdrawalTransactions {
             );
         }
         if tx.transaction_status() == &TransactionStatus::Failure {
+            // Unreachable for a funding: the destination is derived from the minter's own
+            // key, so a bare transfer there has no code to revert in. Were it reached, the
+            // status would be wrong, since nothing reimburses a funding — tolerable only
+            // because it cannot happen, and not worth a status of its own, which would mean
+            // adding a variant to `retrieve_eth_status`' return type and breaking existing
+            // clients. Revisit if funding ever goes through a contract, where a revert becomes
+            // possible.
             return (
                 RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
                     EthTransaction {
