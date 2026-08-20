@@ -1253,7 +1253,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         add_guest_launch_measurements_to_replica_version(
             &mut registry,
-            ReplicaVersion::default().as_ref(),
+            test_replica_version().as_ref(),
         );
 
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
