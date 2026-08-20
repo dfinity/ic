@@ -95,7 +95,7 @@ fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> V
     ]
 }
 
-fn sweeper_derivation_path() -> Vec<ByteBuf> {
+pub(crate) fn sweeper_derivation_path() -> Vec<ByteBuf> {
     vec![ByteBuf::from(vec![SWEEPER_SCHEMA_TAG])]
 }
 

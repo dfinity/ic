@@ -2906,11 +2906,12 @@ mod sweep_lane {
     use super::{gas_fee_estimate, sign_transaction, transaction_receipt};
     use crate::eth_rpc_client::responses::TransactionStatus;
     use crate::lifecycle::EthereumNetwork;
-    use crate::numeric::{GasAmount, TransactionCount, TransactionNonce, Wei, WeiPerGas};
+    use crate::numeric::{TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
         CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError, SweepId,
         SweepRequest, TransactionPipeline,
     };
+    use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
         SignableTransaction, SignedAuthorization, SweepTransaction,
@@ -2919,7 +2920,6 @@ mod sweep_lane {
     use ethnum::u256;
     use ic_ethereum_types::Address;
 
-    const SWEEP_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
     const EIP1559_TX_ID: u8 = 2;
     const SET_CODE_TX_ID: u8 = 4;
 
@@ -2975,7 +2975,7 @@ mod sweep_lane {
             .create_transaction(
                 pipeline.next_transaction_nonce(),
                 gas_fee_estimate(),
-                SWEEP_GAS_LIMIT,
+                SWEEP_TRANSACTION_GAS_LIMIT,
                 EthereumNetwork::Sepolia,
             )
             .expect("BUG: the fixture allowance covers the fixture fee");
@@ -3177,7 +3177,7 @@ mod sweep_lane {
             .create_transaction(
                 pipeline.next_transaction_nonce(),
                 gas_fee_estimate(),
-                SWEEP_GAS_LIMIT,
+                SWEEP_TRANSACTION_GAS_LIMIT,
                 EthereumNetwork::Sepolia,
             )
             .expect("BUG: the fixture allowance covers the fixture fee")
@@ -3194,7 +3194,8 @@ mod sweep_lane {
         };
 
         assert_eq!(
-            tx.max_fee_per_gas.transaction_cost(SWEEP_GAS_LIMIT),
+            tx.max_fee_per_gas
+                .transaction_cost(SWEEP_TRANSACTION_GAS_LIMIT),
             Some(request.max_transaction_fee)
         );
         assert_eq!(
@@ -3214,7 +3215,7 @@ mod sweep_lane {
         let created = request.create_transaction(
             TransactionNonce::ZERO,
             spiked_fee,
-            SWEEP_GAS_LIMIT,
+            SWEEP_TRANSACTION_GAS_LIMIT,
             EthereumNetwork::Sepolia,
         );
 
@@ -3240,14 +3241,14 @@ mod sweep_lane {
             gas_fee_estimate().max_priority_fee_per_gas
                 > request
                     .max_transaction_fee
-                    .into_wei_per_gas(SWEEP_GAS_LIMIT)
+                    .into_wei_per_gas(SWEEP_TRANSACTION_GAS_LIMIT)
                     .unwrap()
         );
 
         let created = request.create_transaction(
             TransactionNonce::ZERO,
             gas_fee_estimate(),
-            SWEEP_GAS_LIMIT,
+            SWEEP_TRANSACTION_GAS_LIMIT,
             EthereumNetwork::Sepolia,
         );
 
