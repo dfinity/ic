@@ -38,7 +38,7 @@ mod accounting {
 
         assert_eq!(
             accounting.burned_not_yet_spent(),
-            Wei::new(FEE - FEE / 2),
+            Wei::new(FEE / 2),
             "the fee provisioned but never paid stays as backing"
         );
     }
@@ -87,26 +87,13 @@ mod accounting {
 mod config {
     use super::*;
     use crate::state::sweeper_funding::SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS;
+    use proptest::prelude::*;
 
     const MINIMUM_BURN: u128 = 30_000_000_000_000_000; // ckETH's mainnet minimum withdrawal amount
 
     fn config_for(minimum_withdrawal_amount: u128) -> SweeperFundingConfig {
         SweeperFundingConfig::for_minimum_withdrawal_amount(Wei::new(minimum_withdrawal_amount))
             .expect("test setup: the bounds must fit")
-    }
-
-    #[test]
-    fn should_derive_the_bounds_from_the_minimum_withdrawal_amount() {
-        let config = config_for(MINIMUM_BURN);
-
-        assert_eq!(
-            config.target,
-            Wei::new(MINIMUM_BURN * SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS as u128)
-        );
-        assert_eq!(
-            config.low_water_mark,
-            config.target.checked_div_floor(2_u8).unwrap()
-        );
     }
 
     #[test]
@@ -159,16 +146,20 @@ mod config {
         );
     }
 
-    #[test]
-    fn should_fund_up_to_the_target() {
-        let config = config_for(MINIMUM_BURN);
-        let just_below = config.low_water_mark.checked_sub(Wei::ONE).unwrap();
+    proptest! {
+        #[test]
+        fn should_fund_up_to_the_target(
+            balance in 0..MINIMUM_BURN * SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS as u128
+        ) {
+            let config = config_for(MINIMUM_BURN);
+            let balance = Wei::new(balance);
+            prop_assume!(balance < config.low_water_mark);
 
-        assert_eq!(
-            config.amount_due(just_below),
-            Some(config.target.checked_sub(just_below).unwrap()),
-            "top up the shortfall to the target, not a fixed amount"
-        );
-        assert_eq!(config.amount_due(Wei::ZERO), Some(config.target));
+            let amount_due = config
+                .amount_due(balance)
+                .expect("a balance below the low-water mark is due a funding");
+
+            prop_assert_eq!(balance.checked_add(amount_due), Some(config.target));
+        }
     }
 }

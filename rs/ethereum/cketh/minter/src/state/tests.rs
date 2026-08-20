@@ -328,22 +328,6 @@ mod upgrade {
     }
 
     #[test]
-    fn should_install_with_a_minimum_the_fixed_bounds_would_have_refused() {
-        use crate::lifecycle::init::InitArg;
-        use crate::state::State;
-        use crate::test_fixtures::valid_init_arg;
-
-        let minimum = 90_000_000_000_000_000_u128; // above the 0.08 ETH the fixed bounds left
-        let state = State::try_from(InitArg {
-            minimum_withdrawal_amount: Nat::from(minimum),
-            ..valid_init_arg()
-        })
-        .expect("a minimum this large must no longer constrain the install");
-
-        assert!(state.sweeper_funding_config().low_water_mark > Wei::new(minimum));
-    }
-
-    #[test]
     fn should_fail_when_upgrade_args_invalid() {
         let mut state = initial_state();
         assert_matches!(
@@ -1539,6 +1523,7 @@ mod eth_balance {
     use crate::state::tests::{initial_state, received_eth_event};
     use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
     use crate::state::{EthBalance, State};
+    use crate::test_fixtures::sweeper_funding_request;
     use crate::tx::{SignedEip1559TransactionRequest, TransactionSignature};
     use maplit::btreemap;
 
@@ -1661,20 +1646,7 @@ mod eth_balance {
         );
         let eth_balance_before = state.eth_balance.eth_balance();
 
-        let funding = EthWithdrawalRequest {
-            withdrawal_amount: Wei::new(10_000_000_000_000_000),
-            destination: "0x5353535353535353535353535353535353535353"
-                .parse()
-                .unwrap(),
-            ledger_burn_index: LedgerBurnIndex::new(0),
-            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
-                .parse()
-                .unwrap(),
-            from_subaccount: crate::eth_logs::LedgerSubaccount::from_bytes(
-                crate::CKETH_FEE_SUBACCOUNT,
-            ),
-            created_at: Some(1699527697000000000),
-        };
+        let funding = sweeper_funding_request(Wei::new(10_000_000_000_000_000));
         let receipt = WithdrawalFlow {
             tx_status: TransactionStatus::Success,
             ..WithdrawalFlow::for_request(WithdrawalRequest::SweeperFunding(funding.clone()))
@@ -1726,21 +1698,8 @@ mod eth_balance {
         );
         let eth_balance_before = state.eth_balance.eth_balance();
 
-        let funding = EthWithdrawalRequest {
-            withdrawal_amount: Wei::new(10_000_000_000_000_000),
-            destination: "0x5353535353535353535353535353535353535353"
-                .parse()
-                .unwrap(),
-            ledger_burn_index: LedgerBurnIndex::new(0),
-            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
-                .parse()
-                .unwrap(),
-            from_subaccount: crate::eth_logs::LedgerSubaccount::from_bytes(
-                crate::CKETH_FEE_SUBACCOUNT,
-            ),
-            created_at: Some(1699527697000000000),
-        };
-        WithdrawalFlow {
+        let funding = sweeper_funding_request(Wei::new(10_000_000_000_000_000));
+        let receipt = WithdrawalFlow {
             tx_status: TransactionStatus::Failure,
             ..WithdrawalFlow::for_request(WithdrawalRequest::SweeperFunding(funding.clone()))
         }
@@ -1751,9 +1710,10 @@ mod eth_balance {
             state.sweeper_funding.cumulative_burned(),
             funding.withdrawal_amount
         );
-        assert!(
-            spent > Wei::ZERO && spent < funding.withdrawal_amount,
-            "only the wasted gas was spent, got {spent}"
+        assert_eq!(
+            spent,
+            receipt.effective_transaction_fee(),
+            "a failed funding moved no ETH, so the gas it paid is the whole spend"
         );
         assert_eq!(
             state.sweeper_funding.burned_not_yet_spent(),

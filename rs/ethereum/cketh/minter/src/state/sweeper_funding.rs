@@ -1,5 +1,4 @@
-//! Burn-first accounting for sweeper fee funding, per
-//! `rs/ethereum/cketh/docs/deposit_from_cex.md`, "Fund the transaction fees without touching the
+//! Burn-first accounting for sweeper fee funding, "Fund the transaction fees without touching the
 //! ckETH backing": ckETH is burned from the minter's fee subaccount *before* the ETH moves, so that
 //! at every instant
 //!
@@ -15,14 +14,17 @@ mod tests;
 
 use crate::numeric::Wei;
 
-/// How much ckETH has been burned for sweeping and how much of it has actually been spent.
-///
-/// Not CBOR-serializable: rebuilt from the audit events on every upgrade, never persisted.
+/// How much ckETH has been burned for sweeping and how much of it has actually been spent: the two
+/// sides of the invariant above.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SweeperFundingAccounting {
+    /// Grows when a funding is accepted, by the whole amount that funding may spend.
     cumulative_burned: Wei,
+    /// Grows when that funding's transaction finalizes, by the ETH the sweeper received — nothing
+    /// if it failed.
     cumulative_transferred: Wei,
-    /// Fees of finalized funding transactions, successful or not.
+    /// Grows at the same point by the fee the transaction paid, which it does either way. Together
+    /// with the amount transferred it is the spend, which never overtakes the burn.
     cumulative_transaction_fees: Wei,
 }
 
@@ -121,7 +123,10 @@ impl SweeperFundingConfig {
         if sweeper_balance >= self.low_water_mark {
             return None;
         }
-        // Non-zero: the balance is below the low-water mark, which is half the target.
-        self.target.checked_sub(sweeper_balance)
+        Some(
+            self.target
+                .checked_sub(sweeper_balance)
+                .expect("BUG: the low-water mark must not exceed the target"),
+        )
     }
 }

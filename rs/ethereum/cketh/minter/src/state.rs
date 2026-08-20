@@ -123,7 +123,7 @@ pub struct State {
     /// delegates to when sweeping funded deposit addresses.
     pub sweeper_contract_address: Option<Address>,
 
-    /// Burn-first accounting for sweeper fee funding, folded from the audit events.
+    /// Burn-first accounting for sweeper fee funding.
     pub sweeper_funding: SweeperFundingAccounting,
 }
 

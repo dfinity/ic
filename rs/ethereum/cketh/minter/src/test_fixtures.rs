@@ -1,6 +1,9 @@
 use crate::EVM_RPC_ID_STAGING;
+use crate::eth_logs::LedgerSubaccount;
 use crate::lifecycle::init::InitArg;
+use crate::numeric::{LedgerBurnIndex, Wei};
 use crate::state::State;
+use crate::state::transactions::EthWithdrawalRequest;
 use candid::{Nat, Principal};
 
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
@@ -28,6 +31,23 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
 
 pub fn initial_state() -> State {
     State::try_from(valid_init_arg()).expect("BUG: invalid init arg")
+}
+
+/// A sweeper funding request of `withdrawal_amount`, as the funding task builds one: burned from the
+/// minter's own fee subaccount, sent to its sweeper address.
+pub fn sweeper_funding_request(withdrawal_amount: Wei) -> EthWithdrawalRequest {
+    EthWithdrawalRequest {
+        withdrawal_amount,
+        destination: "0x5353535353535353535353535353535353535353"
+            .parse()
+            .unwrap(),
+        ledger_burn_index: LedgerBurnIndex::new(0),
+        from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+            .parse()
+            .unwrap(),
+        from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
+        created_at: Some(1699527697000000000),
+    }
 }
 
 /// Install `state` into the global thread-local `STATE`, so `read_state`/`mutate_state` see it in a
