@@ -45,7 +45,8 @@ Kind=bridge
 
 [Bridge]
 ForwardDelaySec=0
-STP=false";
+STP=false
+MulticastSnooping=no";
 
 fn generate_bridge6_network_content(
     ipv6_address: &str,
