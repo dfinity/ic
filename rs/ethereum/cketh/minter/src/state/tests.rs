@@ -299,6 +299,35 @@ mod upgrade {
     use std::str::FromStr;
 
     #[test]
+    fn should_track_the_minimum_withdrawal_amount_in_the_funding_bounds() {
+        let mut state = initial_state();
+        let before = state.sweeper_funding_config();
+
+        let raised = 90_000_000_000_000_000_u128; // 0.09 ETH, triple mainnet's minimum
+        state
+            .upgrade(UpgradeArg {
+                minimum_withdrawal_amount: Some(Nat::from(raised)),
+                ..Default::default()
+            })
+            .expect("raising the minimum withdrawal amount must be accepted");
+
+        let after = state.sweeper_funding_config();
+        assert!(
+            after.target > before.target && after.low_water_mark > before.low_water_mark,
+            "the bounds are derived from the minimum, so raising it must move both: \
+             {before:?} -> {after:?}"
+        );
+        assert!(
+            after
+                .target
+                .checked_sub(after.low_water_mark)
+                .expect("the target must exceed the low-water mark")
+                >= Wei::new(raised),
+            "and the smallest amount a funding moves must still cover the raised minimum"
+        );
+    }
+
+    #[test]
     fn should_fail_when_upgrade_args_invalid() {
         let mut state = initial_state();
         assert_matches!(
@@ -315,6 +344,17 @@ mod upgrade {
         assert_matches!(
             state.upgrade(UpgradeArg {
                 minimum_withdrawal_amount: Some(Nat::from(0_u8)),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidMinimumWithdrawalAmount(_))
+        );
+
+        let mut state = initial_state();
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                minimum_withdrawal_amount: Some(Nat(BigUint::from_bytes_be(
+                    &ethnum::u256::MAX.to_be_bytes(),
+                ))),
                 ..Default::default()
             }),
             Err(InvalidStateError::InvalidMinimumWithdrawalAmount(_))
@@ -1124,6 +1164,7 @@ fn state_equivalence() {
         deposits
     };
     let state = State {
+        sweeper_funding: Default::default(),
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
@@ -1493,6 +1534,7 @@ mod eth_balance {
     use crate::state::tests::{initial_state, received_eth_event};
     use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
     use crate::state::{EthBalance, State};
+    use crate::test_fixtures::sweeper_funding_request;
     use crate::tx::{SignedEip1559TransactionRequest, TransactionSignature};
     use maplit::btreemap;
 
@@ -1562,8 +1604,7 @@ mod eth_balance {
         assert_eq!(balance_after_erc20_deposit, balance_before);
     }
 
-    /// Both outcomes of one withdrawal flow, applied to independent copies of the same starting
-    /// state so a test can compare them directly.
+    /// Both outcomes of one flow, each applied to its own copy of the starting state.
     struct BothOutcomes {
         after_success: State,
         after_failure: State,
@@ -1571,10 +1612,8 @@ mod eth_balance {
         receipt_failed: TransactionReceipt,
     }
 
-    /// Runs the shared 21'000-gas flow against `state_before` twice, once finalizing successfully and
-    /// once with a failure receipt, leaving each caller to assert only what its request type makes
-    /// different. The gas fixture comes from a real Sepolia transaction and over-provisions the fee,
-    /// so part of it is always recorded as unspent.
+    /// Runs the 21'000-gas flow twice, once finalizing successfully and once with a failure
+    /// receipt. The gas fixture over-provisions the fee, so part of it is always left unspent.
     fn apply_eth_transfer_both_ways<T: Into<WithdrawalRequest>>(
         state_before: &State,
         request: T,
@@ -1607,6 +1646,96 @@ mod eth_balance {
             receipt_succeeded,
             receipt_failed,
         }
+    }
+
+    #[test]
+    fn should_account_for_a_successful_sweeper_funding() {
+        let mut state = initial_state();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+        let eth_balance_before = state.eth_balance.eth_balance();
+
+        let funding = sweeper_funding_request(Wei::new(10_000_000_000_000_000));
+        let receipt = WithdrawalFlow {
+            tx_status: TransactionStatus::Success,
+            ..WithdrawalFlow::for_request(WithdrawalRequest::SweeperFunding(funding.clone()))
+        }
+        .apply(&mut state);
+
+        assert_eq!(
+            state.sweeper_funding.cumulative_burned(),
+            funding.withdrawal_amount,
+            "the burn is recorded when the funding is accepted, before any ETH moves"
+        );
+        let spent = state.sweeper_funding.cumulative_spent();
+        let unspent_fee_allowance = state.eth_balance.total_unspent_tx_fees();
+        assert!(
+            unspent_fee_allowance > Wei::ZERO,
+            "test setup: the effective fee must be below the charged max fee"
+        );
+        assert_eq!(
+            spent,
+            funding
+                .withdrawal_amount
+                .checked_sub(unspent_fee_allowance)
+                .unwrap(),
+            "spend is the burn minus the fee allowance that was charged but not used"
+        );
+        assert_eq!(
+            state.sweeper_funding.burned_not_yet_spent(),
+            unspent_fee_allowance,
+            "the unused fee allowance stays as backing, neither re-minted nor offset"
+        );
+        assert_eq!(
+            state.eth_balance.eth_balance(),
+            eth_balance_before.checked_sub(spent).unwrap(),
+            "the ETH balance is debited by exactly what was spent"
+        );
+        assert!(
+            state.sweeper_funding.cumulative_burned() >= spent,
+            "burned must never fall below spent"
+        );
+        assert_eq!(receipt.status, TransactionStatus::Success);
+    }
+
+    #[test]
+    fn should_keep_a_failed_sweeper_funding_as_backing() {
+        let mut state = initial_state();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+        let eth_balance_before = state.eth_balance.eth_balance();
+
+        let funding = sweeper_funding_request(Wei::new(10_000_000_000_000_000));
+        let receipt = WithdrawalFlow {
+            tx_status: TransactionStatus::Failure,
+            ..WithdrawalFlow::for_request(WithdrawalRequest::SweeperFunding(funding.clone()))
+        }
+        .apply(&mut state);
+
+        let spent = state.sweeper_funding.cumulative_spent();
+        assert_eq!(
+            state.sweeper_funding.cumulative_burned(),
+            funding.withdrawal_amount
+        );
+        assert_eq!(
+            spent,
+            receipt.effective_transaction_fee(),
+            "a failed funding moved no ETH, so the gas it paid is the whole spend"
+        );
+        assert_eq!(
+            state.sweeper_funding.burned_not_yet_spent(),
+            funding.withdrawal_amount.checked_sub(spent).unwrap(),
+            "the rest stays as backing, available to no later funding"
+        );
+        assert_eq!(
+            state.eth_balance.eth_balance(),
+            eth_balance_before.checked_sub(spent).unwrap(),
+            "only the fee left the main address, so ckETH is over-backed, never under-backed"
+        );
     }
 
     #[test]
@@ -1683,11 +1812,6 @@ mod eth_balance {
         );
     }
 
-    /// Funding takes its own arm in the balance accounting, so the ckETH and ckERC20 cases above
-    /// cannot reach it. What is asserted is the same shape as a ckETH withdrawal — a success debits
-    /// the transferred ETH plus the fee actually paid, a failure debits only that fee — because
-    /// funding is an ordinary withdrawal to the accounting. What differs is that nothing is ever
-    /// reimbursed, which is why the failing case must still leave the fee counters moving.
     #[test]
     fn should_update_after_successful_and_failed_sweeper_funding() {
         let mut state_before_funding = initial_state();
@@ -1714,9 +1838,7 @@ mod eth_balance {
         let receipt_succeeded = &outcomes.receipt_succeeded;
         let after_success = outcomes.after_success.eth_balance.clone();
 
-        // Asserted as the identity the accounting has to satisfy rather than as a fixed number: the
-        // funding ceiling covers both the ETH delivered and the fee, so whatever part of the fee
-        // went unspent is exactly what stays with the minter.
+        // An identity rather than a fixed number: the ceiling covers the ETH delivered plus the fee.
         let unspent = after_success
             .total_unspent_tx_fees
             .checked_sub(eth_balance_before_funding.total_unspent_tx_fees)
