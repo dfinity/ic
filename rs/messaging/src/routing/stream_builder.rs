@@ -491,13 +491,14 @@ impl StreamBuilderImpl {
                     // subnet (the source) or the destination subnet is cooling down; not
                     // even into the loopback stream.
                     //
-                    // The subnet's own output responses are exempt from the source side of
-                    // the check, so that a cooling down subnet can still respond to the
-                    // calls it has already accepted. But they are held back just the same
-                    // while the destination subnet is cooling down.
+                    // The subnet's own output responses are exempt for as long as this
+                    // subnet is cooling down, so that it can still respond to the calls it
+                    // has already accepted; whether or not the destination subnet is cooling
+                    // down, the loopback stream included. They are only held back if this
+                    // subnet is not cooling down but the destination subnet is.
                     //
                     // Retain the message (along with everything behind it in the same queue)
-                    // until the subnet that is cooling down stops doing so, rather than
+                    // until the subnet that holds it back stops cooling down, rather than
                     // rejecting or dropping it.
                     let skip_while_cooling_down = if is_subnet_output_response {
                         !own_subnet_is_cooling_down && dst_subnet_is_cooling_down

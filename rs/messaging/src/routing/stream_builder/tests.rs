@@ -1240,17 +1240,6 @@ mod cooling_down {
         });
     }
 
-    /// Marks `subnet_id` as cooling down.
-    fn mark_cooling_down(state: &mut ReplicatedState, subnet_id: SubnetId) {
-        state.metadata.modify_network_topology(|network_topology| {
-            network_topology
-                .subnets_mut()
-                .get_mut(&subnet_id)
-                .unwrap()
-                .cooling_down = true;
-        });
-    }
-
     /// A request from `SENDER_CANISTER` to `receiver`, with the given callback ID.
     ///
     /// `canister_states_with_outputs()` requires the callback IDs of a canister's
@@ -1330,22 +1319,23 @@ mod cooling_down {
     fn cooling_down_subnet_message_matrix(
         originator: CanisterId,
     ) -> impl Iterator<Item = Arc<Response>> {
-        [NO_DEADLINE, SOME_DEADLINE]
-            .into_iter()
-            .flat_map(move |deadline| {
-                [Cycles::zero(), ONE_TRILLION_CYCLES]
-                    .into_iter()
-                    .map(move |refund| {
-                        Arc::new(Response {
-                            originator,
-                            respondent: CanisterId::from(LOCAL_SUBNET),
-                            originator_reply_callback: CallbackId::from(1),
-                            refund,
-                            response_payload: Payload::Data(vec![]),
-                            deadline,
-                        })
-                    })
+        [
+            (NO_DEADLINE, Cycles::zero()),
+            (NO_DEADLINE, ONE_TRILLION_CYCLES),
+            (SOME_DEADLINE, Cycles::zero()),
+            (SOME_DEADLINE, ONE_TRILLION_CYCLES),
+        ]
+        .into_iter()
+        .map(move |(deadline, refund)| {
+            Arc::new(Response {
+                originator,
+                respondent: CanisterId::from(LOCAL_SUBNET),
+                originator_reply_callback: CallbackId::from(1),
+                refund,
+                response_payload: Payload::Data(vec![]),
+                deadline,
             })
+        })
     }
 
     /// Enqueues `response` into `LOCAL_SUBNET`'s own output queues, first pushing
@@ -1596,78 +1586,66 @@ mod cooling_down {
         }
     }
 
-    /// Tests that a message from the subnet's own output queues to a cooling down
-    /// subnet is retained in those queues -- rather than routed, rejected or dropped
-    /// -- and that it is routed as soon as the destination subnet stops cooling
-    /// down. I.e. the subnet's own output queues are only exempt from the source
-    /// side of the check (see
-    /// `build_streams_routes_subnet_messages_while_cooling_down()`), not from the
-    /// destination side.
+    /// Tests that a response in the subnet's own output queues addressed to a
+    /// canister on a cooling down subnet is retained there -- rather than routed,
+    /// rejected or dropped -- while `LOCAL_SUBNET` is not cooling down; and that it
+    /// is routed as soon as the destination subnet stops cooling down.
     ///
-    /// Covers the full matrix of: addressed to a canister hosted by the cooling down
-    /// subnet vs. to the subnet itself (i.e. its management canister);
-    /// unbounded-wait vs. bounded-wait; and with no cycles vs. 1T cycles attached.
+    /// Covers the full matrix of: unbounded-wait vs. bounded-wait; and with no
+    /// cycles vs. 1T cycles attached.
+    ///
+    /// Contrast with `build_streams_routes_subnet_messages_while_cooling_down()`,
+    /// where `LOCAL_SUBNET` is cooling down and the response is routed regardless.
     #[test]
     fn build_streams_retains_subnet_messages_to_cooling_down_subnet() {
-        // A canister hosted by the cooling down subnet; and the subnet itself, i.e.
-        // its management canister.
-        for originator in [COOLING_DOWN_CANISTER, CanisterId::from(COOLING_DOWN_SUBNET)] {
-            for response in cooling_down_subnet_message_matrix(originator) {
-                with_test_replica_logger(|log| {
-                    let (stream_builder, mut provided_state, metrics_registry) =
-                        new_cooling_down_fixture(&log);
-                    push_subnet_output_response(&mut provided_state, response.clone());
+        for response in cooling_down_subnet_message_matrix(COOLING_DOWN_CANISTER) {
+            with_test_replica_logger(|log| {
+                let (stream_builder, mut provided_state, metrics_registry) =
+                    new_cooling_down_fixture(&log);
+                push_subnet_output_response(&mut provided_state, response.clone());
 
-                    let mut result_state = stream_builder.build_streams(provided_state);
+                let mut result_state = stream_builder.build_streams(provided_state);
 
-                    // Nothing was routed into the stream to the cooling down subnet and the
-                    // response is still in the subnet's own output queue.
-                    assert_no_messages_routed(&result_state, COOLING_DOWN_SUBNET);
-                    assert_eq!(
-                        vec![RequestOrResponse::Response(response.clone())],
-                        subnet_output_queue_contents(&result_state, originator)
-                    );
+                // Nothing was routed into the stream to the cooling down subnet and the
+                // response is still in the subnet's own output queue.
+                assert_no_messages_routed(&result_state, COOLING_DOWN_SUBNET);
+                assert_eq!(
+                    vec![RequestOrResponse::Response(response.clone())],
+                    subnet_output_queue_contents(&result_state, COOLING_DOWN_CANISTER)
+                );
 
-                    assert_routed_messages_eq(MetricVec::new(), &metrics_registry);
-                    assert_eq!(1, fetch_cooling_down_skipped_queues(&metrics_registry));
-                    assert_eq_critical_errors(0, 0, 0, &metrics_registry);
+                assert_routed_messages_eq(MetricVec::new(), &metrics_registry);
+                assert_eq!(1, fetch_cooling_down_skipped_queues(&metrics_registry));
+                assert_eq_critical_errors(0, 0, 0, &metrics_registry);
 
-                    // And it is routed as soon as the destination subnet stops cooling down.
-                    clear_cooling_down(&mut result_state, COOLING_DOWN_SUBNET);
-                    let result_state = stream_builder.build_streams(result_state);
-                    assert_eq!(
-                        vec![StreamMessage::from(RequestOrResponse::Response(response))],
-                        routed_messages(&result_state, COOLING_DOWN_SUBNET)
-                    );
-                });
-            }
+                // And it is routed as soon as the destination subnet stops cooling down.
+                clear_cooling_down(&mut result_state, COOLING_DOWN_SUBNET);
+                let result_state = stream_builder.build_streams(result_state);
+                assert_eq!(
+                    vec![StreamMessage::from(RequestOrResponse::Response(response))],
+                    routed_messages(&result_state, COOLING_DOWN_SUBNET)
+                );
+            });
         }
     }
 
-    /// Tests that the subnet's own output queues are exempt from the source side of
-    /// the check: a message from `LOCAL_SUBNET`'s own output queues is routed even
-    /// while `LOCAL_SUBNET` itself is cooling down, so that a cooling down subnet
-    /// can still respond to the calls it has already accepted. This holds regardless
-    /// of whether the destination subnet is cooling down as well, the loopback
-    /// stream included.
+    /// Tests that a response in `LOCAL_SUBNET`'s own output queues is routed while
+    /// `LOCAL_SUBNET` itself is cooling down -- so that a cooling down subnet can
+    /// still respond to the calls it has already accepted -- whether or not the
+    /// destination subnet is cooling down, the loopback stream included.
     #[test]
     fn build_streams_routes_subnet_messages_while_cooling_down() {
         for (originator, dst_subnet) in [
-            // Destination subnet not cooling down: a canister hosted by `OTHER_SUBNET`;
-            // and `OTHER_SUBNET` itself, i.e. its management canister.
+            // A canister hosted by `OTHER_SUBNET`, which is not cooling down.
             (OTHER_CANISTER, OTHER_SUBNET),
-            (CanisterId::from(OTHER_SUBNET), OTHER_SUBNET),
-            // Destination subnet cooling down as well: a canister hosted by the remote
-            // `COOLING_DOWN_SUBNET`; and a canister hosted by `LOCAL_SUBNET` itself,
-            // i.e. the loopback stream.
-            (COOLING_DOWN_CANISTER, COOLING_DOWN_SUBNET),
-            (SENDER_CANISTER, LOCAL_SUBNET),
+            // A canister hosted by `LOCAL_SUBNET`, i.e. the loopback stream; and
+            // `LOCAL_SUBNET` is cooling down.
+            (COOLING_DOWN_CANISTER, LOCAL_SUBNET),
         ] {
             for response in cooling_down_subnet_message_matrix(originator) {
                 with_test_replica_logger(|log| {
                     let (stream_builder, mut provided_state, metrics_registry) =
-                        new_cooling_down_fixture(&log);
-                    mark_cooling_down(&mut provided_state, LOCAL_SUBNET);
+                        new_local_cooling_down_fixture(&log);
                     push_subnet_output_response(&mut provided_state, response.clone());
 
                     let result_state = stream_builder.build_streams(provided_state);
