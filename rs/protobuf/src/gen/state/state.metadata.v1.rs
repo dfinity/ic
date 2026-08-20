@@ -35,8 +35,7 @@ pub struct SubnetTopology {
     pub canister_cycles_cost_schedule: i32,
     #[prost(message, repeated, tag = "8")]
     pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
-    /// Whether the subnet is "cooling down", i.e. quiescing: it inducts no ingress
-    /// messages.
+    /// Whether the subnet is "cooling down", i.e. quiescing.
     ///
     /// See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
     /// semantics.
