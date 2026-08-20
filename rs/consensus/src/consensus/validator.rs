@@ -2617,13 +2617,7 @@ pub mod test {
                 .returning(move || *expected_batch_height_clone.read().unwrap());
 
             // Put a random tape share in the unvalidated pool
-            let share_1 = RandomTapeShare::fake(
-                RandomTapeContent {
-                    version: replica_config.replica_version.clone(),
-                    height: Height::from(1),
-                },
-                replica_config.node_id,
-            );
+            let share_1 = RandomTapeShare::fake(Height::from(1), replica_config.node_id);
             pool.insert_unvalidated(share_1.clone());
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -2634,13 +2628,7 @@ pub mod test {
             );
 
             // Put another random tape share in the unvalidated pool
-            let share_2 = RandomTapeShare::fake(
-                RandomTapeContent {
-                    version: replica_config.replica_version.clone(),
-                    height: Height::from(2),
-                },
-                replica_config.node_id,
-            );
+            let share_2 = RandomTapeShare::fake(Height::from(2), replica_config.node_id);
             pool.insert_unvalidated(share_2.clone());
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 2);

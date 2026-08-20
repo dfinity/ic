@@ -545,7 +545,7 @@ mod tests {
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     ReplicaConfig {
-                        node_id: replica_1.clone(),
+                        node_id: replica_1,
                         ..replica_config.clone()
                     },
                     registry.clone(),
@@ -617,7 +617,7 @@ mod tests {
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg_2 = DkgImpl::new(
                     ReplicaConfig {
-                        node_id: replica_2.clone(),
+                        node_id: replica_2,
                         ..replica_config
                     },
                     registry,
@@ -1104,7 +1104,7 @@ mod tests {
                     );
                     let dkg_1 = DkgImpl::new(
                         ReplicaConfig {
-                            node_id: node_id_1.clone(),
+                            node_id: node_id_1,
                             ..replica_config_1.clone()
                         },
                         registry_1,
@@ -1123,7 +1123,7 @@ mod tests {
                     );
                     let dkg_2 = DkgImpl::new(
                         ReplicaConfig {
-                            node_id: node_id_2.clone(),
+                            node_id: node_id_2,
                             ..replica_config_2.clone()
                         },
                         registry_2,
