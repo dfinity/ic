@@ -30,14 +30,16 @@ use ic_types::{
         ChainKeyData, ConsensusResponse,
     },
     consensus::{
-        Block, BlockPayload, HasVersion,
+        BlockPayload, DataPayload, HasVersion,
         dkg::RemoteTranscriptResult,
         idkg::{self},
     },
-    crypto::randomness_from_crypto_hashable,
-    crypto::threshold_sig::{
-        ThresholdSigPublicKey,
-        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    crypto::{
+        randomness_from_crypto_hashable,
+        threshold_sig::{
+            ThresholdSigPublicKey,
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        },
     },
     messages::{CallbackId, Payload, RejectContext},
 };
@@ -149,14 +151,8 @@ pub(crate) fn deliver_batches_with_result_processor(
         };
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
-        if block.payload.is_summary() {
-            info!(
-                log,
-                "Delivering finalized batch at CUP height of {}", height
-            );
-        }
-        // When we are not delivering CUP block, we must check if the subnet is halted.
-        else {
+        if !block.payload.is_summary() {
+            // When delivering a data block, we must check if the subnet is halted.
             match status::get_status(
                 height,
                 &summary_block,
@@ -185,8 +181,6 @@ pub(crate) fn deliver_batches_with_result_processor(
             }
         }
 
-        let randomness = randomness_from_crypto_hashable(&tape);
-
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let (mut idkg_subnet_public_keys, idkg_pre_signatures) =
             get_idkg_subnet_public_keys_and_pre_signatures(
@@ -197,57 +191,63 @@ pub(crate) fn deliver_batches_with_result_processor(
                 block_stats.idkg_stats.as_mut(),
             );
         chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
-
         // Add vetKD keys to this map as well
         let (mut nidkg_subnet_public_keys, nidkg_ids) = get_vetkey_public_keys(dkg_summary, log);
         chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
-
-        // If the subnet contains chain keys, log them on every summary block
-        if !chain_key_subnet_public_keys.is_empty() && block.payload.is_summary() {
-            info!(
-                log,
-                "Subnet {} contains chain keys: {:?}", subnet_id, chain_key_subnet_public_keys
-            );
-        }
-
-        let mut batch_stats = BatchStats::new(height);
-
         let chain_key_data = ChainKeyData {
             master_public_keys: chain_key_subnet_public_keys,
             idkg_pre_signatures,
             nidkg_ids,
         };
-        let (consensus_responses, canister_http_spent) =
-            generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
-        // This flag can only be true, if we've called deliver_batches with a height
-        // limit.  In this case we also want to have a checkpoint for that last height.
-        let persist_batch = Some(height) == max_batch_height_to_deliver;
-        let requires_full_state_hash = block.payload.is_summary() || persist_batch;
-        let batch_content = match block.payload.as_ref() {
-            BlockPayload::Summary(_summary_payload) => BatchContent::Data {
-                batch_messages: BatchMessages::default(),
-                chain_key_data,
-                consensus_responses,
-                canister_http_spent,
-                requires_full_state_hash,
-            },
+
+        let (batch_content, batch_stats) = match block.payload.as_ref() {
+            BlockPayload::Summary(summary_payload) => {
+                info!(
+                    log,
+                    "Delivering finalized DKG summary at height {} with config ids: {:?}",
+                    height,
+                    summary_payload.dkg.configs.keys().collect::<Vec<_>>()
+                );
+
+                // If the subnet contains chain keys, log them on every summary block
+                if !chain_key_data.master_public_keys.is_empty() {
+                    info!(
+                        log,
+                        "Subnet {} contains chain keys: {:?}",
+                        subnet_id,
+                        chain_key_data.master_public_keys
+                    );
+                }
+
+                let batch_stats = BatchStats {
+                    batch_height: height.get(),
+                    ..Default::default()
+                };
+                let batch_content = BatchContent::Data {
+                    batch_messages: BatchMessages::default(),
+                    chain_key_data,
+                    consensus_responses: vec![],
+                    canister_http_spent: Default::default(),
+                    requires_full_state_hash: true,
+                };
+
+                (batch_content, batch_stats)
+            }
             BlockPayload::Data(data_payload) => {
-                batch_stats.add_from_payload(&data_payload.batch);
-                BatchContent::Data {
-                    batch_messages: data_payload
-                        .batch
-                        .clone()
-                        .into_messages()
-                        .map_err(|err| {
-                            error!(log, "batch payload deserialization failed: {:?}", err);
-                            err
-                        })
-                        .unwrap_or_default(),
+                let (batch_messages, consensus_responses, batch_stats, canister_http_spent) =
+                    get_messages_responses_stats_and_http_spent(height, data_payload, log);
+
+                let batch_content = BatchContent::Data {
+                    batch_messages,
                     chain_key_data,
                     consensus_responses,
                     canister_http_spent,
-                    requires_full_state_hash,
-                }
+                    // This flag can only be true, if we've called deliver_batches with a height
+                    // limit.  In this case we also want to have a checkpoint for that last height.
+                    requires_full_state_hash: Some(height) == max_batch_height_to_deliver,
+                };
+
+                (batch_content, batch_stats)
             }
         };
 
@@ -282,6 +282,8 @@ pub(crate) fn deliver_batches_with_result_processor(
             failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
         };
 
+        let randomness = randomness_from_crypto_hashable(&tape);
+
         let next_checkpoint_height = dkg_summary.get_next_start_height();
         let current_interval_length = dkg_summary.interval_length;
         let batch = Batch {
@@ -292,7 +294,6 @@ pub(crate) fn deliver_batches_with_result_processor(
             }),
             content: batch_content,
             randomness,
-
             registry_version: block.context.registry_version,
             time: block.context.time,
             blockmaker_metrics,
@@ -313,49 +314,63 @@ pub(crate) fn deliver_batches_with_result_processor(
     Ok(last_delivered_batch_height)
 }
 
-/// This function creates responses to the system calls that are redirected to
-/// consensus. There are two types of calls being handled here:
-/// - Initial NiDKG transcript creation, where a response may come from data payloads.
-/// - Canister threshold signature creation, where a response may come from from data payloads.
-/// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
-fn generate_responses_to_subnet_calls(
-    block: &Block,
-    stats: &mut BatchStats,
+/// Extracts from a data payload everything needed to deliver it as a batch, in the order returned:
+///
+/// - The [`BatchMessages`] of the batch payload.
+/// - The responses to the system calls that are redirected to consensus. There are three types of
+///   calls being handled here:
+///   - Initial NiDKG transcript creation.
+///   - Canister threshold signature creation.
+///   - CanisterHttpResponse handling, i.e. responses to canister http requests.
+///
+///   All of them are answered from the data payload; summary payloads carry no responses.
+/// - The [`BatchStats`] of the payload, including the canister http stats.
+/// - The cycles spent on the canister http requests answered by this payload and/or by previous
+///   payloads.
+fn get_messages_responses_stats_and_http_spent(
+    height: Height,
+    data_payload: &DataPayload,
     log: &ReplicaLogger,
-) -> (Vec<ConsensusResponse>, CanisterHttpSpent) {
-    let mut consensus_responses = Vec::new();
-    let canister_http_spent = match block.payload.as_ref() {
-        BlockPayload::Summary(summary_payload) => {
-            info!(
-                log,
-                "New DKG summary with config ids created: {:?}",
-                summary_payload.dkg.configs.keys().collect::<Vec<_>>()
-            );
-            CanisterHttpSpent::default()
-        }
-        BlockPayload::Data(data_payload) => {
-            consensus_responses.append(&mut generate_responses_to_remote_dkgs(
-                &data_payload.dkg.transcripts_for_remote_subnets,
-                log,
-            ));
+) -> (
+    BatchMessages,
+    Vec<ConsensusResponse>,
+    BatchStats,
+    CanisterHttpSpent,
+) {
+    let messages = data_payload
+        .batch
+        .clone()
+        .into_messages()
+        .map_err(|err| {
+            error!(log, "batch payload deserialization failed: {:?}", err);
+            err
+        })
+        .unwrap_or_default();
 
-            if let Some(payload) = &data_payload.idkg {
-                consensus_responses
-                    .append(&mut generate_responses_to_initial_dealings_calls(payload));
-            }
+    let mut responses = Vec::new();
+    responses.append(&mut generate_responses_to_remote_dkgs(
+        &data_payload.dkg.transcripts_for_remote_subnets,
+        log,
+    ));
 
-            let (mut http_responses, http_spent, http_stats) =
-                CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
-            consensus_responses.append(&mut http_responses);
-            stats.canister_http = http_stats;
+    if let Some(payload) = &data_payload.idkg {
+        responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
+    }
 
-            let mut chain_key_responses =
-                ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
-            consensus_responses.append(&mut chain_key_responses);
-            http_spent
-        }
+    let (mut http_responses, canister_http_spent, http_stats) =
+        CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
+    responses.append(&mut http_responses);
+
+    let mut chain_key_responses =
+        ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
+    responses.append(&mut chain_key_responses);
+
+    let stats = BatchStats {
+        canister_http: http_stats,
+        ..BatchStats::from_payload(height, &data_payload.batch)
     };
-    (consensus_responses, canister_http_spent)
+
+    (messages, responses, stats, canister_http_spent)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -578,20 +593,16 @@ mod tests {
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        PrincipalId, RegistryVersion, SubnetId,
-        batch::{BatchPayload, ValidationContext},
+        PrincipalId, SubnetId,
+        batch::BatchPayload,
         consensus::{
-            DataPayload, Payload as ConsensusPayload, Rank,
+            DataPayload,
             dkg::{DkgDataPayload, RemoteTranscriptResult},
         },
-        crypto::{
-            CryptoHash, CryptoHashOf,
-            threshold_sig::ni_dkg::{
-                NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
-            },
+        crypto::threshold_sig::ni_dkg::{
+            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
         messages::{CallbackId, Payload},
-        time::UNIX_EPOCH,
     };
     use std::str::FromStr;
 
@@ -722,29 +733,16 @@ mod tests {
             ],
         };
 
-        let block_payload = BlockPayload::Data(DataPayload {
+        let data_payload = DataPayload {
             batch: BatchPayload::default(),
             dkg: dkg_data,
             idkg: None,
-        });
-
-        let payload = ConsensusPayload::new(ic_types::crypto::crypto_hash, block_payload);
-
-        let block = Block::new(
-            CryptoHashOf::from(CryptoHash(vec![0_u8; 32])),
-            payload,
+        };
+        let (_, responses, _, _) = get_messages_responses_stats_and_http_spent(
             Height::from(1),
-            Rank(0),
-            ValidationContext {
-                registry_version: RegistryVersion::from(1),
-                certified_height: Height::from(0),
-                time: UNIX_EPOCH,
-            },
+            &data_payload,
+            &no_op_logger(),
         );
-
-        let mut batch_stats = BatchStats::new(Height::from(1));
-        let (responses, _canister_http_spent) =
-            generate_responses_to_subnet_calls(&block, &mut batch_stats, &no_op_logger());
 
         assert_eq!(
             responses.len(),
