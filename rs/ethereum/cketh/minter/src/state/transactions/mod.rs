@@ -18,7 +18,8 @@ use crate::numeric::{
 };
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
-    Resubmittable, SignableTransaction, Signed, SignedEip1559TransactionRequest, TransactionPrice,
+    Resubmittable, SignableTransaction, Signed, SignedAuthorization,
+    SignedEip1559TransactionRequest, TransactionPrice,
 };
 use candid::Principal;
 use ic_canister_log::log;
@@ -215,8 +216,7 @@ impl SweepId {
 /// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
 /// and is never reimbursed.
 ///
-/// For now this is a plain EIP-1559 transaction (type `0x02`); the EIP-7702 (`0x04`) first-time
-/// delegation and the sweep-queue-driven construction of the delegate call data are follow-ups.
+/// The sweep-queue-driven construction of the delegate call data is a follow-up.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct SweepRequest {
     /// This sweep's identity (the pipeline's alternate map key).
@@ -241,6 +241,11 @@ pub struct SweepRequest {
     /// The IC time at which the sweep was decided.
     #[n(5)]
     pub created_at: u64,
+    /// Delegations to install on the way, one signed by each deposit address the sweep touches
+    /// that is not yet delegated to the sweeper contract. Empty once they all are, and a sweep
+    /// with none is a plain EIP-1559 transaction.
+    #[n(6)]
+    pub authorizations: Vec<SignedAuthorization>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]

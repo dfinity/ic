@@ -11,8 +11,8 @@ use crate::state::transactions::{
     WithdrawalRequest, WithdrawalTransactions,
 };
 use crate::tx::{
-    AccessList, Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest,
-    TransactionSignature,
+    AccessList, Eip1559TransactionRequest, GasFeeEstimate, SignableTransaction, Signed,
+    SignedEip1559TransactionRequest, TransactionSignature,
 };
 use crate::withdraw::estimate_gas_limit;
 use ic_ethereum_types::Address;
@@ -2908,14 +2908,20 @@ mod sweep_lane {
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{GasAmount, TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
-        CreateSweepTransactionError, Eip1559TransactionRequest, PipelineRequest,
-        ResubmitTransactionError, SweepId, SweepRequest, TransactionPipeline,
+        CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError, SweepId,
+        SweepRequest, TransactionPipeline,
     };
-    use crate::tx::GasFeeEstimate;
+    use crate::tx::{
+        Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate, SignableTransaction,
+        SignedAuthorization, SweepTransaction,
+    };
     use assert_matches::assert_matches;
+    use ethnum::u256;
     use ic_ethereum_types::Address;
 
     const SWEEP_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
+    const EIP1559_TX_ID: u8 = 2;
+    const SET_CODE_TX_ID: u8 = 4;
 
     fn sweep_request(id: u64) -> SweepRequest {
         SweepRequest {
@@ -2925,6 +2931,26 @@ mod sweep_lane {
             data: vec![0xaa, 0xbb, 0xcc],
             max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
             created_at: 1_620_328_630_000_000_000,
+            authorizations: vec![],
+        }
+    }
+
+    /// A sweep of two deposit addresses that are not yet delegated to the sweeper contract.
+    fn delegating_sweep_request(id: u64) -> SweepRequest {
+        SweepRequest {
+            authorizations: vec![authorization(1), authorization(2)],
+            ..sweep_request(id)
+        }
+    }
+
+    fn authorization(seed: u8) -> SignedAuthorization {
+        SignedAuthorization {
+            chain_id: EthereumNetwork::Sepolia.chain_id(),
+            delegate: Address::new([0xde; 20]),
+            nonce: TransactionNonce::ZERO,
+            y_parity: false,
+            r: u256::from(seed),
+            s: u256::from(seed),
         }
     }
 
@@ -2932,10 +2958,18 @@ mod sweep_lane {
         TransactionPipeline::new(TransactionNonce::ZERO)
     }
 
+    fn higher_gas_fee_estimate() -> GasFeeEstimate {
+        let estimate = gas_fee_estimate();
+        GasFeeEstimate {
+            base_fee_per_gas: estimate.base_fee_per_gas.checked_mul(2_u8).unwrap(),
+            max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.checked_mul(2_u8).unwrap(),
+        }
+    }
+
     fn create_and_record_sweep_tx(
         pipeline: &mut TransactionPipeline<SweepRequest>,
         request: SweepRequest,
-    ) -> Eip1559TransactionRequest {
+    ) -> SweepTransaction {
         let id = request.id;
         let tx = request
             .create_transaction(
@@ -2957,14 +2991,62 @@ mod sweep_lane {
 
         let tx = create_and_record_sweep_tx(&mut pipeline, sweep_request(0));
 
-        assert_eq!(tx.nonce, TransactionNonce::ZERO);
+        assert_eq!(tx.nonce(), TransactionNonce::ZERO);
         assert_eq!(
             pipeline.next_transaction_nonce(),
             TransactionNonce::from(1_u64)
         );
-        assert_eq!(tx.destination, sweep_request(0).destination);
-        assert_eq!(tx.amount, Wei::ZERO);
-        assert_eq!(tx.data, sweep_request(0).data);
+        assert_eq!(tx.destination(), &sweep_request(0).destination);
+        assert_eq!(tx.amount(), &Wei::ZERO);
+        assert_eq!(tx.data(), sweep_request(0).data);
+    }
+
+    #[test]
+    fn should_sweep_delegated_addresses_with_an_eip1559_transaction() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(sweep_request(0));
+
+        let tx = create_and_record_sweep_tx(&mut pipeline, sweep_request(0));
+
+        assert_eq!(tx.transaction_type(), EIP1559_TX_ID);
+        assert_eq!(tx.authorizations(), &[]);
+    }
+
+    #[test]
+    fn should_install_delegations_with_an_eip7702_transaction() {
+        let mut pipeline = sweeper_pipeline();
+        let request = delegating_sweep_request(0);
+        pipeline.record_request(request.clone());
+
+        let tx = create_and_record_sweep_tx(&mut pipeline, request.clone());
+
+        assert_eq!(tx.transaction_type(), SET_CODE_TX_ID);
+        assert_eq!(tx.authorizations(), request.authorizations.as_slice());
+        assert_eq!(tx.destination(), &request.destination);
+        assert_eq!(tx.amount(), &request.amount);
+        assert_eq!(tx.data(), request.data);
+        assert_eq!(tx.nonce(), TransactionNonce::ZERO);
+    }
+
+    #[test]
+    fn should_keep_the_delegations_when_bumping_the_fee() {
+        let mut pipeline = sweeper_pipeline();
+        let request = delegating_sweep_request(0);
+        pipeline.record_request(request.clone());
+        let created = create_and_record_sweep_tx(&mut pipeline, request.clone());
+        pipeline.record_signed_transaction(sign_transaction(created.clone()));
+
+        let resubmitted = pipeline
+            .create_resubmit_transactions(TransactionCount::ZERO, higher_gas_fee_estimate());
+
+        let [Ok((id, bumped))] = resubmitted.as_slice() else {
+            panic!("BUG: expected exactly one transaction to resubmit, got {resubmitted:?}");
+        };
+        assert_eq!(id, &SweepId(0));
+        assert_eq!(bumped.transaction_type(), SET_CODE_TX_ID);
+        assert_eq!(bumped.authorizations(), request.authorizations.as_slice());
+        assert!(bumped.max_priority_fee_per_gas() > created.max_priority_fee_per_gas());
+        assert_eq!(bumped.max_fee_per_gas(), created.max_fee_per_gas());
     }
 
     #[test]
@@ -2983,6 +3065,24 @@ mod sweep_lane {
     }
 
     #[test]
+    fn should_finalize_a_sweep_that_installed_delegations() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(delegating_sweep_request(0));
+        let created = create_and_record_sweep_tx(&mut pipeline, delegating_sweep_request(0));
+        let signed = sign_transaction(created);
+        pipeline.record_signed_transaction(signed.clone());
+
+        let receipt = transaction_receipt(&signed, TransactionStatus::Success);
+        let finalized = pipeline.record_finalized_transaction(SweepId(0), &receipt);
+
+        assert_eq!(finalized.transaction_hash(), &signed.hash());
+        assert_eq!(
+            finalized.transaction().authorizations(),
+            delegating_sweep_request(0).authorizations.as_slice()
+        );
+    }
+
+    #[test]
     fn should_advance_the_nonce_across_two_sweeps() {
         let mut pipeline = sweeper_pipeline();
         pipeline.record_request(sweep_request(0));
@@ -2991,8 +3091,8 @@ mod sweep_lane {
         let first = create_and_record_sweep_tx(&mut pipeline, sweep_request(0));
         let second = create_and_record_sweep_tx(&mut pipeline, sweep_request(1));
 
-        assert_eq!(first.nonce, TransactionNonce::ZERO);
-        assert_eq!(second.nonce, TransactionNonce::from(1_u64));
+        assert_eq!(first.nonce(), TransactionNonce::ZERO);
+        assert_eq!(second.nonce(), TransactionNonce::from(1_u64));
         assert_eq!(
             pipeline.next_transaction_nonce(),
             TransactionNonce::from(2_u64)
@@ -3004,43 +3104,67 @@ mod sweep_lane {
     fn should_trap_when_the_created_transaction_carries_other_call_data() {
         let mut pipeline = sweeper_pipeline();
         pipeline.record_request(sweep_request(0));
-        let tx = sweep_request(0)
+        let SweepTransaction::Eip1559(tx) = created_sweep_transaction(&pipeline, sweep_request(0))
+        else {
+            panic!("BUG: a sweep with no delegations to install is an EIP-1559 transaction");
+        };
+
+        pipeline.record_created_transaction(
+            SweepId(0),
+            SweepTransaction::new(
+                Eip1559TransactionRequest {
+                    data: vec![0xff],
+                    ..tx
+                },
+                vec![],
+            ),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "sweep transaction should install exactly the request's delegations")]
+    fn should_trap_when_the_created_transaction_installs_other_delegations() {
+        let mut pipeline = sweeper_pipeline();
+        let request = delegating_sweep_request(0);
+        pipeline.record_request(request.clone());
+        let SweepTransaction::Eip7702(tx) = created_sweep_transaction(&pipeline, request) else {
+            panic!("BUG: a sweep with delegations to install is an EIP-7702 transaction");
+        };
+
+        pipeline.record_created_transaction(
+            SweepId(0),
+            SweepTransaction::Eip7702(Eip7702TransactionRequest {
+                authorization_list: vec![authorization(3)],
+                ..tx
+            }),
+        );
+    }
+
+    /// The transaction `request` creates on `pipeline`'s next nonce, without recording it.
+    fn created_sweep_transaction(
+        pipeline: &TransactionPipeline<SweepRequest>,
+        request: SweepRequest,
+    ) -> SweepTransaction {
+        request
             .create_transaction(
                 pipeline.next_transaction_nonce(),
                 gas_fee_estimate(),
                 SWEEP_GAS_LIMIT,
                 EthereumNetwork::Sepolia,
             )
-            .expect("BUG: the fixture allowance covers the fixture fee");
-
-        pipeline.record_created_transaction(
-            SweepId(0),
-            Eip1559TransactionRequest {
-                data: vec![0xff],
-                ..tx
-            },
-        );
+            .expect("BUG: the fixture allowance covers the fixture fee")
     }
 
     #[test]
     fn should_allocate_the_whole_fee_allowance_to_a_sweep_transaction() {
         let request = sweep_request(0);
-        let tx = request
-            .create_transaction(
-                TransactionNonce::ZERO,
-                gas_fee_estimate(),
-                SWEEP_GAS_LIMIT,
-                EthereumNetwork::Sepolia,
-            )
-            .expect("BUG: the fixture allowance covers the fixture fee");
+        let pipeline = sweeper_pipeline();
 
-        assert_eq!(
-            tx.max_fee_per_gas,
-            request
-                .max_transaction_fee
-                .into_wei_per_gas(SWEEP_GAS_LIMIT)
-                .unwrap()
-        );
+        let SweepTransaction::Eip1559(tx) = created_sweep_transaction(&pipeline, request.clone())
+        else {
+            panic!("BUG: a sweep with no delegations to install is an EIP-1559 transaction");
+        };
+
         assert_eq!(
             tx.max_fee_per_gas.transaction_cost(SWEEP_GAS_LIMIT),
             Some(request.max_transaction_fee)
@@ -3059,7 +3183,7 @@ mod sweep_lane {
             ..gas_fee_estimate()
         };
 
-        let error = request.create_transaction(
+        let created = request.create_transaction(
             TransactionNonce::ZERO,
             spiked_fee,
             SWEEP_GAS_LIMIT,
@@ -3067,7 +3191,7 @@ mod sweep_lane {
         );
 
         assert_matches!(
-            error,
+            created,
             Err(CreateSweepTransactionError::InsufficientTransactionFee {
                 id,
                 allowed_max_transaction_fee,
@@ -3092,7 +3216,7 @@ mod sweep_lane {
                     .unwrap()
         );
 
-        let error = request.create_transaction(
+        let created = request.create_transaction(
             TransactionNonce::ZERO,
             gas_fee_estimate(),
             SWEEP_GAS_LIMIT,
@@ -3100,7 +3224,7 @@ mod sweep_lane {
         );
 
         assert_matches!(
-            error,
+            created,
             Err(CreateSweepTransactionError::InsufficientTransactionFee { .. })
         );
     }
@@ -3350,8 +3474,8 @@ fn resubmit_transaction_with_bumped_price(
     signed_tx
 }
 
-fn transaction_receipt(
-    signed_tx: &SignedEip1559TransactionRequest,
+fn transaction_receipt<T: SignableTransaction>(
+    signed_tx: &Signed<T>,
     status: TransactionStatus,
 ) -> TransactionReceipt {
     use std::str::FromStr;
@@ -3361,15 +3485,15 @@ fn transaction_receipt(
         )
         .unwrap(),
         block_number: BlockNumber::new(4190269),
-        effective_gas_price: signed_tx.transaction().max_fee_per_gas,
-        gas_used: signed_tx.transaction().gas_limit,
+        effective_gas_price: signed_tx.transaction().max_fee_per_gas(),
+        gas_used: signed_tx.transaction().gas_limit(),
         status,
         transaction_hash: signed_tx.hash(),
     }
 }
 
-fn sign_transaction(transaction: Eip1559TransactionRequest) -> SignedEip1559TransactionRequest {
-    SignedEip1559TransactionRequest::from((transaction, dummy_signature()))
+fn sign_transaction<T: SignableTransaction>(transaction: T) -> Signed<T> {
+    Signed::from((transaction, dummy_signature()))
 }
 
 fn dummy_signature() -> TransactionSignature {

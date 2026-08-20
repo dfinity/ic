@@ -172,6 +172,10 @@ impl SignableTransaction for Eip7702TransactionRequest {
         rlp.append_list(&self.authorization_list);
     }
 
+    fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+
     fn nonce(&self) -> TransactionNonce {
         self.nonce
     }
@@ -198,6 +202,10 @@ impl SignableTransaction for Eip7702TransactionRequest {
 
     fn data(&self) -> &[u8] {
         &self.data
+    }
+
+    fn access_list(&self) -> &AccessList {
+        &self.access_list
     }
 
     fn with_price_and_amount(&self, price: TransactionPrice, amount: Wei) -> Self {

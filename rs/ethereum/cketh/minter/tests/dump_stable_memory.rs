@@ -6,8 +6,9 @@ use ic_cketh_minter::checked_amount::CheckedAmountOf;
 use ic_cketh_minter::endpoints::events::{
     AccessListItem as CandidAccessListItem, Event as CandidEvent, EventSource as CandidEventSource,
     GetEventsResult, ReimbursementIndex as CandidReimbursementIndex,
+    SignedAuthorization as CandidSignedAuthorization,
     TransactionReceipt as CandidTransactionReceipt, TransactionStatus as CandidTransactionStatus,
-    UnsignedTransaction,
+    UnsignedSweeperTransaction, UnsignedTransaction,
 };
 use ic_cketh_minter::erc20::CkErc20Token;
 use ic_cketh_minter::eth_logs::{
@@ -23,7 +24,9 @@ use ic_cketh_minter::state::transactions::{
 };
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
-    AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+    AccessList, AccessListItem, Eip1559TransactionRequest, SignedAuthorization,
+    SignedEip1559TransactionRequest, SignedSweepTransaction, SweepTransaction,
+    TransactionSignature,
 };
 use ic_stable_structures::Memory;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
@@ -127,7 +130,9 @@ fn map_unsigned_transaction(tx: UnsignedTransaction) -> Eip1559TransactionReques
     }
 }
 
-fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequest {
+fn decode_signed_transaction(
+    raw_transaction: &str,
+) -> (Eip1559TransactionRequest, TransactionSignature) {
     use ethers_core::types::transaction::eip2718::TypedTransaction;
     use ethnum::u256;
     use ic_ethereum_types::Address;
@@ -196,7 +201,36 @@ fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequ
         s: map_ethers_u256(decoded_sig.s),
     };
 
-    SignedEip1559TransactionRequest::from((request, signature))
+    (request, signature)
+}
+fn map_signed_sweep_transaction(raw_transaction: &str) -> SignedSweepTransaction {
+    let (transaction, signature) = decode_signed_transaction(raw_transaction);
+    SignedSweepTransaction::from((SweepTransaction::Eip1559(transaction), signature))
+}
+
+fn map_unsigned_sweeper_transaction(tx: UnsignedSweeperTransaction) -> SweepTransaction {
+    SweepTransaction::new(
+        map_unsigned_transaction(tx.transaction),
+        map_authorizations(tx.authorization_list),
+    )
+}
+
+fn map_authorizations(authorizations: Vec<CandidSignedAuthorization>) -> Vec<SignedAuthorization> {
+    fn map_signature_component(bytes: &[u8]) -> ethnum::u256 {
+        ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(bytes).unwrap())
+    }
+
+    authorizations
+        .into_iter()
+        .map(|authorization| SignedAuthorization {
+            chain_id: authorization.chain_id.0.to_u64().unwrap(),
+            delegate: authorization.delegate.parse().unwrap(),
+            nonce: authorization.nonce.try_into().unwrap(),
+            y_parity: authorization.y_parity,
+            r: map_signature_component(&authorization.r),
+            s: map_signature_component(&authorization.s),
+        })
+        .collect()
 }
 
 fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
@@ -305,7 +339,9 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 raw_transaction,
             } => ET::SignedTransaction {
                 withdrawal_id: map_nat(withdrawal_id),
-                transaction: map_signed_transaction(&raw_transaction),
+                transaction: SignedEip1559TransactionRequest::from(decode_signed_transaction(
+                    &raw_transaction,
+                )),
             },
             EventPayload::ReplacedTransaction {
                 withdrawal_id,
@@ -328,6 +364,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 data,
                 max_transaction_fee,
                 created_at,
+                authorizations,
             } => ET::AcceptedSweepRequest(SweepRequest {
                 id: SweepId(sweep_id.0.to_u64().unwrap()),
                 destination: destination.parse().unwrap(),
@@ -335,27 +372,28 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 data: data.into_vec(),
                 max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                 created_at,
+                authorizations: map_authorizations(authorizations),
             }),
             EventPayload::CreatedSweeperTransaction {
                 sweep_id,
                 transaction,
             } => ET::CreatedSweeperTransaction {
                 sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
-                transaction: map_unsigned_transaction(transaction),
+                transaction: map_unsigned_sweeper_transaction(transaction),
             },
             EventPayload::SignedSweeperTransaction {
                 sweep_id,
                 raw_transaction,
             } => ET::SignedSweeperTransaction {
                 sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
-                transaction: map_signed_transaction(&raw_transaction),
+                transaction: map_signed_sweep_transaction(&raw_transaction),
             },
             EventPayload::ReplacedSweeperTransaction {
                 sweep_id,
                 transaction,
             } => ET::ReplacedSweeperTransaction {
                 sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
-                transaction: map_unsigned_transaction(transaction),
+                transaction: map_unsigned_sweeper_transaction(transaction),
             },
             EventPayload::FinalizedSweeperTransaction {
                 sweep_id,

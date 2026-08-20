@@ -560,6 +560,26 @@ type UnsignedTransaction = record {
     access_list : vec record { address : text; storage_keys : vec blob };
 };
 
+// An EIP-7702 authorization tuple: a deposit address' signed consent to delegate
+// its code to `delegate`, signed by the address itself.
+type SignedAuthorization = record {
+    chain_id : nat;
+    delegate : text;
+    nonce : nat;
+    y_parity : bool;
+    // 32-byte signature components.
+    r : blob;
+    s : blob;
+};
+
+// A sweep transaction the minter has created but not yet signed: a transaction,
+// plus the delegations it installs on the way. With none it is sent as a plain
+// EIP-1559 (0x02) transaction, and otherwise as an EIP-7702 (0x04) one.
+type UnsignedSweeperTransaction = record {
+    transaction : UnsignedTransaction;
+    authorization_list : vec SignedAuthorization;
+};
+
 type Event = record {
     timestamp : nat64;
     payload : variant {
@@ -631,10 +651,13 @@ type Event = record {
             data : blob;
             max_transaction_fee : nat;
             created_at : nat64;
+            // Delegations the sweep installs on the way, empty if every address
+            // it touches is already delegated.
+            authorizations : vec SignedAuthorization;
         };
         CreatedSweeperTransaction : record {
             sweep_id : nat;
-            transaction : UnsignedTransaction;
+            transaction : UnsignedSweeperTransaction;
         };
         SignedSweeperTransaction : record {
             sweep_id : nat;
@@ -642,7 +665,7 @@ type Event = record {
         };
         ReplacedSweeperTransaction : record {
             sweep_id : nat;
-            transaction : UnsignedTransaction;
+            transaction : UnsignedSweeperTransaction;
         };
         FinalizedSweeperTransaction : record {
             sweep_id : nat;
