@@ -588,7 +588,7 @@ pub enum ResubmitTransactionError<Id = LedgerBurnIndex> {
 /// How far a transaction has got through the pipeline. Carries the transaction itself, since
 /// every caller that asks the stage also wants the transaction at it.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(in crate::state) enum TransactionStage<'a> {
+pub enum TransactionStage<'a> {
     Created(&'a Eip1559TransactionRequest),
     /// The most recently sent transaction, i.e. the one with the highest fee.
     Sent(&'a SignedTransactionRequest),
