@@ -21,8 +21,9 @@ use anyhow::{Context, Result, bail};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_canister_client::Sender;
-use ic_consensus_system_test_utils::get_cup_from_node;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::{
+    get_cup_from_node, rw_message::install_nns_with_customizations_and_check_progress,
+};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -42,13 +43,16 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            NnsCustomizations, SubnetSnapshot,
         },
     },
     util::runtime_from_url,
 };
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
+use registry_canister::{
+    init::RegistryCanisterInitPayload, mutations::do_split_subnet::SplitSubnetPayload,
+};
 use slog::info;
 use xnet_test::{Metrics, StartArgs};
 
@@ -108,7 +112,18 @@ fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_check_progress(env.topology_snapshot());
+    // Subnet Splitting is still behind a feature flag in the Registry canister,
+    // so it has to be turned on explicitly.
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCustomizations {
+            registry_canister_init_payload: RegistryCanisterInitPayload {
+                is_subnet_splitting_enabled: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
 }
 
 fn subnet_splitting_test(env: TestEnv) {
