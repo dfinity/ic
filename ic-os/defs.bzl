@@ -323,27 +323,20 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],
             )
 
-            if build_alternative_guestos_image:
-                native.alias(
-                    name = boot_args,
-                    actual = ":" + extracted_boot_args,
-                    tags = ["manual"],
-                )
-            else:
-                native.genrule(
-                    name = "generate-" + boot_args,
-                    outs = [boot_args],
-                    srcs = [partition_root_hash, ":boot_args_template"],
-                    cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
-                          "< $(location :boot_args_template) > $@",
-                    tags = ["manual"],
-                )
+            native.genrule(
+                name = "generate-" + boot_args,
+                outs = [boot_args],
+                srcs = [partition_root_hash, ":boot_args_template"],
+                cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
+                      "< $(location :boot_args_template) > $@",
+                tags = ["manual"],
+            )
         else:
             # No signing required, no ROOT_HASH substitution
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
             native.alias(
                 name = boot_args,
-                actual = ":" + extracted_boot_args if build_alternative_guestos_image else ":boot_args_template",
+                actual = ":boot_args_template",
                 tags = ["manual"],
             )
 
