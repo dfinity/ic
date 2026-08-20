@@ -21,7 +21,7 @@ pub struct CanisterHttpPoolManagerMetrics {
     /// A count of the total number of shares marked invalid.
     pub shares_marked_invalid: IntCounter,
     /// Notable, but expected events observed by the pool manager, by kind.
-    pool_manager_metrics: IntCounterVec,
+    pool_manager_events: IntCounterVec,
     /// Operations the pool manager failed to perform, by kind.
     pool_manager_errors: IntCounterVec,
 }
@@ -51,9 +51,9 @@ impl CanisterHttpPoolManagerMetrics {
             shares_marked_invalid: metrics_registry.int_counter(
                 "canister_http_shares_marked_invalid", "A count of the total number of shares marked invalid."
             ),
-            pool_manager_metrics: metrics_registry.int_counter_vec(
-                "canister_http_pool_manager_metrics",
-                "Canister http pool manager related metrics, by kind.",
+            pool_manager_events: metrics_registry.int_counter_vec(
+                "canister_http_pool_manager_events",
+                "Notable, but expected events observed by the pool manager, by kind.",
                 &[LABEL_TYPE],
             ),
             pool_manager_errors: metrics_registry.int_counter_vec(
@@ -65,8 +65,8 @@ impl CanisterHttpPoolManagerMetrics {
     }
 
     /// Records a notable, but expected event of the given kind.
-    pub(crate) fn pool_manager_metrics_inc(&self, label: &str) {
-        self.pool_manager_metrics.with_label_values(&[label]).inc();
+    pub(crate) fn observe_pool_manager_event(&self, label: &str) {
+        self.pool_manager_events.with_label_values(&[label]).inc();
     }
 
     /// Records a failed operation of the given kind.

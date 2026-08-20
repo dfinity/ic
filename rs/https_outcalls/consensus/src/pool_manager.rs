@@ -342,7 +342,7 @@ impl CanisterHttpPoolManagerImpl {
                 } else {
                     self.requested_id_cache.borrow_mut().insert(*id);
                     self.metrics
-                        .pool_manager_metrics_inc("request_sent_to_adapter");
+                        .observe_pool_manager_event("request_sent_to_adapter");
                 }
             }
         }
@@ -368,7 +368,7 @@ impl CanisterHttpPoolManagerImpl {
                 Err(TryReceiveError::Empty) => break,
                 Ok((response, payment_receipt)) => {
                     self.metrics
-                        .pool_manager_metrics_inc("adapter_response_received");
+                        .observe_pool_manager_event("adapter_response_received");
                     // Drop the response if its context is no longer present in the replicated state.
                     // We continue gossiping a share even if a response to the context has already
                     // been delivered, in order to report the amount of cycles spent.
@@ -379,7 +379,7 @@ impl CanisterHttpPoolManagerImpl {
                                 // Consensus already answered this request; we only sign a
                                 // share to report the cycles we spent on it.
                                 self.metrics
-                                    .pool_manager_metrics_inc("response_for_delivered_context");
+                                    .observe_pool_manager_event("response_for_delivered_context");
                                 context
                             }
                             None => {
@@ -389,8 +389,9 @@ impl CanisterHttpPoolManagerImpl {
                                      corresponding context is no longer in the replicated state.",
                                     response.id,
                                 );
-                                self.metrics
-                                    .pool_manager_metrics_inc("response_dropped_context_timed_out");
+                                self.metrics.observe_pool_manager_event(
+                                    "response_dropped_context_timed_out",
+                                );
                                 self.requested_id_cache.borrow_mut().remove(&response.id);
                                 continue;
                             }
@@ -493,7 +494,7 @@ impl CanisterHttpPoolManagerImpl {
                 // Reject shares from different replica versions
                 if !is_current_protocol_version(share.content.replica_version()) {
                     self.metrics
-                        .pool_manager_metrics_inc("share_dropped_unknown_version");
+                        .observe_pool_manager_event("share_dropped_unknown_version");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 }
 
@@ -509,7 +510,7 @@ impl CanisterHttpPoolManagerImpl {
                     .or_else(|| delivered_contexts.get(&share.content.id()))
                 else {
                     self.metrics
-                        .pool_manager_metrics_inc("share_dropped_unknown_context");
+                        .observe_pool_manager_event("share_dropped_unknown_context");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
@@ -1112,7 +1113,7 @@ pub mod test {
                 // Dropping it is expected during an upgrade, so it is not an error.
                 assert_eq!(
                     metric_vec(&[(&[("type", "share_dropped_unknown_version")], 1)]),
-                    fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_metrics")
+                    fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_events")
                 );
                 assert!(
                     fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_errors")
