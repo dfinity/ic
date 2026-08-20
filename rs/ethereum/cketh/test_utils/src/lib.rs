@@ -182,6 +182,23 @@ impl CkEthSetup {
     /// minter, or asserting on the set of pending outcalls.
     pub fn settle_initial_sweeper_funding_check(&self) {
         const TOPPED_UP: &str = "0x16345785d8a0000"; // 0.1 ETH
+        self.answer_initial_sweeper_balance_read(TOPPED_UP);
+    }
+
+    /// As [`Self::settle_initial_sweeper_funding_check`], but answers with something the decoder
+    /// rejects, so the funding task takes its early return and records no observation. That early
+    /// return is unreachable from outside any other way.
+    pub fn fail_initial_sweeper_funding_check(&self) {
+        // Not a hex quantity, so decoding it fails: the minter has no way to read a balance from
+        // this, which is what makes the task skip without recording an observation.
+        const UNREADABLE: &str = "not a quantity";
+        self.answer_initial_sweeper_balance_read(UNREADABLE);
+    }
+
+    /// Answers that same read with `response`, whatever it is. A test wanting the read to *fail*
+    /// passes something the decoder rejects, which is the only way to reach the funding task's
+    /// early return from outside.
+    fn answer_initial_sweeper_balance_read<T: serde::Serialize>(&self, response: T) {
         // Waits for the outcall rather than ticking a fixed number of times, so a check that stops
         // firing fails here instead of surfacing in whichever test runs next.
         let mut ticks = 0;
@@ -196,7 +213,7 @@ impl CkEthSetup {
             ticks += 1;
         }
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBalance)
-            .respond_for_all_with(TOPPED_UP)
+            .respond_for_all_with(response)
             .build()
             .expect_rpc_calls(self);
     }
@@ -512,6 +529,13 @@ impl CkEthSetup {
             ()
         )
         .unwrap()
+    }
+
+    /// Upgrades the minter without changing any configuration, so a test can observe what an
+    /// upgrade on its own does to state that is deliberately not carried across one.
+    pub fn upgrade_minter_without_changes(self) -> Self {
+        self.upgrade_minter(UpgradeArg::default());
+        self
     }
 
     fn upgrade_minter(&self, upgrade_arg: UpgradeArg) {

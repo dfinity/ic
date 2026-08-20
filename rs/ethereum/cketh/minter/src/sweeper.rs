@@ -14,7 +14,7 @@ use crate::logs::{DEBUG, INFO};
 use crate::memo::BurnMemo;
 use crate::numeric::Wei;
 use crate::state::audit::{EventType, process_event};
-use crate::state::sweeper_funding::InFlightFunding;
+use crate::state::sweeper_funding::{InFlightFunding, ObservedSweeperBalance};
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::state::{State, TaskType, mutate_state, read_state};
 use crate::{CKETH_FEE_SUBACCOUNT, deposit_address::sweeper_address};
@@ -56,6 +56,16 @@ pub async fn fund_sweeper_address() {
                 return;
             }
         };
+
+    // Cached before deciding anything: sweeping consults this far more often than it changes, and
+    // recording it even when no funding is due is what keeps the observation fresh.
+    let observed_at_nanos = ic_cdk::api::time();
+    mutate_state(|s| {
+        s.last_observed_sweeper_balance = Some(ObservedSweeperBalance {
+            balance: sweeper_balance,
+            observed_at_nanos,
+        });
+    });
 
     let amount = match read_state(|s| plan_funding(s, sweeper_balance)) {
         FundingDecision::Fund(amount) => amount,

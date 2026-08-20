@@ -13,7 +13,9 @@ use crate::numeric::{
 };
 use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
-use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
+use crate::state::sweeper_funding::{
+    ObservedSweeperBalance, SweeperFundingAccounting, SweeperFundingConfig,
+};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
@@ -125,6 +127,9 @@ pub struct State {
 
     /// Burn-first accounting for sweeper fee funding.
     pub sweeper_funding: SweeperFundingAccounting,
+    /// The sweeper address' ETH balance as last read on chain, i.e. the prepaid sweep gas.
+    /// Volatile cache refreshed by the funding task, deliberately not event-sourced.
+    pub last_observed_sweeper_balance: Option<ObservedSweeperBalance>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -447,7 +452,10 @@ impl State {
         if matches!(withdrawal_request, WithdrawalRequest::SweeperFunding(_)) {
             let transferred = match receipt.status {
                 TransactionStatus::Success => tx.transaction().amount,
-                TransactionStatus::Failure => Wei::ZERO,
+                TransactionStatus::Failure => {
+                    self.sweeper_funding.record_failed_funding();
+                    Wei::ZERO
+                }
             };
             self.sweeper_funding
                 .record_finalized_funding(*withdrawal_id, transferred, tx_fee);

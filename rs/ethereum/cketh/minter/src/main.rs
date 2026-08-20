@@ -1154,6 +1154,72 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
+                // Burned and spent are the two sides of the invariant, so both are counters.
+                w.encode_counter(
+                    "cketh_minter_sweeper_funding_cketh_burned_total",
+                    s.sweeper_funding.cumulative_burned().as_f64(),
+                    "Cumulative ckETH burned from the fee account to prepay sweep gas.",
+                )?;
+                w.encode_counter(
+                    "cketh_minter_sweeper_funding_eth_spent_total",
+                    s.sweeper_funding.cumulative_spent().as_f64(),
+                    "Cumulative ETH debited from the minter's main address for sweeping.",
+                )?;
+                // Alertable: a funding transaction cannot fail on Ethereum unless something the
+                // minter believed impossible has happened, so any non-zero value wants a look.
+                w.encode_counter(
+                    "cketh_minter_sweeper_funding_failed_total",
+                    s.sweeper_funding.failed_fundings() as f64,
+                    "Funding transactions that finalized with a failure receipt. Expected to stay \
+                     zero: funding is a bare transfer to an address derived from the minter's own \
+                     key, which has no code to revert in.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_burned_not_yet_spent",
+                    s.sweeper_funding.burned_not_yet_spent().as_f64(),
+                    "ckETH burned for sweeping but not yet spent, i.e. how far burn runs ahead of \
+                     spend: the burn of a funding still in flight, plus the fees earlier fundings \
+                     provisioned but never paid. Nothing draws it down -- the surplus stays as \
+                     ckETH backing -- so between fundings it only ratchets up.",
+                )?;
+                // NaN rather than 0: "no gas" and "never looked" must not read alike.
+                w.encode_gauge(
+                    "cketh_minter_sweeper_gas_balance",
+                    s.last_observed_sweeper_balance
+                        .map(|observed| observed.balance.as_f64())
+                        .unwrap_or(f64::NAN),
+                    "Prepaid sweep gas: the sweeper address' ETH balance as last observed on chain; \
+                     NaN if never observed.",
+                )?;
+                // The alert for a wedged funding: the balance-age gauge below cannot show one, since
+                // the task refreshes the observation before consulting the guard.
+                w.encode_gauge(
+                    "cketh_minter_sweeper_in_flight_funding_age_seconds",
+                    s.sweeper_funding
+                        .in_flight_funding()
+                        .map(|f| match f.created_at_nanos {
+                            Some(created_at_nanos) => {
+                                (ic_cdk::api::time().saturating_sub(created_at_nanos)
+                                    / 1_000_000_000) as f64
+                            }
+                            None => f64::NAN,
+                        })
+                        .unwrap_or(0.0),
+                    "Age of the sweeper funding awaiting finalization; 0 if none is outstanding, \
+                     NaN if one is but its acceptance time is unknown.",
+                )?;
+                // Alert on this when sweeping stalls: a growing age means funding is failing.
+                w.encode_gauge(
+                    "cketh_minter_sweeper_gas_balance_age_seconds",
+                    s.last_observed_sweeper_balance
+                        .map(|observed| {
+                            (ic_cdk::api::time().saturating_sub(observed.observed_at_nanos)
+                                / 1_000_000_000) as f64
+                        })
+                        .unwrap_or(f64::INFINITY),
+                    "Age of the last sweeper-balance observation in seconds; +Inf if never read.",
+                )?;
+
                 w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate

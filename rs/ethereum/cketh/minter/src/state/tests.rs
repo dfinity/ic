@@ -1165,6 +1165,7 @@ fn state_equivalence() {
     };
     let state = State {
         sweeper_funding: Default::default(),
+        last_observed_sweeper_balance: None,
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
