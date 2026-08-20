@@ -460,7 +460,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
             || self.sent_tx.contains_alt(&id)
             || self.finalized_tx.contains_alt(&id)
         {
-            panic!("BUG: duplicate transaction id {id}");
+            panic!("BUG: duplicate transaction id {id:?}");
         }
         self.pending_requests.push_back(request);
     }
@@ -474,7 +474,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
                 .filter(|r| r.id() == request.id())
                 .count(),
             1,
-            "BUG: expected exactly one request with id {}",
+            "BUG: expected exactly one request with id {:?}",
             request.id()
         );
         self.remove_request(&request);
@@ -491,7 +491,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
             .iter()
             .find(|req| req.id() == id)
             .cloned()
-            .unwrap_or_else(|| panic!("BUG: request {id} not found"));
+            .unwrap_or_else(|| panic!("BUG: request {id:?} not found"));
         assert!(
             self.pending_requests.contains(&request),
             "BUG: request not found"
@@ -628,7 +628,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
                     assert_eq!(
                         prev_index,
                         *index,
-                        "BUG: duplicate transaction hash {} for burn indices {prev_index} and {index}",
+                        "BUG: duplicate transaction hash {} for ids {prev_index:?} and {index:?}",
                         sent_tx.as_ref().hash()
                     );
                 }

@@ -15,7 +15,7 @@ use std::fmt;
 /// (`Id = LedgerBurnIndex`); a second sender address will bring a second implementation.
 pub trait PipelineRequest {
     /// The pipeline's alternate map key — a ckETH `LedgerBurnIndex` for withdrawals.
-    type Id: Copy + Ord + fmt::Debug + fmt::Display;
+    type Id: Copy + Ord + fmt::Debug;
 
     /// Why [`Self::create_transaction`] could not build a transaction. A request that always funds
     /// its own fee can set this to [`std::convert::Infallible`], making the failure unrepresentable
