@@ -467,17 +467,24 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
 
     /// Move an existing request to the back of the queue.
     pub fn reschedule_request<Req: Into<R>>(&mut self, request: Req) {
-        let request = request.into();
+        let id = request.into().id();
         assert_eq!(
             self.pending_requests
                 .iter()
-                .filter(|r| r.id() == request.id())
+                .filter(|r| r.id() == id)
                 .count(),
             1,
-            "BUG: expected exactly one request with id {:?}",
-            request.id()
+            "BUG: expected exactly one request with id {id:?}"
         );
-        self.remove_request(&request);
+        let position = self
+            .pending_requests
+            .iter()
+            .position(|r| r.id() == id)
+            .expect("BUG: exactly one request with this id was just counted");
+        let request = self
+            .pending_requests
+            .remove(position)
+            .expect("BUG: position was just found in the queue");
         self.record_request(request);
     }
 
@@ -486,32 +493,32 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
         id: R::Id,
         transaction: Eip1559TransactionRequest,
     ) {
-        let request = self
+        let position = self
             .pending_requests
             .iter()
-            .find(|req| req.id() == id)
-            .cloned()
+            .position(|req| req.id() == id)
             .unwrap_or_else(|| panic!("BUG: request {id:?} not found"));
-        assert!(
-            self.pending_requests.contains(&request),
-            "BUG: request not found"
-        );
+        let request = &self.pending_requests[position];
         assert_eq!(
             request.destination(),
             transaction.destination,
             "BUG: request and transaction destination mismatch"
         );
         request.assert_created_transaction(&transaction);
+        let resubmission = request.resubmission_strategy();
         let nonce = self.next_nonce;
         assert_eq!(transaction.nonce, nonce, "BUG: transaction nonce mismatch");
         self.next_nonce = self
             .next_nonce
             .checked_increment()
             .expect("Transaction nonce overflow");
-        self.remove_request(&request);
+        let request = self
+            .pending_requests
+            .remove(position)
+            .expect("BUG: position was just found in the queue");
         let transaction_request = TransactionRequest {
             transaction,
-            resubmission: request.resubmission_strategy(),
+            resubmission,
         };
         assert_eq!(
             self.created_tx
@@ -786,10 +793,6 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
 
     pub fn has_pending_requests(&self) -> bool {
         !self.pending_requests.is_empty() || !self.created_tx.is_empty() || !self.sent_tx.is_empty()
-    }
-
-    fn remove_request(&mut self, request: &R) {
-        self.pending_requests.retain(|r| r != request);
     }
 
     fn expect_last_sent_tx_entry<'a>(
