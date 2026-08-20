@@ -239,21 +239,18 @@ impl CanisterHttpPayloadBuilderImpl {
                             accumulated_size += candidate_size;
                         }
                     }
-                    let (groups, success, reject) =
-                        shares_by_callback_id
-                            .get(callback_id)
-                            .map_or((0, 0, 0), |groups| {
-                                let group_count = groups.len();
-                                let (mut success, mut reject) = (0, 0);
-                                for share in groups.values().flatten() {
-                                    if share.content.is_reject() {
-                                        reject += 1;
-                                    } else {
-                                        success += 1;
-                                    }
-                                }
-                                (group_count, success, reject)
-                            });
+                    let groups = shares_by_callback_id.get(callback_id);
+                    let (groups, success, reject) = groups.map_or((0, 0, 0), |groups| {
+                        let (mut success, mut reject) = (0, 0);
+                        for share in groups.values().flatten() {
+                            if share.content.is_reject() {
+                                reject += 1;
+                            } else {
+                                success += 1;
+                            }
+                        }
+                        (groups.len(), success, reject)
+                    });
                     warn!(
                         self.log,
                         "CanisterHttpPayloadBuilder: timeout for callback_id {callback_id} \
