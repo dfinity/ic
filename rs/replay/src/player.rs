@@ -128,7 +128,7 @@ pub(crate) struct Player {
     certification_pool: Option<CertificationPoolImpl>,
     pub registry: Arc<RegistryClientImpl>,
     local_store_path: PathBuf,
-    replica_version: Option<ReplicaVersion>,
+    replica_version: ReplicaVersion,
     pub log: ReplicaLogger,
     _async_log_guard: AsyncGuard,
     /// The id of the subnet where the artifacts are taken from.
@@ -207,7 +207,7 @@ impl Player {
             subnet_id,
             Some(pool),
             Some(backup_dir),
-            Some(replica_version),
+            replica_version,
             log,
             _async_log_guard,
         );
@@ -246,9 +246,16 @@ impl Player {
 
         let replica_version = if let Some(pool) = &consensus_pool {
             // Use the replica version from the finalized tip in the pool.
-            Some(PoolReader::new(pool).get_finalized_tip().version().clone())
+            PoolReader::new(pool).get_finalized_tip().version().clone()
         } else {
-            replica_version
+            // Without a consensus pool, the replica version must be given.
+            replica_version.unwrap_or_else(|| {
+                panic!(
+                    "No consensus pool found at {:?} and no replica version was given; \
+                     one of the two is required.",
+                    cfg.artifact_pool.consensus_pool_path
+                )
+            })
         };
 
         Player::new_with_params(
@@ -270,7 +277,7 @@ impl Player {
         subnet_id: SubnetId,
         consensus_pool: Option<ConsensusPoolImpl>,
         backup_dir: Option<PathBuf>,
-        replica_version: Option<ReplicaVersion>,
+        replica_version: ReplicaVersion,
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
@@ -342,9 +349,7 @@ impl Player {
             ReplayValidator::new(
                 cfg,
                 subnet_id,
-                replica_version
-                    .clone()
-                    .expect("The replica version is always set when a consensus pool is present"),
+                replica_version.clone(),
                 crypto.clone(),
                 crypto.clone(),
                 verifier,
@@ -763,7 +768,7 @@ impl Player {
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
                     randomness_from_crypto_hashable(&last_block),
-                    Some(last_block.version.clone()),
+                    last_block.version.clone(),
                 )
             }
         };
@@ -772,15 +777,6 @@ impl Player {
         if extra_msgs.is_empty() {
             return (time, None);
         }
-
-        // The replica version is required only if there are extra messages to
-        // execute and no consensus pool to take the version from.
-        let replica_version = replica_version.unwrap_or_else(|| {
-            panic!(
-                "The replica version is required to execute the extra messages, but no \
-                 consensus pool is available and no --replica-version was given"
-            )
-        });
 
         let extra_ingresses = extra_msgs
             .iter()
@@ -1185,7 +1181,7 @@ impl Player {
             &ic_logger::replica_logger::no_op_logger(),
             last_cup.content.registry_version(),
         ) {
-            Some(replica_version) if Some(&replica_version) != self.replica_version.as_ref() => {
+            Some(replica_version) if replica_version != self.replica_version => {
                 println!(
                     "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
                     replica_version,
