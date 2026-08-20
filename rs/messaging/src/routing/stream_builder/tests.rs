@@ -1164,7 +1164,8 @@ mod cooling_down {
     /// cooling down subnets are held back.
     const OTHER_SUBNET: SubnetId = SUBNET_3;
 
-    /// The sender of all messages in the tests below, hosted by `LOCAL_SUBNET`.
+    /// The sender of all canister messages in the tests below, hosted by
+    /// `LOCAL_SUBNET`.
     const SENDER_CANISTER: CanisterId = CanisterId::from_u64(0);
     /// The destination canister, hosted by the cooling down subnet (which is
     /// `LOCAL_SUBNET` itself in `new_local_cooling_down_fixture()`).
@@ -1237,6 +1238,17 @@ mod cooling_down {
                 .get_mut(&subnet_id)
                 .unwrap()
                 .cooling_down = false;
+        });
+    }
+
+    /// Marks `subnet_id` as cooling down.
+    fn mark_cooling_down(state: &mut ReplicatedState, subnet_id: SubnetId) {
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology
+                .subnets_mut()
+                .get_mut(&subnet_id)
+                .unwrap()
+                .cooling_down = true;
         });
     }
 
@@ -1638,14 +1650,17 @@ mod cooling_down {
         for (originator, dst_subnet) in [
             // A canister hosted by `OTHER_SUBNET`, which is not cooling down.
             (OTHER_CANISTER, OTHER_SUBNET),
-            // A canister hosted by `LOCAL_SUBNET`, i.e. the loopback stream; and
-            // `LOCAL_SUBNET` is cooling down.
-            (COOLING_DOWN_CANISTER, LOCAL_SUBNET),
+            // A canister hosted by the remote `COOLING_DOWN_SUBNET`.
+            (COOLING_DOWN_CANISTER, COOLING_DOWN_SUBNET),
+            // A canister hosted by `LOCAL_SUBNET` itself, i.e. the loopback stream;
+            // and `LOCAL_SUBNET` is cooling down.
+            (SENDER_CANISTER, LOCAL_SUBNET),
         ] {
             for response in cooling_down_subnet_message_matrix(originator) {
                 with_test_replica_logger(|log| {
                     let (stream_builder, mut provided_state, metrics_registry) =
-                        new_local_cooling_down_fixture(&log);
+                        new_cooling_down_fixture(&log);
+                    mark_cooling_down(&mut provided_state, LOCAL_SUBNET);
                     push_subnet_output_response(&mut provided_state, response.clone());
 
                     let result_state = stream_builder.build_streams(provided_state);
