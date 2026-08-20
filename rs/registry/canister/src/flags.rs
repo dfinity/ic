@@ -97,6 +97,10 @@ pub mod temporary_overrides {
         let policy = AccessList::allow(override_subnets);
         NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
     }
+
+    pub fn test_set_subnet_splitting_enabled(override_value: bool) {
+        IS_SUBNET_SPLITTING_ENABLED.replace(override_value);
+    }
 }
 
 pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {

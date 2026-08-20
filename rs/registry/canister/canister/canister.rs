@@ -209,8 +209,8 @@ fn canister_init() {
     #[cfg(feature = "test")]
     {
         use registry_canister::flags::temporary_overrides::{
-            test_set_swapping_enabled_subnets, test_set_swapping_status,
-            test_set_swapping_whitelisted_callers,
+            test_set_subnet_splitting_enabled, test_set_swapping_enabled_subnets,
+            test_set_swapping_status, test_set_swapping_whitelisted_callers,
         };
 
         println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
@@ -234,6 +234,13 @@ fn canister_init() {
         );
         test_set_swapping_enabled_subnets(
             init_payload.swapping_enabled_subnets.unwrap_or_default(),
+        );
+        println!(
+            "{LOG_PREFIX}canister_init: Subnet Splitting enabled: {:?}",
+            init_payload.is_subnet_splitting_enabled
+        );
+        test_set_subnet_splitting_enabled(
+            init_payload.is_subnet_splitting_enabled.unwrap_or_default(),
         );
     }
 }
