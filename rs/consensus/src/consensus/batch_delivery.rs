@@ -24,7 +24,7 @@ use ic_protobuf::{
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
-    Height, PrincipalId, ReplicaVersion, SubnetId,
+    Height, PrincipalId, SubnetId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
         ChainKeyData, ConsensusResponse,
@@ -52,7 +52,6 @@ pub fn deliver_batches(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    replica_version: &ReplicaVersion,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
@@ -65,7 +64,6 @@ pub fn deliver_batches(
         pool,
         registry_client,
         subnet_id,
-        replica_version,
         log,
         max_batch_height_to_deliver,
         /*result_processor=*/ None,
@@ -82,7 +80,6 @@ pub(crate) fn deliver_batches_with_result_processor(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    current_replica_version: &ReplicaVersion,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
@@ -165,7 +162,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 registry_client,
                 subnet_id,
                 pool,
-                current_replica_version,
+                block.version(),
                 log,
             ) {
                 Some(Status::Halting | Status::Halted) => {

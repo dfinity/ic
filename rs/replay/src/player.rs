@@ -713,9 +713,6 @@ impl Player {
                 pool,
                 &*self.registry,
                 self.subnet_id,
-                self.replica_version
-                    .as_ref()
-                    .expect("The replica version is set when a consensus pool is present"),
                 &self.log,
                 replay_target_height,
             ) {
