@@ -7,11 +7,13 @@ use super::{
 };
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei};
-use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy};
+use crate::tx::{
+    Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy, SignableTransaction,
+};
 use std::fmt;
 
 /// A request that can flow through a `TransactionPipeline`: it carries an identity used as the
-/// pipeline's alternate map key, and knows the EIP-1559 transaction it turns into.
+/// pipeline's alternate map key, and knows the transaction it turns into.
 ///
 /// Implemented by [`WithdrawalRequest`] — the minter's **main address** pipeline
 /// (`Id = LedgerBurnIndex`) — and by [`SweepRequest`] — the dedicated **sweeper address** pipeline
@@ -20,6 +22,9 @@ pub trait PipelineRequest {
     /// The pipeline's alternate map key: a ckETH `LedgerBurnIndex` for withdrawals, a `SweepId`
     /// for sweeps.
     type Id: Copy + Ord + fmt::Debug;
+
+    /// The transaction this request turns into.
+    type Transaction: SignableTransaction;
 
     /// Why [`Self::create_transaction`] could not build a transaction. A request that always funds
     /// its own fee can set this to [`std::convert::Infallible`], making the failure unrepresentable
@@ -34,9 +39,9 @@ pub trait PipelineRequest {
 
     /// Assert that a freshly created transaction is consistent with the request: it goes to the
     /// right address, and moves the right amount.
-    fn assert_created_transaction(&self, transaction: &Eip1559TransactionRequest);
+    fn assert_created_transaction(&self, transaction: &Self::Transaction);
 
-    /// Creates the EIP-1559 transaction that fulfils this request.
+    /// Creates the transaction that fulfils this request.
     ///
     /// # Errors
     /// * [`Self::Error`] if the request cannot cover the transaction fee.
@@ -46,11 +51,12 @@ pub trait PipelineRequest {
         gas_fee_estimate: GasFeeEstimate,
         gas_limit: GasAmount,
         ethereum_network: EthereumNetwork,
-    ) -> Result<Eip1559TransactionRequest, Self::Error>;
+    ) -> Result<Self::Transaction, Self::Error>;
 }
 
 impl PipelineRequest for WithdrawalRequest {
     type Id = LedgerBurnIndex;
+    type Transaction = Eip1559TransactionRequest;
     type Error = CreateTransactionError;
 
     fn id(&self) -> LedgerBurnIndex {
@@ -187,6 +193,7 @@ impl PipelineRequest for WithdrawalRequest {
 
 impl PipelineRequest for SweepRequest {
     type Id = SweepId;
+    type Transaction = Eip1559TransactionRequest;
     type Error = CreateSweepTransactionError;
 
     fn id(&self) -> SweepId {
