@@ -128,7 +128,7 @@ pub(crate) struct Player {
     certification_pool: Option<CertificationPoolImpl>,
     pub registry: Arc<RegistryClientImpl>,
     local_store_path: PathBuf,
-    replica_version: ReplicaVersion,
+    replica_version: Option<ReplicaVersion>,
     pub log: ReplicaLogger,
     _async_log_guard: AsyncGuard,
     /// The id of the subnet where the artifacts are taken from.
@@ -207,7 +207,7 @@ impl Player {
             subnet_id,
             Some(pool),
             Some(backup_dir),
-            replica_version,
+            Some(replica_version),
             log,
             _async_log_guard,
         );
@@ -217,42 +217,45 @@ impl Player {
 
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
-    pub(crate) fn new(cfg: Config, subnet_id: SubnetId) -> Self {
+    pub(crate) fn new(
+        cfg: Config,
+        subnet_id: SubnetId,
+        replica_version: Option<ReplicaVersion>,
+    ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
         let time_source = Arc::new(SysTimeSource::new());
 
-        // Without a consensus pool there is nothing to replay.
-        if !cfg.artifact_pool.consensus_pool_path.exists() {
-            panic!(
-                "No consensus pool found at {:?}",
-                cfg.artifact_pool.consensus_pool_path
+        let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
+            let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
+            // We don't want to modify the original consensus pool during the subnet
+            // recovery.
+            artifact_pool_config.persistent_pool_read_only = true;
+            let consensus_pool = ConsensusPoolImpl::from_uncached(
+                NodeId::from(PrincipalId::new_anonymous()),
+                UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
+                MetricsRegistry::new(),
+                log.clone(),
+                time_source,
             );
-        }
-        let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
-        // We don't want to modify the original consensus pool during the subnet
-        // recovery.
-        artifact_pool_config.persistent_pool_read_only = true;
-        let consensus_pool = ConsensusPoolImpl::from_uncached(
-            NodeId::from(PrincipalId::new_anonymous()),
-            UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
-            MetricsRegistry::new(),
-            log.clone(),
-            time_source,
-        );
+            Some(consensus_pool)
+        } else {
+            None
+        };
 
-        // Use the replica version from the finalized tip in the pool.
-        let replica_version = PoolReader::new(&consensus_pool)
-            .get_finalized_tip()
-            .version()
-            .clone();
+        let replica_version = if let Some(pool) = &consensus_pool {
+            // Use the replica version from the finalized tip in the pool.
+            Some(PoolReader::new(pool).get_finalized_tip().version().clone())
+        } else {
+            replica_version
+        };
 
         Player::new_with_params(
             cfg,
             registry,
             subnet_id,
-            Some(consensus_pool),
+            consensus_pool,
             None,
             replica_version,
             log,
@@ -267,7 +270,7 @@ impl Player {
         subnet_id: SubnetId,
         consensus_pool: Option<ConsensusPoolImpl>,
         backup_dir: Option<PathBuf>,
-        replica_version: ReplicaVersion,
+        replica_version: Option<ReplicaVersion>,
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
@@ -339,7 +342,9 @@ impl Player {
             ReplayValidator::new(
                 cfg,
                 subnet_id,
-                replica_version.clone(),
+                replica_version
+                    .clone()
+                    .expect("The replica version is always set when a consensus pool is present"),
                 crypto.clone(),
                 crypto.clone(),
                 verifier,
@@ -708,7 +713,9 @@ impl Player {
                 pool,
                 &*self.registry,
                 self.subnet_id,
-                &self.replica_version,
+                self.replica_version
+                    .as_ref()
+                    .expect("The replica version is set when a consensus pool is present"),
                 &self.log,
                 replay_target_height,
             ) {
@@ -759,7 +766,7 @@ impl Player {
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
                     randomness_from_crypto_hashable(&last_block),
-                    last_block.version.clone(),
+                    Some(last_block.version.clone()),
                 )
             }
         };
@@ -768,6 +775,15 @@ impl Player {
         if extra_msgs.is_empty() {
             return (time, None);
         }
+
+        // The replica version is required only if there are extra messages to
+        // execute and no consensus pool to take the version from.
+        let replica_version = replica_version.unwrap_or_else(|| {
+            panic!(
+                "The replica version is required to execute the extra messages, but no \
+                 consensus pool is available and no --replica-version was given"
+            )
+        });
 
         let extra_ingresses = extra_msgs
             .iter()
@@ -1172,7 +1188,7 @@ impl Player {
             &ic_logger::replica_logger::no_op_logger(),
             last_cup.content.registry_version(),
         ) {
-            Some(replica_version) if replica_version != self.replica_version => {
+            Some(replica_version) if Some(&replica_version) != self.replica_version.as_ref() => {
                 println!(
                     "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
                     replica_version,
