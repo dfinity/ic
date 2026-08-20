@@ -5,7 +5,7 @@ mod hsm;
 mod misc;
 mod upgrade;
 
-use crate::protocol::{Command, HostOSVsockVersion, Response, parse_request};
+use crate::protocol::{Command, HostOSVsockVersion, Request, Response};
 use hsm::{attach_hsm, detach_hsm};
 use misc::{get_hostos_version, get_hostos_vsock_version, notify};
 use upgrade::{start_upgrade_guest_vm, upgrade_hostos};
@@ -112,5 +112,81 @@ fn verify_sender_cid(stream: &mut VsockStream, guest_cid: u32) -> io::Result<()>
             io::ErrorKind::InvalidData,
             "The actual sender CID did not match the sender CID in the request object",
         ))
+    }
+}
+
+pub fn parse_request(json_str: &str) -> Result<Request, String> {
+    serde_json::from_str::<Request>(json_str)
+        .map_err(|error| format!("Unable to parse guest request: {json_str}: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_request() {
+        // Test AttachHSM command
+        let json_str = r#"{"sender_cid": 123, "message": "attach-hsm"}"#;
+        let request = parse_request(json_str);
+        assert!(request.is_ok());
+        let request = request.unwrap();
+        assert_eq!(request.command, Command::AttachHSM);
+
+        // Test DetachHSM command
+        let json_str = r#"{"sender_cid": 123, "message": "detach-hsm"}"#;
+        let request = parse_request(json_str);
+        assert!(request.is_ok());
+        let request = request.unwrap();
+        assert_eq!(request.command, Command::DetachHSM);
+
+        // Test Upgrade command
+        let json_str = r#"{"sender_cid": 123, "message": {"upgrade": {"url": "http://example.com/upgrade", "target-hash": "abcd1234hash"}}}"#;
+        let request = parse_request(json_str);
+        assert!(request.is_ok());
+        let request = request.unwrap();
+        assert_eq!(request.guest_cid, 123);
+        match request.command {
+            Command::Upgrade(data) => {
+                assert_eq!(data.url, "http://example.com/upgrade");
+                assert_eq!(data.target_hash, "abcd1234hash");
+            }
+            _ => panic!("Expected Upgrade command"),
+        }
+
+        // Test Notify command
+        let json_str = r#"{"sender_cid": 123, "message": {"notify": {"message": "System update required", "count": 2}}}"#;
+        let request = parse_request(json_str);
+        assert!(request.is_ok());
+        let request = request.unwrap();
+        assert_eq!(request.guest_cid, 123);
+        match request.command {
+            Command::Notify(data) => {
+                assert_eq!(data.count, 2);
+                assert_eq!(data.message, "System update required");
+            }
+            _ => panic!("Expected Notify command"),
+        }
+
+        // Test GetVsockProtocol command
+        let json_str = r#"{"sender_cid": 123, "message": "GetVsockProtocol"}"#;
+        let request = parse_request(json_str);
+        assert!(request.is_ok());
+        let request = request.unwrap();
+        assert_eq!(request.guest_cid, 123);
+        assert_eq!(request.command, Command::GetVsockProtocol);
+
+        // Test GetHostOSVersion command
+        let json_str = r#"{"sender_cid": 123, "message": "GetHostOSVersion"}"#;
+        let request = parse_request(json_str);
+        assert!(request.is_ok());
+        let request = request.unwrap();
+        assert_eq!(request.guest_cid, 123);
+        assert_eq!(request.command, Command::GetHostOSVersion);
+
+        // Test malformed command
+        let json_str = r#"{"sender_cid": 123, "message": "attach-hsm"#; // Missing closing brace
+        let request = parse_request(json_str);
+        assert!(request.is_err());
     }
 }
