@@ -276,17 +276,18 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 tar --extract -a --file "$<" --directory "$$tmpdir"
 
                 # initrd and vmlinuz are symlinks, first extract the symlink targets
-                initrd_target="$$(/usr/sbin/debugfs -R "stat /initrd.img" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
-                vmlinuz_target="$$(/usr/sbin/debugfs -R "stat /vmlinuz" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
+                initrd_target="$$($(location //:debugfs) -R "stat /initrd.img" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
+                vmlinuz_target="$$($(location //:debugfs) -R "stat /vmlinuz" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
 
-                /usr/sbin/debugfs -R "dump /boot_args $(@D)/""" + extracted_boot_args + """" "$$tmpdir/partition.img"
-                /usr/sbin/debugfs -R "dump /OVMF_SEV.fd $(@D)/""" + extracted_ovmf_sev + """" "$$tmpdir/partition.img"
-                /usr/sbin/debugfs -R "dump /$$initrd_target $(@D)/""" + extracted_initrd + """" "$$tmpdir/partition.img"
-                /usr/sbin/debugfs -R "dump /$$vmlinuz_target $(@D)/""" + extracted_vmlinuz + """" "$$tmpdir/partition.img"
+                $(location //:debugfs) -R "dump /boot_args $(@D)/""" + extracted_boot_args + """" "$$tmpdir/partition.img"
+                $(location //:debugfs) -R "dump /OVMF_SEV.fd $(@D)/""" + extracted_ovmf_sev + """" "$$tmpdir/partition.img"
+                $(location //:debugfs) -R "dump /$$initrd_target $(@D)/""" + extracted_initrd + """" "$$tmpdir/partition.img"
+                $(location //:debugfs) -R "dump /$$vmlinuz_target $(@D)/""" + extracted_vmlinuz + """" "$$tmpdir/partition.img"
             """,
             message = "Extracting files from boot partition",
             tags = ["manual"],
             target_compatible_with = ["@platforms//os:linux"],
+            tools = ["//:debugfs"],
         )
 
         # The kernel command line (boot args) is usually generated from boot_args_template:
