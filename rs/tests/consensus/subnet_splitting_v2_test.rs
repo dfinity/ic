@@ -24,7 +24,7 @@ use dfn_candid::candid;
 use ic_agent::AgentError;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::{
-    get_cup_from_node, rw_message::install_nns_and_check_progress,
+    get_cup_from_node, rw_message::install_nns_with_customizations_and_check_progress,
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
@@ -43,7 +43,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-            IcNodeSnapshot, SubnetSnapshot, get_dependency_path,
+            IcNodeSnapshot, NnsCustomizations, SubnetSnapshot, get_dependency_path,
         },
     },
     nns::vote_and_execute_proposal,
@@ -51,7 +51,9 @@ use ic_system_test_driver::{
     util::{create_agent, runtime_from_url},
 };
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
+use registry_canister::{
+    init::RegistryCanisterInitPayload, mutations::do_split_subnet::SplitSubnetPayload,
+};
 use slog::info;
 use xnet_test::{Metrics, StartArgs};
 
@@ -72,8 +74,6 @@ const CHATTING_CANISTERS_ON_SOURCE_SUBNET_COUNT: usize = 10;
 const CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT: usize = 3;
 const FIRST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 3;
 const LAST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 8;
-
-const TEST_ENABLED: bool = false;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -120,7 +120,19 @@ fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_check_progress(env.topology_snapshot());
+    // Subnet Splitting is still behind a feature flag in the Registry canister,
+    // so it has to be turned on explicitly. This only works because system
+    // tests install registry-canister-test, not the release build.
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCustomizations {
+            registry_canister_init_payload: RegistryCanisterInitPayload {
+                is_subnet_splitting_enabled: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
 }
 
 fn subnet_splitting_test(env: TestEnv) {
@@ -132,15 +144,6 @@ fn subnet_splitting_test(env: TestEnv) {
             so the canisters have some time to chit chat"
         );
         tokio::time::sleep(Duration::from_secs(10)).await;
-
-        if !TEST_ENABLED {
-            info!(
-                env.logger(),
-                "Subnet splititing not enabled yet, skipping the test."
-            );
-
-            return;
-        }
 
         run_subnet_splitting_test(env.clone(), &test_params).await
     })
