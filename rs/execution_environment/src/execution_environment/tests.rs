@@ -10,10 +10,10 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
     CanisterStatusType, CreateCanisterArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, HttpMethod, IC_00, LogVisibilityV2,
-    MasterPublicKeyId, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, ReplicationCounts, SchnorrAlgorithm, SchnorrKeyId,
-    TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UploadChunkArgs, VetKdCurve,
-    VetKdKeyId,
+    MasterPublicKeyId, Method, PRICING_VERSION_PAY_AS_YOU_GO, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, ReplicationCounts,
+    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
+    UploadChunkArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
@@ -3830,6 +3830,114 @@ fn execute_canister_http_request_caps_allowance_at_worst_case_cost() {
         http_request_context.request.payment,
         refundable_payment - expected_allowance * committee_size
     );
+}
+
+fn http_request_args_with_pricing_version(
+    caller_canister: CanisterId,
+    pricing_version: Option<u32>,
+) -> CanisterHttpRequestArgs {
+    CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        // Bounded, so that the legacy fee charged up front (which is based on the
+        // largest response the outcall could receive) stays within the payment
+        // attached below.
+        max_response_bytes: Some(1024),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: None,
+        pricing_version,
+    }
+}
+
+/// The pay-as-you-go pricing model is gated behind the `flexible_http_requests`
+/// feature flag for non-flexible outcalls too: a request selecting it is honored
+/// once the flag is enabled, and falls back to legacy pricing until then.
+#[test]
+fn execute_canister_http_request_pay_as_you_go_is_gated() {
+    for (flexible_http_requests_enabled, expected) in [
+        (false, PricingVersion::Legacy),
+        (true, PricingVersion::PayAsYouGo),
+    ] {
+        let own_subnet = subnet_test_id(1);
+        let caller_canister = canister_test_id(10);
+        let mut builder = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister);
+        if flexible_http_requests_enabled {
+            builder = builder.with_flexible_http_requests_enabled();
+        }
+        let mut test = builder.build();
+        std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+            .subnet_features
+            .http_requests = true;
+
+        let args = http_request_args_with_pricing_version(
+            caller_canister,
+            Some(PRICING_VERSION_PAY_AS_YOU_GO),
+        );
+        test.inject_call_to_ic00(
+            Method::HttpRequest,
+            args.encode(),
+            Cycles::new(1_000_000_000),
+        );
+        test.execute_all();
+
+        let canister_http_request_contexts = &test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(canister_http_request_contexts.len(), 1);
+        let http_request_context = canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
+        assert_eq!(
+            http_request_context.pricing_version, expected,
+            "unexpected pricing version with the feature flag \
+             {flexible_http_requests_enabled}"
+        );
+    }
+}
+
+/// An unknown pricing version falls back to the default one, whether or not the
+/// pay-as-you-go pricing model is enabled.
+#[test]
+fn execute_canister_http_request_unknown_pricing_version_falls_back() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
+
+    let args = http_request_args_with_pricing_version(caller_canister, Some(42));
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_all();
+
+    let http_request_context = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
 }
 
 #[test]

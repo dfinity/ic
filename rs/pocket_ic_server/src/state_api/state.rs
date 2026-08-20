@@ -285,6 +285,8 @@ pub enum PocketIcError {
     SubnetRequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
+    NotAFlexibleCanisterHttpRequest((SubnetId, CanisterHttpRequestId)),
+    TooManyMockCanisterHttpResponses((usize, usize)),
     InvalidRejectCode(u64),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
@@ -346,6 +348,21 @@ impl std::fmt::Debug for OpOut {
                 write!(
                     f,
                     "InvalidMockCanisterHttpResponses(actual={actual},expected={expected})"
+                )
+            }
+            OpOut::Error(PocketIcError::NotAFlexibleCanisterHttpRequest((
+                subnet_id,
+                canister_http_request_id,
+            ))) => {
+                write!(
+                    f,
+                    "NotAFlexibleCanisterHttpRequest({subnet_id},{canister_http_request_id:?})"
+                )
+            }
+            OpOut::Error(PocketIcError::TooManyMockCanisterHttpResponses((actual, expected))) => {
+                write!(
+                    f,
+                    "TooManyMockCanisterHttpResponses(actual={actual},expected={expected})"
                 )
             }
             OpOut::Error(PocketIcError::InvalidRejectCode(code)) => {

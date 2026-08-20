@@ -9,8 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
+- The function `PocketIc::mock_flexible_canister_http_response` and the type `MockFlexibleCanisterHttpResponse` to mock the responses
+  of the committee nodes of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request`
+  management canister endpoint.
+  Unlike `PocketIc::mock_canister_http_response`, which requires exactly one response per node of the subnet, it takes at most
+  one response per node of the outcall's committee and those responses may differ.
+  Providing fewer responses than the committee size models the remaining committee nodes never responding, which is how
+  a timeout is mocked. All responses to an outcall must be provided in a single call.
+- The field `replication` of type `CanisterHttpReplication` on `CanisterHttpRequest`, describing how a pending canister HTTP
+  outcall is replicated across the nodes of its subnet: `FullyReplicated`, `NonReplicated`, or `Flexible` with the outcall's
+  `total_requests`, `min_responses`, and `max_responses`. The committee size of a flexible outcall (`total_requests`)
+  is the number of responses `PocketIc::mock_flexible_canister_http_response` accepts.
+- The field `pricing_version` of type `CanisterHttpPricingVersion` on `CanisterHttpRequest`, reporting whether a pending
+  canister HTTP outcall is priced with the `Legacy` or the `PayAsYouGo` pricing model.
+- Enabling beta features (`IcpConfig::beta_features` passed to `PocketIcBuilder::with_icp_config`) now also enables the
+  pay-as-you-go pricing model, which covers both the `flexible_http_request` management canister endpoint (whose outcalls are
+  always priced that way) and the `pricing_version` field of `http_request` (through which a fully replicated or non-replicated
+  outcall can select it). Without beta features, `flexible_http_request` is only available on subnets where HTTP outcalls are
+  free (system subnets and subnets with a free cycles cost schedule), where it falls back to the legacy pricing model, and an
+  `http_request` asking for pay-as-you-go pricing silently falls back to the legacy pricing model as well.
 
 ### Changed
+- Mocked canister HTTP responses report the cycles their node actually spent on the outcall, instead of reporting no spend at all.
+  This applies to both `PocketIc::mock_canister_http_response` and `PocketIc::mock_flexible_canister_http_response`. Under the
+  pay-as-you-go pricing model the reported spend is what determines the refund: the calling canister is refunded the unspent part
+  of the per-replica cycles allowance withheld from its payment, rather than all of it. It can also make an outcall fail with an
+  out-of-cycles error, if what the nodes report leaves too little to pay for delivering a response. Outcalls priced with the
+  legacy pricing model are unaffected, since it ignores the reported spend.
+- In the live mode, a response obtained by actually performing a canister HTTP outcall is attributed to the nodes that would have
+  performed the outcall (the whole subnet for a fully replicated outcall, the outcall's committee for a flexible one, the
+  designated node for a non-replicated one) instead of to every node of the subnet, and it reports the cycles actually spent on
+  the outcall.
 - No hard TTL is set on PocketIC servers started implicitly by the library (e.g. by `PocketIc::new` or `PocketIcBuilder::build`); previously a default of 10 minutes was used.
   The hard TTL is an absolute deadline measured from the server's launch which is not extended by activity, so a test suite whose total runtime exceeded it had its server terminated while still serving requests, failing in-flight calls with `Connection reset by peer`.
   Orphaned servers remain bounded by the (activity-based) soft TTL.

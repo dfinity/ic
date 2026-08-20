@@ -71,6 +71,14 @@ pub const DEFAULT_HTTP_OUTCALLS_PRICING_VERSION: u32 = PRICING_VERSION_LEGACY;
 /// If the pricing version provided in the request is not in this set, the request will use the default pricing version.
 pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS: &[u32] = &[PRICING_VERSION_LEGACY];
 
+/// The pricing versions an HTTP outcall may select on a subnet where the
+/// pay-as-you-go pricing model is enabled, i.e. the set that
+/// [`ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS`] widens to once the feature is
+/// available. Until then, a request asking for pay-as-you-go pricing falls back to
+/// [`DEFAULT_HTTP_OUTCALLS_PRICING_VERSION`] like any other unsupported version.
+pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO: &[u32] =
+    &[PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO];
+
 /// HTTP headers bounded by total size.
 pub type BoundedHttpHeaders = BoundedVec<
     HTTP_HEADERS_MAX_NUMBER,
@@ -431,8 +439,6 @@ pub struct FlexibleHttpRequestErr {
 /// Why the flexible HTTP outcall failed globally.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum FlexibleHttpGlobalError {
-    #[serde(rename = "invalid_parameters")]
-    InvalidParameters(candid::Reserved),
     #[serde(rename = "timeout")]
     Timeout(candid::Reserved),
     #[serde(rename = "out_of_cycles")]

@@ -11,6 +11,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The endpoint `/instances/<instance_id>/update/mock_flexible_canister_http` to mock the responses of the committee nodes
+  of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request` management canister endpoint.
+  Unlike `/instances/<instance_id>/update/mock_canister_http`, which requires exactly one response per node of the subnet,
+  it takes at most one response per node of the outcall's committee and those responses may differ.
+  Providing fewer responses than the committee size models the remaining committee nodes never responding.
+  All responses to an outcall must be provided in a single call.
+- The endpoint `/instances/<instance_id>/read/get_canister_http` reports two additional fields for every pending canister HTTP
+  outcall: `replication`, describing how the outcall is replicated across the nodes of its subnet (`FullyReplicated`,
+  `NonReplicated`, or `Flexible` with the outcall's `total_requests`, `min_responses`, and `max_responses`), and
+  `pricing_version`, reporting whether it is priced with the `Legacy` or the `PayAsYouGo` pricing model.
+- Enabling beta features (the field `beta_features` of `icp_config` when creating an instance) now also enables the
+  pay-as-you-go pricing model, which covers both the `flexible_http_request` management canister endpoint (whose outcalls
+  are always priced that way) and the `pricing_version` field of `http_request` (through which a fully replicated or
+  non-replicated outcall can select it). Without beta features, `flexible_http_request` is only available on subnets where
+  HTTP outcalls are free (system subnets and subnets with a free cycles cost schedule), where it falls back to the legacy
+  pricing model, and an `http_request` asking for pay-as-you-go pricing silently falls back to the legacy pricing model
+  as well.
+
+### Changed
+- Mocked canister HTTP responses report the cycles their node actually spent on the outcall, instead of reporting no spend at
+  all. This applies to both `/instances/<instance_id>/update/mock_canister_http` and
+  `/instances/<instance_id>/update/mock_flexible_canister_http`. Under the pay-as-you-go pricing model the reported spend is
+  what determines the refund: the calling canister is refunded the unspent part of the per-replica cycles allowance withheld
+  from its payment, rather than all of it. It can also make an outcall fail with an out-of-cycles error, if what the nodes
+  report leaves too little to pay for delivering a response. Outcalls priced with the legacy pricing model are unaffected,
+  since it ignores the reported spend.
+- In the live mode, a response obtained by actually performing a canister HTTP outcall is attributed to the nodes that would
+  have performed the outcall (the whole subnet for a fully replicated outcall, the outcall's committee for a flexible one,
+  the designated node for a non-replicated one) instead of to every node of the subnet, and it reports the cycles actually
+  spent on the outcall.
+
 
 
 ## 15.0.0 - 2026-06-26

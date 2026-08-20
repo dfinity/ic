@@ -2,7 +2,7 @@ use candid::{CandidType, Nat, Principal, define_function};
 use ic_cdk::api::{
     accept_message, canister_self, debug_print, instruction_counter, msg_arg_data, msg_reject,
 };
-use ic_cdk::call::{Call, Error as CallError, RejectCode};
+use ic_cdk::call::{Call, CallFailed, Error as CallError, RejectCode};
 use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::{inspect_message, query, trap, update};
 use ic_cdk_management_canister::{
@@ -53,6 +53,19 @@ impl RejectionCode {
 fn map_call_error(err: CallError) -> (RejectionCode, String) {
     match err {
         CallError::CallRejected(rejected) => (
+            RejectionCode::from_raw(rejected.raw_reject_code()),
+            rejected.reject_message().to_string(),
+        ),
+        // Nothing reached the callee, so there is no reject code to report.
+        other => (RejectionCode::Unknown, other.to_string()),
+    }
+}
+
+/// Translates a failed raw call into the reject code and message
+/// `flexible_canister_http` reports back over Candid.
+fn map_raw_call_error(err: CallFailed) -> (RejectionCode, String) {
+    match err {
+        CallFailed::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
         ),
@@ -427,6 +440,44 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpRequestRe
         is_replicated: None,
     };
     canister_http_outcall(&arg).await.unwrap()
+}
+
+/// Makes an HTTP outcall, passing `args` (a Candid-encoded `http_request_args`) to
+/// the management canister verbatim and attaching `cycles` cycles to the call.
+///
+/// Unlike `canister_http`, this lets the caller set fields that
+/// `ic-cdk-management-canister` does not expose, such as `pricing_version`.
+#[update]
+async fn canister_http_raw(
+    args: ByteBuf,
+    cycles: u128,
+) -> Result<ByteBuf, (RejectionCode, String)> {
+    Call::unbounded_wait(Principal::management_canister(), "http_request")
+        .with_raw_args(&args)
+        .with_cycles(cycles)
+        .await
+        .map(|response| ByteBuf::from(response.into_bytes()))
+        .map_err(map_raw_call_error)
+}
+
+/// Makes a flexible HTTP outcall, passing `args` (a Candid-encoded
+/// `flexible_http_request_args`) to the management canister verbatim and
+/// attaching `cycles` cycles to the call.
+///
+/// Both the argument and the result are passed through undecoded so that callers
+/// can use the authoritative Candid types instead of copies maintained here;
+/// `ic-cdk-management-canister` does not expose flexible HTTP outcalls (yet).
+#[update]
+async fn flexible_canister_http(
+    args: ByteBuf,
+    cycles: u128,
+) -> Result<ByteBuf, (RejectionCode, String)> {
+    Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
+        .with_raw_args(&args)
+        .with_cycles(cycles)
+        .await
+        .map(|response| ByteBuf::from(response.into_bytes()))
+        .map_err(map_raw_call_error)
 }
 
 // inter-canister calls

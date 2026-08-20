@@ -3,12 +3,13 @@ use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
-    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
-    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSenderInfo, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTickConfigs, RawTime, RawVerifyCanisterSigArg, SubnetId, Topology,
+    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse,
+    MockFlexibleCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest,
+    RawCanisterId, RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
+    RawCanisterSnapshotUpload, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawMockFlexibleCanisterHttpResponse, RawPrincipalId,
+    RawSenderInfo, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -1887,6 +1888,33 @@ impl PocketIc {
         let raw_mock_canister_http_response: RawMockCanisterHttpResponse =
             mock_canister_http_response.into();
         self.post(endpoint, raw_mock_canister_http_response).await
+    }
+
+    /// Mock the responses of the committee nodes of a pending *flexible* canister
+    /// HTTP outcall, i.e. one made through the `flexible_http_request` management
+    /// canister endpoint.
+    ///
+    /// Unlike `PocketIc::mock_canister_http_response`, which requires exactly one
+    /// response per node of the subnet, this takes at most one response per node
+    /// of the outcall's committee (whose size is the `total_requests` of the
+    /// outcall's `CanisterHttpReplication::Flexible` replication) and those
+    /// responses may differ. Providing fewer responses than the committee size
+    /// models the remaining committee nodes never responding, which is how a
+    /// timeout is mocked.
+    ///
+    /// All responses to an outcall must be provided in a single call: once any
+    /// response to it has been mocked, the outcall no longer shows up in
+    /// `PocketIc::get_canister_http` and further responses to it cannot be mocked.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn mock_flexible_canister_http_response(
+        &self,
+        mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse,
+    ) {
+        let endpoint = "update/mock_flexible_canister_http";
+        let raw_mock_flexible_canister_http_response: RawMockFlexibleCanisterHttpResponse =
+            mock_flexible_canister_http_response.into();
+        self.post(endpoint, raw_mock_flexible_canister_http_response)
+            .await
     }
 
     /// Download a canister snapshot to a given snapshot directory.

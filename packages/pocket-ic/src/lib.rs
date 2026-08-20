@@ -57,8 +57,9 @@ use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
         HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawSenderInfo,
-        RawSubnetBlockmakers, RawTickConfigs, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
+        MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawEffectivePrincipal,
+        RawMessageId, RawSenderInfo, RawSubnetBlockmakers, RawTickConfigs, RawTime, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -1660,6 +1661,34 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .mock_canister_http_response(mock_canister_http_response)
+                .await
+        })
+    }
+
+    /// Mock the responses of the committee nodes of a pending *flexible* canister
+    /// HTTP outcall, i.e. one made through the `flexible_http_request` management
+    /// canister endpoint.
+    ///
+    /// Unlike `PocketIc::mock_canister_http_response`, which requires exactly one
+    /// response per node of the subnet, this takes at most one response per node
+    /// of the outcall's committee (whose size is the `total_requests` of the
+    /// outcall's `CanisterHttpReplication::Flexible` replication) and those
+    /// responses may differ. Providing fewer responses than the committee size
+    /// models the remaining committee nodes never responding, which is how a
+    /// timeout is mocked.
+    ///
+    /// All responses to an outcall must be provided in a single call: once any
+    /// response to it has been mocked, the outcall no longer shows up in
+    /// `PocketIc::get_canister_http` and further responses to it cannot be mocked.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn mock_flexible_canister_http_response(
+        &self,
+        mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .mock_flexible_canister_http_response(mock_flexible_canister_http_response)
                 .await
         })
     }
