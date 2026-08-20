@@ -5,7 +5,9 @@ mod tests;
 
 use crate::asset::{Asset, Erc20Asset, EthAsset};
 use crate::deposit_address::DepositAddress;
-use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, rpc_client};
+use crate::eth_rpc_client::{
+    MIN_ATTACHED_CYCLES, NoReduction, ToReducedWithStrategy, balance_scan_rpc_client,
+};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
@@ -23,9 +25,7 @@ use ic_ethereum_types::Address;
 
 pub async fn balance_scan<T: TimeProvider>(time_provider: &T) {
     let now = Timestamp::from_nanos(time_provider.time());
-    // TODO DEFI-2923: use a lower threshold rpc client, e.g. 2-out-of-3 since we use latest block height
-    // and only to notify the sweeper (no minting)
-    let client = read_state(rpc_client);
+    let client = read_state(balance_scan_rpc_client);
     scan(now, client, time_provider).await;
 }
 
@@ -208,6 +208,10 @@ pub struct ScanErrors {
     pub(crate) call: u64,
 }
 
+/// Balances of one chunk, or `None` when its `eth_call` failed or its reply did not decode; either
+/// is tallied in `errors`. A reply without the client's minimum number of agreeing providers is
+/// such a failure: [`NoReduction`] never falls back to a single provider's answer, so one provider
+/// claiming an empty balance cannot hide a funded address.
 async fn chunk_balances<R: Runtime>(
     input: Vec<u8>,
     n: usize,
@@ -220,7 +224,7 @@ async fn chunk_balances<R: Runtime>(
         .with_cycles(MIN_ATTACHED_CYCLES)
         .try_send()
         .await
-        .reduce_with_strategy(AnyOf)
+        .reduce_with_strategy(NoReduction)
     {
         Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), n) {
             Ok(balances) => Some(balances),

@@ -30,6 +30,7 @@ use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositEthArg,
     DepositEthError, DepositEthResponse, DepositMode, MinterInfo,
 };
+use ic_cketh_minter::eth_rpc_client::Threshold;
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::{
     BALANCE_SCAN_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL,
@@ -51,6 +52,7 @@ use std::iter::{once, zip};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use strum::IntoEnumIterator;
 
 pub const DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
@@ -251,7 +253,10 @@ impl CkErc20Setup {
             .collect();
         MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
             .with_request_params_filter(EthCallInputStartsWith::batcher(kind))
-            .respond_for_all_with(balance_scan_response(&response))
+            .respond_for_providers_with(
+                JsonRpcProvider::iter().take(usize::from(Threshold::BALANCE_SCAN.total)),
+                balance_scan_response(&response),
+            )
             .build()
             .expect_rpc_calls(self);
         self.env.tick();
