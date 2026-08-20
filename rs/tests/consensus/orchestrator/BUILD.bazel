@@ -168,6 +168,20 @@ system_test_nns(
     backend = "farm",
     # 1 API BN + 1 System + 2 * 4 Cloud Engine = 10 IC Node VMs * 6 vCPUs.
     cpus = MIN_LOCAL_CPUS + 10 * DEFAULT_VCPUS_PER_VM,
+    # TODO: Re-enable this once a governance canister containing the relaxed
+    # `UpdateStandardEngineReplicaVersion` validation from PR 10939 has been
+    # released to mainnet (i.e. once `governance` in
+    # mainnet-canister-revisions.json points at such a version).
+    #
+    # Why: this test elects a second GuestOS/Replica version, and such versions
+    # are named `<commit>-test` (see `guestos_update` below). The mainnet
+    # governance canister still requires the replica version IDs in an
+    # `UpdateStandardEngineReplicaVersion` proposal to be 40-character
+    # hexadecimal strings, so it rejects the proposal that this test submits.
+    #
+    # The `_head_nns` variant, which runs against the governance canister built
+    # from this branch, keeps running daily, so the test is still covered.
+    enable_mainnet_nns_variant = False,
     # This is needed so that the test can elect a second Guestos/Replica version.
     guestos_update = "test",
     tags = [
