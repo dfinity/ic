@@ -957,8 +957,6 @@ fn test_next_idx_preserved_after_deallocate() {
 
 #[test]
 fn test_next_idx_preserved_when_appending_empty_delta_log() {
-    // Simulates migration from a canister_log that has no records but a
-    // non-zero next_idx (e.g. all records were evicted after uninstalling).
     let log_size = 4096;
     let next_idx = TEST_NEXT_IDX;
 
@@ -966,9 +964,9 @@ fn test_next_idx_preserved_when_appending_empty_delta_log() {
     store.resize_for_testing(log_size);
     assert_eq!(store.next_idx(), 0);
 
-    // Delta log with no records but next_idx > 0, as produced by CanisterLog
-    // after uninstalling a canister (uninstall clears records but keeps next_idx).
-    let mut empty_delta = ic_types::CanisterLog::new_aggregate(next_idx, vec![]);
+    // Delta log with no records but next_idx > 0, as produced by a message that
+    // emitted no log records after the store had already moved on.
+    let mut empty_delta = CanisterLog::new_delta_with_next_index(next_idx, log_size);
     assert!(empty_delta.is_empty());
 
     store.append_delta_log(&mut empty_delta);

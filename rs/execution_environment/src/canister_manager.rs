@@ -79,17 +79,6 @@ pub(crate) mod types;
 /// Maximum binary slice size allowed per single message download.
 const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 
-/// Instructions charged per byte of stored log data during log memory resize.
-///
-/// When the log memory limit changes, all existing records must be read from
-/// the old ring buffer into heap memory, re-encoded, and written into a newly
-/// allocated ring buffer. The cost is proportional to the bytes currently
-/// stored (not the allocated capacity).
-///
-/// TODO(DSM-11): Consider moving this constant into `CyclesAccountManagerConfig`
-/// alongside other per-byte fee parameters.
-const LOG_RESIZE_COST_PER_BYTE: u64 = 32;
-
 /// The entity responsible for managing canisters (creation, installing, etc.)
 pub(crate) struct CanisterManager {
     hypervisor: Arc<Hypervisor>,
@@ -614,7 +603,10 @@ impl CanisterManager {
             let log_resize_instructions = if log_resize_needed {
                 let log_bytes_used_before =
                     NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
-                NumInstructions::new(log_bytes_used_before.get() * LOG_RESIZE_COST_PER_BYTE)
+                NumInstructions::new(
+                    log_bytes_used_before.get()
+                        * self.config.canister_log_resize_instructions_per_byte.get(),
+                )
             } else {
                 NumInstructions::new(0)
             };
