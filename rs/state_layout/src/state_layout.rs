@@ -20,8 +20,8 @@ use ic_replicated_state::{
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound, Height,
-    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
+    CanisterId, CanisterTimer, ComputeAllocation, ExecutionRound, Height, MemoryAllocation,
+    NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils::thread::maybe_parallel_map;
@@ -212,9 +212,6 @@ pub struct CanisterStateBits {
     pub snapshot_visibility: SnapshotVisibility,
     pub status_visibility: StatusVisibility,
     pub log_memory_limit: NumBytes,
-    pub canister_log: CanisterLog,
-    pub next_canister_log_record_idx: u64,
-    pub log_memory_store_migrated: bool,
     pub log_memory_store_persistent_next_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
@@ -496,13 +493,16 @@ impl TipHandler {
     }
 
     /// Deletes canisters from tip if they are not in `ids`.
+    ///
+    /// Returns the IDs of the deleted canisters.
     pub fn filter_tip_canisters(
         &mut self,
         height: Height,
         ids: &BTreeSet<CanisterId>,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<Vec<CanisterId>, LayoutError> {
         let tip = self.tip(height)?;
         let canisters_on_disk = tip.canister_ids()?;
+        let mut deleted_canister_ids = Vec::new();
         for id in canisters_on_disk {
             if !ids.contains(&id) {
                 let canister_path = tip.canister(&id)?.raw_path();
@@ -511,9 +511,10 @@ impl TipHandler {
                     message: "Cannot remove canister.".to_string(),
                     io_err: err,
                 })?;
+                deleted_canister_ids.push(id);
             }
         }
-        Ok(())
+        Ok(deleted_canister_ids)
     }
 
     /// Deletes snapshots from tip if they are not in `ids`.

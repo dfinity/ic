@@ -59,8 +59,8 @@ use ic_types::messages::{
 };
 use ic_types::{
     CanisterId, CanisterTimer, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
-    MIN_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes, NumInstructions, PrincipalId, SnapshotId, Time,
+    MAX_STABLE_MEMORY_IN_BYTES, MIN_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes, NumInstructions,
+    PrincipalId, SnapshotId, Time,
 };
 use ic_types_cycles::{
     CanisterCreation, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
@@ -78,17 +78,6 @@ pub(crate) mod types;
 
 /// Maximum binary slice size allowed per single message download.
 const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
-
-/// Instructions charged per byte of stored log data during log memory resize.
-///
-/// When the log memory limit changes, all existing records must be read from
-/// the old ring buffer into heap memory, re-encoded, and written into a newly
-/// allocated ring buffer. The cost is proportional to the bytes currently
-/// stored (not the allocated capacity).
-///
-/// TODO(DSM-11): Consider moving this constant into `CyclesAccountManagerConfig`
-/// alongside other per-byte fee parameters.
-const LOG_RESIZE_COST_PER_BYTE: u64 = 32;
 
 /// The entity responsible for managing canisters (creation, installing, etc.)
 pub(crate) struct CanisterManager {
@@ -614,7 +603,10 @@ impl CanisterManager {
             let log_resize_instructions = if log_resize_needed {
                 let log_bytes_used_before =
                     NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
-                NumInstructions::new(log_bytes_used_before.get() * LOG_RESIZE_COST_PER_BYTE)
+                NumInstructions::new(
+                    log_bytes_used_before.get()
+                        * self.config.canister_log_resize_instructions_per_byte.get(),
+                )
             } else {
                 NumInstructions::new(0)
             };
@@ -2446,23 +2438,9 @@ impl CanisterManager {
                         });
             }
 
-            // The snapshot's Wasm and stable memory must fit within the limits
-            // for the loaded module's execution mode.
-            let wasm_memory_limit = match new_execution_state.wasm_execution_mode {
-                WasmExecutionMode::Wasm32 => MAX_WASM_MEMORY_IN_BYTES,
-                WasmExecutionMode::Wasm64 => MAX_WASM64_MEMORY_IN_BYTES,
-            };
-            let snapshot_wasm_memory_bytes =
-                execution_snapshot.wasm_memory.size.get() as u64 * WASM_PAGE_SIZE_IN_BYTES as u64;
-            if snapshot_wasm_memory_bytes > wasm_memory_limit {
-                return Err(CanisterManagerError::CanisterSnapshotInconsistent {
-                    message: format!(
-                        "Snapshot Wasm memory ({snapshot_wasm_memory_bytes} bytes) exceeds the \
-                         limit allowed for the snapshot module's execution mode \
-                         ({wasm_memory_limit} bytes)."
-                    ),
-                });
-            }
+            // The snapshot's Wasm memory is validated against the loaded module
+            // by `create_execution_state` above; the snapshot's stable memory
+            // must fit within the limit allowed.
             let snapshot_stable_memory_bytes =
                 execution_snapshot.stable_memory.size.get() as u64 * WASM_PAGE_SIZE_IN_BYTES as u64;
             if snapshot_stable_memory_bytes > MAX_STABLE_MEMORY_IN_BYTES {

@@ -14,8 +14,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnet
 use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput,
     wasm_executor::{
-        CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
-        WasmExecutionResult, WasmExecutor,
+        CanisterStateChanges, CreatedExecutionState, ExecutionStateChanges, PausedWasmExecution,
+        SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
     },
     wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters,
@@ -306,7 +306,7 @@ impl SchedulerTest {
             wasm_executor
                 .create_execution_state(CanisterModule::new(wasm_source), canister_id)
                 .unwrap()
-                .0,
+                .execution_state,
         );
         canister_state
             .system_state
@@ -1280,7 +1280,7 @@ impl WasmExecutor for TestWasmExecutor {
         canister_module: CanisterModule,
         canister_id: CanisterId,
         _compilation_cache: Arc<CompilationCache>,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+    ) -> HypervisorResult<CreatedExecutionState> {
         let mut guard = self.core.lock().unwrap();
         guard.create_execution_state(canister_module, canister_id)
     }
@@ -1422,7 +1422,7 @@ impl TestWasmExecutorCore {
         &mut self,
         canister_module: CanisterModule,
         _canister_id: CanisterId,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+    ) -> HypervisorResult<CreatedExecutionState> {
         let mut exported_functions = vec![
             WasmMethod::Update("update".into()),
             WasmMethod::System(SystemMethod::CanisterPostUpgrade),
@@ -1444,11 +1444,12 @@ impl TestWasmExecutorCore {
             WasmMetadata::default(),
         );
         let compilation_result = CompilationResult::empty_for_testing();
-        Ok((
+        Ok(CreatedExecutionState {
             execution_state,
-            NumInstructions::from(0),
-            Some(compilation_result),
-        ))
+            compilation_cost: NumInstructions::from(0),
+            compilation_result: Some(compilation_result),
+            declares_wasm_memory: true,
+        })
     }
 
     fn perform_calls(

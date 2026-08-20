@@ -3,7 +3,7 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
-use crate::state::transactions::EthTransactions;
+use crate::state::transactions::WithdrawalTransactions;
 use crate::state::{InvalidStateError, State};
 use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
 use candid::types::number::Nat;
@@ -97,7 +97,7 @@ impl TryFrom<InitArg> for State {
             ecdsa_key_name,
             pending_withdrawal_principals: Default::default(),
             pending_deposit_principals: Default::default(),
-            eth_transactions: EthTransactions::new(initial_nonce),
+            withdrawal_transactions: WithdrawalTransactions::new(initial_nonce),
             cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
             ethereum_block_height,
@@ -120,6 +120,7 @@ impl TryFrom<InitArg> for State {
             log_scrapings,
             automatic_deposits: AutomaticDeposits::default(),
             sweeper_contract_address,
+            sweeper_funding: Default::default(),
         };
         state.validate_config()?;
         Ok(state)

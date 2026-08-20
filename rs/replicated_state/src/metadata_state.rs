@@ -434,8 +434,11 @@ pub struct SubnetTopology {
     ///    expiring message statuses;
     ///  * (on all subnets) no messages are routed to a cooling down subnet --
     ///    including into the cooling down subnet's own loopback stream -- but
-    ///    retained in their respective output queues, so that the respective
-    ///    streams can be emptied.
+    ///    retained in their respective output queues, so that streams to the
+    ///    cooling down subnet can be emptied;
+    ///  * it routes no messages from its canisters' output queues into streams
+    ///    -- including its own loopback stream -- but retains them in output
+    ///    queues, so streams from the cooling down subnet can be emptied.
     pub cooling_down: bool,
 }
 
@@ -999,6 +1002,10 @@ impl SystemMetadata {
     ///
     /// In phase 2 (see [`Self::after_split()`]) the ingress history is pruned and
     /// the split marker is reset.
+    ///
+    /// `unflushed_checkpoint_ops` (holding the delete operations recorded by
+    /// `ReplicatedState::split()` for the canisters dropped by the split) is preserved
+    /// on both subnets, so that the dropped canisters' directories are deleted from tip.
     pub fn split(
         mut self,
         subnet_id: SubnetId,
@@ -1030,6 +1037,10 @@ impl SystemMetadata {
 
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
+
+        // Preserve the delete operations recorded by `ReplicatedState::split()` for the
+        // canisters dropped by the split, so that their directories are deleted from tip.
+        res.unflushed_checkpoint_ops = self.unflushed_checkpoint_ops;
 
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
@@ -1191,8 +1202,9 @@ impl SystemMetadata {
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
     ///  * `unflushed_checkpoint_ops` contains both arbitrary pending operations;
-    ///    and delete operations for the snapshots of non-local canisters. It is
-    ///    therefore preserved untouched.
+    ///    and the delete operations recorded by `ReplicatedState::online_split()`
+    ///    for the canisters dropped by the split. It is therefore preserved
+    ///    untouched.
     pub fn online_split(
         self,
         subnet_id: SubnetId,
@@ -1334,7 +1346,7 @@ impl SystemMetadata {
             // retaining everything else on subnet A'.
             blockmaker_metrics_time_series,
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
-            // for the snapshots of no longer hosted canisters.
+            // for the canisters dropped by the split.
             unflushed_checkpoint_ops,
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.

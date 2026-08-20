@@ -656,7 +656,8 @@ fn merge_subnet_record(
 mod tests {
     use super::*;
     use crate::common::test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        add_fake_subnet, add_guest_launch_measurements_to_replica_version,
+        get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes, prepare_registry_with_nodes_and_chip_id,
     };
     use ic_management_canister_types_private::{
@@ -1246,9 +1247,14 @@ mod tests {
 
     /// Same as `make_registry_for_update_subnet_tests`, but the subnet is
     /// created with `sev_enabled = true` on top of nodes that have a chip ID,
-    /// so that the SEV invariant is satisfied.
+    /// and it runs a GuestOS version that has launch measurements, so that the
+    /// SEV invariants are satisfied.
     fn make_sev_enabled_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
+        add_guest_launch_measurements_to_replica_version(
+            &mut registry,
+            ReplicaVersion::default().as_ref(),
+        );
 
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
