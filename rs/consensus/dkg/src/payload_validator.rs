@@ -284,6 +284,7 @@ mod tests {
         },
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         messages::CallbackId,
+        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
     use std::{
@@ -793,9 +794,11 @@ mod tests {
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
-                node_id,
-                subnet_id,
-                test_replica_version(),
+                ReplicaConfig {
+                    node_id,
+                    subnet_id,
+                    replica_version: test_replica_version(),
+                },
                 registry.clone(),
                 state_manager.clone(),
                 crypto.clone(),

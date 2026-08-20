@@ -619,9 +619,7 @@ fn start_consensus(
     join_handles.push(create_artifact_handler(
         abortable_broadcast_channels.dkg,
         ic_consensus_dkg::DkgImpl::new(
-            node_id,
-            subnet_id,
-            replica_version,
+            replica_config.clone(),
             Arc::clone(&registry_client),
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_crypto),
@@ -669,7 +667,7 @@ fn start_consensus(
             Arc::new(Mutex::new(canister_http_adapter_client)),
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
-            replica_config.clone(),
+            replica_config,
             subnet_type,
             Arc::clone(&registry_client),
             metrics_registry.clone(),

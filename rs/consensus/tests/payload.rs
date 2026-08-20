@@ -194,9 +194,7 @@ fn consensus_produces_expected_batches() {
         let consensus_bouncer =
             ic_consensus::consensus::ConsensusBouncer::new(&metrics_registry, router.clone());
         let dkg = ic_consensus_dkg::DkgImpl::new(
-            replica_config.node_id,
-            replica_config.subnet_id,
-            replica_config.replica_version.clone(),
+            replica_config.clone(),
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,

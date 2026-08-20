@@ -1435,14 +1435,7 @@ mod tests {
             };
 
             let fake_tape_share = |height: Height, node_id: NodeId| {
-                RandomTapeShare::fake(
-                    RandomTapeContent {
-                        version: test_replica_version(),
-                        height,
-                    },
-                    node_id,
-                )
-                .into_message()
+                RandomTapeShare::fake(height, node_id).into_message()
             };
 
             // Create shares from 5 nodes for 20 heights, only add aggregates below height 15.

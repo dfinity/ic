@@ -4,7 +4,7 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
 use ic_types::{
     CryptoHashOfPartialState, Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
@@ -272,13 +272,16 @@ impl FakeContentSigner<&RandomBeacon> for RandomBeaconShare {
     }
 }
 
-impl FakeContentSigner<RandomTapeContent> for RandomTapeShare {
-    fn fake(content: RandomTapeContent, signer: NodeId) -> RandomTapeShare {
+impl FakeContentSigner<Height> for RandomTapeShare {
+    fn fake(height: Height, signer: NodeId) -> RandomTapeShare {
         let signature = ThresholdSignatureShare {
             signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![])),
             signer,
         };
-        Signed { content, signature }
+        Signed {
+            content: RandomTapeContent::new(height, test_replica_version()),
+            signature,
+        }
     }
 }
 
