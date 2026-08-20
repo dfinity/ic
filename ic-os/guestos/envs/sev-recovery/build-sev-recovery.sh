@@ -23,9 +23,12 @@ base_version=""
 proposal_id=""
 for arg in "$@"; do
     case "$arg" in
-        --base=*)     base_version="${arg#--base=}" ;;
+        --base=*) base_version="${arg#--base=}" ;;
         --proposal=*) proposal_id="${arg#--proposal=}" ;;
-        *) echo "unknown argument: $arg" >&2; exit 1 ;;
+        *)
+            echo "unknown argument: $arg" >&2
+            exit 1
+            ;;
     esac
 done
 
