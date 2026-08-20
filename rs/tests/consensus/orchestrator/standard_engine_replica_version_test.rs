@@ -91,6 +91,7 @@ use anyhow::Result;
 use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
+use futures::future;
 use ic_base_types::SubnetId;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_upgrade_common::elect_target_version;
@@ -165,13 +166,13 @@ fn setup(env: TestEnv) {
 
 /// Creates a Cloud Engine with a blank `replica_version_id` out of
 /// `node_ids`, and returns its (new) subnet ID.
-fn create_engine(
+async fn create_engine(
     engine_controller: &Canister<'_>,
     sender: &Sender,
     node_ids: Vec<Principal>,
 ) -> SubnetId {
-    let create_engine_result: Result<NewSubnet, String> =
-        block_on(engine_controller.update_from_sender(
+    let create_engine_result: Result<NewSubnet, String> = engine_controller
+        .update_from_sender(
             "create_engine",
             candid_one,
             CreateEngineArgs {
@@ -180,7 +181,8 @@ fn create_engine(
                 replica_version_id: "".to_string(),
             },
             sender,
-        ))
+        )
+        .await
         .expect("create_engine call failed");
     create_engine_result
         .expect("create_engine returned an error")
@@ -254,13 +256,12 @@ fn test(env: TestEnv) {
         logger,
         "Creating 2 Cloud Engines with blank `replica_version_id`..."
     );
-    let engine_subnet_ids: Vec<SubnetId> = unassigned_node_ids
-        .chunks(ENGINE_NODE_COUNT)
-        .map(|node_ids| create_engine(&engine_controller, &proposal_sender, node_ids.to_vec()))
-        .collect();
-    let [engine_a_id, engine_b_id]: [SubnetId; NUM_ENGINES] = engine_subnet_ids
-        .try_into()
-        .expect("expected exactly 2 Cloud Engine subnet IDs");
+    let (node_ids_a, node_ids_b) = unassigned_node_ids.split_at(ENGINE_NODE_COUNT);
+    // Create both Cloud Engines concurrently, to save time.
+    let (engine_a_id, engine_b_id) = block_on(future::join(
+        create_engine(&engine_controller, &proposal_sender, node_ids_a.to_vec()),
+        create_engine(&engine_controller, &proposal_sender, node_ids_b.to_vec()),
+    ));
     info!(
         logger,
         "Created Cloud Engines: subnets {engine_a_id} and {engine_b_id}"

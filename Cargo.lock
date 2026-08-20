@@ -2452,6 +2452,7 @@ dependencies = [
  "canister-test",
  "consensus-upgrade-system-tests",
  "dfn_candid",
+ "futures",
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
