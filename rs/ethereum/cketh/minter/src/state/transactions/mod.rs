@@ -17,8 +17,9 @@ use crate::numeric::{
     TransactionNonce, Wei,
 };
 use crate::tx::{
-    Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate,
-    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+    Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate, SignableTransaction,
+    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionPrice,
+    TransactionRequest,
 };
 use candid::Principal;
 use ic_canister_log::log;
@@ -1420,14 +1421,15 @@ impl TransactionCallData {
 /// * `max_fee_per_gas`
 /// * `max_priority_fee_per_gas`
 /// * `amount` (because the cost of the transaction is paid by the beneficiary and so influencing the fee does influence the transaction amount)
-fn equal_ignoring_fee_and_amount(
-    lhs: &Eip1559TransactionRequest,
-    rhs: &Eip1559TransactionRequest,
-) -> bool {
-    let mut rhs_with_lhs_fee_and_amount = rhs.clone();
-    rhs_with_lhs_fee_and_amount.max_fee_per_gas = lhs.max_fee_per_gas;
-    rhs_with_lhs_fee_and_amount.max_priority_fee_per_gas = lhs.max_priority_fee_per_gas;
-    rhs_with_lhs_fee_and_amount.amount = lhs.amount;
+fn equal_ignoring_fee_and_amount<T: SignableTransaction + Eq>(lhs: &T, rhs: &T) -> bool {
+    let rhs_with_lhs_fee_and_amount = rhs.with_price_and_amount(
+        TransactionPrice {
+            gas_limit: rhs.gas_limit(),
+            max_fee_per_gas: lhs.max_fee_per_gas(),
+            max_priority_fee_per_gas: lhs.max_priority_fee_per_gas(),
+        },
+        *lhs.amount(),
+    );
 
     lhs == &rhs_with_lhs_fee_and_amount
 }

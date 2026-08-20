@@ -1,5 +1,6 @@
 use super::{
-    AccessList, SignableTransaction, Signed, compute_recovery_id, encode_u256, split_in_two,
+    AccessList, SignableTransaction, Signed, TransactionPrice, compute_recovery_id, encode_u256,
+    split_in_two,
 };
 use crate::{
     eth_rpc::Hash,
@@ -18,8 +19,6 @@ const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
 /// Immutable signed EIP-7702 transaction.
 /// Use [`sign`](super::sign) to create a newly signed transaction or
 /// `SignedEip7702TransactionRequest::from()` if the signature is already known.
-// TODO(DEFI-2926): mirror the `Resubmittable`/fee-bump machinery used for EIP-1559 transactions
-// once EIP-7702 transactions are wired into the resubmission path.
 pub type SignedEip7702TransactionRequest = Signed<Eip7702TransactionRequest>;
 
 /// <https://eips.ethereum.org/EIPS/eip-7702>
@@ -187,5 +186,27 @@ impl SignableTransaction for Eip7702TransactionRequest {
 
     fn max_priority_fee_per_gas(&self) -> WeiPerGas {
         self.max_priority_fee_per_gas
+    }
+
+    fn destination(&self) -> &Address {
+        &self.destination
+    }
+
+    fn amount(&self) -> &Wei {
+        &self.amount
+    }
+
+    fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    fn with_price_and_amount(&self, price: TransactionPrice, amount: Wei) -> Self {
+        Self {
+            max_priority_fee_per_gas: price.max_priority_fee_per_gas,
+            max_fee_per_gas: price.max_fee_per_gas,
+            gas_limit: price.gas_limit,
+            amount,
+            ..self.clone()
+        }
     }
 }
