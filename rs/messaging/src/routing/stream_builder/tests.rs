@@ -1356,7 +1356,7 @@ mod cooling_down {
     fn push_subnet_output_response(state: &mut ReplicatedState, response: Arc<Response>) {
         state
             .push_input(
-RequestBuilder::new()
+                RequestBuilder::new()
                     .sender(response.originator)
                     .receiver(response.respondent)
                     .sender_reply_callback(response.originator_reply_callback)
