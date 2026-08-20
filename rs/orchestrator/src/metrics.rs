@@ -17,6 +17,7 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) replica_version_upgrade_prevented: IntCounterVec,
     pub(crate) critical_error_cup_deserialization_failed: IntCounter,
     pub(crate) critical_error_state_removal_failed: IntCounter,
+    pub(crate) critical_error_observed_scheduled_splitting_cup: IntCounter,
     pub(crate) fstrim_duration: IntGauge,
     pub(crate) critical_error_task_failed: IntCounterVec,
     pub(crate) processes_start_attempts: IntCounterVec,
@@ -97,6 +98,10 @@ impl OrchestratorMetrics {
             critical_error_state_removal_failed: metrics_registry.int_counter(
                 "orchestrator_state_removal_failed_total",
                 "Number of times removing the local node state failed",
+            ),
+            critical_error_observed_scheduled_splitting_cup: metrics_registry.int_counter(
+                "orchestrator_observed_scheduled_splitting_cup_total",
+                "Number of times the orchestrator observed a scheduled splitting CUP",
             ),
             fstrim_duration: metrics_registry.int_gauge(
                 "orchestrator_fstrim_duration_milliseconds",
