@@ -171,6 +171,18 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         tools = ["//:fuse2fs"],
     )
 
+    ext4_image(
+        name = "partition-boot-alternative.tzst",
+        src = ":alternative_guestos_base_bootfs_tree_tar",
+        file_contexts = ":file_contexts",
+        partition_size = image_deps["bootfs_size"],
+        target_compatible_with = ["@platforms//os:linux"],
+        extra_files = {
+            ":alternative_guestos_proposal.cbor": "/alternative_guestos_proposal.cbor:0644",
+        },
+        tags = ["manual", "no-cache"],
+    )
+
     # -------------------- Extract root and boot partitions --------------------
 
     # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
@@ -220,38 +232,25 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             tags = ["manual", "no-cache"],
         )
 
-        if build_alternative_guestos_image:
-            ext4_image(
-                name = partition_boot_tzst,
-                src = ":alternative_guestos_base_bootfs_tree_tar",
-                file_contexts = ":file_contexts",
-                partition_size = image_deps["bootfs_size"],
-                target_compatible_with = ["@platforms//os:linux"],
-                extra_files = {
-                    ":alternative_guestos_proposal.cbor": "/alternative_guestos_proposal.cbor:0644",
-                },
-                tags = ["manual", "no-cache"],
-            )
-        else:
-            ext4_image(
-                name = partition_boot_tzst,
-                src = ":rootfs-tree.tar",
-                file_contexts = ":file_contexts",
-                partition_size = image_deps["bootfs_size"],
-                subdir = "boot",
-                target_compatible_with = ["@platforms//os:linux"],
-                extra_files = {
-                    k: v
-                    for k, v in (
-                        image_deps["bootfs"].items() + [
-                            (version_txt, "/version.txt:0644"),
-                            (boot_args, "/boot_args:0644"),
-                            (image_deps["grub_config"], "/grub.cfg:0644"),
-                        ]
-                    )
-                },
-                tags = ["manual", "no-cache"],
-            )
+        ext4_image(
+            name = partition_boot_tzst,
+            src = ":rootfs-tree.tar",
+            file_contexts = ":file_contexts",
+            partition_size = image_deps["bootfs_size"],
+            subdir = "boot",
+            target_compatible_with = ["@platforms//os:linux"],
+            extra_files = {
+                k: v
+                for k, v in (
+                    image_deps["bootfs"].items() + [
+                        (version_txt, "/version.txt:0644"),
+                        (boot_args, "/boot_args:0644"),
+                        (image_deps["grub_config"], "/grub.cfg:0644"),
+                    ]
+                )
+            },
+            tags = ["manual", "no-cache"],
+        )
 
         # Extract individual files (boot args, initrd, vmlinuz, OVMF firmware) from the
         # boot partition image for use in launch measurement generation and boot arg aliasing.
@@ -262,7 +261,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
 
         native.genrule(
             name = "extract_boot_partition_files" + test_suffix,
-            srcs = [":" + partition_boot_tzst],
+            srcs = [":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":" + partition_boot_tzst],
             outs = [
                 extracted_boot_args,
                 extracted_initrd,
@@ -438,7 +437,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
     partitions = [
         "//ic-os/bootloader:partition-esp.tzst",
         ":partition-grub.tzst",
-        ":partition-boot.tzst",
+        ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot.tzst",
         ":partition-root.tzst",
     ] + custom_partitions
 
@@ -483,7 +482,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
 
             upgrade_image(
                 name = update_image_tar,
-                boot_partition = ":partition-boot" + test_suffix + ".tzst",
+                boot_partition = ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot" + test_suffix + ".tzst",
                 root_partition = ":partition-root" + test_suffix + ".tzst",
                 tags = ["manual", "no-cache"],
                 target_compatible_with = ["@platforms//os:linux"],
