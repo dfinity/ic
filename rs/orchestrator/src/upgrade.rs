@@ -218,10 +218,15 @@ impl Upgrade {
                 match nidkg_id.target_subnet {
                     NiDkgTargetSubnet::Local => nidkg_id.dealer_subnet,
                     NiDkgTargetSubnet::Remote(_) => {
-                        // If this CUP was created by a remote subnet, then it is a genesis/recovery
-                        // CUP. This is the only case in the branch where we can trust the subnet ID
-                        // of the latest registry version, as switching to a registry CUP "resets" the
-                        // "oldest registry version in use" which is responsible for subnet membership.
+                        // If this CUP was created by a remote subnet, then it is a
+                        // genesis/recovery/post-split CUP.
+                        // It is actually not possible to be a post-split CUP because for it to not
+                        // be deserializable, we must have just upgraded to a new replica version.
+                        // But the registry ensures the subnet record (including its replica
+                        // version) cannot change during a subnet split.
+                        // For genesis/recovery CUPs, we can read the subnet ID of the latest
+                        // registry version, as switching to them "resets" the "oldest registry
+                        // version in use" which is responsible for subnet membership.
                         match self.registry.get_subnet_id(latest_registry_version) {
                             Ok(subnet_id) => subnet_id,
                             Err(OrchestratorError::NodeUnassignedError(_, _)) => {
@@ -323,7 +328,7 @@ impl Upgrade {
             info!(
                 self.logger,
                 "The latest CUP (registry version={}, height={}) is unsigned: \
-                a subnet genesis/recovery/split is in progress",
+                a subnet genesis/recovery is in progress",
                 latest_cup.content.registry_version(),
                 latest_cup.height(),
             );
