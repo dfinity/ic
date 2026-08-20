@@ -151,6 +151,7 @@ system_test(
 
 system_test_nns(
     name = "standard_engine_replica_version_test",
+    # TODO: Remove this once PR 11208 is in master.
     # Why: This test needs an API Boundary Node, and those do not work
     # when you do `bazel test //rs/tests:widget_test_local`. This test
     # only works, when run in Farm. This blocks `_local`.
