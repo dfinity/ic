@@ -1460,7 +1460,7 @@ impl ReplicatedState {
         // enforce an explicit decision whenever new fields are added.
         let Self {
             mut canister_states,
-            metadata,
+            mut metadata,
             mut subnet_queues,
             mut refunds,
             consensus_queue,
@@ -1470,15 +1470,28 @@ impl ReplicatedState {
         // Consensus queue is always empty at the end of the round.
         assert!(consensus_queue.is_empty());
 
-        // Retain only canisters hosted by `own_subnet_id`.
+        // Retain only canisters hosted by `subnet_id`; and record the removal of the
+        // others, so that their directories are deleted from tip by the flush of these
+        // operations, making `TipRequest::FilterTipCanisters` a pure safety net.
         //
         // TODO: Validate that canisters are split across no more than 2 subnets.
-        canister_states.retain(|canister_id, _| {
+        let is_local_canister = |canister_id: &CanisterId| {
             routing_table
                 .lookup_entry(*canister_id)
                 .map(|(_range, subnet_id)| subnet_id)
                 == Some(subnet_id)
-        });
+        };
+        let dropped_canister_ids: Vec<CanisterId> = canister_states
+            .all_keys()
+            .filter(|canister_id| !is_local_canister(canister_id))
+            .cloned()
+            .collect();
+        canister_states.retain(|canister_id, _| is_local_canister(canister_id));
+        for canister_id in dropped_canister_ids {
+            metadata
+                .unflushed_checkpoint_ops
+                .delete_canister(canister_id);
+        }
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //
