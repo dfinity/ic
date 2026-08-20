@@ -115,6 +115,10 @@ gh api repos/dfinity/ic/pulls/<PULL_REQUEST_NUMBER>/requested_reviewers --method
 ```
 where `<PULL_REQUEST_NUMBER>` is the number of the Pull Request.
 
+The review effort level is not part of that request — neither the REST body nor
+GraphQL takes one. It comes from the repository default, which is set to
+`Balanced` (repo Settings -> Copilot -> Code review -> Review effort level).
+
 To confirm the request landed, check the issue timeline for a `review_requested`
 event naming `Copilot`:
 ```
