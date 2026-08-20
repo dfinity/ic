@@ -212,6 +212,34 @@ async fn send_request(
     result
 }
 
+/// Performs a non-replicated HTTP outcall from a *composite query*.
+///
+/// No cycles are attached: `ic0.call_cycles_add` traps in a composite query, and
+/// an outcall made from a query is not charged for.
+#[query(composite = true)]
+async fn send_request_from_query(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let raw_response = Call::unbounded_wait(Principal::management_canister(), "http_request")
+        .with_raw_args(&request.request.encode())
+        .await
+        .map(|response| response.into_bytes())
+        .map_err(map_call_error)?;
+
+    let decoded: CanisterHttpResponsePayload = candid::utils::decode_one(&raw_response)
+        .expect("Failed to decode CanisterHttpResponsePayload");
+    let response_headers = decoded
+        .headers
+        .into_iter()
+        .map(|header| (header.name, header.value))
+        .collect();
+    Ok(RemoteHttpResponse::new(
+        decoded.status,
+        response_headers,
+        String::from_utf8_lossy(&decoded.body).to_string(),
+    ))
+}
+
 #[query]
 async fn check_response(
     url: String,
