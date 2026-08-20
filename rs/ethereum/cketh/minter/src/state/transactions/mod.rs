@@ -587,7 +587,7 @@ pub enum CreateTransactionError {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum ResubmitTransactionError<Id = LedgerBurnIndex> {
+pub enum ResubmitTransactionError<Id> {
     InsufficientTransactionFee {
         id: Id,
         transaction_nonce: TransactionNonce,
@@ -632,13 +632,13 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
 
     pub fn record_request<Req: Into<R>>(&mut self, request: Req) {
         let request = request.into();
-        let burn_index = request.id();
-        if self.pending_requests.iter().any(|r| r.id() == burn_index)
-            || self.created_tx.contains_alt(&burn_index)
-            || self.sent_tx.contains_alt(&burn_index)
-            || self.finalized_tx.contains_alt(&burn_index)
+        let id = request.id();
+        if self.pending_requests.iter().any(|r| r.id() == id)
+            || self.created_tx.contains_alt(&id)
+            || self.sent_tx.contains_alt(&id)
+            || self.finalized_tx.contains_alt(&id)
         {
-            panic!("BUG: duplicate transaction id {burn_index}");
+            panic!("BUG: duplicate transaction id {id}");
         }
         self.pending_requests.push_back(request);
     }
@@ -713,18 +713,14 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
             "BUG: mismatch between sent transaction and created transaction"
         );
         let signed_tx = created_tx.clone_resubmission_strategy(signed_transaction);
-        let (nonce, ledger_burn_index, _created_tx) = self
+        let (nonce, id, _created_tx) = self
             .created_tx
             .remove_entry(&signed_tx.as_ref().nonce())
             .expect("BUG: missing created transaction");
         if let Some(sent_tx) = self.sent_tx.get_mut(&nonce) {
             sent_tx.push(signed_tx);
         } else {
-            assert_eq!(
-                self.sent_tx
-                    .try_insert(nonce, ledger_burn_index, vec![signed_tx]),
-                Ok(())
-            );
+            assert_eq!(self.sent_tx.try_insert(nonce, id, vec![signed_tx]), Ok(()));
         }
     }
 
@@ -747,15 +743,15 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
         // The nonce of the first pending transaction is then exactly c.
         let first_pending_tx_nonce: TransactionNonce = latest_transaction_count.change_units();
         let mut transactions_to_resubmit = Vec::new();
-        for (nonce, burn_index, signed_tx) in self
+        for (nonce, id, signed_tx) in self
             .sent_tx
             .iter()
-            .filter(|(nonce, _burn_index, _signed_tx)| *nonce >= &first_pending_tx_nonce)
+            .filter(|(nonce, _id, _signed_tx)| *nonce >= &first_pending_tx_nonce)
         {
             let last_signed_tx = signed_tx.last().expect("BUG: empty sent transactions list");
             match last_signed_tx.resubmit(current_gas_fee.clone()) {
                 Ok(Some(new_tx)) => {
-                    transactions_to_resubmit.push(Ok((*burn_index, new_tx)));
+                    transactions_to_resubmit.push(Ok((*id, new_tx)));
                 }
                 Ok(None) => {
                     // the transaction fee is still up-to-date but because the transaction did not get included,
@@ -768,7 +764,7 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
                 }) => {
                     transactions_to_resubmit.push(Err(
                         ResubmitTransactionError::InsufficientTransactionFee {
-                            id: *burn_index,
+                            id: *id,
                             transaction_nonce: *nonce,
                             allowed_max_transaction_fee,
                             max_transaction_fee: actual_max_transaction_fee,
@@ -783,19 +779,14 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
 
     pub fn record_resubmit_transaction(&mut self, new_tx: Eip1559TransactionRequest) {
         let nonce = new_tx.nonce;
-        let (ledger_burn_index, last_sent_tx) =
-            Self::expect_last_sent_tx_entry(&self.sent_tx, &nonce);
+        let (id, last_sent_tx) = Self::expect_last_sent_tx_entry(&self.sent_tx, &nonce);
         assert!(
             equal_ignoring_fee_and_amount(last_sent_tx.as_ref().transaction(), &new_tx),
             "BUG: mismatch between last sent transaction {last_sent_tx:?} and the transaction to resubmit {new_tx:?}"
         );
         Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &nonce);
         let new_tx = last_sent_tx.clone_resubmission_strategy(new_tx);
-        assert_eq!(
-            self.created_tx
-                .try_insert(nonce, *ledger_burn_index, new_tx),
-            Ok(())
-        );
+        assert_eq!(self.created_tx.try_insert(nonce, *id, new_tx), Ok(()));
     }
 
     pub fn sent_transactions_to_finalize(
@@ -808,7 +799,7 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
         for (_nonce, index, sent_txs) in self
             .sent_tx
             .iter()
-            .filter(|(nonce, _burn_index, _signed_txs)| *nonce < &first_non_finalized_tx_nonce)
+            .filter(|(nonce, _id, _signed_txs)| *nonce < &first_non_finalized_tx_nonce)
         {
             for sent_tx in sent_txs {
                 if let Some(prev_index) = transactions.insert(sent_tx.as_ref().hash(), *index) {
@@ -860,7 +851,7 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
     pub fn requests_batch(&self, requested_batch_size: usize) -> Vec<R> {
         // The number of pending transaction nonces is counted and not the number of pending transactions
         // because a nonce may be associated with several distinct transactions (due to re-submission and dynamic fees).
-        // However, once a nonce is chosen for a withdrawal request, it's in our interest that the corresponding transaction be finalized asap.
+        // However, once a nonce is chosen for a request, it's in our interest that the corresponding transaction be finalized asap.
         // Limiting the number of transactions would be counter-productive.
         const MAX_NUM_PENDING_TRANSACTION_NONCES: usize = 1000;
         let unique_pending_transaction_nonces: BTreeSet<_> =
@@ -889,7 +880,7 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
     ) -> impl Iterator<Item = (&TransactionNonce, &R::Id, &Eip1559TransactionRequest)> {
         self.created_tx
             .iter()
-            .map(|(nonce, ledger_burn_index, tx)| (nonce, ledger_burn_index, tx.as_ref()))
+            .map(|(nonce, id, tx)| (nonce, id, tx.as_ref()))
     }
 
     pub fn transactions_to_sign_batch(
@@ -898,7 +889,7 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
     ) -> Vec<(R::Id, Eip1559TransactionRequest)> {
         self.transactions_to_sign_iter()
             .take(batch_size)
-            .map(|(_nonce, withdrawal_id, tx)| (*withdrawal_id, tx.clone()))
+            .map(|(_nonce, id, tx)| (*id, tx.clone()))
             .collect()
     }
 
@@ -910,10 +901,10 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
         let first_pending_tx_nonce: TransactionNonce = latest_transaction_count.change_units();
         self.sent_tx
             .iter()
-            .filter_map(move |(nonce, ledger_burn_index, txs)| {
+            .filter_map(move |(nonce, id, txs)| {
                 txs.last()
-                    .map(|tx| (nonce, ledger_burn_index, tx))
-                    .filter(|(nonce, _ledger_burn_index, _tx)| *nonce >= &first_pending_tx_nonce)
+                    .map(|tx| (nonce, id, tx))
+                    .filter(|(nonce, _id, _tx)| *nonce >= &first_pending_tx_nonce)
             })
             .take(batch_size)
             .map(|(_nonce, _index, tx)| tx.as_ref())
@@ -935,11 +926,8 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
             .map(|(nonce, index, txs)| (nonce, index, txs.iter().map(|tx| tx.as_ref()).collect()))
     }
 
-    pub fn get_finalized_transaction(
-        &self,
-        burn_index: &R::Id,
-    ) -> Option<&FinalizedEip1559Transaction> {
-        self.finalized_tx.get_alt(burn_index)
+    pub fn get_finalized_transaction(&self, id: &R::Id) -> Option<&FinalizedEip1559Transaction> {
+        self.finalized_tx.get_alt(id)
     }
 
     pub fn processed_requests_iter(&self) -> impl Iterator<Item = &R> {
@@ -960,8 +948,8 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
             .map(TransactionStage::Finalized)
     }
 
-    pub fn get_processed_request(&self, burn_index: &R::Id) -> Option<&R> {
-        self.processed_requests.get(burn_index)
+    pub fn get_processed_request(&self, id: &R::Id) -> Option<&R> {
+        self.processed_requests.get(id)
     }
 
     pub fn finalized_transactions_iter(
@@ -986,11 +974,11 @@ impl<R: PipelineRequest> TransactionPipeline<R> {
         sent_tx: &'a MultiKeyMap<TransactionNonce, R::Id, Vec<SignedTransactionRequest>>,
         nonce: &TransactionNonce,
     ) -> (&'a R::Id, &'a SignedTransactionRequest) {
-        let (ledger_burn_index, sent_txs) = sent_tx
+        let (id, sent_txs) = sent_tx
             .get_entry(nonce)
             .expect("BUG: sent transaction not found");
         let last_sent_tx = sent_txs.last().expect("BUG: empty sent transactions list");
-        (ledger_burn_index, last_sent_tx)
+        (id, last_sent_tx)
     }
 
     fn cleanup_failed_resubmitted_transactions(
@@ -1208,6 +1196,33 @@ impl WithdrawalTransactions {
             })
     }
 
+    /// Arm the reimbursement for a withdrawal whose transaction failed on chain.
+    ///
+    /// # Panics
+    /// If the withdrawal is still armed for reimbursement, or was already reimbursed — either
+    /// would let the same burn be minted back twice.
+    pub fn record_reimbursement_request(
+        &mut self,
+        index: ReimbursementIndex,
+        request: ReimbursementRequest,
+    ) {
+        assert_eq!(
+            self.maybe_reimburse.get(&index.withdrawal_id()),
+            None,
+            "BUG: withdrawal request still in maybe_reimburse could lead to double minting!"
+        );
+        assert_eq!(
+            self.reimbursed.get(&index),
+            None,
+            "BUG: reimbursement request was already processed"
+        );
+        assert_eq!(
+            self.reimbursement_requests.insert(index.clone(), request),
+            None,
+            "BUG: reimbursement request for withdrawal {index:?} already exists"
+        );
+    }
+
     /// Quarantine the reimbursement request identified by its index to prevent double minting.
     /// WARNING!: It's crucial that this method does not panic,
     /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
@@ -1372,33 +1387,10 @@ impl WithdrawalTransactions {
     }
 }
 
-/// Main-address pipeline behavior that is specific to ckETH/ckERC20 withdrawals: reimbursing a failed
-/// transaction and answering the withdrawal-status endpoints. The sweeper pipeline has none of this.
+/// The withdrawal-status queries backing the minter's `retrieve_eth_status` and
+/// `withdrawal_status` endpoints. They read the pipeline and the reimbursement records together,
+/// which is why they live on the wrapper; the sweeper pipeline answers no such endpoint.
 impl WithdrawalTransactions {
-    /// Finalize the transaction for `ledger_burn_index` matching `receipt`, then — if it failed on
-    /// chain — record the corresponding ckETH/ckERC20 reimbursement.
-    pub fn record_reimbursement_request(
-        &mut self,
-        index: ReimbursementIndex,
-        request: ReimbursementRequest,
-    ) {
-        assert_eq!(
-            self.maybe_reimburse.get(&index.withdrawal_id()),
-            None,
-            "BUG: withdrawal request still in maybe_reimburse could lead to double minting!"
-        );
-        assert_eq!(
-            self.reimbursed.get(&index),
-            None,
-            "BUG: reimbursement request was already processed"
-        );
-        assert_eq!(
-            self.reimbursement_requests.insert(index.clone(), request),
-            None,
-            "BUG: reimbursement request for withdrawal {index:?} already exists"
-        );
-    }
-
     pub fn withdrawal_status(
         &self,
         parameter: &WithdrawalSearchParameter,

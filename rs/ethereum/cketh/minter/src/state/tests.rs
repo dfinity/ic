@@ -923,19 +923,6 @@ proptest! {
     }
 }
 
-fn accepted_withdrawal_request_event(
-    request: crate::state::transactions::WithdrawalRequest,
-) -> EventType {
-    use crate::state::transactions::WithdrawalRequest;
-    match request {
-        WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
-        WithdrawalRequest::CkErc20(request) => EventType::AcceptedErc20WithdrawalRequest(request),
-        WithdrawalRequest::SweeperFunding(request) => {
-            EventType::AcceptedSweeperFundingRequest(request)
-        }
-    }
-}
-
 #[test]
 fn state_equivalence() {
     use crate::EVM_RPC_ID_PRODUCTION;
@@ -1120,8 +1107,8 @@ fn state_equivalence() {
         }),
     };
     let builder = WithdrawalTransactionsBuilder::default()
-        .with_pending_withdrawal_requests(pending_requests)
-        .with_processed_withdrawal_requests(processed_requests)
+        .with_pending_requests(pending_requests)
+        .with_processed_requests(processed_requests)
         .with_created_tx(created_tx)
         .with_sent_tx(sent_tx)
         .with_finalized_tx(finalized_tx)
@@ -1346,7 +1333,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             withdrawal_transactions: builder
                 .clone()
-                .with_pending_withdrawal_requests(
+                .with_pending_requests(
                     vec![
                         withdrawal_request2.clone().into(),
                         withdrawal_request1.clone().into()
@@ -1365,9 +1352,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             withdrawal_transactions: builder
                 .clone()
-                .with_pending_withdrawal_requests(
-                    vec![withdrawal_request1.into()].into_iter().collect()
-                )
+                .with_pending_requests(vec![withdrawal_request1.into()].into_iter().collect())
                 .build(),
             ..state.clone()
         }),
@@ -2082,6 +2067,18 @@ mod eth_balance {
         let mut state = initial_state();
         add_erc20_token(&mut state);
         state
+    }
+
+    fn accepted_withdrawal_request_event(request: WithdrawalRequest) -> EventType {
+        match request {
+            WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
+            WithdrawalRequest::CkErc20(request) => {
+                EventType::AcceptedErc20WithdrawalRequest(request)
+            }
+            WithdrawalRequest::SweeperFunding(request) => {
+                EventType::AcceptedSweeperFundingRequest(request)
+            }
+        }
     }
 
     fn add_erc20_token(state: &mut State) {

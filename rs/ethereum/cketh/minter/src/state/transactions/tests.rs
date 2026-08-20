@@ -3196,7 +3196,7 @@ impl Default for WithdrawalTransactionsBuilder {
 }
 
 impl WithdrawalTransactionsBuilder {
-    pub(in crate::state) fn with_pending_withdrawal_requests(
+    pub(in crate::state) fn with_pending_requests(
         mut self,
         pending_requests: VecDeque<WithdrawalRequest>,
     ) -> Self {
@@ -3204,7 +3204,7 @@ impl WithdrawalTransactionsBuilder {
         self
     }
 
-    pub(in crate::state) fn with_processed_withdrawal_requests(
+    pub(in crate::state) fn with_processed_requests(
         mut self,
         processed_requests: BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
     ) -> Self {
