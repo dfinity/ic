@@ -2,7 +2,7 @@ use candid::{CandidType, Nat, Principal, define_function};
 use ic_cdk::api::{
     accept_message, canister_self, debug_print, instruction_counter, msg_arg_data, msg_reject,
 };
-use ic_cdk::call::{Call, Error as CallError, RejectCode};
+use ic_cdk::call::{Call, CallFailed, Error as CallError, RejectCode};
 use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::{inspect_message, query, trap, update};
 use ic_cdk_management_canister::{
@@ -69,6 +69,17 @@ fn map_call_error(err: impl Into<CallError>) -> (RejectionCode, String) {
         err @ (CallError::CandidDecodeFailed(_)
         | CallError::InsufficientLiquidCycleBalance(_)
         | CallError::CallPerformFailed(_)) => (RejectionCode::Unknown, err.to_string()),
+    }
+}
+
+/// Same, for a call built by hand rather than through a CDK helper.
+fn map_call_failed(err: CallFailed) -> (RejectionCode, String) {
+    match err {
+        CallFailed::CallRejected(rejected) => (
+            RejectionCode::from_raw(rejected.raw_reject_code()),
+            rejected.reject_message().to_string(),
+        ),
+        other => (RejectionCode::Unknown, other.to_string()),
     }
 }
 
@@ -409,6 +420,43 @@ async fn canister_http(
         is_replicated: None,
     };
     canister_http_outcall(&arg).await.map_err(map_call_error)
+}
+
+/// Makes a non-replicated HTTP outcall from a *composite query*.
+///
+/// Unlike `canister_http`, nothing about this goes through consensus: the node
+/// serving the query performs the request and hands the result straight back.
+///
+/// Note that the call is built by hand rather than with the CDK's
+/// `http_request` helper. That helper attaches cycles for the outcall, and
+/// `ic0.call_cycles_add128` traps in a composite query -- an outcall made from a
+/// query is not charged for, so there is nothing to attach.
+#[query(composite = true)]
+async fn canister_http_from_query(
+    http_server_addr: String,
+) -> Result<HttpRequestResult, (RejectionCode, String)> {
+    let arg = HttpRequestArgs {
+        url: http_server_addr,
+        max_response_bytes: None,
+        method: HttpMethod::GET,
+        headers: vec![],
+        body: None,
+        transform: None,
+        // A query is served by a single node, so the request cannot be
+        // replicated and has to say so.
+        is_replicated: Some(false),
+    };
+    Call::unbounded_wait(Principal::management_canister(), "http_request")
+        .with_arg(&arg)
+        .await
+        .map_err(map_call_failed)?
+        .candid()
+        .map_err(|err| {
+            (
+                RejectionCode::CanisterError,
+                format!("could not decode the http_request reply: {err}"),
+            )
+        })
 }
 
 #[query]

@@ -127,6 +127,7 @@ service : {
   sign_with_ecdsa : (blob, vec blob, text) -> (SignWithEcdsaResult);
   node_metrics_history_proxy: (NodeMetricsHistoryArgs) -> (vec NodeMetricsHistoryResponse);
   canister_http : (text) -> (HttpResponseResult);
+  canister_http_from_query : (text) -> (HttpResponseResult) composite_query;
   canister_http_with_transform : (text) -> (HttpResponse);
   proxy_call : (principal, text, blob, nat) -> (RawCallResult);
   transform : (TransformArgs) -> (HttpResponse) query;

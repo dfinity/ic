@@ -308,6 +308,49 @@ fn test_canister_http_in_live_mode() {
     http_response.unwrap();
 }
 
+/// An HTTP outcall made from a composite query against a real webserver.
+///
+/// This is the only end-to-end coverage of the feature against a real adapter
+/// and real sockets: a query outcall never enters the replicated state, so
+/// `mock_canister_http_response`, which drives the consensus pipeline, does not
+/// apply to it.
+///
+/// Note that no ticks are needed. A replicated outcall has to be mocked or made
+/// progress on, because its response arrives through a block; this one is handed
+/// straight back to the query that asked for it.
+///
+/// Like `test_canister_http_in_live_mode`, this does not work on Windows, where
+/// the test webserver runs on the host while the PocketIC server runs in WSL.
+#[test]
+fn test_canister_http_from_query() {
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    let http_server = HttpServer::new("127.0.0.1");
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    let reply = pic
+        .query_call(
+            canister_id,
+            Principal::anonymous(),
+            "canister_http_from_query",
+            encode_one(http_server.addr()).unwrap(),
+        )
+        .unwrap();
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    let http_response = http_response.expect("the outcall from the query failed");
+
+    assert_eq!(http_response.status, 200_u32);
+    assert!(
+        String::from_utf8_lossy(&http_response.body).contains("Hello"),
+        "unexpected body: {:?}",
+        String::from_utf8_lossy(&http_response.body)
+    );
+}
+
 #[test]
 fn test_raw_gateway() {
     // We create a PocketIC instance consisting of the NNS and one application subnet.
