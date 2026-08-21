@@ -712,9 +712,10 @@ prop_compose! {
         deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
         last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
         sweeper_contract_address in proptest::option::of(arb_address()),
+        next_sweeper_transaction_nonce in proptest::option::of(arb_nat()),
     ) -> UpgradeArg {
         UpgradeArg {
-            next_sweeper_transaction_nonce: None,
+            next_sweeper_transaction_nonce,
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
             ethereum_block_height,
             minimum_withdrawal_amount,
