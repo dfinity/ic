@@ -9,23 +9,29 @@
 //! `fetch_finalized_receipts`), but signing with the sweeper derivation path (`[3]`) and reading
 //! the sweeper address' own transaction count.
 //!
-//! Deliberately out of scope here (follow-ups): EIP-7702 (`0x04`) first-time delegation, building
-//! the delegate sweep call data from the balance-sweep queue, and gating the pipeline on prepaid sweep
-//! gas. Nothing enqueues a [`SweepRequest`] in production yet, so this task early-returns on an
-//! empty pipeline.
+//! [`enqueue_batched_sweep`] is what feeds it: it takes the deposits the balance scan queued, signs
+//! one delegation and one ownership attestation per address, and enqueues a single [`SweepRequest`]
+//! whose call data sweeps them all through the deployed delegate.
+//!
+//! Deliberately out of scope here (follow-up): gating the sweep on the sweeper address' prepaid gas,
+//! and the economic policy (`unswept_value` margin, `max_age`) deciding *when* to sweep rather than
+//! sweeping whatever is queued.
 
 use crate::{
-    deposit_address::sweeper_derivation_path,
+    attestation::sign_attestation,
+    deposit_address::{DepositAddressSchema, deposit_derivation_path, sweeper_derivation_path},
     guard::TimerGuard,
     logs::{DEBUG, INFO},
-    numeric::{GasAmount, TransactionCount},
+    numeric::{TransactionCount, TransactionNonce, Wei},
     state::{
         State, TaskType,
         audit::{EventType, process_event},
+        eth_logs_scraping::LogScrapingId,
         mutate_state, read_state,
-        transactions::PipelineRequest,
+        transactions::{PipelineRequest, SweepRequest, SweptDeposit},
     },
-    tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
+    sweeper_contract::{SweepItem, encode_sweep_erc20_batch},
+    tx::{Authorization, GasFeeEstimate, lazy_refresh_gas_fee_estimate},
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
         send_signed_transactions,
@@ -34,10 +40,11 @@ use crate::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
+use std::collections::BTreeSet;
 
-/// Gas limit of a sweep transaction. A fixed, conservative bound for the preparatory type-`0x02`
-/// pipeline; a per-request estimate arrives with the real delegate sweep call.
-pub(crate) const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
+/// Deposits swept in one transaction. Bounded by gas: each one adds an authorization, a delegated
+/// call, an approval and a transfer.
+const MAX_DEPOSITS_PER_SWEEP: usize = 20;
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
@@ -146,7 +153,7 @@ fn create_transactions_batch(gas_fee_estimate: &GasFeeEstimate) {
         let Ok(transaction) = request.create_transaction(
             nonce,
             gas_fee_estimate.clone(),
-            SWEEP_TRANSACTION_GAS_LIMIT,
+            request.gas_limit(),
             ethereum_network,
         );
         mutate_state(|s| {
@@ -240,4 +247,140 @@ async fn finalize_transactions_batch(sender: Address) {
             );
         }
     }
+}
+
+/// Enqueue a single sweep of everything the balance scan has queued, up to
+/// [`MAX_DEPOSITS_PER_SWEEP`] deposits.
+///
+/// Each deposit contributes an ownership attestation, and each address that is not delegated yet
+/// also contributes an EIP-7702 authorization — so the first sweep of an address rides a type-`0x04`
+/// transaction and later ones a plain type-`0x02`. An authorization pins the address' nonce, which
+/// is `0` for a deposit EOA: incoming ERC-20 transfers never touch it, and only one of its own
+/// authorizations can advance it.
+pub async fn enqueue_batched_sweep() {
+    let _guard = match TimerGuard::new(TaskType::SweeperSend) {
+        Ok(guard) => guard,
+        Err(e) => {
+            log!(
+                DEBUG,
+                "Failed retrieving timer guard to enqueue a batched sweep: {e:?}",
+            );
+            return;
+        }
+    };
+
+    let Some(sweeper_contract) = read_state(|s| s.sweeper_contract_address) else {
+        log!(
+            DEBUG,
+            "[enqueue_batched_sweep]: SKIPPING: no sweeper contract address is configured"
+        );
+        return;
+    };
+    // The delegate transfers through the helper it was constructed with, and the attestation each
+    // deposit address signs names that same helper, so a sweep is only valid against it.
+    let Some(helper_contract) = read_state(|s| {
+        s.log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)
+            .copied()
+    }) else {
+        log!(
+            DEBUG,
+            "[enqueue_batched_sweep]: SKIPPING: no deposit helper with subaccount is configured"
+        );
+        return;
+    };
+    let targets: Vec<_> = read_state(|s| {
+        s.automatic_deposits
+            .sweep_targets_iter()
+            .take(MAX_DEPOSITS_PER_SWEEP)
+            .collect()
+    });
+    if targets.is_empty() {
+        return;
+    }
+
+    let chain_id = read_state(State::ethereum_network).chain_id();
+    let mut items = Vec::with_capacity(targets.len());
+    let mut deposits = Vec::with_capacity(targets.len());
+    let mut authorizations = Vec::new();
+    for target in targets {
+        let account = target.account();
+        let attestation = match sign_attestation(
+            chain_id,
+            &helper_contract,
+            DepositAddressSchema::CkErc20,
+            &account,
+        )
+        .await
+        {
+            Ok(attestation) => attestation,
+            Err(e) => {
+                log!(
+                    INFO,
+                    "[enqueue_batched_sweep]: failed attesting {account:?}, skipping the whole sweep: {e}"
+                );
+                return;
+            }
+        };
+        let delegating = !read_state(|s| s.automatic_deposits.is_delegated(&target.address()));
+        if delegating {
+            let authorization = Authorization {
+                chain_id,
+                delegate: sweeper_contract,
+                nonce: TransactionNonce::ZERO,
+            };
+            match authorization
+                .sign(deposit_derivation_path(
+                    DepositAddressSchema::CkErc20,
+                    &account,
+                ))
+                .await
+            {
+                Ok(authorization) => authorizations.push(authorization),
+                Err(e) => {
+                    log!(
+                        INFO,
+                        "[enqueue_batched_sweep]: failed authorizing {account:?}, skipping the whole sweep: {e}"
+                    );
+                    return;
+                }
+            }
+        }
+        items.push(SweepItem {
+            deposit: target.address(),
+            account,
+            attestation,
+        });
+        deposits.push(SweptDeposit {
+            owner: account.owner,
+            subaccount: account.subaccount,
+            erc20_contract_address: target.token(),
+            address: target.address(),
+            delegating,
+        });
+    }
+
+    let tokens: Vec<_> = deposits
+        .iter()
+        .map(|deposit| deposit.erc20_contract_address)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let request = SweepRequest {
+        id: read_state(|s| s.next_sweep_id),
+        destination: sweeper_contract,
+        amount: Wei::ZERO,
+        data: encode_sweep_erc20_batch(&items, &tokens),
+        max_transaction_fee: Wei::MAX,
+        created_at: ic_cdk::api::time(),
+        authorizations,
+        deposits,
+    };
+    log!(
+        INFO,
+        "[enqueue_batched_sweep]: sweeping {} deposits, {} of them delegating, via {sweeper_contract}",
+        request.deposits.len(),
+        request.authorizations.len()
+    );
+    mutate_state(|s| process_event(s, EventType::AcceptedSweepRequest(request)));
 }

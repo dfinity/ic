@@ -705,6 +705,7 @@ fn sweep_entry(
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),
+        swept_by: None,
     }
 }
 
@@ -733,6 +734,119 @@ fn entry(account: &Account, expires_at: Timestamp) -> Entry<ScanProgress> {
     Entry {
         value: ScanProgress::from(deposit_address(account)),
         expires_at,
+    }
+}
+
+mod record_sweep_scheduled {
+    use super::{account, automatic_deposit, deposit_address, request, usdc, usdt};
+    use crate::numeric::BlockNumber;
+    use crate::state::automatic_deposits::AutomaticDeposits;
+    use crate::state::transactions::{SweepId, SweptDeposit};
+    use crate::test_fixtures::expect_panic_with_message;
+    use ic_ethereum_types::Address;
+    use icrc_ledger_types::icrc1::account::Account;
+
+    #[test]
+    fn should_offer_a_queued_deposit_until_a_sweep_takes_it() {
+        let mut deposits = queued();
+
+        assert_eq!(targets(&deposits), vec![usdc(), usdt()]);
+
+        deposits.record_sweep_scheduled(SweepId(7), &[swept(account(0), usdc(), false)]);
+
+        assert_eq!(targets(&deposits), vec![usdt()]);
+        // The entry stays queued, it is only no longer sweepable.
+        assert_eq!(deposits.sweep_len(), 2);
+    }
+
+    #[test]
+    fn should_carry_the_scanned_balance_to_the_sweeper() {
+        let deposits = queued();
+
+        let target = deposits.sweep_targets_iter().next().unwrap();
+
+        assert_eq!(target.account(), account(0));
+        assert_eq!(target.token(), usdc());
+        assert_eq!(target.address(), deposit_address(&account(0)));
+        assert_eq!(target.scanned_balance(), 10_u8.into());
+    }
+
+    #[test]
+    fn should_delegate_an_address_only_when_the_sweep_installs_it() {
+        let mut deposits = queued();
+        assert!(!deposits.is_delegated(&deposit_address(&account(0))));
+
+        deposits.record_sweep_scheduled(SweepId(0), &[swept(account(0), usdc(), false)]);
+        assert!(!deposits.is_delegated(&deposit_address(&account(0))));
+
+        deposits.record_sweep_scheduled(SweepId(1), &[swept(account(0), usdt(), true)]);
+        assert!(deposits.is_delegated(&deposit_address(&account(0))));
+    }
+
+    #[test]
+    fn should_trap_when_two_sweeps_take_the_same_deposit() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept(account(0), usdc(), true)]);
+
+        expect_panic_with_message(
+            || {
+                deposits.record_sweep_scheduled(SweepId(1), &[swept(account(0), usdc(), true)]);
+            },
+            "was already taken by sweep",
+        );
+    }
+
+    #[test]
+    fn should_trap_when_a_sweep_takes_a_deposit_that_is_not_queued() {
+        let mut deposits = queued();
+
+        expect_panic_with_message(
+            || {
+                deposits.record_sweep_scheduled(SweepId(0), &[swept(account(1), usdc(), true)]);
+            },
+            "is not queued for sweeping",
+        );
+    }
+
+    /// One account with two funded tokens at the same deposit address, both awaiting a sweep.
+    fn queued() -> AutomaticDeposits {
+        let mut deposits = AutomaticDeposits::default();
+        for token in [usdc(), usdt()] {
+            deposits.record_automatic_deposit_received(&automatic_deposit(
+                account(0),
+                token,
+                10,
+                BlockNumber::new(900),
+                3,
+            ));
+        }
+        deposits
+    }
+
+    fn targets(deposits: &AutomaticDeposits) -> Vec<Address> {
+        deposits
+            .sweep_targets_iter()
+            .map(|target| target.token())
+            .collect()
+    }
+
+    fn swept(account: Account, token: Address, delegating: bool) -> SweptDeposit {
+        SweptDeposit {
+            owner: account.owner,
+            subaccount: account.subaccount,
+            erc20_contract_address: token,
+            address: deposit_address(&account),
+            delegating,
+        }
+    }
+
+    #[test]
+    fn should_key_a_swept_deposit_by_its_account() {
+        assert_eq!(swept(account(0), usdc(), false).account(), account(0));
+        assert_eq!(
+            request(swept(account(0), usdc(), false).account(), usdc()),
+            request(account(0), usdc())
+        );
     }
 }
 
