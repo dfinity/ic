@@ -34,6 +34,7 @@ enum PayloadValidationError {
         pre_split_source_subnet_size: usize,
     },
     DisallowedSourceSubnetType(SubnetType),
+    CloudEngineDeploymentInProgress,
     SourceSubnetIsSigningSubnet,
     UnhostedCanisterIds,
     SplitAlreadyInProgress,
@@ -276,6 +277,27 @@ impl Registry {
             ));
         }
 
+        if source_subnet_type == SubnetType::CloudEngine
+            && source_subnet_record.replica_version_id.is_empty()
+        {
+            let standard_engine_replica_version_record =
+                self.get_standard_engine_replica_version_record()
+                .expect("StandardEngineReplicaVersionRecord should exist if the subnet has no replica version");
+
+            // We want to reject a split if the source subnet is a cloud engine and a deployment of
+            // a new replica version is in progress. This is because the new destination subnet will
+            // have a new subnet ID which we do not know yet and could end up upgrading to a
+            // different version. We would like to avoid weird situations where both a split and an
+            // upgrade are scheduled at the same time, so we enforce that the cloud engine
+            // deployment is complete before allowing a split. In that case, it is guaranteed that
+            // both subnets will be on the same replica version after the split.
+            if 0.0 < standard_engine_replica_version_record.deployment_progress
+                && standard_engine_replica_version_record.deployment_progress < 1.0
+            {
+                return Err(PayloadValidationError::CloudEngineDeploymentInProgress);
+            }
+        }
+
         let pre_split_source_nodes: HashSet<NodeId> = source_subnet_record
             .membership
             .iter()
@@ -454,6 +476,13 @@ impl std::fmt::Display for PayloadValidationError {
             ),
             PayloadValidationError::DisallowedSourceSubnetType(subnet_type) => {
                 write!(f, "Subnets of type {subnet_type:?} may not be split")
+            }
+            PayloadValidationError::CloudEngineDeploymentInProgress => {
+                write!(
+                    f,
+                    "The source subnet is a Cloud Engine subnet and the deployment \
+                    of a new replica version is still in progress"
+                )
             }
             PayloadValidationError::SourceSubnetIsSigningSubnet => {
                 write!(f, "Signing subnets may not be split")
