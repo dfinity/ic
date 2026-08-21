@@ -1196,6 +1196,7 @@ mod tests {
                     registry,
                     crypto,
                     state_manager,
+                    replica_config,
                     ..
                 } = DependenciesBuilder::multiple_subnets(pool_config, records)
                     .with_replica_config(ReplicaConfig {
@@ -1215,10 +1216,7 @@ mod tests {
                 let message_routing = Arc::new(message_routing);
 
                 let cup_maker = CatchUpPackageMaker::new(
-                    ReplicaConfig {
-                        node_id: NODE_5,
-                        subnet_id: SOURCE_SUBNET_ID,
-                    },
+                    replica_config,
                     membership,
                     crypto,
                     state_manager,
