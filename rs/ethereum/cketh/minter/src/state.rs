@@ -229,8 +229,6 @@ impl State {
         Some(ecdsa_public_key_to_address(&pubkey))
     }
 
-    /// The minter's dedicated sweeper address, or [`None`] if the minter's public key has not
-    /// been fetched yet.
     pub fn sweeper_address(&self) -> Option<Address> {
         let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
         Some(sweeper_address(&master_public_key, &chain_code))
