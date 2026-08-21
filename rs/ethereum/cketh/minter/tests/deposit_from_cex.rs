@@ -28,6 +28,7 @@ use ic_cketh_minter::balance_scan::batcher::{
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
+use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
 use ic_cketh_test_utils::ckerc20::Erc20Token;
@@ -35,6 +36,7 @@ use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup};
 use ic_cketh_test_utils::{MINTER_ADDRESS, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 
@@ -328,21 +330,19 @@ fn should_credit_two_cex_deposits_through_one_eip7702_sweep() {
     await_sweep(&setup, &sweeper, deadline);
 
     let minter = address_from_hex(MINTER_ADDRESS);
-    let ck_usdc = setup.ckerc20_token("ckUSDC");
-    let ck_usdt = setup.ckerc20_token("ckUSDT");
-    await_credited(
-        &setup,
-        ck_usdc.ledger_canister_id,
-        account(user_one, DEPOSIT_SUBACCOUNT),
-        USDC_DEPOSIT,
-        deadline,
+    // The sweep must have succeeded on chain. Asserted before its effects so a revert is reported as
+    // one, with the gas it burned, instead of as an unswept balance.
+    let sweep = setup
+        .anvil()
+        .last_transaction_of(&sweeper)
+        .expect("the sweeper's transaction should be on chain");
+    assert_eq!(
+        sweep.transaction_type, 4,
+        "a first sweep installs delegations, so it must be an EIP-7702 transaction: {sweep:?}"
     );
-    await_credited(
-        &setup,
-        ck_usdt.ledger_canister_id,
-        account(user_two, DEPOSIT_SUBACCOUNT),
-        USDT_DEPOSIT,
-        deadline,
+    assert!(
+        sweep.succeeded,
+        "the sweep reverted: {sweep:?} (gas_used == gas_limit means it ran out of gas)"
     );
 
     // The funds left the deposit addresses and landed at the minter's main address.
@@ -380,6 +380,25 @@ fn should_credit_two_cex_deposits_through_one_eip7702_sweep() {
         setup.anvil().balance(&sweeper) < SWEEPER_GAS_WEI,
         "the sweeper address pays for the sweep out of its own prepaid gas"
     );
+
+    // Only now the mint, which the unchanged deposit pipeline drives off the sweep's own helper
+    // event — downstream of every effect asserted above.
+    let ck_usdc = setup.ckerc20_token("ckUSDC");
+    let ck_usdt = setup.ckerc20_token("ckUSDT");
+    await_credited(
+        &setup,
+        ck_usdc.ledger_canister_id,
+        account(user_one, DEPOSIT_SUBACCOUNT),
+        USDC_DEPOSIT,
+        deadline,
+    );
+    await_credited(
+        &setup,
+        ck_usdt.ledger_canister_id,
+        account(user_two, DEPOSIT_SUBACCOUNT),
+        USDT_DEPOSIT,
+        deadline,
+    );
 }
 
 /// Waits for the sweeper address to send its one transaction.
@@ -390,11 +409,12 @@ fn await_sweep(setup: &LiveBalanceScanSetup, sweeper: &Address, deadline: Durati
         // PocketIC instance goes away — which is exactly when a diagnostic is most wanted.
         let sent = setup.anvil().transaction_count(sweeper);
         println!(
-            "[await_sweep] {:?} block={} sweeper_nonce={} sweeper_wei={}",
+            "[await_sweep] {:?} block={} sweeper_nonce={} sweeper_wei={} stages={}",
             start.elapsed(),
             setup.anvil().block_number(),
             sent,
             setup.anvil().balance(sweeper),
+            sweep_stages(setup),
         );
         if sent > 0 {
             assert_eq!(
@@ -409,6 +429,27 @@ fn await_sweep(setup: &LiveBalanceScanSetup, sweeper: &Address, deadline: Durati
         );
         std::thread::sleep(Duration::from_secs(5));
     }
+}
+
+/// How far the sweep pipeline has got, counted off the minter's audit events. Unlike its canister
+/// log, which is a rolling buffer the EVM RPC canister's tracing evicts within minutes, the event
+/// log is durable — so this says which stage stalled even late in a run.
+fn sweep_stages(setup: &LiveBalanceScanSetup) -> String {
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for event in setup.minter_events() {
+        let stage = match event.payload {
+            EventPayload::AutomaticDepositReceived { .. } => "detected",
+            EventPayload::AcceptedSweepRequest { .. } => "accepted",
+            EventPayload::CreatedSweeperTransaction { .. } => "created",
+            EventPayload::SignedSweeperTransaction { .. } => "signed",
+            EventPayload::ReplacedSweeperTransaction { .. } => "replaced",
+            EventPayload::FinalizedSweeperTransaction { .. } => "finalized",
+            EventPayload::AcceptedDeposit { .. } | EventPayload::MintedCkErc20 { .. } => "minted",
+            _ => continue,
+        };
+        *counts.entry(stage).or_default() += 1;
+    }
+    format!("{counts:?}")
 }
 
 /// Waits until `account` holds exactly `expected` on `ledger_id`. The mint follows the sweep's own
