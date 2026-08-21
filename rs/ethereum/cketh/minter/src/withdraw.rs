@@ -456,10 +456,16 @@ async fn finalize_transactions_batch() {
                 }
             }
             let actual_finalized_withdrawal_ids: BTreeSet<_> = receipts.keys().cloned().collect();
-            assert_eq!(
-                expected_finalized_withdrawal_ids, actual_finalized_withdrawal_ids,
-                "ERROR: unexpected transaction receipts for some withdrawal IDs"
-            );
+            if expected_finalized_withdrawal_ids != actual_finalized_withdrawal_ids {
+                log!(
+                    INFO,
+                    "Mismatch between expected finalized withdrawal IDs {:?} and actual {:?}. \
+                     A receipt may not yet be indexed by the RPC provider. Will retry later.",
+                    expected_finalized_withdrawal_ids,
+                    actual_finalized_withdrawal_ids,
+                );
+                return;
+            }
             for (withdrawal_id, transaction_receipt) in receipts {
                 mutate_state(|s| {
                     process_event(
