@@ -6,8 +6,8 @@
 //! Boots each VM as a per-VM daemonized `qemu-system-x86_64` process, controlled
 //! afterwards through its pid-file (destroy) and a per-VM QMP unix socket
 //! (reboot). Networking (per-group Linux bridge + per-VM TAPs, `dnsmasq`
-//! RA/DHCPv4) and disk images (qcow2 overlays over a shared base) are managed
-//! directly by this backend.
+//! RA/DHCPv4/DNS) and disk images (qcow2 overlays over a shared base) are
+//! managed directly by this backend.
 //!
 //! Many Farm features have no local equivalent (managed playnet DNS, TLS
 //! issuance, HTTP file upload, multi-tenant scheduling); those operations warn
@@ -25,17 +25,29 @@ use crate::driver::test_env_api::get_dependency_path_from_env;
 use anyhow::{Context, Result, anyhow, bail};
 use deterministic_ips::MacAddr6Ext;
 use macaddr::MacAddr6;
+use network::systemd::IPV6_NAME_SERVERS;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::net::Ipv6Addr;
+use std::net::{IpAddr, Ipv6Addr};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+/// The domain under which the group's `dnsmasq` synthesises a DNS name for every
+/// address in the group's `/64`, by writing the address with `:` replaced by `-`
+/// (e.g. `fd00-1-2--3.ipv6.nip.io`).
+///
+/// This mirrors the public `nip.io` wildcard DNS service, which is what system
+/// tests use when they need to reach a VM by a *name* rather than by an address
+/// literal — see `rs/tests/networking/canister_http_socks_test.rs`. Answering
+/// for it locally is what makes those tests work without external DNS; on the
+/// Farm backend the real service resolves the same names to the same addresses.
+const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
@@ -245,7 +257,7 @@ impl LocalBackend {
         // a *non-zero* inner uid/gid instead of `0`.
         //
         // The reason: the backend relies on `dnsmasq` staying unprivileged so it
-        // skips its privilege-drop path (see `start_ra_daemon`). That path is
+        // skips its privilege-drop path (see `start_dnsmasq`). That path is
         // gated purely on `getuid() == 0`, and when taken it fails in this
         // namespace — `setgroups` is denied (below) and the default `dip` gid is
         // unmapped. This normally holds because the action runs as an ordinary
@@ -539,17 +551,22 @@ impl LocalBackend {
     ///
     /// IC GuestOS nodes statically configure their global IPv6: the test driver
     /// hands each node a fixed address plus the `<prefix>::1` gateway (which
-    /// lives on the bridge), so they need neither RA nor SLAAC. We still run a
-    /// minimal `dnsmasq` as an RA daemon on the bridge for non-IC-node VMs (e.g.
-    /// universal VMs), which bring up only a link-local address and derive their
-    /// global one via SLAAC from the RA; the RA's non-zero router lifetime also
-    /// installs the bridge (the host) as their default router.
+    /// lives on the bridge), so they need neither RA nor SLAAC. The group's
+    /// `dnsmasq` still advertises the prefix on the bridge for non-IC-node VMs
+    /// (e.g. universal VMs), which bring up only a link-local address and derive
+    /// their global one via SLAAC from the RA; the RA's non-zero router lifetime
+    /// also installs the bridge (the host) as their default router.
     ///
     /// Either way the host is each guest's default router, which lets a guest
     /// reply to the driver's off-`/64` management address
     /// ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)). No IP forwarding is
     /// involved — the management address is on `lo`, so traffic to it terminates
     /// on the host.
+    ///
+    /// The bridge additionally carries the name-server addresses GuestOS is
+    /// hard-coded to query ([`IPV6_NAME_SERVERS`]), so that the group's
+    /// `dnsmasq` can answer DNS on them; see
+    /// [`start_dnsmasq`](Self::start_dnsmasq).
     pub fn create_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
         let prefix = Self::group_ipv6_prefix(group_name);
@@ -569,6 +586,19 @@ impl LocalBackend {
             self.logger,
             "Creating local bridge {bridge} for group {group_name} ({prefix}/64, {ipv4_prefix}.0/24)"
         );
+
+        // The name-server addresses GuestOS sends its DNS queries to. They are
+        // globally routable addresses owned by Cloudflare and Google, but the
+        // backend runs in its own network namespace with no external
+        // connectivity (see `ensure_administrable_netns`), so nothing else can
+        // claim them and no query can escape. Assigning them here — rather than
+        // reconfiguring the guests, which have no name-server knob and boot with
+        // `IPv6AcceptRA=no` — is what gives every node a working resolver
+        // without touching IC-OS.
+        let name_server_addrs: String = IPV6_NAME_SERVERS
+            .iter()
+            .map(|name_server| format!("ip -6 addr add {name_server}/128 dev {bridge} nodad && "))
+            .collect();
 
         // (Re)create the bridge, assign the gateway, and bring it up. Deleting
         // first makes this idempotent across an interrupted run that leaked the
@@ -590,6 +620,7 @@ impl LocalBackend {
              ip link set dev {bridge} up && \
              ip -6 addr add {gateway}/64 dev {bridge} nodad && \
              ip addr add {ipv4_gateway}/24 dev {bridge} && \
+             {name_server_addrs}\
              ip -6 addr replace {mgmt}/128 dev lo && \
              ip -6 addr replace {logs}/128 dev lo && \
              ip -6 addr replace {files}/128 dev lo && \
@@ -597,16 +628,17 @@ impl LocalBackend {
         );
         Self::run_shell(&create_script, "create group bridge")?;
 
-        // Start the RA daemon. Non-IC-node VMs (e.g. universal VMs) SLAAC their
-        // global address from it; IC GuestOS nodes use a static config instead.
+        // Start `dnsmasq`. Non-IC-node VMs (e.g. universal VMs) SLAAC their
+        // global address from its RA; IC GuestOS nodes use a static config instead.
         // The same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for
-        // VMs that requested a second NIC.
-        self.start_ra_daemon(group_name, &bridge, &prefix, &ipv4_prefix)?;
+        // VMs that requested a second NIC, and DNS on the name-server addresses
+        // assigned above.
+        self.start_dnsmasq(group_name, &bridge, &prefix, &ipv4_prefix)?;
 
         Ok(())
     }
 
-    /// Path of the pid-file for the group's `dnsmasq` RA daemon.
+    /// Path of the pid-file for the group's `dnsmasq`.
     fn dnsmasq_pid_path(&self, bridge: &str) -> PathBuf {
         self.active_local_backend
             .working_dir
@@ -614,13 +646,28 @@ impl LocalBackend {
             .join(format!("{bridge}.pid"))
     }
 
-    /// Spawn a minimal `dnsmasq` as an IPv6 Router Advertisement daemon on
-    /// `bridge`, advertising the group's `/64` for SLAAC with a non-zero router
-    /// lifetime (installing the host as the default router for VMs that use the
-    /// RA; IC GuestOS nodes use a static config instead). The same daemon serves
-    /// DHCPv4 on the group's IPv4 `/24` for VMs with a second NIC. See
-    /// [`create_group`](Self::create_group) for the rationale.
-    fn start_ra_daemon(
+    /// Path of the extra hosts-file the group's `dnsmasq` serves DNS records
+    /// from (`--addn-hosts`), written by
+    /// [`add_dns_record`](Self::add_dns_record).
+    fn dnsmasq_hosts_path(&self, bridge: &str) -> PathBuf {
+        self.active_local_backend
+            .working_dir
+            .join("dnsmasq")
+            .join(format!("{bridge}.hosts"))
+    }
+
+    /// Spawn a minimal `dnsmasq` on `bridge` serving three roles:
+    ///
+    /// * an IPv6 Router Advertisement daemon advertising the group's `/64` for
+    ///   SLAAC with a non-zero router lifetime (installing the host as the
+    ///   default router for VMs that use the RA; IC GuestOS nodes use a static
+    ///   config instead),
+    /// * a DHCPv4 server on the group's IPv4 `/24` for VMs with a second NIC,
+    /// * the group's DNS server, answering on the name-server addresses
+    ///   [`create_group`](Self::create_group) put on the bridge.
+    ///
+    /// See [`create_group`](Self::create_group) for the rationale.
+    fn start_dnsmasq(
         &self,
         group_name: &str,
         bridge: &str,
@@ -632,26 +679,49 @@ impl LocalBackend {
             format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
         })?;
         let pid_path = self.dnsmasq_pid_path(bridge);
+        let hosts_path = self.dnsmasq_hosts_path(bridge);
         let lease_path = dnsmasq_dir.join(format!("{bridge}.leases"));
         let log_path = dnsmasq_dir.join(format!("{bridge}.log"));
         // Remove a stale pid-file from a previous interrupted run.
         let _ = std::fs::remove_file(&pid_path);
+        // Truncate the hosts-file, both to drop any records such a run left and
+        // so it exists before `dnsmasq` starts: a missing `--addn-hosts` file is
+        // tolerated, but relying on it being picked up later is needless risk.
+        std::fs::write(&hosts_path, "")
+            .with_context(|| format!("creating {}", hosts_path.display()))?;
 
         info!(
             self.logger,
-            "Starting RA daemon (dnsmasq) for group {group_name} on bridge {bridge}"
+            "Starting dnsmasq for group {group_name} on bridge {bridge}"
         );
 
         // `dnsmasq` needs `CAP_NET_RAW`/`CAP_NET_ADMIN` to open the ICMPv6 raw
         // socket and send RAs, and `CAP_NET_BIND_SERVICE` to bind UDP port 67 for
-        // DHCPv4; it inherits them from the ambient capability set the driver set
-        // up (see `ensure_administrable_netns`).
+        // DHCPv4 and port 53 for DNS; it inherits them from the ambient
+        // capability set the driver set up (see `ensure_administrable_netns`).
         // `--ra-param=<bridge>,10,1800` sends an RA every 10s with a 1800s router
         // lifetime; `--dhcp-range=<prefix>,ra-only` advertises the autonomous
         // prefix for SLAAC without stateful leases. The second `--dhcp-range`
         // enables stateful DHCPv4 on the IPv4 `/24` for the guest's second NIC
-        // (`enp2s0`). `--port=0` disables DNS. `dnsmasq` daemonizes (writing its
-        // pid-file) and is signalled via it in teardown.
+        // (`enp2s0`). `dnsmasq` daemonizes (writing its pid-file) and is
+        // signalled via it in teardown.
+        //
+        // DNS: `--no-resolv --no-hosts` keeps the resolver hermetic — it neither
+        // reads the driver host's `/etc/resolv.conf` nor its `/etc/hosts`. With
+        // no upstream server left to forward to, anything it cannot answer is
+        // REFUSED rather than leaked. It answers from two sources:
+        //
+        // * `--addn-hosts` — records tests register through
+        //   [`add_dns_record`](Self::add_dns_record).
+        // * `--synth-domain` — synthesises `<address>.ipv6.nip.io` for the
+        //   group's `/64`, with `:` written as `-`, mirroring the public
+        //   `nip.io` wildcard service that tests use to name a VM by its
+        //   address. `dnsmasq` parses the label with `inet_pton`, so it accepts
+        //   exactly the form Rust's `Ipv6Addr` Display produces.
+        //
+        // `--bind-interfaces` binds the bridge's addresses as they are at
+        // startup, which is why `create_group` assigns the name-server addresses
+        // before calling this.
         //
         // `dnsmasq` runs unprivileged: `ensure_administrable_netns` guarantees a
         // non-zero uid inside the driver's user namespace (identity-mapped, or
@@ -667,27 +737,76 @@ impl LocalBackend {
                  --pid-file={pid} \
                  --dhcp-leasefile={lease} \
                  --log-facility={log} \
-                 --port=0 \
                  --bind-interfaces \
                  --interface={bridge} \
                  --except-interface=lo \
                  --enable-ra \
                  --dhcp-range={prefix},ra-only \
                  --dhcp-range={ipv4_prefix}.2,{ipv4_prefix}.254,255.255.255.0,1h \
-                 --ra-param={bridge},10,1800",
+                 --ra-param={bridge},10,1800 \
+                 --no-resolv \
+                 --no-hosts \
+                 --addn-hosts={hosts} \
+                 --synth-domain={NIP_IO_DOMAIN},{prefix}/64",
             pid = pid_path.display(),
             lease = lease_path.display(),
             log = log_path.display(),
+            hosts = hosts_path.display(),
         );
-        Self::run_shell(&dnsmasq_script, "start dnsmasq RA daemon")?;
+        Self::run_shell(&dnsmasq_script, "start dnsmasq")?;
 
         Ok(())
     }
 
-    /// Stop the group's `dnsmasq` RA daemon, if running. It runs as the current
-    /// user, so it is signalled directly via its pid-file. Best-effort and
-    /// idempotent.
-    fn stop_ra_daemon(&self, bridge: &str) {
+    /// Register a DNS record with the group's `dnsmasq`, so that `name` resolves
+    /// to `addr` on every VM in the group.
+    ///
+    /// Appends to the `--addn-hosts` file and signals `dnsmasq` with `SIGHUP`,
+    /// which makes it flush its cache and re-read that file. Records therefore
+    /// accumulate across calls.
+    ///
+    /// This is how the local backend replaces Farm's playnet DNS: see
+    /// `InternetComputer::setup_api_bn_local_playnet`.
+    pub fn add_dns_record(&self, group_name: &str, name: &str, addr: IpAddr) -> Result<()> {
+        let bridge = Self::bridge_name(group_name);
+        let hosts_path = self.dnsmasq_hosts_path(&bridge);
+
+        info!(
+            self.logger,
+            "Registering DNS record {name} -> {addr} with the dnsmasq of group {group_name}"
+        );
+
+        let mut hosts_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&hosts_path)
+            .with_context(|| format!("opening {}", hosts_path.display()))?;
+        writeln!(hosts_file, "{addr} {name}")
+            .with_context(|| format!("appending to {}", hosts_path.display()))?;
+        drop(hosts_file);
+
+        // `dnsmasq` runs as the current user, so it can be signalled directly via
+        // its pid-file.
+        let pid_path = self.dnsmasq_pid_path(&bridge);
+        let pid = std::fs::read_to_string(&pid_path)
+            .with_context(|| format!("reading {}", pid_path.display()))?
+            .trim()
+            .parse::<i32>()
+            .with_context(|| format!("parsing the pid in {}", pid_path.display()))?;
+        let status = Command::new("kill")
+            .args(["-HUP", &pid.to_string()])
+            .status()
+            .context("signalling dnsmasq with SIGHUP")?;
+        if !status.success() {
+            bail!("failed to SIGHUP dnsmasq (pid {pid}): {status}");
+        }
+
+        Ok(())
+    }
+
+    /// Stop the group's `dnsmasq`, if running. It runs as the current user, so
+    /// it is signalled directly via its pid-file. Best-effort and idempotent.
+    fn stop_dnsmasq(&self, bridge: &str) {
         let pid_path = self.dnsmasq_pid_path(bridge);
         if let Ok(contents) = std::fs::read_to_string(&pid_path)
             && let Ok(pid) = contents.trim().parse::<i32>()
@@ -783,8 +902,8 @@ impl LocalBackend {
             "Deleting local group {group_name} (bridge {bridge})"
         );
 
-        // Stop the RA daemon before removing the bridge it listens on.
-        self.stop_ra_daemon(&bridge);
+        // Stop `dnsmasq` before removing the bridge it listens on.
+        self.stop_dnsmasq(&bridge);
 
         // Best effort: stop every VM QEMU process started for this group. Each
         // VM records its pid under `working_dir/vms/<vm>/qemu.pid`; killing it

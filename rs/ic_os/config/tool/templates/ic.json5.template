@@ -119,6 +119,7 @@
     // ====================================
     http_handler: {
         listen_addr: "[::]:8080",
+        extra_api_boundary_node_trust_anchors_pem: {{ extra_api_boundary_node_trust_anchors_pem }},
     },
 
     // ====================================

@@ -151,21 +151,6 @@ system_test(
 
 system_test_nns(
     name = "standard_engine_replica_version_test",
-    # TODO: Remove this once PR 11208 is in master.
-    # Why: This test needs an API Boundary Node, and those do not work
-    # when you do `bazel test //rs/tests:widget_test_local`. This test
-    # only works, when run in Farm. This blocks `_local`.
-    #
-    # Ok, but why is API BN needed: Cloud Engines.
-    #
-    # Ok, but why do Cloud Engines need API BNs? They are not allowed
-    # to talk NATIVELY to canisters that live in other subnets, but
-    # they need to talk to the Registry canister, which lives in the NNS
-    # subnet.
-    #
-    # To satisfy these conflicting requirements, Cloud Engines talk to
-    # Registry via API BNs.
-    backend = "farm",
     # 1 API BN + 1 System + 2 * 4 Cloud Engine = 10 IC Node VMs * 6 vCPUs.
     cpus = MIN_LOCAL_CPUS + 10 * DEFAULT_VCPUS_PER_VM,
     # TODO: Re-enable this once BOTH of these pins in
