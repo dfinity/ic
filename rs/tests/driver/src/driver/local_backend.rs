@@ -431,8 +431,9 @@ impl LocalBackend {
     /// (vs the nodes' `0`), so it lies *outside* every node `/64` — meaning the
     /// GuestOS firewall's hard-coded accept for a node's own prefix does not
     /// match the driver, letting registry-derived deny rules actually be
-    /// exercised — while staying in the ULA range `fd00::/8` the backend
-    /// whitelists at bootstrap.
+    /// exercised. `init_ic` whitelists it (see
+    /// [`group_driver_ipv6_prefixes`](Self::group_driver_ipv6_prefixes)) so the
+    /// driver can still reach the nodes once the firewall is active.
     ///
     /// It is reserved for the driver's *own* host→node traffic; journald
     /// streaming ([`group_logs_ipv6`](Self::group_logs_ipv6)) and the file
@@ -495,6 +496,43 @@ impl LocalBackend {
             "fd00:{:02x}{:02x}:{:02x}{:02x}:3::1",
             hash[0], hash[1], hash[2], hash[3]
         )
+    }
+
+    /// The IPv6 ULA range every address the local backend hands out lives in:
+    /// the nodes' `/64`, the driver's own addresses and any other VM in the
+    /// group. Offered to tests that have to whitelist the *whole* group on the
+    /// nodes' firewall; see
+    /// [`InternetComputer::with_group_wide_firewall_whitelist`](crate::driver::ic::InternetComputer::with_group_wide_firewall_whitelist).
+    pub const GROUP_ULA_PREFIX: &'static str = "fd00::/8";
+
+    /// The three addresses the test driver reaches the group's VMs from: the
+    /// management source ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)), the
+    /// journald-streaming source ([`group_logs_ipv6`](Self::group_logs_ipv6))
+    /// and the file server's listen address
+    /// ([`group_files_ipv6`](Self::group_files_ipv6)).
+    ///
+    /// Kept as one list so that the places which have to know the full set —
+    /// assigning them to `lo` in [`create_group`](Self::create_group), removing
+    /// them again in [`delete_group`](Self::delete_group), and whitelisting them
+    /// on the nodes' firewall via
+    /// [`group_driver_ipv6_prefixes`](Self::group_driver_ipv6_prefixes) — cannot
+    /// drift apart when a fourth one is added.
+    fn group_driver_ipv6s(group_name: &str) -> [String; 3] {
+        [
+            Self::group_mgmt_ipv6(group_name),
+            Self::group_logs_ipv6(group_name),
+            Self::group_files_ipv6(group_name),
+        ]
+    }
+
+    /// [`group_driver_ipv6s`](Self::group_driver_ipv6s) as `/128` prefixes, for
+    /// the firewall whitelist `init_ic` seeds into the initial registry (see
+    /// `rs/tests/driver/src/driver/bootstrap.rs`).
+    pub fn group_driver_ipv6_prefixes(group_name: &str) -> Vec<String> {
+        Self::group_driver_ipv6s(group_name)
+            .into_iter()
+            .map(|addr| format!("{addr}/128"))
+            .collect()
     }
 
     /// Returns the per-group private IPv4 `/24` (a deterministic subnet in
@@ -574,10 +612,8 @@ impl LocalBackend {
         let gateway = Self::group_gateway_ipv6(group_name);
         // Driver addresses, all assigned to `lo`: the management source for
         // host→node traffic, the dedicated journald-streaming source, and the
-        // file server's listen address. See the respective `group_*_ipv6`.
-        let mgmt = Self::group_mgmt_ipv6(group_name);
-        let logs = Self::group_logs_ipv6(group_name);
-        let files = Self::group_files_ipv6(group_name);
+        // file server's listen address. See `group_driver_ipv6s`.
+        let [mgmt, logs, files] = Self::group_driver_ipv6s(group_name);
         // The IPv4 gateway (`<ipv4_prefix>.1`) also lives on the bridge so
         // `dnsmasq` can serve DHCPv4 to VMs that requested a second NIC.
         let ipv4_prefix = Self::group_ipv4_prefix(group_name);
@@ -894,9 +930,7 @@ impl LocalBackend {
     /// journald-streaming and file-server) from `lo`.
     pub fn delete_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
-        let mgmt = Self::group_mgmt_ipv6(group_name);
-        let logs = Self::group_logs_ipv6(group_name);
-        let files = Self::group_files_ipv6(group_name);
+        let [mgmt, logs, files] = Self::group_driver_ipv6s(group_name);
         info!(
             self.logger,
             "Deleting local group {group_name} (bridge {bridge})"
