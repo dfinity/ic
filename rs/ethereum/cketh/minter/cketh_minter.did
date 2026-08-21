@@ -250,6 +250,10 @@ type MinterInfo = record {
     // This might be less that the actual amount available on the `minter_address()`.
     erc20_balances : opt vec record { erc20_contract_address: text; balance: nat};
 
+    // Minimum balance, in each token's own units, that a deposit address must hold for the
+    // balance scan to treat it as a deposit candidate. A smaller balance is never detected.
+    minimum_deposit_amounts : opt vec record { erc20_contract_address: text; minimum_deposit_amount: nat};
+
     // Last scraped block number for logs of the ETH helper contract.
     last_eth_scraped_block_number: opt nat;
 
