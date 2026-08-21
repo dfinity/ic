@@ -28,7 +28,7 @@ use ic_interfaces_state_manager::{
 use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    NodeId, SubnetId,
+    Height, NodeId, SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackageShare, CatchUpShareContent, HasHeight,
@@ -164,6 +164,7 @@ impl CatchUpPackageMaker {
         start_block: Block,
     ) -> Option<CatchUpPackageShare> {
         let summary_height = start_block.height();
+
         let cup_type = get_catch_up_package_type(
             self.registry.as_ref(),
             self.replica_config.node_id,
@@ -171,6 +172,17 @@ impl CatchUpPackageMaker {
         )
         .inspect_err(|err| warn!(self.log, "Failed to get the catch up package type: {err}"))
         .ok()?;
+
+        let cup_height = self.get_cup_height(&start_block, cup_type);
+
+        let my_node_id = self.replica_config.node_id;
+        // Skip if this node has already made a share
+        if pool
+            .get_catch_up_package_shares(cup_height)
+            .any(|share| share.signature.signer == my_node_id)
+        {
+            return None;
+        }
 
         let halting = || {
             status::should_halt(
@@ -267,8 +279,6 @@ impl CatchUpPackageMaker {
             .inspect_err(|err| warn!(self.log, "Couldn't get a block for a CUP: {err}"))
             .ok()?;
 
-        let height = cup_block.height();
-
         let random_beacon = self
             .get_cup_random_beacon(pool, &cup_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Couldn't get a random beacon for a CUP: {err}"))
@@ -277,23 +287,14 @@ impl CatchUpPackageMaker {
         let high_threshold_transcript =
             get_current_transcript_from_summary_block(&cup_block, &NiDkgTag::HighThreshold)
                 .or_else(|| {
-                    warn!(self.log, "Couldn't find transcript at height {height}");
+                    warn!(self.log, "Couldn't find transcript at height {cup_height}");
                     None
                 })?;
-
-        let my_node_id = self.replica_config.node_id;
+        // Skip if this node is not in the committee to make CUP shares
         if !high_threshold_transcript
             .committee
             .get()
             .contains(&my_node_id)
-        {
-            return None;
-        }
-
-        // Skip if this node has already made a share
-        if pool
-            .get_catch_up_package_shares(height)
-            .any(|share| share.signature.signer == my_node_id)
         {
             return None;
         }
@@ -312,14 +313,14 @@ impl CatchUpPackageMaker {
             .inspect_err(|err| {
                 error!(
                     self.log,
-                    "Couldn't create a signature at height {height}: {err}"
+                    "Couldn't create a signature at height {cup_height}: {err}"
                 )
             })
             .ok()?;
 
         debug!(
             self.log,
-            "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {height}"
+            "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {cup_height}"
         );
         Some(CatchUpPackageShare {
             content: share_content,
@@ -327,20 +328,46 @@ impl CatchUpPackageMaker {
         })
     }
 
+    fn get_cup_height(&self, summary_block: &Block, cup_type: CatchUpPackageType) -> Height {
+        // IMPORTANT: keep this in sync with the height of the block returned by `get_cup_block`.
+        match cup_type {
+            CatchUpPackageType::Normal => summary_block.height(),
+            // During subnet splitting we skip one DKG interval
+            CatchUpPackageType::PostSplit { .. } => summary_block
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .get_next_start_height(),
+        }
+    }
+
     fn get_cup_block(
         &self,
         summary_block: Block,
         cup_type: CatchUpPackageType,
     ) -> Result<Block, String> {
-        match cup_type {
-            CatchUpPackageType::Normal => Ok(summary_block),
+        #[cfg(debug_assertions)]
+        let expected_height = self.get_cup_height(&summary_block, cup_type);
+
+        let cup_block = match cup_type {
+            CatchUpPackageType::Normal => summary_block,
             CatchUpPackageType::PostSplit { new_subnet_id } => create_post_split_summary_block(
                 &summary_block,
                 new_subnet_id,
                 self.registry.as_ref(),
             )
-            .map_err(|err| format!("Failed to create a post split block: {err}")),
-        }
+            .map_err(|err| format!("Failed to create a post split block: {err}"))?,
+        };
+
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            cup_block.height(),
+            expected_height,
+            "The CUP block height should match the expected CUP height"
+        );
+
+        Ok(cup_block)
     }
 
     fn get_cup_random_beacon(
@@ -443,6 +470,7 @@ mod tests {
     //! CatchUpPackageMaker unit tests
     use super::*;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+    use ic_consensus_utils::subnet_splitting::PostSplitAssignmentError;
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -542,6 +570,26 @@ mod tests {
                 .advance_round_normal_operation_n(dkg_interval_length);
 
             run(cup_maker, dkg_interval_length, deps)
+        })
+    }
+
+    #[test]
+    fn test_consistency_cup_type_height_block() {
+        with_cup_maker_setup(|cup_maker, _, Dependencies { pool, .. }| {
+            let proposal = pool.make_next_block();
+            let block = proposal.content.as_ref();
+            let cup_type = get_catch_up_package_type(
+                cup_maker.registry.as_ref(),
+                cup_maker.replica_config.node_id,
+                block,
+            )
+            .expect("Failed to get CUP type");
+            assert_eq!(cup_type, CatchUpPackageType::Normal);
+            let cup_height = cup_maker.get_cup_height(block, cup_type);
+            let cup_block = cup_maker
+                .get_cup_block(block.clone(), cup_type)
+                .expect("Failed to get CUP block");
+            assert_eq!(cup_height, cup_block.height());
         })
     }
 
@@ -1051,7 +1099,7 @@ mod tests {
                 let message_routing = Arc::new(message_routing);
 
                 let cup_maker = CatchUpPackageMaker::new(
-                    replica_config,
+                    replica_config.clone(),
                     membership,
                     crypto,
                     state_manager,
@@ -1081,6 +1129,23 @@ mod tests {
                 pool.insert_validated(proposal.clone());
                 pool.notarize(&proposal);
                 pool.finalize(&proposal);
+
+                // Consistency-check between `get_catch_up_package_type`, get_cup_height` and `get_cup_block`
+                let block = proposal.content.as_ref();
+                let cup_type =
+                    get_catch_up_package_type(registry.as_ref(), replica_config.node_id, block)
+                        .expect("Failed to get CUP type");
+                assert_eq!(
+                    cup_type,
+                    CatchUpPackageType::PostSplit {
+                        new_subnet_id: expected_new_subnet_id
+                    }
+                );
+                let cup_height = cup_maker.get_cup_height(block, cup_type);
+                let cup_block = cup_maker
+                    .get_cup_block(block.clone(), cup_type)
+                    .expect("Failed to get CUP block");
+                assert_eq!(cup_height, cup_block.height());
 
                 let share = cup_maker
                     .consider_block(&PoolReader::new(&pool), proposal.content.as_ref().clone())
@@ -1216,12 +1281,12 @@ mod tests {
                 let message_routing = Arc::new(message_routing);
 
                 let cup_maker = CatchUpPackageMaker::new(
-                    replica_config,
+                    replica_config.clone(),
                     membership,
                     crypto,
                     state_manager,
                     message_routing,
-                    registry,
+                    registry.clone(),
                     log,
                 );
 
@@ -1247,6 +1312,23 @@ mod tests {
                 pool.notarize(&proposal);
                 pool.finalize(&proposal);
 
+                assert!(
+                    get_catch_up_package_type(
+                        registry.as_ref(),
+                        replica_config.node_id,
+                        proposal.content.as_ref()
+                    )
+                    .expect_err("Expected error for node outside of both subnets")
+                    .contains(
+                        &match new_subnet_of_cup_maker {
+                            Some(subnet_id) =>
+                                PostSplitAssignmentError::DisallowedMembershipChange(subnet_id),
+                            None =>
+                                PostSplitAssignmentError::Unassigned(SPLITTING_REGISTRY_VERSION),
+                        }
+                        .to_string()
+                    )
+                );
                 assert_eq!(
                     cup_maker
                         .consider_block(&PoolReader::new(&pool), proposal.content.as_ref().clone()),
