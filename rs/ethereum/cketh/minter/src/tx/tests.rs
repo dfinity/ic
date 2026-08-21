@@ -222,9 +222,10 @@ fn should_cbor_encoding_be_stable() {
 mod eip7702 {
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
-        AccessList, Authorization, Eip7702TransactionRequest, SignedAuthorization,
-        SignedEip7702TransactionRequest, TransactionSignature,
+        AccessList, AccessListItem, Authorization, Eip7702TransactionRequest, SignedAuthorization,
+        SignedEip7702TransactionRequest, StorageKey, TransactionSignature,
     };
+    use assert_matches::assert_matches;
     use ethnum::u256;
     use ic_ethereum_types::Address;
     use std::str::FromStr;
@@ -399,6 +400,54 @@ mod eip7702 {
         assert_eq!(recovered.as_bytes(), authority.as_ref());
     }
 
+    #[test]
+    fn should_decode_the_raw_bytes_it_encoded() {
+        for signed_tx in [
+            sample_signed_transaction(),
+            sample_signed_transaction_with_access_list(),
+        ] {
+            let decoded =
+                SignedEip7702TransactionRequest::decode(&signed_tx.raw_transaction_bytes())
+                    .unwrap();
+
+            assert_eq!(decoded, signed_tx);
+            assert_eq!(decoded.hash(), signed_tx.hash());
+        }
+    }
+
+    #[test]
+    fn should_refuse_to_decode_a_transaction_of_another_type() {
+        let mut raw_transaction = sample_signed_transaction().raw_transaction_bytes();
+        raw_transaction[0] = 2;
+
+        assert_matches!(
+            SignedEip7702TransactionRequest::decode(&raw_transaction),
+            Err(e) if e.contains("got type 2")
+        );
+    }
+
+    #[test]
+    fn should_refuse_to_decode_an_empty_transaction() {
+        assert_matches!(
+            SignedEip7702TransactionRequest::decode(&[]),
+            Err(e) if e.contains("empty transaction")
+        );
+    }
+
+    /// The sample transaction carries an empty access list, so decoding it exercises neither the
+    /// nested storage keys nor the address inside an access-list item.
+    fn sample_signed_transaction_with_access_list() -> SignedEip7702TransactionRequest {
+        let signed_tx = sample_signed_transaction();
+        let transaction = Eip7702TransactionRequest {
+            access_list: AccessList(vec![AccessListItem {
+                address: Address::from_str("0x0303030303030303030303030303030303030303").unwrap(),
+                storage_keys: vec![StorageKey([0x11; 32]), StorageKey([0x22; 32])],
+            }]),
+            ..signed_tx.transaction().clone()
+        };
+        SignedEip7702TransactionRequest::from((transaction, sample_transaction_signature()))
+    }
+
     fn sample_signed_transaction() -> SignedEip7702TransactionRequest {
         let authorization = SignedAuthorization {
             chain_id: 6,
@@ -426,7 +475,11 @@ mod eip7702 {
             access_list: AccessList::new(),
             authorization_list: vec![authorization],
         };
-        let signature = TransactionSignature {
+        SignedEip7702TransactionRequest::from((transaction, sample_transaction_signature()))
+    }
+
+    fn sample_transaction_signature() -> TransactionSignature {
+        TransactionSignature {
             signature_y_parity: false,
             r: u256::from_str_hex(
                 "0xd93fc9ae934d4f72db91cb149e7e84b50ca83b5a8a7b873b0fdb009546e3af47",
@@ -436,8 +489,7 @@ mod eip7702 {
                 "0x786bfaf31af61eea6471dbb1bec7d94f73fb90887e4f04d0e9b85676c47ab02a",
             )
             .unwrap(),
-        };
-        SignedEip7702TransactionRequest::from((transaction, signature))
+        }
     }
 
     #[test]

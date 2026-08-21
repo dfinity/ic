@@ -16,8 +16,8 @@ use crate::state::transactions::{
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{
     AccessList, AccessListItem, Eip1559TransactionRequest, SignedAuthorization,
-    SignedEip1559TransactionRequest, SignedSweepTransaction, StorageKey, SweepTransaction,
-    TransactionSignature,
+    SignedEip1559TransactionRequest, SignedEip7702TransactionRequest, SignedSweepTransaction,
+    StorageKey, SweepTransaction, TransactionSignature,
 };
 use candid::Principal;
 use ic_agent::identity::AnonymousIdentity;
@@ -261,6 +261,18 @@ impl GetEventsFile {
             (request, signature)
         }
         fn map_signed_sweep_transaction(raw_transaction: &str) -> SignedSweepTransaction {
+            const EIP_7702_TRANSACTION_TYPE: u8 = 4;
+
+            let raw_bytes = hex::decode(raw_transaction.trim_start_matches("0x"))
+                .expect("BUG: sent sweep transaction is not hex-encoded");
+            if raw_bytes.first() == Some(&EIP_7702_TRANSACTION_TYPE) {
+                let signed = SignedEip7702TransactionRequest::decode(&raw_bytes)
+                    .expect("BUG: failed to deserialize sent EIP-7702 sweep transaction");
+                return SignedSweepTransaction::from((
+                    SweepTransaction::Eip7702(signed.transaction().clone()),
+                    signed.signature().clone(),
+                ));
+            }
             let (transaction, signature) = decode_signed_transaction(raw_transaction);
             SignedSweepTransaction::from((SweepTransaction::Eip1559(transaction), signature))
         }
