@@ -215,6 +215,10 @@ impl PipelineRequest for SweepRequest {
             transaction.amount, self.amount,
             "BUG: sweep transaction amount should equal the request amount"
         );
+        assert_eq!(
+            transaction.data, self.data,
+            "BUG: sweep transaction should carry the request's call data"
+        );
     }
 
     fn create_transaction(
