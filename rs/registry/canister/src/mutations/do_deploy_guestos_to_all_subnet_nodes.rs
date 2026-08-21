@@ -39,18 +39,7 @@ impl Registry {
             );
         }
 
-        // A blank replica_version_id names no version at all: it takes a Cloud
-        // Engine off a pinned version and defers to
-        // StandardEngineReplicaVersionRecord instead (see
-        // SubnetRecord.replica_version_id in subnet.proto). Nothing blank can be
-        // elected, so it is validated against the conditions that let the
-        // SubnetRecord invariant tolerate it (see invariants::replica_version)
-        // rather than against the elected versions.
-        if payload.replica_version_id.is_empty() {
-            self.check_blank_replica_version_id_is_allowed(subnet_id);
-        } else {
-            check_replica_version_is_elected(self, &payload.replica_version_id);
-        }
+        self.validate_deploy_guestos_payload(subnet_id, &payload);
 
         // Get the subnet record
         let subnet_key = make_subnet_record_key(subnet_id);
@@ -78,12 +67,24 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations)
     }
 
+    fn validate_deploy_guestos_payload(
+        &self,
+        subnet_id: SubnetId,
+        payload: &DeployGuestosToAllSubnetNodesPayload,
+    ) {
+        if payload.replica_version_id.is_empty() {
+            self.check_engine_can_have_blank_replica_version_id(subnet_id);
+        } else {
+            check_replica_version_is_elected(self, &payload.replica_version_id);
+        }
+    }
+
     /// Panics unless `subnet_id` is allowed to have a blank
     /// `replica_version_id` — i.e. it is a Cloud Engine, the feature is
     /// enabled, and there is a StandardEngineReplicaVersionRecord to resolve
     /// the blank against. Without the last one, blanking would leave the subnet
     /// with no replica version at all (and trip the SubnetRecord invariant).
-    fn check_blank_replica_version_id_is_allowed(&self, subnet_id: SubnetId) {
+    fn check_engine_can_have_blank_replica_version_id(&self, subnet_id: SubnetId) {
         assert!(
             is_blank_replica_version_id_for_cloud_engines_enabled(),
             "{LOG_PREFIX}do_deploy_guestos_to_all_subnet_nodes: a blank replica_version_id is \
@@ -134,10 +135,11 @@ mod tests {
     use ic_types::ReplicaVersion;
     use maplit::btreemap;
 
-    /// A second elected version, so that a
-    /// StandardEngineReplicaVersionRecord's two version IDs can differ (as its
-    /// invariant requires). Replica version IDs are git commit IDs.
-    const OTHER_REPLICA_VERSION_ID: &str = "63d086714a1e2bc6b0615008d5582f527d554cd3";
+    // Two elected replica versions, used as the old and new versions of a
+    // StandardEngineReplicaVersionRecord (whose invariant requires that they
+    // differ). Replica version IDs are git commit IDs.
+    const OLD_REPLICA_VERSION_ID: &str = "55c61431287c71ca6c70aa9457ab6c0a6fb61dab";
+    const NEW_REPLICA_VERSION_ID: &str = "5f13942e58297b970fdf5f4e33c0af8fc7faa267";
 
     /// Creates a registry with a single non-CloudEngine subnet of the given
     /// `subnet_type`. For CloudEngine subnets, use
@@ -180,9 +182,11 @@ mod tests {
         }
     }
 
-    /// A payload that takes the subnet off a pinned version, so that it follows
-    /// the StandardEngineReplicaVersionRecord instead.
-    fn blank_deploy_payload(subnet_id: SubnetId) -> DeployGuestosToAllSubnetNodesPayload {
+    /// Creates a payload that makes the subnet (presumably, an engine)
+    /// follow StandardEngineReplicaVersionRecord instead.
+    fn new_blank_replica_version_id_payload(
+        subnet_id: SubnetId,
+    ) -> DeployGuestosToAllSubnetNodesPayload {
         DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
             replica_version_id: String::new(),
@@ -190,18 +194,24 @@ mod tests {
     }
 
     /// Installs the record a blank `replica_version_id` resolves against. Its
-    /// two version IDs must differ and both must be elected, hence the extra
-    /// election.
+    /// two version IDs must differ and both must be elected, so both are
+    /// elected here.
     fn add_standard_engine_replica_version_record(registry: &mut Registry) {
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_replica_version_key(OTHER_REPLICA_VERSION_ID).as_bytes(),
-            ReplicaVersionRecord::default().encode_to_vec(),
-        )]);
+        registry.maybe_apply_mutation_internal(vec![
+            insert(
+                make_replica_version_key(OLD_REPLICA_VERSION_ID).as_bytes(),
+                ReplicaVersionRecord::default().encode_to_vec(),
+            ),
+            insert(
+                make_replica_version_key(NEW_REPLICA_VERSION_ID).as_bytes(),
+                ReplicaVersionRecord::default().encode_to_vec(),
+            ),
+        ]);
         registry.maybe_apply_mutation_internal(vec![insert(
             make_standard_engine_replica_version_record_key().as_bytes(),
             StandardEngineReplicaVersionRecord {
-                new_replica_version_id: OTHER_REPLICA_VERSION_ID.to_string(),
-                old_replica_version_id: ReplicaVersion::default().to_string(),
+                new_replica_version_id: NEW_REPLICA_VERSION_ID.to_string(),
+                old_replica_version_id: OLD_REPLICA_VERSION_ID.to_string(),
                 deployment_progress: 0.1,
             }
             .encode_to_vec(),
@@ -273,7 +283,7 @@ mod tests {
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             ENGINE_CONTROLLER_CANISTER_ID.get(),
-            blank_deploy_payload(subnet_id),
+            new_blank_replica_version_id_payload(subnet_id),
         );
 
         let subnet_record = registry.get_subnet_or_panic(subnet_id);
@@ -287,7 +297,7 @@ mod tests {
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             GOVERNANCE_CANISTER_ID.get(),
-            blank_deploy_payload(subnet_id),
+            new_blank_replica_version_id_payload(subnet_id),
         );
 
         let subnet_record = registry.get_subnet_or_panic(subnet_id);
@@ -302,7 +312,7 @@ mod tests {
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             ENGINE_CONTROLLER_CANISTER_ID.get(),
-            blank_deploy_payload(subnet_id),
+            new_blank_replica_version_id_payload(subnet_id),
         );
     }
 
@@ -318,7 +328,7 @@ mod tests {
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             ENGINE_CONTROLLER_CANISTER_ID.get(),
-            blank_deploy_payload(subnet_id),
+            new_blank_replica_version_id_payload(subnet_id),
         );
     }
 
@@ -335,7 +345,7 @@ mod tests {
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             GOVERNANCE_CANISTER_ID.get(),
-            blank_deploy_payload(subnet_id),
+            new_blank_replica_version_id_payload(subnet_id),
         );
     }
 
@@ -350,7 +360,7 @@ mod tests {
             GOVERNANCE_CANISTER_ID.get(),
             DeployGuestosToAllSubnetNodesPayload {
                 subnet_id: subnet_id.get(),
-                replica_version_id: OTHER_REPLICA_VERSION_ID.to_string(),
+                replica_version_id: NEW_REPLICA_VERSION_ID.to_string(),
             },
         );
     }
