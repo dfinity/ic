@@ -472,7 +472,7 @@ insufficient cycles attached, or the endpoint not being enabled on the subnet) r
 
 *Warning.* The cycles a node reports having spent on a mocked outcall include a term for how long the
 response took to arrive, which PocketIC derives from how long it took to run the mocked outcall in process.
-Aavoid asserting on exact cycles balances after any outcall priced with the pay-as-you-go pricing model —
+Avoid asserting on exact cycles balances after any outcall priced with the pay-as-you-go pricing model —
 whether it is a flexible one or an `http_request` mocked with `PocketIc::mock_canister_http_response`.
 Outcalls priced with the legacy pricing model are unaffected, since it ignores the reported spend.
 
