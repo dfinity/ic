@@ -63,6 +63,12 @@ pub struct Erc20Balance {
     pub balance: Nat,
 }
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+pub struct Erc20MinimumDeposit {
+    pub erc20_contract_address: String,
+    pub minimum_deposit_amount: Nat,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
@@ -80,6 +86,7 @@ pub struct MinterInfo {
     pub eth_balance: Option<Nat>,
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
     pub erc20_balances: Option<Vec<Erc20Balance>>,
+    pub minimum_deposit_amounts: Option<Vec<Erc20MinimumDeposit>>,
     pub last_eth_scraped_block_number: Option<Nat>,
     pub last_erc20_scraped_block_number: Option<Nat>,
     pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
