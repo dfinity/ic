@@ -22,6 +22,7 @@ use crate::driver::{
     metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
     report::SystemTestGroupError,
     serve_files_task::{SERVE_FILES_TASK_NAME, serve_files_task},
+    serve_ntp_task::{SERVE_NTP_TASK_NAME, serve_ntp_task},
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
@@ -236,6 +237,7 @@ pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
            && task_name.ne(METRICS_SYNC_TASK_NAME)
            && task_name.ne(VECTOR_LOGGING_TASK_NAME)
            && task_name.ne(SERVE_FILES_TASK_NAME)
+           && task_name.ne(SERVE_NTP_TASK_NAME)
            && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX)
            && !task_name.starts_with("dummy(")
     )
@@ -1065,6 +1067,26 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(serve_files_task_id)) as Box<dyn Task>
         };
 
+        // Under the Local backend IC-OS's `chrony` cannot reach any of the public
+        // NTP servers it is configured with, and SetupOS *halts its installation*
+        // if the clock never becomes synchronized. Serve NTP from the group's
+        // gateway instead; on Farm the nodes reach the real servers, so this is a
+        // no-op there.
+        let serve_ntp_task_id = TaskId::Test(String::from(SERVE_NTP_TASK_NAME));
+        let serve_ntp_task = if use_local_backend {
+            Box::from(subproc(
+                serve_ntp_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || serve_ntp_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(serve_ntp_task_id)) as Box<dyn Task>
+        };
+
         // Stream each VM's serial console (captured to a file on disk by the
         // Local backend) to the test log. Opt-in via `--stream-console-logs`,
         // which only the Local backend sets; on Farm this is an `EmptyTask`.
@@ -1292,10 +1314,17 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
+            let serve_ntp_plan = compose(
+                Some(serve_ntp_task),
+                EvalOrder::Sequential,
+                vec![serve_files_plan],
+                &mut compose_ctx,
+            );
+
             let logs_stream_plan = compose(
                 Some(logs_stream_task),
                 EvalOrder::Sequential,
-                vec![serve_files_plan],
+                vec![serve_ntp_plan],
                 &mut compose_ctx,
             );
 
@@ -1357,10 +1386,17 @@ impl SystemTestGroup {
             &mut compose_ctx,
         );
 
+        let serve_ntp_plan = compose(
+            Some(serve_ntp_task),
+            EvalOrder::Sequential,
+            vec![serve_files_plan],
+            &mut compose_ctx,
+        );
+
         let logs_stream_plan = compose(
             Some(logs_stream_task),
             EvalOrder::Sequential,
-            vec![serve_files_plan],
+            vec![serve_ntp_plan],
             &mut compose_ctx,
         );
 

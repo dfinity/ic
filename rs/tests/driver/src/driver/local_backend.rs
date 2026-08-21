@@ -64,6 +64,19 @@ const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
 /// `DNS=` servers the group's `dnsmasq` answers on.
 pub const IN_GROUP_DOMAIN_SUFFIX: &str = "ic.net";
 
+/// The NTP server names IC-OS's `chrony` can reach over plain NTP, which
+/// `start_dnsmasq` resolves to the group's gateway so that
+/// [`serve_ntp_task`](crate::driver::serve_ntp_task) can answer them.
+///
+/// Kept in sync by hand with `ic-os/components/misc/chrony/chrony.conf`, which
+/// lists these two `pool` directives plus fourteen `server ... nts` ones. The
+/// NTS servers are deliberately left unresolvable: serving them would mean
+/// terminating an NTS-KE TLS handshake on port 4460, and chrony's `prefer` only
+/// biases selection — an unreachable preferred source does not stop it selecting
+/// the pool source. So chrony logs a resolution failure for those and syncs from
+/// here.
+const NTP_POOL_HOSTNAMES: [&str; 2] = ["2.pool.ntp.org", "ntp.ubuntu.com"];
+
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
 /// Ubuntu `ovmf-generic-hwe` package; see `bazel/ovmf.bzl`). The code image is
@@ -715,7 +728,8 @@ impl LocalBackend {
     }
 
     /// Path of the extra hosts-file the group's `dnsmasq` serves DNS records
-    /// from (`--addn-hosts`), written by
+    /// from (`--addn-hosts`), seeded by
+    /// [`start_dnsmasq`](Self::start_dnsmasq) and appended to by
     /// [`add_dns_record`](Self::add_dns_record).
     fn dnsmasq_hosts_path(&self, bridge: &str) -> PathBuf {
         self.active_local_backend
@@ -733,6 +747,10 @@ impl LocalBackend {
     /// * a DHCPv4 server on the group's IPv4 `/24` for VMs with a second NIC,
     /// * the group's DNS server, answering on the name-server addresses
     ///   [`create_group`](Self::create_group) put on the bridge.
+    ///
+    /// It is also where the group's NTP service is published: the hosts-file is
+    /// seeded with [`NTP_POOL_HOSTNAMES`] pointing at the gateway, which is where
+    /// [`serve_ntp_task`](crate::driver::serve_ntp_task) answers.
     ///
     /// See [`create_group`](Self::create_group) for the rationale.
     fn start_dnsmasq(
@@ -752,10 +770,21 @@ impl LocalBackend {
         let log_path = dnsmasq_dir.join(format!("{bridge}.log"));
         // Remove a stale pid-file from a previous interrupted run.
         let _ = std::fs::remove_file(&pid_path);
-        // Truncate the hosts-file, both to drop any records such a run left and
+        // (Re)write the hosts-file, both to drop any records such a run left and
         // so it exists before `dnsmasq` starts: a missing `--addn-hosts` file is
         // tolerated, but relying on it being picked up later is needless risk.
-        std::fs::write(&hosts_path, "")
+        //
+        // Seed it with the NTP pool names (see `NTP_POOL_HOSTNAMES`) pointing at
+        // the gateway, where `serve_ntp_task` answers. Writing them here rather
+        // than through `add_dns_record` means they are available to the very first
+        // guest to boot, with no SIGHUP to race; `add_dns_record` appends, so the
+        // records tests register later are unaffected.
+        let gateway = Self::group_gateway_ipv6(group_name);
+        let ntp_records: String = NTP_POOL_HOSTNAMES
+            .iter()
+            .map(|hostname| format!("{gateway} {hostname}\n"))
+            .collect();
+        std::fs::write(&hosts_path, ntp_records)
             .with_context(|| format!("creating {}", hosts_path.display()))?;
 
         info!(
@@ -779,8 +808,8 @@ impl LocalBackend {
         // no upstream server left to forward to, anything it cannot answer is
         // REFUSED rather than leaked. It answers from two sources:
         //
-        // * `--addn-hosts` — records tests register through
-        //   [`add_dns_record`](Self::add_dns_record).
+        // * `--addn-hosts` — the NTP pool records seeded above, plus records
+        //   tests register through [`add_dns_record`](Self::add_dns_record).
         // * `--synth-domain` — synthesises `<address>.ipv6.nip.io` for the
         //   group's `/64`, with `:` written as `-`, mirroring the public
         //   `nip.io` wildcard service that tests use to name a VM by its
