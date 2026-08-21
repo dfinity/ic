@@ -522,3 +522,34 @@ mod subaccount {
         pub field_after: u64,
     }
 }
+
+mod encode_principal {
+    use crate::eth_logs::{encode_principal, parse_principal_from_slice};
+    use candid::Principal;
+
+    #[test]
+    fn should_round_trip_through_the_helper_encoding() {
+        for principal in [
+            Principal::from_slice(&[1, 2, 3, 4]),
+            Principal::from_slice(&[0xff; 29]),
+            candid::Principal::from_text("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
+        ] {
+            assert_eq!(
+                parse_principal_from_slice(&encode_principal(&principal)),
+                Ok(principal)
+            );
+        }
+    }
+
+    #[test]
+    fn should_reject_what_the_helper_never_carries() {
+        assert_eq!(
+            parse_principal_from_slice(&encode_principal(&Principal::management_canister())),
+            Err("management canister principal is not allowed".to_string())
+        );
+        assert_eq!(
+            parse_principal_from_slice(&encode_principal(&Principal::anonymous())),
+            Err("anonymous principal is not allowed".to_string())
+        );
+    }
+}
