@@ -920,7 +920,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
                     amount: amount.into(),
-                    data: format!("0x{}", hex::encode(data)),
+                    data: ByteBuf::from(data),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,
                 },

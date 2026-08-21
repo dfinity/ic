@@ -525,8 +525,8 @@ pub mod events {
             sweep_id: Nat,
             destination: String,
             amount: Nat,
-            /// Hex-encoded transaction call data (the delegate sweep call).
-            data: String,
+            /// Transaction call data (the delegate sweep call).
+            data: ByteBuf,
             max_transaction_fee: Nat,
             created_at: u64,
         },
