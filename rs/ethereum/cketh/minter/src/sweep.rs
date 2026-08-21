@@ -29,7 +29,6 @@ use crate::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use ic_management_canister_types_private::DerivationPath;
 
 /// Gas limit of a sweep transaction. A fixed, conservative bound; a per-request estimate arrives
 /// with the real delegate sweep call.
@@ -189,7 +188,7 @@ async fn sign_transactions_batch() {
             .map(|(sweep_id, tx)| async move {
                 (
                     sweep_id,
-                    crate::tx::sign(tx, DerivationPath::new(sweeper_derivation_path())).await,
+                    crate::tx::sign(tx, sweeper_derivation_path()).await,
                 )
             }),
     )
