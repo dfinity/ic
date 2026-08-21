@@ -4217,8 +4217,8 @@ fn process_mock_flexible_canister_https_response(
     let canister_id = context.request.sender;
 
     // The responses are assigned to the committee's nodes one each, in the
-    // (arbitrary but deterministic) order the `BTreeSet` iterates them in: which
-    // node reports which response is not observable through the API.
+    // deterministic order in which the `BTreeSet` iterates them. The assigned
+    // node IDs remain observable in per-node error details.
     let responses = std::iter::zip(
         committee.iter(),
         mock_flexible_canister_http_response.responses.iter(),
