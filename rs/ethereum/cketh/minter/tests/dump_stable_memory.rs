@@ -332,7 +332,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 id: SweepId(sweep_id.0.to_u64().unwrap()),
                 destination: destination.parse().unwrap(),
                 amount: amount.try_into().unwrap(),
-                data: hex::decode(data.strip_prefix("0x").unwrap_or(&data)).unwrap(),
+                data: data.into_vec(),
                 max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                 created_at,
             }),
