@@ -190,8 +190,8 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersion>;
 
-    /// Return the [ReplicaVersionRecord] as recorded in the subnet record
-    /// at the given height.
+    /// Return the [ReplicaVersionRecord] of the subnet. See
+    /// [Self::get_replica_version].
     fn get_replica_version_record(
         &self,
         subnet_id: SubnetId,
