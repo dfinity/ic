@@ -106,14 +106,16 @@ pub fn is_split_scheduled(summary_block: &Block) -> Option<SplittingArgs> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct PostSplitAssignment {
     pub new_subnet_id: SubnetId,
     pub other_subnet_id: SubnetId,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, PartialEq, Eq, Error)]
 pub enum PostSplitAssignmentError {
+    #[error("The summary block does not have a scheduled subnet split: {0:?}")]
+    SummaryBlockNotScheduled(SubnetSplittingStatus),
     #[error("Error while getting the subnet id from the registry at version {0}: {1}")]
     FailedToGetSubnetIdFromTheRegistry(RegistryVersion, RegistryClientError),
     #[error("The node is unassigned at registry version {0}")]
@@ -133,15 +135,18 @@ pub fn get_post_split_subnet_assignment(
         source_subnet_id,
     }: SplittingArgs,
 ) -> Result<PostSplitAssignment, PostSplitAssignmentError> {
-    debug_assert!(matches!(
-        summary_block
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .subnet_splitting_status(),
-        SubnetSplittingStatus::Scheduled(..)
-    ));
+    match summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .subnet_splitting_status()
+    {
+        SubnetSplittingStatus::Scheduled(..) => {}
+        status @ (SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit(..)) => {
+            return Err(PostSplitAssignmentError::SummaryBlockNotScheduled(status));
+        }
+    }
 
     // We determine the new subnet assignment of the node by looking up its subnet id in the
     // registry at the registry version of the summary block's validation context because this will
@@ -482,16 +487,32 @@ mod tests {
     }
 
     #[rstest]
-    fn should_not_be_scheduled_when_subnet_splitting_not_scheduled_test(
-        #[values(
-            SubnetSplittingStatus::NotScheduled,
-            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
-        )]
-        status: SubnetSplittingStatus,
+    #[case::not_scheduled(SubnetSplittingStatus::NotScheduled)]
+    #[case::post_split_source(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }))]
+    #[case::post_split_destination(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: DESTINATION_SUBNET_ID }))]
+    fn should_not_be_scheduled_and_assignment_should_fail_when_subnet_splitting_not_scheduled_test(
+        #[case] status: SubnetSplittingStatus,
     ) {
         let block = make_summary_block_with_status(status);
 
         assert!(is_split_scheduled(&block).is_none());
+
+        let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
+
+        let result = get_post_split_subnet_assignment(
+            NODE_1,
+            &block,
+            registry.as_ref(),
+            SplittingArgs {
+                source_subnet_id: SOURCE_SUBNET_ID,
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+            },
+        );
+
+        assert_eq!(
+            result,
+            Err(PostSplitAssignmentError::SummaryBlockNotScheduled(status))
+        );
     }
 
     #[test]
@@ -503,7 +524,12 @@ mod tests {
         let result =
             get_post_split_subnet_assignment(NODE_3, &block, registry.as_ref(), splitting_args);
 
-        assert_matches!(result, Err(PostSplitAssignmentError::DisallowedMembershipChange(s)) if s == OTHER_SUBNET_ID);
+        assert_eq!(
+            result,
+            Err(PostSplitAssignmentError::DisallowedMembershipChange(
+                OTHER_SUBNET_ID
+            ))
+        );
     }
 
     #[test]
@@ -515,7 +541,12 @@ mod tests {
         let result =
             get_post_split_subnet_assignment(NODE_4, &block, registry.as_ref(), splitting_args);
 
-        assert_matches!(result, Err(PostSplitAssignmentError::Unassigned(v)) if v == REGISTRY_CUP_REGISTRY_VERSION);
+        assert_eq!(
+            result,
+            Err(PostSplitAssignmentError::Unassigned(
+                REGISTRY_CUP_REGISTRY_VERSION
+            ))
+        );
     }
 
     #[test]
