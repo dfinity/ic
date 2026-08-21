@@ -14,9 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - The endpoint `/instances/<instance_id>/update/mock_flexible_canister_http` to mock the responses of the committee nodes
   of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request` management canister endpoint.
-  Unlike `/instances/<instance_id>/update/mock_canister_http`, which requires exactly one response per node of the subnet,
+  Unlike `/instances/<instance_id>/update/mock_canister_http`, which delivers one response per node of the subnet,
   it takes at most one response per node of the outcall's committee and those responses may differ.
-  Providing fewer responses than the committee size models the remaining committee nodes never responding.
+  Providing fewer responses than the committee size models the remaining committee nodes never responding: with at least
+  `min_responses` successful ones among them the outcall still succeeds, and with fewer it stays pending until the time is
+  advanced past its 60 second timeout.
   All responses to an outcall must be provided in a single call.
 - The endpoint `/instances/<instance_id>/read/get_canister_http` reports two additional fields for every pending canister HTTP
   outcall: `replication`, describing how the outcall is replicated across the nodes of its subnet (`FullyReplicated`,
@@ -42,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   have performed the outcall (the whole subnet for a fully replicated outcall, the outcall's committee for a flexible one,
   the designated node for a non-replicated one) instead of to every node of the subnet, and it reports the cycles actually
   spent on the outcall.
+- Mocking a canister HTTP response whose reject message exceeds the 1 KiB a node truncates its reject messages to now fails.
+  Such a response is not one any node could have reported: it would be priced above what a node can be charged for gossiping
+  a reject and produce a response share that a real subnet's nodes reject as too large.
+- A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching
+  what a node of a real subnet does.
 
 
 

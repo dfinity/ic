@@ -421,16 +421,13 @@ of its committee can be read, and its responses are mocked with `PocketIc::mock_
     assert_eq!(canister_http_requests.len(), 1);
     let canister_http_request = &canister_http_requests[0];
 
-    let CanisterHttpReplication::Flexible {
-        total_requests,
-        min_responses,
-        max_responses,
-    } = canister_http_request.replication
+    let CanisterHttpReplication::Flexible { total_requests, .. } =
+        canister_http_request.replication
     else {
         panic!("expected a flexible canister http outcall");
     };
 
-    let reply = |body: &[u8]| {
+    let http_reply = |body: &[u8]| {
         CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
             status: 200,
             headers: vec![],
@@ -440,17 +437,16 @@ of its committee can be read, and its responses are mocked with `PocketIc::mock_
     pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
         subnet_id: canister_http_request.subnet_id,
         request_id: canister_http_request.request_id,
-        // One response per committee node, assigned to the committee nodes in
-        // ascending node ID order. The responses may differ.
-        responses: vec![reply(b"hello"); total_requests as usize],
+        // One response per committee node. The responses may differ.
+        responses: vec![http_reply(b"hello"); total_requests as usize],
     });
 
-    // The calling canister receives between `min_responses` and `max_responses`
-    // of the mocked responses, smallest first.
+    // The calling canister receives at least `min_responses` (and at most
+    // `max_responses`) of the mocked responses, smallest first.
     let reply = pic.await_call(call_id).unwrap();
 ```
 
-Unlike `PocketIc::mock_canister_http_response`, which requires exactly one response per node of the subnet,
+Unlike `PocketIc::mock_canister_http_response`, which delivers one response per node of the subnet,
 this takes *at most* `total_requests` responses. Providing fewer models the remaining committee nodes never
 responding:
 - with at least `min_responses` successful responses among them, the outcall succeeds;
@@ -469,6 +465,10 @@ responding:
 mocked, the outcall no longer shows up in `PocketIc::get_canister_http` and further responses to it cannot
 be mocked.
 
+*Note.* A mocked reject message must fit into the 1 KiB a node truncates its reject messages to; mocking a
+longer one fails, since no node could have reported it. This applies to `PocketIc::mock_canister_http_response`
+just as much as to `PocketIc::mock_flexible_canister_http_response`.
+
 Note that a flexible outcall never rejects the calling canister's call: every outcome above, including the
 errors, is delivered as a `flexible_http_request_result` reply. Only a synchronous failure (invalid arguments,
 insufficient cycles attached, or the endpoint not being enabled on the subnet) rejects the call.
@@ -476,7 +476,11 @@ insufficient cycles attached, or the endpoint not being enabled on the subnet) r
 *Warning.* The cycles a node reports having spent on a mocked outcall include a term for how long the
 response took to arrive, which PocketIC derives from how long it took to run the mocked outcall in process.
 That term is zero in practice (it is measured in whole milliseconds), but it is not guaranteed to be, so
-avoid asserting on exact cycles balances after a flexible outcall.
+avoid asserting on exact cycles balances after any outcall priced with the pay-as-you-go pricing model —
+whether it is a flexible one or an `http_request` mocked with `PocketIc::mock_canister_http_response`.
+Outcalls priced with the legacy pricing model are unaffected, since it ignores the reported spend.
+
+### Live mode
 
 In the live mode (see the section "Live Mode" for more details), the canister HTTP outcalls are processed
 by actually making an HTTP request to the URL specified in the canister HTTP outcall.

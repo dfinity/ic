@@ -2,7 +2,7 @@ use candid::{CandidType, Nat, Principal, define_function};
 use ic_cdk::api::{
     accept_message, canister_self, debug_print, instruction_counter, msg_arg_data, msg_reject,
 };
-use ic_cdk::call::{Call, CallFailed, Error as CallError, RejectCode};
+use ic_cdk::call::{Call, Error as CallError, RejectCode};
 use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::{inspect_message, query, trap, update};
 use ic_cdk_management_canister::{
@@ -48,24 +48,14 @@ impl RejectionCode {
     }
 }
 
-/// Translates a failed call into the reject code and message `canister_http`
-/// reports back over Candid.
-fn map_call_error(err: CallError) -> (RejectionCode, String) {
-    match err {
+/// Translates a failed call into the reject code and message the HTTP outcall
+/// endpoints below report back over Candid.
+///
+/// Takes anything that converts into a `CallError`, so that it also covers the
+/// `CallFailed` of a raw call whose reply is not decoded.
+fn map_call_error(err: impl Into<CallError>) -> (RejectionCode, String) {
+    match err.into() {
         CallError::CallRejected(rejected) => (
-            RejectionCode::from_raw(rejected.raw_reject_code()),
-            rejected.reject_message().to_string(),
-        ),
-        // Nothing reached the callee, so there is no reject code to report.
-        other => (RejectionCode::Unknown, other.to_string()),
-    }
-}
-
-/// Translates a failed raw call into the reject code and message
-/// `flexible_canister_http` reports back over Candid.
-fn map_raw_call_error(err: CallFailed) -> (RejectionCode, String) {
-    match err {
-        CallFailed::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
         ),
@@ -457,7 +447,7 @@ async fn canister_http_raw(
         .with_cycles(cycles)
         .await
         .map(|response| ByteBuf::from(response.into_bytes()))
-        .map_err(map_raw_call_error)
+        .map_err(map_call_error)
 }
 
 /// Makes a flexible HTTP outcall, passing `args` (a Candid-encoded
@@ -477,7 +467,7 @@ async fn flexible_canister_http(
         .with_cycles(cycles)
         .await
         .map(|response| ByteBuf::from(response.into_bytes()))
-        .map_err(map_raw_call_error)
+        .map_err(map_call_error)
 }
 
 // inter-canister calls

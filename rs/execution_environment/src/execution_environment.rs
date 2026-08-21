@@ -1354,11 +1354,11 @@ impl ExecutionEnvironment {
                                 // The pay-as-you-go pricing model is gated behind
                                 // the same `flexible_http_requests` feature flag as
                                 // flexible outcalls; until it is enabled, a request
-                                // asking for it falls back to legacy pricing.
-                                let pay_as_you_go_enabled = matches!(
-                                    self.config.flexible_http_requests,
-                                    FlagStatus::Enabled
-                                );
+                                // asking for it falls back to legacy pricing, like
+                                // one asking for any other unsupported pricing
+                                // version.
+                                let pay_as_you_go_enabled =
+                                    self.config.flexible_http_requests == FlagStatus::Enabled;
                                 match CanisterHttpRequestContext::generate_from_args(
                                     state.time(),
                                     request.as_ref(),

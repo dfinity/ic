@@ -1179,10 +1179,16 @@ pub struct CanisterHttpHeader {
     Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
 )]
 pub enum CanisterHttpReplication {
-    /// Every node of the subnet performs the outcall and they must all agree on
-    /// the response. Mock such an outcall with `PocketIc::mock_canister_http_response`.
+    /// Every node of the subnet performs the outcall and a response is delivered
+    /// once `n - f` of them agree on it (9 of 13 on a regular application subnet);
+    /// too many differing responses make the outcall fail with a "no consensus
+    /// could be reached" rejection instead. Mock such an outcall with
+    /// `PocketIc::mock_canister_http_response`.
     FullyReplicated,
-    /// A single node performs the outcall (`is_replicated = false`).
+    /// A single node performs the outcall (`is_replicated = false`) and its
+    /// response is the one delivered. Which node that is is not exposed, so such an
+    /// outcall is mocked with `PocketIc::mock_canister_http_response` like a fully
+    /// replicated one, i.e. by answering for every node of the subnet.
     NonReplicated,
     /// A committee of `total_requests` nodes performs the outcall and between
     /// `min_responses` and `max_responses` of their (potentially differing)
@@ -1209,7 +1215,8 @@ pub enum CanisterHttpPricingVersion {
     Legacy,
     /// The outcall is charged for the resources it actually consumes: a base fee is
     /// charged up front, a per-replica cycles allowance is withheld from the
-    /// payment, and whatever the responding nodes do not spend is refunded.
+    /// payment, and whatever the responding nodes do not spend — beyond the cost of
+    /// putting the response into a block — is refunded.
     PayAsYouGo,
 }
 
@@ -1293,6 +1300,9 @@ pub struct CanisterHttpReply {
 )]
 pub struct CanisterHttpReject {
     pub reject_code: u64,
+    /// The reject message. Bounded by the 1 KiB a node truncates its reject
+    /// messages to: mocking a longer message fails, since no node could have
+    /// reported it.
     pub message: String,
 }
 
@@ -1356,20 +1366,22 @@ pub struct RawMockFlexibleCanisterHttpResponse {
 /// Mocked responses to a pending *flexible* canister HTTP outcall, i.e. one made
 /// through the `flexible_http_request` management canister endpoint.
 ///
-/// Unlike a fully replicated outcall, whose nodes must all agree on one response,
-/// a flexible outcall is performed by a committee of `total_requests` nodes whose
-/// responses may differ and need not all arrive (see
+/// Unlike a fully replicated outcall, which delivers the one response its nodes
+/// agree on, a flexible outcall is performed by a committee of `total_requests`
+/// nodes whose responses may differ and need not all arrive (see
 /// [`CanisterHttpReplication::Flexible`]).
 #[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MockFlexibleCanisterHttpResponse {
     pub subnet_id: Principal,
     pub request_id: u64,
-    /// One response per committee node that responded, assigned to the outcall's
-    /// committee nodes in ascending node ID order.
+    /// One response per committee node that responded. Each response is attributed
+    /// to a different committee node; which node reports which is not observable
+    /// (and does not matter, as the calling canister is never told).
     ///
     /// There may be at most `total_requests` responses; providing fewer models a
-    /// committee whose remaining nodes never respond, which is how a timeout is
-    /// mocked.
+    /// committee whose remaining nodes never respond. With at least `min_responses`
+    /// successful ones among them the outcall still succeeds; with fewer it stays
+    /// pending until the time is advanced past its 60 second timeout.
     pub responses: Vec<CanisterHttpResponse>,
 }
 

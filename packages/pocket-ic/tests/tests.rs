@@ -2173,9 +2173,11 @@ fn test_flexible_canister_http_responses_too_large() {
     let (call_id, request) =
         submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
 
-    // Both responses are well below the 2 MB cap on a single response, but the two
-    // of them together exceed the 2 MiB a block has for HTTP outcall responses,
-    // and both of them have to be delivered (`min_responses == 2`).
+    // Both responses are well below the 2 MB cap on a single response
+    // (`MAX_CANISTER_HTTP_RESPONSE_BYTES`), but the two of them together exceed the
+    // 2 MiB a block has for HTTP outcall responses
+    // (`MAX_CANISTER_HTTP_PAYLOAD_SIZE`), and both of them have to be delivered
+    // (`min_responses == 2`).
     let body = vec![b'x'; 1_100_000];
     pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
         subnet_id: request.subnet_id,
@@ -2202,7 +2204,8 @@ fn test_flexible_canister_http_out_of_cycles() {
 
     // Enough to cover the outcall's base fee (~50M cycles on a 13-node subnet with
     // this replication) and to let every node perform the outcall, but nowhere near
-    // enough to also cover the cost of putting 13 responses into a block.
+    // enough to also cover the cost of putting 13 responses into a block. Revisit
+    // if the fees in `rs/https_outcalls/pricing/src/fees.rs` change.
     const CYCLES: u128 = 100_000_000;
     let replication = ReplicationCounts {
         total_requests: 13,
@@ -2344,7 +2347,8 @@ fn test_canister_http_pay_as_you_go_out_of_cycles() {
 
     // Enough to cover the outcall's base fee (~38M cycles on a 13-node subnet) and
     // to let every node perform the outcall, but nowhere near enough to also cover
-    // the cost of putting a 10 KB response into a block.
+    // the cost of putting a 10 KB response into a block. Revisit if the fees in
+    // `rs/https_outcalls/pricing/src/fees.rs` change.
     const CYCLES: u128 = 80_000_000;
     let (call_id, request) =
         submit_pay_as_you_go_outcall(&pic, canister_id, PRICING_VERSION_PAY_AS_YOU_GO, CYCLES);
@@ -2544,6 +2548,93 @@ fn test_flexible_mock_of_fully_replicated_outcall() {
         subnet_id: request.subnet_id,
         request_id: request.request_id,
         responses: vec![reply(b"hello")],
+    });
+}
+
+/// A mocked reject is priced too: a rejecting node reports having downloaded
+/// nothing, and a fully replicated outcall does not gossip its responses either,
+/// so nothing beyond the base fee and the consensus cost of putting the reject
+/// into a block is charged.
+#[test]
+fn test_canister_http_pay_as_you_go_reject() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+
+    let balance_before = pic.cycle_balance(canister_id);
+    let (call_id, request) = submit_pay_as_you_go_outcall(
+        &pic,
+        canister_id,
+        PRICING_VERSION_PAY_AS_YOU_GO,
+        FLEXIBLE_OUTCALL_CYCLES,
+    );
+    let balance_in_flight = pic.cycle_balance(canister_id);
+    assert!(balance_in_flight < balance_before);
+
+    pic.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: request.subnet_id,
+        request_id: request.request_id,
+        response: reject("Connection refused"),
+        additional_responses: vec![],
+    });
+
+    let reply = pic.await_call(call_id).unwrap();
+    let (reject_code, message) =
+        decode_raw_http_result(&reply).expect_err("expected the outcall to be rejected");
+    assert!(
+        matches!(reject_code, RejectionCode::SysTransient),
+        "unexpected reject code {reject_code:?} (message: {message})"
+    );
+    assert_eq!(message, "Connection refused");
+
+    let balance_after = pic.cycle_balance(canister_id);
+    assert!(
+        balance_after > balance_in_flight,
+        "expected a refund: {balance_in_flight} -> {balance_after}"
+    );
+    assert!(
+        balance_after < balance_before,
+        "expected the outcall to cost something: {balance_after} >= {balance_before}"
+    );
+}
+
+/// A reject message longer than the 1 KiB a node truncates its reject messages to
+/// is not one any node could have reported, so mocking it is an error.
+#[test]
+#[should_panic(expected = "CanisterHttpRejectMessageTooLong((1025, 1024))")]
+fn test_canister_http_reject_message_too_long() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+
+    let (_call_id, request) =
+        submit_raw_outcall(&pic, canister_id, None, None, FLEXIBLE_OUTCALL_CYCLES);
+
+    pic.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: request.subnet_id,
+        request_id: request.request_id,
+        response: reject(&"x".repeat(1025)),
+        additional_responses: vec![],
+    });
+}
+
+/// The same holds for the flexible mock.
+#[test]
+#[should_panic(expected = "CanisterHttpRejectMessageTooLong((1025, 1024))")]
+fn test_flexible_canister_http_reject_message_too_long() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+
+    let replication = ReplicationCounts {
+        total_requests: 2,
+        min_responses: 1,
+        max_responses: 2,
+    };
+    let (_call_id, request) =
+        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
+
+    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
+        subnet_id: request.subnet_id,
+        request_id: request.request_id,
+        responses: vec![reject(&"x".repeat(1025))],
     });
 }
 
@@ -4829,28 +4920,4 @@ fn test_delete_subnet_state_dir() {
     // After deletion, only the NNS subnet's and the remaining application subnet's
     // state directories should exist.
     assert_eq!(subnet_dirs_count(), 2);
-}
-
-#[test]
-fn zz_debug_outcall() {
-    let pic = PocketIc::new();
-    let canister_id = deploy_test_canister(&pic);
-    println!("ZZ balance before: {}", pic.cycle_balance(canister_id));
-    let call_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "canister_http",
-            encode_one("example.com").unwrap(),
-        )
-        .unwrap();
-    for i in 0..6 {
-        pic.tick();
-        println!(
-            "ZZ regular tick {i}: pending={:?} ingress={:?} balance={}",
-            pic.get_canister_http().len(),
-            pic.ingress_status(call_id.clone()),
-            pic.cycle_balance(canister_id),
-        );
-    }
 }

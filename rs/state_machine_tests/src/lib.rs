@@ -2764,8 +2764,10 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
-    /// Injects one response share per node of the subnet, all reporting an empty
-    /// payment receipt.
+    /// Injects one response share per node of the subnet, all reporting that the
+    /// node spent nothing on the outcall (so that, under the pay-as-you-go pricing
+    /// model, the only thing charged against the withheld per-replica allowances is
+    /// the consensus cost of putting the response into a block).
     ///
     /// This is what a fully replicated HTTP outcall needs. For an outcall
     /// performed by only a subset of the nodes, or one whose nodes report having
@@ -2801,6 +2803,12 @@ impl StateMachine {
         canister_id: CanisterId,
         responses: BTreeMap<NodeId, (CanisterHttpResponseContent, CanisterHttpPaymentReceipt)>,
     ) {
+        for node_id in responses.keys() {
+            assert!(
+                self.nodes.iter().any(|node| node.node_id == *node_id),
+                "cannot respond as {node_id}, which is not a node of this subnet"
+            );
+        }
         for (node_id, (content, payment_receipt)) in responses {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {

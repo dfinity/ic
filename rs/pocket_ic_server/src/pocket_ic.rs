@@ -53,7 +53,7 @@ use ic_https_outcalls_adapter::{
     start_server as start_canister_http_server,
 };
 use ic_https_outcalls_adapter_client::{CanisterHttpAdapterClientImpl, setup_canister_http_client};
-use ic_https_outcalls_pricing::{NetworkUsage, PricingFactory};
+use ic_https_outcalls_pricing::{NetworkUsage, PricingError, PricingFactory};
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
 use ic_https_outcalls_service::HttpsOutcallResult;
@@ -126,7 +126,8 @@ use ic_types::{
         CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest as AdapterCanisterHttpRequest, CanisterHttpRequestContext,
         CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
-        CanisterHttpResponseContent, PricingVersion, Replication,
+        CanisterHttpResponseContent, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion,
+        Replication, ReplicationKind,
     },
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable, threshold_sig::IcRootOfTrust},
     malicious_flags::MaliciousFlags,
@@ -3752,17 +3753,19 @@ fn http_header_from(
 }
 
 fn replication_from(replication: &Replication) -> CanisterHttpReplication {
-    match replication {
-        Replication::FullyReplicated => CanisterHttpReplication::FullyReplicated,
-        Replication::NonReplicated(_) => CanisterHttpReplication::NonReplicated,
-        Replication::Flexible {
-            committee,
+    // `Replication::kind()` already derives the committee size, so the conversion
+    // only has to rename the variants.
+    match replication.kind() {
+        ReplicationKind::FullyReplicated => CanisterHttpReplication::FullyReplicated,
+        ReplicationKind::NonReplicated => CanisterHttpReplication::NonReplicated,
+        ReplicationKind::Flexible {
+            total_requests,
             min_responses,
             max_responses,
         } => CanisterHttpReplication::Flexible {
-            total_requests: committee.len() as u32,
-            min_responses: *min_responses,
-            max_responses: *max_responses,
+            total_requests,
+            min_responses,
+            max_responses,
         },
     }
 }
@@ -3943,17 +3946,32 @@ async fn setup_adapter_mock(
 
 // END COPY
 
-/// Checks that every reject code appearing in `responses` is a valid one.
-fn validate_mock_canister_http_reject_codes<'a>(
+/// Checks that every reject in `responses` is one a node could have produced, i.e.
+/// that its reject code is a valid one and that its message is within the size a
+/// node truncates its reject messages to.
+fn validate_mock_canister_http_rejects<'a>(
     responses: impl Iterator<Item = &'a CanisterHttpResponse>,
 ) -> Result<(), OpOut> {
     for response in responses {
-        if let CanisterHttpResponse::CanisterHttpReject(reject) = response
-            && ic_error_types::RejectCode::try_from(reject.reject_code).is_err()
-        {
+        let CanisterHttpResponse::CanisterHttpReject(reject) = response else {
+            continue;
+        };
+        if ic_error_types::RejectCode::try_from(reject.reject_code).is_err() {
             return Err(OpOut::Error(PocketIcError::InvalidRejectCode(
                 reject.reject_code,
             )));
+        }
+        // A node prunes an oversized reject message before signing and gossiping
+        // it, so a longer message is not something any node could have reported:
+        // it would both be priced above what a node can be charged for gossiping
+        // a reject and produce a response share that peers reject as too large.
+        if reject.message.len() > MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES {
+            return Err(OpOut::Error(
+                PocketIcError::CanisterHttpRejectMessageTooLong((
+                    reject.message.len(),
+                    MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES,
+                )),
+            ));
         }
     }
     Ok(())
@@ -3966,12 +3984,12 @@ fn validate_mock_canister_http_reject_codes<'a>(
 /// A reply is pushed through a real [`CanisterHttpAdapterClientImpl`] backed by an
 /// in-process adapter serving exactly that reply, so that the calling canister's
 /// transform function really runs and the spend is accounted for by the real
-/// pricing machinery. A reject is turned into reject content directly, preserving
-/// the reject code and message provided by the caller, and is priced as a failed
-/// outcall that downloaded nothing.
+/// pricing machinery. A reject is turned into reject content directly, keeping the
+/// reject code and message provided by the caller, and is priced as an outcall that
+/// downloaded nothing and only gossiped its reject body.
 fn mock_canister_http_response_content(
     pic: &PocketIc,
-    subnet: &Arc<StateMachine>,
+    subnet: &StateMachine,
     canister_http_request_id: CanisterHttpRequestId,
     context: &CanisterHttpRequestContext,
     response: &CanisterHttpResponse,
@@ -4034,22 +4052,35 @@ fn mock_canister_http_response_content(
             }
         }
         CanisterHttpResponse::CanisterHttpReject(reject) => {
+            // The reject code was checked by `validate_mock_canister_http_rejects`
+            // before any response was converted.
             let reject = CanisterHttpReject {
                 reject_code: ic_error_types::RejectCode::try_from(reject.reject_code).unwrap(),
                 message: reject.message.clone(),
             };
-            // A rejecting node downloaded nothing and ran no transform, but it does
-            // gossip its reject body to its peers. This mirrors how the HTTPS
-            // outcalls client prices an outcall that failed before it got a
-            // response.
             let mut budget =
                 PricingFactory::new(&MetricsRegistry::new(), subnet.replica_logger.clone())
                     .new_tracker(context);
-            let _ = budget.subtract_network_usage(NetworkUsage {
-                response_size: NumBytes::from(0),
-                response_time: Duration::ZERO,
-            });
-            let _ = budget.subtract_gossip_usage(NumBytes::from(reject.count_bytes() as u64));
+            // A rejecting node ran no transform and, unlike a real one, spent no
+            // time on an outcall that downloaded nothing. It does gossip its reject
+            // body to its peers though, which is what it is charged for here.
+            budget
+                .subtract_network_usage(NetworkUsage {
+                    response_size: NumBytes::from(0),
+                    response_time: Duration::ZERO,
+                })
+                .expect("an outcall that consumed no network resources is never charged");
+            // A node that cannot pay for gossiping its reject reports an
+            // out-of-cycles reject instead of the one it produced, just like the
+            // HTTPS outcalls client does.
+            let reject =
+                match budget.subtract_gossip_usage(NumBytes::from(reject.count_bytes() as u64)) {
+                    Ok(()) => reject,
+                    Err(PricingError::InsufficientCycles) => CanisterHttpReject {
+                        reject_code: ic_error_types::RejectCode::CanisterReject,
+                        message: "Insufficient cycles".to_string(),
+                    },
+                };
             (
                 CanisterHttpResponseContent::Reject(reject),
                 budget.create_payment_receipt(),
@@ -4058,31 +4089,54 @@ fn mock_canister_http_response_content(
     }
 }
 
+/// The pending canister HTTP outcall a mock refers to: the subnet it was made on,
+/// its request ID, and its request context.
+type PendingCanisterHttpRequest = (
+    Arc<StateMachine>,
+    CanisterHttpRequestId,
+    CanisterHttpRequestContext,
+);
+
+/// Resolves the subnet and the pending canister HTTP outcall a mock refers to.
+fn pending_canister_http_request(
+    pic: &PocketIc,
+    raw_subnet_id: Principal,
+    request_id: u64,
+) -> Result<PendingCanisterHttpRequest, OpOut> {
+    let subnet_id = ic_types::SubnetId::new(ic_types::PrincipalId(raw_subnet_id));
+    let Some(subnet) = pic.subnets.get(subnet_id) else {
+        return Err(OpOut::Error(PocketIcError::SubnetNotFound(raw_subnet_id)));
+    };
+    let canister_http_request_id = CanisterHttpRequestId::from(request_id);
+    let Some(context) = subnet
+        .canister_http_request_contexts()
+        .remove(&canister_http_request_id)
+    else {
+        return Err(OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
+            subnet_id,
+            canister_http_request_id,
+        ))));
+    };
+    Ok((subnet, canister_http_request_id, context))
+}
+
 fn process_mock_canister_https_response(
     pic: &PocketIc,
     mock_canister_http_response: &MockCanisterHttpResponse,
 ) -> OpOut {
-    if let Err(err) = validate_mock_canister_http_reject_codes(
+    if let Err(err) = validate_mock_canister_http_rejects(
         std::iter::once(&mock_canister_http_response.response)
             .chain(mock_canister_http_response.additional_responses.iter()),
     ) {
         return err;
     }
-    let subnet_id =
-        ic_types::SubnetId::new(ic_types::PrincipalId(mock_canister_http_response.subnet_id));
-    let Some(subnet) = pic.subnets.get(subnet_id) else {
-        return OpOut::Error(PocketIcError::SubnetNotFound(
-            mock_canister_http_response.subnet_id,
-        ));
-    };
-    let canister_http_request_id =
-        CanisterHttpRequestId::from(mock_canister_http_response.request_id);
-    let contexts = subnet.canister_http_request_contexts();
-    let Some(context) = contexts.get(&canister_http_request_id) else {
-        return OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
-            subnet_id,
-            canister_http_request_id,
-        )));
+    let (subnet, canister_http_request_id, context) = match pending_canister_http_request(
+        pic,
+        mock_canister_http_response.subnet_id,
+        mock_canister_http_response.request_id,
+    ) {
+        Ok(request) => request,
+        Err(err) => return err,
     };
     let canister_id = context.request.sender;
 
@@ -4105,7 +4159,7 @@ fn process_mock_canister_https_response(
             pic,
             &subnet,
             canister_http_request_id,
-            context,
+            &context,
             response,
         )
     };
@@ -4120,10 +4174,13 @@ fn process_mock_canister_https_response(
         vec![content.clone(); subnet.nodes.len() - 1]
     };
     contents.push(content);
-    // Every node of the subnet answers, whether or not it is one of the nodes that
-    // would have performed the outcall: the payload builder only ever looks at the
-    // shares of the latter, and requiring one response per subnet node is the
-    // contract of this (non-flexible) mock.
+    // Every node of the subnet answers, which is the contract of this
+    // (non-flexible) mock. That is exactly what a fully replicated outcall needs,
+    // since its committee is the whole node set. For a non-replicated or flexible
+    // outcall the payload builder ignores the shares of the nodes outside the
+    // designated node / the committee, so the surplus responses are harmless (see
+    // `mock_flexible_canister_http_response` for mocking a flexible outcall
+    // committee by committee).
     let responses = std::iter::zip(subnet.nodes.iter(), contents)
         .map(|(node, content)| (node.node_id, content))
         .collect();
@@ -4139,31 +4196,22 @@ fn process_mock_flexible_canister_https_response(
     pic: &PocketIc,
     mock_flexible_canister_http_response: &MockFlexibleCanisterHttpResponse,
 ) -> OpOut {
-    if let Err(err) = validate_mock_canister_http_reject_codes(
-        mock_flexible_canister_http_response.responses.iter(),
-    ) {
+    if let Err(err) =
+        validate_mock_canister_http_rejects(mock_flexible_canister_http_response.responses.iter())
+    {
         return err;
     }
-    let subnet_id = ic_types::SubnetId::new(ic_types::PrincipalId(
+    let (subnet, canister_http_request_id, context) = match pending_canister_http_request(
+        pic,
         mock_flexible_canister_http_response.subnet_id,
-    ));
-    let Some(subnet) = pic.subnets.get(subnet_id) else {
-        return OpOut::Error(PocketIcError::SubnetNotFound(
-            mock_flexible_canister_http_response.subnet_id,
-        ));
-    };
-    let canister_http_request_id =
-        CanisterHttpRequestId::from(mock_flexible_canister_http_response.request_id);
-    let contexts = subnet.canister_http_request_contexts();
-    let Some(context) = contexts.get(&canister_http_request_id) else {
-        return OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
-            subnet_id,
-            canister_http_request_id,
-        )));
+        mock_flexible_canister_http_response.request_id,
+    ) {
+        Ok(request) => request,
+        Err(err) => return err,
     };
     let Replication::Flexible { committee, .. } = &context.replication else {
         return OpOut::Error(PocketIcError::NotAFlexibleCanisterHttpRequest((
-            subnet_id,
+            subnet.get_subnet_id(),
             canister_http_request_id,
         )));
     };
@@ -4176,8 +4224,9 @@ fn process_mock_flexible_canister_https_response(
     }
     let canister_id = context.request.sender;
 
-    // The committee is a `BTreeSet`, i.e. the responses are assigned to its nodes
-    // in ascending node ID order.
+    // The responses are assigned to the committee's nodes one each, in the
+    // (arbitrary but deterministic) order the `BTreeSet` iterates them in: which
+    // node reports which response is not observable through the API.
     let responses = std::iter::zip(
         committee.iter(),
         mock_flexible_canister_http_response.responses.iter(),
@@ -4189,7 +4238,7 @@ fn process_mock_flexible_canister_https_response(
                 pic,
                 &subnet,
                 canister_http_request_id,
-                context,
+                &context,
                 response,
             ),
         )

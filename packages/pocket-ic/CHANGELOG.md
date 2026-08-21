@@ -12,10 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIc::mock_flexible_canister_http_response` and the type `MockFlexibleCanisterHttpResponse` to mock the responses
   of the committee nodes of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request`
   management canister endpoint.
-  Unlike `PocketIc::mock_canister_http_response`, which requires exactly one response per node of the subnet, it takes at most
+  Unlike `PocketIc::mock_canister_http_response`, which delivers one response per node of the subnet, it takes at most
   one response per node of the outcall's committee and those responses may differ.
-  Providing fewer responses than the committee size models the remaining committee nodes never responding, which is how
-  a timeout is mocked. All responses to an outcall must be provided in a single call.
+  Providing fewer responses than the committee size models the remaining committee nodes never responding: with at least
+  `min_responses` successful ones among them the outcall still succeeds, and with fewer it stays pending until the time is
+  advanced past its 60 second timeout. All responses to an outcall must be provided in a single call.
 - The field `replication` of type `CanisterHttpReplication` on `CanisterHttpRequest`, describing how a pending canister HTTP
   outcall is replicated across the nodes of its subnet: `FullyReplicated`, `NonReplicated`, or `Flexible` with the outcall's
   `total_requests`, `min_responses`, and `max_responses`. The committee size of a flexible outcall (`total_requests`)
@@ -40,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   performed the outcall (the whole subnet for a fully replicated outcall, the outcall's committee for a flexible one, the
   designated node for a non-replicated one) instead of to every node of the subnet, and it reports the cycles actually spent on
   the outcall.
+- Mocking a canister HTTP response whose reject message exceeds the 1 KiB a node truncates its reject messages to now fails.
+  Such a response is not one any node could have reported: it would be priced above what a node can be charged for gossiping a
+  reject and produce a response share that a real subnet's nodes reject as too large.
+- A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching what
+  a node of a real subnet does.
 - No hard TTL is set on PocketIC servers started implicitly by the library (e.g. by `PocketIc::new` or `PocketIcBuilder::build`); previously a default of 10 minutes was used.
   The hard TTL is an absolute deadline measured from the server's launch which is not extended by activity, so a test suite whose total runtime exceeded it had its server terminated while still serving requests, failing in-flight calls with `Connection reset by peer`.
   Orphaned servers remain bounded by the (activity-based) soft TTL.

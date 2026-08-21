@@ -1641,7 +1641,9 @@ impl PocketIc {
     /// Note that, unless a PocketIC instance is in auto progress mode,
     /// a response to the pending canister HTTP outcalls
     /// must be produced by the test driver and passed on to the PocketIC instace
-    /// using `PocketIc::mock_canister_http_response`.
+    /// using `PocketIc::mock_canister_http_response`, or, for a *flexible* outcall
+    /// (`CanisterHttpReplication::Flexible`), using
+    /// `PocketIc::mock_flexible_canister_http_response`.
     /// In auto progress mode, the PocketIC server produces a response for every
     /// pending canister HTTP outcall by actually making an HTTP request
     /// to the specified URL.
@@ -1651,7 +1653,11 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_canister_http().await })
     }
 
-    /// Mock a response to a pending canister HTTP outcall.
+    /// Mock a response to a pending canister HTTP outcall: the same response for
+    /// every node of the subnet, or one response per node if
+    /// `MockCanisterHttpResponse::additional_responses` is non-empty. For a
+    /// *flexible* outcall, whose committee nodes are answered individually, see
+    /// `PocketIc::mock_flexible_canister_http_response`.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn mock_canister_http_response(
         &self,
@@ -1669,13 +1675,15 @@ impl PocketIc {
     /// HTTP outcall, i.e. one made through the `flexible_http_request` management
     /// canister endpoint.
     ///
-    /// Unlike `PocketIc::mock_canister_http_response`, which requires exactly one
-    /// response per node of the subnet, this takes at most one response per node
+    /// Unlike `PocketIc::mock_canister_http_response`, which delivers one response
+    /// per node of the subnet, this takes at most one response per node
     /// of the outcall's committee (whose size is the `total_requests` of the
     /// outcall's `CanisterHttpReplication::Flexible` replication) and those
     /// responses may differ. Providing fewer responses than the committee size
-    /// models the remaining committee nodes never responding, which is how a
-    /// timeout is mocked.
+    /// models the remaining committee nodes never responding: with at least
+    /// `min_responses` successful ones among them the outcall still succeeds, and
+    /// with fewer it stays pending until the time is advanced past its 60 second
+    /// timeout, at which point it fails with a timeout error.
     ///
     /// All responses to an outcall must be provided in a single call: once any
     /// response to it has been mocked, the outcall no longer shows up in
