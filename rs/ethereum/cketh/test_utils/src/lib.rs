@@ -99,6 +99,9 @@ pub const USDC_ERC20_CONTRACT_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0c
 pub const USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE: &str =
     "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub const MINTER_ADDRESS: &str = "0x30a14171b7c4c93ff5213f82eeb74f7c7e3f1ebc";
+/// The minter's dedicated sweeper address, derived from the same test key as [`MINTER_ADDRESS`]
+/// under the sweeper derivation path. Hardcoded because no endpoint reports it yet; a test that
+/// funds it asserts the sweep really was sent from here, so a stale value fails loudly.
 pub const SWEEPER_ADDRESS: &str = "0x07e326c6604e3801270fc52ffb7ad3d6c5dfe89c";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";

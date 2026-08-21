@@ -290,9 +290,10 @@ rust_test(
 
 rust_test(
     name = "deposit_from_cex",
-    # The end-to-end balance-scan test runs a live PocketIC and waits (wall-clock) for the minter's
-    # periodic scan, so it needs a larger timeout than the pure-anvil tests.
-    size = "medium",
+    # The end-to-end tests run a live PocketIC and wait (wall-clock) for the minter's periodic tasks
+    # — a balance scan, then a sweep, then the log scraping the mint follows from — so they need a
+    # much larger timeout than the pure-anvil tests.
+    size = "large",
     srcs = ["tests/deposit_from_cex.rs"],
     data = [
         "//:anvil",
@@ -330,8 +331,10 @@ rust_test(
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types",
         "//rs/ethereum/cketh/test_utils",
         "@crate_index//:assert_matches",
+        "@crate_index//:candid",
     ],
 )
 

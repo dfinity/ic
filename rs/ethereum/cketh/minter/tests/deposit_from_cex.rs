@@ -22,6 +22,7 @@
 //! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
 
 use assert_matches::assert_matches;
+use candid::{Nat, Principal};
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
@@ -29,9 +30,13 @@ use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
+use ic_cketh_test_utils::ckerc20::Erc20Token;
 use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup};
+use ic_cketh_test_utils::{MINTER_ADDRESS, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
-use std::time::Duration;
+use icrc_ledger_types::icrc1::account::Account;
+use std::str::FromStr;
+use std::time::{Duration, Instant};
 
 #[test]
 fn should_read_erc20_balances_across_tokens_and_holders() {
@@ -246,4 +251,197 @@ fn holder_at(index: u64) -> Address {
     // Offset so no holder collides with the deployer or a low reserved address.
     bytes[0] = 0xd0;
     Address::new(bytes)
+}
+
+/// The whole deposit-from-CEX flow against a real EVM, end to end: two users register deposit
+/// addresses for two different tokens, a CEX-style plain `transfer` funds each, and the minter —
+/// with no further user action — detects both, sweeps them in **one** EIP-7702 transaction through
+/// the real deposit helper, and credits each user the full amount on its ckERC20 ledger.
+///
+/// Everything runs for real: a live PocketIC hosting the minter, the EVM RPC canister, the
+/// orchestrator and the ckUSDC/ckUSDT ledgers, making genuine HTTPS outcalls to an anvil node that
+/// holds the deployed `CkDeposit` helper and `CkSweeperAttested` delegate. Only the sweeper
+/// address' gas is shortcut: anvil credits it directly instead of the ckETH burn pipeline.
+#[test]
+fn should_credit_two_cex_deposits_through_one_eip7702_sweep() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [7; 32];
+    // 6-decimal amounts, both far above the ~$10 per-token candidate minimum.
+    const USDC_DEPOSIT: u128 = 100_000_000;
+    const USDT_DEPOSIT: u128 = 150_000_000;
+    /// Enough for one batch sweep at anvil's gas price, with room for a fee bump.
+    const SWEEPER_GAS_WEI: u128 = 1_000_000_000_000_000_000;
+
+    let sweeper = address_from_hex(SWEEPER_ADDRESS);
+    let setup = LiveBalanceScanSetup::new_live_with_sweeping(&sweeper, SWEEPER_GAS_WEI);
+    let contracts = setup.sweep_contracts();
+    let [usdc, usdt] = setup.supported_erc20_tokens() else {
+        panic!("expected exactly 2 supported tokens")
+    };
+
+    let (user_one, user_two) = (setup.depositor(1), setup.depositor(2));
+    let deposit_one = setup.register_deposit_address(user_one, DEPOSIT_SUBACCOUNT, usdc);
+    let deposit_two = setup.register_deposit_address(user_two, DEPOSIT_SUBACCOUNT, usdt);
+    assert_ne!(
+        deposit_one, deposit_two,
+        "distinct accounts must get distinct deposit addresses"
+    );
+    for deposit in [&deposit_one, &deposit_two] {
+        assert!(
+            setup.anvil().code(deposit).is_empty(),
+            "a deposit address starts with no code"
+        );
+        assert_eq!(
+            setup.anvil().balance(deposit),
+            0,
+            "a deposit address never needs ETH of its own"
+        );
+    }
+
+    // The CEX withdrawal: a plain ERC-20 transfer to each address, carrying no principal.
+    setup.credit_deposits(&[
+        Holding {
+            deposit: deposit_one,
+            token: usdc,
+            amount: USDC_DEPOSIT,
+        },
+        Holding {
+            deposit: deposit_two,
+            token: usdt,
+            amount: USDT_DEPOSIT,
+        },
+    ]);
+
+    // Generous: the mint waits for the sweep's own helper event to be scraped, and log scraping runs
+    // on a three-minute interval.
+    let deadline = Duration::from_secs(600);
+    assert_matches!(
+        setup.await_scan(user_one, DEPOSIT_SUBACCOUNT, usdc, deadline).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == USDC_DEPOSIT
+    );
+    assert_matches!(
+        setup.await_scan(user_two, DEPOSIT_SUBACCOUNT, usdt, deadline).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == USDT_DEPOSIT
+    );
+
+    // Fail here rather than at the mint if the sweep itself never goes out: the mint is downstream
+    // of the sweep's own helper event, so a missing credit says nothing about which step broke.
+    await_sweep(&setup, &sweeper, deadline);
+
+    let minter = address_from_hex(MINTER_ADDRESS);
+    let ck_usdc = setup.ckerc20_token("ckUSDC");
+    let ck_usdt = setup.ckerc20_token("ckUSDT");
+    await_credited(
+        &setup,
+        ck_usdc.ledger_canister_id,
+        account(user_one, DEPOSIT_SUBACCOUNT),
+        USDC_DEPOSIT,
+        deadline,
+    );
+    await_credited(
+        &setup,
+        ck_usdt.ledger_canister_id,
+        account(user_two, DEPOSIT_SUBACCOUNT),
+        USDT_DEPOSIT,
+        deadline,
+    );
+
+    // The funds left the deposit addresses and landed at the minter's main address.
+    for (deposit, token, amount) in [
+        (&deposit_one, usdc, USDC_DEPOSIT),
+        (&deposit_two, usdt, USDT_DEPOSIT),
+    ] {
+        let contract = contract_address(token);
+        assert_eq!(
+            setup.anvil().erc20_balance(&contract, deposit),
+            Erc20Value::from(0_u8),
+            "the deposit address should have been swept empty"
+        );
+        assert_eq!(
+            setup.anvil().erc20_balance(&contract, &minter),
+            Erc20Value::from(amount),
+            "the minter's main address should hold the swept balance"
+        );
+    }
+
+    // Each address is now delegated to the sweeper contract, by the 23-byte EIP-7702 designator
+    // `0xef0100 || delegate`, so a later sweep of it needs no authorization at all.
+    for deposit in [&deposit_one, &deposit_two] {
+        let mut designator = vec![0xef, 0x01, 0x00];
+        designator.extend_from_slice(contracts.delegate.as_ref());
+        assert_eq!(
+            setup.anvil().code(deposit),
+            designator,
+            "the sweep should have installed the delegation"
+        );
+    }
+
+    // The sweeper paid for the sweep itself; `await_sweep` already pinned it to one transaction.
+    assert!(
+        setup.anvil().balance(&sweeper) < SWEEPER_GAS_WEI,
+        "the sweeper address pays for the sweep out of its own prepaid gas"
+    );
+}
+
+/// Waits for the sweeper address to send its one transaction.
+fn await_sweep(setup: &LiveBalanceScanSetup, sweeper: &Address, deadline: Duration) {
+    let start = Instant::now();
+    loop {
+        // Read the chain, not the IC: anvil is a separate process, so these stay readable even if the
+        // PocketIC instance goes away — which is exactly when a diagnostic is most wanted.
+        let sent = setup.anvil().transaction_count(sweeper);
+        println!(
+            "[await_sweep] {:?} block={} sweeper_nonce={} sweeper_wei={}",
+            start.elapsed(),
+            setup.anvil().block_number(),
+            sent,
+            setup.anvil().balance(sweeper),
+        );
+        if sent > 0 {
+            assert_eq!(
+                sent, 1,
+                "both deposits must be swept by a single transaction"
+            );
+            return;
+        }
+        assert!(
+            start.elapsed() <= deadline,
+            "the sweeper {sweeper} sent no transaction within {deadline:?}"
+        );
+        std::thread::sleep(Duration::from_secs(5));
+    }
+}
+
+/// Waits until `account` holds exactly `expected` on `ledger_id`. The mint follows the sweep's own
+/// finalized helper event through the minter's unchanged deposit pipeline, so this is what proves
+/// the whole chain ran.
+fn await_credited(
+    setup: &LiveBalanceScanSetup,
+    ledger_id: Principal,
+    account: Account,
+    expected: u128,
+    deadline: Duration,
+) {
+    let start = Instant::now();
+    loop {
+        let balance = setup.balance_of_ledger(ledger_id, account);
+        if balance == Nat::from(expected) {
+            return;
+        }
+        assert!(
+            start.elapsed() <= deadline,
+            "{account:?} was credited {balance} instead of {expected} within {deadline:?}"
+        );
+        std::thread::sleep(Duration::from_secs(2));
+    }
+}
+
+fn account(owner: Principal, subaccount: [u8; 32]) -> Account {
+    Account {
+        owner,
+        subaccount: Some(subaccount),
+    }
+}
+
+fn contract_address(token: &Erc20Token) -> Address {
+    Address::from_str(&token.contract.address).unwrap()
 }
