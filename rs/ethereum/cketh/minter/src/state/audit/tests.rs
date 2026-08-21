@@ -93,6 +93,7 @@ impl GetEventsFile {
         use crate::endpoints::events::{
             AccessListItem as CandidAccessListItem, EventSource as CandidEventSource,
             ReimbursementIndex as CandidReimbursementIndex,
+            TransactionReceipt as CandidTransactionReceipt,
             TransactionStatus as CandidTransactionStatus,
         };
         use crate::eth_logs::EventSource;
@@ -128,6 +129,20 @@ impl GetEventsFile {
                     ledger_id,
                     ckerc20_ledger_burn_index: map_nat(ckerc20_ledger_burn_index),
                 },
+            }
+        }
+
+        fn map_transaction_receipt(receipt: CandidTransactionReceipt) -> TransactionReceipt {
+            TransactionReceipt {
+                block_hash: receipt.block_hash.parse().unwrap(),
+                block_number: receipt.block_number.try_into().unwrap(),
+                effective_gas_price: receipt.effective_gas_price.try_into().unwrap(),
+                gas_used: receipt.gas_used.try_into().unwrap(),
+                status: match receipt.status {
+                    CandidTransactionStatus::Success => TransactionStatus::Success,
+                    CandidTransactionStatus::Failure => TransactionStatus::Failure,
+                },
+                transaction_hash: receipt.transaction_hash.parse().unwrap(),
             }
         }
 
@@ -357,20 +372,7 @@ impl GetEventsFile {
                     transaction_receipt,
                 } => ET::FinalizedTransaction {
                     withdrawal_id: map_nat(withdrawal_id),
-                    transaction_receipt: TransactionReceipt {
-                        block_hash: transaction_receipt.block_hash.parse().unwrap(),
-                        block_number: transaction_receipt.block_number.try_into().unwrap(),
-                        effective_gas_price: transaction_receipt
-                            .effective_gas_price
-                            .try_into()
-                            .unwrap(),
-                        gas_used: transaction_receipt.gas_used.try_into().unwrap(),
-                        status: match transaction_receipt.status {
-                            CandidTransactionStatus::Success => TransactionStatus::Success,
-                            CandidTransactionStatus::Failure => TransactionStatus::Failure,
-                        },
-                        transaction_hash: transaction_receipt.transaction_hash.parse().unwrap(),
-                    },
+                    transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
                 EventPayload::AcceptedSweepRequest {
                     sweep_id,
@@ -413,20 +415,7 @@ impl GetEventsFile {
                     transaction_receipt,
                 } => ET::FinalizedSweeperTransaction {
                     sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
-                    transaction_receipt: TransactionReceipt {
-                        block_hash: transaction_receipt.block_hash.parse().unwrap(),
-                        block_number: transaction_receipt.block_number.try_into().unwrap(),
-                        effective_gas_price: transaction_receipt
-                            .effective_gas_price
-                            .try_into()
-                            .unwrap(),
-                        gas_used: transaction_receipt.gas_used.try_into().unwrap(),
-                        status: match transaction_receipt.status {
-                            CandidTransactionStatus::Success => TransactionStatus::Success,
-                            CandidTransactionStatus::Failure => TransactionStatus::Failure,
-                        },
-                        transaction_hash: transaction_receipt.transaction_hash.parse().unwrap(),
-                    },
+                    transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
                 EventPayload::ReimbursedEthWithdrawal {
                     reimbursed_in_block,
