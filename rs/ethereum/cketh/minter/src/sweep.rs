@@ -41,6 +41,7 @@ use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use std::collections::BTreeSet;
+use std::time::Duration;
 
 /// Deposits swept in one transaction. Bounded by gas: each one adds an authorization, a delegated
 /// call, an approval and a transfer.
@@ -383,4 +384,9 @@ pub async fn enqueue_batched_sweep() {
         request.authorizations.len()
     );
     mutate_state(|s| process_event(s, EventType::AcceptedSweepRequest(request)));
+    // Send it now rather than at the send task's next tick: the mint follows the sweep, so every
+    // interval spent waiting here is crediting latency a user sees.
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        process_sweeper_transactions().await;
+    });
 }
