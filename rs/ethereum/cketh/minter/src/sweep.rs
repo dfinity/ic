@@ -166,7 +166,7 @@ fn create_transactions_batch(gas_fee_estimate: &GasFeeEstimate) {
             Ok(transaction) => {
                 log!(
                     INFO,
-                    "[process_sweeper_transactions]: created sweep transaction for {sweep_id} with nonce {nonce} and gas limit {}",
+                    "[process_sweeper_transactions]: created sweep transaction for {sweep_id:?} with nonce {nonce} and gas limit {}",
                     request.gas_limit()
                 );
                 mutate_state(|s| {
@@ -215,7 +215,7 @@ async fn sign_transactions_batch() {
             Ok(transaction) => mutate_state(|s| {
                 log!(
                     INFO,
-                    "[process_sweeper_transactions]: signed sweep {sweep_id}"
+                    "[process_sweeper_transactions]: signed sweep {sweep_id:?}"
                 );
                 process_event(
                     s,
@@ -263,7 +263,7 @@ async fn finalize_transactions_batch(sender: Address) {
                 for (sweep_id, transaction_receipt) in receipts {
                     log!(
                         INFO,
-                        "[process_sweeper_transactions]: finalized sweep {sweep_id} with status {:?}, gas used {}",
+                        "[process_sweeper_transactions]: finalized sweep {sweep_id:?} with status {:?}, gas used {}",
                         transaction_receipt.status,
                         transaction_receipt.gas_used
                     );
