@@ -48,11 +48,8 @@ impl RejectionCode {
     }
 }
 
-/// Translates a failed call into the reject code and message the HTTP outcall
-/// endpoints below report back over Candid.
-///
-/// Takes anything that converts into a `CallError`, so that it also covers the
-/// `CallFailed` of a raw call whose reply is not decoded.
+/// Translates a failed call into the reject code and message `canister_http`
+/// reports back over Candid.
 fn map_call_error(err: impl Into<CallError>) -> (RejectionCode, String) {
     match err.into() {
         CallError::CallRejected(rejected) => (

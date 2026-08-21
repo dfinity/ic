@@ -6,11 +6,8 @@ use ic_config::{
 
 pub fn hypervisor_config() -> HypervisorConfig {
     HypervisorConfig {
-        // Enables the `flexible_http_request` management canister endpoint, whose
-        // outcalls are always priced with the pay-as-you-go pricing model. The same
-        // flag gates that pricing model for `http_request`, whose outcalls may then
-        // select it through their `pricing_version` (they keep using the legacy
-        // pricing model unless they do).
+        // Enables the `flexible_http_request` management canister endpoint, and the
+        // option for `http_request` to choose between legacy and pay-as-you-go pricing.
         flexible_http_requests: FlagStatus::Enabled,
         embedders_config: EmbeddersConfig {
             feature_flags: FeatureFlags {

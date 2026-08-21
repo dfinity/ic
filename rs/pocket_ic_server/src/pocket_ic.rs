@@ -3861,9 +3861,8 @@ impl Operation for ProcessCanisterHttpInternal {
                         canister_http.pending.remove(&response.id);
                         if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
                         {
-                            // Only one real outcall is made, so every node that
-                            // would have performed it reports the same response
-                            // and the same spend.
+                            // Only one real outcall is made, so every node that would have 
+                            // performed it reports the same response and the same spend.
                             let responses = outcall_nodes(&sm, context)
                                 .into_iter()
                                 .map(|node_id| {
@@ -3980,13 +3979,6 @@ fn validate_mock_canister_http_rejects<'a>(
 /// Turns one mocked response into the response content a node would have
 /// produced, together with the cycles that node reports having spent on the
 /// outcall.
-///
-/// A reply is pushed through a real [`CanisterHttpAdapterClientImpl`] backed by an
-/// in-process adapter serving exactly that reply, so that the calling canister's
-/// transform function really runs and the spend is accounted for by the real
-/// pricing machinery. A reject is turned into reject content directly, keeping the
-/// reject code and message provided by the caller, and is priced as an outcall that
-/// downloaded nothing and only gossiped its reject body.
 fn mock_canister_http_response_content(
     pic: &PocketIc,
     subnet: &StateMachine,

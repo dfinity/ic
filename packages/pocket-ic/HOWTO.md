@@ -405,13 +405,10 @@ and an `http_request` asking for pay-as-you-go pricing silently falls back to th
 `CanisterHttpRequest::pricing_version` reports which pricing model a pending outcall actually ended up with.
 
 Under the pay-as-you-go pricing model, a base fee is charged up front, a per-replica cycles allowance is
-withheld from the payment, and whatever the responding nodes do not spend is refunded — so a mocked outcall
-makes the calling canister's cycles balance go down when the outcall is made and back up (partway) when it is
-answered. If the attached cycles do not cover the cost of delivering a response, the outcall fails with an
-out-of-cycles error: a `flexible_http_request` returns the `out_of_cycles` error described below, while an
-`http_request` is rejected with `SysTransient` and a message starting with `Out of cycles:`. This applies to
-fully replicated and non-replicated outcalls mocked with `PocketIc::mock_canister_http_response` just as much
-as to flexible ones.
+withheld from the payment, and whatever the responding nodes do not spend is refunded. If the attached cycles
+do not cover the cost of delivering a response, the outcall fails with an out-of-cycles error: a `flexible_http_request`
+returns the `out_of_cycles` error described below, while an `http_request` is rejected with `SysTransient` and
+a message starting with `Out of cycles:`. This applies to calls made under pay-as-you-go pricing.
 
 A pending flexible outcall reports its replication in `CanisterHttpRequest::replication`, from which the size
 of its committee can be read, and its responses are mocked with `PocketIc::mock_flexible_canister_http_response`:
@@ -466,8 +463,8 @@ mocked, the outcall no longer shows up in `PocketIc::get_canister_http` and furt
 be mocked.
 
 *Note.* A mocked reject message must fit into the 1 KiB a node truncates its reject messages to; mocking a
-longer one fails, since no node could have reported it. This applies to `PocketIc::mock_canister_http_response`
-just as much as to `PocketIc::mock_flexible_canister_http_response`.
+longer one fails, since no node could have reported it. This applies to both `PocketIc::mock_canister_http_response`
+and `PocketIc::mock_flexible_canister_http_response`.
 
 Note that a flexible outcall never rejects the calling canister's call: every outcome above, including the
 errors, is delivered as a `flexible_http_request_result` reply. Only a synchronous failure (invalid arguments,
@@ -475,8 +472,7 @@ insufficient cycles attached, or the endpoint not being enabled on the subnet) r
 
 *Warning.* The cycles a node reports having spent on a mocked outcall include a term for how long the
 response took to arrive, which PocketIC derives from how long it took to run the mocked outcall in process.
-That term is zero in practice (it is measured in whole milliseconds), but it is not guaranteed to be, so
-avoid asserting on exact cycles balances after any outcall priced with the pay-as-you-go pricing model —
+Aavoid asserting on exact cycles balances after any outcall priced with the pay-as-you-go pricing model —
 whether it is a flexible one or an `http_request` mocked with `PocketIc::mock_canister_http_response`.
 Outcalls priced with the legacy pricing model are unaffected, since it ignores the reported spend.
 

@@ -1351,12 +1351,8 @@ impl ExecutionEnvironment {
                                     | SubnetType::VerifiedApplication
                                     | SubnetType::CloudEngine => state.get_own_cost_schedule(),
                                 };
-                                // The pay-as-you-go pricing model is gated behind
-                                // the same `flexible_http_requests` feature flag as
-                                // flexible outcalls; until it is enabled, a request
-                                // asking for it falls back to legacy pricing, like
-                                // one asking for any other unsupported pricing
-                                // version.
+                                // The pay-as-you-go pricing model is gated behind the same
+                                // feature flag as flexible outcalls
                                 let pay_as_you_go_enabled =
                                     self.config.flexible_http_requests == FlagStatus::Enabled;
                                 match CanisterHttpRequestContext::generate_from_args(

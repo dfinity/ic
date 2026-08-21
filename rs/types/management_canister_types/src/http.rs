@@ -75,11 +75,6 @@ pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS: &[u32] = &[PRICING_VERSION_LEG
 /// The pricing versions an HTTP outcall may select on a subnet where the
 /// pay-as-you-go pricing model *is* enabled, i.e. one whose
 /// `flexible_http_requests` feature flag is on.
-///
-/// This is the set [`ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS`] is replaced by
-/// there; on a subnet where the flag is off, a request asking for pay-as-you-go
-/// pricing falls back to [`DEFAULT_HTTP_OUTCALLS_PRICING_VERSION`] like one asking
-/// for any other unsupported version.
 pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO: &[u32] =
     &[PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO];
 

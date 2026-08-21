@@ -2765,13 +2765,10 @@ impl StateMachine {
     }
 
     /// Injects one response share per node of the subnet, all reporting that the
-    /// node spent nothing on the outcall (so that, under the pay-as-you-go pricing
-    /// model, the only thing charged against the withheld per-replica allowances is
-    /// the consensus cost of putting the response into a block).
+    /// node spent nothing on the outcall.
     ///
-    /// This is what a fully replicated HTTP outcall needs. For an outcall
-    /// performed by only a subset of the nodes, or one whose nodes report having
-    /// spent cycles, see [`Self::mock_canister_http_response_for_nodes`].
+    /// For an outcall performed by only a subset of the nodes, or one whose nodes
+    /// report having spent cycles, see [`Self::mock_canister_http_response_for_nodes`].
     pub fn mock_canister_http_response(
         &self,
         request_id: u64,

@@ -650,12 +650,6 @@ impl CanisterHttpRequestContext {
         NumBytes::from(request_size as u64)
     }
 
-    /// Creates the context of an `http_request` outcall.
-    ///
-    /// `pay_as_you_go_enabled` tells whether the subnet offers the pay-as-you-go
-    /// pricing model, and hence whether the request may select it through its
-    /// `pricing_version`; where it does not, a request asking for it falls back to
-    /// the default pricing version.
     pub fn generate_from_args(
         time: Time,
         request: &Request,

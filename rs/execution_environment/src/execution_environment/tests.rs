@@ -3838,9 +3838,6 @@ fn http_request_args_with_pricing_version(
 ) -> CanisterHttpRequestArgs {
     CanisterHttpRequestArgs {
         url: "https://example.com".to_string(),
-        // Bounded, so that the legacy fee charged up front (which is based on the
-        // largest response the outcall could receive) stays within the payment
-        // attached below.
         max_response_bytes: Some(1024),
         headers: BoundedHttpHeaders::new(vec![]),
         body: None,

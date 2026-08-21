@@ -1675,11 +1675,9 @@ impl PocketIc {
     /// HTTP outcall, i.e. one made through the `flexible_http_request` management
     /// canister endpoint.
     ///
-    /// Unlike `PocketIc::mock_canister_http_response`, which delivers one response
-    /// per node of the subnet, this takes at most one response per node
-    /// of the outcall's committee (whose size is the `total_requests` of the
-    /// outcall's `CanisterHttpReplication::Flexible` replication) and those
-    /// responses may differ. Providing fewer responses than the committee size
+    /// This takes at most one response per node of the outcall's committee (whose
+    /// size is the `total_requests` of the outcall's `CanisterHttpReplication::Flexible`
+    /// replication). Providing fewer responses than the committee size
     /// models the remaining committee nodes never responding: with at least
     /// `min_responses` successful ones among them the outcall still succeeds, and
     /// with fewer it stays pending until the time is advanced past its 60 second
