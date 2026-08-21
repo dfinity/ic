@@ -20,10 +20,9 @@ use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
-        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -56,6 +55,7 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
     canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
+        UnflushedCheckpointOp,
         subnet_call_context_manager::InstallCodeCallId,
         testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
@@ -85,8 +85,8 @@ use ic_test_utilities_types::{
     messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
-    SubnetId, UserId,
+    CanisterId, CanisterTimer, ComputeAllocation, MIN_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
+    NumBytes, NumInstructions, SubnetId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CanisterCall, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
@@ -320,6 +320,7 @@ fn canister_manager_config(
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
         SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
+        SchedulerConfig::application_subnet().canister_log_resize_instructions_per_byte,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
         MAX_ENVIRONMENT_VARIABLES,
@@ -536,11 +537,8 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     // Try installing canister2, should fail due to insufficient memory capacity on the subnet.
     let err = test.install_canister(canister2, wasm).unwrap_err();
-    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
-    } else {
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
-    };
+    let msg =
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet.";
     err.assert_contains(ErrorCode::SubnetOversubscribed, msg);
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -2046,6 +2044,27 @@ fn canister_status_of_deleted_canister() {
 }
 
 #[test]
+fn delete_canister_records_unflushed_checkpoint_op() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+
+    // Creating and stopping a canister does not require any checkpoint ops.
+    assert!(test.state().metadata.unflushed_checkpoint_ops.is_empty());
+
+    test.delete_canister(canister_id).unwrap();
+
+    // Deleting the canister requires deleting its directory from the tip.
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![UnflushedCheckpointOp::DeleteCanister(canister_id)]
+    );
+}
+
+#[test]
 fn deleting_already_deleted_canister() {
     let mut test = ExecutionTestBuilder::new().build();
 
@@ -2294,11 +2313,8 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     // Try upgrading the canister, should fail because there is not enough memory capacity
     // on the subnet.
-    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
-    } else {
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
-    };
+    let msg =
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet.";
     test.upgrade_canister(canister2, wasm)
         .unwrap_err()
         .assert_contains(ErrorCode::SubnetOversubscribed, msg);
@@ -5824,6 +5840,113 @@ fn create_canister_heap_delta_log_memory_limit_explicit() {
     .unwrap();
 
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+}
+
+// A non-zero log_memory_limit below the minimum is rejected on canister creation.
+#[test]
+fn create_canister_with_too_low_log_memory_limit_fails() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    for limit in [1, MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64 - 1] {
+        test.create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(limit)
+                .build(),
+        )
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterRejectedMessage,
+            &format!(
+                "The canister log memory limit {limit} is too low. \
+                It must be either zero or at least {MIN_AGGREGATE_LOG_MEMORY_LIMIT}."
+            ),
+        );
+        assert_eq!(test.state().num_canisters(), 0);
+    }
+}
+
+// A non-zero log_memory_limit below the minimum is rejected on update_settings,
+// leaving the previous limit in place.
+#[test]
+fn update_settings_with_too_low_log_memory_limit_fails() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(MIB)
+                .build(),
+        )
+        .unwrap();
+
+    for limit in [1, MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64 - 1] {
+        let args = UpdateSettingsArgs {
+            canister_id: canister_id.get(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(limit)
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        test.subnet_message(Method::UpdateSettings, args)
+            .unwrap_err()
+            .assert_contains(
+                ErrorCode::CanisterRejectedMessage,
+                &format!(
+                    "The canister log memory limit {limit} is too low. \
+                    It must be either zero or at least {MIN_AGGREGATE_LOG_MEMORY_LIMIT}."
+                ),
+            );
+        assert_eq!(
+            test.canister_state(canister_id).log_memory_limit(),
+            NumBytes::new(MIB)
+        );
+    }
+}
+
+// The minimum log_memory_limit is accepted and applied as is.
+#[test]
+fn update_settings_with_minimum_log_memory_limit_succeeds() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+    let min_limit = MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(MIB)
+                .build(),
+        )
+        .unwrap();
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(min_limit)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).log_memory_limit(),
+        NumBytes::new(min_limit)
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .byte_capacity() as u64,
+        min_limit
+    );
 }
 
 #[test]

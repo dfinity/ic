@@ -3577,7 +3577,7 @@ fn flexible_error_into_messages_timeout() {
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
-    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(stats.flexible_errors, BTreeMap::from([("timeout", 1)]));
     assert_eq!(stats.flexible_errors_candid_failures, 0);
     // A flexible timeout carries no full response body, hence reports no spend.
     assert!(spent.initial.is_empty());
@@ -3621,7 +3621,10 @@ fn flexible_error_into_messages_too_many_rejects() {
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
-    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(
+        stats.flexible_errors,
+        BTreeMap::from([("too_many_rejects", 1)])
+    );
     assert_eq!(stats.flexible_errors_candid_failures, 0);
 
     let Payload::Data(ref data) = responses[0].payload else {
@@ -3676,7 +3679,10 @@ fn flexible_error_into_messages_responses_too_large() {
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
-    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(
+        stats.flexible_errors,
+        BTreeMap::from([("responses_too_large", 1)])
+    );
     assert_eq!(stats.flexible_errors_candid_failures, 0);
     // A responses-too-large error delivers no body (consensus cost zero), so it
     // reports the sum of its seen shares' per-replica spend. Here every share
@@ -6509,7 +6515,10 @@ fn flexible_outcall_is_out_of_cycles_when_allowances_are_exhausted() {
             let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(
                 &payload_to_bytes_max_4mb(payload.clone()),
             );
-            assert_eq!(stats.flexible_errors, 1);
+            assert_eq!(
+                stats.flexible_errors,
+                BTreeMap::from([("out_of_cycles", 1)])
+            );
             assert_eq!(responses.len(), 1);
             let Payload::Data(ref data) = responses[0].payload else {
                 panic!("Expected Payload::Data, got {:?}", responses[0].payload);

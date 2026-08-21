@@ -7,6 +7,7 @@ mod tests;
 use self::subnet_call_context_manager::SubnetCallContextManager;
 use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
+use crate::CanisterState;
 use crate::CheckpointLoadingMetrics;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
@@ -434,8 +435,11 @@ pub struct SubnetTopology {
     ///    expiring message statuses;
     ///  * (on all subnets) no messages are routed to a cooling down subnet --
     ///    including into the cooling down subnet's own loopback stream -- but
-    ///    retained in their respective output queues, so that the respective
-    ///    streams can be emptied.
+    ///    retained in their respective output queues, so that streams to the
+    ///    cooling down subnet can be emptied;
+    ///  * it routes no messages from its canisters' output queues into streams
+    ///    -- including its own loopback stream -- but retains them in output
+    ///    queues, so streams from the cooling down subnet can be emptied.
     pub cooling_down: bool,
 }
 
@@ -999,6 +1003,10 @@ impl SystemMetadata {
     ///
     /// In phase 2 (see [`Self::after_split()`]) the ingress history is pruned and
     /// the split marker is reset.
+    ///
+    /// `unflushed_checkpoint_ops` (holding the delete operations recorded by
+    /// `ReplicatedState::split()` for the canisters dropped by the split) is preserved
+    /// on both subnets, so that the dropped canisters' directories are deleted from tip.
     pub fn split(
         mut self,
         subnet_id: SubnetId,
@@ -1030,6 +1038,10 @@ impl SystemMetadata {
 
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
+
+        // Preserve the delete operations recorded by `ReplicatedState::split()` for the
+        // canisters dropped by the split, so that their directories are deleted from tip.
+        res.unflushed_checkpoint_ops = self.unflushed_checkpoint_ops;
 
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
@@ -1191,8 +1203,9 @@ impl SystemMetadata {
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
     ///  * `unflushed_checkpoint_ops` contains both arbitrary pending operations;
-    ///    and delete operations for the snapshots of non-local canisters. It is
-    ///    therefore preserved untouched.
+    ///    and the delete operations recorded by `ReplicatedState::online_split()`
+    ///    for the canisters dropped by the split. It is therefore preserved
+    ///    untouched.
     pub fn online_split(
         self,
         subnet_id: SubnetId,
@@ -1334,7 +1347,7 @@ impl SystemMetadata {
             // retaining everything else on subnet A'.
             blockmaker_metrics_time_series,
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
-            // for the snapshots of no longer hosted canisters.
+            // for the canisters dropped by the split.
             unflushed_checkpoint_ops,
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
@@ -2371,6 +2384,10 @@ pub enum UnflushedCheckpointOp {
     LoadSnapshot(CanisterId, SnapshotId),
     /// A canister was renamed.
     RenameCanister(CanisterId, CanisterId),
+    /// A canister was deleted.
+    DeleteCanister(CanisterId),
+    /// A snapshot was deleted.
+    DeleteSnapshot(SnapshotId),
 }
 
 /// A collection of unflushed checkpoint operations in the order that they were applied to the state.
@@ -2416,6 +2433,42 @@ impl UnflushedCheckpointOps {
             old_canister_id,
             new_canister_id,
         ));
+    }
+
+    /// Records the deletion of a canister, together with the deletion of all its
+    /// snapshots (which are deleted along with the canister). Private to the crate
+    /// because the only ways of permanently removing a canister are
+    /// `ReplicatedState::remove_canister()` and the two subnet split methods, which
+    /// call this on the caller's behalf.
+    ///
+    /// Takes the `CanisterState` rather than just the canister ID because the
+    /// canister's snapshots live in it (`SystemMetadata` cannot map a canister ID to
+    /// its snapshot IDs); recording their deletion here rather than at the call sites
+    /// means it cannot be overlooked.
+    pub(crate) fn delete_canister(&mut self, canister_state: &CanisterState) {
+        for (snapshot_id, _) in canister_state.canister_snapshots.iter() {
+            self.delete_snapshot(*snapshot_id);
+        }
+        self.operations.push(UnflushedCheckpointOp::DeleteCanister(
+            canister_state.canister_id(),
+        ));
+    }
+
+    /// Records the deletion of a canister snapshot. Private to the crate because the
+    /// only ways of permanently removing a snapshot are `CanisterSnapshots::remove()`,
+    /// `CanisterSnapshots::delete_snapshots()` and the deletion of the snapshot's
+    /// canister, all of which call this on the caller's behalf.
+    pub(crate) fn delete_snapshot(&mut self, snapshot_id: SnapshotId) {
+        self.operations
+            .push(UnflushedCheckpointOp::DeleteSnapshot(snapshot_id));
+    }
+
+    /// Appends all operations of `other`, preserving their order.
+    ///
+    /// Used to merge in the operations recorded while mutating a single `CanisterState`
+    /// (which has no access to `SystemMetadata`) into the state's operations.
+    pub fn extend(&mut self, other: UnflushedCheckpointOps) {
+        self.operations.extend(other.operations);
     }
 }
 

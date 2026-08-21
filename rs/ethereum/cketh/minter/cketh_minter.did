@@ -253,7 +253,6 @@ type MinterInfo = record {
     evm_rpc_id : opt principal;
 };
 
-
 type GasFeeEstimate = record {
     // Maximum amount of Wei per gas unit that the transaction is willing to pay in total.
     // This covers the base fee determined by the network and the `max_priority_fee_per_gas`.
@@ -583,6 +582,14 @@ type Event = record {
             block_number : nat;
         };
         AcceptedEthWithdrawalRequest : record {
+            withdrawal_amount : nat;
+            destination : text;
+            ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
+            created_at: opt nat64;
+        };
+        AcceptedSweeperFundingRequest : record {
             withdrawal_amount : nat;
             destination : text;
             ledger_burn_index : nat;

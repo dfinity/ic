@@ -443,8 +443,10 @@ impl CallOrTaskHelper {
     }
 
     /// Replays the previous update call steps on the given clean canister.
-    /// Returns an error if any step fails. Otherwise, it returns an instance of
-    /// the helper that can be used to continue the update call execution.
+    /// Returns an error if the cycles balance of the clean canister dropped
+    /// below the cycles balance at the start of the DTS execution or if any step
+    /// fails. Otherwise, it returns an instance of the helper that can be used
+    /// to continue the update call execution.
     fn resume(
         clean_canister: &CanisterState,
         original: &OriginalContext,
@@ -453,7 +455,13 @@ impl CallOrTaskHelper {
     ) -> Result<Self, UserError> {
         let mut helper = Self::new(clean_canister, original, deallocation_sender)?;
         helper.executed_wasm_instructions = paused.executed_wasm_instructions;
-        if helper.initial_cycles_balance != paused.initial_cycles_balance {
+        // The cycles balance of the clean canister must not decrease during the
+        // DTS execution: the recorded steps are replayed on the clean canister
+        // state and a lower balance might no longer be able to cover them.
+        // An increase is safe: all cycles changes of the DTS execution are
+        // applied relative to the balance of the clean canister state and hence
+        // the additional cycles are preserved.
+        if helper.initial_cycles_balance < paused.initial_cycles_balance {
             let msg = match original.call_or_task {
                 CanisterCallOrTask::Update(_) => {
                     "Mismatch in cycles balance when resuming an update call".to_string()

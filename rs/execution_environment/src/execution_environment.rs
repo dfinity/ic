@@ -6,7 +6,7 @@ use crate::canister_manager::types::{
 };
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
-use crate::execution::common::{list_canisters, validate_controller};
+use crate::execution::common::{canister_info, list_canisters, validate_controller};
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
 use crate::execution_environment_metrics::{
@@ -33,12 +33,12 @@ use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType,
-    ClearChunkStoreArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs,
-    IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType, ClearChunkStoreArgs,
+    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -311,6 +311,7 @@ impl RoundLimits {
 pub(crate) struct ConsumedCyclesForInstructions<'a> {
     consumed_cycles: CompoundCycles<Instructions>,
     instructions_used: NumInstructions,
+    install_code_debit: NumInstructions,
     cycles_account_manager: &'a CyclesAccountManager,
     log: &'a ReplicaLogger,
 }
@@ -324,6 +325,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         Self {
             consumed_cycles: CompoundCycles::new(Cycles::zero(), cost_schedule),
             instructions_used: NumInstructions::new(0),
+            install_code_debit: NumInstructions::new(0),
             cycles_account_manager,
             log,
         }
@@ -338,6 +340,20 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         self.instructions_used += instructions;
     }
 
+    /// Accumulates instructions that count towards the `install_code` rate
+    /// limit of the canister, i.e., instructions used by management operations
+    /// that install code on the canister (and thus compile a Wasm module).
+    ///
+    /// The debit is only applied if the management operation fails: on success
+    /// the operation itself is responsible for updating the canister's
+    /// `install_code_debit`.
+    ///
+    /// The caller is responsible for only accumulating instructions if
+    /// rate limiting of instructions is enabled.
+    pub(crate) fn add_install_code_debit(&mut self, instructions: NumInstructions) {
+        self.install_code_debit += instructions;
+    }
+
     pub(crate) fn apply(
         self,
         canister: &mut CanisterState,
@@ -345,6 +361,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         failed_charge: &IntCounter,
     ) {
+        canister.scheduler_state.install_code_debit += self.install_code_debit;
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
         let res = self.cycles_account_manager.consume_cycles_for_final_instructions(
@@ -2130,12 +2147,10 @@ impl ExecutionEnvironment {
                         .heap_delta_debit
                         .saturating_add(&response.heap_delta_increase);
                 }
-                if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
-                    state
-                        .metadata
-                        .unflushed_checkpoint_ops
-                        .push(unflushed_checkpoint_op);
-                }
+                state
+                    .metadata
+                    .unflushed_checkpoint_ops
+                    .extend(response.unflushed_checkpoint_ops);
                 if let Some(snapshot_id) = response.snapshot_to_make_immutable
                     && let Some(canister) =
                         state.canister_state_make_mut(&snapshot_id.get_canister_id())
@@ -2832,23 +2847,7 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(canister_id, state)?;
-        let canister_history = canister.system_state.get_canister_history();
-        let total_num_changes = canister_history.get_total_num_changes();
-        let changes = canister_history
-            .get_changes(num_requested_changes.unwrap_or(0) as usize)
-            .map(|e| (*e.clone()).clone())
-            .collect();
-        let module_hash = canister
-            .execution_state
-            .as_ref()
-            .map(|es| es.wasm_binary.binary.module_hash().to_vec());
-        let controllers = canister
-            .controllers()
-            .iter()
-            .copied()
-            .collect::<Vec<PrincipalId>>();
-        let res = CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers);
-        Ok(res.encode())
+        Ok(canister_info(canister, num_requested_changes).encode())
     }
 
     fn get_canister_metadata(

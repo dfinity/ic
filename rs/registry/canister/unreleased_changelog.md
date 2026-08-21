@@ -9,11 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-Add a `replica_version_id` to `ReplicaVersionRecord`s, and backfill with a data migration.
+* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
+  `guest_launch_measurements`.
 
 ## Changed
-
-* Guest launch measurements are now required (when electing a new GuestOS version).
 
 * `deploy_guestos_to_all_subnet_nodes` now accepts a blank `replica_version_id`
   for Cloud Engines, provided a `StandardEngineReplicaVersionRecord` exists.
@@ -25,8 +24,6 @@ Add a `replica_version_id` to `ReplicaVersionRecord`s, and backfill with a data 
 ## Deprecated
 
 ## Removed
-
-The `blessed_replica_versions` record has been removed.
 
 ## Fixed
 

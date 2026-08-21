@@ -116,6 +116,17 @@ impl FlexibleCanisterHttpError {
         }
     }
 
+    /// The kind of error this is, as a short stable name. Used as a metric
+    /// label, so the returned set of values must stay small and fixed.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Timeout { .. } => "timeout",
+            Self::ResponsesTooLarge { .. } => "responses_too_large",
+            Self::TooManyRejects { .. } => "too_many_rejects",
+            Self::OutOfCycles { .. } => "out_of_cycles",
+        }
+    }
+
     /// The signed receipts this error carries whose response body is *not* part of
     /// the payload: all of the evidence behind [`Self::ResponsesTooLarge`] and
     /// [`Self::OutOfCycles`], and the extra shares funding a
