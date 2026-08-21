@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+* `UpdateCanisterSettings` and `CreateCanisterAndInstallCode` proposals can
+  now set `reserved_cycles_limit` on a canister, alongside the other canister
+  settings that were already supported.
+
 ## Changed
 
 ## Deprecated

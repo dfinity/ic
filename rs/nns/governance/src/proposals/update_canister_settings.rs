@@ -78,6 +78,7 @@ impl UpdateCanisterSettings {
             wasm_memory_limit,
             wasm_memory_threshold,
             snapshot_visibility,
+            reserved_cycles_limit,
         } = self
             .settings
             .as_ref()
@@ -92,6 +93,7 @@ impl UpdateCanisterSettings {
             && snapshot_visibility.is_none()
             && wasm_memory_limit.is_none()
             && wasm_memory_threshold.is_none()
+            && reserved_cycles_limit.is_none()
         {
             return Err(invalid_proposal_error(
                 "At least one setting must be provided",
@@ -104,6 +106,7 @@ impl UpdateCanisterSettings {
         let freezing_threshold = freezing_threshold.map(Nat::from);
         let wasm_memory_limit = wasm_memory_limit.map(Nat::from);
         let wasm_memory_threshold = wasm_memory_threshold.map(Nat::from);
+        let reserved_cycles_limit = reserved_cycles_limit.map(Nat::from);
         let log_visibility = match log_visibility {
             Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
             None => None,
@@ -114,8 +117,6 @@ impl UpdateCanisterSettings {
             }
             None => None,
         };
-        // Reserved cycles limit is not supported yet.
-        let reserved_cycles_limit = None;
         Ok(RootCanisterSettings {
             controllers,
             compute_allocation,
@@ -192,6 +193,7 @@ impl From<CanisterSettings> for SelfDescribingValue {
             wasm_memory_limit,
             wasm_memory_threshold,
             snapshot_visibility,
+            reserved_cycles_limit,
         } = settings;
 
         // Flatten the nested `controllers` field. More specifically, get rid of the intermediate
@@ -211,6 +213,7 @@ impl From<CanisterSettings> for SelfDescribingValue {
             .add_field("freezing_threshold", freezing_threshold)
             .add_field("wasm_memory_limit", wasm_memory_limit)
             .add_field("wasm_memory_threshold", wasm_memory_threshold)
+            .add_field("reserved_cycles_limit", reserved_cycles_limit)
             .add_field("log_visibility", log_visibility)
             .add_field("snapshot_visibility", snapshot_visibility)
             .build()
@@ -320,6 +323,7 @@ mod tests {
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
                 snapshot_visibility: Some(SnapshotVisibility::Public as i32),
+                reserved_cycles_limit: Some(1 << 29),
             }),
         };
 
@@ -351,7 +355,7 @@ mod tests {
                     freezing_threshold: Some(Nat::from(100_u64)),
                     log_visibility: Some(RootLogVisibility::Public),
                     snapshot_visibility: Some(RootSnapshotVisibility::Public),
-                    reserved_cycles_limit: None,
+                    reserved_cycles_limit: Some(Nat::from(1_u64 << 29)),
                     wasm_memory_threshold: Some(Nat::from(1_u64 << 30)),
                 }
             }
@@ -374,6 +378,7 @@ mod tests {
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
                 snapshot_visibility: Some(SnapshotVisibility::Public as i32),
+                reserved_cycles_limit: Some(1 << 29),
             }),
         };
 
@@ -403,7 +408,7 @@ mod tests {
                 freezing_threshold: Some(Nat::from(100_u64)),
                 log_visibility: Some(RootLogVisibility::Public),
                 snapshot_visibility: Some(RootSnapshotVisibility::Public),
-                reserved_cycles_limit: None,
+                reserved_cycles_limit: Some(Nat::from(1_u64 << 29)),
                 wasm_memory_threshold: Some(Nat::from(1_u64 << 30)),
             }
         );
@@ -449,6 +454,7 @@ mod tests {
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
                 snapshot_visibility: Some(SnapshotVisibility::Public as i32),
+                reserved_cycles_limit: Some(1 << 29),
             }),
         };
 
@@ -467,6 +473,7 @@ mod tests {
                     "memory_allocation".to_string() => SelfDescribingValue::from(1_u64 << 32),
                     "wasm_memory_limit".to_string() => SelfDescribingValue::from(1_u64 << 31),
                     "wasm_memory_threshold".to_string() => SelfDescribingValue::from(1_u64 << 30),
+                    "reserved_cycles_limit".to_string() => SelfDescribingValue::from(1_u64 << 29),
                     "compute_allocation".to_string() => SelfDescribingValue::from(10_u64),
                     "freezing_threshold".to_string() => SelfDescribingValue::from(100_u64),
                     "log_visibility".to_string() => SelfDescribingValue::from("Public"),
@@ -500,6 +507,7 @@ mod tests {
                     "freezing_threshold".to_string() => SelfDescribingValue::Null,
                     "wasm_memory_limit".to_string() => SelfDescribingValue::Null,
                     "wasm_memory_threshold".to_string() => SelfDescribingValue::Null,
+                    "reserved_cycles_limit".to_string() => SelfDescribingValue::Null,
                     "log_visibility".to_string() => SelfDescribingValue::Null,
                     "snapshot_visibility".to_string() => SelfDescribingValue::Null,
                 }),

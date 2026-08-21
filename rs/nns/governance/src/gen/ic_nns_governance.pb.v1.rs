@@ -304,23 +304,23 @@ pub mod reward_node_provider {
     /// This message specifies how to create a new neuron on behalf of
     /// the node provider.
     ///
-    /// * The controller of the new neuron is the node provider's
-    ///   principal.
+    /// - The controller of the new neuron is the node provider's
+    ///    principal.
     ///
-    /// * The account is chosen at random.
+    /// - The account is chosen at random.
     ///
-    /// * The stake of the new neuron is `amount_e8s`.
+    /// - The stake of the new neuron is `amount_e8s`.
     ///
-    /// * `dissolve_delay_seconds` is as specified in the proto.
+    /// - `dissolve_delay_seconds` is as specified in the proto.
     ///
-    /// * `kyc_verified` is set to true, as node providers are
-    ///   (implicitly) KYC'ed.
+    /// - `kyc_verified` is set to true, as node providers are
+    ///    (implicitly) KYC'ed.
     ///
-    /// * `not_for_profit` is set to false.
+    /// - `not_for_profit` is set to false.
     ///
-    /// * All other values are set as for other neurons: timestamp is
-    ///   now, following is set up per default, maturity is 0, neuron fee
-    ///   is 0.
+    /// - All other values are set as for other neurons: timestamp is
+    ///    now, following is set up per default, maturity is 0, neuron fee
+    ///    is 0.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1956,14 +1956,14 @@ pub struct SwapParticipationLimits {
 /// This message has a couple of unusual features.
 ///
 /// 1. There is (currently) only one field. We expect that more fields will be
-///    (and possibly other clients) to be able to handle this information in a
-///    generic way, i.e. without having to change their code.
+///     (and possibly other clients) to be able to handle this information in a
+///     generic way, i.e. without having to change their code.
 ///
-/// 1. Fields that might be added later will probably be mutually exclusive with
-///    existing fields. Normally, this would be handled by putting all such
-///    fields into a oneof. However, Candid has a bug where variant is not
-///    handled correctly. Therefore, we refrain from using oneof until we believe
-///    that the fix is very imminent.
+/// 2. Fields that might be added later will probably be mutually exclusive with
+///     existing fields. Normally, this would be handled by putting all such
+///     fields into a oneof. However, Candid has a bug where variant is not
+///     handled correctly. Therefore, we refrain from using oneof until we believe
+///     that the fix is very imminent.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2228,11 +2228,9 @@ pub struct VotingPowerEconomics {
     /// After a neuron has experienced voting power reduction for this amount of
     /// time, a couple of things happen:
     ///
-    /// ```text
-    /// 1. Deciding voting power reaches 0.
+    ///      1. Deciding voting power reaches 0.
     ///
-    /// 2. Its following on topics other than NeuronManagement are cleared.
-    /// ```
+    ///      2. Its following on topics other than NeuronManagement are cleared.
     ///
     /// Initially, set to 1/12 years.
     #[prost(uint64, optional, tag = "2")]
@@ -2288,7 +2286,7 @@ pub struct NeuronsFundMatchedFundingCurveCoefficients {
 /// the Neurons' Fund depends on four factors:
 /// (1) Direct participation amount at the time of the swap's successful finalization.
 /// (2) Amount of maturity held by all eligible neurons that were members of the Neurons' Fund
-/// at the time of the CreateServiceNervousSystem proposal execution.
+///      at the time of the CreateServiceNervousSystem proposal execution.
 /// (3) Global Neurons' Fund participation thresholds, held in this structure (defined in XDR).
 /// (4) ICP/XDR conversion rate at the time of the CreateServiceNervousSystem proposal execution.
 #[derive(
@@ -2383,11 +2381,11 @@ pub struct RewardEvent {
     /// reasons that rewards might not be distributed in a given round.
     ///
     /// 1. "Missed" rounds: there was a long period when we did calculate rewards
-    ///    (longer than 1 round). (I.e. distribute_rewards was not called by
-    ///    heartbeat for whatever reason, most likely some kind of bug.)
+    ///     (longer than 1 round). (I.e. distribute_rewards was not called by
+    ///     heartbeat for whatever reason, most likely some kind of bug.)
     ///
-    /// 1. Rollover: We tried to distribute rewards, but there were no proposals
-    ///    settled to distribute rewards for.
+    /// 2. Rollover: We tried to distribute rewards, but there were no proposals
+    ///     settled to distribute rewards for.
     ///
     /// In both of these cases, the rewards purse rolls over into the next round.
     #[prost(uint64, optional, tag = "6")]
@@ -2470,7 +2468,8 @@ pub struct OpenSnsTokenSwap {
 /// Therefore, most of the fields here have equivalents in SnsInitPayload.
 /// Please, consult the comments therein.
 ///
-/// ## Metadata
+/// Metadata
+/// --------
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2709,7 +2708,8 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "4")]
         pub token_logo: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Image>,
     }
-    /// ## Proposal Parameters
+    /// Proposal Parameters
+    /// -------------------
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -3023,6 +3023,8 @@ pub struct CanisterSettings {
         tag = "8"
     )]
     pub snapshot_visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "9")]
+    pub reserved_cycles_limit: ::core::option::Option<u64>,
 }
 /// Nested message and enum types in `CanisterSettings`.
 pub mod canister_settings {
@@ -3382,7 +3384,7 @@ pub struct IcpPriceHistory {
 /// The maturity modulation factor is applied when disbursing (unstaked) maturity to ICP.
 ///
 /// When a neuron owner disburses maturity, the amount of ICP received is:
-/// maturity * (1 + current_value_permyriad / 10_000)
+///    maturity * (1 + current_value_permyriad / 10_000)
 ///
 /// This factor stabilizes ICP price: it is positive when ICP is above its long-term average
 /// (encouraging selling pressure), and negative when below (discouraging selling).
@@ -3865,9 +3867,8 @@ pub struct DateUtc {
 /// for defining the covered period. In this case, `registry_version` is no longer set.
 ///
 /// Summary of field usage:
-///
-/// * Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
-/// * After performance-based rewards:  `start_date` and `end_date` are Some; `registry_version` is None.
+/// - Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
+/// - After performance-based rewards:  `start_date` and `end_date` are Some; `registry_version` is None.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -4007,19 +4008,18 @@ pub mod settle_community_fund_participation {
 /// When a swap ends, the Swap canister notifies the Neurons' Fund of the swap's ultimate result,
 /// which can be either `Committed` or `Aborted`. Note that currently, the Neurons' Fund is managed
 /// by the NNS Governance canister.
-///
 /// * If the result is `Committed`:
-///   * Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
-///     the Matched Funding rules). This computation is based on the total direct participation
-///     amount, which is thus a field of `Committed`.
-///   * Neurons' Fund converts the "effective" amount of maturity into ICP by:
-///     * Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
-///       to the SNS treasury.
-///     * Refunding whatever maturity is left over (the maximum possible maturity is reserved by
-///       the Neurons' Fund before the swap begins).
-///   * Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
-///     (see SettleNeuronsFundParticipationResponse).
-///   * The Swap canister then creates SNS neurons for the Neurons' Fund participants.
+///    - Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
+///      the Matched Funding rules). This computation is based on the total direct participation
+///      amount, which is thus a field of `Committed`.
+///    - Neurons' Fund converts the "effective" amount of maturity into ICP by:
+///      - Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
+///        to the SNS treasury.
+///      - Refunding whatever maturity is left over (the maximum possible maturity is reserved by
+///        the Neurons' Fund before the swap begins).
+///    - Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
+///      (see SettleNeuronsFundParticipationResponse).
+///    - The Swap canister then creates SNS neurons for the Neurons' Fund participants.
 /// * If the result is Aborted, the Neurons' Fund is refunded for all maturity reserved for this SNS.
 ///
 /// This design assumes trust between the Neurons' Fund and the SNS Swap canisters. In the one hand,
@@ -4064,24 +4064,23 @@ pub struct SettleNeuronsFundParticipationRequest {
 pub mod settle_neurons_fund_participation_request {
     /// When this happens, the NNS Governance needs to do several things:
     /// (1) Compute the effective amount of ICP per neuron of the Neurons' Fund as a function of
-    /// `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
-    /// equal `total_neurons_fund_contribution_icp_e8s`.
+    ///      `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
+    ///      equal `total_neurons_fund_contribution_icp_e8s`.
     /// (2) Mint (via the ICP Ledger) and sent to the SNS governance the amount of
-    /// `total_neurons_fund_contribution_icp_e8s`.
+    ///      `total_neurons_fund_contribution_icp_e8s`.
     /// (3) Respond to this request with `SettleNeuronsFundParticipationResponse`, providing
-    /// the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
-    /// as computed in step (1).
+    ///      the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
+    ///      as computed in step (1).
     /// (4) Refund each neuron of the Neurons' Fund with (reserved - effective) amount of ICP.
     /// Effective amounts depend on `total_direct_participation_icp_e8s` and the participation limits
     /// of a particular SNS instance, namely, each participation must be between
     /// `min_participant_icp_e8s` and `max_participant_icp_e8s`.
-    ///
-    /// * If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
-    ///   then it is ineligible to participate.
-    /// * If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
-    ///   then its participation amount is limited to `max_participant_icp_e8s`.
-    ///   Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
-    ///   the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
+    /// - If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
+    ///    then it is ineligible to participate.
+    /// - If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
+    ///    then its participation amount is limited to `max_participant_icp_e8s`.
+    /// Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
+    /// the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -5004,8 +5003,8 @@ pub enum Topic {
     Kyc = 9,
     /// Topic for proposals to reward node providers.
     NodeProviderRewards = 10,
-    /// ## IC OS upgrade proposals
-    ///
+    /// IC OS upgrade proposals
+    /// -----------------------
     /// ICP runs on a distributed network of nodes grouped into subnets. Each node runs a stack of
     /// operating systems, including HostOS (runs on bare metal) and GuestOS (runs inside HostOS;
     /// contains, e.g., the ICP replica process). HostOS and GuestOS are distributed via separate disk
