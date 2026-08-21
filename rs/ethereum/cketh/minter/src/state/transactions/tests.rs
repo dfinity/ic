@@ -2995,6 +2995,27 @@ mod sweep_lane {
     }
 
     #[test]
+    #[should_panic(expected = "sweep transaction should carry the request's call data")]
+    fn should_trap_when_the_created_transaction_carries_other_call_data() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(sweep_request(0));
+        let Ok(tx) = sweep_request(0).create_transaction(
+            pipeline.next_transaction_nonce(),
+            gas_fee_estimate(),
+            SWEEP_GAS_LIMIT,
+            EthereumNetwork::Sepolia,
+        );
+
+        pipeline.record_created_transaction(
+            SweepId(0),
+            Eip1559TransactionRequest {
+                data: vec![0xff],
+                ..tx
+            },
+        );
+    }
+
+    #[test]
     #[should_panic(expected = "duplicate transaction id")]
     fn should_trap_on_a_duplicate_sweep_id() {
         let mut pipeline = sweeper_pipeline();
