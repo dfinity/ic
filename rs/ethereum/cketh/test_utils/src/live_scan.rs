@@ -25,13 +25,15 @@
 //! EVM RPC canister), so the minter reads real Ethereum state from anvil once live: minter → EVM RPC
 //! canister → anvil.
 
-use candid::{Decode, Encode, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::{
-    DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, DepositStatus,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
+    DepositStatus,
 };
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -128,6 +130,32 @@ impl LiveBalanceScanSetup {
     /// The owned anvil node, so a test can read balances and code straight off the chain.
     pub fn anvil(&self) -> &Anvil {
         &self.anvil
+    }
+
+    /// The ckERC20 token the orchestrator spawned for `symbol`, whose ledger the mint lands on.
+    pub fn ckerc20_token(&self, symbol: &str) -> CkErc20Token {
+        self.ckerc20.find_ckerc20_token(symbol)
+    }
+
+    /// The minter's own log, for a failure message that says what it was doing.
+    pub fn minter_logs(&self) -> String {
+        self.ckerc20
+            .cketh
+            .minter_canister_logs()
+            .into_iter()
+            .map(|log| log.content)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// The audit events the minter has recorded, to see how far a sweep got.
+    pub fn minter_events(&self) -> Vec<ic_cketh_minter::endpoints::events::Event> {
+        self.ckerc20.cketh.get_all_events()
+    }
+
+    /// `account`'s balance on `ledger_id`, i.e. what the deposit was credited.
+    pub fn balance_of_ledger(&self, ledger_id: Principal, account: impl Into<Account>) -> Nat {
+        self.ckerc20.balance_of_ledger(ledger_id, account)
     }
 
     /// A distinct non-anonymous depositing principal for `seed`, so a test can register several
