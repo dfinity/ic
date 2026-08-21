@@ -40,7 +40,7 @@ use std::time::{Duration, Instant};
 
 /// The domain under which the group's `dnsmasq` synthesises a DNS name for every
 /// address in the group's `/64`, by writing the address with `:` replaced by `-`
-/// (e.g. `fd00-1-2--3.ipv6.nip.io`).
+/// (e.g. `2a00-fb01-400-2c--3.ipv6.nip.io`).
 ///
 /// This mirrors the public `nip.io` wildcard DNS service, which is what system
 /// tests use when they need to reach a VM by a *name* rather than by an address
@@ -406,15 +406,41 @@ impl LocalBackend {
         sanitize_name(&format!("ictest-{group_name}-{vm_name}"))
     }
 
-    /// Returns the per-group IPv6 prefix (a deterministic /64 in the
-    /// ULA range `fd00::/8`).
+    /// Returns the `/64` the group's *nodes* are addressed out of, i.e. subnet-id
+    /// 0 of [`group_subnet_prefix`](Self::group_subnet_prefix).
     fn group_ipv6_prefix(group_name: &str) -> String {
+        Self::group_subnet_prefix(group_name, 0)
+    }
+
+    /// Returns `2a00:fb01:400:<group><subnet>::`, the group's `/64` for
+    /// `subnet_id` (0 for the nodes, 1..=3 for the driver's own addresses).
+    ///
+    /// The range is deliberately an ordinary global unicast prefix rather than a
+    /// reserved one. It must not be a ULA or link-local address, because the
+    /// orchestrator reads those as a sign that it is running in a cloud and
+    /// blocks on cloud metadata discovery before it can register itself
+    /// (`assemble_add_node_message` in `rs/orchestrator/src/registration.rs`),
+    /// which never completes here. But reserved ranges are no good either: they
+    /// are exactly the ones software special-cases. `2001:db8::/32` (RFC 3849)
+    /// looks appealing for a fake network and breaks `bitcoind`, whose
+    /// `CNetAddr::IsValid()` rejects documentation addresses outright, so every
+    /// RPC from the driver is refused with "Client network is not allowed RPC
+    /// access" even under `-rpcallowip='::/0'`. A boring routable-looking prefix
+    /// has no such classifier to trip over. Nothing leaves the group's network
+    /// namespace, so real-world routability is irrelevant — only how software
+    /// *classifies* the bits.
+    ///
+    /// [`GROUP_PREFIX`](Self::GROUP_PREFIX) is a `/56`, which leaves one byte
+    /// before the `/64` boundary: 6 bits of group digest and 2 bits of
+    /// subnet-id. The digest is therefore much shorter than the bridge's and
+    /// TAP's (see [`bridge_name`](Self::bridge_name)), but a collision between
+    /// two groups is unobservable: each test owns a private network namespace
+    /// (see [`ensure_administrable_netns`](Self::ensure_administrable_netns)).
+    fn group_subnet_prefix(group_name: &str, subnet_id: u8) -> String {
         use ic_crypto_sha2::Sha256;
+        debug_assert!(subnet_id < 4, "subnet-id must fit in 2 bits");
         let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}::",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("2a00:fb01:400:{:02x}::", (hash[0] & 0xfc) | subnet_id)
     }
 
     /// Returns the per-group IPv6 gateway address (`<prefix>1`). Assigned to the
@@ -446,12 +472,7 @@ impl LocalBackend {
     /// SLAAC; [`create_group`](Self::create_group) overrides the node `/64`'s
     /// connected-route source to it.
     pub fn group_mgmt_ipv6(group_name: &str) -> String {
-        use ic_crypto_sha2::Sha256;
-        let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:1::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("{}1", Self::group_subnet_prefix(group_name, 1))
     }
 
     /// Returns the per-group IPv6 address the driver streams the nodes' journald
@@ -467,12 +488,7 @@ impl LocalBackend {
     /// Like the management address it is assigned to `lo` in
     /// [`create_group`](Self::create_group).
     pub fn group_logs_ipv6(group_name: &str) -> String {
-        use ic_crypto_sha2::Sha256;
-        let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:2::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("{}1", Self::group_subnet_prefix(group_name, 2))
     }
 
     /// Returns the per-group IPv6 address the file server
@@ -490,20 +506,21 @@ impl LocalBackend {
     /// own traffic. Like it, this is assigned to `lo` in
     /// [`create_group`](Self::create_group).
     pub fn group_files_ipv6(group_name: &str) -> String {
-        use ic_crypto_sha2::Sha256;
-        let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:3::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("{}1", Self::group_subnet_prefix(group_name, 3))
     }
 
-    /// The IPv6 ULA range every address the local backend hands out lives in:
-    /// the nodes' `/64`, the driver's own addresses and any other VM in the
-    /// group. Offered to tests that have to whitelist the *whole* group on the
-    /// nodes' firewall; see
+    /// The IPv6 range every address the local backend hands out lives in: the
+    /// nodes' `/64`, the driver's own addresses and any other VM in the group.
+    /// Offered to tests that have to whitelist the *whole* group on the nodes'
+    /// firewall; see
     /// [`InternetComputer::with_group_wide_firewall_whitelist`](crate::driver::ic::InternetComputer::with_group_wide_firewall_whitelist).
-    pub const GROUP_ULA_PREFIX: &'static str = "fd00::/8";
+    ///
+    /// `2a00:fb01:400::/56` is DFINITY's Zurich DC prefix. The addresses never
+    /// leave the group's network namespace, so nothing is actually routed there;
+    /// it is used because an ordinary global unicast prefix is the one thing no
+    /// classifier special-cases — see
+    /// [`group_subnet_prefix`](Self::group_subnet_prefix).
+    pub const GROUP_PREFIX: &'static str = "2a00:fb01:400::/56";
 
     /// The three addresses the test driver reaches the group's VMs from: the
     /// management source ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)), the
