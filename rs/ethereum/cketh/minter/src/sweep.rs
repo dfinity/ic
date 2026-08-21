@@ -258,7 +258,7 @@ async fn finalize_transactions_batch(sender: Address) {
 /// is `0` for a deposit EOA: incoming ERC-20 transfers never touch it, and only one of its own
 /// authorizations can advance it.
 pub async fn enqueue_batched_sweep() {
-    let _guard = match TimerGuard::new(TaskType::SweeperSend) {
+    let _guard = match TimerGuard::new(TaskType::SweeperEnqueue) {
         Ok(guard) => guard,
         Err(e) => {
             log!(
