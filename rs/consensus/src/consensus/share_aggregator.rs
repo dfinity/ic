@@ -219,9 +219,17 @@ impl ShareAggregator {
 
         let shares = pool
             .get_catch_up_package_shares(block.height())
-            .map(|share| Signed {
-                content: CatchUpContent::from_share_content(share.content, block.clone()),
-                signature: share.signature,
+            .filter_map(|share| {
+                // The validator should already perform this check if implemented correctly, so this
+                // is just a sanity check
+                if ic_types::crypto::crypto_hash(&block) != share.content.block {
+                    return None;
+                }
+
+                Some(Signed {
+                    content: CatchUpContent::from_share_content(share.content, block.clone()),
+                    signature: share.signature,
+                })
             });
 
         let cups = aggregate_with_threshold(
