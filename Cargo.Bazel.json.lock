@@ -1,5 +1,5 @@
 {
-  "checksum": "ecab59e54cd3dfcb3d049bf925c4d1c1e1ab338ef237c40f066ef568f79e0321",
+  "checksum": "2166bb1d196aa33ee68d439e9b1f8befe4eb82ebf62863e53a20defde5dde55d",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -33800,7 +33800,10 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "override_targets": {
+        "lib": "@@//packages/ic-error-types:ic-error-types"
+      }
     },
     "ic-gateway 0.2.0": {
       "name": "ic-gateway",

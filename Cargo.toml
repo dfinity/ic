@@ -1001,3 +1001,11 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.11.1"
+
+# Redirect the crates.io `ic-error-types` (pulled in transitively by out-of-source
+# crates such as `ic-cdk`, which re-exports `ic_error_types::RejectCode`) to the
+# in-repo copy, so the whole workspace resolves a single `ic-error-types`.
+# The Bazel build applies the equivalent redirect via `override_target_lib` on the
+# `ic-error-types` annotation in `bazel/rust.MODULE.bazel`.
+[patch.crates-io]
+ic-error-types = { path = "packages/ic-error-types" }
