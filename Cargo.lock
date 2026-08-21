@@ -7395,6 +7395,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "criterion",
+ "hex",
  "ic-artifact-pool",
  "ic-btc-replica-types",
  "ic-config",
@@ -7551,6 +7552,7 @@ dependencies = [
  "phantom_newtype",
  "prost",
  "slog",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7588,6 +7590,7 @@ dependencies = [
  "prometheus",
  "prost",
  "rayon",
+ "rstest",
  "slog",
 ]
 

@@ -2,17 +2,16 @@
 //! artifacts.
 #![allow(clippy::result_large_err)]
 use crate::consensus::{
-    ConsensusMessageId, check_protocol_version,
+    ConsensusMessageId, catchup_package_maker, check_protocol_version,
     metrics::ValidatorMetrics,
     status::{self, Status},
 };
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
-    MINIMUM_CHAIN_LENGTH, RoundRobin, active_high_threshold_nidkg_id,
-    active_low_threshold_nidkg_id,
+    MINIMUM_CHAIN_LENGTH, RoundRobin, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    get_oldest_state_registry_version,
+    get_current_transcript_from_summary_block, get_oldest_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::{PoolReader, UnexpectedChainLength},
     subnet_splitting,
@@ -30,6 +29,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{ReplicaLogger, trace, warn};
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
@@ -40,9 +40,16 @@ use ic_types::{
         EquivocationProof, FinalizationContent, HasBlockHash, HasCommittee, HasHash, HasHeight,
         HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare,
         RandomTape, RandomTapeShare, Rank,
-        dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
+        catchup::CatchUpPackageType,
+        dkg::{
+            DkgPayloadValidationFailure, InvalidDkgPayloadReason, PostSplitArgs,
+            SubnetSplittingStatus,
+        },
     },
-    crypto::{CryptoError, CryptoHashOf, Signed, threshold_sig::ni_dkg::NiDkgId},
+    crypto::{
+        CryptoError, CryptoHashOf, Signed,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
+    },
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
@@ -92,6 +99,8 @@ enum ValidationFailure {
     CatchUpHeightNegligible,
     MissingPastPayloads,
     SubnetSplittingStatusError(subnet_splitting::StatusError),
+    CatchUpPackageTypeError(String),
+    SubnetSplittingError(String),
 }
 
 /// Possible reasons for invalid artifacts.
@@ -99,6 +108,7 @@ enum ValidationFailure {
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
+#[allow(clippy::large_enum_variant)]
 enum InvalidArtifactReason {
     CryptoError(CryptoError),
     MismatchedRank(Rank, Option<Rank>),
@@ -118,6 +128,15 @@ enum InvalidArtifactReason {
     MismatchedOldestRegistryVersionInCatchUpPackageShare,
     MismatchedStateHashInCatchUpPackageShare,
     MismatchedRandomBeaconInCatchUpPackageShare,
+    InvalidHeightInSplittingCatchUpPackageShare {
+        expected: Height,
+        received: Height,
+    },
+    InvalidSubnetSplittingStatusInCatchUpPackage(SubnetSplittingStatus),
+    InvalidSubnetIdInSplittingCatchUpPackage {
+        expected: SubnetId,
+        received: SubnetId,
+    },
     RepeatedSigner,
     ReplicaVersionMismatch,
     NotABlockmaker,
@@ -294,12 +313,17 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        _pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let dkg_id = active_high_threshold_nidkg_id(pool.as_cache(), height)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
+        let dkg_id = get_current_transcript_from_summary_block(
+            self.content.block.as_ref(),
+            &NiDkgTag::HighThreshold,
+        )
+        .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?
+        .dkg_id
+        .clone();
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -317,19 +341,59 @@ impl SignatureVerify for CatchUpPackage {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         _pool: &PoolReader<'_>,
-        _cfg: &ReplicaConfig,
+        cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
+        let cup_registry_version = self.content.registry_version();
+
+        // During a subnet split, we will start receiving CUPs from both subnets. Only validate the
+        // ones for our subnet.
+        let subnet_id_to_validate_against = match self.subnet_splitting_status() {
+            SubnetSplittingStatus::NotScheduled => membership.subnet_id,
+            status @ SubnetSplittingStatus::Scheduled(_) => {
+                // There is no CUP on a `Scheduled` summary.
+                return Err(ValidationError::InvalidArtifact(
+                    InvalidArtifactReason::InvalidSubnetSplittingStatusInCatchUpPackage(status),
+                ));
+            }
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) => {
+                let registry_subnet_id = match membership
+                    .registry_client
+                    .get_subnet_id_from_node_id(cfg.node_id, cup_registry_version)
+                {
+                    Ok(Some(subnet_id)) => subnet_id,
+                    Ok(None) => {
+                        // This should not happen: we are unassigned on a registry version of a
+                        // subnet split. Just in case, validate the CUP from the source subnet.
+                        // After doing so, the orchestrator will detect it and kill us.
+                        membership.subnet_id
+                    }
+                    Err(e) => {
+                        return Err(ValidationError::ValidationFailed(
+                            ValidationFailure::RegistryClientError(e),
+                        ));
+                    }
+                };
+
+                if registry_subnet_id != new_subnet_id {
+                    // This is a CUP from the other subnet
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage {
+                            expected: registry_subnet_id,
+                            received: new_subnet_id,
+                        },
+                    ));
+                }
+
+                new_subnet_id
+            }
+        };
+
         crypto
             .verify_combined_threshold_sig_by_public_key(
                 &self.signature.signature,
                 &self.content,
-                membership.subnet_id,
-                // Using any registry version here is fine because we assume that the
-                // public key of the subnet will not change. The alternative of trying
-                // to use the registry version obtained from the pool is not an option
-                // here because we may not be able to get a proper value if we do not
-                // have the relevant portion of the chain.
-                membership.registry_client.get_latest_version(),
+                subnet_id_to_validate_against,
+                cup_registry_version,
             )
             .map_err(ValidatorError::from)
     }
@@ -1733,10 +1797,64 @@ impl Validator {
         pool_reader: &PoolReader<'_>,
         share_content: &CatchUpShareContent,
     ) -> Result<Block, ValidatorError> {
-        let height = share_content.height();
-        let block = pool_reader
-            .get_finalized_block(height)
-            .ok_or(ValidationFailure::FinalizedBlockNotFound(height))?;
+        let share_height = share_content.height();
+
+        let dkg_summary_block = pool_reader.get_highest_finalized_summary_block();
+        let dkg_summary = &dkg_summary_block.payload.as_ref().as_summary().dkg;
+
+        let (block, beacon, state_height) = match catchup_package_maker::get_catch_up_package_type(
+            self.registry_client.as_ref(),
+            self.replica_config.node_id,
+            &dkg_summary_block,
+        )
+        .map_err(ValidationFailure::CatchUpPackageTypeError)?
+        {
+            CatchUpPackageType::PostSplit { new_subnet_id }
+                if dkg_summary.get_next_start_height() == share_height =>
+            {
+                let post_split_block = catchup_package_maker::create_post_split_summary_block(
+                    &dkg_summary_block,
+                    new_subnet_id,
+                    self.registry_client.as_ref(),
+                )
+                .map_err(ValidationFailure::SubnetSplittingError)?;
+
+                let post_split_random_beacon =
+                    catchup_package_maker::create_post_split_random_beacon(&post_split_block)
+                        .map_err(ValidationFailure::SubnetSplittingError)?;
+
+                let state_height = dkg_summary.height;
+
+                (post_split_block, post_split_random_beacon, state_height)
+            }
+            // We don't produce CUPs for the height at which a subnet splitting is happening.
+            CatchUpPackageType::PostSplit { .. } if dkg_summary.height == share_height => {
+                return Err(
+                    InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare {
+                        expected: dkg_summary.get_next_start_height(),
+                        received: share_height,
+                    }
+                    .into(),
+                );
+            }
+            // It could be that, in our view, the latest summary indicates a subnet-split but
+            // we receive an old CUP share or a future CUP share (i.e. that does not correspond to
+            // the expected post-split height). In that case, validate it like normally.
+            CatchUpPackageType::PostSplit { .. } | CatchUpPackageType::Normal => {
+                let block = pool_reader
+                    .get_finalized_block(share_height)
+                    .ok_or(ValidationFailure::FinalizedBlockNotFound(share_height))?;
+
+                let beacon = pool_reader
+                    .get_random_beacon(share_height)
+                    .ok_or(ValidationFailure::RandomBeaconNotFound(share_height))?;
+
+                let state_height = share_height;
+
+                (block, beacon, state_height)
+            }
+        };
+
         if ic_types::crypto::crypto_hash(&block) != share_content.block {
             return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
         }
@@ -1745,25 +1863,22 @@ impl Validator {
             return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
         }
 
-        let beacon = pool_reader
-            .get_random_beacon(height)
-            .ok_or(ValidationFailure::RandomBeaconNotFound(height))?;
         if &beacon != share_content.random_beacon.get_value() {
             return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
-        let hash = self
+        let state_hash = self
             .state_manager
-            .get_state_hash_at(height)
+            .get_state_hash_at(state_height)
             .map_err(ValidationFailure::StateHashError)?;
-        if hash != share_content.state_hash {
+        if state_hash != share_content.state_hash {
             return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
         // Should succeed as we already got the hash above
         let state = self
             .state_manager
-            .get_state_at(height)
+            .get_state_at(state_height)
             .map_err(ValidationFailure::StateManagerError)?;
         let registry_version = get_oldest_state_registry_version(state.get_ref());
         if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
@@ -1998,10 +2113,12 @@ pub mod test {
     use super::*;
     use crate::consensus::{
         MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
+        catchup_package_maker::CatchUpPackageMaker,
     };
     use assert_matches::assert_matches;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder, RefMockPayloadBuilder};
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
@@ -2021,6 +2138,7 @@ pub mod test {
         SetupInitialDkgContext, SignWithThresholdContext,
     };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
+    use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::{
         assert_changeset_matches_pattern,
@@ -2032,7 +2150,10 @@ pub mod test {
             fake_signature_request_context_with_registry_version,
         },
     };
-    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_registry::{
+        SubnetRecordBuilder, add_subnet_record, insert_initial_dkg_transcript,
+    };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
         ids::{node_test_id, subnet_test_id},
@@ -2040,11 +2161,13 @@ pub mod test {
     };
     use ic_types::{
         CryptoHashOfState, ReplicaVersion, Time,
+        backwards_compatibility::BackwardsCompatible,
         batch::{BatchPayload, IngressPayload},
         consensus::{
             BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof, Finalization,
             FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare, Payload,
-            RandomBeaconContent, RandomTapeContent, SummaryPayload, dkg::DkgDataPayload,
+            RandomBeaconContent, RandomTapeContent, SummaryPayload,
+            dkg::{DkgDataPayload, SplittingArgs, SubnetSplittingStatus},
             idkg::PreSigId,
         },
         crypto::{
@@ -2055,8 +2178,11 @@ pub mod test {
         signature::ThresholdSignature,
         subnet_id_into_protobuf,
     };
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::{
+        NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6, SUBNET_1, SUBNET_2,
+    };
     use rstest::rstest;
+    use std::str::FromStr;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
@@ -2083,8 +2209,10 @@ pub mod test {
     struct ValidatorAndDependencies {
         validator: Validator,
         payload_builder: Arc<RefMockPayloadBuilder>,
+        membership: Arc<Membership>,
         state_manager: Arc<RefMockStateManager>,
         message_routing: Arc<RefMockMessageRouting>,
+        crypto: Arc<CryptoReturningOk>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         registry: Arc<FakeRegistryClient>,
         pool: TestConsensusPool,
@@ -2118,6 +2246,20 @@ pub mod test {
             }
         }
 
+        fn multiple_subnets(
+            pool_config: ArtifactPoolConfig,
+            subnet_records: Vec<(u64, SubnetId, SubnetRecord)>,
+        ) -> Self {
+            Self {
+                deps_builder: DependenciesBuilder::multiple_subnets(pool_config, subnet_records),
+            }
+        }
+
+        fn with_replica_config(mut self, replica_config: ReplicaConfig) -> Self {
+            self.deps_builder = self.deps_builder.with_replica_config(replica_config);
+            self
+        }
+
         fn with_dkg_interval_length(mut self, length: u64) -> Self {
             self.deps_builder = self.deps_builder.with_dkg_interval_length(length);
             self
@@ -2146,9 +2288,9 @@ pub mod test {
 
             let validator = Validator::new(
                 replica_config.clone(),
-                membership,
+                membership.clone(),
                 registry.clone(),
-                crypto,
+                crypto.clone(),
                 payload_builder.clone(),
                 state_manager.clone(),
                 message_routing.clone(),
@@ -2162,8 +2304,10 @@ pub mod test {
             ValidatorAndDependencies {
                 validator,
                 payload_builder,
+                membership,
                 state_manager,
                 message_routing,
+                crypto,
                 registry_data_provider,
                 registry,
                 pool,
@@ -3202,6 +3346,9 @@ pub mod test {
         next_block
     }
 
+    /// The subnet IDs of the source and destination subnets in the subnet split tests below.
+    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
     /// The registry version at which the subnet split is scheduled in the tests below.
     const SUBNET_SPLIT_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
 
@@ -3220,7 +3367,7 @@ pub mod test {
             .value
             .expect("The CUP contents should be in the registry");
         cup_contents.cup_type = Some(CupType::SubnetSplitting(SubnetSplittingArgsProto {
-            destination_subnet_id: Some(subnet_id_into_protobuf(subnet_test_id(1))),
+            destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
         }));
 
         registry_data_provider
@@ -3255,7 +3402,7 @@ pub mod test {
                 ..
             } = ValidatorAndDependenciesBuilder::single_subnet(
                 pool_config,
-                subnet_test_id(0),
+                SOURCE_SUBNET_ID,
                 (1..=block_registry_version.get())
                     .map(|version| {
                         (
@@ -3329,7 +3476,7 @@ pub mod test {
                 ..
             } = ValidatorAndDependenciesBuilder::single_subnet(
                 pool_config,
-                subnet_test_id(0),
+                SOURCE_SUBNET_ID,
                 (1..=block_registry_version.get())
                     .map(|version| {
                         (
@@ -3352,6 +3499,10 @@ pub mod test {
             // summary block below is the first one that could adopt the scheduled version.
             pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
 
+            if block_registry_version >= SUBNET_SPLIT_REGISTRY_VERSION {
+                schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
+            }
+
             // The proposal picks up the latest registry version, and its payload is built for that
             // very version, so the only thing under test is the version itself.
             let summary_proposal = make_next_block(&pool);
@@ -3364,13 +3515,35 @@ pub mod test {
                 context.registry_version, block_registry_version,
                 "expected the summary block to reference the registry version under test",
             );
+            // Sanity-check that the summary block's payload reflects the subnet splitting status
+            // as it should be at the registry version under test.
+            assert_eq!(
+                summary_proposal
+                    .content
+                    .as_ref()
+                    .payload
+                    .as_ref()
+                    .as_summary()
+                    .dkg
+                    .subnet_splitting_status(),
+                if block_registry_version < SUBNET_SPLIT_REGISTRY_VERSION {
+                    SubnetSplittingStatus::NotScheduled
+                } else {
+                    SubnetSplittingStatus::Scheduled(SplittingArgs {
+                        source_subnet_id: replica_config.subnet_id,
+                        destination_subnet_id: DESTINATION_SUBNET_ID,
+                    })
+                },
+            );
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(context.certified_height);
             time_source.set_time(context.time).unwrap();
 
-            schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
+            if block_registry_version < SUBNET_SPLIT_REGISTRY_VERSION {
+                schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
+            }
 
             let result = validator.check_block_validity(&PoolReader::new(&pool), &summary_proposal);
             if block_registry_version <= SUBNET_SPLIT_REGISTRY_VERSION {
@@ -4918,5 +5091,357 @@ pub mod test {
                 );
             })
         });
+    }
+
+    const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+
+    enum MalformShare {
+        StateHash,
+        RandomBeacon,
+        RegistryVersion,
+        Height,
+    }
+    #[rstest]
+    #[case(NODE_1, None, Ok(()))]
+    #[case(NODE_2, None, Ok(()))]
+    // after the split, nodes NODE_3 and NODE_4 will be on a different subnet than the validator
+    // (NODE_1)
+    #[case::wrong_subnet(
+        NODE_3,
+        None,
+        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
+    )]
+    #[case::wrong_subnet(
+        NODE_4,
+        None,
+        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
+    )]
+    #[case::wrong_state_hash(
+        NODE_1,
+        Some(MalformShare::StateHash),
+        Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare)
+    )]
+    #[case::wrong_random_beacon(
+        NODE_1,
+        Some(MalformShare::RandomBeacon),
+        Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare)
+    )]
+    #[case::wrong_registry_version(
+        NODE_1,
+        Some(MalformShare::RegistryVersion),
+        Err(InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare)
+    )]
+    #[case::wrong_height(
+        NODE_1,
+        Some(MalformShare::Height),
+        Err(InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare { expected: Height::from(20), received: Height::from(10) })
+    )]
+    fn validate_post_split_cup_share_test(
+        #[case] cup_share_node_id: NodeId,
+        #[case] malform_share: Option<MalformShare>,
+        #[case] expected_validation_result: Result<(), InvalidArtifactReason>,
+    ) {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let ValidatorAndDependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    registry_data_provider,
+                    crypto,
+                    validator,
+                    state_manager,
+                    ..
+                } = ValidatorAndDependenciesBuilder::multiple_subnets(
+                    pool_config,
+                    vec![
+                        (
+                            INITIAL_REGISTRY_VERSION.get(),
+                            SOURCE_SUBNET_ID,
+                            SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                .build(),
+                        ),
+                        (
+                            SUBNET_SPLIT_REGISTRY_VERSION.get(),
+                            SOURCE_SUBNET_ID,
+                            SubnetRecordBuilder::from(&[NODE_1, NODE_2])
+                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                .build(),
+                        ),
+                        (
+                            SUBNET_SPLIT_REGISTRY_VERSION.get(),
+                            DESTINATION_SUBNET_ID,
+                            SubnetRecordBuilder::from(&[NODE_3, NODE_4])
+                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                .build(),
+                        ),
+                    ],
+                )
+                .with_replica_config(ReplicaConfig {
+                    node_id: NODE_1,
+                    subnet_id: SOURCE_SUBNET_ID,
+                })
+                .build();
+                // Manually insert DKG transcripts at the splitting version to simulate what the
+                // registry would do. The setup above only inserts the transcripts at the initial
+                // version.
+                insert_initial_dkg_transcript(
+                    SUBNET_SPLIT_REGISTRY_VERSION.get(),
+                    SOURCE_SUBNET_ID,
+                    &SubnetRecordBuilder::from(&[NODE_1, NODE_2])
+                        .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                        .build(),
+                    &registry_data_provider,
+                );
+                registry.reload();
+
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(fake_state_hash.clone()));
+
+                let message_routing = FakeMessageRouting::new();
+                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                let message_routing = Arc::new(message_routing);
+
+                let cup_maker = CatchUpPackageMaker::new(
+                    ReplicaConfig {
+                        node_id: cup_share_node_id,
+                        subnet_id: SOURCE_SUBNET_ID,
+                    },
+                    membership,
+                    crypto,
+                    state_manager,
+                    message_routing,
+                    registry,
+                    log,
+                );
+
+                pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+
+                let subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id: SOURCE_SUBNET_ID,
+                    destination_subnet_id: DESTINATION_SUBNET_ID,
+                });
+                let mut proposal = pool.make_next_block();
+                let block = proposal.content.as_mut();
+                block.context.certified_height = block.height;
+                block.context.registry_version = SUBNET_SPLIT_REGISTRY_VERSION;
+                let mut payload = block.payload.as_ref().as_summary().clone();
+                payload.dkg.subnet_splitting_status =
+                    BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(payload),
+                );
+                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                pool.insert_validated(proposal.clone());
+                pool.notarize(&proposal);
+                pool.finalize(&proposal);
+
+                let mut share = cup_maker
+                    .consider_block(&PoolReader::new(&pool), proposal.content.as_ref().clone())
+                    .expect("Should succeed with valid inputs");
+
+                match malform_share {
+                    Some(MalformShare::StateHash) => {
+                        share.content.state_hash =
+                            CryptoHashOfState::from(CryptoHash(vec![3, 1, 4]));
+                    }
+                    Some(MalformShare::RandomBeacon) => {
+                        let mut invalid_beacon = share.content.random_beacon.into_inner();
+                        invalid_beacon.content.version =
+                            ReplicaVersion::from_str("invalid_replica_version").unwrap();
+
+                        share.content.random_beacon =
+                            HashedRandomBeacon::new(ic_types::crypto::crypto_hash, invalid_beacon);
+                    }
+                    Some(MalformShare::RegistryVersion) => {
+                        share
+                            .content
+                            .oldest_registry_version_in_use_by_replicated_state =
+                            Some(INITIAL_REGISTRY_VERSION);
+                    }
+                    Some(MalformShare::Height) => {
+                        let mut beacon = share.content.random_beacon.into_inner();
+                        beacon.content.height = proposal.height();
+
+                        share.content.random_beacon =
+                            HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon);
+                    }
+                    None => {}
+                }
+
+                pool.insert_unvalidated(share.clone());
+
+                let pool_reader = PoolReader::new(&pool);
+                let change_set = validator.validate_catch_up_package_shares(&pool_reader);
+
+                let expected_change_action = match expected_validation_result {
+                    Ok(()) => {
+                        ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(share))
+                    }
+                    Err(err) => ChangeAction::HandleInvalid(
+                        ConsensusMessage::CatchUpPackageShare(share),
+                        format!("{err:?}"),
+                    ),
+                };
+
+                assert_eq!(change_set, vec![expected_change_action]);
+            })
+        })
+    }
+
+    /// Tests the checks performed when validating a full CUP during a subnet split: after the
+    /// split, both new subnets produce CUPs, and a node must only validate the one of the subnet
+    /// the registry assigns it to at the CUP's registry version.
+    #[rstest]
+    // CUPs unrelated to a subnet split are validated against the subnet we are running on.
+    #[case::split_not_scheduled(NODE_1, SubnetSplittingStatus::NotScheduled, Ok(()))]
+    // NODE_1 stays on the source subnet, so it validates the source subnet's CUP, but not the
+    // destination subnet's one.
+    #[case::source_node_and_source_cup(
+        NODE_1,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
+        Ok(())
+    )]
+    #[case::source_node_and_destination_cup(
+        NODE_1,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: DESTINATION_SUBNET_ID }),
+        Err(InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage {
+            expected: SOURCE_SUBNET_ID,
+            received: DESTINATION_SUBNET_ID,
+        })
+    )]
+    // NODE_5 moves to the destination subnet, so for it it's the other way around.
+    #[case::destination_node_and_destination_cup(
+        NODE_5,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: DESTINATION_SUBNET_ID }),
+        Ok(())
+    )]
+    #[case::destination_node_and_source_cup(
+        NODE_5,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
+        Err(InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage {
+            expected: DESTINATION_SUBNET_ID,
+            received: SOURCE_SUBNET_ID,
+        })
+    )]
+    // A node which the registry doesn't assign to any subnet keeps validating the CUP of the
+    // subnet it is currently running on, i.e. the source subnet.
+    #[case::unassigned_node_and_source_cup(
+        NODE_6,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SOURCE_SUBNET_ID }),
+        Ok(())
+    )]
+    #[case::unassigned_node_and_destination_cup(
+        NODE_6,
+        SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: DESTINATION_SUBNET_ID }),
+        Err(InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage {
+            expected: SOURCE_SUBNET_ID,
+            received: DESTINATION_SUBNET_ID,
+        })
+    )]
+    // A summary block which only schedules the split never has a CUP.
+    #[case::split_scheduled(
+        NODE_1,
+        SubnetSplittingStatus::Scheduled(SplittingArgs {
+            source_subnet_id: SOURCE_SUBNET_ID,
+            destination_subnet_id: DESTINATION_SUBNET_ID,
+        }),
+        Err(InvalidArtifactReason::InvalidSubnetSplittingStatusInCatchUpPackage(
+            SubnetSplittingStatus::Scheduled(SplittingArgs {
+                source_subnet_id: SOURCE_SUBNET_ID,
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+            })
+        ))
+    )]
+    #[trace]
+    fn validate_catch_up_package_during_subnet_splitting_test(
+        #[case] validator_node_id: NodeId,
+        #[case] cup_subnet_splitting_status: SubnetSplittingStatus,
+        #[case] expected_validation_result: Result<(), InvalidArtifactReason>,
+    ) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let ValidatorAndDependencies {
+                validator,
+                state_manager,
+                mut pool,
+                ..
+            } = ValidatorAndDependenciesBuilder::multiple_subnets(
+                pool_config,
+                vec![
+                    (
+                        INITIAL_REGISTRY_VERSION.get(),
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                    (
+                        INITIAL_REGISTRY_VERSION.get(),
+                        DESTINATION_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_5])
+                            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                ],
+            )
+            .with_replica_config(ReplicaConfig {
+                node_id: validator_node_id,
+                subnet_id: SOURCE_SUBNET_ID,
+            })
+            .build();
+
+            // Report a state height above the CUP height, so that the CUP is not held
+            // back waiting for the state to catch up.
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .return_const(Height::new(1000));
+
+            // Advance to just below the summary height, without creating any CUP.
+            pool.advance_round_normal_operation_no_cup_n(DKG_INTERVAL_LENGTH);
+
+            // Insert the random beacon of the summary height, which the CUP refers to.
+            let beacon = pool.make_next_beacon();
+            pool.insert_beacon_chain(&beacon, beacon.content.height);
+
+            // Notarize and finalize the summary block, carrying the subnet splitting status under
+            // test, but don't create a CUP for it.
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            let mut payload = block.payload.as_ref().as_summary().clone();
+            payload.dkg.subnet_splitting_status =
+                BackwardsCompatible::new_for_test_only(Some(cup_subnet_splitting_status));
+            block.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(payload),
+            );
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+
+            let catch_up_package = pool.make_catch_up_package(proposal.height());
+            pool.insert_unvalidated(catch_up_package.clone());
+
+            let pool_reader = PoolReader::new(&pool);
+            let change_set = validator.validate_catch_up_packages(&pool_reader);
+
+            let expected_change_action = match expected_validation_result {
+                Ok(()) => ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackage(
+                    catch_up_package,
+                )),
+                Err(err) => ChangeAction::HandleInvalid(
+                    ConsensusMessage::CatchUpPackage(catch_up_package),
+                    format!("{err:?}"),
+                ),
+            };
+
+            assert_eq!(change_set, vec![expected_change_action]);
+        })
     }
 }

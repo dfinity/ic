@@ -350,7 +350,6 @@ mod tests {
             // This will be a summary block, since we are at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
             let summary = block.payload.as_ref();
-
             let last_summary_block = PoolReader::new(&pool)
                 .dkg_summary_block(&parent_block)
                 .unwrap();
@@ -722,6 +721,7 @@ mod tests {
                 registry,
                 state_manager,
                 registry_data_provider,
+                replica_config,
                 ..
             } = DependenciesBuilder::single_subnet(
                 pool_config,
@@ -788,6 +788,8 @@ mod tests {
                 crypto.clone(),
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry.clone(),
+                replica_config,
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
