@@ -297,7 +297,10 @@ rust_test(
     data = [
         "//:anvil",
         "//:solc",
-        # Reuses the mock ERC-20 source compiled at test time by the vendored solc.
+        # Contract sources compiled at test time by the vendored solc: the mock ERC-20, the real
+        # deposit helper the sweep transfers through, and the delegate it sweeps with.
+        "DepositHelperWithSubaccount.sol",
+        "tests/deposit_from_cex_demo/CkSweeperAttested.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
         # End-to-end balance scan on a live PocketIC + local anvil node.
         ":cketh_minter_debug.wasm.gz",
@@ -310,6 +313,8 @@ rust_test(
     ],
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
+        "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
+        "CKSWEEPER_ATTESTED_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperAttested.sol)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
