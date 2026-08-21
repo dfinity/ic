@@ -86,7 +86,7 @@ impl Registry {
         );
     }
 
-    fn get_standard_engine_replica_version_record(
+    pub fn get_standard_engine_replica_version_record(
         &self,
     ) -> Option<StandardEngineReplicaVersionRecord> {
         self.get(
