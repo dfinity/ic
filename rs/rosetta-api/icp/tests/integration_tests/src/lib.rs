@@ -8,6 +8,8 @@ use url::Url;
 
 use ic_icrc_rosetta_client::RosettaClient;
 
+/// Maximum number of retries when waiting for Rosetta to start.
+/// With WAIT_BETWEEN_ATTEMPTS of 100ms, this gives a 100 second timeout.
 const NUM_TRIES: u64 = 1000;
 const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 
@@ -102,7 +104,14 @@ pub async fn start_rosetta(
         tries_left -= 1;
     }
 
-    let port = std::fs::read_to_string(port_file).expect("Expected port in port file");
+    if !port_file.exists() {
+        panic!(
+            "Rosetta did not create port file within timeout. Check if Rosetta crashed during startup."
+        );
+    }
+
+    let port = std::fs::read_to_string(&port_file)
+        .unwrap_or_else(|e| panic!("Failed to read port file {:?}: {}", port_file, e));
     let port = u16::from_str(&port).expect("Expected port in port file");
 
     let rosetta_client = RosettaClient::from_str_url(&format!("http://localhost:{port}"))
@@ -116,8 +125,11 @@ pub async fn start_rosetta(
     }
 
     if let Err(e) = rosetta_client.network_list().await {
-        panic!("Unable to get the network_list from rosetta: {e:?}");
-    };
+        panic!(
+            "Unable to get the network_list from rosetta after {} attempts. Last error: {e:?}",
+            NUM_TRIES
+        );
+    }
 
     let context = RosettaContext {
         _proc,
