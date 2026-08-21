@@ -170,7 +170,13 @@ impl CatchUpPackageMaker {
             self.replica_config.node_id,
             &start_block,
         )
-        .inspect_err(|err| warn!(self.log, "Failed to get the catch up package type: {err}"))
+        .inspect_err(|err| {
+            warn!(
+                every_n_seconds => 5,
+                self.log,
+                "Failed to get the catch up package type: {err}"
+            )
+        })
         .ok()?;
 
         let cup_height = self.get_cup_height(&start_block, cup_type);
@@ -226,6 +232,7 @@ impl CatchUpPackageMaker {
             Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
                 // TODO: Setup a delay before retry
                 debug!(
+                    every_n_seconds => 5,
                     self.log,
                     "Cannot make CUP at height {} because \
                     state is not committed yet. Will retry",
@@ -235,6 +242,7 @@ impl CatchUpPackageMaker {
             }
             Err(StateHashError::Transient(HashNotComputedYet(_))) => {
                 debug!(
+                    every_n_seconds => 5,
                     self.log,
                     "Cannot make CUP at height {} because \
                     state hash is not computed yet. Will retry",
@@ -265,9 +273,10 @@ impl CatchUpPackageMaker {
             .get_state_at(summary_height)
             .inspect_err(|err| {
                 error!(
+                    every_n_seconds => 5,
                     self.log,
                     "Cannot make CUP at height {summary_height}: `get_state_hash_at` \
-                    succeeded but `get_state_at` failed with {err}. Will retry",
+                    succeeded but `get_state_at` failed with {err}. Will retry"
                 )
             })
             .ok()?;
@@ -276,18 +285,34 @@ impl CatchUpPackageMaker {
 
         let cup_block = self
             .get_cup_block(start_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Couldn't get a block for a CUP: {err}"))
+            .inspect_err(|err| {
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "Couldn't get a block for a CUP: {err}"
+                )
+            })
             .ok()?;
 
         let random_beacon = self
             .get_cup_random_beacon(pool, &cup_block, cup_type)
-            .inspect_err(|err| warn!(self.log, "Couldn't get a random beacon for a CUP: {err}"))
+            .inspect_err(|err| {
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "Couldn't get a random beacon for a CUP: {err}"
+                )
+            })
             .ok()?;
 
         let high_threshold_transcript =
             get_current_transcript_from_summary_block(&cup_block, &NiDkgTag::HighThreshold)
                 .or_else(|| {
-                    warn!(self.log, "Couldn't find transcript at height {cup_height}");
+                    warn!(
+                        every_n_seconds => 5,
+                        self.log,
+                        "Couldn't find transcript at height {cup_height}"
+                    );
                     None
                 })?;
         // Skip if this node is not in the committee to make CUP shares
@@ -312,6 +337,7 @@ impl CatchUpPackageMaker {
             .sign(&content, my_node_id, high_dkg_id)
             .inspect_err(|err| {
                 error!(
+                    every_n_seconds => 5,
                     self.log,
                     "Couldn't create a signature at height {cup_height}: {err}"
                 )
@@ -319,6 +345,7 @@ impl CatchUpPackageMaker {
             .ok()?;
 
         debug!(
+            every_n_seconds => 5,
             self.log,
             "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {cup_height}"
         );
