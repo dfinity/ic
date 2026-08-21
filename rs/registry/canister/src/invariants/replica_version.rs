@@ -4,7 +4,7 @@ use crate::{
     flags::is_blank_replica_version_id_for_cloud_engines_enabled,
     invariants::common::{
         InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-        get_all_replica_version_records, get_api_boundary_node_records_from_snapshot,
+        get_all_replica_version_records_with_keys, get_api_boundary_node_records_from_snapshot,
         get_subnet_ids_from_snapshot, get_value_from_snapshot,
     },
 };
@@ -53,9 +53,11 @@ pub(crate) fn check_replica_version_invariants(
     versions_in_use.append(&mut get_all_standard_engine_replica_versions(snapshot));
     versions_in_use.append(&mut get_all_api_boundary_node_versions(snapshot));
 
-    let elected_set: BTreeSet<_> = get_all_replica_version_records(snapshot)
-        .into_keys()
-        .collect();
+    // Re-collect since we can't compare `BTreeSet<String>` with `BTreeSet<&String>` with `is_superset`.
+    let versions_in_use: BTreeSet<_> = versions_in_use.iter().collect();
+
+    let elected_versions = get_all_replica_version_records_with_keys(snapshot);
+    let elected_set: BTreeSet<_> = elected_versions.keys().collect();
     assert!(
         elected_set.is_superset(&versions_in_use),
         "Using a version that isn't elected. Elected versions: {elected_set:?}, in use: {versions_in_use:?}."
@@ -65,34 +67,30 @@ pub(crate) fn check_replica_version_invariants(
         "Elected an empty version ID."
     );
 
-    for version in elected_set {
-        let r = get_replica_version_record(snapshot, &version);
-
+    for (key, record) in elected_versions {
         // Check whether release package URLs (update image) and corresponding hash are well-formed.
         // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
         assert_valid_urls_and_hash(
-            &r.release_package_urls,
-            &r.release_package_sha256_hex,
+            &record.release_package_urls,
+            &record.release_package_sha256_hex,
             false, // allow_file_url
         );
 
         // Check that all measured versions are valid
-        if let Some(Err(defects)) = r.guest_launch_measurements.map(|v| v.validate()) {
+        if let Some(Err(defects)) = record.guest_launch_measurements.map(|v| v.validate()) {
             panic!("guest_launch_measurements are not valid. Defects: {defects:?}");
         }
 
         // Enforce that the stored version always matches the key
-        if let Some(replica_version_id) = r.replica_version_id {
-            assert_eq!(replica_version_id, version);
+        if let Some(replica_version_id) = record.replica_version_id {
+            assert_eq!(
+                replica_version_id, key,
+                "The registry key and internal `replica_version_id` must be consistent."
+            );
         }
     }
 
     Ok(())
-}
-
-fn get_replica_version_record(snapshot: &RegistrySnapshot, version: &str) -> ReplicaVersionRecord {
-    get_value_from_snapshot(snapshot, make_replica_version_key(version))
-        .unwrap_or_else(|| panic!("Could not find replica version: {version}"))
 }
 
 fn get_subnet_record(snapshot: &RegistrySnapshot, subnet_id: SubnetId) -> SubnetRecord {
@@ -676,5 +674,23 @@ mod tests {
     #[test]
     fn set_hash_and_url() {
         check_replica_version(MOCK_HASH, vec![MOCK_URL.into()]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The registry key and internal `replica_version_id` must be consistent."
+    )]
+    fn panic_with_inner_version_mismatch() {
+        let registry = invariant_compliant_registry(0);
+
+        let key = make_replica_version_key("FOO");
+        let value = ReplicaVersionRecord {
+            replica_version_id: Some("BAR".to_string()),
+            ..Default::default()
+        }
+        .encode_to_vec();
+
+        let mutation = vec![upsert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
     }
 }

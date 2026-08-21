@@ -12,6 +12,8 @@ on the process that this file is part of, see
 * Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
   `guest_launch_measurements`.
 
+* Enforce that every `hostos_version_id` matches its `HostosVersionRecord`'s registry key.
+
 ## Changed
 
 * `deploy_guestos_to_all_subnet_nodes` now accepts a blank `replica_version_id`
