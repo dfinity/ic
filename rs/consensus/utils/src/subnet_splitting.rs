@@ -120,7 +120,9 @@ pub enum PostSplitAssignmentError {
     FailedToGetSubnetIdFromTheRegistry(RegistryVersion, RegistryClientError),
     #[error("The node is unassigned at registry version {0}")]
     Unassigned(RegistryVersion),
-    #[error("The node changed subnets during subnet splitting")]
+    #[error(
+        "The node changed to subnet {0} during the split, which is neither the source nor destination subnet"
+    )]
     DisallowedMembershipChange(SubnetId),
 }
 
