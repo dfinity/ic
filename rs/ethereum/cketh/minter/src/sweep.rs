@@ -164,6 +164,11 @@ fn create_transactions_batch(gas_fee_estimate: &GasFeeEstimate) {
             ethereum_network,
         ) {
             Ok(transaction) => {
+                log!(
+                    INFO,
+                    "[process_sweeper_transactions]: created sweep transaction for {sweep_id} with nonce {nonce} and gas limit {}",
+                    request.gas_limit()
+                );
                 mutate_state(|s| {
                     process_event(
                         s,
@@ -208,6 +213,10 @@ async fn sign_transactions_batch() {
     for (sweep_id, result) in results {
         match result {
             Ok(transaction) => mutate_state(|s| {
+                log!(
+                    INFO,
+                    "[process_sweeper_transactions]: signed sweep {sweep_id}"
+                );
                 process_event(
                     s,
                     EventType::SignedSweeperTransaction {
@@ -252,6 +261,12 @@ async fn finalize_transactions_batch(sender: Address) {
             });
             if let Some(receipts) = fetch_finalized_receipts(txs_to_finalize).await {
                 for (sweep_id, transaction_receipt) in receipts {
+                    log!(
+                        INFO,
+                        "[process_sweeper_transactions]: finalized sweep {sweep_id} with status {:?}, gas used {}",
+                        transaction_receipt.status,
+                        transaction_receipt.gas_used
+                    );
                     mutate_state(|s| {
                         process_event(
                             s,
@@ -307,6 +322,10 @@ pub async fn enqueue_batched_sweep() {
             .collect()
     });
     if targets.is_empty() {
+        log!(
+            DEBUG,
+            "[enqueue_batched_sweep]: SKIPPING: nothing queued to sweep"
+        );
         return;
     }
 
@@ -347,6 +366,13 @@ pub async fn enqueue_batched_sweep() {
         if let Some(authorization) = authorization {
             authorizations.push(authorization);
         }
+        log!(
+            DEBUG,
+            "[enqueue_batched_sweep]: sweeping {} of {} from {}, delegating: {delegating}",
+            target.scanned_balance(),
+            target.token(),
+            target.address()
+        );
         items.push(SweepItem {
             deposit: target.address(),
             account,
