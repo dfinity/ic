@@ -9,6 +9,7 @@ use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
+use serde_bytes::ByteBuf;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Decode, Encode)]
 pub struct TransactionSignature {
@@ -213,14 +214,18 @@ impl<T: SignableTransaction> Signed<T> {
 /// [`Signed`] transaction.
 pub async fn sign<T: SignableTransaction>(
     transaction: T,
-    derivation_path: DerivationPath,
+    derivation_path: Vec<ByteBuf>,
 ) -> Result<Signed<T>, String> {
     let hash = transaction.hash();
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    let signature = crate::management::sign_with_ecdsa(key_name, derivation_path, hash.0)
-        .await
-        .map_err(|e| format!("failed to sign tx: {e}"))?;
-    let recid = compute_recovery_id(&hash, &signature).await;
+    let signature = crate::management::sign_with_ecdsa(
+        key_name,
+        DerivationPath::new(derivation_path.clone()),
+        hash.0,
+    )
+    .await
+    .map_err(|e| format!("failed to sign tx: {e}"))?;
+    let recid = compute_recovery_id(&hash, &signature, &derivation_path).await;
     if recid.is_x_reduced() {
         return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
     }
