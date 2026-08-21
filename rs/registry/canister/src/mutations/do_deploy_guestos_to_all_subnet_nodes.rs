@@ -39,7 +39,7 @@ impl Registry {
             );
         }
 
-        self.validate_deploy_guestos_payload(subnet_id, &payload);
+        self.validate_deploy_guestos_payload(&payload);
 
         // Get the subnet record
         let subnet_key = make_subnet_record_key(subnet_id);
@@ -67,12 +67,9 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations)
     }
 
-    fn validate_deploy_guestos_payload(
-        &self,
-        subnet_id: SubnetId,
-        payload: &DeployGuestosToAllSubnetNodesPayload,
-    ) {
+    fn validate_deploy_guestos_payload(&self, payload: &DeployGuestosToAllSubnetNodesPayload) {
         if payload.replica_version_id.is_empty() {
+            let subnet_id = SubnetId::from(payload.subnet_id);
             self.check_engine_can_have_blank_replica_version_id(subnet_id);
         } else {
             check_replica_version_is_elected(self, &payload.replica_version_id);
@@ -113,7 +110,8 @@ impl Registry {
 mod tests {
     use super::*;
     use crate::common::test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        add_fake_subnet, add_guest_launch_measurements_to_replica_version,
+        get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_cloud_engine_subnet, prepare_registry_with_nodes,
     };
     use crate::flags::{
@@ -135,9 +133,7 @@ mod tests {
     use ic_types::ReplicaVersion;
     use maplit::btreemap;
 
-    // Two elected replica versions, used as the old and new versions of a
-    // StandardEngineReplicaVersionRecord (whose invariant requires that they
-    // differ). Replica version IDs are git commit IDs.
+    // StandardEngineReplicaVersionRecord.
     const OLD_REPLICA_VERSION_ID: &str = "55c61431287c71ca6c70aa9457ab6c0a6fb61dab";
     const NEW_REPLICA_VERSION_ID: &str = "5f13942e58297b970fdf5f4e33c0af8fc7faa267";
 
@@ -194,8 +190,8 @@ mod tests {
     }
 
     /// Installs the record a blank `replica_version_id` resolves against. Its
-    /// two version IDs must differ and both must be elected, so both are
-    /// elected here.
+    /// two version IDs must differ and both must be elected and have guest
+    /// launch measurements, so both are elected (with measurements) here.
     fn add_standard_engine_replica_version_record(registry: &mut Registry) {
         registry.maybe_apply_mutation_internal(vec![
             insert(
@@ -207,6 +203,8 @@ mod tests {
                 ReplicaVersionRecord::default().encode_to_vec(),
             ),
         ]);
+        add_guest_launch_measurements_to_replica_version(registry, OLD_REPLICA_VERSION_ID);
+        add_guest_launch_measurements_to_replica_version(registry, NEW_REPLICA_VERSION_ID);
         registry.maybe_apply_mutation_internal(vec![insert(
             make_standard_engine_replica_version_record_key().as_bytes(),
             StandardEngineReplicaVersionRecord {
