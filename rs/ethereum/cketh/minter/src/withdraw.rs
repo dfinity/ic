@@ -1,3 +1,4 @@
+use crate::eth_rpc::Hash;
 use crate::{
     MAIN_DERIVATION_PATH,
     eth_logs::LedgerSubaccount,
@@ -7,7 +8,7 @@ use crate::{
     },
     guard::TimerGuard,
     logs::{DEBUG, INFO},
-    numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount},
+    numeric::{GasAmount, LedgerMintIndex, TransactionCount},
     state::{
         State, TaskType,
         audit::{EventType, process_event},
@@ -17,7 +18,7 @@ use crate::{
             ReimbursementRequest, WithdrawalRequest,
         },
     },
-    tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
+    tx::{GasFeeEstimate, SignableTransaction, Signed, lazy_refresh_gas_fee_estimate},
 };
 use candid::Nat;
 use evm_rpc_types::{
@@ -25,6 +26,7 @@ use evm_rpc_types::{
 };
 use futures::future::join_all;
 use ic_canister_log::log;
+use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::{
@@ -176,12 +178,13 @@ pub async fn process_retrieve_eth_requests() {
         }
     };
 
-    let latest_transaction_count = latest_transaction_count().await;
+    let sender = minter_address().await;
+    let latest_transaction_count = latest_transaction_count(sender).await;
     resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
     create_transactions_batch(gas_fee_estimate);
     sign_transactions_batch().await;
     send_transactions_batch(latest_transaction_count).await;
-    finalize_transactions_batch().await;
+    finalize_transactions_batch(sender).await;
 
     if read_state(|s| s.withdrawal_transactions.has_pending_requests()) {
         ic_cdk_timers::set_timer(
@@ -191,9 +194,11 @@ pub async fn process_retrieve_eth_requests() {
     }
 }
 
-async fn latest_transaction_count() -> Option<TransactionCount> {
+/// The latest (unconfirmed) transaction count of `sender` on chain, used to gate resubmission and
+/// sending. Reused by both the main-address pipeline and the sweeper-address pipeline (`sender` differs).
+pub(crate) async fn latest_transaction_count(sender: Address) -> Option<TransactionCount> {
     match read_state(rpc_client)
-        .get_transaction_count((minter_address().await.into_bytes(), BlockTag::Latest))
+        .get_transaction_count((sender.into_bytes(), BlockTag::Latest))
         .with_cycles(MIN_ATTACHED_CYCLES)
         .try_send()
         .await
@@ -356,7 +361,15 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
         s.withdrawal_transactions
             .transactions_to_send_batch(latest_transaction_count, TRANSACTIONS_TO_SEND_BATCH_SIZE)
     });
+    send_signed_transactions(&transactions_to_send).await;
+}
 
+/// Broadcast already-signed transactions via the EVM RPC canister. Sender- and
+/// transaction-type-agnostic, so both the main-address withdrawal pipeline (type `0x02`) and the
+/// sweeper-address pipeline (type `0x02` or `0x04`) reuse it.
+pub(crate) async fn send_signed_transactions<T: SignableTransaction + std::fmt::Debug>(
+    transactions_to_send: &[Signed<T>],
+) {
     let rpc_client = read_state(rpc_client);
     let results = join_all(transactions_to_send.iter().map(async |tx| {
         rpc_client
@@ -391,81 +404,29 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     }
 }
 
-async fn finalize_transactions_batch() {
+async fn finalize_transactions_batch(sender: Address) {
     if read_state(|s| s.withdrawal_transactions.is_sent_tx_empty()) {
         return;
     }
 
-    match finalized_transaction_count().await {
+    match finalized_transaction_count(sender).await {
         Ok(finalized_tx_count) => {
             let txs_to_finalize = read_state(|s| {
                 s.withdrawal_transactions
                     .sent_transactions_to_finalize(&finalized_tx_count)
             });
-            let expected_finalized_withdrawal_ids: BTreeSet<_> =
-                txs_to_finalize.values().cloned().collect();
-            let rpc_client = read_state(rpc_client);
-            let results = join_all(txs_to_finalize.keys().map(async |hash| {
-                rpc_client
-                    .get_transaction_receipt(*hash)
-                    .with_cycles(MIN_ATTACHED_CYCLES)
-                    .try_send()
-                    .await
-                    .reduce_with_strategy(NoReduction)
-            }))
-            .await;
-            let mut receipts: BTreeMap<LedgerBurnIndex, EvmTransactionReceipt> = BTreeMap::new();
-            for ((hash, withdrawal_id), result) in zip(txs_to_finalize, results) {
-                match result {
-                    Ok(Some(receipt)) => {
-                        log!(
-                            DEBUG,
-                            "Received transaction receipt {receipt:?} for transaction {hash} and withdrawal ID {withdrawal_id}"
+            if let Some(receipts) = fetch_finalized_receipts(txs_to_finalize).await {
+                for (withdrawal_id, transaction_receipt) in receipts {
+                    mutate_state(|s| {
+                        process_event(
+                            s,
+                            EventType::FinalizedTransaction {
+                                withdrawal_id,
+                                transaction_receipt: transaction_receipt.into(),
+                            },
                         );
-                        match receipts.get(&withdrawal_id) {
-                            // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
-                            Some(existing_receipt) => {
-                                log!(
-                                    INFO,
-                                    "ERROR: received different receipts for transaction {hash} with withdrawal ID {withdrawal_id}: {existing_receipt:?} and {receipt:?}. Will retry later"
-                                );
-                                return;
-                            }
-                            None => {
-                                receipts.insert(withdrawal_id, receipt);
-                            }
-                        }
-                    }
-                    Ok(None) => {
-                        log!(
-                            DEBUG,
-                            "Transaction {hash} for withdrawal ID {withdrawal_id} was not mined, it's probably a resubmitted transaction",
-                        )
-                    }
-                    Err(e) => {
-                        log!(
-                            INFO,
-                            "Failed to get transaction receipt for {hash} and withdrawal ID {withdrawal_id}: {e:?}. Will retry later",
-                        );
-                        return;
-                    }
+                    });
                 }
-            }
-            let actual_finalized_withdrawal_ids: BTreeSet<_> = receipts.keys().cloned().collect();
-            assert_eq!(
-                expected_finalized_withdrawal_ids, actual_finalized_withdrawal_ids,
-                "ERROR: unexpected transaction receipts for some withdrawal IDs"
-            );
-            for (withdrawal_id, transaction_receipt) in receipts {
-                mutate_state(|s| {
-                    process_event(
-                        s,
-                        EventType::FinalizedTransaction {
-                            withdrawal_id,
-                            transaction_receipt: transaction_receipt.into(),
-                        },
-                    );
-                });
             }
         }
 
@@ -475,10 +436,76 @@ async fn finalize_transactions_batch() {
     }
 }
 
-async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
-{
+/// Fetch the finalized receipts for the given (transaction hash → pipeline id) map. Returns `None` when
+/// the batch should be retried later (a receipt fetch failed, or the same hash came back with two
+/// different receipts). On success the map is keyed by pipeline id, and its keys are asserted to be
+/// exactly the ids expected to finalize. Sender/id-agnostic, so both pipelines reuse it.
+pub(crate) async fn fetch_finalized_receipts<
+    Id: Copy + Ord + std::fmt::Debug + std::fmt::Display,
+>(
+    txs_to_finalize: BTreeMap<Hash, Id>,
+) -> Option<BTreeMap<Id, EvmTransactionReceipt>> {
+    let expected_finalized_ids: BTreeSet<Id> = txs_to_finalize.values().copied().collect();
+    let rpc_client = read_state(rpc_client);
+    let results = join_all(txs_to_finalize.keys().map(async |hash| {
+        rpc_client
+            .get_transaction_receipt(*hash)
+            .with_cycles(MIN_ATTACHED_CYCLES)
+            .try_send()
+            .await
+            .reduce_with_strategy(NoReduction)
+    }))
+    .await;
+    let mut receipts: BTreeMap<Id, EvmTransactionReceipt> = BTreeMap::new();
+    for ((hash, id), result) in zip(txs_to_finalize, results) {
+        match result {
+            Ok(Some(receipt)) => {
+                log!(
+                    DEBUG,
+                    "Received transaction receipt {receipt:?} for transaction {hash} and id {id}"
+                );
+                match receipts.get(&id) {
+                    // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
+                    Some(existing_receipt) => {
+                        log!(
+                            INFO,
+                            "ERROR: received different receipts for transaction {hash} with id {id}: {existing_receipt:?} and {receipt:?}. Will retry later"
+                        );
+                        return None;
+                    }
+                    None => {
+                        receipts.insert(id, receipt);
+                    }
+                }
+            }
+            Ok(None) => {
+                log!(
+                    DEBUG,
+                    "Transaction {hash} for id {id} was not mined, it's probably a resubmitted transaction",
+                )
+            }
+            Err(e) => {
+                log!(
+                    INFO,
+                    "Failed to get transaction receipt for {hash} and id {id}: {e:?}. Will retry later",
+                );
+                return None;
+            }
+        }
+    }
+    let actual_finalized_ids: BTreeSet<Id> = receipts.keys().copied().collect();
+    assert_eq!(
+        expected_finalized_ids, actual_finalized_ids,
+        "ERROR: unexpected transaction receipts for some ids"
+    );
+    Some(receipts)
+}
+
+pub(crate) async fn finalized_transaction_count(
+    sender: Address,
+) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
     read_state(rpc_client)
-        .get_transaction_count((minter_address().await.into_bytes(), BlockTag::Finalized))
+        .get_transaction_count((sender.into_bytes(), BlockTag::Finalized))
         .with_cycles(MIN_ATTACHED_CYCLES)
         .try_send()
         .await

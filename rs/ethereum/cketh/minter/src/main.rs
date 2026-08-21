@@ -37,6 +37,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
+use ic_cketh_minter::sweep::process_sweeper_transactions;
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
@@ -97,6 +98,11 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
         process_retrieve_eth_requests().await;
+    });
+    // Drains the sweeper send-pipeline on the same cadence as withdrawals; early-returns cheaply while
+    // no sweep is enqueued (nothing enqueues one in production yet — see `crate::sweep`).
+    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
+        process_sweeper_transactions().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
         process_reimbursement().await;
