@@ -429,7 +429,8 @@ fn await_sweep(setup: &LiveBalanceScanSetup, sweeper: &Address, deadline: Durati
             start.elapsed() <= deadline,
             "the sweeper {sweeper} sent no transaction within {deadline:?}"
         );
-        std::thread::sleep(Duration::from_secs(5));
+        setup.advance_time(Duration::from_secs(200));
+        std::thread::sleep(Duration::from_millis(600));
     }
 }
 
@@ -475,7 +476,8 @@ fn await_credited(
             start.elapsed() <= deadline,
             "{account:?} was credited {balance} instead of {expected} within {deadline:?}"
         );
-        std::thread::sleep(Duration::from_secs(2));
+        setup.advance_time(Duration::from_secs(200));
+        std::thread::sleep(Duration::from_millis(600));
     }
 }
 

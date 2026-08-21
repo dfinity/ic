@@ -45,6 +45,14 @@ use crate::anvil::{
 use crate::ckerc20::{CkErc20Setup, Erc20Token};
 use crate::{CkEthSetup, EthereumBackend, MINTER_ADDRESS};
 
+/// How far each poll jumps the IC clock. Comfortably past the minter's longest relevant interval
+/// (three minutes, for log scraping) so one poll always brings the next task due.
+const POLL_JUMP: Duration = Duration::from_secs(200);
+
+/// Real time left for the rounds that jump to actually run, and for the outcalls they start to
+/// reach anvil and come back. The IC clock can be fast-forwarded; an HTTPS outcall cannot.
+const POLL_SETTLE: Duration = Duration::from_millis(600);
+
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
 pub struct Holding<'a> {
@@ -135,6 +143,16 @@ impl LiveBalanceScanSetup {
     /// The ckERC20 token the orchestrator spawned for `symbol`, whose ledger the mint lands on.
     pub fn ckerc20_token(&self, symbol: &str) -> CkErc20Token {
         self.ckerc20.find_ckerc20_token(symbol)
+    }
+
+    /// Jumps the IC clock forward so the minter's periodic tasks fire without the test waiting out
+    /// their intervals in real time.
+    ///
+    /// This composes with auto-progress rather than fighting it: each auto-progress round advances
+    /// the clock by the *delta* of real time since the previous round, so an explicit jump is added
+    /// to, not overwritten. Outcalls keep reaching anvil, since every round still dispatches them.
+    pub fn advance_time(&self, duration: Duration) {
+        self.ckerc20.env.advance_time(duration);
     }
 
     /// The minter's own log, for a failure message that says what it was doing.
@@ -272,7 +290,8 @@ impl LiveBalanceScanSetup {
                 start.elapsed() <= deadline,
                 "the deposit address was not scanned within {deadline:?}"
             );
-            std::thread::sleep(Duration::from_secs(2));
+            self.advance_time(POLL_JUMP);
+            std::thread::sleep(POLL_SETTLE);
         }
     }
 }
