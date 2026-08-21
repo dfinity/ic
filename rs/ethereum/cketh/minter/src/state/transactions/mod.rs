@@ -228,13 +228,15 @@ pub struct SweepRequest {
     /// This sweep's identity (the pipeline's alternate map key).
     #[n(0)]
     pub id: SweepId,
-    /// Address the sweep transaction is sent to (the delegated deposit EOA, later).
+    /// Address the sweep transaction is sent to: the sweeper contract, whose batch entry point
+    /// sweeps every delegated deposit address named in `data`.
     #[n(1)]
     pub destination: Address,
     /// ETH value moved by the transaction (zero for an ERC-20 sweep, which moves tokens via calldata).
     #[n(2)]
     pub amount: Wei,
-    /// Transaction call data (the delegate `sweepErc20` call, later; empty for a plain transfer).
+    /// Transaction call data: the sweeper contract's batch call, naming the deposit addresses to
+    /// sweep, the IC account each is credited to, and the tokens to move.
     #[n(3)]
     pub data: Vec<u8>,
     /// Ceiling on the transaction fee, used as the resubmission fee cap.
