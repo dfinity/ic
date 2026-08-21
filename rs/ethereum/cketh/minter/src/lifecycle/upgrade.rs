@@ -34,7 +34,7 @@ pub struct UpgradeArg {
     pub ethereum_sweeper_contract_address: Option<String>,
     /// Next transaction nonce of the dedicated sweeper address, on its own nonce sequence.
     /// Mirrors `next_transaction_nonce` for the main address.
-    #[cbor(n(12), with = "icrc_cbor::nat::option")]
+    #[cbor(n(11), with = "icrc_cbor::nat::option")]
     pub next_sweeper_transaction_nonce: Option<Nat>,
 }
 
