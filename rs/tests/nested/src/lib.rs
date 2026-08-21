@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::bail;
 use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo};
+use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, VmResourceOverrides};
 use ic_system_test_driver::driver::nested::NestedNode;
 use ic_system_test_driver::driver::test_env::SshKeyGen;
 use ic_system_test_driver::{
@@ -9,6 +10,7 @@ use ic_system_test_driver::{
         nested::{HasNestedVms, NestedNodes},
         test_env::TestEnv,
         test_env_api::*,
+        test_setup::SystemTestBackend,
     },
     retry_with_msg,
     util::block_on,
@@ -20,6 +22,23 @@ pub mod util;
 
 pub const HOST_VM_NAME: &str = "host-1";
 const BARE_METAL_HOST_SECRETS: &str = "BARE_METAL_HOST_SECRETS";
+
+/// Memory given to the nested VM on the local backend, in place of the Farm
+/// default of 32 GiB (`HOSTOS_MEMORY_KIB_PER_VM`). There all VMs share one host,
+/// and this test also runs a System node, an API boundary node and the ic-gateway
+/// universal VM at 4 GiB each.
+///
+/// Two independent reservations come off this figure before the GuestOS sees it,
+/// which is what fixes the floor at 16 GiB:
+///
+/// * the driver subtracts `HOSTOS_MEMORY_RESERVED_GIB` (8) for HostOS itself when
+///   it writes `dev_vm_resources.memory` into the SetupOS `deployment.json`, and
+/// * HostOS then subtracts `UPGRADE_VM_MEMORY_GIB` (4) for the upgrade VM
+///   (`rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs`).
+///
+/// So 16 GiB leaves the nested GuestOS 4 GiB, the same as every other node VM.
+/// At 12 GiB it would be sized 0 GiB and libvirt would refuse the domain.
+const LOCAL_BACKEND_NESTED_VM_MEMORY: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16 * 1024 * 1024);
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
@@ -40,9 +59,18 @@ pub fn setup(env: TestEnv) {
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full setup().
 pub fn simple_setup(env: TestEnv) {
-    NestedNodes::new([HOST_VM_NAME])
-        .setup_and_start(&env)
-        .unwrap();
+    let mut nodes = NestedNodes::new([HOST_VM_NAME]);
+    // Keep the Farm default on Farm; cap it on the local backend, where all VMs
+    // share the driver host's RAM (see `LOCAL_BACKEND_NESTED_VM_MEMORY`). vCPUs are
+    // left at the default 8, which is already the minimum: it must be divisible by
+    // 4 and exceed the 4 the driver reserves for HostOS.
+    if SystemTestBackend::from_env() == SystemTestBackend::Local {
+        nodes = nodes.with_resource_overrides(VmResourceOverrides {
+            memory_kibibytes: Some(LOCAL_BACKEND_NESTED_VM_MEMORY),
+            ..Default::default()
+        });
+    }
+    nodes.setup_and_start(&env).unwrap();
 }
 
 /// Starts a bare metal IPMI session and injects the SSH key from `env`.
