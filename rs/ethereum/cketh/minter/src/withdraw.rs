@@ -27,7 +27,6 @@ use evm_rpc_types::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -320,7 +319,7 @@ async fn sign_transactions_batch() {
             .map(|(withdrawal_id, tx)| async move {
                 (
                     withdrawal_id,
-                    crate::tx::sign(tx, DerivationPath::new(MAIN_DERIVATION_PATH)).await,
+                    crate::tx::sign(tx, MAIN_DERIVATION_PATH).await,
                 )
             }),
     )

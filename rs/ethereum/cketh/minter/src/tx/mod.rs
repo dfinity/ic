@@ -19,6 +19,7 @@ pub use signed::{SignableTransaction, Signed, TransactionSignature, sign};
 pub use sweep::{SignedSweepTransaction, SweepTransaction};
 
 use crate::{
+    deposit_address::derive_public_key,
     eth_rpc::Hash,
     eth_rpc_client::{
         MIN_ATTACHED_CYCLES, MultiCallError, StrictMajorityByKey, ToReducedWithStrategy, rpc_client,
@@ -26,7 +27,7 @@ use crate::{
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::{GasAmount, Wei, WeiPerGas},
-    state::{TaskType, lazy_call_ecdsa_public_key, mutate_state, read_state},
+    state::{TaskType, lazy_call_ecdsa_public_key_with_chain_code, mutate_state, read_state},
 };
 use candid::Nat;
 use ethnum::u256;
@@ -36,6 +37,7 @@ use ic_ethereum_types::Address;
 use ic_secp256k1::RecoveryId;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
+use serde_bytes::ByteBuf;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Decode, Encode)]
 #[cbor(transparent)]
@@ -177,8 +179,18 @@ pub fn encode_u256<T: Into<u256>>(stream: &mut RlpStream, value: T) {
     stream.append(&value.to_be_bytes()[leading_empty_bytes..].as_ref());
 }
 
-async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
-    let ecdsa_public_key = lazy_call_ecdsa_public_key().await;
+/// The parity bit of a signature made under `derivation_path`.
+///
+/// Recovery only succeeds against the public key that produced the signature, so the master key is
+/// derived along the same path first: signing under a deposit address' path and recovering against
+/// the master key finds no parity at all.
+async fn compute_recovery_id(
+    digest: &Hash,
+    signature: &[u8],
+    derivation_path: &[ByteBuf],
+) -> RecoveryId {
+    let (master_public_key, chain_code) = lazy_call_ecdsa_public_key_with_chain_code().await;
+    let ecdsa_public_key = derive_public_key(&master_public_key, &chain_code, derivation_path);
     debug_assert!(
         ecdsa_public_key.verify_signature_prehashed(&digest.0, signature),
         "failed to verify signature prehashed, digest: {:?}, signature: {:?}, public_key: {:?}",
