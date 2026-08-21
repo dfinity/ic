@@ -256,6 +256,22 @@ pub enum EventSourceError {
 /// * the management canister principal
 /// * the anonymous principal
 ///
+/// Encode a principal the way the deposit helper contract carries one: the number of principal
+/// bytes, then those bytes, then zero padding to 32 bytes. The inverse of
+/// [`parse_principal_from_slice`], which is what the minter reads back out of a helper event.
+pub fn encode_principal(principal: &Principal) -> [u8; 32] {
+    let bytes = principal.as_slice();
+    assert!(
+        bytes.len() <= 29,
+        "BUG: a principal is at most 29 bytes, got {}",
+        bytes.len()
+    );
+    let mut encoded = [0_u8; 32];
+    encoded[0] = bytes.len() as u8;
+    encoded[1..=bytes.len()].copy_from_slice(bytes);
+    encoded
+}
+
 /// This method MUST never panic (decode bytes from untrusted sources).
 fn parse_principal_from_slice(slice: &[u8]) -> Result<Principal, String> {
     const ANONYMOUS_PRINCIPAL_BYTES: [u8; 1] = [4];
