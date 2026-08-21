@@ -200,6 +200,10 @@ impl<T: SignableTransaction> Signed<T> {
         &self.inner.transaction
     }
 
+    pub fn signature(&self) -> &TransactionSignature {
+        &self.inner.signature
+    }
+
     pub fn nonce(&self) -> TransactionNonce {
         self.inner.transaction.nonce()
     }
