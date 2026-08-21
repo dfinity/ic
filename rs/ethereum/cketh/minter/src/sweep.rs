@@ -40,7 +40,7 @@ use crate::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// Deposits swept in one transaction. Bounded by gas: each one adds an authorization, a delegated
@@ -306,13 +306,25 @@ pub async fn enqueue_batched_sweep() {
         );
         return;
     };
-    let targets: Vec<_> = read_state(|s| {
-        s.automatic_deposits
-            .sweep_targets_iter()
-            .take(MAX_DEPOSITS_PER_SWEEP)
-            .collect()
+    // One sweep per token, never a batch spanning several. The delegate's batch entry point runs
+    // its whole token list against every deposit address it touches, so a mixed batch pays for a
+    // `balanceOf` at every (address, token) pair — including the pairs holding nothing, which is
+    // most of them once several tokens are supported (DEFI-2980). Grouping costs one transaction's
+    // 21'000 intrinsic gas per token, which a multi-token sweep pays anyway in the cold storage
+    // write each token's balance at the minter needs.
+    let batches: BTreeMap<Address, Vec<_>> = read_state(|s| {
+        s.automatic_deposits.sweep_targets_iter().fold(
+            BTreeMap::new(),
+            |mut batches: BTreeMap<Address, Vec<_>>, target| {
+                let batch = batches.entry(target.token()).or_default();
+                if batch.len() < MAX_DEPOSITS_PER_SWEEP {
+                    batch.push(target);
+                }
+                batches
+            },
+        )
     });
-    if targets.is_empty() {
+    if batches.is_empty() {
         log!(
             DEBUG,
             "[enqueue_batched_sweep]: SKIPPING: nothing queued to sweep"
@@ -321,96 +333,94 @@ pub async fn enqueue_batched_sweep() {
     }
 
     let chain_id = read_state(State::ethereum_network).chain_id();
-    let mut items = Vec::with_capacity(targets.len());
-    let mut deposits = Vec::with_capacity(targets.len());
-    let mut authorizations = Vec::new();
-    for target in targets {
-        let account = target.account();
-        let attestation = match sign_attestation(
-            chain_id,
-            &helper_contract,
-            DepositAddressSchema::CkErc20,
-            &account,
-        )
-        .await
-        {
-            Ok(attestation) => attestation,
-            Err(e) => {
-                log!(
-                    INFO,
-                    "[enqueue_batched_sweep]: failed attesting {account:?}, skipping the whole sweep: {e}"
-                );
-                return;
-            }
-        };
-        let delegating = !read_state(|s| s.automatic_deposits.is_delegated(&target.address()));
-        if delegating {
-            let authorization = Authorization {
+    for (token, targets) in batches {
+        let mut items = Vec::with_capacity(targets.len());
+        let mut deposits = Vec::with_capacity(targets.len());
+        let mut authorizations = Vec::new();
+        for target in targets {
+            let account = target.account();
+            let attestation = match sign_attestation(
                 chain_id,
-                delegate: sweeper_contract,
-                nonce: TransactionNonce::ZERO,
-            };
-            match authorization
-                .sign(deposit_derivation_path(
-                    DepositAddressSchema::CkErc20,
-                    &account,
-                ))
-                .await
+                &helper_contract,
+                DepositAddressSchema::CkErc20,
+                &account,
+            )
+            .await
             {
-                Ok(authorization) => authorizations.push(authorization),
+                Ok(attestation) => attestation,
                 Err(e) => {
                     log!(
                         INFO,
-                        "[enqueue_batched_sweep]: failed authorizing {account:?}, skipping the whole sweep: {e}"
+                        "[enqueue_batched_sweep]: failed attesting {account:?}, skipping the {token} sweep: {e}"
                     );
                     return;
                 }
+            };
+            // Read per target rather than once per batch: an address holding two tokens is swept by
+            // two transactions, and the first one to be enqueued installs its delegation.
+            let delegating = !read_state(|s| s.automatic_deposits.is_delegated(&target.address()));
+            if delegating {
+                let authorization = Authorization {
+                    chain_id,
+                    delegate: sweeper_contract,
+                    nonce: TransactionNonce::ZERO,
+                };
+                match authorization
+                    .sign(deposit_derivation_path(
+                        DepositAddressSchema::CkErc20,
+                        &account,
+                    ))
+                    .await
+                {
+                    Ok(authorization) => authorizations.push(authorization),
+                    Err(e) => {
+                        log!(
+                            INFO,
+                            "[enqueue_batched_sweep]: failed authorizing {account:?}, skipping the {token} sweep: {e}"
+                        );
+                        return;
+                    }
+                }
             }
+            log!(
+                DEBUG,
+                "[enqueue_batched_sweep]: sweeping {} of {token} from {}, delegating: {delegating}",
+                target.scanned_balance(),
+                target.address()
+            );
+            items.push(SweepItem {
+                deposit: target.address(),
+                account,
+                attestation,
+            });
+            deposits.push(SweptDeposit {
+                owner: account.owner,
+                subaccount: account.subaccount,
+                erc20_contract_address: token,
+                address: target.address(),
+                delegating,
+            });
         }
+
+        let request = SweepRequest {
+            id: read_state(|s| s.next_sweep_id),
+            destination: sweeper_contract,
+            amount: Wei::ZERO,
+            data: encode_sweep_erc20_batch(&items, &[token]),
+            max_transaction_fee: Wei::MAX,
+            created_at: ic_cdk::api::time(),
+            authorizations,
+            deposits,
+        };
         log!(
-            DEBUG,
-            "[enqueue_batched_sweep]: sweeping {} of {} from {}, delegating: {delegating}",
-            target.scanned_balance(),
-            target.token(),
-            target.address()
+            INFO,
+            "[enqueue_batched_sweep]: sweeping {} deposits of {token}, {} of them delegating, via {sweeper_contract}",
+            request.deposits.len(),
+            request.authorizations.len()
         );
-        items.push(SweepItem {
-            deposit: target.address(),
-            account,
-            attestation,
-        });
-        deposits.push(SweptDeposit {
-            owner: account.owner,
-            subaccount: account.subaccount,
-            erc20_contract_address: target.token(),
-            address: target.address(),
-            delegating,
-        });
+        mutate_state(|s| process_event(s, EventType::AcceptedSweepRequest(request)));
     }
 
-    let tokens: Vec<_> = deposits
-        .iter()
-        .map(|deposit| deposit.erc20_contract_address)
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let request = SweepRequest {
-        id: read_state(|s| s.next_sweep_id),
-        destination: sweeper_contract,
-        amount: Wei::ZERO,
-        data: encode_sweep_erc20_batch(&items, &tokens),
-        max_transaction_fee: Wei::MAX,
-        created_at: ic_cdk::api::time(),
-        authorizations,
-        deposits,
-    };
-    log!(
-        INFO,
-        "[enqueue_batched_sweep]: sweeping {} deposits, {} of them delegating, via {sweeper_contract}",
-        request.deposits.len(),
-        request.authorizations.len()
-    );
-    mutate_state(|s| process_event(s, EventType::AcceptedSweepRequest(request)));
     // Send it now rather than at the send task's next tick: the mint follows the sweep, so every
     // interval spent waiting here is crediting latency a user sees.
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
