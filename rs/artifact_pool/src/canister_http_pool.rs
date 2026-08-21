@@ -269,7 +269,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        CanisterId, ReplicaVersion,
+        CanisterId,
         artifact::IdentifiableArtifact,
         canister_http::{
             CanisterHttpPaymentReceipt, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
@@ -305,7 +305,7 @@ mod tests {
                     content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
                     content_size: 42,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ic_test_utilities_types::ids::test_replica_version(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt::default(),
             },
@@ -330,7 +330,7 @@ mod tests {
                     content_hash: ic_types::crypto::crypto_hash(response),
                     content_size: 42,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ic_test_utilities_types::ids::test_replica_version(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt::default(),
             },

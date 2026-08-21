@@ -122,7 +122,6 @@ pub(crate) fn deliver_batches_with_result_processor(
             );
             break;
         };
-        let replica_version = block.version().clone();
         let mut block_stats = BlockStats::from(&block);
         debug!(
             every_n_seconds => 5,
@@ -131,7 +130,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             consensus => ConsensusLogEntry {
                 height: Some(height.get()),
                 hash: Some(block_stats.block_hash.clone()),
-                replica_version: Some(String::from(&replica_version))
+                replica_version: Some(block.version().to_string())
             }
         );
 
@@ -163,6 +162,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 registry_client,
                 subnet_id,
                 pool,
+                block.version(),
                 log,
             ) {
                 Some(Status::Halting | Status::Halted) => {
@@ -296,7 +296,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             registry_version: block.context.registry_version,
             time: block.context.time,
             blockmaker_metrics,
-            replica_version,
+            replica_version: block.version().clone(),
         };
 
         let result = message_routing.deliver_batch(batch);
@@ -580,7 +580,7 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
-    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
@@ -744,6 +744,7 @@ mod tests {
                 certified_height: Height::from(0),
                 time: UNIX_EPOCH,
             },
+            test_replica_version(),
         );
 
         let mut batch_stats = BatchStats::new(Height::from(1));

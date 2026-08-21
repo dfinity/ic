@@ -39,11 +39,11 @@ use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_id_to_u64, node_test_id, subnet_test_id},
+    ids::{canister_test_id, node_id_to_u64, node_test_id, subnet_test_id, test_replica_version},
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
@@ -1774,7 +1774,7 @@ fn test_response_and_metadata_with_content(
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     (response, metadata)
 }
@@ -7839,7 +7839,7 @@ fn metadata_share_with_content_size(
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
         content_size,
         is_reject: false,
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     metadata_to_share(signer_node, &metadata)
 }
@@ -7850,7 +7850,7 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xCD; 32])),
         content_size: 50,
         is_reject: true,
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     metadata_to_share(signer_node, &metadata)
 }

@@ -121,7 +121,7 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_test_utilities_consensus::fake::FakeContent;
-    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
     use ic_types::{
         consensus::{
             ConsensusMessageHashable, Finalization, FinalizationContent, HasHeight, Notarization,
@@ -153,6 +153,7 @@ mod tests {
             let notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
+                test_replica_version(),
             ));
             let equivocation_proof_id = ConsensusMessageId {
                 hash: ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash(
@@ -209,9 +210,12 @@ mod tests {
 
             // Put block into validated pool, notarization in to unvalidated pool
             pool.insert_validated(block.clone());
+            let replica_version = test_replica_version();
+
             let notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
+                replica_version.clone(),
             ));
             pool.insert_unvalidated(notarization.clone());
 
@@ -241,6 +245,7 @@ mod tests {
             let finalization = Finalization::fake(FinalizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
+                replica_version.clone(),
             ));
             pool.insert_unvalidated(finalization.clone());
 
@@ -265,6 +270,7 @@ mod tests {
                 let notarization = Notarization::fake(NotarizationContent::new(
                     block.height(),
                     block.content.get_hash().clone(),
+                    replica_version.clone(),
                 ));
                 pool.insert_validated(notarization.clone());
             }
@@ -275,6 +281,7 @@ mod tests {
             let notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
+                replica_version,
             ));
             assert!(
                 block.height().get()

@@ -1435,6 +1435,7 @@ mod tests {
     };
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
+    use std::str::FromStr;
     use strum::IntoEnumIterator;
 
     /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
@@ -1475,7 +1476,7 @@ mod tests {
                     content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
                     content_size: 0,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt { spent },
             }
