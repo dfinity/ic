@@ -7,6 +7,7 @@ mod tests;
 use self::subnet_call_context_manager::SubnetCallContextManager;
 use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
+use crate::CanisterState;
 use crate::CheckpointLoadingMetrics;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
@@ -2385,6 +2386,8 @@ pub enum UnflushedCheckpointOp {
     RenameCanister(CanisterId, CanisterId),
     /// A canister was deleted.
     DeleteCanister(CanisterId),
+    /// A snapshot was deleted.
+    DeleteSnapshot(SnapshotId),
 }
 
 /// A collection of unflushed checkpoint operations in the order that they were applied to the state.
@@ -2432,12 +2435,40 @@ impl UnflushedCheckpointOps {
         ));
     }
 
-    /// Records the deletion of a canister. Private to the crate because the only way
-    /// of permanently removing a canister is `ReplicatedState::remove_canister()`,
-    /// which calls this on the caller's behalf.
-    pub(crate) fn delete_canister(&mut self, canister_id: CanisterId) {
+    /// Records the deletion of a canister, together with the deletion of all its
+    /// snapshots (which are deleted along with the canister). Private to the crate
+    /// because the only ways of permanently removing a canister are
+    /// `ReplicatedState::remove_canister()` and the two subnet split methods, which
+    /// call this on the caller's behalf.
+    ///
+    /// Takes the `CanisterState` rather than just the canister ID because the
+    /// canister's snapshots live in it (`SystemMetadata` cannot map a canister ID to
+    /// its snapshot IDs); recording their deletion here rather than at the call sites
+    /// means it cannot be overlooked.
+    pub(crate) fn delete_canister(&mut self, canister_state: &CanisterState) {
+        for (snapshot_id, _) in canister_state.canister_snapshots.iter() {
+            self.delete_snapshot(*snapshot_id);
+        }
+        self.operations.push(UnflushedCheckpointOp::DeleteCanister(
+            canister_state.canister_id(),
+        ));
+    }
+
+    /// Records the deletion of a canister snapshot. Private to the crate because the
+    /// only ways of permanently removing a snapshot are `CanisterSnapshots::remove()`,
+    /// `CanisterSnapshots::delete_snapshots()` and the deletion of the snapshot's
+    /// canister, all of which call this on the caller's behalf.
+    pub(crate) fn delete_snapshot(&mut self, snapshot_id: SnapshotId) {
         self.operations
-            .push(UnflushedCheckpointOp::DeleteCanister(canister_id));
+            .push(UnflushedCheckpointOp::DeleteSnapshot(snapshot_id));
+    }
+
+    /// Appends all operations of `other`, preserving their order.
+    ///
+    /// Used to merge in the operations recorded while mutating a single `CanisterState`
+    /// (which has no access to `SystemMetadata`) into the state's operations.
+    pub fn extend(&mut self, other: UnflushedCheckpointOps) {
+        self.operations.extend(other.operations);
     }
 }
 

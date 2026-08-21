@@ -2147,12 +2147,10 @@ impl ExecutionEnvironment {
                         .heap_delta_debit
                         .saturating_add(&response.heap_delta_increase);
                 }
-                if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
-                    state
-                        .metadata
-                        .unflushed_checkpoint_ops
-                        .push(unflushed_checkpoint_op);
-                }
+                state
+                    .metadata
+                    .unflushed_checkpoint_ops
+                    .extend(response.unflushed_checkpoint_ops);
                 if let Some(snapshot_id) = response.snapshot_to_make_immutable
                     && let Some(canister) =
                         state.canister_state_make_mut(&snapshot_id.get_canister_id())
