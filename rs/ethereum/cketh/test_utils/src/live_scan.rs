@@ -52,10 +52,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::anvil::{
-    Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20, erc20_balance_slot, u256_be,
+    Anvil, DEV_ACCOUNT, SweepContracts, address_from_hex, deploy_mock_erc20,
+    deploy_sweep_contracts, erc20_balance_slot, u256_be,
 };
 use crate::ckerc20::{CkErc20Setup, Erc20Token};
-use crate::{CkEthSetup, EthereumBackend};
+use crate::{CkEthSetup, EthereumBackend, MINTER_ADDRESS};
 
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
@@ -80,6 +81,7 @@ fn contract_address(token: &Erc20Token) -> Address {
 pub struct LiveBalanceScanSetup {
     ckerc20: CkErc20Setup,
     anvil: Arc<Anvil>,
+    sweep_contracts: Option<SweepContracts>,
 }
 
 impl LiveBalanceScanSetup {
@@ -91,9 +93,39 @@ impl LiveBalanceScanSetup {
     /// current time before enabling auto-progress, making the transition deterministic (see the
     /// module documentation).
     pub fn new_live() -> Self {
+        Self::build(None)
+    }
+
+    /// Like [`Self::new_live`], but with the real deposit helper and the attested sweeper delegate
+    /// deployed on the node first, so the minter is installed knowing both, and with the minter's
+    /// dedicated sweeper address pre-funded with `sweeper_gas_wei` of ETH.
+    ///
+    /// Funding the sweeper directly is a shortcut: in production its gas comes from a ckETH burn out
+    /// of the minter's fee account, which is a separate pipeline from sweeping.
+    pub fn new_live_with_sweeping(sweeper: &Address, sweeper_gas_wei: u128) -> Self {
+        let setup = Self::build(Some(sweeper));
+        setup.anvil.set_balance(sweeper, sweeper_gas_wei);
+        setup
+    }
+
+    fn build(sweeper: Option<&Address>) -> Self {
         let anvil = Arc::new(Anvil::start());
-        let cketh = CkEthSetup::new(EthereumBackend::Anvil(Arc::clone(&anvil)));
+        let sweep_contracts = sweeper.map(|_| {
+            // The helper pays out to the minter's main address, which the minter derives from the
+            // same key as the sweeper address, so the fixture cannot know it before installing the
+            // minter. It is only ever read back out of the helper event, never by the helper itself,
+            // so the deployment can name the address the test asserts against.
+            deploy_sweep_contracts(&anvil, &address_from_hex(MINTER_ADDRESS))
+        });
+        let cketh = CkEthSetup::new(EthereumBackend::Anvil {
+            anvil: Arc::clone(&anvil),
+            sweep_contracts,
+        });
         let ckerc20 = CkErc20Setup::with_cketh(cketh).add_supported_erc20_tokens();
+        let ckerc20 = match sweep_contracts {
+            Some(contracts) => ckerc20.add_support_for_subaccount_helper(contracts.helper),
+            None => ckerc20,
+        };
 
         // Answer the HTTPS outcalls still in flight from construction while their request time
         // is still current; the clock jump below would time them all out (see the module doc).
@@ -106,7 +138,22 @@ impl LiveBalanceScanSetup {
         ckerc20.env.set_certified_time(SystemTime::now().into());
         ckerc20.env.auto_progress();
 
-        Self { ckerc20, anvil }
+        Self {
+            ckerc20,
+            anvil,
+            sweep_contracts,
+        }
+    }
+
+    /// The contracts the sweep goes through, if this harness deployed them.
+    pub fn sweep_contracts(&self) -> SweepContracts {
+        self.sweep_contracts
+            .expect("BUG: this harness was built without sweeping")
+    }
+
+    /// The owned anvil node, so a test can read balances and code straight off the chain.
+    pub fn anvil(&self) -> &Anvil {
+        &self.anvil
     }
 
     /// A distinct non-anonymous depositing principal for `seed`, so a test can register several

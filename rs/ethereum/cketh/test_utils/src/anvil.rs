@@ -180,6 +180,43 @@ impl Anvil {
         address_from_hex(receipt["contractAddress"].as_str().unwrap())
     }
 
+    /// A plain `eth_call` against `to`, for reading contract state in assertions.
+    pub fn call(&self, to: &Address, data: &[u8]) -> Vec<u8> {
+        from_hex(
+            self.rpc(
+                "eth_call",
+                serde_json::json!([
+                    {"to": to_hex(to.as_ref()), "input": to_hex(data)},
+                    "latest"
+                ]),
+            )
+            .as_str()
+            .unwrap(),
+        )
+    }
+
+    /// The ETH balance of `address`, so a test can see the sweeper pay for its own gas.
+    pub fn balance(&self, address: &Address) -> u128 {
+        let balance = self.rpc(
+            "eth_getBalance",
+            serde_json::json!([to_hex(address.as_ref()), "latest"]),
+        );
+        let balance = balance.as_str().unwrap();
+        u128::from_str_radix(balance.trim_start_matches("0x"), 16)
+            .unwrap_or_else(|e| panic!("not a u128 balance {balance}: {e}"))
+    }
+
+    /// Credits `address` with `wei` of ETH (foundry's `anvil_setBalance`). The minter's sweeper
+    /// address is funded this way rather than through the ckETH burn-and-withdraw pipeline, which is
+    /// a separate concern from sweeping.
+    pub fn set_balance(&self, address: &Address, wei: u128) {
+        self.rpc(
+            "anvil_setBalance",
+            serde_json::json!([to_hex(address.as_ref()), format!("0x{wei:x}")]),
+        );
+        assert_eq!(self.balance(address), wei, "the balance should be credited");
+    }
+
     fn await_receipt(&self, tx_hash: &str) -> Value {
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
@@ -325,4 +362,47 @@ fn from_hex(hex_str: &str) -> Vec<u8> {
 
 pub fn address_from_hex(hex_str: &str) -> Address {
     Address::new(from_hex(hex_str).try_into().unwrap())
+}
+
+/// The two contracts a sweep goes through, deployed on the node before the fixture is built so the
+/// minter can be installed already knowing where they are.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct SweepContracts {
+    /// The real `DepositHelperWithSubaccount.sol`, which the sweep transfers through and whose
+    /// `ReceivedEthOrErc20` event the minter's unchanged deposit pipeline mints from.
+    pub helper: Address,
+    /// The EIP-7702 delegate every deposit address delegates to.
+    pub delegate: Address,
+}
+
+/// Compiles and deploys the real deposit helper and the attested sweeper delegate, wiring the
+/// delegate to that helper exactly as production does.
+pub fn deploy_sweep_contracts(anvil: &Anvil, minter: &Address) -> SweepContracts {
+    let deployer = address_from_hex(DEV_ACCOUNT);
+    let helper = anvil.deploy(
+        &deployer,
+        &deploy_code(
+            &compile("CKDEPOSIT_SOL", "CkDeposit"),
+            &[address_token(minter)],
+        ),
+    );
+    assert_eq!(
+        &decode_address(&anvil.call(&helper, &call("getMinterAddress()", &[]))),
+        minter,
+        "the helper should pay out to the minter's main address"
+    );
+    let delegate = anvil.deploy(
+        &deployer,
+        &deploy_code(
+            &compile("CKSWEEPER_ATTESTED_SOL", "CkSweeperAttested"),
+            &[address_token(&helper)],
+        ),
+    );
+    SweepContracts { helper, delegate }
+}
+
+fn decode_address(data: &[u8]) -> Address {
+    Address::new(
+        <[u8; 20]>::try_from(&data[12..32]).expect("a 32-byte word holds a 20-byte address"),
+    )
 }
