@@ -162,11 +162,13 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
     (
         vec![payload_3, payload_2, payload_1],
         btreemap![
-            SUBNET_1 => ExpectedIndices {message_index:StreamIndex::new(21), signal_index:StreamIndex::new(16)},
-            SUBNET_2 => ExpectedIndices {message_index:StreamIndex::new(7), signal_index:StreamIndex::new(3)},
-            SUBNET_3 => ExpectedIndices {message_index:StreamIndex::new(2), signal_index:StreamIndex::new(0)},
-            SUBNET_4 => ExpectedIndices {message_index:StreamIndex::new(1), signal_index:StreamIndex::new(0)},
-            SUBNET_5 => ExpectedIndices {message_index:StreamIndex::new(0), signal_index:StreamIndex::new(0)},
+            // The streams hold no reject signals, so `gced_message_index` is the
+            // respective stream's `signals_end` (or zero, with no stream in state).
+            SUBNET_1 => ExpectedIndices { message_index: 21.into(), signal_index: 16.into(), gced_message_index: 17.into()},
+            SUBNET_2 => ExpectedIndices { message_index: 7.into(), signal_index: 3.into(), gced_message_index: 5.into()},
+            SUBNET_3 => ExpectedIndices { message_index: 2.into(), signal_index: 0.into(), gced_message_index: 0.into()},
+            SUBNET_4 => ExpectedIndices { message_index: 1.into(), signal_index: 0.into(), gced_message_index: 0.into()},
+            SUBNET_5 => ExpectedIndices { message_index: 0.into(), signal_index: 0.into(), gced_message_index: 0.into()},
         ],
     )
 }
