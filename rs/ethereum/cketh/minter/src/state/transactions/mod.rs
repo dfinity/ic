@@ -5,6 +5,7 @@ pub(in crate::state) mod tests;
 
 pub use request::PipelineRequest;
 
+use crate::deposit_address::DepositAddress;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
 use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
@@ -13,7 +14,7 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::logs::INFO;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
-    CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
+    CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
 use crate::tx::{
@@ -218,6 +219,15 @@ impl fmt::Display for SweepId {
     }
 }
 
+/// Gas a sweep transaction needs beyond its per-deposit cost: the 21'000 intrinsic cost, the batch
+/// call's own overhead and the first, most expensive write to the minter's token balance.
+const SWEEP_BASE_GAS: u64 = 60_000;
+
+/// Gas each additional deposit in a batch needs: its authorization, the delegated call, the
+/// approval and the transfer. Deliberately above the ~42'000 measured for a batch of 20, since
+/// unspent gas is refunded whereas an underestimate wastes the whole transaction.
+const SWEEP_GAS_PER_DEPOSIT: u64 = 80_000;
+
 /// A sweep the minter issues **from its dedicated sweeper address**, on the sweeper's own nonce
 /// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
 /// and is never reimbursed.
@@ -250,6 +260,47 @@ pub struct SweepRequest {
     /// with none is a plain EIP-1559 transaction.
     #[n(6)]
     pub authorizations: Vec<SignedAuthorization>,
+    /// The deposits this sweep moves, in the order `data` names them. Recording them makes the
+    /// request self-describing: the sweep queue and the set of delegated addresses are both
+    /// reconstructible from the log, without decoding call data.
+    #[n(7)]
+    pub deposits: Vec<SweptDeposit>,
+}
+
+/// One `(account, token)` deposit a sweep moves, and the address it moves it from.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct SweptDeposit {
+    #[cbor(n(0), with = "icrc_cbor::principal")]
+    pub owner: Principal,
+    #[cbor(n(1), with = "minicbor::bytes")]
+    pub subaccount: Option<[u8; 32]>,
+    #[n(2)]
+    pub erc20_contract_address: Address,
+    #[n(3)]
+    pub address: DepositAddress,
+    /// Whether this sweep is the one that installs the address' delegation, i.e. whether its
+    /// authorization is in [`SweepRequest::authorizations`].
+    #[n(4)]
+    pub delegating: bool,
+}
+
+impl SweptDeposit {
+    pub fn account(&self) -> Account {
+        Account {
+            owner: self.owner,
+            subaccount: self.subaccount,
+        }
+    }
+}
+
+impl SweepRequest {
+    /// Gas limit for this sweep's transaction, scaled to the number of deposits it moves.
+    pub fn gas_limit(&self) -> GasAmount {
+        GasAmount::from(
+            SWEEP_BASE_GAS
+                .saturating_add(SWEEP_GAS_PER_DEPOSIT.saturating_mul(self.deposits.len() as u64)),
+        )
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
