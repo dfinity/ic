@@ -156,8 +156,9 @@ impl ShareAggregator {
                 Ok(_) => {}
                 Err(err) => {
                     warn!(
+                        every_n_seconds => 5,
                         self.log,
-                        "Encountered an error while aggregating CUP shares at height {start_block_height}: {err}",
+                        "Encountered an error while aggregating CUP shares at height {start_block_height}: {err}"
                     );
                 }
             }
