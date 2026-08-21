@@ -16,7 +16,7 @@ use crate::{
     },
     pb::v1::{
         Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
-        ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
+        ProposalId, Tally, Uint128, UpgradeJournalEntry, UpgradeSnsControlledCanister,
         UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
@@ -4329,6 +4329,17 @@ async fn test_split_neuron_succeeds() {
     let split_amount_e8s = stake_e8s / 3;
     let maturity_e8s = 123_456_789;
     let mut setup = prepare_setup_for_split_neuron_tests(stake_e8s, maturity_e8s);
+    let original_participation = neuron::RewardEventParticipation {
+        reward_event_end_timestamp_seconds: 123,
+        reward_shares: Some(Uint128::from(99_u128)),
+    };
+    setup
+        .governance
+        .proto
+        .neurons
+        .get_mut(&setup.neuron_id.to_string())
+        .expect("Missing orig neuron!")
+        .latest_reward_event_participation = Some(original_participation);
     let orig_neuron = setup
         .governance
         .proto
@@ -4361,6 +4372,10 @@ async fn test_split_neuron_succeeds() {
     );
     assert_eq!(parent_neuron.maturity_e8s_equivalent, maturity_e8s);
     assert_eq!(parent_neuron.neuron_fees_e8s, orig_neuron.neuron_fees_e8s);
+    assert_eq!(
+        parent_neuron.latest_reward_event_participation,
+        Some(original_participation),
+    );
     let child_neuron = setup
         .governance
         .proto
@@ -4374,6 +4389,7 @@ async fn test_split_neuron_succeeds() {
     assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
     assert!(child_neuron.disburse_maturity_in_progress.is_empty());
     assert_eq!(child_neuron.neuron_fees_e8s, 0);
+    assert_eq!(child_neuron.latest_reward_event_participation, None);
 
     let p = parent_neuron;
     let c = child_neuron;
