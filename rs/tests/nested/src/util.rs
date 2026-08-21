@@ -16,6 +16,7 @@ use ic_system_test_driver::{
         nested::NestedVm,
         test_env::TestEnv,
         test_env_api::*,
+        test_setup::SystemTestBackend,
     },
     nns::{
         get_governance_canister, submit_update_elected_hostos_versions_proposal,
@@ -54,13 +55,26 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
     if let Some(dkg_interval) = dkg_interval {
         subnet = subnet.with_dkg_interval_length(Height::from(dkg_interval));
     }
-    InternetComputer::new()
+    let mut ic = InternetComputer::new()
         .add_subnet(subnet)
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
-        .without_unassigned_config()
-        .setup_and_start(env)
+        .without_unassigned_config();
+
+    // A nested node registers by talking straight to the NNS node over HTTP on the
+    // local backend (see `nested_nns_url` in the driver's `bootstrap.rs`), and it
+    // is not in the registry yet, so nothing whitelists it: the orchestrator's
+    // automatic whitelist only covers nodes the registry already knows, the GuestOS
+    // firewall template's own-`/64` accept does not list 8080, and the local
+    // backend's registry whitelist covers only the driver's own addresses. Open the
+    // group's whole range so the nested HostOS and GuestOS can get in. On Farm the
+    // node goes through the ic-gateway instead and needs none of this.
+    if SystemTestBackend::from_env() == SystemTestBackend::Local {
+        ic = ic.with_group_wide_firewall_whitelist();
+    }
+
+    ic.setup_and_start(env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());

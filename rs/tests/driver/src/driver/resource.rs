@@ -9,11 +9,10 @@ use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
+use crate::driver::ic_images::get_empty_disk_image;
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
-};
+use crate::driver::test_env_api::{get_guestos_img_sha256, get_guestos_img_url};
 use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
@@ -235,15 +234,10 @@ pub fn get_resource_request_for_nested_nodes(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let empty_disk_img_url = get_empty_disk_img_url()?;
-    let empty_disk_img_sha256 = get_empty_disk_img_sha256()?;
-
-    // Add a VM request for each node.
-    let mut res_req = ResourceRequest::new(DiskImage::Url {
-        ic_os_image: true,
-        url: empty_disk_img_url,
-        sha256: empty_disk_img_sha256,
-    });
+    // The primary disk is the install target: the nested VM boots SetupOS from an
+    // attached disk (see `setup_and_start_nested_vms`), which writes HostOS onto
+    // this one.
+    let mut res_req = ResourceRequest::new(get_empty_disk_image(test_env)?);
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
