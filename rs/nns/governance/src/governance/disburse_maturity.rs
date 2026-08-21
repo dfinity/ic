@@ -564,7 +564,7 @@ async fn try_finalize_maturity_disbursement(
             .heap_data
             .maturity_modulation
             .as_ref()
-            .and_then(|m| m.current_value_permyriad);
+            .map(|m| m.current_value_permyriad);
         let maturity_disbursement_finalization = next_maturity_disbursement_to_finalize(
             &governance.neuron_store,
             &governance.heap_data.in_flight_commands,
