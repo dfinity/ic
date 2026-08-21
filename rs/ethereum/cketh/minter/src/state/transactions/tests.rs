@@ -3292,8 +3292,8 @@ mod sweep_lane {
 
     #[test]
     fn should_scale_the_gas_limit_with_the_batch() {
-        let one_deposit = GasAmount::from(140_000_u64);
-        let per_deposit = GasAmount::from(80_000_u64);
+        let one_deposit = GasAmount::from(210_000_u64);
+        let per_deposit = GasAmount::from(150_000_u64);
 
         assert_eq!(with_deposits(0).gas_limit(), GasAmount::from(60_000_u64));
         assert_eq!(with_deposits(1).gas_limit(), one_deposit);
@@ -3301,9 +3301,11 @@ mod sweep_lane {
             with_deposits(2).gas_limit(),
             one_deposit.checked_add(per_deposit).unwrap()
         );
+        // A two-deposit sweep measured 181'676 gas against a real EVM, so the limit must exceed it.
+        assert!(with_deposits(2).gas_limit() > GasAmount::from(181_676_u64));
         assert_eq!(
             with_deposits(20).gas_limit(),
-            GasAmount::from(60_000_u64 + 20 * 80_000_u64)
+            GasAmount::from(60_000_u64 + 20 * 150_000_u64)
         );
     }
 

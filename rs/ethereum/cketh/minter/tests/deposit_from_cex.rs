@@ -340,9 +340,11 @@ fn should_credit_two_cex_deposits_through_one_eip7702_sweep() {
         sweep.transaction_type, 4,
         "a first sweep installs delegations, so it must be an EIP-7702 transaction: {sweep:?}"
     );
+    println!("[sweep] {sweep:?}");
     assert!(
         sweep.succeeded,
-        "the sweep reverted: {sweep:?} (gas_used == gas_limit means it ran out of gas)"
+        "the sweep reverted: {sweep:?}. Consuming nearly all of gas_limit means the delegated call \
+         ran out of gas (EIP-150 leaves the outer frame a 1/64 sliver), rather than hitting a require"
     );
 
     // The funds left the deposit addresses and landed at the minter's main address.
@@ -463,9 +465,10 @@ fn await_credited(
     deadline: Duration,
 ) {
     let start = Instant::now();
+    let credited = Nat::from(expected);
     loop {
         let balance = setup.balance_of_ledger(ledger_id, account);
-        if balance == Nat::from(expected) {
+        if balance == credited {
             return;
         }
         assert!(
