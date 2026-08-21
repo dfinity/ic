@@ -816,6 +816,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
     fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
         use ic_cketh_minter::endpoints::events::{
             DepositAddressRegistration as CandidDepositAddressRegistration, EventPayload as EP,
+            SweptDeposit as CandidSweptDeposit,
         };
         CandidEvent {
             timestamp,
@@ -988,6 +989,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     max_transaction_fee,
                     created_at,
                     authorizations,
+                    deposits,
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
@@ -996,6 +998,16 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,
                     authorizations: map_authorizations(&authorizations),
+                    deposits: deposits
+                        .into_iter()
+                        .map(|deposit| CandidSweptDeposit {
+                            owner: deposit.owner,
+                            subaccount: deposit.subaccount,
+                            erc20_contract_address: deposit.erc20_contract_address.to_string(),
+                            address: deposit.address.to_string(),
+                            delegating: deposit.delegating,
+                        })
+                        .collect(),
                 },
                 EventType::CreatedSweeperTransaction {
                     sweep_id,

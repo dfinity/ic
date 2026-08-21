@@ -9,7 +9,7 @@ use ic_cketh_minter::endpoints::events::{
     AccessListItem as CandidAccessListItem, DepositAddressSchema as CandidDepositAddressSchema,
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsResult,
     ReimbursementIndex as CandidReimbursementIndex,
-    SignedAuthorization as CandidSignedAuthorization,
+    SignedAuthorization as CandidSignedAuthorization, SweptDeposit as CandidSweptDeposit,
     TransactionReceipt as CandidTransactionReceipt, TransactionStatus as CandidTransactionStatus,
     UnsignedSweeperTransaction, UnsignedTransaction,
 };
@@ -236,6 +236,18 @@ fn map_unsigned_sweeper_transaction(tx: UnsignedSweeperTransaction) -> SweepTran
     )
 }
 
+fn map_swept_deposit(
+    deposit: CandidSweptDeposit,
+) -> ic_cketh_minter::state::transactions::SweptDeposit {
+    ic_cketh_minter::state::transactions::SweptDeposit {
+        owner: deposit.owner,
+        subaccount: deposit.subaccount,
+        erc20_contract_address: deposit.erc20_contract_address.parse().unwrap(),
+        address: deposit.address.parse().unwrap(),
+        delegating: deposit.delegating,
+    }
+}
+
 fn map_authorizations(authorizations: Vec<CandidSignedAuthorization>) -> Vec<SignedAuthorization> {
     fn map_signature_component(bytes: &[u8]) -> ethnum::u256 {
         ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(bytes).unwrap())
@@ -416,6 +428,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 max_transaction_fee,
                 created_at,
                 authorizations,
+                deposits,
             } => ET::AcceptedSweepRequest(SweepRequest {
                 id: SweepId(sweep_id.0.to_u64().unwrap()),
                 destination: destination.parse().unwrap(),
@@ -424,6 +437,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                 created_at,
                 authorizations: map_authorizations(authorizations),
+                deposits: deposits.into_iter().map(map_swept_deposit).collect(),
             }),
             EventPayload::CreatedSweeperTransaction {
                 sweep_id,

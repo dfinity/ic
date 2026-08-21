@@ -2906,12 +2906,11 @@ mod sweep_lane {
     use super::{gas_fee_estimate, sign_transaction, transaction_receipt};
     use crate::eth_rpc_client::responses::TransactionStatus;
     use crate::lifecycle::EthereumNetwork;
-    use crate::numeric::{TransactionCount, TransactionNonce, Wei, WeiPerGas};
+    use crate::numeric::{GasAmount, TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
         CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError, SweepId,
-        SweepRequest, TransactionPipeline,
+        SweepRequest, SweptDeposit, TransactionPipeline,
     };
-    use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
         SignableTransaction, SignedAuthorization, SweepTransaction,
@@ -2931,6 +2930,7 @@ mod sweep_lane {
             data: vec![0xaa, 0xbb, 0xcc],
             max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
             created_at: 1_620_328_630_000_000_000,
+            deposits: vec![],
             authorizations: vec![],
         }
     }
@@ -2975,7 +2975,7 @@ mod sweep_lane {
             .create_transaction(
                 pipeline.next_transaction_nonce(),
                 gas_fee_estimate(),
-                SWEEP_TRANSACTION_GAS_LIMIT,
+                request.gas_limit(),
                 EthereumNetwork::Sepolia,
             )
             .expect("BUG: the fixture allowance covers the fixture fee");
@@ -3177,7 +3177,7 @@ mod sweep_lane {
             .create_transaction(
                 pipeline.next_transaction_nonce(),
                 gas_fee_estimate(),
-                SWEEP_TRANSACTION_GAS_LIMIT,
+                request.gas_limit(),
                 EthereumNetwork::Sepolia,
             )
             .expect("BUG: the fixture allowance covers the fixture fee")
@@ -3194,9 +3194,15 @@ mod sweep_lane {
         };
 
         assert_eq!(
-            tx.max_fee_per_gas
-                .transaction_cost(SWEEP_TRANSACTION_GAS_LIMIT),
-            Some(request.max_transaction_fee)
+            tx.max_fee_per_gas,
+            request
+                .max_transaction_fee
+                .into_wei_per_gas(request.gas_limit())
+                .unwrap()
+        );
+        assert!(
+            tx.max_fee_per_gas.transaction_cost(request.gas_limit())
+                <= Some(request.max_transaction_fee)
         );
         assert_eq!(
             tx.max_priority_fee_per_gas,
@@ -3215,7 +3221,7 @@ mod sweep_lane {
         let created = request.create_transaction(
             TransactionNonce::ZERO,
             spiked_fee,
-            SWEEP_TRANSACTION_GAS_LIMIT,
+            request.gas_limit(),
             EthereumNetwork::Sepolia,
         );
 
@@ -3241,14 +3247,14 @@ mod sweep_lane {
             gas_fee_estimate().max_priority_fee_per_gas
                 > request
                     .max_transaction_fee
-                    .into_wei_per_gas(SWEEP_TRANSACTION_GAS_LIMIT)
+                    .into_wei_per_gas(request.gas_limit())
                     .unwrap()
         );
 
         let created = request.create_transaction(
             TransactionNonce::ZERO,
             gas_fee_estimate(),
-            SWEEP_TRANSACTION_GAS_LIMIT,
+            request.gas_limit(),
             EthereumNetwork::Sepolia,
         );
 
@@ -3282,6 +3288,39 @@ mod sweep_lane {
                 && *allowed_max_transaction_fee == sweep_request(0).max_transaction_fee
                 && *max_transaction_fee > sweep_request(0).max_transaction_fee
         );
+    }
+
+    #[test]
+    fn should_scale_the_gas_limit_with_the_batch() {
+        let one_deposit = GasAmount::from(140_000_u64);
+        let per_deposit = GasAmount::from(80_000_u64);
+
+        assert_eq!(with_deposits(0).gas_limit(), GasAmount::from(60_000_u64));
+        assert_eq!(with_deposits(1).gas_limit(), one_deposit);
+        assert_eq!(
+            with_deposits(2).gas_limit(),
+            one_deposit.checked_add(per_deposit).unwrap()
+        );
+        assert_eq!(
+            with_deposits(20).gas_limit(),
+            GasAmount::from(60_000_u64 + 20 * 80_000_u64)
+        );
+    }
+
+    fn with_deposits(count: usize) -> SweepRequest {
+        SweepRequest {
+            deposits: vec![
+                SweptDeposit {
+                    owner: candid::Principal::management_canister(),
+                    subaccount: None,
+                    erc20_contract_address: Address::new([0x11; 20]),
+                    address: crate::deposit_address::DepositAddress::new(Address::new([0x22; 20])),
+                    delegating: true,
+                };
+                count
+            ],
+            ..sweep_request(0)
+        }
     }
 
     #[test]

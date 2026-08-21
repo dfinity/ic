@@ -6,11 +6,12 @@ use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
+use crate::state::transactions::{SweepId, SweptDeposit};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use crate::tx::TransactionSignature;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
@@ -62,6 +63,11 @@ pub struct AutomaticDeposits {
     /// of the same address reuses it instead of paying for another threshold-ECDSA signature; a new
     /// helper deployment yields a different key and simply misses.
     attestations: BTreeMap<AttestationRequest, TransactionSignature>,
+    /// Deposit addresses whose delegation to the sweeper contract a sweep has already installed.
+    /// Delegation is per address rather than per `(address, token)`, and persists once installed,
+    /// so a later sweep of the same address needs no authorization and rides a type-`0x02`
+    /// transaction.
+    delegated: BTreeSet<DepositAddress>,
 }
 
 impl AutomaticDeposits {
@@ -264,6 +270,7 @@ impl AutomaticDeposits {
                 last_scanned_block: deposit.last_scanned_block,
                 scan_count: deposit.scan_count,
                 scanned_balance: deposit.scanned_balance,
+                swept_by: None,
             },
         );
         assert!(
@@ -296,6 +303,53 @@ impl AutomaticDeposits {
             scan_window_nanos: u64::try_from(self.watchlist.ttl().as_nanos()).unwrap_or(u64::MAX),
             capacity: self.watchlist.capacity().get() as u64,
             registrations,
+        }
+    }
+
+    /// The queued deposits no sweep has taken yet, oldest `(account, token)` key first.
+    pub fn sweep_targets_iter(&self) -> impl Iterator<Item = SweepTarget> + '_ {
+        self.sweep
+            .iter()
+            .filter(|(_request, entry)| entry.swept_by.is_none())
+            .map(|(request, entry)| SweepTarget {
+                request: *request,
+                address: entry.address,
+                scanned_balance: entry.scanned_balance,
+            })
+    }
+
+    /// Whether `address` already delegates to the sweeper contract, and so needs no authorization.
+    pub fn is_delegated(&self, address: &DepositAddress) -> bool {
+        self.delegated.contains(address)
+    }
+
+    /// Record that `sweep_id` took these deposits: each leaves the pool of sweepable entries, and
+    /// every address the sweep delegates joins [`Self::is_delegated`].
+    ///
+    /// A delegation counts as installed as soon as the sweep carrying it is enqueued, not once it
+    /// succeeds: an EIP-7702 authorization is applied before the call runs, so a reverted sweep
+    /// still leaves the address delegated and its nonce spent.
+    ///
+    /// # Panics
+    ///
+    /// If a deposit is not queued, or another sweep already took it. Sweeping the same funds twice
+    /// would move a balance the minter has already accounted for.
+    pub fn record_sweep_scheduled(&mut self, sweep_id: SweepId, deposits: &[SweptDeposit]) {
+        for deposit in deposits {
+            let request = DepositRequest::new(deposit.account(), deposit.erc20_contract_address);
+            let entry = self
+                .sweep
+                .get_mut(&request)
+                .unwrap_or_else(|| panic!("BUG: {request:?} is not queued for sweeping"));
+            assert_eq!(
+                entry.swept_by, None,
+                "BUG: {request:?} was already taken by sweep {:?}",
+                entry.swept_by
+            );
+            entry.swept_by = Some(sweep_id);
+            if deposit.delegating {
+                self.delegated.insert(deposit.address);
+            }
         }
     }
 
@@ -349,6 +403,7 @@ impl Default for AutomaticDeposits {
             watchlist: TimedSizedMap::new(DEPOSIT_ADDRESS_SCAN_WINDOW, MAX_ACTIVE_DEPOSITS),
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
+            delegated: BTreeSet::new(),
         }
     }
 }
@@ -423,6 +478,36 @@ struct SweepEntry {
     scan_count: u32,
     /// The balance read for the token at `last_scanned_block`.
     scanned_balance: Erc20Value,
+    /// The sweep that took this entry, once one has been enqueued for it. Set so a later scan tick
+    /// does not enqueue the same funds twice; the entry stays until the sweep is finalized.
+    swept_by: Option<SweepId>,
+}
+
+/// A queued deposit a sweep can move: the `(account, token)` pair, the address its funds sit at,
+/// and the balance the scan found there.
+#[derive(Clone, Copy, Debug)]
+pub struct SweepTarget {
+    request: DepositRequest,
+    address: DepositAddress,
+    scanned_balance: Erc20Value,
+}
+
+impl SweepTarget {
+    pub fn account(&self) -> Account {
+        self.request.account
+    }
+
+    pub fn token(&self) -> Address {
+        self.request.token
+    }
+
+    pub fn address(&self) -> DepositAddress {
+        self.address
+    }
+
+    pub fn scanned_balance(&self) -> Erc20Value {
+        self.scanned_balance
+    }
 }
 
 /// The watchlist value held against one [`DepositRequest`]: the deposit address derived for its

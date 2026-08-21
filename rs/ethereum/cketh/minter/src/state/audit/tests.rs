@@ -100,7 +100,7 @@ impl GetEventsFile {
     fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
         use crate::endpoints::events::{
             AccessListItem as CandidAccessListItem, EventSource as CandidEventSource,
-            ReimbursementIndex as CandidReimbursementIndex,
+            ReimbursementIndex as CandidReimbursementIndex, SweptDeposit as CandidSweptDeposit,
             TransactionReceipt as CandidTransactionReceipt,
             TransactionStatus as CandidTransactionStatus,
         };
@@ -291,6 +291,18 @@ impl GetEventsFile {
             )
         }
 
+        fn map_swept_deposit(
+            deposit: CandidSweptDeposit,
+        ) -> crate::state::transactions::SweptDeposit {
+            crate::state::transactions::SweptDeposit {
+                owner: deposit.owner,
+                subaccount: deposit.subaccount,
+                erc20_contract_address: deposit.erc20_contract_address.parse().unwrap(),
+                address: deposit.address.parse().unwrap(),
+                delegating: deposit.delegating,
+            }
+        }
+
         fn map_authorizations(
             authorizations: Vec<CandidSignedAuthorization>,
         ) -> Vec<SignedAuthorization> {
@@ -470,6 +482,7 @@ impl GetEventsFile {
                     max_transaction_fee,
                     created_at,
                     authorizations,
+                    deposits,
                 } => ET::AcceptedSweepRequest(SweepRequest {
                     id: SweepId(sweep_id.0.to_u64().unwrap()),
                     destination: destination.parse().unwrap(),
@@ -478,6 +491,7 @@ impl GetEventsFile {
                     max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                     created_at,
                     authorizations: map_authorizations(authorizations),
+                    deposits: deposits.into_iter().map(map_swept_deposit).collect(),
                 }),
                 EventPayload::CreatedSweeperTransaction {
                     sweep_id,

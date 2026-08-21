@@ -464,6 +464,17 @@ pub mod events {
         pub s: ByteBuf,
     }
 
+    /// One `(account, token)` deposit a sweep moves, and the address it moves it from.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct SweptDeposit {
+        pub owner: Principal,
+        pub subaccount: Option<[u8; 32]>,
+        pub erc20_contract_address: String,
+        pub address: String,
+        /// Whether this sweep is the one that installs the address' delegation.
+        pub delegating: bool,
+    }
+
     /// A sweep transaction the minter has created but not yet signed: a transaction, plus the
     /// delegations it installs on the way. With none it is sent as a plain EIP-1559 (`0x02`)
     /// transaction, and otherwise as an EIP-7702 (`0x04`) one.
@@ -593,6 +604,8 @@ pub mod events {
             /// Delegations the sweep installs on the way, empty if every address it touches is
             /// already delegated.
             authorizations: Vec<SignedAuthorization>,
+            /// The deposits the sweep moves, in the order its call data names them.
+            deposits: Vec<SweptDeposit>,
         },
         CreatedSweeperTransaction {
             sweep_id: Nat,
