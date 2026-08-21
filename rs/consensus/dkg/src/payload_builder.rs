@@ -940,10 +940,15 @@ pub fn get_post_split_dkg_summary(
     last_summary_block: &Block,
 ) -> Result<DkgSummary, String> {
     let last_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
-    debug_assert!(matches!(
-        last_summary.subnet_splitting_status(),
-        SubnetSplittingStatus::Scheduled(..)
-    ));
+    match last_summary.subnet_splitting_status() {
+        SubnetSplittingStatus::Scheduled(..) => {}
+        status @ (SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit(..)) => {
+            return Err(format!(
+                "The last summary block at height {} does not have a scheduled subnet split: {status:?}",
+                last_summary_block.height
+            ));
+        }
+    }
 
     // The splitting CUP lives exactly at the `Scheduled` summary's context's registry version
     let registry_version = last_summary_block.context.registry_version;
@@ -1566,20 +1571,15 @@ mod tests {
         });
     }
 
-    /// Creates a summary block of the source subnet which signals a scheduled subnet split.
-    fn make_splitting_summary_block(
+    /// Creates a summary block signalling the given subnet splitting status.
+    fn make_summary_with_splitting_status(
         pool: &TestConsensusPool,
-        source_subnet_id: SubnetId,
-        destination_subnet_id: SubnetId,
+        subnet_splitting_status: SubnetSplittingStatus,
     ) -> Block {
         let mut block = pool.get_cache().finalized_block();
         let mut summary = block.payload.as_ref().as_summary().clone();
-        summary.dkg.subnet_splitting_status = BackwardsCompatible::new_for_test_only(Some(
-            SubnetSplittingStatus::Scheduled(SplittingArgs {
-                source_subnet_id,
-                destination_subnet_id,
-            }),
-        ));
+        summary.dkg.subnet_splitting_status =
+            BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Summary(summary),
@@ -1620,8 +1620,13 @@ mod tests {
             )
             .build();
 
-            let splitting_block =
-                make_splitting_summary_block(&pool, source_subnet_id, destination_subnet_id);
+            let splitting_block = make_summary_with_splitting_status(
+                &pool,
+                SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id,
+                    destination_subnet_id,
+                }),
+            );
             let last_summary = &splitting_block.payload.as_ref().as_summary().dkg;
 
             let looked_up_subnet_id = if is_source_subnet {
@@ -1698,8 +1703,13 @@ mod tests {
 
             // The destination subnet has no CUP contents in the registry, so the summary
             // creation should fail.
-            let splitting_block =
-                make_splitting_summary_block(&pool, source_subnet_id, destination_subnet_id);
+            let splitting_block = make_summary_with_splitting_status(
+                &pool,
+                SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id,
+                    destination_subnet_id,
+                }),
+            );
             let error = get_post_split_dkg_summary(
                 destination_subnet_id,
                 registry.as_ref(),
@@ -1709,6 +1719,41 @@ mod tests {
 
             assert!(
                 error.contains("Empty cup contents"),
+                "Unexpected error: {error}"
+            );
+        });
+    }
+
+    /// `get_post_split_dkg_summary` may only be called with a summary block which has a scheduled
+    /// split; any other splitting status is rejected.
+    #[rstest]
+    #[case::not_scheduled(SubnetSplittingStatus::NotScheduled)]
+    #[case::post_split(SubnetSplittingStatus::PostSplit(PostSplitArgs {
+        new_subnet_id: subnet_test_id(1),
+    }))]
+    fn test_get_post_split_dkg_summary_fails_when_split_is_not_scheduled(
+        #[case] subnet_splitting_status: SubnetSplittingStatus,
+    ) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_id = subnet_test_id(1);
+            let nodes: Vec<_> = (0..4).map(node_test_id).collect();
+
+            let Dependencies { pool, registry, .. } = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_id,
+                vec![(1, SubnetRecordBuilder::from(&nodes).build())],
+            )
+            .build();
+
+            let block = make_summary_with_splitting_status(&pool, subnet_splitting_status);
+
+            let error = get_post_split_dkg_summary(subnet_id, registry.as_ref(), &block)
+                .expect_err("Should fail to create the post-split DKG summary");
+
+            assert!(
+                error.contains(&format!(
+                    "does not have a scheduled subnet split: {subnet_splitting_status:?}",
+                )),
                 "Unexpected error: {error}"
             );
         });
