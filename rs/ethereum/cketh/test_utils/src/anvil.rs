@@ -231,6 +231,36 @@ impl Anvil {
             .unwrap_or_else(|e| panic!("not a u128 balance {balance}: {e}"))
     }
 
+    /// Every transaction `sender` has sent, oldest first, with what each did on chain.
+    pub fn transactions_of(&self, sender: &Address) -> Vec<SentTransaction> {
+        let head = self.block_number();
+        let mut sent = Vec::new();
+        for height in 0..=head {
+            let block = self.rpc(
+                "eth_getBlockByNumber",
+                serde_json::json!([format!("0x{height:x}"), true]),
+            );
+            let Some(transactions) = block["transactions"].as_array() else {
+                continue;
+            };
+            for transaction in transactions {
+                if transaction["from"].as_str() != Some(&to_hex(sender.as_ref())) {
+                    continue;
+                }
+                let hash = transaction["hash"].as_str().unwrap().to_string();
+                let receipt = self.rpc("eth_getTransactionReceipt", serde_json::json!([&hash]));
+                sent.push(SentTransaction {
+                    succeeded: status_ok(&receipt),
+                    gas_used: hex_u64(&receipt["gasUsed"]),
+                    gas_limit: hex_u64(&transaction["gas"]),
+                    transaction_type: hex_u64(&transaction["type"]),
+                    hash,
+                });
+            }
+        }
+        sent
+    }
+
     /// The receipt of the most recent transaction `sender` sent, searching back from the chain head,
     /// together with the gas the transaction was allowed. A reverted sweep whose `gasUsed` equals its
     /// `gas` ran out of gas; one below it hit a `require`.
