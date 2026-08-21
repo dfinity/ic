@@ -318,7 +318,11 @@ pub(crate) fn max_consensus_fee(
                     .saturating_mul(FLEXIBLE_RESPONSE_SIZE_OVERHEAD.saturating_add(response_bytes)),
                 subnet_size,
             ) + flexible_extra_response_fee(
-                // The cost of `min_responses` was already part of the base fee
+                // With `T = total_requests` and `m = min_responses`: each allowance holds
+                // `(T - m) / T` of one response's surcharge, while a result of `K` responses
+                // charges its `K` contributors `(K - m) / K` each. That is covered for every
+                // `K <= T`, since `1 - m/K` grows with `K`. `m` is left out because
+                // [`gossipping_base_fee`] already charged for it.
                 total_requests.saturating_sub(min_responses),
                 subnet_size,
             )
