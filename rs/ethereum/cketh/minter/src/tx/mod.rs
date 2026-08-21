@@ -179,6 +179,32 @@ pub fn encode_u256<T: Into<u256>>(stream: &mut RlpStream, value: T) {
     stream.append(&value.to_be_bytes()[leading_empty_bytes..].as_ref());
 }
 
+/// Sign `digest` with the minter's ECDSA key under `derivation_path`, resolving the signature's
+/// parity bit against the key that made it.
+pub(crate) async fn sign_digest(
+    digest: &Hash,
+    derivation_path: &[ByteBuf],
+) -> Result<TransactionSignature, String> {
+    let key_name = read_state(|s| s.ecdsa_key_name.clone());
+    let signature = crate::management::sign_with_ecdsa(
+        key_name,
+        ic_management_canister_types_private::DerivationPath::new(derivation_path.to_vec()),
+        digest.0,
+    )
+    .await
+    .map_err(|e| format!("failed to sign digest: {e}"))?;
+    let recid = compute_recovery_id(digest, &signature, derivation_path).await;
+    if recid.is_x_reduced() {
+        return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
+    }
+    let (r_bytes, s_bytes) = split_in_two(signature);
+    Ok(TransactionSignature {
+        signature_y_parity: recid.is_y_odd(),
+        r: u256::from_be_bytes(r_bytes),
+        s: u256::from_be_bytes(s_bytes),
+    })
+}
+
 /// The parity bit of a signature made under `derivation_path`.
 ///
 /// Recovery only succeeds against the public key that produced the signature, so the master key is
