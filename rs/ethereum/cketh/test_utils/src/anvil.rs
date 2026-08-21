@@ -17,6 +17,14 @@ use std::time::{Duration, Instant};
 /// `eth_sendTransaction` without any local signing.
 pub const DEV_ACCOUNT: &str = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 
+/// The chain the harness pretends to be, matching the `EthereumNetwork::Mainnet` the fixture
+/// installs the minter with.
+pub const CHAIN_ID: u64 = 1;
+
+/// Seconds between blocks on the harness' chain. Fast enough that a test does not wait on it, slow
+/// enough that a block still holds several transactions.
+const BLOCK_TIME_SECS: u64 = 1;
+
 /// The whole supply minted to the deployer when deploying a [`deploy_mock_erc20`] token.
 const TOKEN_SUPPLY: u128 = 1_000_000_000;
 
@@ -52,6 +60,23 @@ impl Anvil {
             .arg("127.0.0.1")
             .arg("--port")
             .arg(port.to_string())
+            // Interval mining, so the chain advances on its own. By default anvil only mines when it
+            // receives a transaction, which leaves a chain that looks frozen to everything reading
+            // it: the balance scan measures its backoff in elapsed *blocks*, so no scan after the
+            // first is ever due, and `finalized` never moves at all.
+            .arg("--block-time")
+            .arg(BLOCK_TIME_SECS.to_string())
+            // One slot per epoch, so `finalized` follows `latest` within a couple of blocks instead
+            // of the 32 a real chain takes. The sweeper pipeline finalizes against `finalized`
+            // regardless of the block height the minter is configured with.
+            .arg("--slots-in-an-epoch")
+            .arg("1")
+            // Anvil defaults to chain id 31337, but the fixture installs the minter as Mainnet. Both
+            // of a sweep's signatures commit to the chain id — the EIP-7702 authorization tuple and
+            // the attestation digest — so a mismatch makes the protocol skip the delegation and the
+            // delegate's `ecrecover` fail, reverting the whole batch.
+            .arg("--chain-id")
+            .arg(CHAIN_ID.to_string())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -204,6 +229,59 @@ impl Anvil {
         let balance = balance.as_str().unwrap();
         u128::from_str_radix(balance.trim_start_matches("0x"), 16)
             .unwrap_or_else(|e| panic!("not a u128 balance {balance}: {e}"))
+    }
+
+    /// The receipt of the most recent transaction `sender` sent, searching back from the chain head,
+    /// together with the gas the transaction was allowed. A reverted sweep whose `gasUsed` equals its
+    /// `gas` ran out of gas; one below it hit a `require`.
+    pub fn last_transaction_of(&self, sender: &Address) -> Option<SentTransaction> {
+        let head = self.block_number();
+        for height in (0..=head).rev() {
+            let block = self.rpc(
+                "eth_getBlockByNumber",
+                serde_json::json!([format!("0x{height:x}"), true]),
+            );
+            let Some(transactions) = block["transactions"].as_array() else {
+                continue;
+            };
+            for transaction in transactions {
+                if transaction["from"].as_str() != Some(&to_hex(sender.as_ref())) {
+                    continue;
+                }
+                let hash = transaction["hash"].as_str().unwrap().to_string();
+                let receipt = self.rpc("eth_getTransactionReceipt", serde_json::json!([&hash]));
+                return Some(SentTransaction {
+                    succeeded: status_ok(&receipt),
+                    gas_used: hex_u64(&receipt["gasUsed"]),
+                    gas_limit: hex_u64(&transaction["gas"]),
+                    transaction_type: hex_u64(&transaction["type"]),
+                    hash,
+                });
+            }
+        }
+        None
+    }
+
+    /// The height of the chain's latest block.
+    pub fn block_number(&self) -> u64 {
+        let number = self.rpc("eth_blockNumber", serde_json::json!([]));
+        let number = number.as_str().unwrap();
+        u64::from_str_radix(number.trim_start_matches("0x"), 16)
+            .unwrap_or_else(|e| panic!("not a u64 block number {number}: {e}"))
+    }
+
+    /// How many transactions `address` has sent, so a test can pin that a batch really was one
+    /// transaction. An EIP-7702 authority's nonce also advances when one of its own authorizations
+    /// is applied, which is how a swept deposit address ends up with a nonce of 1 without ever
+    /// having sent anything.
+    pub fn transaction_count(&self, address: &Address) -> u64 {
+        let count = self.rpc(
+            "eth_getTransactionCount",
+            serde_json::json!([to_hex(address.as_ref()), "latest"]),
+        );
+        let count = count.as_str().unwrap();
+        u64::from_str_radix(count.trim_start_matches("0x"), 16)
+            .unwrap_or_else(|e| panic!("not a u64 transaction count {count}: {e}"))
     }
 
     /// Credits `address` with `wei` of ETH (foundry's `anvil_setBalance`). The minter's sweeper
@@ -405,4 +483,20 @@ fn decode_address(data: &[u8]) -> Address {
     Address::new(
         <[u8; 20]>::try_from(&data[12..32]).expect("a 32-byte word holds a 20-byte address"),
     )
+}
+
+/// What a transaction the harness went looking for actually did on chain.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct SentTransaction {
+    pub hash: String,
+    pub succeeded: bool,
+    pub gas_used: u64,
+    pub gas_limit: u64,
+    /// EIP-2718 type: `2` for EIP-1559, `4` for the EIP-7702 transaction a first sweep rides.
+    pub transaction_type: u64,
+}
+
+fn hex_u64(value: &Value) -> u64 {
+    let raw = value.as_str().unwrap_or("0x0");
+    u64::from_str_radix(raw.trim_start_matches("0x"), 16).unwrap_or(0)
 }

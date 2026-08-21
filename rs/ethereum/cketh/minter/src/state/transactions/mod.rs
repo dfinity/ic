@@ -223,10 +223,17 @@ impl fmt::Display for SweepId {
 /// call's own overhead and the first, most expensive write to the minter's token balance.
 const SWEEP_BASE_GAS: u64 = 60_000;
 
-/// Gas each additional deposit in a batch needs: its authorization, the delegated call, the
-/// approval and the transfer. Deliberately above the ~42'000 measured for a batch of 20, since
-/// unspent gas is refunded whereas an underestimate wastes the whole transaction.
-const SWEEP_GAS_PER_DEPOSIT: u64 = 80_000;
+/// Gas each deposit in a batch needs: its authorization, the delegated call, the attestation's
+/// `ecrecover`, the approval and the transfer through the helper.
+///
+/// Deliberately well above what a sweep consumes — two delegating deposits measured 181'676 gas
+/// end to end, which this covers roughly twofold. The headroom is not slack: a sweep nests four
+/// calls deep (batch, delegated sweep, helper deposit, token transfer) and
+/// [EIP-150](https://eips.ethereum.org/EIPS/eip-150) hands each level only 63/64 of the gas left,
+/// so the limit a batch needs is strictly more than the gas it ends up using. Overshooting only
+/// requires the sweeper address to hold more prepaid gas, since the unspent remainder is refunded,
+/// whereas an underestimate burns the whole transaction for nothing.
+const SWEEP_GAS_PER_DEPOSIT: u64 = 150_000;
 
 /// A sweep the minter issues **from its dedicated sweeper address**, on the sweeper's own nonce
 /// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
