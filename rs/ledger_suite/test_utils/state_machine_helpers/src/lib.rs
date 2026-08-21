@@ -576,6 +576,24 @@ pub fn icrc21_consent_message(
     .expect("failed to decode icrc21_canister_call_consent_message response")
 }
 
+/// Generous upper bound on the rounds the ledger needs to spawn an archive
+/// canister, install it and send it the blocks.
+const MAX_ARCHIVING_ROUNDS: usize = 100;
+
+/// Waits for archiving triggered by a preceding call to finish.
+///
+/// The ledger does not archive before replying — it applies the transaction and
+/// replies in one message, and archives in the messages that follow, so that a
+/// failure while archiving cannot turn a committed transaction into a reject.
+/// Anything asserting on archives right after the call that triggered the
+/// archiving therefore has to let those messages run first.
+///
+/// Returns immediately when nothing is in flight, so it is cheap to call after
+/// every ledger update.
+pub fn await_archiving(env: &StateMachine) {
+    env.run_until_completion(MAX_ARCHIVING_ROUNDS);
+}
+
 pub fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
     Decode!(
         &env.query(ledger, "archives", Encode!().unwrap())
@@ -659,7 +677,7 @@ pub fn send_approval(
     from: Principal,
     arg: &ApproveArgs,
 ) -> Result<BlockIndex, ApproveError> {
-    Decode!(
+    let result = Decode!(
         &env.execute_ingress_as(
             PrincipalId(from),
             ledger,
@@ -672,7 +690,9 @@ pub fn send_approval(
         Result<Nat, ApproveError>
     )
     .expect("failed to decode approve response")
-    .map(|n| n.0.to_u64().unwrap())
+    .map(|n| n.0.to_u64().unwrap());
+    await_archiving(env);
+    result
 }
 
 pub fn send_transfer(
@@ -687,14 +707,16 @@ pub fn send_transfer(
         "icrc1_transfer",
         Encode!(arg).unwrap(),
     );
-    Decode!(
+    let result = Decode!(
         &response
         .expect("failed to transfer funds")
         .bytes(),
         Result<Nat, TransferError>
     )
     .expect("failed to decode transfer response")
-    .map(|n| n.0.to_u64().unwrap())
+    .map(|n| n.0.to_u64().unwrap());
+    await_archiving(env);
+    result
 }
 
 pub fn send_transfer_from(
@@ -703,7 +725,7 @@ pub fn send_transfer_from(
     from: Principal,
     arg: &TransferFromArgs,
 ) -> Result<BlockIndex, TransferFromError> {
-    Decode!(
+    let result = Decode!(
         &env.execute_ingress_as(
             PrincipalId(from),
             ledger,
@@ -716,7 +738,9 @@ pub fn send_transfer_from(
         Result<Nat, TransferFromError>
     )
     .expect("failed to decode transfer_from response")
-    .map(|n| n.0.to_u64().unwrap())
+    .map(|n| n.0.to_u64().unwrap());
+    await_archiving(env);
+    result
 }
 
 /// Upgrade a canister as its controller. The canister is stopped before the upgrade and restarted

@@ -2098,6 +2098,25 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
 }
 
 #[test]
+fn test_trapped_archiving_is_counted() {
+    ic_ledger_suite_state_machine_tests::subnet_memory::test_trapped_archiving_is_counted(
+        ledger_wasm(),
+        encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_transfer_when_subnet_is_out_of_memory() {
+    ic_ledger_suite_state_machine_tests::subnet_memory::test_transfer_when_subnet_is_out_of_memory(
+        ledger_wasm(),
+        encode_init_args,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
+#[test]
 fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
     ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles(
         ledger_wasm(), encode_init_args,

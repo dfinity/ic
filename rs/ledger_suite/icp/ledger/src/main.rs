@@ -189,6 +189,25 @@ fn init(
 /// * `to` - The account you want to send the funds to.
 /// * `created_at_time`: When the transaction has been created. If not set then
 ///   now is used.
+/// Starts archiving as a background task instead of awaiting it.
+///
+/// The ledger applies a transaction synchronously but can only archive by
+/// calling the archive canisters, so archiving has to await. Awaiting it before
+/// replying would make the reply depend on continuations that run *after* the
+/// transaction was committed: an await is a commit point, so a trap in one of
+/// them — the replica refusing a memory growth, for instance — cannot roll the
+/// transaction back, but it does turn the reply into a reject, which a caller
+/// cannot tell apart from a transaction that never happened.
+///
+/// Spawning puts archiving on its own chain of messages. The reply is produced
+/// in the same message that commits the transaction, and a failure while
+/// archiving can no longer contradict it — the blocks simply stay in the ledger
+/// until the next attempt.
+fn spawn_archiving() {
+    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
+    ic_cdk::futures::spawn(archive_blocks::<Access>(DebugOutSink, max_msg_size as u64));
+}
+
 async fn send(
     memo: Memo,
     amount: Tokens,
@@ -255,11 +274,10 @@ async fn send(
     };
     certified_data_set(hash.into_bytes());
 
-    // Don't put anything that could ever trap after this call or people using this
-    // endpoint. If something did panic the payment would appear to fail, but would
-    // actually succeed on chain.
-    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    // Nothing after this point may trap: the payment is already committed, so a
+    // trap here would make it appear to fail while it actually succeeded on
+    // chain. Archiving is spawned rather than awaited for exactly that reason.
+    spawn_archiving();
     Ok(height)
 }
 
@@ -388,8 +406,7 @@ async fn icrc1_send(
         created_at_time,
     )?;
 
-    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    spawn_archiving();
     Ok(block_index)
 }
 
@@ -1419,8 +1436,7 @@ fn icrc2_approve_not_async(
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let block_index = icrc2_approve_not_async(caller(), arg, None)?;
 
-    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    spawn_archiving();
     Ok(block_index)
 }
 
@@ -1454,8 +1470,7 @@ async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> 
     });
     let block_index = icrc2_approve_not_async(caller(), approve_arg, Some(spender))?;
 
-    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    spawn_archiving();
     Ok(block_index)
 }
 
