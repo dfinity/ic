@@ -1712,11 +1712,12 @@ impl Stream {
     }
 
     /// Returns the index of the first reject signal at or after `from_index`, if
-    /// any; else `signals_end`.
+    /// any.
     ///
     /// This allows us to decide whether inducting a slice will allow us to garbage
-    /// collect any reject signals, based on its `header.begin()`.
-    pub fn next_reject_signal_index(&self, from_index: StreamIndex) -> StreamIndex {
+    /// collect any reject signals, based on its `header.begin()`. `None` means that
+    /// no slice can, whatever its `header.begin()`.
+    pub fn next_reject_signal_index(&self, from_index: StreamIndex) -> Option<StreamIndex> {
         let next_reject_signal_pos: usize = match self
             .reject_signals
             .binary_search_by(|reject_signal| reject_signal.index.cmp(&from_index))
@@ -1726,7 +1727,7 @@ impl Stream {
         };
         self.reject_signals
             .get(next_reject_signal_pos)
-            .map_or(self.signals_end, |reject_signal| reject_signal.index)
+            .map(|reject_signal| reject_signal.index)
     }
 
     /// Returns the index just beyond the last sent signal.

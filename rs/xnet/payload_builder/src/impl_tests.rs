@@ -419,9 +419,9 @@ async fn validate_slice() {
 
         // Expected indices for messages and signals from `SUBNET_1`.
         const EXPECTED: ExpectedIndices = ExpectedIndices {
-            message_index: SIGNAL_END,      // Assume no intervening payloads.
-            signal_index: MESSAGE_BEGIN,    // Assume we no signals for existing messages.
-            gced_message_index: SIGNAL_END, // Assume we hold no reject signals.
+            message_index: SIGNAL_END,   // Assume no intervening payloads.
+            signal_index: MESSAGE_BEGIN, // Assume we no signals for existing messages.
+            gced_message_index: None,    // Assume we hold no reject signals.
         };
 
         // State with stream for `SUBNET_1`.
@@ -468,7 +468,7 @@ async fn validate_slice() {
             SliceValidationResult::Valid {
                 messages_end: EXPECTED.message_index.increment(),
                 signals_end: EXPECTED.signal_index,
-                gced_message_index: EXPECTED.gced_message_index,
+                gced_message_index: None,
                 message_count: 1,
                 byte_size: 1,
             },
@@ -556,7 +556,7 @@ async fn validate_slice_invalid_signature() {
         let expected = ExpectedIndices {
             message_index: StreamIndex::new(2),
             signal_index: StreamIndex::new(3),
-            gced_message_index: StreamIndex::new(2),
+            gced_message_index: None,
         };
 
         let validation_context = get_validation_context_for_test();
@@ -593,7 +593,7 @@ async fn validate_slice_above_msg_limit() {
         const EXPECTED: ExpectedIndices = ExpectedIndices {
             message_index: StreamIndex::new(SIGNAL_END), // Assume no intervening payloads.
             signal_index: StreamIndex::new(MESSAGE_BEGIN), // Assume no signals for existing msgs.
-            gced_message_index: StreamIndex::new(SIGNAL_END), // Assume no reject signals.
+            gced_message_index: None,                    // Assume no reject signals.
         };
 
         // State of a `System` subnet with a stream for `SUBNET_1`.
@@ -629,7 +629,6 @@ async fn validate_slice_above_msg_limit() {
 
         let expected_message = EXPECTED.message_index.get();
         let signal_index = EXPECTED.signal_index.get();
-        let gced_message_index = EXPECTED.gced_message_index;
 
         // Sanity check: empty slice is rejected.
         assert_matches!(
@@ -641,7 +640,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: expected_message.into(),
                 signals_end: (signal_index + 1).into(),
-                gced_message_index,
+                gced_message_index: None,
                 message_count: 0,
                 byte_size: 1,
             },
@@ -661,7 +660,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: (expected_message + 1).into(),
                 signals_end: signal_index.into(),
-                gced_message_index,
+                gced_message_index: None,
                 message_count: 1,
                 byte_size: 1,
             },
@@ -719,7 +718,7 @@ async fn validate_slice_above_signal_limit() {
                 &ExpectedIndices {
                     message_index: slice_begin.into(),
                     signal_index: SIGNALS_END.into(),
-                    gced_message_index: MESSAGE_BEGIN.into(),
+                    gced_message_index: None,
                 },
                 &validation_context,
                 state,
@@ -735,7 +734,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
-                gced_message_index: MESSAGE_BEGIN.into(),
+                gced_message_index: None,
                 message_count: MAX_STREAM_MESSAGES / 2,
                 byte_size: 1,
             }
@@ -750,7 +749,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
-                gced_message_index: MESSAGE_BEGIN.into(),
+                gced_message_index: None,
                 message_count: 20,
                 byte_size: 1,
             }
@@ -782,9 +781,9 @@ async fn validate_slice_loopback_stream() {
 
         // Expected indices for loopback stream messages and signals.
         const EXPECTED: ExpectedIndices = ExpectedIndices {
-            message_index: SIGNAL_END,      // Assume no intervening payloads.
-            signal_index: MESSAGE_BEGIN,    // Assume we no signals for existing messages.
-            gced_message_index: SIGNAL_END, // Assume we hold no reject signals.
+            message_index: SIGNAL_END,   // Assume no intervening payloads.
+            signal_index: MESSAGE_BEGIN, // Assume we no signals for existing messages.
+            gced_message_index: None,    // Assume we hold no reject signals.
         };
 
         // State with loopback stream.
@@ -959,32 +958,32 @@ async fn expected_indices_for_stream_reject_signal_gc() {
 
         // With no past payloads, the first reject signal we hold.
         assert_eq!(
-            StreamIndex::new(FIRST_REJECT_SIGNAL),
+            Some(StreamIndex::new(FIRST_REJECT_SIGNAL)),
             gced_message_index(&[])
         );
 
         // A payload not reaching the first reject signal changes nothing.
         assert_eq!(
-            StreamIndex::new(FIRST_REJECT_SIGNAL),
+            Some(StreamIndex::new(FIRST_REJECT_SIGNAL)),
             gced_message_index(&[&payload(FIRST_REJECT_SIGNAL)])
         );
 
         // A payload garbage collecting the first reject signal leaves the second.
         assert_eq!(
-            StreamIndex::new(SECOND_REJECT_SIGNAL),
+            Some(StreamIndex::new(SECOND_REJECT_SIGNAL)),
             gced_message_index(&[&payload(FIRST_REJECT_SIGNAL + 1)])
         );
 
-        // A payload garbage collecting reject signals both leaves `signals_end`.
+        // A payload garbage collecting both reject signals leaves none.
         assert_eq!(
-            StreamIndex::new(FIXTURE_SIGNALS_END),
+            None,
             gced_message_index(&[&payload(SECOND_REJECT_SIGNAL + 1)])
         );
 
         // The highest header `begin` across the payloads is what counts, whatever the
         // order they are given in.
         assert_eq!(
-            StreamIndex::new(SECOND_REJECT_SIGNAL),
+            Some(StreamIndex::new(SECOND_REJECT_SIGNAL)),
             gced_message_index(&[
                 &payload(FIRST_REJECT_SIGNAL),
                 &payload(FIRST_REJECT_SIGNAL + 1)
@@ -1023,11 +1022,11 @@ async fn validate_slice_reject_signal_gc() {
         };
 
         // With both reject signals outstanding, the slice garbage collects them, so it
-        // is not empty. `gced_message_index` is `signals_end`: none are left.
+        // is not empty. `gced_message_index` is `None`: none are left afterwards.
         let valid = SliceValidationResult::Valid {
             messages_end: StreamIndex::new(FIXTURE_SIGNALS_END),
             signals_end: StreamIndex::new(0),
-            gced_message_index: StreamIndex::new(FIXTURE_SIGNALS_END),
+            gced_message_index: None,
             message_count: 0,
             byte_size: 1,
         };

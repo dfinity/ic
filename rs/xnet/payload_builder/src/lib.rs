@@ -71,13 +71,14 @@ pub struct ExpectedIndices {
     /// payloads, when present; else `messages_begin()` of our outgoing stream.
     pub signal_index: StreamIndex,
 
-    /// Next garbage collected message index (`header.begin()`) of interest to us.
-    /// This is the index of the first reject signal that we hold, if any; else
-    /// `signals_end`.
+    /// Next garbage collected message index (`header.begin()`) of interest to us:
+    /// the index of the first reject signal we would still hold after inducting the
+    /// past payloads, if any.
     ///
-    /// A slice whose `header.begin()` is beyond this, lets us garbage collect at
-    /// least one reject signal, and is therefore worth inducting.
-    pub gced_message_index: StreamIndex,
+    /// A slice whose `header.begin()` is beyond this lets us garbage collect at
+    /// least one reject signal, and is therefore worth inducting even with no
+    /// messages and no new signals. `None` means no more reject signals to GC.
+    pub gced_message_index: Option<StreamIndex>,
 }
 
 /// Interface for a pool of incoming `CertifiedStreamSlices`.
@@ -465,7 +466,7 @@ impl XNetPayloadBuilderImpl {
 
         // For the next GC-ed message index of interest, start with the most recent
         // (max) `header.begin()` of any slice from `payloads` (or else, zero). Then
-        // find the first reject signal at or beyond that index.
+        // find the first reject signal at or beyond that index, if any.
         let mut max_header_begin = StreamIndex::from(0);
 
         let stream = state.streams().get(&subnet_id);
@@ -483,9 +484,8 @@ impl XNetPayloadBuilderImpl {
                     return ExpectedIndices {
                         message_index: messages.end(),
                         signal_index: most_recent_signal_index.unwrap(),
-                        gced_message_index: stream.map_or(StreamIndex::from(0), |s| {
-                            s.next_reject_signal_index(max_header_begin)
-                        }),
+                        gced_message_index: stream
+                            .and_then(|s| s.next_reject_signal_index(max_header_begin)),
                     };
                 }
             }
@@ -735,12 +735,14 @@ impl XNetPayloadBuilderImpl {
 
         if slice.messages().is_none()
             && slice.header().signals_end() == expected.signal_index
-            && slice.header().begin() <= expected.gced_message_index
+            && expected
+                .gced_message_index
+                .is_none_or(|gced_message_index| slice.header().begin() <= gced_message_index)
         {
             // Empty slice: no messages, no additional signals and no newly GC-ed messages
             // that would allow us to GC any reject signals (in addition to what we have in
-            // the state and any intervening payloads). Not actually invalid, but we don't
-            // want it in a payload.
+            // the intervening payloads). Not actually invalid, but we don't want it in a
+            // payload.
             return SliceValidationResult::Empty;
         }
 
@@ -847,9 +849,7 @@ impl XNetPayloadBuilderImpl {
                 gced_message_index: state
                     .streams()
                     .get(&subnet_id)
-                    .map_or(StreamIndex::from(0), |stream| {
-                        stream.next_reject_signal_index(slice.header().begin())
-                    }),
+                    .and_then(|stream| stream.next_reject_signal_index(slice.header().begin())),
                 message_count: slice.messages().map_or(0, |messages| messages.len()),
                 byte_size,
             },
@@ -1668,8 +1668,8 @@ enum SliceValidationResult {
         messages_end: StreamIndex,
         signals_end: StreamIndex,
         /// The first reject signal at or after the slice's header `begin`, i.e. the
-        /// first reject signal we will still hold after inducting this slice.
-        gced_message_index: StreamIndex,
+        /// first reject signal we will still hold after inducting this slice, if any.
+        gced_message_index: Option<StreamIndex>,
         message_count: usize,
         byte_size: usize,
     },

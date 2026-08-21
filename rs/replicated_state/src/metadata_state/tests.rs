@@ -2559,15 +2559,9 @@ fn stream_next_reject_signal_index() {
         SignalConfig { end: 153 },
     );
 
-    // With no reject signals, `signals_end` is returned for any `from_index`.
-    assert_eq!(
-        StreamIndex::new(153),
-        stream.next_reject_signal_index(0.into())
-    );
-    assert_eq!(
-        StreamIndex::new(153),
-        stream.next_reject_signal_index(153.into())
-    );
+    // With no reject signals, `None` is returned for any `from_index`.
+    assert_eq!(None, stream.next_reject_signal_index(0.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
 
     stream.reject_signals = VecDeque::from([
         RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
@@ -2576,41 +2570,32 @@ fn stream_next_reject_signal_index() {
     ]);
 
     // Before the first reject signal: the first reject signal.
+    assert_eq!(Some(138.into()), stream.next_reject_signal_index(0.into()));
     assert_eq!(
-        StreamIndex::new(138),
-        stream.next_reject_signal_index(0.into())
-    );
-    assert_eq!(
-        StreamIndex::new(138),
+        Some(138.into()),
         stream.next_reject_signal_index(137.into())
     );
     // At a reject signal: that same reject signal.
     assert_eq!(
-        StreamIndex::new(138),
+        Some(138.into()),
         stream.next_reject_signal_index(138.into())
     );
     assert_eq!(
-        StreamIndex::new(139),
+        Some(139.into()),
         stream.next_reject_signal_index(139.into())
     );
     assert_eq!(
-        StreamIndex::new(142),
+        Some(142.into()),
         stream.next_reject_signal_index(142.into())
     );
     // Between reject signals: the following reject signal.
     assert_eq!(
-        StreamIndex::new(142),
+        Some(142.into()),
         stream.next_reject_signal_index(140.into())
     );
-    // Past all reject signals: `signals_end`.
-    assert_eq!(
-        StreamIndex::new(153),
-        stream.next_reject_signal_index(143.into())
-    );
-    assert_eq!(
-        StreamIndex::new(153),
-        stream.next_reject_signal_index(153.into())
-    );
+    // Past all reject signals: `None`.
+    assert_eq!(None, stream.next_reject_signal_index(143.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
 }
 
 #[test]

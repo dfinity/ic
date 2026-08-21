@@ -844,8 +844,8 @@ impl UnpackedStreamSlice {
     /// Garbage collects the slice: drops all messages before
     /// `cutoff.message_index` and updates the witness. If all messages were
     /// dropped; and `cutoff.signal_index` is beyond `signals_end` (no new signals);
-    /// and `cutoff.gced_message_index` is beyond `begin` (no newly GC-ed messages);
-    /// the slice is dropped altogether.
+    /// and `cutoff.gced_message_index` is beyond `begin` or `None` (no newly GC-ed
+    /// messages); the slice is dropped altogether.
     ///
     /// Returns:
     ///  * `Ok(Some(pruned_self))` if the slice was partly pruned;
@@ -860,7 +860,9 @@ impl UnpackedStreamSlice {
         let pruned_tree = self.payload.garbage_collect(cutoff.message_index)?;
         if self.payload.messages.is_none()
             && cutoff.signal_index >= self.payload.header.signals_end()
-            && cutoff.gced_message_index >= self.payload.header.begin()
+            && cutoff
+                .gced_message_index
+                .is_none_or(|gced_message_index| gced_message_index >= self.payload.header.begin())
         {
             // No messages, no new signals, and no newly GC-ed messages. Drop the slice.
             return Ok(None);
