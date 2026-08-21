@@ -2441,8 +2441,10 @@ impl UnflushedCheckpointOps {
     /// `ReplicatedState::remove_canister()` and the two subnet split methods, which
     /// call this on the caller's behalf.
     ///
-    /// Takes the `CanisterState` rather than just the canister ID, so that the
-    /// snapshots of a deleted canister cannot be overlooked.
+    /// Takes the `CanisterState` rather than just the canister ID because the
+    /// canister's snapshots live in it (`SystemMetadata` cannot map a canister ID to
+    /// its snapshot IDs); recording their deletion here rather than at the call sites
+    /// means it cannot be overlooked.
     pub(crate) fn delete_canister(&mut self, canister_state: &CanisterState) {
         for (snapshot_id, _) in canister_state.canister_snapshots.iter() {
             self.delete_snapshot(*snapshot_id);
