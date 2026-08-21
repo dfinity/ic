@@ -641,7 +641,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: expected_message.into(),
                 signals_end: (signal_index + 1).into(),
-                gced_message_index: gced_message_index,
+                gced_message_index,
                 message_count: 0,
                 byte_size: 1,
             },
@@ -661,7 +661,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: (expected_message + 1).into(),
                 signals_end: signal_index.into(),
-                gced_message_index: gced_message_index,
+                gced_message_index,
                 message_count: 1,
                 byte_size: 1,
             },
