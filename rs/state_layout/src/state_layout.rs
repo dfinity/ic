@@ -2598,7 +2598,7 @@ fn delete_snapshot_dir(snapshot_path: &Path) -> Result<(), LayoutError> {
     }
 
     // Remove the parent directory named after the canister if this was the last snapshot of that canister.
-    // Unwrap is safe as snapshots are not at located at `/`.
+    // Unwrap is safe as snapshots are not located at `/`.
     let parent = snapshot_path.parent().unwrap();
 
     if parent.read_dir().map_err(map_error)?.next().is_none() {
