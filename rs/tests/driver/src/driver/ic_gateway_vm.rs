@@ -441,10 +441,12 @@ sudo networkctl reconfigure enp2s0
     /// node-side configuration — which is what lets a nested node register
     /// through the gateway exactly as it does on Farm.
     ///
-    /// The certificate covers both the apex domain and its wildcard so the
-    /// gateway can also serve canister subdomains, even though only the apex is
-    /// registered with the group's `dnsmasq` (see
-    /// [`Self::configure_dns_records`]).
+    /// The certificate covers the apex domain and both the `*.<domain>` and
+    /// `*.raw.<domain>` wildcards, matching the records the Farm path creates, so
+    /// the gateway can also serve canister subdomains. Only the apex is
+    /// registered with the group's `dnsmasq` though (see
+    /// [`Self::configure_dns_records`]), so a subdomain still has to be resolved
+    /// by the client -- see [`DeployedIcGatewayVm::resolve_override_for_url`].
     fn load_or_create_local_playnet(
         &self,
         env: &TestEnv,
@@ -463,10 +465,17 @@ sudo networkctl reconfigure enp2s0
             let domain = format!("{}.{IN_GROUP_DOMAIN_SUFFIX}", self.universal_vm.name);
             let ca = dev_root_ca()?;
             let key = KeyPair::generate().context("generating the gateway certificate key")?;
-            let cert = CertificateParams::new(vec![domain.clone(), format!("*.{domain}")])
-                .context("building the gateway certificate parameters")?
-                .signed_by(&key, &ca.cert, &ca.key)
-                .context("signing the gateway certificate")?;
+            let cert = CertificateParams::new(vec![
+                domain.clone(),
+                format!("*.{domain}"),
+                // A wildcard matches a single label, so the canonical raw hosts
+                // `<canister id>.raw.{domain}` -- which the Farm path gives their
+                // own `*.raw` CNAME -- need a SAN of their own.
+                format!("*.raw.{domain}"),
+            ])
+            .context("building the gateway certificate parameters")?
+            .signed_by(&key, &ca.cert, &ca.key)
+            .context("signing the gateway certificate")?;
             let certificate = Certificate {
                 priv_key_pem: key.serialize_pem(),
                 cert_pem: cert.pem(),
