@@ -1174,6 +1174,47 @@ pub struct CanisterHttpHeader {
     pub value: String,
 }
 
+/// How a canister HTTP outcall is replicated across the nodes of its subnet.
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub enum CanisterHttpReplication {
+    /// Every node of the subnet performs the outcall and a response is delivered
+    /// once `n - f` of them agree on it. Too many differing responses make the
+    /// outcall fail with a "no consensus could be reached" rejection instead.
+    /// Mock such an outcall with `PocketIc::mock_canister_http_response`.
+    FullyReplicated,
+    /// A single node performs the outcall (`is_replicated = false`) and its
+    /// response is the one delivered.
+    NonReplicated,
+    /// A committee of `total_requests` nodes performs the outcall and between
+    /// `min_responses` and `max_responses` of their (potentially differing)
+    /// responses are delivered to the calling canister. Mock such an outcall
+    /// with `PocketIc::mock_flexible_canister_http_response`.
+    Flexible {
+        /// The number of nodes performing the outcall.
+        total_requests: u32,
+        /// The number of responses required to deliver a result.
+        min_responses: u32,
+        /// The largest number of responses that may be delivered.
+        max_responses: u32,
+    },
+}
+
+/// The pricing model applied to a canister HTTP outcall.
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub enum CanisterHttpPricingVersion {
+    /// The whole cost of the outcall is charged up front, based on the largest
+    /// response it could receive.
+    Legacy,
+    /// The outcall is charged for the resources it actually consumes: a base fee is
+    /// charged up front, a per-replica cycles allowance is withheld from the
+    /// payment, and whatever the responding nodes do not spend is refunded.
+    PayAsYouGo,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterHttpRequest {
     pub subnet_id: RawSubnetId,
@@ -1185,6 +1226,8 @@ pub struct RawCanisterHttpRequest {
     #[serde(serialize_with = "base64::serialize")]
     pub body: Vec<u8>,
     pub max_response_bytes: Option<u64>,
+    pub replication: CanisterHttpReplication,
+    pub pricing_version: CanisterHttpPricingVersion,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -1198,6 +1241,8 @@ pub struct CanisterHttpRequest {
     #[serde(serialize_with = "base64::serialize")]
     pub body: Vec<u8>,
     pub max_response_bytes: Option<u64>,
+    pub replication: CanisterHttpReplication,
+    pub pricing_version: CanisterHttpPricingVersion,
 }
 
 impl From<RawCanisterHttpRequest> for CanisterHttpRequest {
@@ -1212,6 +1257,8 @@ impl From<RawCanisterHttpRequest> for CanisterHttpRequest {
             headers: raw_canister_http_request.headers,
             body: raw_canister_http_request.body,
             max_response_bytes: raw_canister_http_request.max_response_bytes,
+            replication: raw_canister_http_request.replication,
+            pricing_version: raw_canister_http_request.pricing_version,
         }
     }
 }
@@ -1226,6 +1273,8 @@ impl From<CanisterHttpRequest> for RawCanisterHttpRequest {
             headers: canister_http_request.headers,
             body: canister_http_request.body,
             max_response_bytes: canister_http_request.max_response_bytes,
+            replication: canister_http_request.replication,
+            pricing_version: canister_http_request.pricing_version,
         }
     }
 }
@@ -1246,6 +1295,7 @@ pub struct CanisterHttpReply {
 )]
 pub struct CanisterHttpReject {
     pub reject_code: u64,
+    /// Bounded by the 1 KiB a node truncates its reject messages to.
     pub message: String,
 }
 
@@ -1295,6 +1345,61 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             request_id: mock_canister_http_response.request_id,
             response: mock_canister_http_response.response,
             additional_responses: mock_canister_http_response.additional_responses,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawMockFlexibleCanisterHttpResponse {
+    pub subnet_id: RawSubnetId,
+    pub request_id: u64,
+    pub responses: Vec<CanisterHttpResponse>,
+}
+
+/// Mocked responses to a pending *flexible* canister HTTP outcall, i.e. one made
+/// through the `flexible_http_request` management canister endpoint.
+///
+/// Unlike a fully replicated outcall, which delivers the one response its nodes
+/// agree on, a flexible outcall is performed by a committee of `total_requests`
+/// nodes whose responses may differ and need not all arrive (see
+/// [`CanisterHttpReplication::Flexible`]).
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct MockFlexibleCanisterHttpResponse {
+    pub subnet_id: Principal,
+    pub request_id: u64,
+    /// One response per committee node that responded. Each response is attributed
+    /// to a different committee node.
+    ///
+    /// There may be at most `total_requests` responses; providing fewer models a
+    /// committee whose remaining nodes never respond. With at least `min_responses`
+    /// successful ones among them the outcall still succeeds; with fewer it stays
+    /// pending until the time is advanced past its 60 second timeout.
+    pub responses: Vec<CanisterHttpResponse>,
+}
+
+impl From<RawMockFlexibleCanisterHttpResponse> for MockFlexibleCanisterHttpResponse {
+    fn from(raw_mock_flexible_canister_http_response: RawMockFlexibleCanisterHttpResponse) -> Self {
+        Self {
+            subnet_id: candid::Principal::from_slice(
+                &raw_mock_flexible_canister_http_response.subnet_id.subnet_id,
+            ),
+            request_id: raw_mock_flexible_canister_http_response.request_id,
+            responses: raw_mock_flexible_canister_http_response.responses,
+        }
+    }
+}
+
+impl From<MockFlexibleCanisterHttpResponse> for RawMockFlexibleCanisterHttpResponse {
+    fn from(mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse) -> Self {
+        Self {
+            subnet_id: RawSubnetId {
+                subnet_id: mock_flexible_canister_http_response
+                    .subnet_id
+                    .as_slice()
+                    .to_vec(),
+            },
+            request_id: mock_flexible_canister_http_response.request_id,
+            responses: mock_flexible_canister_http_response.responses,
         }
     }
 }

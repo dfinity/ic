@@ -2764,6 +2764,11 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
+    /// Injects one response share per node of the subnet, all reporting that the
+    /// node spent nothing on the outcall.
+    ///
+    /// For an outcall performed by only a subset of the nodes, or one whose nodes
+    /// report having spent cycles, see [`Self::mock_canister_http_response_for_nodes`].
     pub fn mock_canister_http_response(
         &self,
         request_id: u64,
@@ -2771,7 +2776,37 @@ impl StateMachine {
         contents: Vec<CanisterHttpResponseContent>,
     ) {
         assert_eq!(contents.len(), self.nodes.len());
-        for (node, content) in std::iter::zip(self.nodes.iter(), contents) {
+        let responses = std::iter::zip(self.nodes.iter(), contents)
+            .map(|(node, content)| {
+                (
+                    node.node_id,
+                    (content, CanisterHttpPaymentReceipt::default()),
+                )
+            })
+            .collect();
+        self.mock_canister_http_response_for_nodes(request_id, canister_id, responses);
+    }
+
+    /// Injects one response share per entry of `responses`, signed by the node it
+    /// is keyed by and carrying that node's payment receipt.
+    ///
+    /// Unlike [`Self::mock_canister_http_response`], this does not require exactly
+    /// one response per subnet node, which is what non-fully-replicated outcalls
+    /// need: only the nodes of the outcall's committee produce a response, their
+    /// responses may differ, and some of them may not respond at all.
+    pub fn mock_canister_http_response_for_nodes(
+        &self,
+        request_id: u64,
+        canister_id: CanisterId,
+        responses: BTreeMap<NodeId, (CanisterHttpResponseContent, CanisterHttpPaymentReceipt)>,
+    ) {
+        for node_id in responses.keys() {
+            assert!(
+                self.nodes.iter().any(|node| node.node_id == *node_id),
+                "cannot respond as {node_id}, which is not a node of this subnet"
+            );
+        }
+        for (node_id, (content, payment_receipt)) in responses {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
@@ -2786,10 +2821,10 @@ impl StateMachine {
                     is_reject: content.is_reject(),
                     replica_version: ReplicaVersion::default(),
                 },
-                payment_receipt: CanisterHttpPaymentReceipt::default(),
+                payment_receipt,
             };
             let signature = CryptoReturningOk::default()
-                .sign(&receipt_share, node.node_id, registry_version)
+                .sign(&receipt_share, node_id, registry_version)
                 .unwrap();
             let share = Signed {
                 content: receipt_share,

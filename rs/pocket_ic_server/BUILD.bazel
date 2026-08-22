@@ -21,6 +21,7 @@ LIB_DEPENDENCIES = [
     "//rs/http_endpoints/public",
     "//rs/https_outcalls/adapter:adapter_with_http",
     "//rs/https_outcalls/client",
+    "//rs/https_outcalls/pricing",
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",

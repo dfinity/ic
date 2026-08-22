@@ -92,6 +92,10 @@ type HttpResponseResult = variant {
   Ok : HttpResponse;
   Err : record {RejectionCode; text};
 };
+type RawHttpResponseResult = variant {
+  Ok : blob;
+  Err : record {RejectionCode; text};
+};
 
 type TransformArgs = record {
   response : HttpResponse;
@@ -123,6 +127,8 @@ service : {
   node_metrics_history_proxy: (NodeMetricsHistoryArgs) -> (vec NodeMetricsHistoryResponse);
   canister_http : (text) -> (HttpResponseResult);
   canister_http_with_transform : (text) -> (HttpResponse);
+  canister_http_raw : (blob, nat) -> (RawHttpResponseResult);
+  flexible_canister_http : (blob, nat) -> (RawHttpResponseResult);
   transform : (TransformArgs) -> (HttpResponse) query;
   whoami : () -> (text);
   whois : (principal) -> (text);

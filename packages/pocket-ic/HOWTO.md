@@ -378,6 +378,106 @@ e.g., 13 for a regular application subnet.
     assert_eq!(err, expected);
 ```
 
+### Flexible canister HTTP outcalls
+
+A canister can also make a *flexible* HTTP outcall through the `flexible_http_request` management canister
+endpoint. Such an outcall is performed by a committee of `total_requests` nodes of the subnet, whose responses
+need not agree, and the calling canister is handed between `min_responses` and `max_responses` of them.
+
+Flexible outcalls are priced with the pay-as-you-go pricing model, which is still gated. So is the
+`pricing_version` field of a regular `http_request`, through which a fully replicated or non-replicated outcall
+can select that same pricing model. To use either on a regular application subnet, enable beta features on the
+instance:
+
+```rust
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_icp_config(IcpConfig {
+            beta_features: Some(IcpConfigFlag::Enabled),
+            ..Default::default()
+        })
+        .build();
+```
+
+Without beta features, flexible outcalls are only available on subnets where HTTP outcalls are free (system
+subnets and subnets created with a free cycles cost schedule), where they fall back to the legacy pricing model,
+and an `http_request` asking for pay-as-you-go pricing silently falls back to the legacy pricing model as well.
+`CanisterHttpRequest::pricing_version` reports which pricing model a pending outcall actually ended up with.
+
+Under the pay-as-you-go pricing model, a base fee is charged up front, a per-replica cycles allowance is
+withheld from the payment, and whatever the responding nodes do not spend is refunded. If the attached cycles
+do not cover the cost of delivering a response, the outcall fails with an out-of-cycles error: a `flexible_http_request`
+returns the `out_of_cycles` error described below, while an `http_request` is rejected with `SysTransient` and
+a message starting with `Out of cycles:`. This applies to calls made under pay-as-you-go pricing.
+
+A pending flexible outcall reports its replication in `CanisterHttpRequest::replication`, from which the size
+of its committee can be read, and its responses are mocked with `PocketIc::mock_flexible_canister_http_response`:
+
+```rust
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+    let canister_http_request = &canister_http_requests[0];
+
+    let CanisterHttpReplication::Flexible { total_requests, .. } =
+        canister_http_request.replication
+    else {
+        panic!("expected a flexible canister http outcall");
+    };
+
+    let http_reply = |body: &[u8]| {
+        CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.to_vec(),
+        })
+    };
+    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        // One response per committee node. The responses may differ.
+        responses: vec![http_reply(b"hello"); total_requests as usize],
+    });
+
+    // The calling canister receives at least `min_responses` (and at most
+    // `max_responses`) of the mocked responses, smallest first.
+    let reply = pic.await_call(call_id).unwrap();
+```
+
+Unlike `PocketIc::mock_canister_http_response`, which delivers one response per node of the subnet,
+this takes *at most* `total_requests` responses. Providing fewer models the remaining committee nodes never
+responding:
+- with at least `min_responses` successful responses among them, the outcall succeeds;
+- with more rejects than the slack between `total_requests` and `min_responses` allows, i.e. with more than
+  `total_requests - min_responses` of them, the outcall fails with a `too_many_rejects` error reporting the
+  rejecting nodes;
+- if the `min_responses` smallest successful responses do not fit into the 2 MiB a block has for HTTP outcall
+  responses, the outcall fails with a `responses_too_large` error — note that each individual response may
+  still be within the 2 MB cap that applies to a single response;
+- if the cycles attached to the outcall do not cover the cost of putting its responses into a block, it fails
+  with an `out_of_cycles` error;
+- with too few responses to decide any of the above, the outcall stays pending until, after advancing the time
+  past its 60 second timeout, it fails with a `timeout` error.
+
+*Warning.* All responses to an outcall must be provided in a single call: once any response to it has been
+mocked, the outcall no longer shows up in `PocketIc::get_canister_http` and further responses to it cannot
+be mocked.
+
+*Note.* A mocked reject message must fit into the 1 KiB a node truncates its reject messages to; mocking a
+longer one fails, since no node could have reported it. This applies to both `PocketIc::mock_canister_http_response`
+and `PocketIc::mock_flexible_canister_http_response`.
+
+Note that a flexible outcall never rejects the calling canister's call: every outcome above, including the
+errors, is delivered as a `flexible_http_request_result` reply. Only a synchronous failure (invalid arguments,
+insufficient cycles attached, or the endpoint not being enabled on the subnet) rejects the call.
+
+*Warning.* The cycles a node reports having spent on a mocked outcall include a term for how long the
+response took to arrive, which PocketIC derives from how long it took to run the mocked outcall in process.
+Avoid asserting on exact cycles balances after any outcall priced with the pay-as-you-go pricing model —
+whether it is a flexible one or an `http_request` mocked with `PocketIc::mock_canister_http_response`.
+Outcalls priced with the legacy pricing model are unaffected, since it ignores the reported spend.
+
+### Live mode
+
 In the live mode (see the section "Live Mode" for more details), the canister HTTP outcalls are processed
 by actually making an HTTP request to the URL specified in the canister HTTP outcall.
 

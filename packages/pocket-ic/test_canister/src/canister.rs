@@ -50,8 +50,8 @@ impl RejectionCode {
 
 /// Translates a failed call into the reject code and message `canister_http`
 /// reports back over Candid.
-fn map_call_error(err: CallError) -> (RejectionCode, String) {
-    match err {
+fn map_call_error(err: impl Into<CallError>) -> (RejectionCode, String) {
+    match err.into() {
         CallError::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
@@ -427,6 +427,44 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpRequestRe
         is_replicated: None,
     };
     canister_http_outcall(&arg).await.unwrap()
+}
+
+/// Makes an HTTP outcall, passing `args` (a Candid-encoded `http_request_args`) to
+/// the management canister verbatim and attaching `cycles` cycles to the call.
+///
+/// Unlike `canister_http`, this lets the caller set fields that
+/// `ic-cdk-management-canister` does not expose, such as `pricing_version`.
+#[update]
+async fn canister_http_raw(
+    args: ByteBuf,
+    cycles: u128,
+) -> Result<ByteBuf, (RejectionCode, String)> {
+    Call::unbounded_wait(Principal::management_canister(), "http_request")
+        .with_raw_args(&args)
+        .with_cycles(cycles)
+        .await
+        .map(|response| ByteBuf::from(response.into_bytes()))
+        .map_err(map_call_error)
+}
+
+/// Makes a flexible HTTP outcall, passing `args` (a Candid-encoded
+/// `flexible_http_request_args`) to the management canister verbatim and
+/// attaching `cycles` cycles to the call.
+///
+/// Both the argument and the result are passed through undecoded so that callers
+/// can use the authoritative Candid types instead of copies maintained here;
+/// `ic-cdk-management-canister` does not expose flexible HTTP outcalls (yet).
+#[update]
+async fn flexible_canister_http(
+    args: ByteBuf,
+    cycles: u128,
+) -> Result<ByteBuf, (RejectionCode, String)> {
+    Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
+        .with_raw_args(&args)
+        .with_cycles(cycles)
+        .await
+        .map(|response| ByteBuf::from(response.into_bytes()))
+        .map_err(map_call_error)
 }
 
 // inter-canister calls

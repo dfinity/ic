@@ -9,8 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
+- The function `PocketIc::mock_flexible_canister_http_response` and the type `MockFlexibleCanisterHttpResponse` to mock the responses
+  of the committee nodes of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request`
+  management canister endpoint.
+- The field `replication` of type `CanisterHttpReplication` on `CanisterHttpRequest`, describing how a pending canister HTTP
+  outcall is replicated across the nodes of its subnet: `FullyReplicated`, `NonReplicated`, or `Flexible` with the outcall's
+  `total_requests`, `min_responses`, and `max_responses`. The committee size of a flexible outcall (`total_requests`)
+  is the number of responses `PocketIc::mock_flexible_canister_http_response` accepts.
+- The field `pricing_version` of type `CanisterHttpPricingVersion` on `CanisterHttpRequest`, reporting whether a pending
+  canister HTTP outcall is priced with the `Legacy` or the `PayAsYouGo` pricing model.
+- Enabling beta features (`IcpConfig::beta_features` passed to `PocketIcBuilder::with_icp_config`) now also enables the
+  pay-as-you-go pricing model, which covers both the `flexible_http_request` management canister endpoint (whose outcalls are
+  always priced that way) and the `pricing_version` field of `http_request` (through which a fully replicated or non-replicated
+  outcall can select it).
 
 ### Changed
+- Mocked canister HTTP responses report the cycles their node actually spent on the outcall, instead of reporting no spend at all.
+  This applies to both `PocketIc::mock_canister_http_response` and `PocketIc::mock_flexible_canister_http_response`.
+- Mocking a canister HTTP response whose reject message exceeds 1 KiB now fails. Such a response is not one any node could have
+  reported.
+- A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching what
+  a node of a real subnet does under pay-as-you-go pricing.
 - No hard TTL is set on PocketIC servers started implicitly by the library (e.g. by `PocketIc::new` or `PocketIcBuilder::build`); previously a default of 10 minutes was used.
   The hard TTL is an absolute deadline measured from the server's launch which is not extended by activity, so a test suite whose total runtime exceeded it had its server terminated while still serving requests, failing in-flight calls with `Connection reset by peer`.
   Orphaned servers remain bounded by the (activity-based) soft TTL.
