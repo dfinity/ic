@@ -359,6 +359,18 @@ impl CanisterMetrics {
         self.interrupted_during_execution += 1;
     }
 
+    /// Replaces the per-use-case consumed cycles counters, i.e. the metrics
+    /// served by the `canister_metrics` management canister endpoint.
+    ///
+    /// Used when a canister is renamed, so that the renamed canister reports
+    /// the metrics of the canister whose id it adopts.
+    pub fn set_consumed_cycles_by_use_cases_as_counters(
+        &mut self,
+        consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
+    ) {
+        self.consumed_cycles_by_use_cases_as_counters = consumed_cycles_by_use_cases_as_counters;
+    }
+
     pub fn load_metrics(&self) -> &LoadMetrics {
         &self.load_metrics
     }
@@ -2249,16 +2261,40 @@ impl SystemState {
     /// Overwrites the total length of the canister history with the original
     /// canister's. Bumps the canister version to be monotone w.r.t. both the
     /// original and new values.
+    ///
+    /// Also takes over the creation timestamp, the log record index, the
+    /// per-use-case consumed cycles counters and the query stats of the
+    /// original canister, and drops the log records that belong to this
+    /// canister under its old id.
+    #[allow(clippy::too_many_arguments)]
     pub fn rename_canister(
         &mut self,
         to_canister_id: CanisterId,
         to_version: u64,
         to_total_num_changes: u64,
+        to_canister_creation_timestamp: Option<Time>,
+        to_log_memory_store_next_idx: u64,
+        to_consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
+        to_total_query_stats: TotalQueryStats,
     ) {
         self.canister_id = to_canister_id;
         self.canister_history
             .set_total_num_changes(to_total_num_changes);
         self.canister_version = std::cmp::max(self.canister_version, to_version) + 1;
+        // The renamed canister takes over the identity of the canister at
+        // `to_canister_id`, so it also takes over that canister's creation
+        // timestamp, even when that canister has none.
+        self.canister_creation_timestamp = to_canister_creation_timestamp;
+        // The log records of the renamed canister were produced under its old
+        // id, so they are dropped; only the record index carries over, so that
+        // the indices served for `to_canister_id` keep increasing.
+        self.log_memory_store
+            .clear_and_set_next_idx(to_log_memory_store_next_idx);
+        self.canister_metrics
+            .set_consumed_cycles_by_use_cases_as_counters(
+                to_consumed_cycles_by_use_cases_as_counters,
+            );
+        self.total_query_stats = to_total_query_stats;
     }
 
     pub fn get_canister_history(&self) -> &CanisterHistory {

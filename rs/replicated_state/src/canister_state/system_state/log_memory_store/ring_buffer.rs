@@ -135,6 +135,15 @@ impl RingBuffer {
         self.io.save_header(&h);
     }
 
+    /// Clears the buffer and resets the record index, so that the next
+    /// appended record is assigned `next_idx`.
+    pub fn clear_and_set_next_idx(&mut self, next_idx: u64) {
+        let mut h = self.io.load_header();
+        h.clear();
+        h.next_idx = next_idx;
+        self.io.save_header(&h);
+    }
+
     /// Convenience method for adding a single log record in tests.
     #[cfg(test)]
     fn append(&mut self, record: &CanisterLogRecord) {
