@@ -51,18 +51,9 @@ const OS_PAGES_PER_WASM_PAGE: usize =
     ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
 
 /// Returns the per-Wasm-page instruction charge applied by the deterministic
-/// memory tracker when it is enabled in the default config, or 0 otherwise.
+/// memory tracker.
 fn dsm_charge_per_wasm_page() -> u64 {
-    use ic_config::flag_status::FlagStatus;
-    if EmbeddersConfig::default()
-        .feature_flags
-        .deterministic_memory_tracker
-        == FlagStatus::Enabled
-    {
-        OS_PAGES_PER_WASM_PAGE as u64 * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
-    } else {
-        0
-    }
+    OS_PAGES_PER_WASM_PAGE as u64 * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
 }
 
 lazy_static! {
