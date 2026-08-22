@@ -194,8 +194,9 @@ pub struct HostOSDevSettings {
 }
 
 impl Default for HostOSDevSettings {
-    /// These currently match the defaults for nested tests on Farm:
-    /// (`HOSTOS_VCPUS_PER_VM / 2`, `HOSTOS_MEMORY_KIB_PER_VM / 2`)
+    /// Fallback for a `deployment.json` that omits the field. Nested system-tests
+    /// never rely on it: `create_setupos_config_image` always writes an explicit
+    /// `dev_vm_resources`, derived from the VM's size minus what HostOS reserves.
     fn default() -> Self {
         HostOSDevSettings {
             vm_memory: 16,
