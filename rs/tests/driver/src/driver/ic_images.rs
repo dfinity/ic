@@ -301,6 +301,39 @@ pub fn get_setupos_img_sha256() -> String {
     std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
 }
 
+/// Get the all-zero disk image a nested node uses as its primary disk from the
+/// environment.
+///
+/// This is the *install target*: the nested VM boots SetupOS from an attached
+/// disk, which writes HostOS onto this one. The Farm variables are only set by
+/// `run_systest.sh` when it uploads the image, which it does not do under the
+/// Local backend -- hence the Farm/Local split rather than one unconditional URL.
+pub fn get_empty_disk_image(env: &TestEnv) -> Result<DiskImage> {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let url_var = "ENV_DEPS__EMPTY_DISK_IMG_URL";
+            let hash_var = "ENV_DEPS__EMPTY_DISK_IMG_HASH";
+            Ok(DiskImage::Url {
+                ic_os_image: true,
+                url: Url::parse(
+                    &std::env::var(url_var).with_context(|| format!("Failed to read {url_var}"))?,
+                )
+                .with_context(|| format!("Invalid Url in {url_var}"))?,
+                sha256: std::env::var(hash_var)
+                    .with_context(|| format!("Failed to read {hash_var}"))?,
+            })
+        }
+        SystemTestBackend::Local => {
+            let var = "ENV_DEPS__EMPTY_DISK_IMG_PATH";
+            Ok(DiskImage::Local {
+                path: PathBuf::from(
+                    std::env::var(var).with_context(|| format!("Failed to read {var}"))?,
+                ),
+            })
+        }
+    }
+}
+
 /// Pull the version of the HostOS from either the HostOS or the SetupOS image (whichever is
 /// available). Panic if no version is found or HostOS and SetupOS versions do not match.
 pub fn get_hostos_version() -> HostosVersion {

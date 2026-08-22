@@ -458,13 +458,7 @@ pub fn setup_and_start_nested_vms(
     let logger = env.logger();
     info!(logger, "Setting up nested VM(s) ...");
 
-    let ic_gateway_url = env
-        .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
-        .map(|v| v.get_public_url())
-        .unwrap_or_else(|_| {
-            info!(logger, "No gateway found, using dummy URL");
-            url::Url::parse("http://localhost:8080").unwrap()
-        });
+    let nns_url = nested_nns_url(env, &logger);
     let nns_public_key_override = env.prep_dir("").map(|v| v.root_public_key_path());
 
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
@@ -472,7 +466,7 @@ pub fn setup_and_start_nested_vms(
         let t_env = env.clone();
         let t_farm = farm.clone();
         let t_group_name = group_name.to_string();
-        let t_ic_gateway_url = ic_gateway_url.clone();
+        let t_nns_url = nns_url.clone();
         let t_nns_public_key_override = nns_public_key_override.clone();
         join_handles.push(thread::spawn(move || {
             let vm_name = node.vm_name();
@@ -480,30 +474,55 @@ pub fn setup_and_start_nested_vms(
             let config_image = create_setupos_config_image(
                 &t_env,
                 &vm_name,
-                &t_ic_gateway_url,
+                &t_nns_url,
                 t_nns_public_key_override.as_deref(),
             )?;
 
             if node.get_vm()?.bare_metal {
-                setup_baremetal_instance(&t_env, &node, &config_image)
-                    .context("Setting up baremetal instance failed")
-            } else {
-                let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
-                    &t_group_name,
-                    &config_image,
-                    NESTED_CONFIG_IMAGE_PATH,
-                )?);
-                let setupos_image =
-                    AttachImageSpec::via_url(get_setupos_img_url(&t_env), get_setupos_img_sha256());
-                t_farm.attach_disk_images(
-                    &t_group_name,
-                    &vm_name,
-                    "usb-storage",
-                    vec![setupos_image, config_image_spec],
-                )?;
-                t_farm.start_vm(&t_group_name, &vm_name)?;
-                Ok(())
+                return setup_baremetal_instance(&t_env, &node, &config_image)
+                    .context("Setting up baremetal instance failed");
             }
+
+            // Attach the SetupOS image and the config image, then boot. The VM's
+            // *primary* disk is the all-zero install target
+            // (`get_resource_request_for_nested_nodes`), so it has nothing
+            // bootable on it and the firmware falls through to SetupOS; once
+            // SetupOS has written HostOS onto the primary disk and created its
+            // `IC-OS` UEFI boot entry, that entry wins and the VM comes up as
+            // HostOS.
+            match SystemTestBackend::read_attribute(&t_env) {
+                SystemTestBackend::Farm => {
+                    let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
+                        &t_group_name,
+                        &config_image,
+                        NESTED_CONFIG_IMAGE_PATH,
+                    )?);
+                    let setupos_image = AttachImageSpec::via_url(
+                        get_setupos_img_url(&t_env),
+                        get_setupos_img_sha256(),
+                    );
+                    t_farm.attach_disk_images(
+                        &t_group_name,
+                        &vm_name,
+                        "usb-storage",
+                        vec![setupos_image, config_image_spec],
+                    )?;
+                    t_farm.start_vm(&t_group_name, &vm_name)?;
+                }
+                SystemTestBackend::Local => {
+                    let backend = LocalBackend::from_test_env(&t_env)?;
+                    // The image is already on disk here, so take its path
+                    // directly rather than the content-addressed URL the Farm arm
+                    // hands to the Farm host; `attach_disk_images` extracts it.
+                    let var = "ENV_DEPS__SETUPOS_DISK_IMG_PATH";
+                    let setupos_image = PathBuf::from(
+                        std::env::var(var).with_context(|| format!("Failed to read '{var}'"))?,
+                    );
+                    backend.attach_disk_images(&vm_name, &[setupos_image, config_image])?;
+                    backend.start_vm(&t_group_name, &vm_name)?;
+                }
+            }
+            Ok(())
         }));
     }
 
@@ -529,6 +548,55 @@ pub fn setup_and_start_nested_vms(
     }
 
     result
+}
+
+/// The NNS URL a nested node is told to register through, written into its
+/// SetupOS `deployment.json` as `nns.urls`.
+///
+/// On Farm this is the ic-gateway: a nested node is *not* in the registry yet, so
+/// it cannot pass the replicas' firewall (the orchestrator's automatic whitelist
+/// only covers nodes the registry already knows), whereas the gateway fronts an
+/// API boundary node that is. The gateway's playnet domain resolves in DNS and its
+/// certificate chains to a public CA, so the node can use it out of the box.
+///
+/// Neither holds on the Local backend: the gateway serves a self-signed
+/// certificate for a `.local` domain that the group's `dnsmasq` knows nothing
+/// about (driver-side clients paper over both with a resolve override and
+/// `danger_accept_invalid_certs`), and a nested GuestOS has no knob for either --
+/// `make_bootstrap_options` gives it no trust anchors, unlike a driver-managed
+/// node, which receives `extra_api_boundary_node_trust_anchors_pem` through its
+/// config image. So point it straight at the NNS node over plain HTTP, exactly as
+/// `create_config_disk_image` does for every other node in the group. Reaching it
+/// pre-registration is what `with_group_wide_firewall_whitelist` is for; a nested
+/// test on the Local backend has to set it (see `rs/tests/nested/src/util.rs`).
+fn nested_nns_url(env: &TestEnv, logger: &Logger) -> Url {
+    let dummy = || {
+        info!(logger, "No NNS node or gateway found, using dummy URL");
+        Url::parse("http://localhost:8080").unwrap()
+    };
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => env
+            .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
+            .map(|gateway| gateway.get_public_url())
+            .unwrap_or_else(|_| dummy()),
+        // Every step here has to tolerate absence, because a nested VM can be
+        // brought up with no IC at all -- `rs/tests/node/launch_single_host.rs`
+        // does exactly that, and only waits for HostOS to accept an SSH login.
+        // `topology_snapshot()` panics when there is no Internet Computer and
+        // `root_subnet()` panics when the registry has no root subnet, so neither
+        // can be used: the Farm arm above gets this for free because
+        // `get_deployed_ic_gateway` merely returns an `Err`.
+        SystemTestBackend::Local => env
+            .safe_topology_snapshot()
+            .ok()
+            .and_then(|topology| topology.try_root_subnet())
+            .and_then(|root_subnet| root_subnet.nodes().next())
+            .map(|node| {
+                Url::parse(&format!("http://[{}]:8080", node.get_ip_addr()))
+                    .expect("Could not parse the NNS node's URL")
+            })
+            .unwrap_or_else(dummy),
+    }
 }
 
 fn validate_version_config(env: &TestEnv) {

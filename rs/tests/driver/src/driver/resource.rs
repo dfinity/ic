@@ -9,11 +9,10 @@ use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
+use crate::driver::ic_images::get_empty_disk_image;
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
-};
+use crate::driver::test_env_api::{get_guestos_img_sha256, get_guestos_img_url};
 use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
@@ -33,7 +32,19 @@ const DEFAULT_VM_RESOURCES: VmResources = VmResources {
 };
 
 pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
-pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
+/// Memory for a nested VM, out of which the nested GuestOS gets what is left
+/// after two independent reservations: the driver takes
+/// [`HOSTOS_MEMORY_RESERVED_GIB`] (8) off for HostOS when it writes
+/// `dev_vm_resources.memory` into the SetupOS `deployment.json`, and HostOS then
+/// takes another 4 off for the upgrade VM (`UPGRADE_VM_MEMORY_GIB` in
+/// `rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs`).
+///
+/// So 16 GiB leaves the GuestOS [`DEFAULT_MEMORY_KIB_PER_VM`] (4 GiB), the same
+/// as every other node VM in a test: a nested node runs the same replica, and
+/// sizing it larger than its unnested peers only made nested tests harder to fit
+/// on one host. Tests that need more say so with `NestedNodes::with_resource_overrides`
+/// (see `rs/tests/nested/nns_recovery`).
+pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16 * 1024 * 1024); // 16GiB
 const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
     vcpus: HOSTOS_VCPUS_PER_VM,
     memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
@@ -235,15 +246,10 @@ pub fn get_resource_request_for_nested_nodes(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let empty_disk_img_url = get_empty_disk_img_url()?;
-    let empty_disk_img_sha256 = get_empty_disk_img_sha256()?;
-
-    // Add a VM request for each node.
-    let mut res_req = ResourceRequest::new(DiskImage::Url {
-        ic_os_image: true,
-        url: empty_disk_img_url,
-        sha256: empty_disk_img_sha256,
-    });
+    // The primary disk is the install target: the nested VM boots SetupOS from an
+    // attached disk (see `setup_and_start_nested_vms`), which writes HostOS onto
+    // this one.
+    let mut res_req = ResourceRequest::new(get_empty_disk_image(test_env)?);
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
