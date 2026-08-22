@@ -1619,11 +1619,11 @@ fn network_topology_ecdsa_subnets() {
 }
 
 #[test]
-fn network_topology_route_uses_filtered_topology() {
+fn network_topology_routing() {
     let subnet_a = subnet_test_id(1);
     let subnet_b = subnet_test_id(2);
 
-    // The filtered routing table only contains subnet_a's range.
+    // The routing table only contains subnet_a's range.
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
@@ -1631,8 +1631,7 @@ fn network_topology_route_uses_filtered_topology() {
         .unwrap(),
     );
 
-    // The filtered subnets map only contains subnet_a.
-    // subnet_b exists in the network but is not visible to this subnet.
+    // The subnets map only contains subnet_a.
     let network_topology = NetworkTopology {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
@@ -1645,19 +1644,19 @@ fn network_topology_route_uses_filtered_topology() {
 
     // --- Canister ID routing ---
 
-    // Canister on subnet_a: resolvable via the filtered routing table.
+    // Canister on subnet_a: resolvable via the routing table.
     assert_eq!(
         network_topology.route(canister_test_id(50).get()),
         Some(subnet_a),
     );
-    // Canister 150 is not in the filtered routing table at all.
+    // Canister 150 is not in the routing table at all.
     assert_eq!(network_topology.route(canister_test_id(150).get()), None);
 
     // --- Subnet ID routing ---
 
-    // subnet_a is in the filtered subnets map.
+    // subnet_a is in the subnets map.
     assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
-    // subnet_b is NOT in the filtered subnets map.
+    // subnet_b is NOT in the subnets map.
     assert_eq!(network_topology.route(subnet_b.get()), None);
 }
 
