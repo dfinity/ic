@@ -159,6 +159,8 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&fake_crypto) as Arc<_>,
             no_op_logger(),
             &PoolReader::new(&*consensus_pool.read().unwrap()),
+            registry_client.clone(),
+            replica_config.clone(),
         )));
 
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
