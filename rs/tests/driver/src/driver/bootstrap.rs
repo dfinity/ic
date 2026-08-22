@@ -579,11 +579,18 @@ fn nested_nns_url(env: &TestEnv, logger: &Logger) -> Url {
             .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
             .map(|gateway| gateway.get_public_url())
             .unwrap_or_else(|_| dummy()),
+        // Every step here has to tolerate absence, because a nested VM can be
+        // brought up with no IC at all -- `rs/tests/node/launch_single_host.rs`
+        // does exactly that, and only waits for HostOS to accept an SSH login.
+        // `topology_snapshot()` panics when there is no Internet Computer and
+        // `root_subnet()` panics when the registry has no root subnet, so neither
+        // can be used: the Farm arm above gets this for free because
+        // `get_deployed_ic_gateway` merely returns an `Err`.
         SystemTestBackend::Local => env
-            .topology_snapshot()
-            .root_subnet()
-            .nodes()
-            .next()
+            .safe_topology_snapshot()
+            .ok()
+            .and_then(|topology| topology.try_root_subnet())
+            .and_then(|root_subnet| root_subnet.nodes().next())
             .map(|node| {
                 Url::parse(&format!("http://[{}]:8080", node.get_ip_addr()))
                     .expect("Could not parse the NNS node's URL")
