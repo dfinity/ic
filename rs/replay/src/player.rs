@@ -55,7 +55,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
-    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
+    batch::{Batch, BatchContent, BatchMessages},
     consensus::{
         CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
         certification::{Certification, CertificationContent, CertificationShare},
@@ -737,12 +737,13 @@ impl Player {
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
     ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
-        let (registry_version, time, randomness, replica_version) = match pool {
+        let (registry_version, time, randomness, replica_version, target_height) = match pool {
             None => (
                 self.registry.get_latest_version(),
                 ic_types::time::current_time(),
                 Randomness::from([0; 32]),
                 ReplicaVersion::default(),
+                None,
             ),
             Some(pool) => {
                 let pool = PoolReader::new(pool);
@@ -761,14 +762,44 @@ impl Player {
                     last_block.context.time + Duration::from_nanos(1),
                     randomness_from_crypto_hashable(&last_block),
                     last_block.version.clone(),
+                    Some(target_height),
                 )
             }
         };
 
         let extra_msgs = extra(self, time);
-        if extra_msgs.is_empty() {
-            return (time, None);
+        let no_extra_msgs = extra_msgs.is_empty();
+        if no_extra_msgs {
+            let Some(target_height) = target_height else {
+                // Without a consensus pool no batches were replayed, so the on-disk
+                // checkpoint is untouched and there is nothing to persist. Delivering a
+                // batch anyway would mutate the state based on the wall clock time from
+                // above, producing a non-deterministic state hash.
+                return (time, None);
+            };
+            // States above the replay target height can only come from the extra
+            // batches of a previous invocation over the same data directory. In that
+            // case the checkpoint to persist already exists and re-running the replay
+            // must not deliver yet another extra batch: it would move the checkpoint
+            // (and thereby change the state hash) one height further on every re-run,
+            // making the hash depend on how many times the replay was run rather
+            // than only on the replayed data.
+            let latest_state_height = self.state_manager.latest_state_height();
+            if latest_state_height > target_height {
+                println!(
+                    "Skipping the extra batch: the latest state height {latest_state_height} \
+                    is already above the replay target height {target_height}."
+                );
+                return (time, None);
+            }
         }
+        // `deliver_batches()` deliberately does not force a checkpoint at the replay
+        // target height: that height has to be executed exactly the way the subnet
+        // executed it, so that the resulting certified state is identical to the one
+        // the subnet certified at that height (see `redeliver_certifications`).
+        // Therefore we always deliver at least one extra batch after replaying the
+        // consensus pool; the final extra batch is a `BatchContent::Checkpointing`
+        // one, whose round creates the checkpoint without executing anything.
 
         let extra_ingresses = extra_msgs
             .iter()
@@ -778,25 +809,34 @@ impl Player {
         let mut extra_batch = Batch {
             batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
-            content: BatchContent::Data {
-                batch_messages: BatchMessages {
-                    signed_ingress_msgs: extra_ingresses,
-                    ..BatchMessages::default()
-                },
-                chain_key_data: Default::default(),
-                consensus_responses: Vec::new(),
-                canister_http_spent: Default::default(),
-                requires_full_state_hash: false,
+            content: if no_extra_msgs {
+                BatchContent::Checkpointing
+            } else {
+                BatchContent::Data {
+                    batch_messages: BatchMessages {
+                        signed_ingress_msgs: extra_ingresses,
+                        ..BatchMessages::default()
+                    },
+                    chain_key_data: Default::default(),
+                    consensus_responses: Vec::new(),
+                    canister_http_spent: Default::default(),
+                    requires_full_state_hash: false,
+                }
             },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
             registry_version,
             time,
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            // No block was made for this batch, so no blockmaker is credited.
+            blockmaker_metrics: None,
             replica_version,
         };
 
-        println!("extra_batch created with new ingress");
+        if no_extra_msgs {
+            println!("extra_batch created to trigger checkpoint creation");
+        } else {
+            println!("extra_batch created with new ingress");
+        }
 
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
@@ -822,12 +862,16 @@ impl Player {
                             });
 
                     extra_batch = extra_batch.clone();
-                    extra_batch.content = BatchContent::Data {
-                        batch_messages: BatchMessages::default(),
-                        chain_key_data: Default::default(),
-                        consensus_responses: Vec::new(),
-                        canister_http_spent: Default::default(),
-                        requires_full_state_hash: !have_incomplete_msgs,
+                    extra_batch.content = if have_incomplete_msgs {
+                        BatchContent::Data {
+                            batch_messages: BatchMessages::default(),
+                            chain_key_data: Default::default(),
+                            consensus_responses: Vec::new(),
+                            canister_http_spent: Default::default(),
+                            requires_full_state_hash: false,
+                        }
+                    } else {
+                        BatchContent::Checkpointing
                     };
                     extra_batch.batch_number = message_routing.expected_batch_height();
                     extra_batch.time += Duration::from_nanos(1);
@@ -1017,7 +1061,16 @@ impl Player {
                 && last_batch_height >= height
             {
                 println!("Target height {height} reached.");
-                return Ok(self.get_latest_state_params(None, invalid_artifacts));
+                let state_params = self.get_latest_state_params(None, invalid_artifacts);
+                if state_params.height < last_batch_height {
+                    println!(
+                        "No checkpoint was created at the target height because it is not \
+                        a CUP height; the reported state corresponds to the latest \
+                        checkpoint at height {}.",
+                        state_params.height
+                    );
+                }
+                return Ok(state_params);
             }
 
             match result {

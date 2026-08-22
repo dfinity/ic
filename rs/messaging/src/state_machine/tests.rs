@@ -92,7 +92,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             chain_key_data,
             ..
         } => (batch_messages.clone(), chain_key_data.clone()),
-        BatchContent::Splitting { .. } => unimplemented!(),
+        BatchContent::Splitting { .. } | BatchContent::Checkpointing => unimplemented!(),
     };
 
     let mut demux = Box::new(MockDemux::new());
@@ -819,7 +819,7 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
             .batch_time
             .checked_add(Duration::from_secs(1))
             .unwrap(),
-        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
         replica_version: ReplicaVersion::default(),
     };
 

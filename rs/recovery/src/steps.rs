@@ -451,6 +451,17 @@ impl Step for ReplayStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
+        // Without a consensus pool, `ic-replay` silently replays no blocks and
+        // creates no checkpoint at all, so a missing pool means the state was
+        // downloaded incorrectly. Fail loudly instead.
+        let consensus_pool_path = self.work_dir.join("data").join(IC_CONSENSUS_POOL_PATH);
+        if !consensus_pool_path.exists() {
+            return Err(RecoveryError::UnexpectedError(format!(
+                "No consensus pool found at {}",
+                consensus_pool_path.display(),
+            )));
+        }
+
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
         let checkpoint_height = if checkpoint_path.exists() {
