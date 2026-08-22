@@ -76,6 +76,11 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         }
         EventType::AcceptedSweeperFundingRequest(request) => {
             state.sweeper_funding.record_burn(request.withdrawal_amount);
+            state.sweeper_funding.mark_funding_in_flight(
+                request.ledger_burn_index,
+                request.withdrawal_amount,
+                request.created_at,
+            );
             // Named explicitly: the payload converts to `CkEth` on its own, which would make the
             // funding reimbursable.
             state

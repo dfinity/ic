@@ -207,6 +207,7 @@ rust_ic_test_suite(
             # Run against a local foundry anvil node, not the IC test suite.
             "tests/deposit_from_cex_demo.rs",
             "tests/deposit_from_cex.rs",
+            "tests/sweeper_funding.rs",
         ],
     ),
     data = [
@@ -327,6 +328,38 @@ rust_test(
         "//packages/ic-ethereum-types",
         "//rs/ethereum/cketh/test_utils",
         "@crate_index//:assert_matches",
+    ],
+)
+
+rust_test(
+    name = "sweeper_funding",
+    # Waits on the minter's 6-minute withdrawal timer for the funding transfer to be sent. Its own
+    # deadlines can total 21 minutes, so anything below `eternal` (60 minutes) would have Bazel kill
+    # the test before they fire, replacing their diagnostics with a bare timeout.
+    size = "large",
+    timeout = "eternal",
+    srcs = ["tests/sweeper_funding.rs"],
+    data = [
+        ":cketh_minter_debug.wasm.gz",
+        "//:anvil",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "@evm_rpc.wasm.gz//file",
+    ],
+    env = {
+        "ANVIL_BIN": "$(rootpath //:anvil)",
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
+        "EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    tags = ["long_test"],  # ~6 minutes, nearly all of it waiting on that timer.
+    deps = [
+        # Keep sorted.
+        ":minter",
+        "//packages/ic-ethereum-types",
+        "//rs/ethereum/cketh/test_utils",
     ],
 )
 

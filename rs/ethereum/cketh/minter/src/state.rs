@@ -450,7 +450,7 @@ impl State {
                 TransactionStatus::Failure => Wei::ZERO,
             };
             self.sweeper_funding
-                .record_finalized_funding(transferred, tx_fee);
+                .record_finalized_funding(*withdrawal_id, transferred, tx_fee);
         }
 
         if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
@@ -822,6 +822,17 @@ impl Default for EthBalance {
     }
 }
 
+#[cfg(test)]
+impl EthBalance {
+    /// An `EthBalance` holding `eth_balance` of deposit-backed ETH.
+    pub fn with_eth_balance(eth_balance: Wei) -> Self {
+        Self {
+            eth_balance,
+            ..Default::default()
+        }
+    }
+}
+
 impl EthBalance {
     fn eth_balance_add(&mut self, value: Wei) {
         self.eth_balance = self.eth_balance.checked_add(value).unwrap_or_else(|| {
@@ -932,4 +943,5 @@ pub enum TaskType {
     MintCkErc20,
     RefreshLatestBlockHeight,
     BalanceScan,
+    SweeperFunding,
 }

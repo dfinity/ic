@@ -42,6 +42,18 @@ pub struct Anvil {
 
 impl Anvil {
     pub fn start() -> Self {
+        Self::start_with_args(&[])
+    }
+
+    /// Starts anvil impersonating Ethereum mainnet: chain id 1, so transactions the minter signs for
+    /// `EthereumNetwork::Mainnet` are accepted, with one slot per epoch so the `finalized` block tag
+    /// trails `latest` by two blocks instead of the default 64 (2 epochs x 32 slots) — which is what
+    /// lets a test drive the minter at its production `BlockTag::Finalized`.
+    pub fn start_mainnet_like() -> Self {
+        Self::start_with_args(&["--chain-id", "1", "--slots-in-an-epoch", "1"])
+    }
+
+    fn start_with_args(extra_args: &[&str]) -> Self {
         let bin = std::env::var("ANVIL_BIN").expect("ANVIL_BIN not set by Bazel");
         let port = {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -52,6 +64,7 @@ impl Anvil {
             .arg("127.0.0.1")
             .arg("--port")
             .arg(port.to_string())
+            .args(extra_args)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -120,6 +133,31 @@ impl Anvil {
         );
     }
 
+    /// Credits `address` with `wei` of native ETH (foundry's `anvil_setBalance`).
+    pub(crate) fn set_balance(&self, address: &Address, wei: u128) {
+        self.rpc(
+            "anvil_setBalance",
+            serde_json::json!([to_hex(address.as_ref()), format!("0x{wei:x}")]),
+        );
+    }
+
+    /// The native ETH balance of `address` at `block`, read straight from anvil, i.e. the
+    /// ground truth an `eth_getBalance` routed through the EVM RPC canister must reproduce.
+    pub(crate) fn eth_balance(&self, address: &Address, block: &str) -> u128 {
+        let hex = self.rpc(
+            "eth_getBalance",
+            serde_json::json!([to_hex(address.as_ref()), block]),
+        );
+        let hex = hex.as_str().expect("eth_getBalance must return a string");
+        u128::from_str_radix(hex.trim_start_matches("0x"), 16)
+            .expect("eth_getBalance must return a hex quantity")
+    }
+
+    /// Mines `count` blocks (foundry's `anvil_mine`).
+    pub(crate) fn mine(&self, count: u64) {
+        self.rpc("anvil_mine", serde_json::json!([format!("0x{count:x}")]));
+    }
+
     /// A create-style `eth_call` (no `to`): anvil runs `data` as init code and returns whatever it
     /// `RETURN`s, exactly as the minter invokes the batcher.
     pub fn eth_call_create(&self, from: &Address, data: &[u8]) -> Result<Vec<u8>, String> {
@@ -171,6 +209,49 @@ impl Anvil {
             .as_str()
             .unwrap()
             .to_string()
+    }
+
+    /// Emits a `ReceivedEth(from, value, principal)` log from `helper`, the way the real ckETH helper
+    /// contract does, so the minter's log scraping credits a deposit against it.
+    ///
+    /// Places runtime code at `helper` that emits the log and stops, then calls it: a bare `eth_call`
+    /// would not produce a log in a block, and the minter only sees logs that were mined.
+    pub(crate) fn emit_received_eth(
+        &self,
+        helper: &Address,
+        from: &Address,
+        value: u128,
+        principal_topic: &[u8; 32],
+    ) {
+        // Keccak256("ReceivedEth(address,uint256,bytes32)")
+        let received_eth_topic = keccak256(b"ReceivedEth(address,uint256,bytes32)");
+        let mut from_topic = [0_u8; 32];
+        from_topic[12..].copy_from_slice(from.as_ref());
+
+        let mut code = Vec::new();
+        // mstore(0, value) — the log's data word.
+        code.push(0x7f);
+        code.extend_from_slice(&u256_be(value));
+        code.extend_from_slice(&[0x60, 0x00, 0x52]);
+        // LOG3 pops offset, size, topic1, topic2, topic3, so push them in reverse.
+        code.push(0x7f);
+        code.extend_from_slice(principal_topic);
+        code.push(0x7f);
+        code.extend_from_slice(&from_topic);
+        code.push(0x7f);
+        code.extend_from_slice(&received_eth_topic);
+        // PUSH1 32 (size), PUSH1 0 (offset), LOG3, STOP. LOG3 is 0xa3 — 0xa2 is LOG2, which would
+        // drop the principal topic and the minter would reject the event as having invalid topics.
+        code.extend_from_slice(&[0x60, 0x20, 0x60, 0x00, 0xa3, 0x00]);
+
+        self.set_code(helper, &code);
+        let hash = self.send_transaction(from, Some(helper), &[]);
+        assert!(
+            status_ok(&self.await_receipt(&hash)),
+            "emitting the deposit log reverted"
+        );
+        // The minter reads at `finalized`, which trails `latest`.
+        self.mine(3);
     }
 
     pub(crate) fn deploy(&self, from: &Address, code: &[u8]) -> Address {

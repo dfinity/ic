@@ -1,11 +1,27 @@
-use crate::numeric::Wei;
+use crate::numeric::{LedgerBurnIndex, Wei};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 
 const BURN: u128 = 100_000_000_000_000_000; // 0.1 ETH
+/// Fixed acceptance time; these tests are about the arithmetic, not about ageing.
+const CREATED_AT: Option<u64> = Some(1_700_000_000_000_000_000);
 const FEE: u128 = 1_000_000_000_000_000; // 0.001 ETH
 
 mod accounting {
     use super::*;
+
+    /// Accepts a funding the way the audit handler does: record the burn, then earmark it until the
+    /// transfer settles. Settlement asserts the pairing, so tests have to go through both steps.
+    fn accept(
+        accounting: &mut SweeperFundingAccounting,
+        index: u64,
+        amount: Wei,
+        burn: Wei,
+    ) -> LedgerBurnIndex {
+        let index = LedgerBurnIndex::new(index);
+        accounting.record_burn(burn);
+        accounting.mark_funding_in_flight(index, amount, CREATED_AT);
+        index
+    }
 
     #[test]
     fn should_start_empty() {
@@ -19,8 +35,8 @@ mod accounting {
     #[test]
     fn should_leave_no_surplus_after_a_successful_funding() {
         let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+        let index = accept(&mut accounting, 1, Wei::new(BURN), Wei::new(BURN));
+        accounting.record_finalized_funding(index, Wei::new(BURN - FEE), Wei::new(FEE));
 
         assert_eq!(accounting.cumulative_spent(), Wei::new(BURN));
         assert_eq!(
@@ -33,8 +49,8 @@ mod accounting {
     #[test]
     fn should_keep_the_unspent_fee_as_surplus_after_a_successful_funding() {
         let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE / 2));
+        let index = accept(&mut accounting, 1, Wei::new(BURN), Wei::new(BURN));
+        accounting.record_finalized_funding(index, Wei::new(BURN - FEE), Wei::new(FEE / 2));
 
         assert_eq!(
             accounting.burned_not_yet_spent(),
@@ -46,8 +62,8 @@ mod accounting {
     #[test]
     fn should_keep_the_burn_as_surplus_after_a_failed_funding() {
         let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::ZERO, Wei::new(FEE));
+        let index = accept(&mut accounting, 1, Wei::new(BURN), Wei::new(BURN));
+        accounting.record_finalized_funding(index, Wei::ZERO, Wei::new(FEE));
 
         assert_eq!(accounting.cumulative_spent(), Wei::new(FEE));
         assert_eq!(
@@ -64,9 +80,9 @@ mod accounting {
     #[test]
     fn should_accumulate_across_fundings() {
         let mut accounting = SweeperFundingAccounting::default();
-        for _ in 0..3 {
-            accounting.record_burn(Wei::new(BURN));
-            accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+        for index in 1..=3 {
+            let index = accept(&mut accounting, index, Wei::new(BURN), Wei::new(BURN));
+            accounting.record_finalized_funding(index, Wei::new(BURN - FEE), Wei::new(FEE));
         }
 
         assert_eq!(accounting.cumulative_burned(), Wei::new(3 * BURN));
@@ -78,9 +94,9 @@ mod accounting {
     #[should_panic(expected = "more ETH spent on sweeping than ckETH burned")]
     fn should_panic_when_spending_more_than_was_burned() {
         let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(FEE));
+        let index = accept(&mut accounting, 1, Wei::new(BURN), Wei::new(FEE));
 
-        accounting.record_finalized_funding(Wei::new(BURN), Wei::new(FEE));
+        accounting.record_finalized_funding(index, Wei::new(BURN), Wei::new(FEE));
     }
 }
 
