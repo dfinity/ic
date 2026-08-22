@@ -140,7 +140,7 @@ rust_library(
 )
 
 rust_test(
-    name = "generic_workload_engine",
+    name = "unit_tests",
     crate = ":ic-system-test-driver",
     deps = [
         "@crate_index//:assert_matches",
