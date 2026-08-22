@@ -578,23 +578,18 @@ impl ReplicatedStateMetrics {
                 .get_consumed_cycles_by_use_case(),
         );
 
-        // Add the consumed cycles in ecdsa outcalls.
+        // Add the subnet-level use cases; their getters all read the
+        // by-use-case map. The canister-level use cases in that map originate
+        // from deleted canisters and are already covered by
+        // `get_consumed_cycles_by_deleted_canisters()`.
         consumed_cycles_total += state
             .metadata
             .subnet_metrics
             .get_consumed_cycles_ecdsa_outcalls();
-
-        // Add the consumed cycles in http outcalls.
         consumed_cycles_total += state
             .metadata
             .subnet_metrics
             .get_consumed_cycles_http_outcalls();
-
-        // Add the remaining subnet-level use cases. Unlike ECDSA/HTTP outcalls
-        // and deleted canisters, these have no dedicated scalar field, but their
-        // getters read the by-use-case map. The canister-level use cases in that
-        // map originate from deleted canisters and are already covered by
-        // `get_consumed_cycles_by_deleted_canisters()`.
         consumed_cycles_total += state
             .metadata
             .subnet_metrics
