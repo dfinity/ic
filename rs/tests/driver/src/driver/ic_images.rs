@@ -301,38 +301,13 @@ pub fn get_setupos_img_sha256() -> String {
     std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
 }
 
-/// Get the initial SetupOS disk image from the environment.
-///
-/// Like [`get_guestos_disk_image`], but for the image a nested node installs
-/// itself from: under the Local backend it is already present on disk, so a
-/// [`DiskImage::Local`] is returned; under Farm a [`DiskImage::Url`] pointing at
-/// Farm's store is returned.
-pub fn get_setupos_disk_image(env: &TestEnv) -> DiskImage {
-    match SystemTestBackend::read_attribute(env) {
-        SystemTestBackend::Farm => DiskImage::Url {
-            ic_os_image: true,
-            url: get_setupos_img_url(env),
-            sha256: get_setupos_img_sha256(),
-        },
-        SystemTestBackend::Local => {
-            let var = "ENV_DEPS__SETUPOS_DISK_IMG_PATH";
-            DiskImage::Local {
-                path: PathBuf::from(
-                    std::env::var(var).unwrap_or_else(|_| panic!("Failed to read '{var}'")),
-                ),
-            }
-        }
-    }
-}
-
 /// Get the all-zero disk image a nested node uses as its primary disk from the
 /// environment.
 ///
 /// This is the *install target*: the nested VM boots SetupOS from an attached
-/// disk, which writes HostOS onto this one. Same Farm/Local split as
-/// [`get_setupos_disk_image`]. Note the Farm variables are only set by
+/// disk, which writes HostOS onto this one. The Farm variables are only set by
 /// `run_systest.sh` when it uploads the image, which it does not do under the
-/// Local backend -- hence the split rather than one unconditional URL.
+/// Local backend -- hence the Farm/Local split rather than one unconditional URL.
 pub fn get_empty_disk_image(env: &TestEnv) -> Result<DiskImage> {
     match SystemTestBackend::read_attribute(env) {
         SystemTestBackend::Farm => {

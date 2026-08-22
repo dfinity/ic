@@ -1,5 +1,5 @@
 use crate::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, Playnet};
-use crate::driver::ic_images::{get_setupos_disk_image, try_get_setupos_img_version};
+use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::local_backend::LocalBackend;
 use crate::driver::nested::NestedVm;
 use crate::driver::resource::{BootImage, DiskImage};
@@ -511,12 +511,13 @@ pub fn setup_and_start_nested_vms(
                 }
                 SystemTestBackend::Local => {
                     let backend = LocalBackend::from_test_env(&t_env)?;
-                    let DiskImage::Local {
-                        path: setupos_image,
-                    } = get_setupos_disk_image(&t_env)
-                    else {
-                        bail!("Expected a local SetupOS disk image on the Local backend");
-                    };
+                    // The image is already on disk here, so take its path
+                    // directly rather than the content-addressed URL the Farm arm
+                    // hands to the Farm host; `attach_disk_images` extracts it.
+                    let var = "ENV_DEPS__SETUPOS_DISK_IMG_PATH";
+                    let setupos_image = PathBuf::from(
+                        std::env::var(var).with_context(|| format!("Failed to read '{var}'"))?,
+                    );
                     backend.attach_disk_images(&vm_name, &[setupos_image, config_image])?;
                     backend.start_vm(&t_group_name, &vm_name)?;
                 }
