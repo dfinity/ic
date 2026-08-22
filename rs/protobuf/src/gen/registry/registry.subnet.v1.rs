@@ -117,6 +117,10 @@ pub struct SubnetRecord {
     /// Limits on resource consumption (e.g., memory usage).
     #[prost(message, optional, tag = "34")]
     pub resource_limits: ::core::option::Option<ResourceLimits>,
+    /// See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+    /// semantics.
+    #[prost(bool, tag = "35")]
+    pub cooling_down: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {

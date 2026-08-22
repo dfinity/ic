@@ -1134,9 +1134,7 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
                     chain_keys_held,
                     cost_schedule,
                     subnet_admins,
-                    // There is no registry field backing this yet, so no subnet
-                    // ever cools down in production; only tests set it.
-                    cooling_down: false,
+                    cooling_down: subnet_record.cooling_down,
                 },
             );
         }
