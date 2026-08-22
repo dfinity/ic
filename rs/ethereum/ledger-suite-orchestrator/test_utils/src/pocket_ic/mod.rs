@@ -5,7 +5,7 @@ use crate::{
     ledger_suite_orchestrator_wasm, ledger_wasm,
 };
 use candid::{Decode, Encode, Principal};
-use ic_cdk::management_canister::CanisterStatusResult as CdkCanisterStatusResult;
+use ic_cdk_management_canister::CanisterStatusResult as CdkCanisterStatusResult;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledLedgerSuite,
     ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,

@@ -4,11 +4,11 @@ use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::{Call, CallFailed, Error as CallError, RejectCode},
-    management_canister::{
-        CanisterInfoArgs, CanisterInfoResult, ListCanisterSnapshotsArgs, canister_info,
-        list_canister_snapshots,
-    },
     println,
+};
+use ic_cdk_management_canister::{
+    CanisterInfoArgs, CanisterInfoResult, ListCanisterSnapshotsArgs, canister_info,
+    list_canister_snapshots,
 };
 use serde::Deserialize;
 

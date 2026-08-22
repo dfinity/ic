@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests;
+pub(in crate::state) mod tests;
 
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
 use crate::eth_logs::LedgerSubaccount;
@@ -7,6 +7,7 @@ use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
+use crate::logs::INFO;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
     CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
@@ -18,6 +19,7 @@ use crate::tx::{
     SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
 };
 use candid::Principal;
+use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
@@ -36,6 +38,10 @@ pub enum WithdrawalSearchParameter {
 pub enum WithdrawalRequest {
     CkEth(EthWithdrawalRequest),
     CkErc20(Erc20WithdrawalRequest),
+    /// Carries the same payload as [`WithdrawalRequest::CkEth`] — a burn of the minter's own
+    /// ckETH, transferred to the sweeper address — but is never reimbursed, so it needs a
+    /// variant of its own rather than a flag on the payload.
+    SweeperFunding(EthWithdrawalRequest),
 }
 
 impl WithdrawalRequest {
@@ -43,12 +49,15 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => request.ledger_burn_index,
             WithdrawalRequest::CkErc20(request) => request.cketh_ledger_burn_index,
+            WithdrawalRequest::SweeperFunding(request) => request.ledger_burn_index,
         }
     }
 
     pub fn created_at(&self) -> Option<u64> {
         match self {
-            WithdrawalRequest::CkEth(request) => request.created_at,
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.created_at
+            }
             WithdrawalRequest::CkErc20(request) => Some(request.created_at),
         }
     }
@@ -56,7 +65,9 @@ impl WithdrawalRequest {
     /// Address to which the funds are to be sent to.
     pub fn payee(&self) -> Address {
         match self {
-            WithdrawalRequest::CkEth(request) => request.destination,
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.destination
+            }
             WithdrawalRequest::CkErc20(request) => request.destination,
         }
     }
@@ -64,22 +75,36 @@ impl WithdrawalRequest {
     /// Address to which the transaction is to be sent to.
     pub fn destination(&self) -> Address {
         match self {
-            WithdrawalRequest::CkEth(request) => request.destination,
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.destination
+            }
             WithdrawalRequest::CkErc20(request) => request.erc20_contract_address,
         }
     }
 
     pub fn from(&self) -> Principal {
         match self {
-            WithdrawalRequest::CkEth(request) => request.from,
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.from
+            }
             WithdrawalRequest::CkErc20(request) => request.from,
         }
     }
 
     pub fn from_subaccount(&self) -> Option<&LedgerSubaccount> {
         match self {
-            WithdrawalRequest::CkEth(request) => request.from_subaccount.as_ref(),
+            WithdrawalRequest::CkEth(request) | WithdrawalRequest::SweeperFunding(request) => {
+                request.from_subaccount.as_ref()
+            }
             WithdrawalRequest::CkErc20(request) => request.from_subaccount.as_ref(),
+        }
+    }
+
+    /// Whether this request can be paid back if its transaction fails.
+    pub fn is_reimbursable(&self) -> bool {
+        match self {
+            WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => true,
+            WithdrawalRequest::SweeperFunding(_) => false,
         }
     }
 
@@ -88,6 +113,9 @@ impl WithdrawalRequest {
             WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
             WithdrawalRequest::CkErc20(request) => {
                 EventType::AcceptedErc20WithdrawalRequest(request)
+            }
+            WithdrawalRequest::SweeperFunding(request) => {
+                EventType::AcceptedSweeperFundingRequest(request)
             }
         }
     }
@@ -197,17 +225,23 @@ pub enum ReimbursementIndex {
     },
 }
 
-impl From<&WithdrawalRequest> for ReimbursementIndex {
-    fn from(value: &WithdrawalRequest) -> Self {
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct NotReimbursable;
+
+impl TryFrom<&WithdrawalRequest> for ReimbursementIndex {
+    type Error = NotReimbursable;
+
+    fn try_from(value: &WithdrawalRequest) -> Result<Self, Self::Error> {
         match value {
-            WithdrawalRequest::CkEth(request) => ReimbursementIndex::CkEth {
+            WithdrawalRequest::CkEth(request) => Ok(ReimbursementIndex::CkEth {
                 ledger_burn_index: request.ledger_burn_index,
-            },
-            WithdrawalRequest::CkErc20(request) => ReimbursementIndex::CkErc20 {
+            }),
+            WithdrawalRequest::CkErc20(request) => Ok(ReimbursementIndex::CkErc20 {
                 cketh_ledger_burn_index: request.cketh_ledger_burn_index,
                 ledger_id: request.ckerc20_ledger_id,
                 ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
-            },
+            }),
+            WithdrawalRequest::SweeperFunding(_) => Err(NotReimbursable),
         }
     }
 }
@@ -345,7 +379,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 
 /// State machine holding Ethereum transactions issued by the minter.
 /// Overall the transaction lifecycle is as follows:
-/// 1. The user's withdrawal request is enqueued and processed in a FIFO order.
+/// 1. A withdrawal request is enqueued and processed in a FIFO order.
 /// 2. A transaction is created by either consuming a withdrawal request
 ///    (the first time a transaction is created for that nonce and burn index)
 ///    or re-submitting an already sent transaction for that nonce and burn index.
@@ -353,27 +387,19 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    previously created transaction or re-submitting an already sent transaction as is.
 /// 4. The transaction is sent to Ethereum. There may have been multiple
 ///    sent transactions for that nonce and burn index in case of resubmissions.
-/// 5. For a given nonce (and burn index), at most one sent transaction is finalized.
-///    The others sent transactions for that nonce were never mined and can be discarded.
-/// 6. If a given transaction fails the minter will reimburse the user who requested the
-///    withdrawal with the corresponding amount minus fees.
+/// 5. For a given nonce (and burn index), at most one sent transaction is finalized; a failed
+///    one is reported as such. The other sent transactions for that nonce were never mined and
+///    can be discarded. Paying the requester back is not the pipeline's concern — see
+///    [`WithdrawalTransactions`].
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct EthTransactions {
-    pub(in crate::state) pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
+pub(in crate::state) struct TransactionPipeline {
+    pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
     // Processed withdrawal requests (transaction created, sent, or finalized).
-    pub(in crate::state) processed_withdrawal_requests:
-        BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
-    pub(in crate::state) created_tx:
-        MultiKeyMap<TransactionNonce, LedgerBurnIndex, TransactionRequest>,
-    pub(in crate::state) sent_tx:
-        MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedTransactionRequest>>,
-    pub(in crate::state) finalized_tx:
-        MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
-    pub(in crate::state) next_nonce: TransactionNonce,
-
-    pub(in crate::state) maybe_reimburse: BTreeSet<LedgerBurnIndex>,
-    pub(in crate::state) reimbursement_requests: BTreeMap<ReimbursementIndex, ReimbursementRequest>,
-    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
+    processed_withdrawal_requests: BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
+    created_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, TransactionRequest>,
+    sent_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedTransactionRequest>>,
+    finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
+    next_nonce: TransactionNonce,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -395,7 +421,17 @@ pub enum ResubmitTransactionError {
     },
 }
 
-impl EthTransactions {
+/// How far a transaction has got through the pipeline. Carries the transaction itself, since
+/// every caller that asks the stage also wants the transaction at it.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub(in crate::state) enum TransactionStage<'a> {
+    Created(&'a Eip1559TransactionRequest),
+    /// The most recently sent transaction, i.e. the one with the highest fee.
+    Sent(&'a SignedTransactionRequest),
+    Finalized(&'a FinalizedEip1559Transaction),
+}
+
+impl TransactionPipeline {
     pub fn new(next_nonce: TransactionNonce) -> Self {
         Self {
             pending_withdrawal_requests: VecDeque::new(),
@@ -404,9 +440,6 @@ impl EthTransactions {
             sent_tx: MultiKeyMap::default(),
             finalized_tx: MultiKeyMap::default(),
             next_nonce,
-            maybe_reimburse: Default::default(),
-            reimbursement_requests: Default::default(),
-            reimbursed: Default::default(),
         }
     }
 
@@ -416,38 +449,6 @@ impl EthTransactions {
 
     pub fn update_next_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
         self.next_nonce = new_nonce;
-    }
-
-    pub fn reimbursement_requests_iter(
-        &self,
-    ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursementRequest)> {
-        self.reimbursement_requests.iter()
-    }
-
-    pub fn reimbursed_transactions_iter(
-        &self,
-    ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursedResult)> {
-        self.reimbursed.iter()
-    }
-
-    fn find_reimbursed_transaction_by_cketh_ledger_burn_index(
-        &self,
-        searched_burn_index: &LedgerBurnIndex,
-    ) -> Option<&ReimbursedResult> {
-        self.reimbursed
-            .iter()
-            .find_map(|(index, value)| match index {
-                ReimbursementIndex::CkEth { ledger_burn_index }
-                    if ledger_burn_index == searched_burn_index =>
-                {
-                    Some(value)
-                }
-                ReimbursementIndex::CkErc20 {
-                    cketh_ledger_burn_index,
-                    ..
-                } if cketh_ledger_burn_index == searched_burn_index => Some(value),
-                _ => None,
-            })
     }
 
     pub fn record_withdrawal_request<R: Into<WithdrawalRequest>>(&mut self, request: R) {
@@ -504,7 +505,7 @@ impl EthTransactions {
             "BUG: withdrawal request and transaction destination mismatch"
         );
         match &withdrawal_request {
-            WithdrawalRequest::CkEth(req) => {
+            WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => {
                 assert!(
                     req.withdrawal_amount > transaction.amount,
                     "BUG: transaction amount should be the withdrawal amount deducted from transaction fees"
@@ -528,9 +529,11 @@ impl EthTransactions {
         let transaction_request = TransactionRequest {
             transaction,
             resubmission: match &withdrawal_request {
-                WithdrawalRequest::CkEth(cketh) => ResubmissionStrategy::ReduceEthAmount {
-                    withdrawal_amount: cketh.withdrawal_amount,
-                },
+                WithdrawalRequest::CkEth(cketh) | WithdrawalRequest::SweeperFunding(cketh) => {
+                    ResubmissionStrategy::ReduceEthAmount {
+                        withdrawal_amount: cketh.withdrawal_amount,
+                    }
+                }
                 WithdrawalRequest::CkErc20(ckerc20) => ResubmissionStrategy::GuaranteeEthAmount {
                     allowed_max_transaction_fee: ckerc20.max_transaction_fee,
                 },
@@ -549,7 +552,6 @@ impl EthTransactions {
                 .insert(withdrawal_id, withdrawal_request),
             None
         );
-        assert!(self.maybe_reimburse.insert(withdrawal_id));
     }
 
     pub fn record_signed_transaction(
@@ -677,11 +679,13 @@ impl EthTransactions {
         transactions
     }
 
+    /// Move the transaction matching `receipt` into the finalized map and clean up its
+    /// superseded resubmissions, returning the finalized transaction.
     pub fn record_finalized_transaction(
         &mut self,
         ledger_burn_index: LedgerBurnIndex,
-        receipt: TransactionReceipt,
-    ) {
+        receipt: &TransactionReceipt,
+    ) -> FinalizedEip1559Transaction {
         let sent_tx = self
             .sent_tx
             .get_alt(&ledger_burn_index)
@@ -705,202 +709,7 @@ impl EthTransactions {
                 .try_insert(nonce, ledger_burn_index, finalized_tx.clone()),
             Ok(())
         );
-
-        assert!(
-            self.maybe_reimburse.remove(&ledger_burn_index),
-            "failed to remove entry from maybe_reimburse with block index: {ledger_burn_index}",
-        );
-
-        let request = self.processed_withdrawal_requests
-            .get(&ledger_burn_index)
-            .expect("failed to find entry from processed_withdrawal_requests with block index: {ledger_burn_index}");
-        let index = ReimbursementIndex::from(request);
-        match &request {
-            WithdrawalRequest::CkEth(request) => {
-                if receipt.status == TransactionStatus::Failure {
-                    self.record_reimbursement_request(
-                        index,
-                        ReimbursementRequest {
-                            ledger_burn_index,
-                            to: request.from,
-                            to_subaccount: request.from_subaccount.clone(),
-                            reimbursed_amount: finalized_tx.transaction_amount().change_units(),
-                            transaction_hash: Some(receipt.transaction_hash),
-                        },
-                    );
-                }
-            }
-            WithdrawalRequest::CkErc20(request) => {
-                if receipt.status == TransactionStatus::Failure {
-                    self.record_reimbursement_request(
-                        index,
-                        ReimbursementRequest {
-                            ledger_burn_index: request.ckerc20_ledger_burn_index,
-                            reimbursed_amount: request.withdrawal_amount.change_units(),
-                            to: request.from,
-                            to_subaccount: request.from_subaccount.clone(),
-                            transaction_hash: Some(receipt.transaction_hash),
-                        },
-                    );
-                }
-            }
-        }
-    }
-
-    pub fn record_reimbursement_request(
-        &mut self,
-        index: ReimbursementIndex,
-        request: ReimbursementRequest,
-    ) {
-        assert_eq!(
-            self.maybe_reimburse.get(&index.withdrawal_id()),
-            None,
-            "BUG: withdrawal request still in maybe_reimburse could lead to double minting!"
-        );
-        assert_eq!(
-            self.reimbursed.get(&index),
-            None,
-            "BUG: reimbursement request was already processed"
-        );
-        assert_eq!(
-            self.reimbursement_requests.insert(index.clone(), request),
-            None,
-            "BUG: reimbursement request for withdrawal {index:?} already exists"
-        );
-    }
-
-    /// Quarantine the reimbursement request identified by its index to prevent double minting.
-    /// WARNING!: It's crucial that this method does not panic,
-    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
-    pub fn record_quarantined_reimbursement(&mut self, index: ReimbursementIndex) {
-        self.reimbursement_requests.remove(&index);
-        self.reimbursed
-            .insert(index, Err(ReimbursedError::Quarantined));
-    }
-
-    pub fn record_finalized_reimbursement(
-        &mut self,
-        index: ReimbursementIndex,
-        reimbursed_in_block: LedgerMintIndex,
-    ) {
-        let reimbursement_request = self
-            .reimbursement_requests
-            .remove(&index)
-            .unwrap_or_else(|| panic!("BUG: missing reimbursement request with index {index:?}"));
-        let burn_in_block = index.burn_in_block();
-        assert_eq!(
-            self.reimbursed.insert(
-                index,
-                Ok(Reimbursed {
-                    burn_in_block,
-                    reimbursed_in_block,
-                    reimbursed_amount: reimbursement_request.reimbursed_amount,
-                    transaction_hash: reimbursement_request.transaction_hash,
-                }),
-            ),
-            None
-        );
-    }
-
-    pub fn withdrawal_status(
-        &self,
-        parameter: &WithdrawalSearchParameter,
-    ) -> Vec<(
-        &WithdrawalRequest,
-        WithdrawalStatus,
-        Option<&Eip1559TransactionRequest>,
-    )> {
-        // Pending requests matching the given search parameter
-        let pending = self.pending_withdrawal_requests.iter().filter_map(|r| {
-            r.match_parameter(parameter)
-                .then_some((r, WithdrawalStatus::Pending, None))
-        });
-
-        // Processed withdrawal requests matching the given search parameter.
-        let processed = self
-            .processed_withdrawal_requests
-            .values()
-            .filter(|r| r.match_parameter(parameter))
-            .map(|request| {
-                match self.processed_transaction_status(&request.cketh_ledger_burn_index()) {
-                    (RetrieveEthStatus::TxCreated, Some(tx)) => {
-                        (request, WithdrawalStatus::TxCreated, Some(tx))
-                    }
-                    (RetrieveEthStatus::TxSent(sent), Some(tx)) => {
-                        (request, WithdrawalStatus::TxSent(sent), Some(tx))
-                    }
-                    (RetrieveEthStatus::TxFinalized(status), Some(tx)) => {
-                        (request, WithdrawalStatus::TxFinalized(status), Some(tx))
-                    }
-                    _ => {
-                        panic!("Status of processed request is not found {request:?}")
-                    }
-                }
-            });
-
-        pending.chain(processed).collect()
-    }
-
-    pub fn transaction_status(&self, burn_index: &LedgerBurnIndex) -> RetrieveEthStatus {
-        if self
-            .pending_withdrawal_requests
-            .iter()
-            .any(|r| &r.cketh_ledger_burn_index() == burn_index)
-        {
-            return RetrieveEthStatus::Pending;
-        }
-        self.processed_transaction_status(burn_index).0
-    }
-
-    fn processed_transaction_status(
-        &self,
-        burn_index: &LedgerBurnIndex,
-    ) -> (RetrieveEthStatus, Option<&Eip1559TransactionRequest>) {
-        if let Some(tx) = self.created_tx.get_alt(burn_index) {
-            return (RetrieveEthStatus::TxCreated, Some(tx.as_ref()));
-        }
-
-        if let Some(tx) = self.sent_tx.get_alt(burn_index).and_then(|txs| txs.last()) {
-            return (
-                RetrieveEthStatus::TxSent(EthTransaction::from(tx.as_ref())),
-                Some(tx.as_ref().as_ref()),
-            );
-        }
-
-        if let Some(tx) = self.finalized_tx.get_alt(burn_index) {
-            if let Some(Ok(reimbursed)) =
-                self.find_reimbursed_transaction_by_cketh_ledger_burn_index(burn_index)
-            {
-                return (
-                    RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
-                        reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
-                        transaction_hash: tx.transaction_hash().to_string(),
-                        reimbursed_amount: reimbursed.reimbursed_amount.into(),
-                    }),
-                    Some(tx.as_ref()),
-                );
-            }
-            if tx.transaction_status() == &TransactionStatus::Failure {
-                return (
-                    RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                        EthTransaction {
-                            transaction_hash: tx.transaction_hash().to_string(),
-                        },
-                    )),
-                    Some(tx.as_ref()),
-                );
-            }
-
-            return (
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success {
-                    transaction_hash: tx.transaction_hash().to_string(),
-                    effective_transaction_fee: Some(tx.effective_transaction_fee().into()),
-                }),
-                Some(tx.as_ref()),
-            );
-        }
-
-        (RetrieveEthStatus::NotFound, None)
+        finalized_tx
     }
 
     pub fn withdrawal_requests_batch(&self, requested_batch_size: usize) -> Vec<WithdrawalRequest> {
@@ -928,18 +737,6 @@ impl EthTransactions {
 
     pub fn withdrawal_requests_len(&self) -> usize {
         self.pending_withdrawal_requests.len()
-    }
-
-    pub fn maybe_reimburse_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
-        self.processed_withdrawal_requests
-            .iter()
-            .filter_map(|(index, request)| {
-                if self.maybe_reimburse.contains(index) {
-                    Some(request)
-                } else {
-                    None
-                }
-            })
     }
 
     pub fn transactions_to_sign_iter(
@@ -1004,6 +801,24 @@ impl EthTransactions {
         burn_index: &LedgerBurnIndex,
     ) -> Option<&FinalizedEip1559Transaction> {
         self.finalized_tx.get_alt(burn_index)
+    }
+
+    pub fn processed_withdrawal_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
+        self.processed_withdrawal_requests.values()
+    }
+
+    /// How far the transaction for `burn_index` has got, or `None` if the pipeline holds none.
+    pub fn transaction_stage(&self, burn_index: &LedgerBurnIndex) -> Option<TransactionStage<'_>> {
+        if let Some(tx) = self.created_tx.get_alt(burn_index) {
+            return Some(TransactionStage::Created(tx.as_ref()));
+        }
+        // The last one sent is the one with the highest fee, so it is the one that may be mined.
+        if let Some(tx) = self.sent_tx.get_alt(burn_index).and_then(|txs| txs.last()) {
+            return Some(TransactionStage::Sent(tx));
+        }
+        self.finalized_tx
+            .get_alt(burn_index)
+            .map(TransactionStage::Finalized)
     }
 
     pub fn get_processed_withdrawal_request(
@@ -1086,11 +901,362 @@ impl EthTransactions {
         ensure_eq!(self.finalized_tx, other.finalized_tx);
         ensure_eq!(self.next_nonce, other.next_nonce);
 
+        Ok(())
+    }
+}
+
+/// The minter's transaction pipeline, carrying user withdrawals, together with the reimbursement
+/// bookkeeping only a withdrawal can need: a failed ckETH/ckERC20 transaction pays the user back,
+/// so the send machinery and the ledger-side refund have to stay in step.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct WithdrawalTransactions {
+    pipeline: TransactionPipeline,
+    /// Requests whose transaction was created but has not finally settled, and which would
+    /// therefore have to be paid back if it failed.
+    maybe_reimburse: BTreeSet<LedgerBurnIndex>,
+    reimbursement_requests: BTreeMap<ReimbursementIndex, ReimbursementRequest>,
+    reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
+}
+
+impl WithdrawalTransactions {
+    pub fn new(next_nonce: TransactionNonce) -> Self {
+        Self {
+            pipeline: TransactionPipeline::new(next_nonce),
+            maybe_reimburse: Default::default(),
+            reimbursement_requests: Default::default(),
+            reimbursed: Default::default(),
+        }
+    }
+
+    /// Record a created transaction, and remember the request may still need paying back.
+    pub fn record_created_transaction(
+        &mut self,
+        withdrawal_id: LedgerBurnIndex,
+        transaction: Eip1559TransactionRequest,
+    ) {
+        self.pipeline
+            .record_created_transaction(withdrawal_id, transaction);
+        if self.is_reimbursable(&withdrawal_id) {
+            assert!(self.maybe_reimburse.insert(withdrawal_id));
+        }
+    }
+
+    /// Whether a failed transaction for this request would pay the requester back. A sweeper
+    /// funding never is, so it is never armed for reimbursement in the first place.
+    fn is_reimbursable(&self, withdrawal_id: &LedgerBurnIndex) -> bool {
+        self.pipeline
+            .get_processed_withdrawal_request(withdrawal_id)
+            .expect("BUG: missing processed withdrawal request")
+            .is_reimbursable()
+    }
+
+    /// Finalize the transaction for `ledger_burn_index` matching `receipt`, then — if it failed on
+    /// chain — record the corresponding ckETH/ckERC20 reimbursement.
+    pub fn record_finalized_transaction(
+        &mut self,
+        ledger_burn_index: LedgerBurnIndex,
+        receipt: TransactionReceipt,
+    ) {
+        let finalized_tx = self
+            .pipeline
+            .record_finalized_transaction(ledger_burn_index, &receipt);
+        if self.is_reimbursable(&ledger_burn_index) {
+            assert!(
+                self.maybe_reimburse.remove(&ledger_burn_index),
+                "failed to remove entry from maybe_reimburse with block index: {ledger_burn_index}",
+            );
+        }
+
+        let request = self
+            .pipeline
+            .get_processed_withdrawal_request(&ledger_burn_index)
+            .expect("BUG: missing processed withdrawal request");
+        if receipt.status != TransactionStatus::Failure {
+            return;
+        }
+        let (index, reimbursement) = match request {
+            WithdrawalRequest::CkEth(request) => (
+                ReimbursementIndex::CkEth {
+                    ledger_burn_index: request.ledger_burn_index,
+                },
+                ReimbursementRequest {
+                    ledger_burn_index,
+                    to: request.from,
+                    to_subaccount: request.from_subaccount.clone(),
+                    reimbursed_amount: finalized_tx.transaction_amount().change_units(),
+                    transaction_hash: Some(receipt.transaction_hash),
+                },
+            ),
+            WithdrawalRequest::CkErc20(request) => (
+                ReimbursementIndex::CkErc20 {
+                    cketh_ledger_burn_index: request.cketh_ledger_burn_index,
+                    ledger_id: request.ckerc20_ledger_id,
+                    ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
+                },
+                ReimbursementRequest {
+                    ledger_burn_index: request.ckerc20_ledger_burn_index,
+                    reimbursed_amount: request.withdrawal_amount.change_units(),
+                    to: request.from,
+                    to_subaccount: request.from_subaccount.clone(),
+                    transaction_hash: Some(receipt.transaction_hash),
+                },
+            ),
+            WithdrawalRequest::SweeperFunding(request) => {
+                // A funding is a plain transfer to an address derived from the minter's own key,
+                // so there is no code for it to revert in: reaching this means an assumption
+                // broke. Logged rather than trapped, since the accounting holds either way — the
+                // burn stays burned, and of the ETH it covered only the gas of the failed
+                // transaction actually left the main address.
+                log!(
+                    INFO,
+                    "[record_finalized_transaction]: UNEXPECTED: sweeper funding {} of {} to {} \
+                     FAILED (tx {}), which should be impossible for a transfer to an address the \
+                     minter controls; the burn is NOT reimbursed: no ETH reached the sweeper, the \
+                     failed transaction still paid {} of gas, and the rest of the burn now \
+                     over-backs ckETH",
+                    ledger_burn_index,
+                    request.withdrawal_amount,
+                    request.destination,
+                    receipt.transaction_hash,
+                    receipt.effective_transaction_fee(),
+                );
+                return;
+            }
+        };
+        self.record_reimbursement_request(index, reimbursement);
+    }
+
+    pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
+        use ic_utils_ensure::ensure_eq;
+
         ensure_eq!(self.maybe_reimburse, other.maybe_reimburse);
         ensure_eq!(self.reimbursement_requests, other.reimbursement_requests);
         ensure_eq!(self.reimbursed, other.reimbursed);
+        self.pipeline.is_equivalent_to(&other.pipeline)
+    }
 
-        Ok(())
+    pub fn next_transaction_nonce(&self) -> TransactionNonce {
+        self.pipeline.next_transaction_nonce()
+    }
+
+    pub fn update_next_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
+        self.pipeline.update_next_transaction_nonce(new_nonce)
+    }
+
+    pub fn record_withdrawal_request<R: Into<WithdrawalRequest>>(&mut self, request: R) {
+        self.pipeline.record_withdrawal_request(request)
+    }
+
+    pub fn reschedule_withdrawal_request<R: Into<WithdrawalRequest>>(&mut self, request: R) {
+        self.pipeline.reschedule_withdrawal_request(request)
+    }
+
+    pub fn record_signed_transaction(
+        &mut self,
+        signed_transaction: SignedEip1559TransactionRequest,
+    ) {
+        self.pipeline.record_signed_transaction(signed_transaction)
+    }
+
+    pub fn create_resubmit_transactions(
+        &self,
+        latest_transaction_count: TransactionCount,
+        current_gas_fee: GasFeeEstimate,
+    ) -> Vec<Result<(LedgerBurnIndex, Eip1559TransactionRequest), ResubmitTransactionError>> {
+        self.pipeline
+            .create_resubmit_transactions(latest_transaction_count, current_gas_fee)
+    }
+
+    pub fn record_resubmit_transaction(&mut self, new_tx: Eip1559TransactionRequest) {
+        self.pipeline.record_resubmit_transaction(new_tx)
+    }
+
+    pub fn sent_transactions_to_finalize(
+        &self,
+        finalized_transaction_count: &TransactionCount,
+    ) -> BTreeMap<Hash, LedgerBurnIndex> {
+        self.pipeline
+            .sent_transactions_to_finalize(finalized_transaction_count)
+    }
+
+    pub fn withdrawal_requests_batch(&self, requested_batch_size: usize) -> Vec<WithdrawalRequest> {
+        self.pipeline
+            .withdrawal_requests_batch(requested_batch_size)
+    }
+
+    pub fn withdrawal_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
+        self.pipeline.withdrawal_requests_iter()
+    }
+
+    pub fn withdrawal_requests_len(&self) -> usize {
+        self.pipeline.withdrawal_requests_len()
+    }
+
+    pub fn transactions_to_sign_iter(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &TransactionNonce,
+            &LedgerBurnIndex,
+            &Eip1559TransactionRequest,
+        ),
+    > {
+        self.pipeline.transactions_to_sign_iter()
+    }
+
+    pub fn transactions_to_sign_batch(
+        &self,
+        batch_size: usize,
+    ) -> Vec<(LedgerBurnIndex, Eip1559TransactionRequest)> {
+        self.pipeline.transactions_to_sign_batch(batch_size)
+    }
+
+    pub fn transactions_to_send_batch(
+        &self,
+        latest_transaction_count: TransactionCount,
+        batch_size: usize,
+    ) -> Vec<SignedEip1559TransactionRequest> {
+        self.pipeline
+            .transactions_to_send_batch(latest_transaction_count, batch_size)
+    }
+
+    pub fn sent_transactions_iter(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &TransactionNonce,
+            &LedgerBurnIndex,
+            Vec<&SignedEip1559TransactionRequest>,
+        ),
+    > {
+        self.pipeline.sent_transactions_iter()
+    }
+
+    pub fn get_finalized_transaction(
+        &self,
+        burn_index: &LedgerBurnIndex,
+    ) -> Option<&FinalizedEip1559Transaction> {
+        self.pipeline.get_finalized_transaction(burn_index)
+    }
+
+    pub fn get_processed_withdrawal_request(
+        &self,
+        burn_index: &LedgerBurnIndex,
+    ) -> Option<&WithdrawalRequest> {
+        self.pipeline.get_processed_withdrawal_request(burn_index)
+    }
+
+    pub fn finalized_transactions_iter(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &TransactionNonce,
+            &LedgerBurnIndex,
+            &FinalizedEip1559Transaction,
+        ),
+    > {
+        self.pipeline.finalized_transactions_iter()
+    }
+
+    pub fn is_sent_tx_empty(&self) -> bool {
+        self.pipeline.is_sent_tx_empty()
+    }
+
+    pub fn has_pending_requests(&self) -> bool {
+        self.pipeline.has_pending_requests()
+    }
+
+    pub fn reimbursement_requests_iter(
+        &self,
+    ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursementRequest)> {
+        self.reimbursement_requests.iter()
+    }
+
+    pub fn reimbursed_transactions_iter(
+        &self,
+    ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursedResult)> {
+        self.reimbursed.iter()
+    }
+
+    fn find_reimbursed_transaction_by_cketh_ledger_burn_index(
+        &self,
+        searched_burn_index: &LedgerBurnIndex,
+    ) -> Option<&ReimbursedResult> {
+        self.reimbursed
+            .iter()
+            .find_map(|(index, value)| match index {
+                ReimbursementIndex::CkEth { ledger_burn_index }
+                    if ledger_burn_index == searched_burn_index =>
+                {
+                    Some(value)
+                }
+                ReimbursementIndex::CkErc20 {
+                    cketh_ledger_burn_index,
+                    ..
+                } if cketh_ledger_burn_index == searched_burn_index => Some(value),
+                _ => None,
+            })
+    }
+
+    /// Quarantine the reimbursement request identified by its index to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    pub fn record_quarantined_reimbursement(&mut self, index: ReimbursementIndex) {
+        self.reimbursement_requests.remove(&index);
+        self.reimbursed
+            .insert(index, Err(ReimbursedError::Quarantined));
+    }
+
+    pub fn record_finalized_reimbursement(
+        &mut self,
+        index: ReimbursementIndex,
+        reimbursed_in_block: LedgerMintIndex,
+    ) {
+        let reimbursement_request = self
+            .reimbursement_requests
+            .remove(&index)
+            .unwrap_or_else(|| panic!("BUG: missing reimbursement request with index {index:?}"));
+        let burn_in_block = index.burn_in_block();
+        assert_eq!(
+            self.reimbursed.insert(
+                index,
+                Ok(Reimbursed {
+                    burn_in_block,
+                    reimbursed_in_block,
+                    reimbursed_amount: reimbursement_request.reimbursed_amount,
+                    transaction_hash: reimbursement_request.transaction_hash,
+                }),
+            ),
+            None
+        );
+    }
+
+    pub fn record_reimbursement_request(
+        &mut self,
+        index: ReimbursementIndex,
+        request: ReimbursementRequest,
+    ) {
+        assert_eq!(
+            self.maybe_reimburse.get(&index.withdrawal_id()),
+            None,
+            "BUG: withdrawal request still in maybe_reimburse could lead to double minting!"
+        );
+        assert_eq!(
+            self.reimbursed.get(&index),
+            None,
+            "BUG: reimbursement request was already processed"
+        );
+        assert_eq!(
+            self.reimbursement_requests.insert(index.clone(), request),
+            None,
+            "BUG: reimbursement request for withdrawal {index:?} already exists"
+        );
+    }
+
+    pub fn maybe_reimburse_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
+        self.maybe_reimburse
+            .iter()
+            .filter_map(|index| self.pipeline.get_processed_withdrawal_request(index))
     }
 
     pub fn oldest_incomplete_withdrawal_timestamp(&self) -> Option<u64> {
@@ -1098,6 +1264,111 @@ impl EthTransactions {
             .chain(self.maybe_reimburse_requests_iter())
             .flat_map(|req| req.created_at().into_iter())
             .min()
+    }
+
+    pub fn withdrawal_status(
+        &self,
+        parameter: &WithdrawalSearchParameter,
+    ) -> Vec<(
+        &WithdrawalRequest,
+        WithdrawalStatus,
+        Option<&Eip1559TransactionRequest>,
+    )> {
+        // Pending requests matching the given search parameter
+        let pending = self.pipeline.withdrawal_requests_iter().filter_map(|r| {
+            r.match_parameter(parameter)
+                .then_some((r, WithdrawalStatus::Pending, None))
+        });
+
+        // Processed withdrawal requests matching the given search parameter.
+        let processed = self
+            .pipeline
+            .processed_withdrawal_requests_iter()
+            .filter(|r| r.match_parameter(parameter))
+            .map(|request| {
+                match self.processed_transaction_status(&request.cketh_ledger_burn_index()) {
+                    (RetrieveEthStatus::TxCreated, Some(tx)) => {
+                        (request, WithdrawalStatus::TxCreated, Some(tx))
+                    }
+                    (RetrieveEthStatus::TxSent(sent), Some(tx)) => {
+                        (request, WithdrawalStatus::TxSent(sent), Some(tx))
+                    }
+                    (RetrieveEthStatus::TxFinalized(status), Some(tx)) => {
+                        (request, WithdrawalStatus::TxFinalized(status), Some(tx))
+                    }
+                    _ => {
+                        panic!("Status of processed request is not found {request:?}")
+                    }
+                }
+            });
+
+        pending.chain(processed).collect()
+    }
+
+    pub fn transaction_status(&self, burn_index: &LedgerBurnIndex) -> RetrieveEthStatus {
+        if self
+            .pipeline
+            .withdrawal_requests_iter()
+            .any(|r| &r.cketh_ledger_burn_index() == burn_index)
+        {
+            return RetrieveEthStatus::Pending;
+        }
+        self.processed_transaction_status(burn_index).0
+    }
+
+    fn processed_transaction_status(
+        &self,
+        burn_index: &LedgerBurnIndex,
+    ) -> (RetrieveEthStatus, Option<&Eip1559TransactionRequest>) {
+        let tx = match self.pipeline.transaction_stage(burn_index) {
+            Some(TransactionStage::Created(tx)) => return (RetrieveEthStatus::TxCreated, Some(tx)),
+            Some(TransactionStage::Sent(tx)) => {
+                return (
+                    RetrieveEthStatus::TxSent(EthTransaction::from(tx.as_ref())),
+                    Some(tx.as_ref().as_ref()),
+                );
+            }
+            Some(TransactionStage::Finalized(tx)) => tx,
+            None => return (RetrieveEthStatus::NotFound, None),
+        };
+
+        if let Some(Ok(reimbursed)) =
+            self.find_reimbursed_transaction_by_cketh_ledger_burn_index(burn_index)
+        {
+            return (
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
+                    reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
+                    transaction_hash: tx.transaction_hash().to_string(),
+                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
+                }),
+                Some(tx.as_ref()),
+            );
+        }
+        if tx.transaction_status() == &TransactionStatus::Failure {
+            // Unreachable for a funding: the destination is derived from the minter's own
+            // key, so a bare transfer there has no code to revert in. Were it reached, the
+            // status would be wrong, since nothing reimburses a funding — tolerable only
+            // because it cannot happen, and not worth a status of its own, which would mean
+            // adding a variant to `retrieve_eth_status`' return type and breaking existing
+            // clients. Revisit if funding ever goes through a contract, where a revert becomes
+            // possible.
+            return (
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
+                    EthTransaction {
+                        transaction_hash: tx.transaction_hash().to_string(),
+                    },
+                )),
+                Some(tx.as_ref()),
+            );
+        }
+
+        (
+            RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success {
+                transaction_hash: tx.transaction_hash().to_string(),
+                effective_transaction_fee: Some(tx.effective_transaction_fee().into()),
+            }),
+            Some(tx.as_ref()),
+        )
     }
 }
 
@@ -1119,15 +1390,26 @@ pub fn create_transaction(
         "BUG: gas limit should be non-zero"
     );
     match withdrawal_request {
-        WithdrawalRequest::CkEth(request) => {
+        WithdrawalRequest::CkEth(EthWithdrawalRequest {
+            withdrawal_amount,
+            destination,
+            ledger_burn_index,
+            ..
+        })
+        | WithdrawalRequest::SweeperFunding(EthWithdrawalRequest {
+            withdrawal_amount,
+            destination,
+            ledger_burn_index,
+            ..
+        }) => {
             let transaction_price = gas_fee_estimate.to_price(gas_limit);
             let max_transaction_fee = transaction_price.max_transaction_fee();
-            let tx_amount = match request.withdrawal_amount.checked_sub(max_transaction_fee) {
+            let tx_amount = match withdrawal_amount.checked_sub(max_transaction_fee) {
                 Some(tx_amount) => tx_amount,
                 None => {
                     return Err(CreateTransactionError::InsufficientTransactionFee {
-                        cketh_ledger_burn_index: request.ledger_burn_index,
-                        allowed_max_transaction_fee: request.withdrawal_amount,
+                        cketh_ledger_burn_index: *ledger_burn_index,
+                        allowed_max_transaction_fee: *withdrawal_amount,
                         actual_max_transaction_fee: max_transaction_fee,
                     });
                 }
@@ -1138,7 +1420,7 @@ pub fn create_transaction(
                 max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
                 max_fee_per_gas: transaction_price.max_fee_per_gas,
                 gas_limit: transaction_price.gas_limit,
-                destination: request.destination,
+                destination: *destination,
                 amount: tx_amount,
                 data: Vec::new(),
                 access_list: Default::default(),

@@ -1,4 +1,5 @@
 use crate::units::GIB as ONE_GIB;
+use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
@@ -17,8 +18,11 @@ use ic_management_canister_types_private::{
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterStatus, ReplicatedState, SystemState,
-    canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
+    CanisterStatus, ExecutionTask, ReplicatedState, SystemState,
+    canister_state::{
+        DEFAULT_QUEUE_CAPACITY, NextExecution, WASM_PAGE_SIZE_IN_BYTES,
+        execution_state::WasmExecutionMode,
+    },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
     testing::{CanisterQueuesTesting, SystemStateTesting},
@@ -31,13 +35,13 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
-    CanisterId, CountBytes, PrincipalId, RegistryVersion,
+    CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, PricingVersion, Replication, Transform},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterTask, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
-        RequestOrResponse, Response,
+        CallbackId, CanisterTask, MAX_RESPONSE_COUNT_BYTES, MessageId, NO_DEADLINE, Payload,
+        RejectContext, RequestOrResponse, Response,
     },
     time::UNIX_EPOCH,
 };
@@ -3321,17 +3325,19 @@ fn execute_canister_http_request() {
             http_request_context.variable_parts_size(),
             &http_request_context.replication,
         );
-        let expected_refundable = match cost_schedule {
+        let node_count = test.subnet_size();
+        let refundable_payment = match cost_schedule {
             CanisterCyclesCostSchedule::Free => Cycles::new(0),
             CanisterCyclesCostSchedule::Normal => payment - base_fee.real(),
         };
-        assert_eq!(
-            http_request_context.refund_status.refundable_cycles,
-            expected_refundable
-        );
+        let expected_allowance = refundable_payment / node_count;
         assert_eq!(
             http_request_context.refund_status.per_replica_allowance,
-            expected_refundable / test.subnet_size().max(1)
+            expected_allowance
+        );
+        assert_eq!(
+            http_request_context.refund_status.refundable_cycles,
+            expected_allowance * node_count
         );
         assert_eq!(
             http_request_context.refund_status.refunded_cycles,
@@ -3526,7 +3532,8 @@ fn execute_canister_http_request_non_replicated_refund_status() {
         is_replicated: Some(false),
         pricing_version: None,
     };
-    let payment = Cycles::new(1_000_000_000);
+    // A payment the outcall could conceivably spend in full
+    let payment = Cycles::new(100_000_000);
     test.inject_call_to_ic00(Method::HttpRequest, args.encode(), payment);
     test.execute_all();
 
@@ -3549,6 +3556,18 @@ fn execute_canister_http_request_non_replicated_refund_status() {
         &http_request_context.replication,
     );
     let expected_refundable = payment - base_fee.real();
+    // Sanity check that these args actually exercise the un-capped split: if the
+    // worst case ever drops below the payment, this test would silently start
+    // asserting the cap instead (which
+    // `execute_canister_http_request_caps_allowance_at_worst_case_cost` covers).
+    assert!(
+        expected_refundable
+            <= test.max_http_request_usage_fee(
+                &http_request_context.replication,
+                http_request_context.max_response_bytes,
+                http_request_context.subnet_size,
+            )
+    );
     assert_eq!(
         http_request_context.refund_status.refundable_cycles,
         expected_refundable
@@ -3621,26 +3640,36 @@ fn execute_flexible_canister_http_request() {
             other => panic!("expected flexible replication, got {other:?}"),
         };
 
-        // Pay-as-you-go takes out the entire payment upfront (unless the cost
-        // schedule is free), refunding everything beyond the base fee per
-        // replica.
+        // Pay-as-you-go takes out the base fee plus the per-replica allowances
+        // upfront (unless the cost schedule is free), refunding everything beyond
+        // the base fee per replica.
         let base_fee = test.http_request_base_fee(
             http_request_context.variable_parts_size(),
             &http_request_context.replication,
         );
-        let (expected_payment, expected_refundable) = match cost_schedule {
-            CanisterCyclesCostSchedule::Free => (payment, Cycles::new(0)),
-            CanisterCyclesCostSchedule::Normal => (Cycles::new(0), payment - base_fee.real()),
+        let refundable_payment = match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => payment - base_fee.real(),
         };
-        assert_eq!(http_request_context.request.payment, expected_payment);
-        assert_eq!(
-            http_request_context.refund_status.refundable_cycles,
-            expected_refundable
-        );
+        let expected_allowance = refundable_payment / committee_size.max(1);
         assert_eq!(
             http_request_context.refund_status.per_replica_allowance,
-            expected_refundable / committee_size.max(1)
+            expected_allowance
         );
+        assert_eq!(
+            http_request_context.refund_status.refundable_cycles,
+            expected_allowance * committee_size.max(1)
+        );
+        // Whatever the payment covers beyond the base fee and the allowances stays
+        // in the payment, to be refunded along with the response.
+        let expected_payment = match cost_schedule {
+            CanisterCyclesCostSchedule::Free => payment,
+            CanisterCyclesCostSchedule::Normal => {
+                refundable_payment - expected_allowance * committee_size.max(1)
+            }
+        };
+        assert_ne!(expected_payment, Cycles::new(0));
+        assert_eq!(http_request_context.request.payment, expected_payment);
         assert_eq!(
             http_request_context.refund_status.refunded_cycles,
             Cycles::new(0)
@@ -3652,6 +3681,155 @@ fn execute_flexible_canister_http_request() {
                 .is_empty()
         );
     }
+}
+
+#[test]
+fn execute_canister_http_request_refunds_truncated_allowance_remainder() {
+    // Regression test: the payment beyond the base fee does not generally divide
+    // evenly into per-replica allowances, and the truncated remainder must not be
+    // lost. It is not taken out of the payment, so that it is refunded along with
+    // the response.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    // A payment far below what the committee can possibly spend on this outcall, so
+    // that the payment — rather than the worst-case cost — is split into allowances.
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        flexible_http_request_args(caller_canister).encode(),
+        payment,
+    );
+    test.execute_all();
+
+    let http_request_context = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    let committee_size = match &http_request_context.replication {
+        Replication::Flexible { committee, .. } => committee.len(),
+        other => panic!("expected flexible replication, got {other:?}"),
+    };
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let allowance = (payment - base_fee.real()) / committee_size;
+    let remainder = payment - base_fee.real() - allowance * committee_size;
+    // Sanity checks that these args actually exercise a truncated split: the payment
+    // is shared by more than one replica and does not divide evenly among them.
+    assert!(committee_size > 1);
+    assert_ne!(remainder, Cycles::new(0));
+
+    // `refundable_cycles` covers exactly the per-replica allowances, ...
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        allowance
+    );
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        allowance * committee_size
+    );
+    // ... and the remainder that no allowance covers was never taken out of the
+    // payment, so it is refunded when the response is delivered.
+    assert_eq!(http_request_context.request.payment, remainder);
+    // Nothing disappears from the cycles accounting: the base fee, the allowances
+    // and what is left of the payment add up to what the caller paid.
+    assert_eq!(
+        base_fee.real()
+            + http_request_context.refund_status.refundable_cycles
+            + http_request_context.request.payment,
+        payment
+    );
+    // Only the base fee is charged (and reported as consumed) upfront.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_http_outcalls(),
+        base_fee.nominal()
+    );
+    assert_eq!(
+        *test
+            .state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .get(&CyclesUseCase::HTTPOutcalls)
+            .unwrap(),
+        base_fee.nominal()
+    );
+}
+
+#[test]
+fn execute_canister_http_request_caps_allowance_at_worst_case_cost() {
+    // A replica can never spend more than the worst-case cost of the outcall, so
+    // whatever the payment covers beyond that is not held back as allowance but
+    // refunded along with the response.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    // A payment far beyond what the committee can possibly spend on this outcall.
+    let payment = Cycles::new(1_000_000_000_000_000);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        flexible_http_request_args(caller_canister).encode(),
+        payment,
+    );
+    test.execute_all();
+
+    let http_request_context = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    let committee_size = match &http_request_context.replication {
+        Replication::Flexible { committee, .. } => committee.len(),
+        other => panic!("expected flexible replication, got {other:?}"),
+    };
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let max_usage_fee = test.max_http_request_usage_fee(
+        &http_request_context.replication,
+        http_request_context.max_response_bytes,
+        http_request_context.subnet_size,
+    );
+    let refundable_payment = payment - base_fee.real();
+    // The payment covers more than the outcall can possibly spend, so the worst case
+    // — rather than the payment — is what gets split into allowances.
+    assert!(max_usage_fee < refundable_payment);
+    let expected_allowance = max_usage_fee / committee_size;
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        expected_allowance
+    );
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        expected_allowance * committee_size
+    );
+    // Everything the payment covers beyond the base fee and the allowances stays in
+    // the payment, to be refunded along with the response.
+    assert_eq!(
+        http_request_context.request.payment,
+        refundable_payment - expected_allowance * committee_size
+    );
 }
 
 #[test]
@@ -3814,21 +3992,25 @@ fn execute_flexible_canister_http_request_explicit_replication() {
     assert_eq!(min_responses, 2);
     assert_eq!(max_responses, 4);
 
-    // Pay-as-you-go takes the entire payment upfront and splits the refundable
-    // remainder across the committee.
+    // Pay-as-you-go takes the base fee plus the per-replica allowances upfront and
+    // splits the refundable payment across the committee.
     let base_fee = test.http_request_base_fee(
         http_request_context.variable_parts_size(),
         &http_request_context.replication,
     );
-    let expected_refundable = payment - base_fee.real();
-    assert_eq!(http_request_context.request.payment, Cycles::new(0));
-    assert_eq!(
-        http_request_context.refund_status.refundable_cycles,
-        expected_refundable
-    );
+    let refundable_payment = payment - base_fee.real();
+    let expected_allowance = refundable_payment / committee_size.max(1);
     assert_eq!(
         http_request_context.refund_status.per_replica_allowance,
-        expected_refundable / committee_size.max(1)
+        expected_allowance
+    );
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        expected_allowance * committee_size.max(1)
+    );
+    assert_eq!(
+        http_request_context.request.payment,
+        refundable_payment - expected_allowance * committee_size.max(1)
     );
 }
 
@@ -6037,4 +6219,433 @@ fn list_canisters_via_ingress_fails_at_execution() {
         err.description()
             .contains("list_canisters cannot be called by a user")
     );
+}
+
+/// Snapshot of the cycles and instruction counters of a canister that are needed
+/// to check the accounting of a paused execution that fails to resume.
+#[derive(Clone, Copy)]
+struct ExecutionAccounting {
+    /// The counter metric is used because it only records the cycles consumed
+    /// for instructions when the prepaid execution cycles are refunded at the
+    /// end of a message execution: unlike the gauge metric, which is bumped
+    /// already by the prepayment, it thus does not depend on whether the
+    /// snapshot is taken before or after the prepayment.
+    consumed_cycles: NominalCycles,
+    /// The instructions executed by all the slices of the canister, including
+    /// slices of an execution that was paused and did not finish (yet).
+    executed_instructions: NumInstructions,
+}
+
+impl ExecutionAccounting {
+    fn take(test: &ExecutionTest, canister_id: CanisterId) -> Self {
+        Self {
+            consumed_cycles: test
+                .canister_state(canister_id)
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_as_counters()
+                .get(&CyclesUseCase::Instructions)
+                .cloned()
+                .unwrap_or_default(),
+            executed_instructions: test.canister_executed_instructions(canister_id),
+        }
+    }
+}
+
+/// Executes the first slice of the next execution of the given canister, which
+/// must pause, then decreases the cycles balance of that canister and resumes
+/// the execution, which must fail.
+///
+/// Asserts that the canister is charged for exactly the instructions that the
+/// slices of the failed execution had executed.
+fn paused_execution_fails_to_resume_after_cycles_decrease(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+) {
+    let before = ExecutionAccounting::take(test, canister_id);
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(Cycles::new(1));
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let after = ExecutionAccounting::take(test, canister_id);
+
+    // The cycles consumed for instructions, which the execution derives from the
+    // instructions it reports as used, match the cost of the instructions
+    // executed by the slices: resuming failed before resuming the Wasm
+    // execution, so no further instructions were executed after the last pause.
+    let executed_instructions = after.executed_instructions - before.executed_instructions;
+    let expected_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            executed_instructions,
+            test.get_own_subnet_cycles_config(),
+            WasmExecutionMode::Wasm32,
+        )
+        .nominal();
+    assert_eq!(
+        after.consumed_cycles - before.consumed_cycles,
+        expected_cost
+    );
+}
+
+/// A canister that is about to start a long-running execution: the first slice
+/// of that execution exceeds the slice instruction limit and hence pauses.
+///
+/// Shared by the tests that decrease and increase the cycles balance of the
+/// canister while its execution is paused.
+struct LongRunningExecution {
+    test: ExecutionTest,
+    /// The canister whose long-running execution pauses.
+    canister_id: CanisterId,
+    /// The ingress message whose status reflects the outcome of the long-running
+    /// execution; `None` for canister tasks, which have no ingress status.
+    ingress_id: Option<MessageId>,
+}
+
+/// Sets up a long-running update call, or a long-running replicated query if
+/// `replicated_query` is set.
+fn long_running_call(replicated_query: bool) -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(200_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .instruction_counter_is_at_least(200_000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let method = if replicated_query { "query" } else { "update" };
+    let (ingress_id, _) = test.ingress_raw(a_id, method, a);
+
+    LongRunningExecution {
+        test,
+        canister_id: a_id,
+        ingress_id: Some(ingress_id),
+    }
+}
+
+/// Sets up a long-running response callback, or a long-running cleanup callback
+/// if `cleanup` is set. In the latter case the response callback traps, so that
+/// the long-running callback is the cleanup one.
+fn long_running_callback(cleanup: bool) -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let long_execution = wasm()
+        .instruction_counter_is_at_least(1_000_000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+    let call_args = if cleanup {
+        call_args()
+            .other_side(b)
+            .on_reply(wasm().trap())
+            .on_cleanup(long_execution)
+    } else {
+        call_args().other_side(b).on_reply(long_execution)
+    };
+    let a = wasm().call_simple(b_id, "update", call_args).build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B, which replies.
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    LongRunningExecution {
+        test,
+        canister_id: a_id,
+        ingress_id: Some(ingress_id),
+    }
+}
+
+/// Sets up a long-running canister task: the heartbeat. It grows the stable
+/// memory before the execution is paused, so that its state changes can be
+/// checked to be either dropped or kept, depending on whether resuming the
+/// execution fails or succeeds.
+fn long_running_heartbeat() -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let (ingress_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm()
+            .set_heartbeat(
+                wasm()
+                    .stable_grow(1)
+                    .instruction_counter_is_at_least(1_000_000)
+                    .build(),
+            )
+            .reply()
+            .build(),
+    );
+    test.execute_message(canister_id);
+    check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .task_queue
+        .enqueue(ExecutionTask::Heartbeat);
+
+    LongRunningExecution {
+        test,
+        canister_id,
+        ingress_id: None,
+    }
+}
+
+/// Every kind of paused execution re-creates its helper from the current clean
+/// canister state when it is resumed, so it relies on the cycles balance of that
+/// state not decreasing while the execution is paused. This test covers all of
+/// them: update calls, replicated queries, response callbacks, cleanup
+/// callbacks, and canister tasks (heartbeat). The `install_code` case is covered
+/// by `dts_install_code_resume_fails_due_to_cycles_decrease`.
+#[test]
+fn dts_resume_fails_due_to_cycles_decrease() {
+    // 1. Update calls and replicated queries.
+    for replicated_query in [false, true] {
+        let LongRunningExecution {
+            mut test,
+            canister_id,
+            ingress_id,
+        } = long_running_call(replicated_query);
+
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
+
+        let err = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap_err();
+        let message = if replicated_query {
+            "a replicated query"
+        } else {
+            "an update call"
+        };
+        err.assert_contains(
+            ErrorCode::CanisterWasmEngineError,
+            &format!(
+                "Error from Canister {canister_id}: Canister encountered a Wasm engine error: \
+                 Failed to apply system changes: Mismatch in cycles \
+                 balance when resuming {message}"
+            ),
+        );
+    }
+
+    // 2. Response and cleanup callbacks.
+    for cleanup in [false, true] {
+        let LongRunningExecution {
+            mut test,
+            canister_id,
+            ingress_id,
+        } = long_running_callback(cleanup);
+
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
+
+        let err = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap_err();
+        let code = if cleanup {
+            // The error of the trapping response callback takes precedence.
+            ErrorCode::CanisterCalledTrap
+        } else {
+            ErrorCode::CanisterWasmEngineError
+        };
+        assert_eq!(err.code(), code);
+        assert!(
+            err.description().contains(
+                "Failed to apply system changes: Mismatch in cycles \
+                 balance when resuming a response call"
+            ),
+            "unexpected error: {err}"
+        );
+    }
+
+    // 3. Canister tasks, e.g. the heartbeat.
+    {
+        let LongRunningExecution {
+            mut test,
+            canister_id,
+            ..
+        } = long_running_heartbeat();
+        let stable_memory_size = test.execution_state(canister_id).stable_memory.size;
+
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
+
+        // A canister task has no ingress status and the failure is not recorded
+        // in the canister log, but the state changes of the heartbeat must have
+        // been dropped along with the failed execution.
+        assert_eq!(
+            test.execution_state(canister_id).stable_memory.size,
+            stable_memory_size
+        );
+    }
+}
+
+/// The cycles added to the cycles balance of a canister while its execution is
+/// paused.
+const CYCLES_ADDED_WHILE_PAUSED: Cycles = Cycles::new(1_234_567_890);
+
+/// Executes the first slice of the next execution of the given canister, which
+/// must pause, then adds `CYCLES_ADDED_WHILE_PAUSED` to the cycles balance of
+/// that canister if `add_cycles` is set, and finally executes all the remaining
+/// slices of that execution.
+///
+/// Asserts that resuming the paused execution did not fail: a failed resume
+/// aborts the paused Wasm execution without executing any further instructions,
+/// so the instructions executed by the remaining slices witness that the Wasm
+/// execution was resumed.
+///
+/// Returns the cycles balance of the canister after the execution has finished.
+fn paused_execution_resumes_after_cycles_increase(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    add_cycles: bool,
+) -> Cycles {
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    let executed_instructions_when_paused = test.canister_executed_instructions(canister_id);
+
+    if add_cycles {
+        test.canister_state_mut(canister_id)
+            .system_state
+            .add_cycles(CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
+        test.execute_slice(canister_id);
+    }
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+    assert_gt!(
+        test.canister_executed_instructions(canister_id),
+        executed_instructions_when_paused
+    );
+
+    test.canister_state(canister_id).system_state.balance()
+}
+
+/// Counterpart of `dts_resume_fails_due_to_cycles_decrease`: while resuming a
+/// paused execution fails if the cycles balance of the canister decreased in the
+/// meantime, an increase of that balance is tolerated and the additional cycles
+/// are not lost when the execution completes. This test covers the same kinds of
+/// paused executions; the `install_code` case is covered by
+/// `dts_install_code_resume_succeeds_after_cycles_increase`.
+///
+/// Every scenario is executed twice, once without adding any cycles and once
+/// with adding `CYCLES_ADDED_WHILE_PAUSED` while the execution is paused. The
+/// two runs are identical otherwise, so the final cycles balances must differ by
+/// exactly the added cycles.
+#[test]
+fn dts_resume_succeeds_after_cycles_increase() {
+    // 1. Update calls and replicated queries.
+    for replicated_query in [false, true] {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ingress_id,
+            } = long_running_call(replicated_query);
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            // The execution completed successfully.
+            let result = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap();
+            assert_matches!(result, WasmResult::Reply(_));
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    // 2. Response and cleanup callbacks.
+    for cleanup in [false, true] {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ingress_id,
+            } = long_running_callback(cleanup);
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            let status = check_ingress_status(test.ingress_status(&ingress_id.unwrap()));
+            if cleanup {
+                // The response callback traps, but the cleanup callback resumed
+                // and completed successfully.
+                let err = status.unwrap_err();
+                assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+            } else {
+                assert_matches!(status.unwrap(), WasmResult::Reply(_));
+            }
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    // 3. Canister tasks, e.g. the heartbeat.
+    {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ..
+            } = long_running_heartbeat();
+            let stable_memory_size = test.execution_state(canister_id).stable_memory.size;
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            // A canister task has no ingress status, but the state changes of
+            // the heartbeat must have been kept.
+            assert_gt!(
+                test.execution_state(canister_id).stable_memory.size,
+                stable_memory_size
+            );
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
+    }
 }

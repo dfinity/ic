@@ -1,5 +1,7 @@
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
+
 pub type Response = Result<Payload, String>;
 
 #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -101,4 +103,110 @@ pub struct UpgradeData {
 pub struct NotifyData {
     pub count: u32,
     pub message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_request_serialization() {
+        assert_eq!(
+            serde_json::json!({
+                "sender_cid": 1_u32,
+                "message": "attach-hsm"
+            }),
+            serde_json::to_value(&Request {
+                guest_cid: 1,
+                command: Command::AttachHSM
+            })
+            .unwrap()
+        );
+        assert_eq!(
+            serde_json::json!({
+                "sender_cid": 1_u32,
+                "message": "detach-hsm"
+            }),
+            serde_json::to_value(&Request {
+                guest_cid: 1,
+                command: Command::DetachHSM
+            })
+            .unwrap()
+        );
+        assert_eq!(
+            serde_json::json!({
+                "sender_cid": 1_u32,
+                "message": {
+                    "notify": {
+                        "count": 1_i32,
+                        "message": "Hello World",
+                    }
+                }
+            }),
+            serde_json::to_value(Request {
+                guest_cid: 1,
+                command: Command::Notify(NotifyData {
+                    count: 1,
+                    message: "Hello World".to_string(),
+                })
+            })
+            .unwrap()
+        );
+        assert_eq!(
+            serde_json::json!({
+                "sender_cid": 1_u32,
+                "message": {
+                    "upgrade": {
+                        "url": "https://example.com",
+                        "target-hash": "0x1111222233334444"
+                    }
+                }
+            }),
+            serde_json::to_value(Request {
+                guest_cid: 1,
+                command: Command::Upgrade(UpgradeData {
+                    url: "https://example.com".to_string(),
+                    target_hash: "0x1111222233334444".to_string()
+                })
+            })
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_response_serialization() {
+        let response: Response = Ok(Payload::NoPayload);
+        assert_eq!(
+            serde_json::json!({
+                "Ok": "NoPayload",
+            }),
+            serde_json::to_value(response).unwrap()
+        );
+
+        let vsock_version: HostOSVsockVersion = HostOSVsockVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
+        let response: Response = Ok(Payload::HostOSVsockVersion(vsock_version));
+
+        let expected_json = serde_json::json!({
+            "Ok": {
+                "HostOSVsockVersion": {
+                    "major": 1,
+                    "minor": 0,
+                    "patch": 0
+                }
+            }
+        });
+        assert_eq!(expected_json, serde_json::to_value(response).unwrap());
+
+        let response: Response = Ok(Payload::HostOSVersion("VERSION".to_string()));
+        let expected_json = serde_json::json!({
+            "Ok": {
+                "HostOSVersion": "VERSION",
+            }
+        });
+        assert_eq!(expected_json, serde_json::to_value(response).unwrap());
+    }
 }

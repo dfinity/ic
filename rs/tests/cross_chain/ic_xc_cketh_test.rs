@@ -362,6 +362,7 @@ fn minter_init_args(ecdsa_key_id: &EcdsaKeyId, cketh_ledger: Principal) -> Minte
         next_transaction_nonce: Nat::from(0_u8),
         last_scraped_block_number: Nat::from(0_u8),
         evm_rpc_id: None,
+        ethereum_sweeper_contract_address: None,
     }
 }
 

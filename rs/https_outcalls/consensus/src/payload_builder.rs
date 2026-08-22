@@ -5,8 +5,8 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            FlexibleFindResult, ResponseShareSigInput, find_flexible_result,
-            find_fully_replicated_response, find_non_flexible_out_of_cycles,
+            FlexibleFindResult, RefundedNodes, ResponseShareSigInput, find_async_receipts,
+            find_flexible_result, find_fully_replicated_response, find_non_flexible_out_of_cycles,
             find_non_replicated_response, group_shares_by_callback_id,
             grouped_shares_meet_divergence_criteria, response_share_sig_inputs,
             validate_flexible_response_with_proof, validate_response_share,
@@ -16,7 +16,7 @@ use crate::{
 use candid::{Decode, Encode};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    membership::{CanisterHttpCommittee, Membership},
+    membership::{CanisterHttpCommittee, Membership, MembershipError},
 };
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
@@ -41,18 +41,20 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
-        CanisterHttpInitialSpent, CanisterHttpPayload, CanisterHttpSpent, ConsensusResponse,
-        FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
+        CanisterHttpAsyncSpent, CanisterHttpInitialSpent, CanisterHttpPayload, CanisterHttpSpent,
+        ConsensusResponse, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseShare,
-        Replication,
+        CanisterHttpRequestContext, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseShare, Replication,
     },
+    consensus::Threshold,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSigBatchEntry,
@@ -64,6 +66,8 @@ use std::{
 };
 
 pub(crate) mod parse;
+pub use parse::PastPayloads;
+
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 #[cfg(test)]
@@ -79,10 +83,11 @@ pub struct CanisterHttpBatchStats {
     pub timeouts: usize,
     pub divergence_responses: usize,
     pub out_of_cycles: usize,
+    pub async_receipts: usize,
     pub single_signature_responses: usize,
     pub flexible_ok_responses: usize,
     pub flexible_ok_responses_candid_failures: usize,
-    pub flexible_errors: usize,
+    pub flexible_errors: BTreeMap<&'static str, usize>,
     pub flexible_errors_candid_failures: usize,
     pub payload_bytes: usize,
 }
@@ -138,7 +143,7 @@ impl CanisterHttpPayloadBuilderImpl {
     fn get_canister_http_payload_impl(
         &self,
         validation_context: &ValidationContext,
-        delivered_ids: HashSet<CallbackId>,
+        past_payloads: PastPayloads,
         max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
         let state = match self
@@ -156,11 +161,16 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         };
 
-        let canister_http_request_contexts = &state
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts;
+        let PastPayloads {
+            delivered_ids,
+            refunded_nodes,
+        } = past_payloads;
+
+        let subnet_call_context_manager = &state.get_ref().metadata.subnet_call_context_manager;
+        let canister_http_request_contexts =
+            &subnet_call_context_manager.canister_http_request_contexts;
+        let delivered_canister_http_request_contexts =
+            &subnet_call_context_manager.delivered_canister_http_request_contexts;
 
         let mut accumulated_size = 0;
         let mut responses_included = 0;
@@ -171,6 +181,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut out_of_cycles = vec![];
         let mut flexible_responses = vec![];
         let mut flexible_errors = vec![];
+        let mut async_receipts = vec![];
 
         // Metrics counters
         let mut total_share_count = 0;
@@ -228,6 +239,27 @@ impl CanisterHttpPayloadBuilderImpl {
                             accumulated_size += candidate_size;
                         }
                     }
+                    let groups = shares_by_callback_id.get(callback_id);
+                    let (groups, success, reject) = groups.map_or((0, 0, 0), |groups| {
+                        let (mut success, mut reject) = (0, 0);
+                        for share in groups.values().flatten() {
+                            if share.content.is_reject() {
+                                reject += 1;
+                            } else {
+                                success += 1;
+                            }
+                        }
+                        (groups.len(), success, reject)
+                    });
+                    warn!(
+                        self.log,
+                        "CanisterHttpPayloadBuilder: timeout for callback_id {callback_id} \
+                        with {groups} groups ({success} success, {reject} reject), pricing {:?}, \
+                        replication {:?}, refund status {:?}",
+                        request.pricing_version,
+                        request.replication,
+                        request.refund_status
+                    );
                     continue;
                 }
                 if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
@@ -374,6 +406,54 @@ impl CanisterHttpPayloadBuilderImpl {
                     },
                 }
             }
+
+            // Collect the asynchronous receipts of the requests that have already
+            // been responded to.
+            for (callback_id, request) in delivered_canister_http_request_contexts {
+                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                    // Break early to avoid iterating through all open contexts.
+                    break;
+                }
+                // Skip contexts that have already timed out.
+                if delivered_context_timed_out(request, validation_context) {
+                    continue;
+                }
+                let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
+                    continue;
+                };
+                let committee = match self.request_committee(request) {
+                    Ok(committee) => committee,
+                    Err(err) => {
+                        warn!(self.log, "Failed to get canister http committee: {:?}", err);
+                        continue;
+                    }
+                };
+                // Skip shares for nodes that have already issued a refund for this request,
+                // according to the certified state or any past payload above it.
+                let already_refunded = RefundedNodes::new(*callback_id, request, &refunded_nodes);
+                for share in find_async_receipts(grouped_shares, &committee, &already_refunded) {
+                    if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                        break;
+                    }
+                    let share_size = share.count_bytes();
+                    let size = NumBytes::new((accumulated_size + share_size) as u64);
+                    if size < max_payload_size {
+                        async_receipts.push(share.clone());
+                        responses_included += 1;
+                        accumulated_size += share_size;
+                    }
+                }
+            }
+        }
+
+        if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+            warn!(
+                every_n_seconds => 15,
+                self.log,
+                "CanisterHttpPayloadBuilder: reached max responses per block ({})",
+                CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
+            );
+            self.metrics.max_responses_per_block_reached.inc();
         }
 
         CanisterHttpPayload {
@@ -383,6 +463,57 @@ impl CanisterHttpPayloadBuilderImpl {
             out_of_cycles,
             flexible_responses,
             flexible_errors,
+            async_receipts,
+        }
+    }
+
+    /// The set of replicas that may have produced a receipt for this request,
+    /// evaluated at the registry version pinned in the request context.
+    fn request_committee(
+        &self,
+        context: &CanisterHttpRequestContext,
+    ) -> Result<BTreeSet<NodeId>, MembershipError> {
+        match &context.replication {
+            Replication::FullyReplicated => self
+                .membership
+                .get_canister_http_committee(context.registry_version)
+                .map(|committee| BTreeSet::from_iter(committee.committee)),
+            // Only the designated replica ever produces a receipt.
+            Replication::NonReplicated(node_id) => Ok(BTreeSet::from([*node_id])),
+            Replication::Flexible { committee, .. } => Ok(committee.clone()),
+        }
+    }
+
+    /// The replicas a response to a *non-flexible* request may come from, and how
+    /// many of them have to agree on one for it to be delivered.
+    fn non_flexible_committee(
+        &self,
+        callback_id: CallbackId,
+        context: &CanisterHttpRequestContext,
+    ) -> Result<(BTreeSet<NodeId>, Threshold), CanisterHttpPayloadValidationError> {
+        match &context.replication {
+            Replication::FullyReplicated => {
+                let CanisterHttpCommittee {
+                    committee,
+                    threshold,
+                    ..
+                } = self
+                    .membership
+                    .get_canister_http_committee(context.registry_version)
+                    .map_err(|err| {
+                        warn!(self.log, "Failed to get membership: {:?}", err);
+                        CanisterHttpPayloadValidationError::ValidationFailed(
+                            CanisterHttpPayloadValidationFailure::Membership,
+                        )
+                    })?;
+                Ok((BTreeSet::from_iter(committee), threshold))
+            }
+            Replication::NonReplicated(node_id) => Ok((BTreeSet::from([*node_id]), 1)),
+            Replication::Flexible { .. } => {
+                Err(CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
+                ))
+            }
         }
     }
 
@@ -390,8 +521,12 @@ impl CanisterHttpPayloadBuilderImpl {
         &self,
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
-        mut delivered_ids: HashSet<CallbackId>,
+        past_payloads: PastPayloads,
     ) -> Result<(), PayloadValidationError> {
+        let PastPayloads {
+            mut delivered_ids,
+            refunded_nodes,
+        } = past_payloads;
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
@@ -423,11 +558,10 @@ impl CanisterHttpPayloadBuilderImpl {
                     CanisterHttpPayloadValidationFailure::StateUnavailable,
                 )
             })?;
-        let http_contexts = &state
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts;
+        let subnet_call_context_manager = &state.get_ref().metadata.subnet_call_context_manager;
+        let http_contexts = &subnet_call_context_manager.canister_http_request_contexts;
+        let delivered_http_contexts =
+            &subnet_call_context_manager.delivered_canister_http_request_contexts;
 
         // Validate the timed out calls
         for timeout_id in &payload.timeouts {
@@ -487,50 +621,26 @@ impl CanisterHttpPayloadBuilderImpl {
             .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             let subnet_size = request_context.subnet_size;
-            let (effective_committee, effective_threshold) = match request_context.replication {
-                Replication::NonReplicated(node_id) => (vec![node_id], 1),
-                Replication::FullyReplicated => {
-                    // The committee is the subnet node set at the registry
-                    // version pinned in the request context.
-                    let CanisterHttpCommittee {
-                        committee,
-                        threshold,
-                        ..
-                    } = self
-                        .membership
-                        .get_canister_http_committee(request_context.registry_version)
-                        .map_err(|err| {
-                            warn!(self.log, "Failed to get membership: {:?}", err);
-                            CanisterHttpPayloadValidationError::ValidationFailed(
-                                CanisterHttpPayloadValidationFailure::Membership,
-                            )
-                        })?;
-                    (committee, threshold)
-                }
-                Replication::Flexible { .. } => {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
-                    );
-                }
-            };
+            let (effective_committee, effective_threshold) =
+                self.non_flexible_committee(callback_id, request_context)?;
 
             let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
                 .proof
                 .signatures
                 .keys()
                 .cloned()
-                .partition(|signer| effective_committee.iter().any(|id| id == signer));
+                .partition(|signer| effective_committee.contains(signer));
             if !invalid_signers.is_empty() {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
                     invalid_signers,
-                    committee: effective_committee,
+                    committee: effective_committee.into_iter().collect(),
                     valid_signers,
                 });
             }
 
             if valid_signers.len() < effective_threshold {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
-                    committee: effective_committee,
+                    committee: effective_committee.into_iter().collect(),
                     signers: valid_signers,
                     expected_threshold: effective_threshold,
                 });
@@ -691,32 +801,7 @@ impl CanisterHttpPayloadBuilderImpl {
             )?;
             // Which replicas a response could come from, and how many of them have to
             // agree on it for it to be delivered.
-            let (committee, threshold) = match &context.replication {
-                Replication::FullyReplicated => {
-                    let CanisterHttpCommittee {
-                        committee,
-                        threshold,
-                        ..
-                    } = self
-                        .membership
-                        .get_canister_http_committee(context.registry_version)
-                        .map_err(|err| {
-                            warn!(self.log, "Failed to get membership: {:?}", err);
-                            CanisterHttpPayloadValidationError::ValidationFailed(
-                                CanisterHttpPayloadValidationFailure::Membership,
-                            )
-                        })?;
-                    (BTreeSet::from_iter(committee), threshold)
-                }
-                // Only the designated replica's response is ever delivered, so it is a
-                // committee of one and its own threshold.
-                Replication::NonReplicated(node_id) => (BTreeSet::from([*node_id]), 1),
-                Replication::Flexible { .. } => {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
-                    );
-                }
-            };
+            let (committee, threshold) = self.non_flexible_committee(callback_id, context)?;
 
             let mut seen_signers = HashSet::new();
             for share in &error.shares {
@@ -1103,6 +1188,56 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
+        // Validate asynchronous receipts: the signed spends of replicas that the
+        // already delivered response of their outcall did not account for.
+        let mut receipts_by_callback: BTreeMap<CallbackId, Vec<&CanisterHttpResponseShare>> =
+            BTreeMap::new();
+        for share in &payload.async_receipts {
+            receipts_by_callback
+                .entry(share.content.id())
+                .or_default()
+                .push(share);
+        }
+        for (callback_id, shares) in receipts_by_callback {
+            // Only an outcall that has already been responded to can be refunded asynchronously.
+            let context = delivered_http_contexts.get(&callback_id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownDeliveredCallbackId(callback_id),
+                ),
+            )?;
+            // Reject if the context for this share has already timed out.
+            if delivered_context_timed_out(context, validation_context) {
+                return invalid_artifact(
+                    InvalidCanisterHttpPayloadReason::DeliveredCallbackTimedOut(callback_id),
+                );
+            }
+            let committee = self.request_committee(context).map_err(|err| {
+                warn!(self.log, "Failed to get membership: {:?}", err);
+                CanisterHttpPayloadValidationError::ValidationFailed(
+                    CanisterHttpPayloadValidationFailure::Membership,
+                )
+            })?;
+
+            // A replica may only be refunded once.
+            let already_refunded = RefundedNodes::new(callback_id, context, &refunded_nodes);
+            let mut seen_signers = HashSet::new();
+            for &share in &shares {
+                validate_response_share(share, callback_id, &committee, &mut seen_signers, context)
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+
+                let signer = share.signature.signer;
+                if already_refunded.contains(&signer) {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::AlreadyRefunded {
+                        callback_id,
+                        signer,
+                    });
+                }
+            }
+
+            // Defer signature verification.
+            sig_inputs.extend(response_share_sig_inputs(shares, context.registry_version));
+        }
+
         // Batch-verify the signatures of the deferred shares.
         if !sig_inputs.is_empty() {
             self.crypto
@@ -1147,8 +1282,8 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             max_size,
             NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
         );
-        let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
-        let payload = self.get_canister_http_payload_impl(context, delivered_ids, max_size);
+        let past_payloads = parse::parse_past_payloads(past_payloads, &self.log);
+        let payload = self.get_canister_http_payload_impl(context, past_payloads, max_size);
         parse::payload_to_bytes(payload, max_size)
     }
 
@@ -1181,7 +1316,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             ));
         }
 
-        let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
+        let past_payloads = parse::parse_past_payloads(past_payloads, &self.log);
         let payload = parse::bytes_to_payload(payload).map_err(|e| {
             ValidationError::InvalidArtifact(
                 consensus::InvalidPayloadReason::InvalidCanisterHttpPayload(
@@ -1192,7 +1327,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         self.validate_canister_http_payload_impl(
             &payload,
             proposal_context.validation_context,
-            delivered_ids,
+            past_payloads,
         )
     }
 }
@@ -1392,9 +1527,10 @@ impl
                 // Timeouts carry no shares and produce no spend report.
                 FlexibleCanisterHttpError::Timeout { .. } => None,
             };
+            let kind = error.kind();
             match flexible_error_into_consensus_response(error) {
                 Some(consensus_response) => {
-                    stats.flexible_errors += 1;
+                    *stats.flexible_errors.entry(kind).or_default() += 1;
                     consensus_responses.push(consensus_response);
                     if let Some(report) = report {
                         spent.initial.push(report);
@@ -1403,6 +1539,20 @@ impl
                 None => stats.flexible_errors_candid_failures += 1,
             }
         }
+
+        let mut async_spent: BTreeMap<CallbackId, BTreeMap<NodeId, Cycles>> = BTreeMap::new();
+        for share in messages.async_receipts {
+            stats.async_receipts += 1;
+            async_spent
+                .entry(share.content.id())
+                .or_default()
+                .insert(share.signature.signer, share.content.spent());
+        }
+        spent.asynchronous.extend(
+            async_spent
+                .into_iter()
+                .map(|(callback, shares)| CanisterHttpAsyncSpent { callback, shares }),
+        );
 
         (consensus_responses, spent, stats)
     }
@@ -1661,6 +1811,18 @@ fn divergence_response_into_reject(
             ),
         )),
     ))
+}
+
+/// Returns true if a delivered context has timed out, meaning no further
+/// asynchronous receipts are accepted.
+fn delivered_context_timed_out(
+    context: &CanisterHttpRequestContext,
+    validation_context: &ValidationContext,
+) -> bool {
+    validation_context
+        .time
+        .saturating_duration_since(context.time)
+        >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
 }
 
 fn validation_failed(

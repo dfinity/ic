@@ -1,15 +1,13 @@
 use super::*;
-use crate::erc20::{CkErc20Token, CkTokenSymbol};
-use crate::state::automatic_deposits::DepositRequest;
+use crate::deposit_address::DepositAddress;
+use crate::state::automatic_deposits::{DepositRequest, ScanProgress};
 use crate::test_fixtures;
 use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
 use ic_canister_runtime::{IcError, StubRuntime};
-use std::collections::BTreeSet;
+use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 
-const DEPOSIT_ADDRESS: Address = Address::new([0x11; 20]);
 const TOKEN_A: Address = Address::new([0x22; 20]);
-const TOKEN_B: Address = Address::new([0x33; 20]);
 
 fn account(owner: u64) -> Account {
     Account {
@@ -19,35 +17,11 @@ fn account(owner: u64) -> Account {
 }
 
 #[test]
-fn should_count_candidates_at_and_above_the_per_token_minimum() {
-    let (token, min) = MIN_DEPOSITS[0]; // ckUSDC
-    let calls = vec![
-        BalanceOfCall {
-            token,
-            holder: DEPOSIT_ADDRESS,
-        };
-        4
-    ];
-    let balances = vec![
-        min,                                              // == min      -> candidate
-        min.checked_sub(Erc20Value::from(1_u8)).unwrap(), // < min      -> excluded
-        min.checked_add(Erc20Value::from(1_u8)).unwrap(), // > min      -> candidate
-        Erc20Value::from(0_u8),                           // failed/zero -> excluded
-    ];
-
-    assert_eq!(count_candidates(&calls, &balances), 2);
-}
-
-#[test]
-fn should_not_count_candidates_for_an_unsupported_token() {
-    // TOKEN_A is absent from MIN_DEPOSITS, so even a huge balance is never a candidate.
-    let calls = vec![BalanceOfCall {
-        token: TOKEN_A,
-        holder: DEPOSIT_ADDRESS,
-    }];
-    let balances = vec![Erc20Value::from(u128::MAX)];
-
-    assert_eq!(count_candidates(&calls, &balances), 0);
+fn unsupported_token_has_an_unreachable_minimum_deposit() {
+    // A token absent from MIN_DEPOSITS gets Erc20Value::MAX as its threshold, so no real balance
+    // (below the u256 max) ever clears it and it is never a candidate.
+    assert_eq!(min_deposit(&TOKEN_A), Erc20Value::MAX);
+    assert!(Erc20Value::from(u128::MAX) < min_deposit(&TOKEN_A));
 }
 
 #[test]
@@ -95,142 +69,38 @@ fn should_have_a_min_deposit_for_every_deployed_supported_token() {
     }
 }
 
-#[test]
-fn should_build_one_call_per_address_and_token_in_order() {
-    let holders = vec![DEPOSIT_ADDRESS, Address::new([0x99; 20])];
-    let tokens = vec![TOKEN_A, TOKEN_B];
-
-    let calls = balance_of_calls(&holders, &tokens);
-
-    assert_eq!(
-        calls,
-        vec![
-            BalanceOfCall {
-                token: TOKEN_A,
-                holder: DEPOSIT_ADDRESS
-            },
-            BalanceOfCall {
-                token: TOKEN_B,
-                holder: DEPOSIT_ADDRESS
-            },
-            BalanceOfCall {
-                token: TOKEN_A,
-                holder: Address::new([0x99; 20])
-            },
-            BalanceOfCall {
-                token: TOKEN_B,
-                holder: Address::new([0x99; 20])
-            },
-        ]
-    );
-}
-
-#[test]
-fn should_build_no_calls_when_no_addresses_or_no_tokens() {
-    assert!(balance_of_calls(&[], &[TOKEN_A]).is_empty());
-    assert!(balance_of_calls(&[DEPOSIT_ADDRESS], &[]).is_empty());
-}
-
-#[test]
-fn should_never_split_an_address_across_batches() {
-    // Scan-state is tracked per address, not per (address, token): `record_scan` advances a whole
-    // address once its batch succeeds. `plan_batches` must therefore keep every `balanceOf` for an
-    // address in the same batch — otherwise a failing batch could advance an address whose balances
-    // were only partially read — even when a single address's token calls alone exceed the cap.
-    fn address_at(index: u64) -> Address {
-        let mut bytes = [0_u8; 20];
-        bytes[..8].copy_from_slice(&index.to_be_bytes());
-        Address::new(bytes)
-    }
-
-    let addresses: Vec<(Account, Address)> = (0..5)
-        .map(|i| (account(i), address_at(1_000 + i)))
-        .collect();
-
-    for num_tokens in [1, 2, 7, MAX_CALLS_PER_BATCH, MAX_CALLS_PER_BATCH + 1] {
-        let tokens: Vec<Address> = (0..num_tokens as u64).map(address_at).collect();
-
-        let batches = plan_batches(&addresses, &tokens);
-
-        let mut seen: BTreeSet<Address> = BTreeSet::new();
-        for batch in &batches {
-            let batch_holders: Vec<Address> = batch.addresses.iter().map(|(_, h)| *h).collect();
-            for holder in &batch_holders {
-                // Batches never intersect: an address belongs to exactly one batch.
-                assert!(
-                    !seen.contains(holder),
-                    "num_tokens={num_tokens}: address {holder:?} appears in more than one batch"
-                );
-                // The batch queries every token for the address, and only for its own addresses.
-                let queried: Vec<Address> = batch
-                    .calls
-                    .iter()
-                    .filter(|call| call.holder == *holder)
-                    .map(|call| call.token)
-                    .collect();
-                assert_eq!(
-                    queried, tokens,
-                    "num_tokens={num_tokens}: address {holder:?} is not fully covered by its batch"
-                );
-            }
-            assert!(
-                batch
-                    .calls
-                    .iter()
-                    .all(|call| batch_holders.contains(&call.holder)),
-                "num_tokens={num_tokens}: batch issues a call for an address outside it"
-            );
-            seen.extend(batch_holders);
-        }
-        assert_eq!(
-            seen.len(),
-            addresses.len(),
-            "num_tokens={num_tokens}: every address must be scanned in exactly one batch"
-        );
-    }
-}
-
 #[tokio::test]
 async fn should_skip_without_scanning() {
     struct Case {
         name: &'static str,
         latest_block: Option<BlockNumber>,
-        token: Option<Address>,
-        holders: Vec<(Account, Address)>,
+        holders: Vec<(Account, DepositAddress)>,
     }
 
-    let holder = (account(1), Address::new([0xa1; 20]));
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
     let cases = vec![
         Case {
             name: "latest block height unknown",
             latest_block: None,
-            token: Some(MIN_DEPOSITS[0].0),
             holders: vec![holder],
         },
         Case {
-            name: "no supported tokens",
+            name: "no pair due for a scan",
             latest_block: Some(BlockNumber::new(1_000)),
-            token: None,
-            holders: vec![holder],
-        },
-        Case {
-            name: "no address due for a scan",
-            latest_block: Some(BlockNumber::new(1_000)),
-            token: Some(MIN_DEPOSITS[0].0),
             holders: vec![],
         },
     ];
 
     for case in cases {
         let now = ts();
-        seed_state(case.latest_block, case.token, &case.holders, now);
+        seed_state(case.latest_block, MIN_DEPOSITS[0].0, &case.holders, now);
 
         // No stub responses: the scan must short-circuit before any outcall.
         scan(now, stub_client(vec![])).await;
 
         // A skipped scan advances no watchlist entry.
         for (account, _) in &case.holders {
-            let entry = live_entry(now, account);
+            let entry = live_entry(now, account, MIN_DEPOSITS[0].0);
             assert_eq!(entry.scan_count, 0, "case: {}", case.name);
             assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
         }
@@ -238,24 +108,25 @@ async fn should_skip_without_scanning() {
 }
 
 #[tokio::test]
-async fn should_advance_scanned_addresses() {
+async fn should_advance_scanned_non_candidate_pairs() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
     let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
-    let candidate = (account(1), Address::new([0xa1; 20]));
-    let non_candidate = (account(2), Address::new([0xa2; 20]));
-    seed_state(Some(latest), Some(token), &[candidate, non_candidate], now);
+    let a = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    let b = (account(2), DepositAddress::new(Address::new([0xa2; 20])));
+    seed_state(Some(latest), token, &[a, b], now);
 
-    // Single chunk, holders in call order: first at the minimum (candidate), second below it.
-    scan(now, stub_client(vec![ok_balances(&[min, below_min])])).await;
+    // Both balances are below the minimum, so neither is a candidate: they advance the schedule
+    // and nothing is moved to the sweep queue.
+    scan(now, stub_client(vec![ok_balances(&[below_min, below_min])])).await;
 
-    // Both scanned addresses are advanced along the schedule at the scanned block.
-    for (account, _) in [candidate, non_candidate] {
-        let entry = live_entry(now, &account);
+    for (account, _) in [a, b] {
+        let entry = live_entry(now, &account, token);
         assert_eq!(entry.scan_count, 1);
         assert_eq!(entry.last_scanned_block, Some(latest));
     }
+    assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 0);
 }
 
 #[tokio::test]
@@ -263,45 +134,47 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     let now = ts();
     let latest = BlockNumber::new(1_000);
     let (token, min) = MIN_DEPOSITS[0];
-    // One token, so addresses_per_chunk == MAX_CALLS_PER_BATCH; this many holders spills into a
-    // second chunk.
+    let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
+    // Each pair is one call, so a batch holds up to MAX_CALLS_PER_BATCH pairs; this many holders
+    // spills into a second chunk.
     let extra = 50_usize;
     let holders: Vec<_> = (0..MAX_CALLS_PER_BATCH + extra)
         .map(|i| {
             let i = i as u64;
             let mut address = [0_u8; 20];
             address[..8].copy_from_slice(&i.to_be_bytes());
-            (account(i), Address::new(address))
+            (account(i), DepositAddress::new(Address::new(address)))
         })
         .collect();
-    seed_state(Some(latest), Some(token), &holders, now);
+    seed_state(Some(latest), token, &holders, now);
 
-    // Two responses, one per chunk, sized to the chunk's call count.
+    // Two responses, one per chunk, sized to the chunk's call count. Below-min balances so the
+    // whole set advances (no sweep events), letting the test assert the chunk split directly.
     scan(
         now,
         stub_client(vec![
-            ok_balances(&vec![min; MAX_CALLS_PER_BATCH]),
-            ok_balances(&vec![min; extra]),
+            ok_balances(&vec![below_min; MAX_CALLS_PER_BATCH]),
+            ok_balances(&vec![below_min; extra]),
         ]),
     )
     .await;
 
-    // Both chunks succeeded, so every address across the split is advanced. Check the boundary
-    // holders of each chunk (first/last of chunk 1, first/last of chunk 2).
+    // Both chunks succeeded, so every pair across the split is advanced. Check the boundary holders
+    // of each chunk (first/last of chunk 1, first/last of chunk 2).
     for i in [
         0,
         MAX_CALLS_PER_BATCH - 1,
         MAX_CALLS_PER_BATCH,
         MAX_CALLS_PER_BATCH + extra - 1,
     ] {
-        let entry = live_entry(now, &holders[i].0);
+        let entry = live_entry(now, &holders[i].0, token);
         assert_eq!(entry.scan_count, 1, "holder {i} must be advanced");
         assert_eq!(entry.last_scanned_block, Some(latest), "holder {i}");
     }
 }
 
 #[tokio::test]
-async fn should_not_advance_addresses_when_the_chunk_fails() {
+async fn should_not_advance_pairs_when_the_chunk_fails() {
     struct Case {
         name: &'static str,
         response: Result<MultiRpcResult<Hex>, IcError>,
@@ -322,12 +195,12 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
     for case in cases {
         let now = ts();
         let latest = BlockNumber::new(1_000);
-        let holder = (account(1), Address::new([0xa1; 20]));
-        seed_state(Some(latest), Some(MIN_DEPOSITS[0].0), &[holder], now);
+        let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+        seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
         scan(now, stub_client(vec![case.response])).await;
 
-        let entry = live_entry(now, &holder.0);
+        let entry = live_entry(now, &holder.0, MIN_DEPOSITS[0].0);
         assert_eq!(
             entry.scan_count, 0,
             "case '{}': a failed chunk must be retried, not advanced",
@@ -337,32 +210,100 @@ async fn should_not_advance_addresses_when_the_chunk_fails() {
     }
 }
 
+#[tokio::test]
+async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction() {
+    let now = ts();
+    let latest = BlockNumber::new(1_000);
+    let (token, min) = MIN_DEPOSITS[0];
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    seed_state(Some(latest), token, &[holder], now);
+
+    // Capture the due targets, then wipe the watchlist — as a concurrent arming/expiry could evict
+    // between reading the targets and applying the scan's outcome.
+    let targets = due_targets(now, latest);
+    seed_state(Some(latest), token, &[], now);
+
+    // The funded pair is still detected: scan_balances works off the captured targets alone, so the
+    // detection is never lost to a mid-scan eviction.
+    let outcomes = scan_balances(&targets, latest, stub_client(vec![ok_balances(&[min])])).await;
+
+    assert_eq!(
+        outcomes,
+        vec![ScanOutcome::Detected(AutomaticDeposit {
+            owner: holder.0.owner,
+            subaccount: holder.0.subaccount,
+            address: holder.1,
+            erc20_contract_address: token,
+            last_scanned_block: latest,
+            scan_count: 1,
+            scanned_balance: min,
+        })]
+    );
+}
+
+#[tokio::test]
+async fn should_yield_nothing_found_for_a_below_minimum_pair() {
+    let now = ts();
+    let latest = BlockNumber::new(1_000);
+    let (token, min) = MIN_DEPOSITS[0];
+    let below = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    seed_state(Some(latest), token, &[holder], now);
+
+    let targets = due_targets(now, latest);
+    let outcomes = scan_balances(&targets, latest, stub_client(vec![ok_balances(&[below])])).await;
+
+    assert_eq!(
+        outcomes,
+        vec![ScanOutcome::NothingFound(DepositRequest::new(
+            holder.0, token
+        ))]
+    );
+}
+
+#[tokio::test]
+async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
+    let now = ts();
+    let latest = BlockNumber::new(1_000);
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
+
+    let targets = due_targets(now, latest);
+    let outcomes = scan_balances(
+        &targets,
+        latest,
+        stub_client(vec![Err(IcError::CallPerformFailed)]),
+    )
+    .await;
+
+    assert!(outcomes.is_empty(), "a failed chunk must yield no outcome");
+}
+
+fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget> {
+    read_state(|s| {
+        s.automatic_deposits
+            .scan_targets_iter(now, latest)
+            .collect()
+    })
+}
+
 fn ts() -> Timestamp {
     Timestamp::from_nanos(1_000)
 }
 
 fn seed_state(
     latest_block: Option<BlockNumber>,
-    token: Option<Address>,
-    holders: &[(Account, Address)],
+    token: Address,
+    holders: &[(Account, DepositAddress)],
     now: Timestamp,
 ) {
     let mut state = test_fixtures::initial_state();
     state.latest_block_height = latest_block;
-    if let Some(token) = token {
-        let network = state.ethereum_network();
-        state.record_add_ckerc20_token(CkErc20Token {
-            erc20_ethereum_network: network,
-            erc20_contract_address: token,
-            ckerc20_token_symbol: CkTokenSymbol::from_str("ckUSDC").unwrap(),
-            ckerc20_ledger_id: candid::Principal::anonymous(),
-        });
-    }
     for (account, address) in holders {
         state
             .automatic_deposits
-            .watch_address_for_account(now, *account, *address)
-            .expect("BUG: failed to arm deposit address");
+            .watch_deposit(now, *account, token, *address)
+            .expect("BUG: failed to arm deposit");
     }
     test_fixtures::init_state(state);
 }
@@ -392,8 +333,12 @@ fn ok_balances(balances: &[Erc20Value]) -> Result<MultiRpcResult<Hex>, IcError> 
     Ok(MultiRpcResult::Consistent(Ok(Hex::from(blob))))
 }
 
-fn live_entry(now: Timestamp, account: &Account) -> DepositRequest {
-    read_state(|s| s.automatic_deposits.get_entry(now, account).cloned())
-        .expect("BUG: expected a live watchlist entry")
-        .value
+fn live_entry(now: Timestamp, account: &Account, token: Address) -> ScanProgress {
+    read_state(|s| {
+        s.automatic_deposits
+            .get_entry(now, &DepositRequest::new(*account, token))
+            .cloned()
+    })
+    .expect("BUG: expected a live watchlist entry")
+    .value
 }

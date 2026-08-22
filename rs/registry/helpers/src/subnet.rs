@@ -190,8 +190,8 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersion>;
 
-    /// Return the [ReplicaVersionRecord] as recorded in the subnet record
-    /// at the given height.
+    /// Return the [ReplicaVersionRecord] of the subnet. See
+    /// [Self::get_replica_version].
     fn get_replica_version_record(
         &self,
         subnet_id: SubnetId,
@@ -515,17 +515,10 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersionRecord> {
-        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        Ok(match deserialize_registry_value::<SubnetRecord>(bytes)? {
-            Some(record) => {
-                let bytes = self.get_value(
-                    &make_replica_version_key(record.replica_version_id),
-                    version,
-                );
-                deserialize_registry_value::<ReplicaVersionRecord>(bytes)?
-            }
-            None => None,
-        })
+        let Some(replica_version) = self.get_replica_version(subnet_id, version)? else {
+            return Ok(None);
+        };
+        self.get_replica_version_record_from_version_id(&replica_version, version)
     }
 
     fn get_replica_version_record_from_version_id(
@@ -644,7 +637,7 @@ fn get_standard_engine_replica_version_record<T: RegistryClient + ?Sized>(
 ///
 /// 1. the engine's ID
 /// 2. the new replica version
-fn engine_upgrade_priority(subnet_id: SubnetId, new_replica_version_id: &str) -> f64 {
+pub fn engine_upgrade_priority(subnet_id: SubnetId, new_replica_version_id: &str) -> f64 {
     let mut hasher = Sha256::new_with_context(&DomainSeparationContext::new("upgrade priority"));
     hasher.write(new_replica_version_id.as_bytes());
     hasher.write(subnet_id.to_string().as_bytes());
@@ -850,6 +843,61 @@ mod tests {
             .get_replica_version_record(subnet_id, version)
             .unwrap();
         assert_eq!(result, Some(replica_version_record))
+    }
+
+    #[test]
+    fn can_get_replica_version_record_for_cloud_engine_with_blank_replica_version_id() {
+        // Step 1: Prepare the world: a CloudEngine subnet with a blank
+        // replica_version_id, resolved via StandardEngineReplicaVersionRecord
+        // to "new".
+        let engine_subnet_id = subnet_id(1);
+        let new_replica_version_record = ReplicaVersionRecord {
+            release_package_sha256_hex: "abc123".to_string(),
+            ..Default::default()
+        };
+
+        let data_provider = ProtoRegistryDataProvider::new();
+        data_provider
+            .add(
+                &make_subnet_record_key(engine_subnet_id),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "".to_string(),
+                    subnet_type: SubnetType::CloudEngine as i32,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        data_provider
+            .add(
+                &make_standard_engine_replica_version_record_key(),
+                RegistryVersion::from(2),
+                Some(StandardEngineReplicaVersionRecord {
+                    new_replica_version_id: "new".to_string(),
+                    old_replica_version_id: "old".to_string(),
+                    deployment_progress: 1.0,
+                }),
+            )
+            .unwrap();
+        data_provider
+            .add(
+                &make_replica_version_key("new"),
+                RegistryVersion::from(2),
+                Some(new_replica_version_record.clone()),
+            )
+            .unwrap();
+
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let result = registry
+            .get_replica_version_record(engine_subnet_id, RegistryVersion::from(2))
+            .unwrap();
+
+        // Step 3: Verify result(s). Blank resolves to "new" (deployment_progress
+        // is 1.0), so this must be new_replica_version_record, not None.
+        assert_eq!(result, Some(new_replica_version_record));
     }
 
     #[test]
