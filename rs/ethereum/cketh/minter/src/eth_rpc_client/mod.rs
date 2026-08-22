@@ -28,40 +28,89 @@ pub const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
 
 pub const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
+/// How many providers a client queries, and how many of them must return the same result for the
+/// EVM RPC canister to report a consistent one.
+pub struct Threshold {
+    pub total: u8,
+    pub min: u8,
+}
+
+impl Threshold {
+    /// The threshold [`balance_scan_rpc_client`] queries with.
+    pub const BALANCE_SCAN: Self = Self { total: 3, min: 2 };
+}
+
+/// Client for the queries whose result the minter acts on irreversibly: minting, and signing and
+/// sending transactions.
 pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
-    const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
-    const MAX_NUM_RETRIES: u32 = 10;
-
-    let chain = state.ethereum_network();
-    let evm_rpc_id = state.evm_rpc_id();
-
-    let providers = match chain {
-        EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
-        EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
-            EthSepoliaService::BlockPi,
-            EthSepoliaService::PublicNode,
-            EthSepoliaService::Alchemy,
-            EthSepoliaService::Ankr,
-        ])),
-    };
-
-    let min_threshold = match chain {
+    let min = match state.ethereum_network() {
         EthereumNetwork::Mainnet => 3_u8,
         EthereumNetwork::Sepolia => 2_u8,
     };
+    rpc_client_with_threshold(state, Threshold { total: 4, min })
+}
+
+/// Client for the ckERC20 automatic-deposit balance scan.
+///
+/// A lower threshold than [`rpc_client`] is acceptable because the scan reads balances at the
+/// latest (non-finalized) block only to notify the sweeper: nothing is minted off this path. Two
+/// providers must still agree, which — combined with [`NoReduction`] at the call site — is what
+/// stops a single faulty or malicious provider from hiding a funded deposit address behind a
+/// well-formed all-zeros answer.
+pub fn balance_scan_rpc_client(
+    state: &State,
+) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
+    rpc_client_with_threshold(state, Threshold::BALANCE_SCAN)
+}
+
+fn rpc_client_with_threshold(
+    state: &State,
+    threshold: Threshold,
+) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
+    const MAX_NUM_RETRIES: u32 = 10;
+
     assert!(
-        min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
+        threshold.min <= threshold.total,
         "BUG: min_threshold too high"
     );
 
-    EvmRpcClient::builder(IcRuntime::new(), evm_rpc_id)
+    let providers = match state.ethereum_network() {
+        EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
+        EthereumNetwork::Sepolia => {
+            EvmRpcServices::EthSepolia(Some(sepolia_services(threshold.total)))
+        }
+    };
+
+    EvmRpcClient::builder(IcRuntime::new(), state.evm_rpc_id())
         .with_rpc_sources(providers)
         .with_consensus_strategy(ConsensusStrategy::Threshold {
-            total: Some(TOTAL_NUMBER_OF_PROVIDERS),
-            min: min_threshold,
+            total: Some(threshold.total),
+            min: threshold.min,
         })
         .with_retry_strategy(DoubleCycles::with_max_num_retries(MAX_NUM_RETRIES))
         .build()
+}
+
+/// The `total` Sepolia services to query, from the set this minter is willing to use.
+///
+/// Mainnet leaves the choice to the EVM RPC canister, which ranks its supported providers by how
+/// recently each last answered. Sepolia names them instead because that canister's supported set
+/// also holds `rpc.sepolia.org`, which this minter dropped, and naming is the only way to exclude
+/// it. Naming then fixes the count too — `ConsensusStrategy::Threshold` rejects a `total` that
+/// differs from the number of named services — so a client querying fewer takes a prefix.
+fn sepolia_services(total: u8) -> Vec<EthSepoliaService> {
+    const SERVICES: &[EthSepoliaService] = &[
+        EthSepoliaService::BlockPi,
+        EthSepoliaService::PublicNode,
+        EthSepoliaService::Alchemy,
+        EthSepoliaService::Ankr,
+    ];
+    assert!(
+        usize::from(total) <= SERVICES.len(),
+        "BUG: {total} Sepolia services requested, only {} available",
+        SERVICES.len()
+    );
+    SERVICES[..usize::from(total)].to_vec()
 }
 
 /// Aggregates responses of different providers to the same query.
