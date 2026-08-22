@@ -1,7 +1,9 @@
 use super::{
-    AccessList, SignableTransaction, Signed, compute_recovery_id, encode_u256, split_in_two,
+    AccessList, AccessListItem, SignableTransaction, Signed, StorageKey, TransactionPrice,
+    TransactionSignature, compute_recovery_id, encode_u256, split_in_two,
 };
 use crate::{
+    checked_amount::CheckedAmountOf,
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
     state::read_state,
@@ -10,7 +12,7 @@ use ethnum::u256;
 use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;
 use minicbor::{Decode, Encode};
-use rlp::RlpStream;
+use rlp::{Rlp, RlpStream};
 
 const SET_CODE_TX_ID: u8 = 4;
 const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
@@ -18,8 +20,6 @@ const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
 /// Immutable signed EIP-7702 transaction.
 /// Use [`sign`](super::sign) to create a newly signed transaction or
 /// `SignedEip7702TransactionRequest::from()` if the signature is already known.
-// TODO(DEFI-2926): mirror the `Resubmittable`/fee-bump machinery used for EIP-1559 transactions
-// once EIP-7702 transactions are wired into the resubmission path.
 pub type SignedEip7702TransactionRequest = Signed<Eip7702TransactionRequest>;
 
 /// <https://eips.ethereum.org/EIPS/eip-7702>
@@ -173,6 +173,10 @@ impl SignableTransaction for Eip7702TransactionRequest {
         rlp.append_list(&self.authorization_list);
     }
 
+    fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+
     fn nonce(&self) -> TransactionNonce {
         self.nonce
     }
@@ -188,4 +192,147 @@ impl SignableTransaction for Eip7702TransactionRequest {
     fn max_priority_fee_per_gas(&self) -> WeiPerGas {
         self.max_priority_fee_per_gas
     }
+
+    fn destination(&self) -> &Address {
+        &self.destination
+    }
+
+    fn amount(&self) -> &Wei {
+        &self.amount
+    }
+
+    fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    fn access_list(&self) -> &AccessList {
+        &self.access_list
+    }
+
+    fn with_price_and_amount(&self, price: TransactionPrice, amount: Wei) -> Self {
+        Self {
+            max_priority_fee_per_gas: price.max_priority_fee_per_gas,
+            max_fee_per_gas: price.max_fee_per_gas,
+            gas_limit: price.gas_limit,
+            amount,
+            ..self.clone()
+        }
+    }
+}
+
+impl SignedEip7702TransactionRequest {
+    /// Decodes the payload a signed EIP-7702 transaction is broadcast as, i.e.
+    /// `0x04 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, to,
+    /// value, data, access_list, authorization_list, y_parity, r, s])`. The inverse of
+    /// [`Signed::raw_transaction_bytes`].
+    ///
+    /// # Errors
+    /// * a description of why `raw_transaction` is not such a payload.
+    pub fn decode(raw_transaction: &[u8]) -> Result<Self, String> {
+        let (transaction_type, payload) = raw_transaction
+            .split_first()
+            .ok_or_else(|| "empty transaction".to_string())?;
+        if *transaction_type != SET_CODE_TX_ID {
+            return Err(format!(
+                "expected an EIP-7702 transaction (type {SET_CODE_TX_ID}), got type {transaction_type}"
+            ));
+        }
+        let rlp = Rlp::new(payload);
+        let transaction = Eip7702TransactionRequest {
+            chain_id: decode_val(&rlp, 0)?,
+            nonce: decode_amount(&rlp, 1)?,
+            max_priority_fee_per_gas: decode_amount(&rlp, 2)?,
+            max_fee_per_gas: decode_amount(&rlp, 3)?,
+            gas_limit: decode_amount(&rlp, 4)?,
+            destination: decode_address(&rlp, 5)?,
+            amount: decode_amount(&rlp, 6)?,
+            data: decode_bytes(&rlp, 7)?.to_vec(),
+            access_list: AccessList(
+                decode_list(&rlp, 8)?
+                    .iter()
+                    .map(|item| {
+                        Ok(AccessListItem {
+                            address: decode_address(item, 0)?,
+                            storage_keys: decode_list(item, 1)?
+                                .iter()
+                                .map(|key| Ok(StorageKey(decode_be_bytes_of(key)?)))
+                                .collect::<Result<_, String>>()?,
+                        })
+                    })
+                    .collect::<Result<_, String>>()?,
+            ),
+            authorization_list: decode_list(&rlp, 9)?
+                .iter()
+                .map(|item| {
+                    Ok(SignedAuthorization {
+                        chain_id: decode_val(item, 0)?,
+                        delegate: decode_address(item, 1)?,
+                        nonce: decode_amount(item, 2)?,
+                        y_parity: decode_val(item, 3)?,
+                        r: decode_u256(item, 4)?,
+                        s: decode_u256(item, 5)?,
+                    })
+                })
+                .collect::<Result<_, String>>()?,
+        };
+        let signature = TransactionSignature {
+            signature_y_parity: decode_val(&rlp, 10)?,
+            r: decode_u256(&rlp, 11)?,
+            s: decode_u256(&rlp, 12)?,
+        };
+        Ok(Self::from((transaction, signature)))
+    }
+}
+
+fn decode_bytes<'a>(rlp: &'a Rlp<'a>, index: usize) -> Result<&'a [u8], String> {
+    decode_be_bytes_slice(&item_at(rlp, index)?)
+}
+
+fn item_at<'a>(rlp: &'a Rlp<'a>, index: usize) -> Result<Rlp<'a>, String> {
+    rlp.at(index)
+        .map_err(|e| format!("missing RLP item at index {index}: {e}"))
+}
+
+fn decode_be_bytes_slice<'a>(rlp: &Rlp<'a>) -> Result<&'a [u8], String> {
+    rlp.data()
+        .map_err(|e| format!("expected a byte string: {e}"))
+}
+
+fn decode_be_bytes_of(rlp: &Rlp) -> Result<[u8; 32], String> {
+    let data = decode_be_bytes_slice(rlp)?;
+    if data.len() > 32 {
+        return Err(format!("expected at most 32 bytes, got {}", data.len()));
+    }
+    let mut bytes = [0_u8; 32];
+    bytes[32 - data.len()..].copy_from_slice(data);
+    Ok(bytes)
+}
+
+fn decode_amount<Unit>(rlp: &Rlp, index: usize) -> Result<CheckedAmountOf<Unit>, String> {
+    Ok(CheckedAmountOf::from_be_bytes(decode_be_bytes_of(
+        &item_at(rlp, index)?,
+    )?))
+}
+
+fn decode_u256(rlp: &Rlp, index: usize) -> Result<u256, String> {
+    Ok(u256::from_be_bytes(decode_be_bytes_of(&item_at(
+        rlp, index,
+    )?)?))
+}
+
+fn decode_val<T: rlp::Decodable>(rlp: &Rlp, index: usize) -> Result<T, String> {
+    item_at(rlp, index)?
+        .as_val()
+        .map_err(|e| format!("malformed RLP item at index {index}: {e}"))
+}
+
+fn decode_address(rlp: &Rlp, index: usize) -> Result<Address, String> {
+    let data = decode_bytes(rlp, index)?;
+    Ok(Address::new(data.try_into().map_err(|_| {
+        format!("expected a 20-byte address, got {} bytes", data.len())
+    })?))
+}
+
+fn decode_list<'a>(rlp: &'a Rlp<'a>, index: usize) -> Result<Vec<Rlp<'a>>, String> {
+    Ok(item_at(rlp, index)?.iter().collect())
 }
