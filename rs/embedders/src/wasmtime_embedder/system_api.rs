@@ -28,7 +28,7 @@ use ic_types::{
     messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, SenderInfo},
     methods::{SystemMethod, WasmClosure},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_output_request};
@@ -4462,7 +4462,11 @@ impl SystemApi for SystemApiImpl {
                 }
             })?;
 
-        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
+        // HTTP outcalls are also free on system subnets, despite their normal cost schedule.
+        let mut subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
+        if self.sandbox_safe_system_state.subnet_type == SubnetType::System {
+            subnet_cycles_config.cost_schedule = CanisterCyclesCostSchedule::Free;
+        }
         let replication_kind = cost_params_v2
             .replication_kind(NumberOfNodes::from(subnet_cycles_config.subnet_size as u32));
         let cost = self
