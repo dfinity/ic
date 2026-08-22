@@ -31,7 +31,6 @@ pub mod prometheus_vm;
 pub mod report;
 pub mod resource;
 pub mod serve_files_task;
-pub mod serve_ntp_task;
 pub mod simulate_network;
 pub mod subprocess_ipc;
 pub mod subprocess_task;
