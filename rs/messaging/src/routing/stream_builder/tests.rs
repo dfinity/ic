@@ -31,7 +31,7 @@ use ic_types::messages::{
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
-use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
+use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue};
 use ic_types::{CanisterId, SubnetId, Time};
 use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
@@ -61,9 +61,14 @@ fn test_signals_metrics_exported() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut state, metrics_registry) = new_fixture(&log);
 
-        let stream = Stream::new(
+        // `signals_end` at 42 and 2 reject signals.
+        let stream = Stream::with_signals(
             StreamIndexedQueue::with_begin(StreamIndex::new(0)),
             StreamIndex::new(42),
+            VecDeque::from(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, StreamIndex::new(39)),
+                RejectSignal::new(RejectReason::CanisterNotFound, StreamIndex::new(41)),
+            ]),
         );
 
         state.with_streams(btreemap![LOCAL_SUBNET => stream]);
@@ -71,7 +76,7 @@ fn test_signals_metrics_exported() {
         stream_builder.build_streams(state);
 
         assert_eq!(
-            metric_vec(&[(&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 42)]),
+            metric_vec(&[(&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 2)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_SIGNALS)
         );
         assert_eq!(

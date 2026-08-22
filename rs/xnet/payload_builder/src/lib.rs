@@ -60,11 +60,25 @@ use tokio::{runtime, sync::mpsc};
 /// Message and signal indices into a XNet stream or stream slice.
 ///
 /// Used when computing the expected indices of a stream during payload building
-/// and validation. Or as cutoff points when dealing with stream slices.
-#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Default)]
+/// and validation. And as cutoff points when trimming pooled stream slices.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct ExpectedIndices {
+    /// Next expected message index. This is the most recent `messages.end()` in
+    /// past payloads, when present; else `signals_end` of our outgoing stream.
     pub message_index: StreamIndex,
+
+    /// Next expected signal index. This is the most recent `signals_end` in past
+    /// payloads, when present; else `messages_begin()` of our outgoing stream.
     pub signal_index: StreamIndex,
+
+    /// Next garbage collected message index (`header.begin()`) of interest to us:
+    /// the index of the first reject signal we would still hold after inducting the
+    /// past payloads, if any.
+    ///
+    /// A slice whose `header.begin()` is beyond this lets us garbage collect at
+    /// least one reject signal, and is therefore worth inducting even with no
+    /// messages and no new signals. `None` means no more reject signals to GC.
+    pub gced_message_index: Option<StreamIndex>,
 }
 
 /// Interface for a pool of incoming `CertifiedStreamSlices`.
@@ -433,8 +447,12 @@ impl XNetPayloadBuilderImpl {
     /// when that exists; or `messages_begin()` of the outgoing `Stream` to
     /// `subnet_id` in `state`.
     ///
-    /// Returns the default value `(0, 0)` when no stream or slices from the
-    /// given subnet exist.
+    /// The next expected garbage collected message index *that we are interested in
+    /// inducting* (in the absence of any messages or new signals) is the index of
+    /// the first reject signal at or beyond the most recent `header.begin()`.
+    ///
+    /// Returns default (zero) values when no stream to or slices from the given
+    /// subnet exist.
     fn expected_indices_for_stream(
         &self,
         subnet_id: SubnetId,
@@ -446,6 +464,13 @@ impl XNetPayloadBuilderImpl {
         // signal index, if present.
         let mut most_recent_signal_index = None;
 
+        // For the next GC-ed message index of interest, start with the most recent
+        // (max) `header.begin()` of any slice from `payloads` (or else, zero). Then
+        // find the first reject signal at or beyond that index, if any.
+        let mut max_header_begin = StreamIndex::from(0);
+
+        let stream = state.streams().get(&subnet_id);
+
         // Look for the most recent stream slice from `subnet_id`, if any.
         for payload in payloads.iter() {
             if let Some(certified_stream) = payload.stream_slices.get(&subnet_id) {
@@ -453,26 +478,28 @@ impl XNetPayloadBuilderImpl {
                     .certified_stream_store
                     .decode_valid_certified_stream_slice(certified_stream)
                     .expect("failed to decode past certified stream");
+                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
+                max_header_begin = max_header_begin.max(slice.header().begin());
                 if let Some(messages) = slice.messages() {
                     return ExpectedIndices {
                         message_index: messages.end(),
-                        signal_index: most_recent_signal_index
-                            .unwrap_or_else(|| slice.header().signals_end()),
+                        signal_index: most_recent_signal_index.unwrap(),
+                        gced_message_index: stream
+                            .and_then(|s| s.next_reject_signal_index(max_header_begin)),
                     };
                 }
-                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
             }
         }
 
         // No stream slice from `subnet_id` in `payloads`, look in `state`.
-        state
-            .streams()
-            .get(&subnet_id)
-            .map(|stream| ExpectedIndices {
-                message_index: stream.signals_end(),
-                signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
-            })
-            .unwrap_or_default()
+        let Some(stream) = stream else {
+            return ExpectedIndices::default();
+        };
+        ExpectedIndices {
+            message_index: stream.signals_end(),
+            signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
+            gced_message_index: stream.next_reject_signal_index(max_header_begin),
+        }
     }
 
     /// Computes the expected message and signal indices for every known subnet
@@ -706,10 +733,16 @@ impl XNetPayloadBuilderImpl {
             ));
         }
 
-        if slice.messages().is_none() && slice.header().signals_end() == expected.signal_index {
-            // Empty slice: no messages and no additional signals (in addition to what we
-            // have in state and any intervening payloads). Not actually invalid, but
-            // we don't want it in a payload.
+        if slice.messages().is_none()
+            && slice.header().signals_end() == expected.signal_index
+            && expected
+                .gced_message_index
+                .is_none_or(|gced_message_index| slice.header().begin() <= gced_message_index)
+        {
+            // Empty slice: no messages, no additional signals and no newly GC-ed messages
+            // that would allow us to GC any reject signals (in addition to what we have in
+            // the intervening payloads). Not actually invalid, but we don't want it in a
+            // payload.
             return SliceValidationResult::Empty;
         }
 
@@ -813,6 +846,10 @@ impl XNetPayloadBuilderImpl {
                     .messages()
                     .map_or(expected.message_index, |messages| messages.end()),
                 signals_end: slice.header().signals_end(),
+                gced_message_index: state
+                    .streams()
+                    .get(&subnet_id)
+                    .and_then(|stream| stream.next_reject_signal_index(slice.header().begin())),
                 message_count: slice.messages().map_or(0, |messages| messages.len()),
                 byte_size,
             },
@@ -1249,6 +1286,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end,
                     signals_end,
+                    gced_message_index,
                     message_count,
                     byte_size,
                 } => {
@@ -1256,7 +1294,12 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                     self.metrics
                         .slice_payload_size
                         .observe(certified_slice.payload.len() as f64);
-                    new_stream_positions.push((*subnet_id, messages_end, signals_end));
+                    new_stream_positions.push((
+                        *subnet_id,
+                        messages_end,
+                        signals_end,
+                        gced_message_index,
+                    ));
                     payload_byte_size += byte_size;
                 }
             }
@@ -1266,12 +1309,14 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         {
             self.slice_pool.observe_pool_size_bytes();
 
-            for (subnet_id, message_index, signal_index) in new_stream_positions {
+            for (subnet_id, message_index, signal_index, gced_message_index) in new_stream_positions
+            {
                 self.slice_pool.garbage_collect_slice(
                     subnet_id,
                     ExpectedIndices {
                         message_index,
                         signal_index,
+                        gced_message_index,
                     },
                 );
             }
@@ -1622,6 +1667,9 @@ enum SliceValidationResult {
     Valid {
         messages_end: StreamIndex,
         signals_end: StreamIndex,
+        /// The first reject signal at or after the slice's header `begin`, i.e. the
+        /// first reject signal we will still hold after inducting this slice, if any.
+        gced_message_index: Option<StreamIndex>,
         message_count: usize,
         byte_size: usize,
     },

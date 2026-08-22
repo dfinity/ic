@@ -689,13 +689,16 @@ fn get_xnet_payload_byte_limit_too_small(
 }
 
 /// Tests payload building from a pool containing an empty slice only.
+///
+/// The outgoing stream is generated without reject signals: in the presence of
+/// reject signals, inducting the slice header might garbage collect them.
 #[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn get_xnet_payload_empty_slice(
     #[strategy(arb_stream(
         1, // min_size
         1, // max_size
         0, // min_signal_count
-        10, // max_signal_count
+        0, // max_signal_count
         CURRENT_CERTIFICATION_VERSION,
     ))]
     out_stream: Stream,
@@ -763,6 +766,54 @@ fn get_xnet_payload_empty_slice(
             xnet_payload_builder.slice_messages_stats()
         );
         assert_eq!(1, xnet_payload_builder.slice_payload_size_stats().count);
+    });
+}
+
+/// Tests that a message-less slice carrying no new signals is still included in a
+/// payload if its header `begin` is beyond our first reject signal, as inducting it
+/// garbage collects that reject signal.
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+fn get_xnet_payload_empty_slice_garbage_collecting_reject_signals(
+    #[strategy(arb_stream_with_config(
+        0..=10000, // msg_start_range
+        1..=1, // size_range
+        0..=10000, // signal_start_range
+        1..=10, // signal_count_range
+        reject_reasons_encodable_at(CURRENT_CERTIFICATION_VERSION),
+    ))]
+    #[filter(!#out_stream.reject_signals().is_empty())]
+    out_stream: Stream,
+) {
+    // Incoming stream with no messages, its `begin` beyond our first reject signal
+    // and carrying no signals we don't already have.
+    let from = out_stream.signals_end();
+    let stream = Stream::new(
+        StreamIndexedQueue::with_begin(from),
+        out_stream.header().begin(),
+    );
+    prop_assume!(from > out_stream.reject_signals().front().unwrap().index);
+
+    with_test_replica_logger(|log| {
+        let mut state_manager = StateManagerFixture::local(log.clone());
+        state_manager = state_manager.with_stream(REMOTE_SUBNET, out_stream);
+
+        let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
+        xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, 0, &log);
+
+        let (payload, _, _) = xnet_payload_builder.get_xnet_payload(usize::MAX);
+
+        // The slice is not empty: it advances our reject signal garbage collection point.
+        assert_eq!(
+            1,
+            payload.len(),
+            "Expecting 1 slice in payload, got {}",
+            payload.len()
+        );
+        let slice = payload
+            .get(&REMOTE_SUBNET)
+            .expect("Expected a slice from REMOTE_SUBNET");
+        assert_eq!(from, slice.header().begin());
+        assert!(slice.messages().is_none());
     });
 }
 
@@ -992,6 +1043,7 @@ fn refill_pool_empty(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            gced_message_index: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1110,6 +1162,7 @@ fn refill_pool_append(
         let stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
+            gced_message_index: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1221,6 +1274,7 @@ fn refill_pool_put_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            gced_message_index: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1334,6 +1388,7 @@ fn refill_pool_append_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
+            gced_message_index: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
