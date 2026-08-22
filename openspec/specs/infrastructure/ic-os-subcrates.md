@@ -835,7 +835,7 @@ The `nft_exporter` crate exports nftables firewall counters as Prometheus metric
 
 ### Requirement: Vsock Protocol (vsock_lib)
 
-The `vsock_lib` crate implements the vsock communication protocol between GuestOS and HostOS, including the client, server, and command protocol.
+The `vsock_lib` crate (`rs/ic_os/vsock/`) implements the vsock communication protocol between GuestOS and HostOS, including the client, server, and command protocol, and provides the `guest` and `host` binaries described below.
 
 #### Scenario: Send command from guest to host
 - **WHEN** a `VSockClient` sends a command
@@ -880,9 +880,9 @@ The `vsock_lib` crate implements the vsock communication protocol between GuestO
 
 ---
 
-### Requirement: Vsock Host Server (vsock_host)
+### Requirement: Vsock Host Server (host)
 
-The vsock host server binary runs on the HostOS and listens for vsock connections from GuestOS.
+The `host` binary (`vsock_lib::src::bin::host`, `rs/ic_os/vsock/src/bin/host.rs`) runs on the HostOS and listens for vsock connections from GuestOS.
 
 #### Scenario: Start vsock host server
 - **WHEN** the vsock host binary is started
@@ -891,9 +891,9 @@ The vsock host server binary runs on the HostOS and listens for vsock connection
 
 ---
 
-### Requirement: Vsock Guest Client (vsock_guest)
+### Requirement: Vsock Guest Client (guest)
 
-The vsock guest binary runs inside GuestOS and sends commands to the HostOS.
+The `guest` binary (`vsock_lib::src::bin::guest`, `rs/ic_os/vsock/src/bin/guest.rs`) runs inside GuestOS and sends commands to the HostOS.
 
 #### Scenario: Send command to host
 - **WHEN** the vsock guest binary is invoked with a command
