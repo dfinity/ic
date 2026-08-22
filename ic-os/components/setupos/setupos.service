@@ -3,6 +3,25 @@ Description=SetupOS install process
 After=generate-network-config.service
 After=systemd-networkd-wait-online.service
 Wants=systemd-networkd-wait-online.service
+# `output-wrapper.sh` keeps one `tee` file descriptor open on /dev/ttyS0 for the
+# whole install. serial-getty@.service carries `TTYVHangup=yes`, so systemd hangs
+# that tty up when the getty on it starts, and the kernel then fails every write
+# on a descriptor opened *before* the hangup with EIO: `tee` drops the serial
+# console and the rest of the install log -- including the failure banner -- is
+# lost. `Type=idle` below is supposed to keep us behind the gettys, but it only
+# defers us while the job queue is busy, and this unit and serial-getty@ttyS0 are
+# released at the same moment (we wait for systemd-networkd-wait-online, the getty
+# for systemd-user-sessions, both of which come with the network). In practice we
+# win that race by about a second, open the tty, and then get hung up on. Order
+# after the getty so `tee` opens the tty once the hangup is already behind us.
+#
+# The unit is instantiated by systemd-getty-generator from `console=ttyS0` on the
+# kernel command line; where that is absent, this is inert ordering.
+#
+# Do NOT add the same ordering to generate-network-config-setupos.service: it runs
+# `Before=systemd-networkd.service` and the getty is transitively ordered after
+# network.target, so that would be a dependency cycle.
+After=serial-getty@ttyS0.service
 
 [Service]
 Type=idle
