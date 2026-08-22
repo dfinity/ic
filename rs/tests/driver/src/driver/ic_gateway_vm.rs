@@ -1,7 +1,8 @@
 use anyhow::{Context, Result, anyhow, bail};
 use http::{Method, StatusCode};
-use rcgen::{CertifiedKey, generate_simple_self_signed};
+use rcgen::{CertificateParams, KeyPair};
 use reqwest::{Client, Request};
+use rsa::{RsaPrivateKey, pkcs1::DecodeRsaPrivateKey, pkcs8::EncodePrivateKey};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
@@ -18,6 +19,7 @@ use crate::{
         farm::{
             Certificate, DemoCertificate, DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate,
         },
+        local_backend::{IN_GROUP_DOMAIN_SUFFIX, LocalBackend},
         log_events,
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
@@ -26,7 +28,7 @@ use crate::{
             CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot,
             IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path_from_env,
         },
-        test_setup::SystemTestBackend,
+        test_setup::{GroupSetup, SystemTestBackend},
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
     retry_with_msg_async,
@@ -42,6 +44,77 @@ const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_aaaa_record
 const IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_a_records_created_event";
 const READY_TIMEOUT: Duration = Duration::from_secs(360);
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Runfiles paths of the dev root CA, provided by `IC_GATEWAY_RUNTIME_DEPS` in
+/// `rs/tests/common.bzl`.
+const DEV_ROOT_CA_CERT_ENV: &str = "DEV_ROOT_CA_CERT_PATH";
+const DEV_ROOT_CA_KEY_ENV: &str = "DEV_ROOT_CA_KEY_PATH";
+
+/// The dev root CA: the certificate authority that every *dev* IC-OS image
+/// already trusts, loaded ready to sign with.
+///
+/// `ic-os/{guestos,hostos}/context/Dockerfile` installs
+/// `ic-os/components/networking/dev-certs/canister_http_test_ca.cert` into
+/// `/usr/local/share/ca-certificates` and runs `update-ca-certificates` — in the
+/// `output_dev` stage only, so a production image trusts nothing extra. Its
+/// private key is checked in beside it, which is how a test can serve HTTPS that
+/// a node accepts without any node-side configuration; `canister_http` and
+/// `ckbtc` already rely on this, and its `README.md` documents the use.
+struct DevRootCa {
+    /// PEM of the checked-in CA certificate, exactly as it sits in the images'
+    /// trust store. This is what the gateway serves as its chain and what a
+    /// driver-side client adds as a trust anchor.
+    cert_pem: String,
+    /// The same CA as an `rcgen` issuer.
+    cert: rcgen::Certificate,
+    key: KeyPair,
+}
+
+/// The PEM of the dev root CA certificate. See [`DevRootCa`].
+fn dev_root_ca_cert_pem() -> Result<String> {
+    let path = get_dependency_path_from_env(DEV_ROOT_CA_CERT_ENV);
+    fs::read_to_string(&path).with_context(|| {
+        format!(
+            "reading the dev root CA certificate from {}",
+            path.display()
+        )
+    })
+}
+
+/// Loads the dev root CA so `rcgen` can issue certificates from it.
+fn dev_root_ca() -> Result<DevRootCa> {
+    let cert_pem = dev_root_ca_cert_pem()?;
+    let key_path = get_dependency_path_from_env(DEV_ROOT_CA_KEY_ENV);
+    let key_pkcs1_pem = fs::read_to_string(&key_path)
+        .with_context(|| format!("reading the dev root CA key from {}", key_path.display()))?;
+
+    // The checked-in key is PKCS#1 (`-----BEGIN RSA PRIVATE KEY-----`), which
+    // `rcgen`'s default `ring` backend cannot load — it takes PKCS#8 only — so
+    // re-encode it first.
+    let key_pkcs8_pem = RsaPrivateKey::from_pkcs1_pem(&key_pkcs1_pem)
+        .context("parsing the dev root CA key as PKCS#1")?
+        .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
+        .context("re-encoding the dev root CA key as PKCS#8")?;
+    let key = KeyPair::from_pem(&key_pkcs8_pem).context("loading the dev root CA key")?;
+
+    // `from_ca_cert_pem` extracts just what is needed to act as an issuer: the
+    // subject name and the subject key identifier, which `signed_by` copies into
+    // the leaf's issuer and authority-key-identifier fields. `self_signed` then
+    // re-signs the CA merely to obtain an `rcgen::Certificate` to pass as that
+    // issuer — the result is not the checked-in certificate byte for byte and is
+    // never served. What makes the chain verify is that the issuer name and the
+    // signing key are the real ones.
+    let cert = CertificateParams::from_ca_cert_pem(&cert_pem)
+        .context("parsing the dev root CA certificate")?
+        .self_signed(&key)
+        .context("loading the dev root CA certificate as an issuer")?;
+
+    Ok(DevRootCa {
+        cert_pem,
+        cert,
+        key,
+    })
+}
 
 /// Represents an IC HTTP Gateway VM, it is a wrapper around Farm's Universal VM.
 #[derive(Debug)]
@@ -71,20 +144,24 @@ impl DeployedIcGatewayVm {
     /// Returns a custom DNS resolution override for reaching the gateway at the
     /// given `url`, if one is needed for the active system-test backend.
     ///
-    /// On the [`SystemTestBackend::Local`] backend the gateway serves HTTPS with
-    /// a self-signed certificate for a local domain (`<name>.local` and its
-    /// wildcard) and there is no DNS service that resolves that domain (or the
-    /// per-canister subdomains `<canister_id>.<name>.local`). Clients reaching
-    /// the gateway therefore have to resolve the requested host themselves to
-    /// the gateway VM's IPv6 address. This returns `(host, [vm_ipv6]:443)` for
-    /// the host of `url` so a `reqwest` client can be configured with
-    /// `.resolve(host, addr)`.
+    /// On the [`SystemTestBackend::Local`] backend the gateway's domain is
+    /// `<name>.ic.net`, which the group's `dnsmasq` resolves for the *VMs* — but
+    /// not for the driver, which sits in the group's network namespace yet reads
+    /// the host's `/etc/resolv.conf`, whose nameserver is unreachable from there.
+    /// Nor does `dnsmasq` answer for the per-canister subdomains
+    /// `<canister_id>.<name>.ic.net`, since it is served a hosts file, which has
+    /// no wildcards. A driver-side client therefore has to resolve the requested
+    /// host itself. This returns `(host, [vm_ipv6]:443)` for the host of `url`,
+    /// to be passed to `reqwest`'s `.resolve(host, addr)`.
     ///
-    /// Note that `reqwest`'s `resolve` overrides only the *exact* host passed to
-    /// it (it does *not* apply to subdomains), so the host of the actual request
-    /// URL — e.g. `<canister_id>.<name>.local` — must be used, not the apex
-    /// domain. On the [`SystemTestBackend::Farm`] backend DNS resolves the
-    /// gateway domain, so no override is needed and `None` is returned.
+    /// Note that `resolve` overrides only the *exact* host passed to it (it does
+    /// *not* apply to subdomains), so the host of the actual request URL — e.g.
+    /// `<canister_id>.<name>.ic.net` — must be used, not the apex domain. On the
+    /// [`SystemTestBackend::Farm`] backend DNS resolves the gateway domain, so no
+    /// override is needed and `None` is returned.
+    ///
+    /// The certificate needs no equivalent workaround: see
+    /// [`Self::root_certificate`].
     pub fn resolve_override_for_url(&self, url: &Url) -> Option<(String, SocketAddr)> {
         match SystemTestBackend::read_attribute(&self.env) {
             SystemTestBackend::Local => {
@@ -95,15 +172,31 @@ impl DeployedIcGatewayVm {
         }
     }
 
-    /// Whether the gateway serves HTTPS with a self-signed certificate that
-    /// clients have to accept (i.e. `danger_accept_invalid_certs(true)`). This
-    /// is the case on the [`SystemTestBackend::Local`] backend; on Farm a
-    /// proper playnet certificate is used.
-    pub fn uses_self_signed_cert(&self) -> bool {
-        matches!(
-            SystemTestBackend::read_attribute(&self.env),
-            SystemTestBackend::Local
-        )
+    /// The extra trust anchor a client needs in order to verify the gateway's
+    /// TLS certificate, if any.
+    ///
+    /// On the [`SystemTestBackend::Local`] backend the certificate is issued by
+    /// the dev root CA (see [`DevRootCa`]) rather than by a public one, so a
+    /// driver-side client has to add that CA to its roots:
+    /// `builder.add_root_certificate(cert)`. `reqwest` *adds* it to the
+    /// platform's roots rather than replacing them, so the client keeps trusting
+    /// everything it trusted before. On [`SystemTestBackend::Farm`] the playnet
+    /// certificate chains to a public CA and `None` is returned.
+    ///
+    /// This covers the gateway only. An API boundary node reached directly still
+    /// serves a certificate generated on the node itself (see
+    /// `generate_ic_boundary_tls_cert`), which no CA vouches for, so clients of
+    /// those have no alternative to `danger_accept_invalid_certs`.
+    pub fn root_certificate(&self) -> Result<Option<reqwest::Certificate>> {
+        match SystemTestBackend::read_attribute(&self.env) {
+            SystemTestBackend::Local => {
+                let cert_pem = dev_root_ca_cert_pem()?;
+                let cert = reqwest::Certificate::from_pem(cert_pem.as_bytes())
+                    .context("parsing the dev root CA certificate as a trust anchor")?;
+                Ok(Some(cert))
+            }
+            SystemTestBackend::Farm => Ok(None),
+        }
     }
 }
 
@@ -207,12 +300,14 @@ sudo networkctl reconfigure enp2s0
 
         let (ic_gateway_fqdn, cert, aaaa_records, a_records) = match backend {
             SystemTestBackend::Local => {
-                // The Local backend has no playnet TLS service, so generate a
-                // self-signed certificate for a local domain and skip DNS
-                // configuration entirely.
-                let playnet = self.load_or_create_local_self_signed(env, vm_ipv6, vm_ipv4)?;
+                // The Local backend has no playnet service, so issue the
+                // certificate from the dev root CA and register the domain with
+                // the group's own `dnsmasq`.
+                let playnet = self.load_or_create_local_playnet(env, vm_ipv6, vm_ipv4)?;
+                let fqdn = playnet.playnet_cert.playnet.clone();
+                self.configure_dns_records(env, &playnet, &fqdn)?;
                 (
-                    playnet.playnet_cert.playnet.clone(),
+                    fqdn,
                     playnet.playnet_cert.cert.clone(),
                     playnet.aaaa_records.clone(),
                     playnet.a_records.clone(),
@@ -274,20 +369,30 @@ sudo networkctl reconfigure enp2s0
             self.universal_vm.name,
             health_url.as_str()
         );
-        // The Local backend has no DNS for the self-signed domain, so resolve it
-        // directly to the VM's IPv6 address and accept the self-signed cert.
-        let resolve = match backend {
-            SystemTestBackend::Local => Some((
-                ic_gateway_fqdn.clone(),
-                SocketAddr::new(IpAddr::V6(vm_ipv6), 443),
-            )),
-            SystemTestBackend::Farm => None,
+        // The driver does not use the group's `dnsmasq` as its resolver — it is in
+        // the group's network namespace but reads the host's `/etc/resolv.conf`,
+        // whose nameserver is unreachable from there — so on the Local backend it
+        // has to resolve the gateway domain itself. The certificate needs no such
+        // workaround: it is issued by the dev root CA, which is added as a trust
+        // anchor rather than skipping verification altogether.
+        let (resolve, root_cert) = match backend {
+            SystemTestBackend::Local => {
+                let resolve = Some((
+                    ic_gateway_fqdn.clone(),
+                    SocketAddr::new(IpAddr::V6(vm_ipv6), 443),
+                ));
+                let cert = reqwest::Certificate::from_pem(dev_root_ca_cert_pem()?.as_bytes())
+                    .context("parsing the dev root CA certificate as a trust anchor")?;
+                (resolve, Some(cert))
+            }
+            SystemTestBackend::Farm => (None, None),
         };
         block_on(await_status_is_healthy(
             &env.logger(),
             health_url,
             msg,
             resolve,
+            root_cert,
         ))
     }
 
@@ -327,12 +432,22 @@ sudo networkctl reconfigure enp2s0
         Ok(playnet)
     }
 
-    /// Loads existing configuration or, on the Local backend, generates a
-    /// self-signed certificate for a deterministic local domain. The Local
-    /// backend has no playnet TLS service, so the gateway serves HTTPS with this
-    /// self-signed certificate. The certificate covers both the apex domain and
-    /// its wildcard so the gateway can also serve canister subdomains.
-    fn load_or_create_local_self_signed(
+    /// Loads existing configuration or, on the Local backend, issues a
+    /// certificate for a deterministic in-group domain from the dev root CA.
+    ///
+    /// The Local backend has no playnet TLS service. Signing with the CA that
+    /// every dev IC-OS image already trusts (see [`DevRootCa`]), rather than
+    /// self-signing, means a *node* can reach the gateway over HTTPS with no
+    /// node-side configuration — which is what lets a nested node register
+    /// through the gateway exactly as it does on Farm.
+    ///
+    /// The certificate covers the apex domain and both the `*.<domain>` and
+    /// `*.raw.<domain>` wildcards, matching the records the Farm path creates, so
+    /// the gateway can also serve canister subdomains. Only the apex is
+    /// registered with the group's `dnsmasq` though (see
+    /// [`Self::configure_dns_records`]), so a subdomain still has to be resolved
+    /// by the client -- see [`DeployedIcGatewayVm::resolve_override_for_url`].
+    fn load_or_create_local_playnet(
         &self,
         env: &TestEnv,
         uvm_ipv6: Ipv6Addr,
@@ -347,18 +462,30 @@ sudo networkctl reconfigure enp2s0
             );
             playnet
         } else {
-            let domain = format!("{}.local", self.universal_vm.name);
-            let CertifiedKey { cert, key_pair } =
-                generate_simple_self_signed(vec![domain.clone(), format!("*.{domain}")])
-                    .context("failed to generate self-signed certificate")?;
+            let domain = format!("{}.{IN_GROUP_DOMAIN_SUFFIX}", self.universal_vm.name);
+            let ca = dev_root_ca()?;
+            let key = KeyPair::generate().context("generating the gateway certificate key")?;
+            let cert = CertificateParams::new(vec![
+                domain.clone(),
+                format!("*.{domain}"),
+                // A wildcard matches a single label, so the canonical raw hosts
+                // `<canister id>.raw.{domain}` -- which the Farm path gives their
+                // own `*.raw` CNAME -- need a SAN of their own.
+                format!("*.raw.{domain}"),
+            ])
+            .context("building the gateway certificate parameters")?
+            .signed_by(&key, &ca.cert, &ca.key)
+            .context("signing the gateway certificate")?;
             let certificate = Certificate {
-                priv_key_pem: key_pair.serialize_pem(),
+                priv_key_pem: key.serialize_pem(),
                 cert_pem: cert.pem(),
-                chain_pem: String::new(),
+                // Served alongside the leaf, so a client that trusts the CA can
+                // build a path to it without an AIA fetch.
+                chain_pem: ca.cert_pem,
             };
             info!(
                 logger,
-                "Generated self-signed certificate for local domain: {domain}"
+                "Issued a certificate for local domain {domain} from the dev root CA"
             );
             Playnet {
                 playnet_cert: PlaynetCertificate {
@@ -389,6 +516,27 @@ sudo networkctl reconfigure enp2s0
         ic_gateway_fqdn: &str,
     ) -> Result<()> {
         let mut records = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Local => {
+                // The group's `dnsmasq` is the local replacement for Farm's
+                // playnet DNS. Only the apex is registered: dnsmasq's
+                // `--addn-hosts` file is a hosts file and so has no wildcards,
+                // and nothing inside a VM resolves a canister subdomain today —
+                // driver-side clients resolve the exact request host themselves,
+                // see `DeployedIcGatewayVm::resolve_override_for_url`. A wildcard
+                // would mean `--address=/<domain>/<addr>` on dnsmasq's command
+                // line, which `SIGHUP` does not re-read.
+                let group_name = GroupSetup::read_attribute(env).infra_group_name;
+                let backend = LocalBackend::from_test_env(env)?;
+                let addrs = playnet
+                    .aaaa_records
+                    .iter()
+                    .map(|addr| IpAddr::V6(*addr))
+                    .chain(playnet.a_records.iter().map(|addr| IpAddr::V4(*addr)));
+                for addr in addrs {
+                    backend.add_dns_record(&group_name, ic_gateway_fqdn, addr)?;
+                }
+                return Ok(());
+            }
             SystemTestBackend::Farm => {
                 vec![
                     DnsRecord {
@@ -407,16 +555,6 @@ sudo networkctl reconfigure enp2s0
                         records: vec![ic_gateway_fqdn.to_string()],
                     },
                 ]
-            }
-            SystemTestBackend::Local => {
-                // The Local backend has no playnet DNS service. Return an empty
-                // set; downstream code on the Local path is expected to skip
-                // playnet DNS configuration entirely.
-                slog::warn!(
-                    env.logger(),
-                    "LocalBackend: skipping configure_dns_records (no playnet)"
-                );
-                vec![]
             }
         };
 
@@ -785,19 +923,21 @@ async fn await_status_is_healthy(
     url: Url,
     msg: String,
     resolve: Option<(String, SocketAddr)>,
+    root_cert: Option<reqwest::Certificate>,
 ) -> Result<()> {
     info!(logger, "Waiting for IcGatewayVm to become healthy ...");
 
     let request = Request::new(Method::GET, url);
     retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
         let mut builder = Client::builder();
-        // On the Local backend the gateway domain has no DNS entry and is served
-        // with a self-signed certificate, so resolve it directly to the VM and
-        // skip certificate verification.
+        // On the Local backend the driver cannot resolve the gateway domain, so
+        // point it at the VM directly, and trust the CA that issued the
+        // certificate.
         if let Some((domain, addr)) = resolve.as_ref() {
-            builder = builder
-                .danger_accept_invalid_certs(true)
-                .resolve(domain, *addr);
+            builder = builder.resolve(domain, *addr);
+        }
+        if let Some(cert) = root_cert.as_ref() {
+            builder = builder.add_root_certificate(cert.clone());
         }
         let client = builder.build()?;
         let response = client
