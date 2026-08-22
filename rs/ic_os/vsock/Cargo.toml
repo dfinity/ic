@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+clap = { workspace = true } # only needed by bin, can't express in direct Cargo.toml
 mockall = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -21,5 +22,5 @@ rusb = { version = "0.9", features = ["vendored"] }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 vsock = "0.4"
-ic-http-utils = { path = "../../../http_utils" }
+ic-http-utils = { path = "../../http_utils" }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }

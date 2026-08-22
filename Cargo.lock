@@ -24549,25 +24549,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "vsock_guest"
-version = "1.0.0"
-dependencies = [
- "clap",
- "vsock_lib",
-]
-
-[[package]]
-name = "vsock_host"
-version = "1.0.0"
-dependencies = [
- "vsock_lib",
-]
-
-[[package]]
 name = "vsock_lib"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "clap",
  "ic-http-utils",
  "mockall",
  "procfs",
