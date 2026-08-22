@@ -1828,10 +1828,8 @@ pub struct IngressHistoryState {
     /// The earliest time in `pruning_times` with associated message IDs that
     /// may still be of type completed or failed.
     next_terminal_time: Time,
-    /// Transient: memory usage of the ingress history.
-    memory_usage: usize,
-    /// Transient: number of entries in each `IngressState`.
-    state_counts: IngressHistoryStats,
+    /// Transient: memory usage and per-`IngressState` entry counts.
+    stats: IngressHistoryStats,
 }
 
 impl Default for IngressHistoryState {
@@ -1840,13 +1838,13 @@ impl Default for IngressHistoryState {
             statuses: Arc::new(BTreeMap::new()),
             pruning_times: Arc::new(BTreeMap::new()),
             next_terminal_time: UNIX_EPOCH,
-            memory_usage: 0,
-            state_counts: IngressHistoryStats::default(),
+            stats: IngressHistoryStats::default(),
         }
     }
 }
 
-/// The number of ingress history entries in each `IngressState`.
+/// The memory usage of the ingress history and the number of entries in each
+/// `IngressState`.
 ///
 /// `IngressStatus::Unknown` does not describe an entry at all: it is the stand-in
 /// for a message with no ingress history entry, so recording one is
@@ -1855,18 +1853,21 @@ impl Default for IngressHistoryState {
 /// way the counts always add up to `IngressHistoryState::len()` and a non-zero
 /// `unknown` count reveals that something did record one.
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
-pub struct IngressHistoryStats {
-    pub received: usize,
-    pub processing: usize,
-    pub completed: usize,
-    pub failed: usize,
-    pub done: usize,
-    pub unknown: usize,
+struct IngressHistoryStats {
+    /// Total memory usage of all ingress history entries.
+    memory_usage: usize,
+
+    received: usize,
+    processing: usize,
+    completed: usize,
+    failed: usize,
+    done: usize,
+    unknown: usize,
 }
 
 impl IngressHistoryStats {
-    /// Returns the counts as `(state name, count)` pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&'static str, usize)> {
+    /// Returns the per-state entry counts as `(state name, count)` pairs.
+    fn state_counts(&self) -> impl Iterator<Item = (&'static str, usize)> {
         [
             ("received", self.received),
             ("processing", self.processing),
@@ -1880,11 +1881,13 @@ impl IngressHistoryStats {
 
     /// Records the insertion of an entry with the given status.
     fn on_insert(&mut self, status: &IngressStatus) {
+        self.memory_usage += status.payload_bytes();
         *self.count_mut(status) += 1;
     }
 
     /// Records the removal of an entry with the given status.
     fn on_remove(&mut self, status: &IngressStatus) {
+        self.memory_usage -= status.payload_bytes();
         *self.count_mut(status) -= 1;
     }
 
@@ -1950,15 +1953,13 @@ impl IngressHistoryState {
                 .or_default()
                 .insert(message_id.clone());
         }
-        self.memory_usage += status.payload_bytes();
-        self.state_counts.on_insert(&status);
+        self.stats.on_insert(&status);
         let old_status = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
         if let Some(old) = &old_status {
-            self.memory_usage -= old.payload_bytes();
-            self.state_counts.on_remove(old);
+            self.stats.on_remove(old);
         }
 
-        if self.memory_usage > ingress_memory_capacity.get() as usize {
+        if self.stats.memory_usage > ingress_memory_capacity.get() as usize {
             self.forget_terminal_statuses(
                 ingress_memory_capacity,
                 time,
@@ -1966,14 +1967,7 @@ impl IngressHistoryState {
             );
         }
 
-        debug_assert_eq!(
-            Self::compute_memory_usage(&self.statuses),
-            self.memory_usage
-        );
-        debug_assert_eq!(
-            Self::compute_state_counts(&self.statuses),
-            self.state_counts
-        );
+        debug_assert_eq!(Self::compute_stats(&self.statuses), self.stats);
 
         old_status.unwrap_or_else(|| IngressStatus::Unknown.into())
     }
@@ -2022,21 +2016,13 @@ impl IngressHistoryState {
         for pruning_times in self.pruning_times.as_ref().values() {
             for message_id in pruning_times {
                 if let Some(removed) = statuses.remove(message_id) {
-                    self.memory_usage -= removed.payload_bytes();
-                    self.state_counts.on_remove(&removed);
+                    self.stats.on_remove(&removed);
                 }
             }
         }
         self.pruning_times = Arc::new(new_pruning_times);
 
-        debug_assert_eq!(
-            Self::compute_memory_usage(&self.statuses),
-            self.memory_usage
-        );
-        debug_assert_eq!(
-            Self::compute_state_counts(&self.statuses),
-            self.state_counts
-        );
+        debug_assert_eq!(Self::compute_stats(&self.statuses), self.stats);
     }
 
     /// Goes over the `pruning_times` from oldest to newest and transitions
@@ -2068,7 +2054,7 @@ impl IngressHistoryState {
         {
             self.next_terminal_time = *time;
 
-            if self.memory_usage <= target_size {
+            if self.stats.memory_usage <= target_size {
                 break;
             }
 
@@ -2092,15 +2078,13 @@ impl IngressHistoryState {
                             time: *time,
                             state: IngressState::Done,
                         });
-                        self.memory_usage += done_status.payload_bytes();
-                        self.state_counts.on_insert(&done_status);
 
+                        self.stats.on_insert(&done_status);
                         // We can safely unwrap here because we know there must be an
                         // ingress status with the given `id` in `statuses` in this
                         // branch.
                         let old_status = statuses.insert(id.clone(), done_status).unwrap();
-                        self.memory_usage -= old_status.payload_bytes();
-                        self.state_counts.on_remove(&old_status);
+                        self.stats.on_remove(&old_status);
                     }
                     _ => continue,
                 }
@@ -2109,40 +2093,31 @@ impl IngressHistoryState {
 
         #[cfg(debug_assertions)]
         debug_assert_eq!(self.statuses.len(), statuses_len_before);
-        debug_assert_eq!(
-            Self::compute_memory_usage(&self.statuses),
-            self.memory_usage
-        );
-        debug_assert_eq!(
-            Self::compute_state_counts(&self.statuses),
-            self.state_counts
-        );
+        debug_assert_eq!(Self::compute_stats(&self.statuses), self.stats);
     }
 
     /// Returns the memory usage of the statuses in the ingress history. See the
     /// documentation of `IngressStatus` for how the byte size of an individual
     /// `IngressStatus` is computed.
     pub fn memory_usage(&self) -> NumBytes {
-        NumBytes::new(self.memory_usage as u64)
+        NumBytes::new(self.stats.memory_usage as u64)
     }
 
-    /// Returns the number of statuses in the ingress history, by `IngressState`.
-    pub fn state_counts(&self) -> IngressHistoryStats {
-        self.state_counts
+    /// Returns the number of statuses in the ingress history, by `IngressState`,
+    /// as `(state name, count)` pairs.
+    pub fn state_counts(&self) -> impl Iterator<Item = (&'static str, usize)> {
+        self.stats.state_counts()
     }
 
-    fn compute_memory_usage(statuses: &BTreeMap<MessageId, Arc<IngressStatus>>) -> usize {
-        statuses.values().map(|status| status.payload_bytes()).sum()
-    }
-
-    fn compute_state_counts(
-        statuses: &BTreeMap<MessageId, Arc<IngressStatus>>,
-    ) -> IngressHistoryStats {
-        let mut state_counts = IngressHistoryStats::default();
+    /// Recomputes from scratch the `IngressHistoryStats` for the given `statuses`.
+    ///
+    /// Time complexity: `O(n)`.
+    fn compute_stats(statuses: &BTreeMap<MessageId, Arc<IngressStatus>>) -> IngressHistoryStats {
+        let mut stats = IngressHistoryStats::default();
         for status in statuses.values() {
-            state_counts.on_insert(status);
+            stats.on_insert(status);
         }
-        state_counts
+        stats
     }
 
     /// Prunes the ingress history as part of subnet splitting, retaining:
@@ -2162,8 +2137,7 @@ impl IngressHistoryState {
             statuses,
             pruning_times: _,
             next_terminal_time: _,
-            memory_usage,
-            state_counts,
+            stats,
         } = self;
 
         // Filters for messages in terminal states or addressed to local canisters.
@@ -2186,8 +2160,7 @@ impl IngressHistoryState {
             .map(|(message_id, _)| message_id.clone())
             .collect();
         mut_statuses.retain(|message_id, _| message_ids_to_retain.contains(message_id));
-        *memory_usage = Self::compute_memory_usage(mut_statuses);
-        *state_counts = Self::compute_state_counts(mut_statuses);
+        *stats = Self::compute_stats(mut_statuses);
     }
 }
 
@@ -2589,8 +2562,7 @@ pub mod testing {
             statuses: Default::default(),
             pruning_times: Default::default(),
             next_terminal_time: UNIX_EPOCH,
-            memory_usage: Default::default(),
-            state_counts: Default::default(),
+            stats: Default::default(),
         };
         //
         // DO NOT MODIFY WITHOUT READING DOC COMMENT!
