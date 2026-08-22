@@ -6,7 +6,7 @@ use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest,
+    ReimbursementRequest, SweepId, SweepRequest,
 };
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
@@ -186,6 +186,41 @@ pub enum EventType {
     /// The minter burned ckETH from its fee subaccount to top up the sweeper address with gas.
     #[n(27)]
     AcceptedSweeperFundingRequest(#[n(0)] EthWithdrawalRequest),
+    /// The minter enqueued a sweep to be sent from its dedicated sweeper address.
+    #[n(28)]
+    AcceptedSweepRequest(#[n(0)] SweepRequest),
+    /// The minter created a sweep transaction.
+    #[n(29)]
+    CreatedSweeperTransaction {
+        #[n(1)]
+        sweep_id: SweepId,
+        #[n(2)]
+        transaction: Eip1559TransactionRequest,
+    },
+    /// The minter signed a sweep transaction.
+    #[n(30)]
+    SignedSweeperTransaction {
+        #[n(1)]
+        sweep_id: SweepId,
+        #[n(2)]
+        transaction: SignedEip1559TransactionRequest,
+    },
+    /// The minter replaced a sweep transaction after a fee bump.
+    #[n(31)]
+    ReplacedSweeperTransaction {
+        #[n(1)]
+        sweep_id: SweepId,
+        #[n(2)]
+        transaction: Eip1559TransactionRequest,
+    },
+    /// The minter observed a sweep transaction being included in a finalized Ethereum block.
+    #[n(32)]
+    FinalizedSweeperTransaction {
+        #[n(1)]
+        sweep_id: SweepId,
+        #[n(2)]
+        transaction_receipt: TransactionReceipt,
+    },
 }
 
 /// Full snapshot of the ckERC20 deposit address registry. Carries the limits in

@@ -32,7 +32,7 @@ use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest,
+    ReimbursementRequest, SweepRequest,
 };
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
@@ -907,6 +907,49 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction_receipt,
                 } => EP::FinalizedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
+                    transaction_receipt: map_transaction_receipt(transaction_receipt),
+                },
+                EventType::AcceptedSweepRequest(SweepRequest {
+                    id,
+                    destination,
+                    amount,
+                    data,
+                    max_transaction_fee,
+                    created_at,
+                }) => EP::AcceptedSweepRequest {
+                    sweep_id: id.0.into(),
+                    destination: destination.to_string(),
+                    amount: amount.into(),
+                    data: ByteBuf::from(data),
+                    max_transaction_fee: max_transaction_fee.into(),
+                    created_at,
+                },
+                EventType::CreatedSweeperTransaction {
+                    sweep_id,
+                    transaction,
+                } => EP::CreatedSweeperTransaction {
+                    sweep_id: sweep_id.0.into(),
+                    transaction: map_unsigned_transaction(transaction),
+                },
+                EventType::SignedSweeperTransaction {
+                    sweep_id,
+                    transaction,
+                } => EP::SignedSweeperTransaction {
+                    sweep_id: sweep_id.0.into(),
+                    raw_transaction: transaction.raw_transaction_hex_string(),
+                },
+                EventType::ReplacedSweeperTransaction {
+                    sweep_id,
+                    transaction,
+                } => EP::ReplacedSweeperTransaction {
+                    sweep_id: sweep_id.0.into(),
+                    transaction: map_unsigned_transaction(transaction),
+                },
+                EventType::FinalizedSweeperTransaction {
+                    sweep_id,
+                    transaction_receipt,
+                } => EP::FinalizedSweeperTransaction {
+                    sweep_id: sweep_id.0.into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
                 EventType::ReimbursedEthWithdrawal(Reimbursed {

@@ -194,6 +194,59 @@ pub struct Erc20WithdrawalRequest {
     pub created_at: u64,
 }
 
+/// Monotonic identity of a sweep, used as the sweeper pipeline's alternate map key. Unlike a
+/// withdrawal's `LedgerBurnIndex`, a sweep burns no ckETH, so its id is a plain counter.
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, Decode, Encode)]
+#[cbor(transparent)]
+pub struct SweepId(#[n(0)] pub u64);
+
+impl SweepId {
+    /// The id following this one, minted when a sweep is accepted.
+    pub fn next(self) -> Self {
+        SweepId(
+            self.0
+                .checked_add(1)
+                .expect("BUG: sweep id space exhausted"),
+        )
+    }
+}
+
+impl fmt::Display for SweepId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A sweep the minter issues **from its dedicated sweeper address**, on the sweeper's own nonce
+/// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
+/// and is never reimbursed.
+///
+/// For now this is a plain EIP-1559 transaction (type `0x02`); the EIP-7702 (`0x04`) first-time
+/// delegation and the sweep-queue-driven construction of the delegate call data are follow-ups.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct SweepRequest {
+    /// This sweep's identity (the pipeline's alternate map key).
+    #[n(0)]
+    pub id: SweepId,
+    /// Address the sweep transaction is sent to: the sweeper contract, whose batch entry point
+    /// sweeps every delegated deposit address named in `data`.
+    #[n(1)]
+    pub destination: Address,
+    /// ETH value moved by the transaction (zero for an ERC-20 sweep, which moves tokens via calldata).
+    #[n(2)]
+    pub amount: Wei,
+    /// Transaction call data: the sweeper contract's batch call, naming the deposit addresses to
+    /// sweep, the IC account each is credited to, and the tokens to move.
+    #[n(3)]
+    pub data: Vec<u8>,
+    /// Ceiling on the transaction fee, used as the resubmission fee cap.
+    #[n(4)]
+    pub max_transaction_fee: Wei,
+    /// The IC time at which the sweep was decided.
+    #[n(5)]
+    pub created_at: u64,
+}
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
 pub enum ReimbursementIndex {
     #[n(0)]
@@ -368,9 +421,9 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 }
 
 /// State machine holding Ethereum transactions issued by the minter from a **single sender
-/// address**, on that address' **own nonce sequence** — generic over the request type `R` so a
-/// second sender address can drive the same machinery on a nonce sequence of its own without
-/// interfering with user withdrawals (`R = WithdrawalRequest`, wrapped by [`WithdrawalTransactions`]).
+/// address**, on that address' **own nonce sequence** — generic over the request type `R` so the
+/// same machinery serves both the main-address withdrawal pipeline (`R = WithdrawalRequest`, aliased
+/// as [`WithdrawalTransactions`]) and the dedicated sweeper-address pipeline (`R = SweepRequest`).
 ///
 /// Overall the transaction lifecycle is as follows:
 /// 1. The request is enqueued and processed in a FIFO order.
@@ -398,6 +451,9 @@ pub struct TransactionPipeline<R: PipelineRequest> {
 
 /// The pipeline sending from the minter's main address, on which user withdrawals travel.
 pub type MinterTransactionPipeline = TransactionPipeline<WithdrawalRequest>;
+
+/// The pipeline sending from the minter's dedicated sweeper address.
+pub type SweeperTransactionPipeline = TransactionPipeline<SweepRequest>;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CreateTransactionError {

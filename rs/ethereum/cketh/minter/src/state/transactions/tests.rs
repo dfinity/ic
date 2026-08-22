@@ -2902,6 +2902,128 @@ pub mod arbitrary {
     }
 }
 
+mod sweep_lane {
+    use super::{gas_fee_estimate, sign_transaction, transaction_receipt};
+    use crate::eth_rpc_client::responses::TransactionStatus;
+    use crate::lifecycle::EthereumNetwork;
+    use crate::numeric::{GasAmount, TransactionNonce, Wei};
+    use crate::state::transactions::{
+        Eip1559TransactionRequest, PipelineRequest, SweepId, SweepRequest, TransactionPipeline,
+    };
+    use ic_ethereum_types::Address;
+
+    const SWEEP_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
+
+    fn sweep_request(id: u64) -> SweepRequest {
+        SweepRequest {
+            id: SweepId(id),
+            destination: Address::new([id as u8; 20]),
+            amount: Wei::ZERO,
+            data: vec![0xaa, 0xbb, 0xcc],
+            max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
+            created_at: 1_620_328_630_000_000_000,
+        }
+    }
+
+    fn sweeper_pipeline() -> TransactionPipeline<SweepRequest> {
+        TransactionPipeline::new(TransactionNonce::ZERO)
+    }
+
+    fn create_and_record_sweep_tx(
+        pipeline: &mut TransactionPipeline<SweepRequest>,
+        request: SweepRequest,
+    ) -> Eip1559TransactionRequest {
+        let id = request.id;
+        let Ok(tx) = request.create_transaction(
+            pipeline.next_transaction_nonce(),
+            gas_fee_estimate(),
+            SWEEP_GAS_LIMIT,
+            EthereumNetwork::Sepolia,
+        );
+        pipeline.record_created_transaction(id, tx);
+        pipeline.created_tx.get_alt(&id).unwrap().as_ref().clone()
+    }
+
+    #[test]
+    fn should_create_a_sweep_transaction_on_the_lane_own_nonce() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(sweep_request(0));
+        assert_eq!(pipeline.next_transaction_nonce(), TransactionNonce::ZERO);
+
+        let tx = create_and_record_sweep_tx(&mut pipeline, sweep_request(0));
+
+        assert_eq!(tx.nonce, TransactionNonce::ZERO);
+        assert_eq!(
+            pipeline.next_transaction_nonce(),
+            TransactionNonce::from(1_u64)
+        );
+        assert_eq!(tx.destination, sweep_request(0).destination);
+        assert_eq!(tx.amount, Wei::ZERO);
+        assert_eq!(tx.data, sweep_request(0).data);
+    }
+
+    #[test]
+    fn should_finalize_a_sweep() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(sweep_request(0));
+        let created = create_and_record_sweep_tx(&mut pipeline, sweep_request(0));
+        let signed = sign_transaction(created);
+        pipeline.record_signed_transaction(signed.clone());
+
+        let receipt = transaction_receipt(&signed, TransactionStatus::Success);
+        let finalized = pipeline.record_finalized_transaction(SweepId(0), &receipt);
+
+        assert_eq!(finalized.transaction_hash(), &signed.hash());
+        assert!(pipeline.get_finalized_transaction(&SweepId(0)).is_some());
+    }
+
+    #[test]
+    fn should_advance_the_nonce_across_two_sweeps() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(sweep_request(0));
+        pipeline.record_request(sweep_request(1));
+
+        let first = create_and_record_sweep_tx(&mut pipeline, sweep_request(0));
+        let second = create_and_record_sweep_tx(&mut pipeline, sweep_request(1));
+
+        assert_eq!(first.nonce, TransactionNonce::ZERO);
+        assert_eq!(second.nonce, TransactionNonce::from(1_u64));
+        assert_eq!(
+            pipeline.next_transaction_nonce(),
+            TransactionNonce::from(2_u64)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "sweep transaction should carry the request's call data")]
+    fn should_trap_when_the_created_transaction_carries_other_call_data() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(sweep_request(0));
+        let Ok(tx) = sweep_request(0).create_transaction(
+            pipeline.next_transaction_nonce(),
+            gas_fee_estimate(),
+            SWEEP_GAS_LIMIT,
+            EthereumNetwork::Sepolia,
+        );
+
+        pipeline.record_created_transaction(
+            SweepId(0),
+            Eip1559TransactionRequest {
+                data: vec![0xff],
+                ..tx
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "duplicate transaction id")]
+    fn should_trap_on_a_duplicate_sweep_id() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(sweep_request(7));
+        pipeline.record_request(sweep_request(7));
+    }
+}
+
 fn cketh_withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithdrawalRequest {
     use std::str::FromStr;
     EthWithdrawalRequest {
