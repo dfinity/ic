@@ -77,13 +77,6 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "guestos_upgrade_smoke_test",
-    # TODO: support this test on the local backend (drop `backend = "farm"`).
-    # The local backend does boot nested VMs now -- see the `registration` target,
-    # which runs there. This one is still pinned only because it has not been
-    # verified on the local backend yet: it upgrades the node, so on top of
-    # installing from SetupOS it also has to download an update image from the
-    # per-group file server and survive a reboot within the test's timeouts.
-    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     enable_uvm = True,
     env = MAINNET_ENV,
@@ -184,13 +177,6 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
-    # TODO: support this test on the local backend (drop `backend = "farm"`).
-    # The local backend does boot nested VMs now -- see the `registration` target,
-    # which runs there. This one is still pinned only because it has not been
-    # verified on the local backend yet: it upgrades the node, so on top of
-    # installing from SetupOS it also has to download an update image from the
-    # per-group file server and survive a reboot within the test's timeouts.
-    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     enable_uvm = True,
     env = MAINNET_ENV,
