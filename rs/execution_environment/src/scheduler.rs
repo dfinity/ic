@@ -1098,6 +1098,17 @@ impl SchedulerImpl {
     //
     // TODO(DSM-103): Consider only aborting actually scheduled canisters.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
+        // Backfill the HTTP/ECDSA outcall cycles from the legacy scalar fields of
+        // `SubnetMetrics` into the corresponding entries of its by-use-case map.
+        // This must run regardless of subnet activity: the subnet-level use cases
+        // are only observed on outcalls, canister deletion and dropped messages,
+        // so tying the migration to an observation would leave the entries stale
+        // forever on a subnet that does none of these.
+        state
+            .metadata
+            .subnet_metrics
+            .migrate_outcalls_cycles_to_use_cases();
+
         let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
