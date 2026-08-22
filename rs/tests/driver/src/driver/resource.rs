@@ -42,9 +42,8 @@ pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
 /// So 16 GiB leaves the GuestOS [`DEFAULT_MEMORY_KIB_PER_VM`] (4 GiB), the same
 /// as every other node VM in a test: a nested node runs the same replica, and
 /// sizing it larger than its unnested peers only made nested tests harder to fit
-/// on one host. 12 GiB would be too little -- the GuestOS would come out at 0 GiB
-/// and libvirt would refuse the domain. Tests that need more say so with
-/// `NestedNodes::with_resource_overrides` (see `rs/tests/nested/nns_recovery`).
+/// on one host. Tests that need more say so with `NestedNodes::with_resource_overrides`
+/// (see `rs/tests/nested/nns_recovery`).
 pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16 * 1024 * 1024); // 16GiB
 const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
     vcpus: HOSTOS_VCPUS_PER_VM,
