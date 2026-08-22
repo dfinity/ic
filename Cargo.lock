@@ -1909,6 +1909,7 @@ name = "canister_http"
 version = "0.9.0"
 dependencies = [
  "canister-test",
+ "ic-protobuf",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",

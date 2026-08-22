@@ -3833,18 +3833,16 @@ fn execute_canister_http_request_caps_allowance_at_worst_case_cost() {
 }
 
 #[test]
-fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
-    // On a free subnet, flexible outcalls are available by default (without the
-    // `flexible_http_requests` feature flag) and fall back to legacy pricing,
-    // where pricing is moot because a free subnet charges nothing.
+fn execute_flexible_canister_http_request_free_subnet_uses_pay_as_you_go() {
+    // Pay-as-you-go applies to every subnet, free ones included. Pricing is moot
+    // there — a free subnet charges nothing — but the request is still routed
+    // through the new pricing model rather than the legacy fallback.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        // The feature flag is deliberately left disabled: the free-subnet path
-        // does not depend on it.
         .build();
 
     let args = flexible_http_request_args(caller_canister);
@@ -3862,8 +3860,10 @@ fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
     let http_request_context = canister_http_request_contexts
         .get(&CallbackId::from(0))
         .unwrap();
-    // The request is routed through legacy pricing with flexible replication.
-    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
+    assert_eq!(
+        http_request_context.pricing_version,
+        PricingVersion::PayAsYouGo
+    );
     assert!(
         matches!(
             http_request_context.replication,
@@ -3873,9 +3873,9 @@ fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
         http_request_context.replication
     );
 
-    // Legacy pricing on a free subnet charges nothing: the full payment is
-    // retained (to be refunded when the response is delivered) and nothing is
-    // marked refundable through the pay-as-you-go mechanism.
+    // A free subnet charges nothing whatever the pricing model: the full payment
+    // is retained (to be refunded when the response is delivered) and there is no
+    // allowance to spend, hence nothing to refund out of one.
     assert_eq!(http_request_context.request.payment, payment);
     assert_eq!(
         http_request_context.refund_status.refundable_cycles,
@@ -3888,17 +3888,14 @@ fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
 }
 
 #[test]
-fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
+fn execute_flexible_canister_http_request_system_subnet_uses_pay_as_you_go() {
     // System subnets charge nothing for HTTP outcalls despite a normal cost
-    // schedule, so flexible outcalls are available there by default (without the
-    // feature flag) and fall back to legacy pricing.
+    // schedule. Like a free subnet, they are still routed through pay-as-you-go.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
-        // A system subnet keeps the default (normal) cost schedule but charges
-        // zero for HTTP outcalls; the feature flag is left disabled.
         .with_subnet_type(SubnetType::System)
         .build();
 
@@ -3917,9 +3914,10 @@ fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
     let http_request_context = canister_http_request_contexts
         .get(&CallbackId::from(0))
         .unwrap();
-    // Routed through legacy pricing with flexible replication, just like a
-    // free-cost-schedule subnet.
-    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
+    assert_eq!(
+        http_request_context.pricing_version,
+        PricingVersion::PayAsYouGo
+    );
     assert!(
         matches!(
             http_request_context.replication,
@@ -3932,8 +3930,8 @@ fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
     // A system subnet charges nothing for HTTP outcalls despite its normal cost
     // schedule, so `try_add_http_context_to_replicated_state` treats it as free
     // just like a free-cost-schedule subnet: the full payment is retained (to be
-    // refunded when the response is delivered) and nothing is marked refundable
-    // through the pay-as-you-go mechanism.
+    // refunded when the response is delivered) and there is no allowance to
+    // spend, hence nothing to refund out of one.
     assert_eq!(http_request_context.request.payment, payment);
     assert_eq!(
         http_request_context.refund_status.refundable_cycles,
@@ -4041,13 +4039,14 @@ fn execute_flexible_canister_http_request_insufficient_payment() {
 #[test]
 fn execute_flexible_canister_http_request_disabled() {
     // On a paying subnet, flexible outcalls under pay-as-you-go pricing are
-    // gated behind the `flexible_http_requests` feature flag, which is disabled
-    // by default.
+    // gated behind the `flexible_http_requests` feature flag. The flag now
+    // defaults to enabled, so turning it back off must still shut them out.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_disabled()
         .build();
 
     let args = flexible_http_request_args(caller_canister);
@@ -4070,6 +4069,44 @@ fn execute_flexible_canister_http_request_disabled() {
     assert_eq!(
         get_reject_message(test.xnet_messages()[0].clone()),
         "This API is not enabled on this subnet"
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled_falls_back_to_legacy_when_free() {
+    // Turning the flag off does not take flexible outcalls away from subnets
+    // where they are free: there they fall back to legacy pricing, which is moot
+    // when nothing is charged. This is the one path that still distinguishes the
+    // flag being off from it being on.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_flexible_http_requests_disabled()
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    assert_eq!(
+        canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap()
+            .pricing_version,
+        PricingVersion::Legacy
     );
 }
 

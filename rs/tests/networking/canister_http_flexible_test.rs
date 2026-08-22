@@ -2,29 +2,34 @@
 Title:: Flexible HTTP outcalls.
 
 Goal:: Exhaustively exercise the `flexible_http_request` management canister
-endpoint on subnets where HTTP outcalls are free (a free-cost-schedule
-application subnet and a system subnet), where flexible outcalls fall back to
-legacy pricing.
+endpoint, both where HTTP outcalls are free and where they are actually paid for
+under pay-as-you-go.
+
+Every scenario runs against both application subnets: what a caller observes must
+not depend on whether it was charged. The scenarios that are *about* being charged
+run only against the paying subnet.
 
 Runbook::
 0. Instantiate a universal VM with a webserver (httpbin).
-1. Instantiate an IC with the HTTP feature enabled on both a 4-node application
-   subnet (free cost schedule) and the 1-node system subnet (free for outcalls
-   despite a normal cost schedule).
+1. Instantiate an IC with the HTTP feature enabled on the 1-node system subnet
+   (free for outcalls despite a normal cost schedule) and on two 4-node
+   application subnets, one on a free and one on a normal cost schedule.
 2. Install NNS canisters.
-3. Install a proxy canister on each of the two subnets.
+3. Install a proxy canister on each of the three subnets.
 4. Make flexible HTTP outcalls through the proxy canisters covering:
    - success across replication parameters and HTTP methods,
    - synchronous validation rejections,
    - runtime errors (too many rejects, responses too large),
    - adapter-level per-node failures,
    - an outcall on the system subnet,
+   - pay-as-you-go charging, refunding and running out of cycles,
    - fault tolerance: an outcall still succeeds with a subnet node killed.
 
 Success::
 1. Each scenario returns the expected `FlexibleHttpRequestResult` (or rejection).
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::{Result, bail};
 use candid::{Decode, Principal};
@@ -43,12 +48,18 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use proxy_canister::{FlexibleRemoteHttpRequest, RejectionCode};
 use slog::info;
 
-/// The cycles attached to each flexible outcall. On a free subnet nothing is
-/// charged.
-const CYCLES: u64 = 0;
+/// The cycles attached to each flexible outcall.
+///
+/// Sized for the worst case in this suite — a 2 MiB response on a 4-node
+/// committee, which costs on the order of 10^10 cycles under pay-as-you-go — with
+/// ample headroom, while staying small enough that every test in the parallel
+/// suite can have one in flight at once against the proxy canister's balance. On
+/// a free subnet nothing is charged and the whole payment comes back.
+const CYCLES: u64 = 500_000_000_000;
 
 /// The application subnet has 4 nodes (see `setup`). With the default
 /// replication (`replication: None`) the committee is all `n` nodes,
@@ -64,10 +75,7 @@ const MIN_REJECT_DETAILS: usize = SUBNET_NODES as usize - DEFAULT_MIN_RESPONSES 
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        // Flexible outcalls require the pay-as-you-go pricing model, which is
-        // still gated. On a free subnet they are available via the legacy
-        // pricing fallback, so the test runs on a free-cost-schedule subnet.
-        .with_setup(canister_http::setup_with_free_cost_schedule)
+        .with_setup(canister_http::setup_with_free_and_paying_subnets)
         .add_parallel(
             SystemTestSubGroup::new()
                 // Success across replication parameters and HTTP methods.
@@ -117,8 +125,13 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_custom_max_response_bytes_exceeded))
                 .add_test(systest!(test_custom_max_response_bytes_within_limits)),
         )
-        // Fault tolerance kills a node, so it must run sequentially AFTER the
-        // parallel suite.
+        // Only meaningful where outcalls are paid for, so these run against the
+        // paying subnet alone. `test_charged_and_refunded` measures the proxy
+        // canister's balance across a single outcall, which any concurrent outcall
+        // from the same canister would perturb, so they run sequentially.
+        .add_test(systest!(test_charged_and_refunded))
+        .add_test(systest!(test_out_of_cycles))
+        // Fault tolerance kills a node, so it has to come last.
         .add_test(systest!(test_fault_tolerance))
         .execute_from_args()?;
 
@@ -129,18 +142,48 @@ fn main() -> Result<()> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Returns a runtime for one of the application-subnet nodes.
-fn app_runtime(env: &TestEnv) -> Runtime {
-    let node = get_node_snapshots(env)
+/// Returns a runtime for a node of the application subnet on `schedule`.
+fn app_runtime_on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> Runtime {
+    let node = get_app_subnet_node_snapshots_with_schedule(env, schedule)
         .next()
         .expect("there is no application node");
     get_runtime_from_node(&node)
 }
 
-/// Returns the proxy canister installed during setup.
-fn proxy_canister<'a>(env: &TestEnv, runtime: &'a Runtime) -> Canister<'a> {
-    let principal_id = get_proxy_canister_id(env);
+/// The principal of the proxy canister on the application subnet running on
+/// `schedule`.
+fn proxy_principal_on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> PrincipalId {
+    get_proxy_canister_id_for(env, schedule)
+}
+
+/// Returns the proxy canister on the application subnet running on `schedule`.
+fn proxy_canister_on<'a>(
+    env: &TestEnv,
+    runtime: &'a Runtime,
+    schedule: CanisterCyclesCostSchedule,
+) -> Canister<'a> {
+    let principal_id = proxy_principal_on(env, schedule);
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+
+/// Points a transform that names the default proxy canister at the proxy the
+/// scenario is actually running against.
+///
+/// A transform has to be a method on the calling canister, and each application
+/// subnet has its own proxy. Scenarios name their own canister with
+/// [`proxy_principal`], so exactly those are retargeted; one that names a different
+/// principal on purpose — see `test_reject_invalid_transform_principal` — is left
+/// alone, which is what keeps it a negative test.
+fn retarget_transform(
+    args: &mut FlexibleCanisterHttpRequestArgs,
+    env: &TestEnv,
+    proxy: PrincipalId,
+) {
+    if let Some(transform) = args.transform.as_mut()
+        && transform.function.0.principal == proxy_principal(env)
+    {
+        transform.function.0.principal = proxy.0;
+    }
 }
 
 /// Returns a runtime for the (single) system-subnet node.
@@ -160,7 +203,7 @@ fn system_proxy_canister<'a>(env: &TestEnv, runtime: &'a Runtime) -> Canister<'a
 /// The principal of the proxy canister (the sender of the outcalls), used as the
 /// valid transform principal.
 fn proxy_principal(env: &TestEnv) -> Principal {
-    get_proxy_canister_id(env).0
+    proxy_principal_on(env, CanisterCyclesCostSchedule::Free).0
 }
 
 fn webserver_base(env: &TestEnv) -> String {
@@ -218,19 +261,69 @@ where
     M: Fn(&TestEnv) -> FlexibleCanisterHttpRequestArgs,
     A: Fn(Result<FlexibleHttpRequestResult, (RejectionCode, String)>) -> Result<()>,
 {
+    run_flexible_test_with_cycles(env, description, CYCLES, make_args, assert_result)
+}
+
+/// Like [`run_flexible_test`], but attaches `cycles` to the outcall instead of
+/// the default payment — for scenarios that are about the payment itself.
+fn run_flexible_test_with_cycles<M, A>(
+    env: TestEnv,
+    description: &str,
+    cycles: u64,
+    make_args: M,
+    assert_result: A,
+) where
+    M: Fn(&TestEnv) -> FlexibleCanisterHttpRequestArgs,
+    A: Fn(Result<FlexibleHttpRequestResult, (RejectionCode, String)>) -> Result<()>,
+{
+    // Run against both application subnets. The outcome a caller sees must not
+    // depend on whether it was charged, so a scenario that only holds on one of
+    // them is a bug either way.
+    for schedule in [
+        CanisterCyclesCostSchedule::Free,
+        CanisterCyclesCostSchedule::Normal,
+    ] {
+        run_flexible_test_on(
+            &env,
+            schedule,
+            description,
+            cycles,
+            &make_args,
+            &assert_result,
+        );
+    }
+}
+
+/// Like [`run_flexible_test_with_cycles`], but only against the application subnet
+/// on the given cost schedule — for the scenarios whose outcome does depend on
+/// whether the outcall is paid for.
+fn run_flexible_test_on<M, A>(
+    env: &TestEnv,
+    schedule: CanisterCyclesCostSchedule,
+    description: &str,
+    cycles: u64,
+    make_args: &M,
+    assert_result: &A,
+) where
+    M: Fn(&TestEnv) -> FlexibleCanisterHttpRequestArgs,
+    A: Fn(Result<FlexibleHttpRequestResult, (RejectionCode, String)>) -> Result<()>,
+{
     let logger = env.logger();
-    let runtime = app_runtime(&env);
-    let proxy = proxy_canister(&env, &runtime);
+    let runtime = app_runtime_on(env, schedule);
+    let proxy = proxy_canister_on(env, &runtime, schedule);
+    let proxy_id = proxy_principal_on(env, schedule);
+    let description = format!("{description} (on a {schedule:?} cost schedule)");
 
     block_on(async {
         ic_system_test_driver::retry_with_msg_async!(
-            description.to_string(),
+            description.clone(),
             &logger,
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                let args = make_args(&env);
-                let result = send_flexible(&proxy, args, CYCLES).await?;
+                let mut args = make_args(env);
+                retarget_transform(&mut args, env, proxy_id);
+                let result = send_flexible(&proxy, args, cycles).await?;
                 assert_result(result)
             }
         )
@@ -1457,14 +1550,17 @@ fn test_system_subnet_outcall(env: TestEnv) {
 fn test_fault_tolerance(env: TestEnv) {
     let logger = env.logger();
 
-    let mut nodes = get_node_snapshots(&env);
+    // Pinned to the free subnet: killing a node is orthogonal to pricing, and with
+    // two application subnets around the choice should not depend on their order.
+    const SCHEDULE: CanisterCyclesCostSchedule = CanisterCyclesCostSchedule::Free;
+    let mut nodes = get_app_subnet_node_snapshots_with_schedule(&env, SCHEDULE);
     let killed_node = nodes.next().expect("no application nodes");
     let healthy_node = nodes.next().expect("need at least two application nodes");
 
     // The proxy canister lives on the subnet, so reach it through a node that
     // stays up.
     let runtime = get_runtime_from_node(&healthy_node);
-    let proxy = proxy_canister(&env, &runtime);
+    let proxy = proxy_canister_on(&env, &runtime, SCHEDULE);
 
     info!(logger, "Killing one application node.");
     killed_node.vm().kill();
@@ -1491,8 +1587,7 @@ fn test_fault_tolerance(env: TestEnv) {
                     min_responses: 2,
                     max_responses: SUBNET_NODES,
                 });
-                // Attaching cycles should be possible, even on free subnets.
-                let result = send_flexible(&proxy, args, 1000).await?;
+                let result = send_flexible(&proxy, args, CYCLES).await?;
                 // At most the surviving nodes (n - 1) can respond.
                 let payloads = expect_ok(result, 2, (SUBNET_NODES - 1) as usize)?;
                 expect_all_status(&payloads, 200)?;
@@ -1503,4 +1598,123 @@ fn test_fault_tolerance(env: TestEnv) {
         .await
         .expect("the flexible outcall did not succeed while a node was down");
     });
+}
+
+// ---------------------------------------------------------------------------
+// Pay-as-you-go pricing
+// ---------------------------------------------------------------------------
+
+/// Reads the proxy canister's own cycle balance.
+async fn cycle_balance(proxy: &Canister<'_>) -> Result<u128> {
+    proxy
+        .query_("cycle_balance", candid_one::<u128, ()>, ())
+        .await
+        .map_err(|err| anyhow::anyhow!("querying the proxy canister's balance failed: {err}"))
+}
+
+/// A successful outcall costs the caller something, but nowhere near the payment
+/// it attached: the unspent part of the per-replica allowances is refunded.
+///
+/// Under pay-as-you-go the whole payment leaves the balance up front and the
+/// refund is credited afterwards, so this watches the balance rather than the
+/// reply's refunded cycles.
+fn test_charged_and_refunded(env: TestEnv) {
+    let logger = env.logger();
+    let runtime = app_runtime_on(&env, CanisterCyclesCostSchedule::Normal);
+    let proxy = proxy_canister_on(&env, &runtime, CanisterCyclesCostSchedule::Normal);
+
+    block_on(async {
+        ic_system_test_driver::retry_with_msg_async!(
+            "a paid outcall charges its cost and refunds the rest".to_string(),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let before = cycle_balance(&proxy).await?;
+                let args = get_args(format!("{}/ascii/priced", webserver_base(&env)));
+                let payloads = expect_ok(
+                    send_flexible(&proxy, args, CYCLES).await?,
+                    DEFAULT_MIN_RESPONSES,
+                    DEFAULT_MAX_RESPONSES,
+                )?;
+                expect_all_bodies(&payloads, b"priced")?;
+                let after = cycle_balance(&proxy).await?;
+
+                // The refund is credited after the response is delivered, so the
+                // balance may still be settling; the retry loop absorbs that.
+                let Some(charged) = before.checked_sub(after) else {
+                    bail!("balance grew from {before} to {after} across a paid outcall");
+                };
+                if charged == 0 {
+                    bail!("a paid outcall on a normal cost schedule charged nothing");
+                }
+                // A small outcall costs orders of magnitude less than the payment
+                // that was attached, so most of it has to have come back.
+                if charged >= u128::from(CYCLES) / 10 {
+                    bail!(
+                        "expected the refund to return most of the {CYCLES}-cycle payment, \
+                         but {charged} cycles were kept"
+                    );
+                }
+                Ok(())
+            }
+        )
+        .await
+        .expect("the outcall was not charged and refunded as expected");
+    });
+}
+
+/// An outcall that can pay its replicas for fetching a response, but cannot pay
+/// for putting one into a block, fails as out of cycles rather than hanging until
+/// it times out.
+///
+/// Delivering a response costs roughly `N * (10N + 600)` cycles per byte
+/// (~2_560 at `N = 4`) against ~50 cycles per byte to download it, so a payment
+/// sized to comfortably cover the downloads still falls far short of the
+/// consensus cost for a large enough response.
+fn test_out_of_cycles(env: TestEnv) {
+    const BODY_SIZE: usize = 500_000;
+    // The payment has to land in a window. Each replica spends ~50 cycles/byte to
+    // download (~25M here) and its receipt is discarded unless its allowance `A`
+    // covers that, so `A` must exceed ~25M. Delivering `min_responses` responses
+    // costs at least `min_responses * N * (10N + 600)` cycles/byte — upwards of
+    // 3.8B here — and the outcall is only out of cycles if what is left of the
+    // collective allowance falls short of that. Writing `A = k * S`, anything from
+    // `k` a little above 1 up to well past 10 qualifies; `k = 4` gives ~4x margin
+    // on the receipt side and ~13x on the affordability side.
+    //
+    // Note the direction: paying *more* buys a bigger allowance and so makes the
+    // outcall affordable, not less so.
+    const PAYMENT: u64 = 400_000_000;
+
+    run_flexible_test_on(
+        &env,
+        CanisterCyclesCostSchedule::Normal,
+        "an outcall that cannot pay to deliver a response is out of cycles",
+        PAYMENT,
+        &|env| {
+            let mut args = get_args(format!("{}/bytes/{BODY_SIZE}", webserver_base(env)));
+            args.replication = Some(ReplicationCounts {
+                total_requests: SUBNET_NODES,
+                min_responses: DEFAULT_MIN_RESPONSES as u32,
+                max_responses: SUBNET_NODES,
+            });
+            args
+        },
+        &|result| match result {
+            Ok(FlexibleHttpRequestResult::Err(FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::OutOfCycles(_)),
+                message,
+                ..
+            })) => {
+                // The caller is told what it had and what a response would cost,
+                // so it can tell how much more to attach.
+                if !message.contains("Out of cycles") {
+                    bail!("unexpected out-of-cycles message: '{message}'");
+                }
+                Ok(())
+            }
+            other => bail!("expected an OutOfCycles error, got: {other:?}"),
+        },
+    );
 }
