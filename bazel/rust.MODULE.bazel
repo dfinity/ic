@@ -1352,6 +1352,7 @@ crate.spec(
 )
 crate.spec(
     features = [
+        "x509-parser",
         "zeroize",
     ],
     package = "rcgen",
