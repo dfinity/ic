@@ -555,33 +555,15 @@ impl TopologySnapshot {
             .expect("root subnet id is not set")
     }
 
-    /// The root subnet, if the underlying registry has one.
-    ///
-    /// Unlike [`Self::root_subnet`] this does not panic when it is missing, which
-    /// a caller needs when the absence of an NNS is a legitimate configuration
-    /// rather than a bug: `NestedNodes::setup_and_start` is used both by the
-    /// nested tests, which stand up an IC, and by
-    /// `rs/tests/node/launch_single_host.rs`, which deliberately stands up none.
-    pub fn try_root_subnet(&self) -> Option<SubnetSnapshot> {
-        let subnet_id = self
-            .local_registry
-            .get_root_subnet_id(self.registry_version)
-            .expect("failed to fetch root subnet id from registry")?;
-        Some(SubnetSnapshot {
+    pub fn root_subnet(&self) -> SubnetSnapshot {
+        let subnet_id = self.root_subnet_id();
+        SubnetSnapshot {
             subnet_id,
             registry_version: self.registry_version,
             local_registry: self.local_registry.clone(),
             env: self.env.clone(),
             ic_name: self.ic_name.clone(),
-        })
-    }
-
-    /// The root subnet.
-    ///
-    /// This method panics if in the underlying registry, the root subnet id is
-    /// not set.
-    pub fn root_subnet(&self) -> SubnetSnapshot {
-        self.try_root_subnet().expect("root subnet id is not set")
+        }
     }
 
     /// The unassigned nodes config record, if it exists.

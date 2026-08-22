@@ -553,49 +553,33 @@ pub fn setup_and_start_nested_vms(
 /// The NNS URL a nested node is told to register through, written into its
 /// SetupOS `deployment.json` as `nns.urls`.
 ///
-/// On Farm this is the ic-gateway: a nested node is *not* in the registry yet, so
-/// it cannot pass the replicas' firewall (the orchestrator's automatic whitelist
-/// only covers nodes the registry already knows), whereas the gateway fronts an
-/// API boundary node that is. The gateway's playnet domain resolves in DNS and its
-/// certificate chains to a public CA, so the node can use it out of the box.
+/// The ic-gateway, on both backends. A nested node is *not* in the registry yet,
+/// so it cannot pass the replicas' firewall — the orchestrator's automatic
+/// whitelist only covers nodes the registry already knows — whereas the gateway
+/// fronts an API boundary node that is. Its domain resolves (in public DNS on
+/// Farm, through the group's `dnsmasq` on the Local backend) and its certificate
+/// is issued by a CA the node trusts (a public one on Farm, the dev root CA that
+/// every dev IC-OS image carries on the Local backend), so the node can use it
+/// out of the box either way.
 ///
-/// Neither holds on the Local backend: the gateway serves a self-signed
-/// certificate for a `.local` domain that the group's `dnsmasq` knows nothing
-/// about (driver-side clients paper over both with a resolve override and
-/// `danger_accept_invalid_certs`), and a nested GuestOS has no knob for either --
-/// `make_bootstrap_options` gives it no trust anchors, unlike a driver-managed
-/// node, which receives `extra_api_boundary_node_trust_anchors_pem` through its
-/// config image. So point it straight at the NNS node over plain HTTP, exactly as
-/// `create_config_disk_image` does for every other node in the group. Reaching it
-/// pre-registration is what `with_group_wide_firewall_whitelist` is for; a nested
-/// test on the Local backend has to set it (see `rs/tests/nested/src/util.rs`).
+/// A nested VM can also be brought up with no IC at all —
+/// `rs/tests/node/launch_single_host.rs` does exactly that, and only waits for
+/// HostOS to accept an SSH login — in which case there is no gateway either and
+/// the URL is never used, so a dummy will do.
 fn nested_nns_url(env: &TestEnv, logger: &Logger) -> Url {
-    let dummy = || {
-        info!(logger, "No NNS node or gateway found, using dummy URL");
-        Url::parse("http://localhost:8080").unwrap()
-    };
-    match SystemTestBackend::read_attribute(env) {
-        SystemTestBackend::Farm => env
-            .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
-            .map(|gateway| gateway.get_public_url())
-            .unwrap_or_else(|_| dummy()),
-        // Every step here has to tolerate absence, because a nested VM can be
-        // brought up with no IC at all -- `rs/tests/node/launch_single_host.rs`
-        // does exactly that, and only waits for HostOS to accept an SSH login.
-        // `topology_snapshot()` panics when there is no Internet Computer and
-        // `root_subnet()` panics when the registry has no root subnet, so neither
-        // can be used: the Farm arm above gets this for free because
-        // `get_deployed_ic_gateway` merely returns an `Err`.
-        SystemTestBackend::Local => env
-            .safe_topology_snapshot()
-            .ok()
-            .and_then(|topology| topology.try_root_subnet())
-            .and_then(|root_subnet| root_subnet.nodes().next())
-            .map(|node| {
-                Url::parse(&format!("http://[{}]:8080", node.get_ip_addr()))
-                    .expect("Could not parse the NNS node's URL")
-            })
-            .unwrap_or_else(dummy),
+    match env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME) {
+        Ok(gateway) => {
+            let url = gateway.get_public_url();
+            // Worth logging: SetupOS prints its own config to the serial console,
+            // but that output is lost to `serial-getty`'s `TTYVHangup`, so this is
+            // the only place a test log records which URL the node was given.
+            info!(logger, "Nested node(s) will register through {url}");
+            url
+        }
+        Err(_) => {
+            info!(logger, "No ic-gateway found, using dummy URL");
+            Url::parse("http://localhost:8080").unwrap()
+        }
     }
 }
 
