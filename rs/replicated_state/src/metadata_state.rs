@@ -9,6 +9,7 @@ use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
 use crate::CanisterState;
 use crate::CheckpointLoadingMetrics;
+use crate::RefundPool;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
@@ -27,6 +28,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
+    canister_http::{CanisterHttpRequestContext, PricingVersion},
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterCall, MessageId, Payload, RejectContext, Response, StreamMessage},
@@ -39,7 +41,7 @@ use ic_types::{
         StreamSlice,
     },
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
@@ -1080,8 +1082,9 @@ impl SystemMetadata {
     /// in terminal states and messages addressed to local canisters. Additionally,
     /// on subnet A' we reject all management canister calls whose execution is in
     /// progress on one of the canisters migrated to subnet B (hence the
-    /// `subnet_queues` argument); and silently discard the corresponding tasks and
-    /// roll back `Stopping` states on all subnet B canisters.
+    /// `subnet_queues` and `refunds` arguments); and silently discard the
+    /// corresponding tasks and roll back `Stopping` states on all subnet B
+    /// canisters.
     ///
     /// Notes:
     ///  * `own_subnet_type` has just been set during `load_checkpoint()`, based on
@@ -1096,6 +1099,7 @@ impl SystemMetadata {
         &mut self,
         is_local_canister: F,
         subnet_queues: &mut CanisterQueues,
+        refunds: &mut RefundPool,
     ) where
         F: Fn(CanisterId) -> bool,
     {
@@ -1167,6 +1171,7 @@ impl SystemMetadata {
             time,
             subnet_queues,
             &mut self.ingress_history,
+            refunds,
         );
     }
 
@@ -1184,6 +1189,9 @@ impl SystemMetadata {
     ///  * Rejects management canister calls targeting canisters that have migrated
     ///    (subnet B will silently drop the corresponding executions from its
     ///    canisters).
+    ///  * Rejects the in-progress HTTP outcalls of migrated canisters and drops
+    ///    their already responded to (delivered) contexts, refunding the cycles
+    ///    still owed for either.
     ///
     /// On subnet B:
     ///  * Updates `own_subnet_id` to `subnet_id`.
@@ -1210,6 +1218,7 @@ impl SystemMetadata {
         self,
         subnet_id: SubnetId,
         subnet_queues: &mut CanisterQueues,
+        refunds: &mut RefundPool,
     ) -> Result<Self, String> {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
@@ -1280,6 +1289,7 @@ impl SystemMetadata {
                 batch_time,
                 subnet_queues,
                 &mut ingress_history,
+                refunds,
             );
         } else {
             //
@@ -1374,13 +1384,14 @@ impl SystemMetadata {
     ///    only a response from *subnet A'* could be inducted.
     ///
     ///  * Specific requests that must be entirely handled by the local subnet where
-    ///    the originator canister exists (e.g. `raw_rand`).
+    ///    the originator canister exists (e.g. `raw_rand` and HTTP outcalls).
     fn reject_in_progress_management_calls_after_split<F>(
         subnet_call_context_manager: &mut SubnetCallContextManager,
         is_local_canister: F,
         time: Time,
         subnet_queues: &mut CanisterQueues,
         ingress_history: &mut IngressHistoryState,
+        refunds: &mut RefundPool,
     ) where
         F: Fn(CanisterId) -> bool,
     {
@@ -1420,6 +1431,73 @@ impl SystemMetadata {
                 subnet_queues,
                 ingress_history,
             );
+        }
+
+        // In-progress HTTP outcalls are rejected if the sender has migrated to another
+        // subnet.
+        for context in
+            subnet_call_context_manager.remove_non_local_canister_http_calls(&is_local_canister)
+        {
+            Self::reject_canister_http_call_after_split(context, subnet_queues);
+        }
+
+        // Delivered HTTP outcall contexts are only retained in order to apply late
+        // per-replica refunds. This can no longer happen for a canister that this subnet
+        // no longer hosts: the refund could only be credited on the canister's new subnet.
+        // Instead, we settle the outcall now, refunding everything it still owes.
+        for context in subnet_call_context_manager
+            .remove_non_local_delivered_canister_http_calls(&is_local_canister)
+        {
+            // Only pay-as-you-go contexts are ever retained as delivered.
+            debug_assert_eq!(PricingVersion::PayAsYouGo, context.pricing_version);
+            refunds.add(
+                context.request.sender,
+                Self::unrefunded_canister_http_cycles(&context),
+            );
+        }
+    }
+
+    /// Rejects an in-progress HTTP outcall made by a canister that has migrated to a
+    /// new subnet following a subnet split. Enqueues an output reject response on behalf
+    /// of the subnet into the provided `subnet_queues`.
+    ///
+    /// Unlike other management calls, an HTTP outcall may hold cycles beyond
+    /// `Request::payment`, so the reject refunds both (see
+    /// [`Self::unrefunded_canister_http_cycles()`]).
+    fn reject_canister_http_call_after_split(
+        context: CanisterHttpRequestContext,
+        subnet_queues: &mut CanisterQueues,
+    ) {
+        let refund = context.request.payment + Self::unrefunded_canister_http_cycles(&context);
+        let request = context.request;
+        let migrated_canister_id = request.sender;
+        subnet_queues.push_output_response(
+            Response {
+                originator: migrated_canister_id,
+                respondent: request.receiver,
+                originator_reply_callback: request.sender_reply_callback,
+                refund,
+                response_payload: Payload::Reject(RejectContext::new(
+                    RejectCode::SysTransient,
+                    format!("Canister {migrated_canister_id} migrated during a subnet split"),
+                )),
+                deadline: request.deadline,
+            }
+            .into(),
+        );
+    }
+
+    /// The part of an HTTP outcall's refundable cycles that has not been refunded to
+    /// the calling canister yet.
+    ///
+    /// Always zero under legacy pricing: there the caller is refunded through
+    /// `Request::payment` when the response is delivered.
+    fn unrefunded_canister_http_cycles(context: &CanisterHttpRequestContext) -> Cycles {
+        match context.pricing_version {
+            PricingVersion::Legacy => Cycles::zero(),
+            PricingVersion::PayAsYouGo => {
+                context.refund_status.refundable_cycles - context.refund_status.refunded_cycles
+            }
         }
     }
 

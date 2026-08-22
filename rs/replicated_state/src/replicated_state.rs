@@ -1538,6 +1538,9 @@ impl ReplicatedState {
     /// * Updates canisters' input schedules, based on `self.canister_states`.
     /// * Prunes the ingress history, retaining only messages addressed to this
     ///   subnet and messages in terminal states (which will time out).
+    /// * Rejects in-progress subnet messages (management calls and HTTP outcalls)
+    ///   that can no longer be handled here, pooling any refunds owed to the
+    ///   canisters that have migrated away.
     pub fn after_split(&mut self) {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
@@ -1548,7 +1551,7 @@ impl ReplicatedState {
             metadata,
             subnet_queues,
             consensus_queue: _,
-            refunds: _,
+            refunds,
             epoch_query_stats,
         } = self;
 
@@ -1584,6 +1587,7 @@ impl ReplicatedState {
         metadata.after_split(
             |canister_id| canister_states.contains_key(&canister_id),
             subnet_queues,
+            refunds,
         );
 
         // Reset query stats after subnet split.
@@ -1727,7 +1731,7 @@ impl ReplicatedState {
         //
         // Prunes the ingress history. And, on *subnet A'* rejects in-progress management
         // calls targeting canisters migrated to *subnet B*.
-        metadata = metadata.online_split(subnet_id, &mut subnet_queues)?;
+        metadata = metadata.online_split(subnet_id, &mut subnet_queues, &mut refunds)?;
 
         Ok(Self {
             canister_states,
