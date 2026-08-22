@@ -31,10 +31,6 @@ use url::Url;
 
 pub const NESTED_VMS_DIR: &str = "nested_vms";
 pub const NESTED_VM_PATH: &str = "vm.json";
-// `build-setupos-config-image.sh` writes a raw FAT image here -- despite what an
-// earlier `.zst` in this name suggested, nothing compresses it. The Local backend
-// dispatches on the extension when it attaches the image
-// (`LocalBackend::extract_image`), so the name has to be honest.
 pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img";
 pub const NESTED_NETWORK_PATH: &str = "ips.json";
 pub const NESTED_VM_CONFIG: &str = "nested_vm_config.json";
