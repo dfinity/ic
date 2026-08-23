@@ -45,10 +45,12 @@ const IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_a_records_crea
 const READY_TIMEOUT: Duration = Duration::from_secs(360);
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Runfiles paths of the dev root CA, provided by `IC_GATEWAY_RUNTIME_DEPS` in
-/// `rs/tests/common.bzl`.
-const DEV_ROOT_CA_CERT_ENV: &str = "DEV_ROOT_CA_CERT_PATH";
-const DEV_ROOT_CA_KEY_ENV: &str = "DEV_ROOT_CA_KEY_PATH";
+/// Runfiles paths of the dev root CA, provided to the local backend's variant of
+/// every system test by `_local_only_deps` in `rs/tests/system_tests.bzl`. Reading
+/// either of these on the Farm backend would panic, and must not happen: Farm uses
+/// a playnet certificate.
+const DEV_ROOT_CA_CERT_ENV: &str = "ENV_DEPS__DEV_ROOT_CA_CERT_PATH";
+const DEV_ROOT_CA_KEY_ENV: &str = "ENV_DEPS__DEV_ROOT_CA_KEY_PATH";
 
 /// The dev root CA: the certificate authority that every *dev* IC-OS image
 /// already trusts, loaded ready to sign with.
@@ -89,21 +91,30 @@ fn dev_root_ca() -> Result<DevRootCa> {
         .with_context(|| format!("reading the dev root CA key from {}", key_path.display()))?;
 
     // The checked-in key is PKCS#1 (`-----BEGIN RSA PRIVATE KEY-----`), which
-    // `rcgen`'s default `ring` backend cannot load — it takes PKCS#8 only — so
-    // re-encode it first.
+    // `rcgen` loads only under its `aws_lc_rs` backend; under `ring` it takes
+    // PKCS#8 only. Which of the two is compiled in is not ours to decide: both
+    // features are on, and `rcgen` prefers `aws_lc_rs` when they are — but only
+    // because `rustls-acme` happens to enable it, four crates away (see
+    // `cargo tree -i rcgen -e features`). Re-encoding to PKCS#8 works under either
+    // backend, so it does not matter if that ever changes; relying on the feature
+    // would turn an unrelated dependency edit into a runtime failure in every
+    // local gateway test.
     let key_pkcs8_pem = RsaPrivateKey::from_pkcs1_pem(&key_pkcs1_pem)
         .context("parsing the dev root CA key as PKCS#1")?
         .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
         .context("re-encoding the dev root CA key as PKCS#8")?;
     let key = KeyPair::from_pem(&key_pkcs8_pem).context("loading the dev root CA key")?;
 
-    // `from_ca_cert_pem` extracts just what is needed to act as an issuer: the
-    // subject name and the subject key identifier, which `signed_by` copies into
-    // the leaf's issuer and authority-key-identifier fields. `self_signed` then
+    // `from_ca_cert_pem` extracts what is needed to act as an issuer, of which
+    // `signed_by` uses one thing: the subject name, which becomes the leaf's
+    // issuer. (It carries the CA's subject key identifier across too, but that
+    // reaches the leaf as an authority key identifier only when
+    // `use_authority_key_identifier_extension` is set, and `CertificateParams::new`
+    // leaves it false — the leaf's only extension is its SAN.) `self_signed` then
     // re-signs the CA merely to obtain an `rcgen::Certificate` to pass as that
-    // issuer — the result is not the checked-in certificate byte for byte and is
-    // never served. What makes the chain verify is that the issuer name and the
-    // signing key are the real ones.
+    // issuer; the result is not the checked-in certificate byte for byte and is
+    // never served. What makes the chain verify is the issuer name plus the
+    // signature, both of which are the real CA's.
     let cert = CertificateParams::from_ca_cert_pem(&cert_pem)
         .context("parsing the dev root CA certificate")?
         .self_signed(&key)
@@ -183,10 +194,13 @@ impl DeployedIcGatewayVm {
     /// everything it trusted before. On [`SystemTestBackend::Farm`] the playnet
     /// certificate chains to a public CA and `None` is returned.
     ///
-    /// This covers the gateway only. An API boundary node reached directly still
-    /// serves a certificate generated on the node itself (see
-    /// `generate_ic_boundary_tls_cert`), which no CA vouches for, so clients of
-    /// those have no alternative to `danger_accept_invalid_certs`.
+    /// This covers the gateway only. Clients that dial an API boundary node
+    /// directly still need `danger_accept_invalid_certs`, and for a different
+    /// reason: `IcNodeSnapshot::get_public_url` hands them an IP-literal URL, which
+    /// no name in the node's certificate can match. (Whether that certificate has a
+    /// CA at all depends on the test — under `with_api_boundary_nodes_playnet` it
+    /// is issued by `LocalApiBoundaryNodesPlaynet`'s ephemeral CA, and otherwise the
+    /// node self-signs it via `generate_ic_boundary_tls_cert`.)
     pub fn root_certificate(&self) -> Result<Option<reqwest::Certificate>> {
         match SystemTestBackend::read_attribute(&self.env) {
             SystemTestBackend::Local => {
@@ -479,8 +493,12 @@ sudo networkctl reconfigure enp2s0
             let certificate = Certificate {
                 priv_key_pem: key.serialize_pem(),
                 cert_pem: cert.pem(),
-                // Served alongside the leaf, so a client that trusts the CA can
-                // build a path to it without an AIA fetch.
+                // Appended to the served `cert.pem` by `start_gateway_container`.
+                // A client that trusts this CA does not actually need it — the leaf
+                // is issued by the root directly, so there is no intermediate to
+                // supply, and RFC 8446 4.4.2 lets the root be omitted — but it
+                // keeps the served chain self-describing when debugging a handshake,
+                // and mirrors the shape of Farm's playnet chain.
                 chain_pem: ca.cert_pem,
             };
             info!(
@@ -518,13 +536,18 @@ sudo networkctl reconfigure enp2s0
         let mut records = match SystemTestBackend::read_attribute(env) {
             SystemTestBackend::Local => {
                 // The group's `dnsmasq` is the local replacement for Farm's
-                // playnet DNS. Only the apex is registered: dnsmasq's
-                // `--addn-hosts` file is a hosts file and so has no wildcards,
-                // and nothing inside a VM resolves a canister subdomain today —
-                // driver-side clients resolve the exact request host themselves,
-                // see `DeployedIcGatewayVm::resolve_override_for_url`. A wildcard
-                // would mean `--address=/<domain>/<addr>` on dnsmasq's command
-                // line, which `SIGHUP` does not re-read.
+                // playnet DNS. Only the apex is registered, because dnsmasq's
+                // `--addn-hosts` file is a hosts file and so has no wildcards.
+                // Driver-side clients cope by resolving the exact request host
+                // themselves, see
+                // `DeployedIcGatewayVm::resolve_override_for_url`. Clients *inside*
+                // a VM cannot: `prometheus_vm` writes `<canister id>.raw.<domain>`
+                // scrape targets that the Prometheus VM resolves through this
+                // dnsmasq, and those have never resolved on this backend — the
+                // domain was an equally unresolvable `.local` name before. Fixing
+                // it means `--address=/<domain>/<addr>` on dnsmasq's command line,
+                // which `SIGHUP` does not re-read, so it would have to be known at
+                // `start_dnsmasq` time or cost a restart.
                 let group_name = GroupSetup::read_attribute(env).infra_group_name;
                 let backend = LocalBackend::from_test_env(env)?;
                 let addrs = playnet
