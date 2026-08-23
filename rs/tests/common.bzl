@@ -186,13 +186,6 @@ SNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
 
 IC_GATEWAY_RUNTIME_DEPS = {
     "IC_GATEWAY_UVM_CONFIG_IMAGE_PATH": "//rs/tests:ic_gateway_uvm_config_image",
-    # The dev root CA, used on the local backend to issue the gateway's TLS
-    # certificate. Every dev IC-OS image already trusts it (it is installed into
-    # /usr/local/share/ca-certificates in the `output_dev` stage of the GuestOS
-    # and HostOS Dockerfiles), which is what lets a node reach the gateway over
-    # HTTPS. See `IcGatewayVm::load_or_create_local_playnet`.
-    "DEV_ROOT_CA_CERT_PATH": "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
-    "DEV_ROOT_CA_KEY_PATH": "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
 }
 
 COUNTER_CANISTER_RUNTIME_DEPS = {
