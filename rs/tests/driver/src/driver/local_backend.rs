@@ -29,8 +29,10 @@ use network::systemd::IPV6_NAME_SERVERS;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{IpAddr, Ipv6Addr};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -230,10 +232,13 @@ impl LocalBackend {
     /// `ip`/`dnsmasq` operations to run with `CAP_NET_ADMIN`/`CAP_NET_RAW`/
     /// `CAP_NET_BIND_SERVICE` over that namespace — without any *host* capability
     ///
-    /// `unshare(CLONE_NEWUSER | CLONE_NEWNET)` creates a private user namespace,
-    /// in which the caller holds a full capability set (it is the namespace's
-    /// creator), plus a network namespace owned by it — so every RTNETLINK
-    /// operation on the new netns succeeds.
+    /// `unshare(CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET)` creates a private
+    /// user namespace, in which the caller holds a full capability set (it is the
+    /// namespace's creator), plus a mount and a network namespace owned by it — so
+    /// every RTNETLINK operation on the new netns succeeds, and the driver can
+    /// give itself a resolver for that netns (see
+    /// [`install_group_resolv_conf`](Self::install_group_resolv_conf)) without
+    /// touching anything outside its own process tree.
     /// We keep the caller's uid/gid unchanged (an *identity* mapping) so
     /// files, `/dev/kvm` and `/dev/net/tun` are accessed exactly as before, then
     /// raise the three networking capabilities into the process's *ambient* set
@@ -251,18 +256,23 @@ impl LocalBackend {
     /// run before any thread is spawned — in particular before the group's
     /// async (threaded) logger is built. Running it before the tokio runtime and the task
     /// subprocesses also puts the whole process tree — task subprocesses, QEMU,
-    /// `dnsmasq` — into the same namespaces and lets them inherit the ambient
-    /// capabilities (`unshare`/`fork`/`exec` all preserve both).
+    /// `dnsmasq` — into the same namespaces (so they resolve names through the
+    /// group's `dnsmasq` as well) and lets them inherit the ambient capabilities
+    /// (`unshare`/`fork`/`exec` all preserve both).
     pub fn ensure_administrable_netns() -> Result<()> {
         let uid = nix::unistd::geteuid().as_raw();
         let gid = nix::unistd::getegid().as_raw();
         // SAFETY: `unshare` only affects the calling (single) thread/process; it
-        // touches no user-space state.
-        if unsafe { libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNET) } != 0 {
+        // touches no user-space state. The kernel creates the user namespace
+        // first, so the mount and network namespaces are both owned by it and the
+        // caller holds `CAP_SYS_ADMIN`/`CAP_NET_ADMIN` over them.
+        if unsafe { libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNS | libc::CLONE_NEWNET) }
+            != 0
+        {
             return Err(anyhow!(std::io::Error::last_os_error())).context(
-                "unshare(CLONE_NEWUSER | CLONE_NEWNET) failed; the local backend needs \
-                 to create a private user+network namespace to administer its \
-                 networking without host capabilities",
+                "unshare(CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET) failed; the local \
+                 backend needs to create a private user+mount+network namespace to \
+                 administer its networking without host capabilities",
             );
         }
         // Map the caller's uid/gid into the new user namespace so it keeps its
@@ -305,6 +315,120 @@ impl LocalBackend {
         // needs `CAP_NET_ADMIN`, so it fails fast (with the `ip` error) if the
         // ambient capabilities did not take effect.
         Self::run_shell("ip link set dev lo up", "bring up lo in the owned netns")?;
+        // Finally, give the driver itself a resolver, now that it owns a mount
+        // namespace to install one in.
+        Self::install_group_resolv_conf()?;
+        Ok(())
+    }
+
+    /// Path of the generated `resolv.conf`
+    /// [`install_group_resolv_conf`](Self::install_group_resolv_conf) bind-mounts
+    /// over `/etc/resolv.conf`.
+    ///
+    /// It lives in the process's temp dir — under Bazel that is the test's own
+    /// scratch dir, which the runner cleans up — because it is written before the
+    /// group dir exists; see
+    /// [`ensure_administrable_netns`](Self::ensure_administrable_netns) for why
+    /// that has to run so early. The pid keeps concurrent drivers from sharing a
+    /// file, even though each one mounts it only in its own namespace.
+    fn generated_resolv_conf_path() -> PathBuf {
+        std::env::temp_dir().join(format!("system-test-resolv.conf.{}", std::process::id()))
+    }
+
+    /// Point the driver's own name resolution at the group's `dnsmasq`, by
+    /// bind-mounting a generated `resolv.conf` naming [`IPV6_NAME_SERVERS`] over
+    /// `/etc/resolv.conf` in the private mount namespace
+    /// [`ensure_administrable_netns`](Self::ensure_administrable_netns) just
+    /// created.
+    ///
+    /// Without this the driver has no resolver at all: it sits in the group's
+    /// network namespace but reads the *host's* `/etc/resolv.conf`, whose
+    /// nameserver is unreachable from there, so every lookup fails. The group's
+    /// `dnsmasq` binds those very [`IPV6_NAME_SERVERS`] on the group bridge inside
+    /// this netns (see [`create_group`](Self::create_group)), so pointing at them
+    /// makes the driver resolve the in-group names ([`IN_GROUP_DOMAIN_SUFFIX`],
+    /// [`NIP_IO_DOMAIN`]) exactly like the VMs do — which is what lets a
+    /// driver-side client reach the IC gateway by name rather than having to
+    /// resolve the host for itself.
+    ///
+    /// `/` is remounted `MS_REC | MS_PRIVATE` first, so the bind mount cannot
+    /// propagate back out. A host that leaves `/` shared — the systemd default —
+    /// would otherwise have its real `/etc/resolv.conf` replaced for as long as
+    /// the mount lived.
+    ///
+    /// Four details worth knowing:
+    ///
+    /// * `mount(2)` needs `CAP_SYS_ADMIN` over the mount namespace's *user*
+    ///   namespace, which the caller holds as that namespace's creator. Mounting
+    ///   here, in-process, is what keeps `CAP_SYS_ADMIN` out of the ambient set
+    ///   the unprivileged children inherit — they have no business mounting
+    ///   anything.
+    /// * glibc reads at most `MAXNS` (3) nameservers, so the fourth line is
+    ///   ignored. Harmless, since all four addresses are the same `dnsmasq`;
+    ///   writing all four keeps the file identical to what the guests are
+    ///   configured with.
+    /// * `/etc/nsswitch.conf` resolves `hosts` through `files` before `dns`, so
+    ///   `/etc/hosts` — and with it `localhost` — keeps working.
+    /// * Until [`create_group`](Self::create_group) has run, no bridge holds these
+    ///   addresses, so a lookup before that fails fast instead of hanging.
+    ///   Nothing resolves a name that early.
+    fn install_group_resolv_conf() -> Result<()> {
+        // Stop mount propagation out of this namespace before mounting anything
+        // into it.
+        Self::mount(
+            None,
+            "/",
+            libc::MS_REC | libc::MS_PRIVATE,
+            "making / private in the owned mount namespace",
+        )?;
+
+        let contents: String = IPV6_NAME_SERVERS
+            .iter()
+            .map(|name_server| format!("nameserver {name_server}\n"))
+            .collect();
+        let path = Self::generated_resolv_conf_path();
+        std::fs::write(&path, contents)
+            .with_context(|| format!("writing the generated resolv.conf {}", path.display()))?;
+
+        Self::mount(
+            Some(&path),
+            "/etc/resolv.conf",
+            libc::MS_BIND,
+            "bind-mounting the generated resolv.conf over /etc/resolv.conf",
+        )
+    }
+
+    /// `mount(2)`, which the `nix` crate cannot offer here because the workspace
+    /// builds it without its `mount` feature.
+    ///
+    /// `source` is `None` for a propagation change, which takes none; the
+    /// filesystem type and the mount data are always `NULL`, because every call
+    /// site is either a bind mount or a propagation change and neither uses them.
+    fn mount(source: Option<&Path>, target: &str, flags: libc::c_ulong, what: &str) -> Result<()> {
+        let source = source
+            .map(|source| CString::new(source.as_os_str().as_bytes()))
+            .transpose()
+            .with_context(|| format!("{what}: the source path contains a NUL byte"))?;
+        let target = CString::new(target).expect("mount target contains a NUL byte");
+        // SAFETY: both strings are NUL-terminated and outlive the call. A NULL
+        // source is what `mount(2)` expects for a propagation change (the kernel
+        // never looks at it), and a NULL filesystem type and data are what it
+        // expects for a bind mount.
+        let rc = unsafe {
+            libc::mount(
+                source.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
+                target.as_ptr(),
+                std::ptr::null(),
+                flags,
+                std::ptr::null(),
+            )
+        };
+        if rc != 0 {
+            return Err(anyhow!(std::io::Error::last_os_error())).context(format!(
+                "{what} failed (mount(2) follows the target symlink, so a target that \
+                 dangles is reported as a missing file rather than as a bad source)"
+            ));
+        }
         Ok(())
     }
 
