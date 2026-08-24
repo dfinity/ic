@@ -1182,17 +1182,15 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                      provisioned but never paid. Nothing draws it down -- the surplus stays as \
                      ckETH backing -- so between fundings it only ratchets up.",
                 )?;
-                // NaN rather than 0: "no gas" and "never looked" must not read alike.
                 w.encode_gauge(
                     "cketh_minter_sweeper_gas_balance",
-                    s.last_observed_sweeper_balance
-                        .map(|observed| observed.balance.as_f64())
-                        .unwrap_or(f64::NAN),
-                    "Prepaid sweep gas: the sweeper address' ETH balance as last observed on chain; \
-                     NaN if never observed.",
+                    s.sweeper_funding.sweeper_balance_lower_bound().as_f64(),
+                    "Prepaid sweep gas: a lower bound on the sweeper address' ETH balance, from the \
+                     fundings the minter has recorded as finalized -- not an observation of the \
+                     chain, and never above the true balance.",
                 )?;
-                // The alert for a wedged funding: the balance-age gauge below cannot show one, since
-                // the task refreshes the observation before consulting the guard.
+                // The alert for a wedged funding: nothing else here shows one, since the gas-balance
+                // gauge above tracks what the minter recorded rather than what it can spend now.
                 w.encode_gauge(
                     "cketh_minter_sweeper_in_flight_funding_age_seconds",
                     s.withdrawal_transactions
@@ -1207,17 +1205,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         .unwrap_or(0.0),
                     "Age of the sweeper funding awaiting finalization; 0 if none is outstanding, \
                      NaN if one is but its acceptance time is unknown.",
-                )?;
-                // Alert on this when sweeping stalls: a growing age means funding is failing.
-                w.encode_gauge(
-                    "cketh_minter_sweeper_gas_balance_age_seconds",
-                    s.last_observed_sweeper_balance
-                        .map(|observed| {
-                            (ic_cdk::api::time().saturating_sub(observed.observed_at_nanos)
-                                / 1_000_000_000) as f64
-                        })
-                        .unwrap_or(f64::INFINITY),
-                    "Age of the last sweeper-balance observation in seconds; +Inf if never read.",
                 )?;
 
                 w.encode_gauge(
